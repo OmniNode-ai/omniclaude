@@ -495,7 +495,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "fallback_reason", "routing_prompt_version"],
     ),
     # =========================================================================
-    # Context Enrichment Observability Events (OMN-2274)
+    # Context Enrichment Observability Events (OMN-2274, OMN-2441)
     # =========================================================================
     "context.enrichment": EventRegistration(
         event_type="context.enrichment",
@@ -507,7 +507,11 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "enrichment_type"],
+        # OMN-2441: updated to use 'channel' (omnidash-canonical field name).
+        # 'enrichment_type' is still emitted for backward compatibility but
+        # is not required by the registry — the daemon only validates
+        # required_fields, not the full schema.
+        required_fields=["session_id", "channel"],
     ),
     # =========================================================================
     # Notification Events (OMN-1831)

@@ -521,7 +521,8 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED
         --arg session_id "$SESSION_ID" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg project_path "$PROJECT_ROOT" \
-        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path}' 2>/dev/null)
+        --arg agent_name "${AGENT_NAME:-}" \
+        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path, agent_name: $agent_name}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e
         # 1s = Python startup overhead + 200ms inner budget

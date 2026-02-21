@@ -1,13 +1,19 @@
-"""Unit tests for enrichment_observability_emitter.py (OMN-2274).
+"""Unit tests for enrichment_observability_emitter.py (OMN-2274, OMN-2441).
 
 Tests cover:
 - build_enrichment_event_payload: all required fields present with correct types
 - emit_enrichment_events: per-channel event emission with mock emit_event
 - was_dropped logic (produced but excluded by token cap)
-- tokens_saved calculation (summarization channel only)
+- tokens_saved / net_tokens_saved calculation (summarization channel only)
+- outcome derivation (hit / miss / error / inflated)
+- omnidash-canonical field names (channel, model_name, tokens_before, tokens_after,
+  net_tokens_saved, similarity_score, cache_hit, outcome, timestamp, repo, agent_name)
 - Graceful degradation when emit_client_wrapper is unavailable
 - No-op when results list is empty
 - Optional handler metadata fields (model_used, relevance_score, etc.)
+- _derive_outcome helper
+- _derive_repo helper
+- project_path and agent_name propagation
 
 All tests run without network access or external services.
 """
@@ -97,9 +103,13 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=300,
             was_dropped=False,
             prompt_version="v2",
+            tokens_before=500,
+            repo="omniclaude2",
+            agent_name="polymorphic-agent",
         )
 
-        required_keys = {
+        # Internal / backward-compat fields
+        internal_keys = {
             "session_id",
             "correlation_id",
             "enrichment_type",
@@ -112,7 +122,22 @@ class TestBuildEnrichmentEventPayload:
             "was_dropped",
             "prompt_version",
         }
-        assert required_keys <= set(payload.keys())
+        # Omnidash canonical fields (OMN-2441)
+        canonical_keys = {
+            "timestamp",
+            "channel",
+            "model_name",
+            "cache_hit",
+            "outcome",
+            "tokens_before",
+            "tokens_after",
+            "net_tokens_saved",
+            "similarity_score",
+            "quality_score",
+            "repo",
+            "agent_name",
+        }
+        assert internal_keys | canonical_keys <= set(payload.keys())
 
     def test_field_values_match_inputs(self) -> None:
         """Payload values must exactly match the inputs."""
@@ -128,8 +153,12 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=True,
             prompt_version="v1",
+            tokens_before=300,
+            repo="myrepo",
+            agent_name="code-agent",
         )
 
+        # Internal fields
         assert payload["session_id"] == "sid"
         assert payload["correlation_id"] == "cid"
         assert payload["enrichment_type"] == "code_analysis"
@@ -141,9 +170,20 @@ class TestBuildEnrichmentEventPayload:
         assert payload["tokens_saved"] == 0
         assert payload["was_dropped"] is True
         assert payload["prompt_version"] == "v1"
+        # Canonical fields
+        assert payload["channel"] == "code_analysis"
+        assert payload["model_name"] == "coder-14b"
+        assert payload["tokens_before"] == 300
+        assert payload["tokens_after"] == 200
+        assert payload["net_tokens_saved"] == 0
+        assert payload["similarity_score"] == 0.5
+        assert payload["repo"] == "myrepo"
+        assert payload["agent_name"] == "code-agent"
+        assert payload["cache_hit"] is False
+        assert payload["quality_score"] is None
 
     def test_relevance_score_none_allowed(self) -> None:
-        """relevance_score may be None (handler did not report it)."""
+        """relevance_score / similarity_score may be None."""
         payload = eoe.build_enrichment_event_payload(
             session_id="s",
             correlation_id="c",
@@ -158,6 +198,7 @@ class TestBuildEnrichmentEventPayload:
             prompt_version="",
         )
         assert payload["relevance_score"] is None
+        assert payload["similarity_score"] is None
 
     def test_latency_ms_rounded_to_three_places(self) -> None:
         """latency_ms is rounded to 3 decimal places."""
@@ -176,9 +217,136 @@ class TestBuildEnrichmentEventPayload:
         )
         assert payload["latency_ms"] == round(12.3456789, 3)
 
+    def test_timestamp_is_iso8601_string(self) -> None:
+        """timestamp field must be a non-empty ISO-8601 string."""
+        payload = eoe.build_enrichment_event_payload(
+            session_id="s",
+            correlation_id="c",
+            enrichment_type="summarization",
+            model_used="",
+            latency_ms=0.0,
+            result_token_count=100,
+            relevance_score=None,
+            fallback_used=False,
+            tokens_saved=0,
+            was_dropped=False,
+            prompt_version="",
+        )
+        ts = payload.get("timestamp")
+        assert isinstance(ts, str)
+        assert len(ts) > 10  # at minimum "YYYY-MM-DD"
+
+    def test_cache_hit_always_false(self) -> None:
+        """cache_hit must be False (not tracked yet)."""
+        payload = eoe.build_enrichment_event_payload(
+            session_id="s",
+            correlation_id="c",
+            enrichment_type="similarity",
+            model_used="",
+            latency_ms=5.0,
+            result_token_count=100,
+            relevance_score=0.9,
+            fallback_used=False,
+            tokens_saved=0,
+            was_dropped=False,
+            prompt_version="",
+        )
+        assert payload["cache_hit"] is False
+
+    def test_quality_score_always_none(self) -> None:
+        """quality_score must be None (not tracked yet)."""
+        payload = eoe.build_enrichment_event_payload(
+            session_id="s",
+            correlation_id="c",
+            enrichment_type="code_analysis",
+            model_used="",
+            latency_ms=5.0,
+            result_token_count=100,
+            relevance_score=None,
+            fallback_used=False,
+            tokens_saved=0,
+            was_dropped=False,
+            prompt_version="",
+        )
+        assert payload["quality_score"] is None
+
 
 # ---------------------------------------------------------------------------
-# 2. emit_enrichment_events — basic emission
+# 2. _derive_outcome
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveOutcome:
+    """Tests for _derive_outcome() helper."""
+
+    def test_hit_when_success_and_tokens(self) -> None:
+        result = eoe._derive_outcome(
+            success=True, tokens_after=100, tokens_before=200, channel="code_analysis"
+        )
+        assert result == "hit"
+
+    def test_miss_when_success_but_no_tokens(self) -> None:
+        result = eoe._derive_outcome(
+            success=True, tokens_after=0, tokens_before=200, channel="summarization"
+        )
+        assert result == "miss"
+
+    def test_error_when_not_success(self) -> None:
+        result = eoe._derive_outcome(
+            success=False, tokens_after=0, tokens_before=200, channel="code_analysis"
+        )
+        assert result == "error"
+
+    def test_inflated_when_summarization_tokens_increase(self) -> None:
+        result = eoe._derive_outcome(
+            success=True, tokens_after=300, tokens_before=200, channel="summarization"
+        )
+        assert result == "inflated"
+
+    def test_not_inflated_for_non_summarization_channels(self) -> None:
+        """similarity and code_analysis channels add context — not inflated."""
+        for channel in ("similarity", "code_analysis"):
+            result = eoe._derive_outcome(
+                success=True,
+                tokens_after=500,
+                tokens_before=200,
+                channel=channel,
+            )
+            assert result == "hit", f"Expected hit for {channel}, got {result}"
+
+    def test_inflated_requires_nonzero_tokens_before(self) -> None:
+        """When tokens_before=0, inflation detection is skipped → hit."""
+        result = eoe._derive_outcome(
+            success=True, tokens_after=300, tokens_before=0, channel="summarization"
+        )
+        assert result == "hit"
+
+
+# ---------------------------------------------------------------------------
+# 3. _derive_repo
+# ---------------------------------------------------------------------------
+
+
+class TestDeriveRepo:
+    """Tests for _derive_repo() helper."""
+
+    def test_returns_basename(self) -> None:
+        assert eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2") == "omniclaude2"
+
+    def test_strips_trailing_slash(self) -> None:
+        assert eoe._derive_repo("/path/to/repo/") == "repo"
+
+    def test_returns_none_for_empty(self) -> None:
+        assert eoe._derive_repo("") is None
+
+    def test_returns_none_for_just_slash(self) -> None:
+        # basename("/") is "" which maps to None
+        result = eoe._derive_repo("/")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 4. emit_enrichment_events — basic emission
 # ---------------------------------------------------------------------------
 
 
@@ -267,7 +435,7 @@ class TestEmitEnrichmentEventsBasic:
 
 
 # ---------------------------------------------------------------------------
-# 3. was_dropped logic
+# 5. was_dropped logic
 # ---------------------------------------------------------------------------
 
 
@@ -343,12 +511,12 @@ class TestWasDropped:
 
 
 # ---------------------------------------------------------------------------
-# 4. tokens_saved calculation
+# 6. tokens_saved / net_tokens_saved calculation
 # ---------------------------------------------------------------------------
 
 
 class TestTokensSaved:
-    """Tests for the tokens_saved field (summarization channel only)."""
+    """Tests for the tokens_saved / net_tokens_saved field (summarization channel only)."""
 
     def test_tokens_saved_computed_for_summarization(self) -> None:
         """tokens_saved = original_prompt_token_count - result tokens (summarization)."""
@@ -369,6 +537,7 @@ class TestTokensSaved:
             )
 
         assert payloads[0]["tokens_saved"] == 600  # 800 - 200
+        assert payloads[0]["net_tokens_saved"] == 600  # canonical name
 
     def test_tokens_saved_zero_for_non_summarization_channels(self) -> None:
         """tokens_saved is always 0 for code_analysis and similarity channels."""
@@ -393,7 +562,9 @@ class TestTokensSaved:
 
         by_type = {p["enrichment_type"]: p for p in payloads}
         assert by_type["code_analysis"]["tokens_saved"] == 0
+        assert by_type["code_analysis"]["net_tokens_saved"] == 0
         assert by_type["similarity"]["tokens_saved"] == 0
+        assert by_type["similarity"]["net_tokens_saved"] == 0
 
     def test_tokens_saved_zero_when_summarization_fails(self) -> None:
         """When summarization fails (success=False), tokens_saved=0."""
@@ -414,6 +585,7 @@ class TestTokensSaved:
             )
 
         assert payloads[0]["tokens_saved"] == 0
+        assert payloads[0]["net_tokens_saved"] == 0
 
     def test_tokens_saved_clamped_to_zero_minimum(self) -> None:
         """tokens_saved is clamped to >= 0 (never negative)."""
@@ -435,10 +607,287 @@ class TestTokensSaved:
             )
 
         assert payloads[0]["tokens_saved"] == 0
+        assert payloads[0]["net_tokens_saved"] == 0
 
 
 # ---------------------------------------------------------------------------
-# 5. Optional handler metadata fields
+# 7. outcome field in emitted events
+# ---------------------------------------------------------------------------
+
+
+class TestOutcomeField:
+    """Tests for the outcome field in emitted events (OMN-2441)."""
+
+    def test_outcome_hit_for_successful_enrichment(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=True, tokens=100)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"code_analysis"},
+            )
+
+        assert payloads[0]["outcome"] == "hit"
+
+    def test_outcome_error_for_failed_enrichment(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=False, tokens=0)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names=set(),
+            )
+
+        assert payloads[0]["outcome"] == "error"
+
+    def test_outcome_inflated_for_summarization_token_increase(self) -> None:
+        """Summarization that increases token count should emit outcome=inflated."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        # tokens=500 > original_prompt_token_count=200 → inflated
+        results = [_FakeResult(name="summarization", success=True, tokens=500)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"summarization"},
+                original_prompt_token_count=200,
+            )
+
+        assert payloads[0]["outcome"] == "inflated"
+
+
+# ---------------------------------------------------------------------------
+# 8. channel and model_name canonical fields
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalFields:
+    """Tests for omnidash-canonical field names in emitted events (OMN-2441)."""
+
+    def test_channel_matches_enrichment_type(self) -> None:
+        """channel field must equal enrichment_type."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        for name in ("summarization", "code_analysis", "similarity"):
+            payloads.clear()
+            results = [_FakeResult(name=name, success=True, tokens=50)]
+            with patch.object(eoe, "emit_event", _capture):
+                eoe.emit_enrichment_events(
+                    session_id="s",
+                    correlation_id="c",
+                    results=results,
+                    kept_names={name},
+                )
+            assert payloads[0]["channel"] == name
+
+    def test_model_name_matches_model_used(self) -> None:
+        """model_name field must equal model_used."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [
+            _FakeResult(
+                name="code_analysis", success=True, tokens=50, model_used="coder-30b"
+            )
+        ]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"code_analysis"},
+            )
+        assert payloads[0]["model_name"] == "coder-30b"
+
+    def test_tokens_after_matches_result_token_count(self) -> None:
+        """tokens_after must equal the result_token_count."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=True, tokens=123)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"code_analysis"},
+            )
+        assert payloads[0]["tokens_after"] == 123
+
+    def test_similarity_score_matches_relevance_score(self) -> None:
+        """similarity_score must equal relevance_score."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [
+            _FakeResult(
+                name="similarity", success=True, tokens=40, relevance_score=0.88
+            )
+        ]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"similarity"},
+            )
+        assert payloads[0]["similarity_score"] == pytest.approx(0.88, abs=1e-6)
+
+    def test_tokens_before_zero_for_non_summarization(self) -> None:
+        """tokens_before must be 0 for code_analysis and similarity channels."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        for name in ("code_analysis", "similarity"):
+            payloads.clear()
+            results = [_FakeResult(name=name, success=True, tokens=100)]
+            with patch.object(eoe, "emit_event", _capture):
+                eoe.emit_enrichment_events(
+                    session_id="s",
+                    correlation_id="c",
+                    results=results,
+                    kept_names={name},
+                    original_prompt_token_count=500,
+                )
+            assert payloads[0]["tokens_before"] == 0, f"Expected 0 for {name}"
+
+    def test_tokens_before_set_for_summarization(self) -> None:
+        """tokens_before must equal original_prompt_token_count for summarization."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="summarization", success=True, tokens=200)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"summarization"},
+                original_prompt_token_count=700,
+            )
+        assert payloads[0]["tokens_before"] == 700
+
+
+# ---------------------------------------------------------------------------
+# 9. repo and agent_name propagation
+# ---------------------------------------------------------------------------
+
+
+class TestRepoAndAgentName:
+    """Tests for repo and agent_name fields in emitted events (OMN-2441)."""
+
+    def test_repo_derived_from_project_path(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="summarization", success=True, tokens=50)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"summarization"},
+                project_path="/Volumes/PRO-G40/Code/omniclaude2",
+            )
+        assert payloads[0]["repo"] == "omniclaude2"
+
+    def test_repo_none_when_no_project_path(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="summarization", success=True, tokens=50)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"summarization"},
+            )
+        assert payloads[0]["repo"] is None
+
+    def test_agent_name_propagated(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=True, tokens=50)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"code_analysis"},
+                agent_name="api-architect",
+            )
+        assert payloads[0]["agent_name"] == "api-architect"
+
+    def test_agent_name_none_when_not_provided(self) -> None:
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=True, tokens=50)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names={"code_analysis"},
+            )
+        assert payloads[0]["agent_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# 10. Optional handler metadata fields
 # ---------------------------------------------------------------------------
 
 
@@ -467,6 +916,7 @@ class TestOptionalHandlerMetadata:
             )
 
         assert payloads[0]["model_used"] == "coder-14b"
+        assert payloads[0]["model_name"] == "coder-14b"
 
     def test_relevance_score_propagated(self) -> None:
         """relevance_score from the handler result is included in the event."""
@@ -490,6 +940,7 @@ class TestOptionalHandlerMetadata:
             )
 
         assert payloads[0]["relevance_score"] == pytest.approx(0.91, abs=1e-6)
+        assert payloads[0]["similarity_score"] == pytest.approx(0.91, abs=1e-6)
 
     def test_fallback_used_propagated(self) -> None:
         """fallback_used=True is propagated when handler reports it."""
@@ -568,7 +1019,7 @@ class TestOptionalHandlerMetadata:
 
 
 # ---------------------------------------------------------------------------
-# 6. Graceful degradation when emit_client_wrapper is unavailable
+# 11. Graceful degradation when emit_client_wrapper is unavailable
 # ---------------------------------------------------------------------------
 
 
@@ -609,7 +1060,7 @@ class TestGracefulDegradation:
 
 
 # ---------------------------------------------------------------------------
-# 7. _extract_* helper functions
+# 12. _extract_* helper functions
 # ---------------------------------------------------------------------------
 
 
