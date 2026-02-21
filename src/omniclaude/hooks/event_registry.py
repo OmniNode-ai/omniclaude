@@ -495,7 +495,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "fallback_reason", "routing_prompt_version"],
     ),
     # =========================================================================
-    # Context Enrichment Observability Events (OMN-2274)
+    # Context Enrichment Observability Events (OMN-2274, OMN-2441)
     # =========================================================================
     "context.enrichment": EventRegistration(
         event_type="context.enrichment",
@@ -507,7 +507,16 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "enrichment_type"],
+        # OMN-2441: 'channel' replaces 'enrichment_type' — payloads without 'channel' are intentionally rejected.
+        # Audited: no caller invokes validate_payload("context.enrichment", ...) with the old
+        # 'enrichment_type' field — the only call site is embedded_publisher.py which forwards
+        # the payload as-is from enrichment_observability_emitter.py (which already emits
+        # 'channel').  No callers need updating.
+        # Manually verified at OMN-2441; re-audit if new validate_payload("context.enrichment", ...) call sites are added.
+        # Migration hint: if validation fails with "missing field: channel", the caller was built
+        # against the old contract ('enrichment_type'); migrate to 'channel' per OMN-2441 and
+        # see OMN-2473 for the legacy field removal timeline.
+        required_fields=["session_id", "channel"],
     ),
     # =========================================================================
     # Notification Events (OMN-1831)

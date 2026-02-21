@@ -405,6 +405,7 @@ def main() -> None:
         session_id: str = input_data.get("session_id", "") or ""
         correlation_id: str = input_data.get("correlation_id", "") or ""
         project_path: str = input_data.get("project_path", "") or ""
+        agent_name: str | None = input_data.get("agent_name") or None
 
         if not prompt:
             logger.debug("Empty prompt in input")
@@ -422,7 +423,7 @@ def main() -> None:
         # Apply token cap
         kept_results = _apply_token_cap(raw_results)
 
-        # Emit per-enrichment observability events (OMN-2274).
+        # Emit per-enrichment observability events (OMN-2274, OMN-2441).
         # Fire-and-forget: errors must not affect the hook output.
         if _emit_enrichment_events is not None and raw_results:
             kept_names = {r.name for r in kept_results}
@@ -433,6 +434,8 @@ def main() -> None:
                     results=raw_results,
                     kept_names=kept_names,
                     original_prompt_token_count=original_prompt_token_count,
+                    project_path=project_path,
+                    agent_name=agent_name,
                 )
             except Exception as _obs_exc:
                 logger.debug("Enrichment observability emission failed: %s", _obs_exc)

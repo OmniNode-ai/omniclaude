@@ -516,12 +516,32 @@ ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
 ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
 if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+    # Normalize routing sentinels to empty string so Python maps them to None.
+    # "NO_AGENT_DETECTED" is a jq fallback for absent/malformed routing JSON.
+    # "null" is the literal string jq emits when the agent_name field is JSON null.
+    # In both cases downstream dashboards expect null, not the sentinel string.
+    # Python's `input_data.get("agent_name") or None` does NOT catch the string "null".
+    # Note: AGENT_NAME is always set by the routing block above (line 174); the :- default
+    # is a safety net for any future code path that bypasses routing, yielding empty string.
+    AGENT_NAME_FOR_ENRICHMENT="${AGENT_NAME:-}"
+    [[ "$AGENT_NAME_FOR_ENRICHMENT" == "NO_AGENT_DETECTED" ]] && AGENT_NAME_FOR_ENRICHMENT=""
+    [[ "$AGENT_NAME_FOR_ENRICHMENT" == "null" ]] && AGENT_NAME_FOR_ENRICHMENT=""
+    # Shell normalizes NO_AGENT_DETECTED/null → ""; Python normalizes "" → None via `or None`.
+    # Both guards are required: removing either breaks the contract.
+    # Known sentinels from routing layer (update here if routing adds new sentinel values):
+    #   "NO_AGENT_DETECTED" -- jq fallback for absent/malformed routing JSON (guard above)
+    #   "null"              -- literal string jq emits when agent_name field is JSON null (guard above)
+    #   ""                  -- empty string produced when routing returns an empty selected_agent;
+    #                          in jq, "" is truthy so `// "NO_AGENT_DETECTED"` does NOT fire for
+    #                          it; bypasses both explicit guards; Python maps "" → None via
+    #                          `input_data.get("agent_name") or None` implicitly
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg project_path "$PROJECT_ROOT" \
-        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path}' 2>/dev/null)
+        --arg agent_name "$AGENT_NAME_FOR_ENRICHMENT" \
+        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path, agent_name: $agent_name}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e
         # 1s = Python startup overhead + 200ms inner budget
