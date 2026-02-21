@@ -18,7 +18,7 @@ class ModelClassificationResponse(BaseModel):
         elapsed_ms: Service-reported elapsed time in milliseconds.
     """
 
-    model_config = ConfigDict(extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     success: bool = Field(
         default=False, description="True when classification succeeded"
