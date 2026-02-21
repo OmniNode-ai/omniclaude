@@ -29,8 +29,18 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
     OutcomeStatus,
 )
+from omniclaude.trace.pr_envelope import (
+    AssociationResult,
+    ModelCIArtifact,
+    ModelPRBodyVersion,
+    ModelPRText,
+    ModelPRTimeline,
+    PRDescriptionDelta,
+    PREnvelope,
+)
 
 __all__ = [
+    # change_frame exports
     "AssociationMethod",
     "ChangeFrame",
     "FailureType",
@@ -43,4 +53,12 @@ __all__ = [
     "ModelToolEvent",
     "ModelWorkspaceRef",
     "OutcomeStatus",
+    # pr_envelope exports
+    "AssociationResult",
+    "ModelCIArtifact",
+    "ModelPRBodyVersion",
+    "ModelPRText",
+    "ModelPRTimeline",
+    "PRDescriptionDelta",
+    "PREnvelope",
 ]
