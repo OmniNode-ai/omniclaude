@@ -1,0 +1,436 @@
+# repo_manifest.yaml
+#
+# Static config mapping the 14 primary omni repos to keyword lists and
+# precedence weights used by epic_decomposer.py for ticket → repo assignment.
+#
+# Scoring: presence/absence (not frequency). A keyword appearing anywhere in
+# the ticket title or description counts once toward that repo's score.
+#
+# MIN_TOP_SCORE: cross-repo split rule only applies when the top-scoring repo
+# reaches at least this threshold. Below this score, assign to omniplan for
+# triage instead of attempting a split.
+
+MIN_TOP_SCORE: 4
+
+repos:
+  - name: omnibase_core
+    description: >
+      Core ONEX runtime framework — node types (Effect, Compute, Reducer,
+      Orchestrator), contract models, Pydantic base schemas, enum governance,
+      registry, type system, and protocol definitions shared across all repos.
+    keywords:
+      - core
+      - base
+      - model
+      - protocol
+      - schema
+      - pydantic
+      - enum
+      - registry
+      - contract
+      - types
+      - type
+      - runtime
+      - node
+      - effect
+      - compute
+      - reducer
+      - orchestrator
+      - framework
+      - validation
+      - dataclass
+      - field
+      - validator
+      - frozen
+      - literal
+      - annotation
+      - handshake
+      - exports
+      - __all__
+      - omnibase
+    precedence: 1
+
+  - name: omnibase_spi
+    description: >
+      Service Provider Interface layer — abstract base classes, interface
+      definitions, adapter contracts, and plugin SPI boundaries that other
+      repos implement against.
+    keywords:
+      - spi
+      - interface
+      - adapter
+      - provider
+      - abstract
+      - plugin
+      - boundary
+      - dependency
+      - injection
+      - inversion
+      - port
+      - hexagonal
+      - implementation
+      - concrete
+      - stub
+      - mock
+      - protocol
+      - abc
+    precedence: 2
+
+  - name: omnibase_infra
+    description: >
+      Infrastructure layer — Kafka/Redpanda event bus, Slack webhooks,
+      PostgreSQL handlers, database migrations, event emission, webhook
+      processors, and all external-service integrations.
+    keywords:
+      - infra
+      - kafka
+      - redpanda
+      - slack
+      - postgres
+      - postgresql
+      - database
+      - db
+      - handler
+      - webhook
+      - event
+      - migration
+      - topic
+      - consumer
+      - producer
+      - broker
+      - queue
+      - message
+      - emit
+      - emission
+      - publish
+      - subscribe
+      - notification
+      - alert
+      - channel
+      - thread
+      - dlq
+      - dead-letter
+      - retry
+      - backoff
+      - connection
+      - credentials
+      - alembic
+      - sqlalchemy
+    precedence: 3
+
+  - name: omniagent
+    description: >
+      Agent framework — agent definitions, agent YAML configs, agent routing
+      logic, agent registry, multi-agent coordination, agent lifecycle
+      management, and agent behavioral specifications.
+    keywords:
+      - agent
+      - agents
+      - routing
+      - route
+      - router
+      - dispatch
+      - selector
+      - coordinator
+      - orchestration
+      - lifecycle
+      - behavioral
+      - spawn
+      - worker
+      - delegation
+      - delegate
+      - polymorphic
+      - activation
+      - trigger
+      - candidate
+      - selection
+      - matching
+      - fuzzy
+    precedence: 4
+
+  - name: omniclaude
+    description: >
+      Claude Code plugin — hooks (SessionStart, UserPromptSubmit, PostToolUse,
+      SessionEnd), hook scripts, handler modules, agent YAML configs for Claude
+      Code, slash commands, skills, context injection, emit daemon, and all
+      Claude Code-specific integrations.
+    keywords:
+      - claude
+      - hook
+      - hooks
+      - session
+      - prompt
+      - tool
+      - posttooluse
+      - sessionstart
+      - sessionend
+      - userpromptsubmit
+      - skill
+      - skills
+      - command
+      - commands
+      - plugin
+      - inject
+      - injection
+      - context
+      - daemon
+      - emit
+      - socket
+      - unix
+      - manifest
+      - yaml
+      - agent-yaml
+      - epic-team
+      - ticket-work
+      - pr-review
+      - parallel-solve
+      - omniclaude
+      - epic
+      - decomposer
+      - repo_manifest
+    precedence: 4
+
+  - name: omniintelligence
+    description: >
+      Intelligence processing service — RAG pipeline, vector search via
+      Qdrant, code analysis, pattern discovery, intent classification,
+      prompt enrichment, semantic search, embeddings, and LLM orchestration.
+    keywords:
+      - intelligence
+      - rag
+      - vector
+      - qdrant
+      - embedding
+      - embeddings
+      - semantic
+      - search
+      - classification
+      - intent
+      - classify
+      - enrich
+      - enrichment
+      - pattern
+      - patterns
+      - analysis
+      - analyze
+      - llm
+      - language-model
+      - similarity
+      - retrieval
+      - augmented
+      - generation
+      - index
+      - indexing
+      - chunk
+      - chunking
+      - tokenize
+      - omniintelligence
+    precedence: 5
+
+  - name: omnimemory
+    description: >
+      Memory and persistence layer — learned patterns storage, session memory,
+      vector store management, knowledge base, persistent context, memory
+      retrieval, and long-term agent memory.
+    keywords:
+      - memory
+      - persist
+      - persistence
+      - store
+      - storage
+      - knowledge
+      - learned
+      - learning
+      - recall
+      - retrieve
+      - retention
+      - cache
+      - caching
+      - state
+      - stateful
+      - session-memory
+      - context-memory
+      - omnimemory
+    precedence: 5
+
+  - name: omnimcp
+    description: >
+      Model Context Protocol (MCP) server — MCP tool definitions, MCP server
+      implementation, tool handlers, resource endpoints, Linear MCP integration,
+      and Claude tool-use protocol implementations.
+    keywords:
+      - mcp
+      - model-context-protocol
+      - tool
+      - tools
+      - resource
+      - server
+      - endpoint
+      - handler
+      - linear-mcp
+      - tool-use
+      - tool-call
+      - function-call
+      - omnimcp
+    precedence: 5
+
+  - name: omninode_infra
+    description: >
+      Node infrastructure — ONEX node deployment, node runtime infrastructure,
+      node execution environment, containerization, node lifecycle management,
+      and Kubernetes node orchestration.
+    keywords:
+      - omninode-infra
+      - node-infra
+      - node-runtime
+      - execution
+      - container
+      - kubernetes
+      - k8s
+      - pod
+      - deploy
+      - deployment
+      - orchestrate
+      - runtime-env
+      - node-lifecycle
+      - cluster
+      - scaling
+      - autoscale
+      - omninode_infra
+    precedence: 6
+
+  - name: omninode_planning
+    description: >
+      Planning nodes — ONEX nodes for project planning, task decomposition,
+      ticket generation, roadmap planning nodes, and planning-specific
+      compute/reducer/orchestrator implementations.
+    keywords:
+      - planning-node
+      - plan-node
+      - decompose
+      - decomposition
+      - task-node
+      - ticket-node
+      - roadmap-node
+      - breakdown
+      - work-breakdown
+      - wbs
+      - omninode_planning
+      - node-planning
+      - omninode
+      - plan-orchestrator
+      - work-breakdown-node
+      - task-breakdown
+      - wbs-node
+      - node-impl
+    precedence: 6
+
+  - name: omninode_review
+    description: >
+      Review nodes — ONEX nodes for code review, PR review automation,
+      quality assessment nodes, review pipeline nodes, and review-specific
+      node implementations.
+    keywords:
+      - review-node
+      - code-review-node
+      - pr-review-node
+      - quality-node
+      - assessment-node
+      - omninode_review
+      - node-review
+      - review-pipeline
+      - review
+      - pr
+      - quality
+      - assess
+      - assessment
+      - code-review
+    precedence: 6
+
+  - name: omnidash
+    description: >
+      Dashboard and observability UI — metrics dashboards, Grafana integrations,
+      observability visualizations, monitoring UIs, Redpanda Console config,
+      event stream viewers, and operational dashboards.
+    keywords:
+      - dashboard
+      - dash
+      - grafana
+      - metrics
+      - visualization
+      - visualize
+      - monitor
+      - monitoring
+      - observability
+      - ui
+      - frontend
+      - console
+      - panel
+      - chart
+      - graph
+      - alert
+      - alerting
+      - stream-viewer
+      - omnidash
+    precedence: 7
+
+  - name: omniplan
+    description: >
+      Planning and project management — roadmap planning, project milestones,
+      epic management, project status tracking, planning workflows, triage
+      workflows, and unmatched ticket catch-all (default assignment target).
+    keywords:
+      - plan
+      - planning
+      - roadmap
+      - project
+      - milestone
+      - epic
+      - triage
+      - status
+      - tracking
+      - prioritize
+      - prioritization
+      - backlog
+      - sprint
+      - cycle
+      - initiative
+      - omniplan
+      - workflow
+      - gantt
+      - timeline
+      - scope
+    precedence: 7
+
+  - name: omniweb
+    description: >
+      Web frontend — user-facing web application, React/Next.js UI, web API
+      endpoints, HTTP client integrations, browser-based tooling, and
+      web-specific service layers.
+    keywords:
+      - web
+      - frontend
+      - react
+      - next
+      - nextjs
+      - browser
+      - http
+      - api
+      - rest
+      - restful
+      - graphql
+      - ui
+      - ux
+      - component
+      - page
+      - route
+      - css
+      - html
+      - typescript
+      - javascript
+      - omniweb
+      - client
+      - spa
+      - server-side-rendering
+      - ssr
+    precedence: 8
