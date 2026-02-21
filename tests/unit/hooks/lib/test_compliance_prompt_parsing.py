@@ -268,6 +268,7 @@ class TestEligibilityFiltering:
                 session_id="sess-parse",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []  # always empty — async model
@@ -294,6 +295,7 @@ class TestBadOutputRecovery:
                 file_path="/test/file.py",
                 session_id="sess-empty",
                 language="python",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []
@@ -319,6 +321,7 @@ class TestBadOutputRecovery:
                 session_id="sess-filtered",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []
@@ -448,6 +451,7 @@ class TestBadOutputRecovery:
                 file_path="/test/file.py",
                 session_id="sess-crash",
                 language="python",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["enforced"] is False
         assert result["error"] == "unexpected crash"
@@ -678,6 +682,7 @@ class TestEdgeCases:
                 file_path="/test/file.py",
                 session_id="sess-timing",
                 language="python",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert isinstance(result["elapsed_ms"], float)
         assert result["elapsed_ms"] >= 0.0
@@ -697,6 +702,7 @@ class TestEdgeCases:
                 session_id="sess-count",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["patterns_queried"] == 7
 
@@ -752,6 +758,7 @@ class TestEdgeCases:
                 session_id="sess-many",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2024-01-01T00:00:00Z",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []  # always empty
