@@ -73,20 +73,28 @@ jobs:
         id: find-artifacts
         run: |
           set -e
-          # Find YAML files following onex_change_control schema naming patterns:
-          #   *contract*.yaml / *contract*.yml  -> validated as ModelTicketContract
-          #   *day_close*.yaml / *day_close*.yml -> validated as ModelDayClose
-          # Excludes: checked-out onex_change_control repo, venvs, git dir,
-          # and plugins/ (agent/command/skill YAMLs often contain "contract" in
-          # their names but are not ticket-contract schema artifacts).
-          FILES=$(find . \
-            -not -path './onex_change_control/*' \
-            -not -path './.venv/*' \
-            -not -path './plugins/*' \
-            -not -path './.git/*' \
-            \( -name '*contract*.yaml' -o -name '*contract*.yml' \
-               -o -name '*day_close*.yaml' -o -name '*day_close*.yml' \) \
-            2>/dev/null | sort || true)
+          # Search only in directories explicitly reserved for schema artifacts.
+          # Using an allowlist (not a blocklist) prevents false positives from
+          # source files, agent configs, hook contracts, or any other YAML that
+          # happens to contain "contract" or "day_close" in its name.
+          #
+          # Reserved schema artifact directories (none exist yet -- gate skips gracefully):
+          #   contracts/  -> ModelTicketContract YAMLs (e.g., contracts/OMN-1234.yaml)
+          #   schemas/    -> schema definitions
+          #   artifacts/  -> general schema artifacts
+          #   drift/      -> ModelDayClose YAMLs (e.g., drift/day_close/2026-02-21.yaml)
+          FILES=""
+          for dir in contracts schemas artifacts drift; do
+            if [ -d "$dir" ]; then
+              FOUND=$(find "$dir" \
+                \( -name '*contract*.yaml' -o -name '*contract*.yml' \
+                   -o -name '*day_close*.yaml' -o -name '*day_close*.yml' \) \
+                2>/dev/null | sort || true)
+              if [ -n "$FOUND" ]; then
+                FILES="${FILES}${FILES:+$'\n'}${FOUND}"
+              fi
+            fi
+          done
 
           if [ -n "$FILES" ]; then
             echo "found=true" >> "$GITHUB_OUTPUT"
