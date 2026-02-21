@@ -471,7 +471,9 @@ Task(
 
 **Orchestrator action after Phase 4:**
 - Log final pipeline summary including all phases, results, and any deferred tickets.
-- Pipeline COMPLETE. Manual merge required.
+- If `status: ready`: Report "Pipeline COMPLETE. PR is merge-ready. Manual merge required."
+- If `status: not_ready`: STOP. Report "PR is NOT merge-ready — blocking issues remain." Include blocking and nit counts from the output. Do NOT say "Pipeline COMPLETE."
+- If `status: failed`: STOP. Report "Phase 4 invocation failed." Include the error details from the result.
 
 ---
 
