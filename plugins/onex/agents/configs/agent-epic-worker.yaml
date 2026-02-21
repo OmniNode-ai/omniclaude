@@ -64,6 +64,10 @@ workflow_template:
         detail: |
           Check that the target repo directory exists at ../{repo} relative to cwd.
           If missing:
+            Scan TaskList for any tasks with owner=="worker-{repo}" AND status==in_progress.
+            For each such task:
+              TaskUpdate(task_id, status=failed, note="TERMINATE: ../{repo} missing — worker aborted")
+            Then:
             SendMessage(to=team-lead, "FATAL: ../{repo} missing — worker cannot proceed")
             TERMINATE immediately. Do not claim tasks, do not continue.
 
@@ -71,6 +75,10 @@ workflow_template:
         action: "Check revocation: ~/.claude/epics/{epic_id}/revoked_runs.yaml"
         detail: |
           Load revoked_runs.yaml (if it exists). If run_id is listed as revoked:
+            Scan TaskList for any tasks with owner=="worker-{repo}" AND status==in_progress.
+            For each such task:
+              TaskUpdate(task_id, status=failed, note="TERMINATE: run {run_id} revoked — worker aborted")
+            Then:
             SendMessage(to=team-lead, "RUN REVOKED: {run_id} is in revoked_runs.yaml — terminating")
             TERMINATE immediately. Do not claim tasks, do not continue.
 
@@ -80,9 +88,10 @@ workflow_template:
       - step: 1
         action: "TaskList(team_name)"
         detail: |
-          Base filter: [epic:{epic_id}] AND [run:{run_id}]
+          Base filter: [epic:{epic_id}] AND [run:{run_id}] AND [repo:{repo}] (all three must appear in task description)
           Additional filter: owner=="worker-{repo}" AND status in {pending, in_progress}
-          This scopes the task list to this worker's repo and run.
+          The [repo:{repo}] tag in the description is required to prevent claiming tasks from a
+          different repo if the owner field is absent or misconfigured.
 
       - step: 2
         action: "Lease validation for in_progress tasks"
@@ -102,9 +111,9 @@ workflow_template:
           Never claim a task without re-fetching to confirm.
 
       - step: 4
-        action: "Parallel execution via git worktrees (multiple pending tasks)"
+        action: "Parallel execution via git worktrees (multiple in_progress tasks owned by this worker)"
         detail: |
-          When multiple pending tasks are available, use git worktrees for isolation.
+          When multiple in_progress tasks owned by this worker are available, use git worktrees for isolation.
           Skill: Skill("onex:using-git-worktrees")
           Worktree root:  ../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}
           Branch naming:  epic/{epic_id}/{ticket_id}/{run_id[:8]}
