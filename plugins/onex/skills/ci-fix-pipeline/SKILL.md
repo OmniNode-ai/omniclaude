@@ -66,7 +66,7 @@ For each classified failure:
 - **Small scope** → dispatches fix to a polymorphic agent (Polly), mirroring exact CI commands from `.github/workflows/ci.yml`
 - **Large scope** → dispatches `create-ticket` to Polly with full context; marks failure as deferred
 
-AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, `large_scope` (ticket created), or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`.
+AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`. Note: mid-fix `large_scope` failures must complete secondary ticket dispatch (confirmed `success`) before being counted — bare `large_scope` does not satisfy the advance condition.
 
 ### Phase 3: local_review
 
@@ -92,6 +92,8 @@ Parse arguments from `$ARGUMENTS`:
 | `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix` (no-op today; reserved for future confirmation gate), `local_review`, or `release_ready` |
 
 ### `--skip-to` handling
+
+**Note:** If `--dry-run` is also set, it takes precedence — evaluate the dry-run flag once at pipeline entry before any phase routing and stop immediately, regardless of `--skip-to`.
 
 When `--skip-to` is provided, begin execution at the named phase. Note that Phase 1 data (failure classification) is required by Phase 2 and later phases, so `--skip-to fix` does NOT skip Phase 1 — it re-runs Phase 1 silently and immediately advances to Phase 2. Only `--skip-to local_review` and `--skip-to release_ready` genuinely bypass earlier phases.
 
