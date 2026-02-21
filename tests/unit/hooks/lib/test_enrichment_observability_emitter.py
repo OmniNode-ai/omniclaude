@@ -1383,14 +1383,14 @@ class TestExtractHelpers:
 
 
 # ---------------------------------------------------------------------------
-# 13. Legacy field sentinel (OMN-2441-followup)
+# 13. Legacy field sentinel (OMN-2473)
 # ---------------------------------------------------------------------------
 
 
 class TestLegacyFieldsAreMarkedForRemoval:
     """Sentinel test enforcing that backward-compat fields are still present.
 
-    SENTINEL: When OMN-2441-followup is resolved and legacy fields are removed,
+    SENTINEL: When OMN-2473 is resolved and legacy fields are removed,
     this test must be deleted and the canonical field names verified instead.
     The test is intentionally designed to FAIL once the legacy fields are gone,
     forcing the developer to update it rather than silently leaving stale code.
@@ -1399,12 +1399,12 @@ class TestLegacyFieldsAreMarkedForRemoval:
     def test_legacy_fields_are_marked_for_removal(self) -> None:
         """All backward-compat fields must still exist in the payload.
 
-        This test exists to convert TODO(OMN-2441-followup) into an enforced
+        This test exists to convert TODO(OMN-2473) into an enforced
         contract.  When the legacy fields are removed from
         build_enrichment_event_payload, this test will fail, signalling that
         the sentinel must be deleted and canonical fields verified instead.
 
-        SENTINEL: When OMN-2441-followup is resolved and legacy fields are
+        SENTINEL: When OMN-2473 is resolved and legacy fields are
         removed, this test must be deleted and the canonical field names
         verified instead.
         """
@@ -1424,7 +1424,7 @@ class TestLegacyFieldsAreMarkedForRemoval:
             emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
-        # SENTINEL: When OMN-2441-followup is resolved and legacy fields are removed,
+        # SENTINEL: When OMN-2473 is resolved and legacy fields are removed,
         # this test must be deleted and the canonical field names verified instead.
         legacy_fields = {
             "enrichment_type",
@@ -1436,6 +1436,6 @@ class TestLegacyFieldsAreMarkedForRemoval:
         for field in legacy_fields:
             assert field in payload, (
                 f"Legacy field '{field}' missing from payload. "
-                f"If OMN-2441-followup has been resolved and this field was intentionally "
+                f"If OMN-2473 has been resolved and this field was intentionally "
                 f"removed, delete this test and verify canonical field names instead."
             )

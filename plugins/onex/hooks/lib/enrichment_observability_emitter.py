@@ -20,7 +20,7 @@ Canonical fields emitted (omnidash ContextEnrichmentEvent schema, OMN-2441):
     repo                -- repository name derived from project_path
     agent_name          -- agent that triggered the enrichment
 
-Legacy/backward-compat fields (retained for consumer migration, see TODO(OMN-2441-followup)):
+Legacy/backward-compat fields (retained for consumer migration, see TODO(OMN-2473)):
     enrichment_type     -- duplicate of ``channel`` under the old field name
     model_used          -- duplicate of ``model_name`` under the old field name
     result_token_count  -- duplicate of ``tokens_after`` under the old field name
@@ -61,7 +61,7 @@ Design notes:
 - Backward-compatible fields (enrichment_type, model_used, result_token_count,
   tokens_saved, relevance_score) are retained alongside the new canonical names
   so existing consumers are not broken.
-  TODO(OMN-2441-followup): Remove legacy fields once omnidash consumers migrate
+  TODO(OMN-2473): Remove legacy fields once omnidash consumers migrate
   to the canonical schema (channel, model_name, tokens_after, net_tokens_saved,
   similarity_score).  Track migration progress against OMN-2441.
 """
@@ -285,7 +285,7 @@ def build_enrichment_event_payload(
         "agent_name": agent_name,
         # ---------------------------------------------------------------
         # Backward-compat fields retained for consumer migration only.
-        # TODO(OMN-2441-followup): Remove once omnidash consumers migrate to
+        # TODO(OMN-2473): Remove once omnidash consumers migrate to
         # the canonical schema above.  The following fields are intentionally
         # omitted from the canonical ContextEnrichmentEvent schema and are
         # present here for legacy consumers only:
