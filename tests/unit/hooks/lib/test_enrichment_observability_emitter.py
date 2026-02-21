@@ -21,6 +21,7 @@ All tests run without network access or external services.
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -103,6 +104,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=300,
             was_dropped=False,
             prompt_version="v2",
+            success=True,
             tokens_before=500,
             repo="omniclaude2",
             agent_name="polymorphic-agent",
@@ -153,6 +155,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=True,
             prompt_version="v1",
+            success=True,
             tokens_before=300,
             repo="myrepo",
             agent_name="code-agent",
@@ -196,6 +199,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=False,
             prompt_version="",
+            success=True,
         )
         assert payload["relevance_score"] is None
         assert payload["similarity_score"] is None
@@ -214,11 +218,18 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=False,
             prompt_version="",
+            success=True,
         )
         assert payload["latency_ms"] == round(12.3456789, 3)
 
     def test_timestamp_is_iso8601_string(self) -> None:
-        """timestamp field must be a non-empty ISO-8601 string."""
+        """timestamp field must be the caller-injected datetime as an ISO-8601 string.
+
+        This test verifies the repository invariant: timestamps are injected by
+        callers for deterministic testing — not generated inside the function via
+        datetime.now().  The exact ISO-8601 value must match the injected datetime.
+        """
+        fixed_dt = datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC)
         payload = eoe.build_enrichment_event_payload(
             session_id="s",
             correlation_id="c",
@@ -231,10 +242,11 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=False,
             prompt_version="",
+            success=True,
+            emitted_at=fixed_dt,
         )
         ts = payload.get("timestamp")
-        assert isinstance(ts, str)
-        assert len(ts) > 10  # at minimum "YYYY-MM-DD"
+        assert ts == fixed_dt.isoformat()
 
     def test_cache_hit_always_false(self) -> None:
         """cache_hit must be False (not tracked yet)."""
@@ -250,6 +262,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=False,
             prompt_version="",
+            success=True,
         )
         assert payload["cache_hit"] is False
 
@@ -267,8 +280,45 @@ class TestBuildEnrichmentEventPayload:
             tokens_saved=0,
             was_dropped=False,
             prompt_version="",
+            success=True,
         )
         assert payload["quality_score"] is None
+
+    def test_outcome_miss_when_success_true_but_zero_tokens(self) -> None:
+        """success=True with result_token_count=0 must produce outcome='miss', not 'error'."""
+        payload = eoe.build_enrichment_event_payload(
+            session_id="s",
+            correlation_id="c",
+            enrichment_type="similarity",
+            model_used="",
+            latency_ms=5.0,
+            result_token_count=0,
+            relevance_score=None,
+            fallback_used=False,
+            tokens_saved=0,
+            was_dropped=False,
+            prompt_version="",
+            success=True,
+        )
+        assert payload["outcome"] == "miss"
+
+    def test_outcome_error_when_success_false(self) -> None:
+        """success=False must produce outcome='error' regardless of token count."""
+        payload = eoe.build_enrichment_event_payload(
+            session_id="s",
+            correlation_id="c",
+            enrichment_type="code_analysis",
+            model_used="",
+            latency_ms=5.0,
+            result_token_count=0,
+            relevance_score=None,
+            fallback_used=False,
+            tokens_saved=0,
+            was_dropped=False,
+            prompt_version="",
+            success=False,
+        )
+        assert payload["outcome"] == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -653,6 +703,25 @@ class TestOutcomeField:
             )
 
         assert payloads[0]["outcome"] == "error"
+
+    def test_outcome_miss_for_successful_enrichment_with_zero_tokens(self) -> None:
+        """success=True with tokens=0 must emit outcome='miss', not 'error'."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="code_analysis", success=True, tokens=0)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="s",
+                correlation_id="c",
+                results=results,
+                kept_names=set(),
+            )
+
+        assert payloads[0]["outcome"] == "miss"
 
     def test_outcome_inflated_for_summarization_token_increase(self) -> None:
         """Summarization that increases token count should emit outcome=inflated."""

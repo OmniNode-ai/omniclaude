@@ -159,10 +159,16 @@ def build_enrichment_event_payload(
     tokens_saved: int,
     was_dropped: bool,
     prompt_version: str,
+    success: bool,
     # OMN-2441: omnidash-compatible fields
     tokens_before: int = 0,
     repo: str | None = None,
     agent_name: str | None = None,
+    # Caller-injected timestamp for deterministic testing (repository invariant:
+    # no datetime.now() defaults).  Production callers may omit this parameter;
+    # the fallback to datetime.now(UTC) is intentional so existing call sites
+    # do not need to change.
+    emitted_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Build the payload dict for a single enrichment observability event.
 
@@ -195,18 +201,27 @@ def build_enrichment_event_payload(
         was_dropped: True when the enrichment ran successfully but was excluded
             by the token-cap drop policy (overflow).
         prompt_version: Prompt template version string from the handler, or "".
+        success: Whether the enrichment handler reported success.  Used to
+            distinguish "miss" (success=True, tokens=0) from "error"
+            (success=False).
         tokens_before: Original prompt token count before enrichment.  Used for
             the summarization channel to compute net_tokens_saved.  Zero for all
             other channels (they add context, not compress it).
         repo: Repository name (basename of project_path).  None when unknown.
         agent_name: Agent that triggered the enrichment.  None when unknown.
+        emitted_at: Explicit UTC timestamp for the event.  Callers should
+            inject this for deterministic testing.  When None (the default),
+            falls back to ``datetime.now(UTC)`` so production callers do not
+            need to change.
 
     Returns:
         Dict suitable for emission via emit_client_wrapper.emit_event().
     """
-    # Derive the outcome from result state
+    # Derive the outcome from result state using the explicit success flag so
+    # that a legitimate "miss" (success=True, tokens=0) is not misclassified
+    # as "error" (success=False).
     outcome = _derive_outcome(
-        success=(result_token_count > 0),
+        success=success,
         tokens_after=result_token_count,
         tokens_before=tokens_before,
         channel=enrichment_type,
@@ -216,7 +231,7 @@ def build_enrichment_event_payload(
         # ---------------------------------------------------------------
         # Canonical omnidash ContextEnrichmentEvent fields (OMN-2441)
         # ---------------------------------------------------------------
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": (emitted_at or datetime.now(UTC)).isoformat(),
         "correlation_id": correlation_id,
         "session_id": session_id,
         "channel": enrichment_type,  # omnidash field name
@@ -379,6 +394,7 @@ def emit_enrichment_events(
             tokens_saved=net_tokens_saved,
             was_dropped=was_dropped,
             prompt_version=_extract_prompt_version(result),
+            success=success,
             tokens_before=tokens_before,
             repo=repo,
             agent_name=agent_name,
