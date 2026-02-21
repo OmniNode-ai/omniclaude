@@ -37,6 +37,18 @@ from omniclaude.trace.fix_transition import (
     FixTransition,
     OpenFailure,
 )
+from omniclaude.trace.intelligence_integration import (
+    ContextItem,
+    FixTransitionEvent,
+    FixTransitionProcessingResult,
+    PatternPromotionCandidate,
+    build_context_item_from_fix_transition,
+    check_pattern_promotion,
+    parse_fix_transition_event,
+    process_fix_transition_event,
+    score_failure_signature_match,
+    score_file_touched_match,
+)
 from omniclaude.trace.pr_envelope import (
     AssociationResult,
     ModelCIArtifact,
@@ -84,4 +96,15 @@ __all__ = [
     # fix_transition exports
     "FixTransition",
     "OpenFailure",
+    # intelligence_integration exports
+    "ContextItem",
+    "FixTransitionEvent",
+    "FixTransitionProcessingResult",
+    "PatternPromotionCandidate",
+    "build_context_item_from_fix_transition",
+    "check_pattern_promotion",
+    "parse_fix_transition_event",
+    "process_fix_transition_event",
+    "score_failure_signature_match",
+    "score_file_touched_match",
 ]
