@@ -37,7 +37,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_omninode_bridge
+          POSTGRES_DB: test_omniclaude
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -75,13 +75,13 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
           PGPASSWORD: test_password
         run: |
           echo "::group::Initializing Database Schema"
 
           # Wait for PostgreSQL to be ready
-          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+          until psql -h localhost -U test_user -d test_omniclaude -c '\q'; do
             echo "Waiting for PostgreSQL..."
             sleep 2
           done
@@ -91,7 +91,7 @@ jobs:
           export POSTGRES_PORT=5432
           export POSTGRES_USER=test_user
           export POSTGRES_PASSWORD=test_password
-          export POSTGRES_DATABASE=test_omninode_bridge
+          export POSTGRES_DATABASE=test_omniclaude
 
           bash scripts/init-db.sh
 
@@ -100,7 +100,7 @@ jobs:
           for migration in migrations/*.sql; do
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
-              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+              psql -h localhost -U test_user -d test_omniclaude -f "$migration" || {
                 echo "Migration failed: $migration"
                 exit 1
               }
@@ -118,23 +118,23 @@ jobs:
 
           # Verify critical tables exist
           echo "Checking agent_routing_decisions table..."
-          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_routing_decisions' || exit 1
+          psql -h localhost -U test_user -d test_omniclaude -c '\d agent_routing_decisions' || exit 1
 
           echo "Checking agent_manifest_injections table..."
-          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_manifest_injections' || exit 1
+          psql -h localhost -U test_user -d test_omniclaude -c '\d agent_manifest_injections' || exit 1
 
           echo "Checking agent_execution_logs table..."
-          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_execution_logs' || exit 1
+          psql -h localhost -U test_user -d test_omniclaude -c '\d agent_execution_logs' || exit 1
 
           echo "Checking agent_transformation_events table..."
-          psql -h localhost -U test_user -d test_omninode_bridge -c '\d agent_transformation_events' || exit 1
+          psql -h localhost -U test_user -d test_omniclaude -c '\d agent_transformation_events' || exit 1
 
           # Verify indexes exist
           echo "Checking indexes..."
-          psql -h localhost -U test_user -d test_omninode_bridge -c '\di' || exit 1
+          psql -h localhost -U test_user -d test_omniclaude -c '\di' || exit 1
 
           # Count tables
-          TABLE_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
+          TABLE_COUNT=$(psql -h localhost -U test_user -d test_omniclaude -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';")
           echo "Total tables created: $TABLE_COUNT"
 
           # Use configurable threshold (configurable via EXPECTED_MIN_TABLES env var)
@@ -155,7 +155,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Database Operations Tests"
 
@@ -178,7 +178,7 @@ jobs:
         run: |
           echo "::group::Resource Leak Detection"
           # Check database connections
-          psql -h localhost -U test_user -d test_omninode_bridge -c "SELECT COUNT(*) as active_connections FROM pg_stat_activity;" || echo "Cannot check DB connections"
+          psql -h localhost -U test_user -d test_omniclaude -c "SELECT COUNT(*) as active_connections FROM pg_stat_activity;" || echo "Cannot check DB connections"
           # Check for unclosed file descriptors
           lsof -p $$ 2>/dev/null | head -20 || echo "lsof not available, skipping"
           echo "::endgroup::"
@@ -202,7 +202,7 @@ jobs:
 
           # This test specifically verifies the UUID bug is fixed
           # Insert a test record with UUID
-          psql -h localhost -U test_user -d test_omninode_bridge <<EOF
+          psql -h localhost -U test_user -d test_omniclaude <<EOF
           INSERT INTO agent_routing_decisions (
             request_id,
             user_request,
@@ -224,7 +224,7 @@ jobs:
           EOF
 
           # Verify the record was inserted successfully
-          RESULT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE user_request = 'Test request';")
+          RESULT=$(psql -h localhost -U test_user -d test_omniclaude -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE user_request = 'Test request';")
 
           if [ "$RESULT" -eq 0 ]; then
             echo "ERROR: UUID field handling test failed"
@@ -323,7 +323,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Kafka Event Publishing Tests"
 
@@ -347,7 +347,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Routing Event Flow Tests"
 
@@ -406,7 +406,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_omninode_bridge
+          POSTGRES_DB: test_omniclaude
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -446,10 +446,10 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
           PGPASSWORD: test_password
         run: |
-          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+          until psql -h localhost -U test_user -d test_omniclaude -c '\q'; do
             sleep 2
           done
           bash scripts/init-db.sh
@@ -459,7 +459,7 @@ jobs:
           for migration in migrations/*.sql; do
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
-              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+              psql -h localhost -U test_user -d test_omniclaude -f "$migration" || {
                 echo "Migration failed: $migration"
                 exit 1
               }
@@ -473,7 +473,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Agent Execution Logging Tests"
 
@@ -490,7 +490,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Action Logging E2E Tests"
 
@@ -504,7 +504,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
         run: |
           echo "::group::Transformation Event Logging Tests"
 
@@ -522,15 +522,15 @@ jobs:
           # This catches logging gaps like the ones discovered manually
 
           # Check that agent_actions table has entries
-          ACTIONS_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_actions;")
+          ACTIONS_COUNT=$(psql -h localhost -U test_user -d test_omniclaude -t -c "SELECT COUNT(*) FROM agent_actions;")
           echo "Agent actions logged: $ACTIONS_COUNT"
 
           # Check that agent_execution_logs table has entries
-          EXEC_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_execution_logs;")
+          EXEC_COUNT=$(psql -h localhost -U test_user -d test_omniclaude -t -c "SELECT COUNT(*) FROM agent_execution_logs;")
           echo "Agent execution logs: $EXEC_COUNT"
 
           # Verify correlation IDs are properly set (not NULL)
-          NULL_CORR_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_execution_logs WHERE correlation_id IS NULL;")
+          NULL_CORR_COUNT=$(psql -h localhost -U test_user -d test_omniclaude -t -c "SELECT COUNT(*) FROM agent_execution_logs WHERE correlation_id IS NULL;")
 
           if [ "$NULL_CORR_COUNT" -gt 0 ]; then
             echo "ERROR: Found $NULL_CORR_COUNT execution logs with NULL correlation_id"
@@ -563,7 +563,7 @@ jobs:
         env:
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_omninode_bridge
+          POSTGRES_DB: test_omniclaude
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -603,10 +603,10 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
           PGPASSWORD: test_password
         run: |
-          until psql -h localhost -U test_user -d test_omninode_bridge -c '\q'; do
+          until psql -h localhost -U test_user -d test_omniclaude -c '\q'; do
             sleep 2
           done
           bash scripts/init-db.sh
@@ -616,7 +616,7 @@ jobs:
           for migration in migrations/*.sql; do
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
-              psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
+              psql -h localhost -U test_user -d test_omniclaude -f "$migration" || {
                 echo "Migration failed: $migration"
                 exit 1
               }
@@ -630,7 +630,7 @@ jobs:
           POSTGRES_PORT: 5432
           POSTGRES_USER: test_user
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DATABASE: test_omninode_bridge
+          POSTGRES_DATABASE: test_omniclaude
           REDIS_URL: redis://localhost:6379/0
         run: |
           echo "::group::Full Pipeline Integration Tests"
