@@ -194,9 +194,10 @@ def build_enrichment_event_payload(
     defaults inside builders).  ``tokens_before``, ``repo``, and ``agent_name``
     have defaults and may be omitted by callers.
 
-    The payload includes both the original internal field names (for backward
-    compatibility with any existing consumers) and the omnidash-canonical field
-    names required by ``ContextEnrichmentEvent`` in omnidash's shared types.
+    The payload uses the omnidash-canonical field names required by
+    ``ContextEnrichmentEvent`` in omnidash's shared types (OMN-2441).
+    Backward-compat alias fields were removed in OMN-2463 after omnidash
+    consumers completed migration to canonical names.
 
     Per the repository invariant, callers must pass ``emitted_at`` explicitly
     so that the timestamp is deterministic in tests.  ``emit_enrichment_events``
@@ -284,24 +285,11 @@ def build_enrichment_event_payload(
         "repo": repo,
         "agent_name": agent_name,
         # ---------------------------------------------------------------
-        # Backward-compat fields retained for consumer migration only.
-        # TODO(OMN-2473): Remove once omnidash consumers migrate to
-        # the canonical schema above.  The following fields are intentionally
-        # omitted from the canonical ContextEnrichmentEvent schema and are
-        # present here for legacy consumers only:
-        #   - fallback_used: internal handler detail, not part of omnidash schema
-        #   - was_dropped: token-cap policy detail, not part of omnidash schema
-        #   - prompt_version: handler-internal versioning, not part of omnidash schema
-        # The remaining fields below (enrichment_type, model_used,
-        # result_token_count, relevance_score, tokens_saved) are duplicates of
-        # canonical fields under old names; remove after consumers migrate.
+        # Internal handler metadata fields (not part of omnidash schema).
+        # These track handler-internal state for debugging and observability
+        # but are not consumed by omnidash consumers.
         # ---------------------------------------------------------------
-        "enrichment_type": enrichment_type,
-        "model_used": model_used,
-        "result_token_count": result_token_count,
-        "relevance_score": relevance_score,
         "fallback_used": fallback_used,
-        "tokens_saved": net_tokens_saved,
         "was_dropped": was_dropped,
         "prompt_version": prompt_version,
     }

@@ -10,7 +10,7 @@ Tests cover:
   net_tokens_saved, similarity_score, cache_hit, outcome, timestamp, repo, agent_name)
 - Graceful degradation when emit_client_wrapper is unavailable
 - No-op when results list is empty
-- Optional handler metadata fields (model_used, relevance_score, etc.)
+- Optional handler metadata fields (fallback_used, was_dropped, prompt_version)
 - _derive_outcome helper
 - _derive_repo helper
 - project_path and agent_name propagation
@@ -111,17 +111,12 @@ class TestBuildEnrichmentEventPayload:
             emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
-        # Internal / backward-compat fields
+        # Internal handler metadata fields (not part of omnidash schema)
         internal_keys = {
             "session_id",
             "correlation_id",
-            "enrichment_type",
-            "model_used",
             "latency_ms",
-            "result_token_count",
-            "relevance_score",
             "fallback_used",
-            "tokens_saved",
             "was_dropped",
             "prompt_version",
         }
@@ -163,16 +158,11 @@ class TestBuildEnrichmentEventPayload:
             emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
-        # Internal fields
+        # Internal handler metadata fields
         assert payload["session_id"] == "sid"
         assert payload["correlation_id"] == "cid"
-        assert payload["enrichment_type"] == "code_analysis"
-        assert payload["model_used"] == "coder-14b"
         assert payload["latency_ms"] == 100.0
-        assert payload["result_token_count"] == 200
-        assert payload["relevance_score"] == 0.5
         assert payload["fallback_used"] is True
-        assert payload["tokens_saved"] == 0
         assert payload["was_dropped"] is True
         assert payload["prompt_version"] == "v1"
         # Canonical fields
@@ -204,7 +194,6 @@ class TestBuildEnrichmentEventPayload:
             success=True,
             emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
-        assert payload["relevance_score"] is None
         assert payload["similarity_score"] is None
 
     def test_latency_ms_rounded_to_three_places(self) -> None:
@@ -621,7 +610,7 @@ class TestWasDropped:
             )
 
         assert len(payloads) == 2
-        by_type = {p["enrichment_type"]: p for p in payloads}
+        by_type = {p["channel"]: p for p in payloads}
         assert by_type["summarization"]["was_dropped"] is False
         assert by_type["similarity"]["was_dropped"] is True
 
@@ -764,8 +753,7 @@ class TestTokensSaved:
                 original_prompt_token_count=800,
             )
 
-        assert payloads[0]["tokens_saved"] == 600  # 800 - 200
-        assert payloads[0]["net_tokens_saved"] == 600  # canonical name
+        assert payloads[0]["net_tokens_saved"] == 600  # 800 - 200
 
     def test_tokens_saved_zero_for_non_summarization_channels(self) -> None:
         """tokens_saved is always 0 for code_analysis and similarity channels."""
@@ -788,10 +776,8 @@ class TestTokensSaved:
                 original_prompt_token_count=1000,
             )
 
-        by_type = {p["enrichment_type"]: p for p in payloads}
-        assert by_type["code_analysis"]["tokens_saved"] == 0
+        by_type = {p["channel"]: p for p in payloads}
         assert by_type["code_analysis"]["net_tokens_saved"] == 0
-        assert by_type["similarity"]["tokens_saved"] == 0
         assert by_type["similarity"]["net_tokens_saved"] == 0
 
     def test_tokens_saved_zero_when_summarization_fails(self) -> None:
@@ -812,7 +798,6 @@ class TestTokensSaved:
                 original_prompt_token_count=500,
             )
 
-        assert payloads[0]["tokens_saved"] == 0
         assert payloads[0]["net_tokens_saved"] == 0
 
     def test_tokens_saved_clamped_to_zero_minimum(self) -> None:
@@ -834,7 +819,6 @@ class TestTokensSaved:
                 original_prompt_token_count=100,  # less than result tokens
             )
 
-        assert payloads[0]["tokens_saved"] == 0
         assert payloads[0]["net_tokens_saved"] == 0
 
 
@@ -1165,7 +1149,6 @@ class TestOptionalHandlerMetadata:
                 kept_names={"code_analysis"},
             )
 
-        assert payloads[0]["model_used"] == "coder-14b"
         assert payloads[0]["model_name"] == "coder-14b"
 
     def test_relevance_score_propagated(self) -> None:
@@ -1189,7 +1172,6 @@ class TestOptionalHandlerMetadata:
                 kept_names={"similarity"},
             )
 
-        assert payloads[0]["relevance_score"] == pytest.approx(0.91, abs=1e-6)
         assert payloads[0]["similarity_score"] == pytest.approx(0.91, abs=1e-6)
 
     def test_fallback_used_propagated(self) -> None:
@@ -1261,8 +1243,8 @@ class TestOptionalHandlerMetadata:
                 kept_names={"code_analysis"},
             )
 
-        assert payloads[0]["model_used"] == ""
-        assert payloads[0]["relevance_score"] is None
+        assert payloads[0]["model_name"] == ""
+        assert payloads[0]["similarity_score"] is None
         assert payloads[0]["fallback_used"] is False
         assert payloads[0]["prompt_version"] == ""
         assert payloads[0]["latency_ms"] == 0.0
@@ -1380,62 +1362,3 @@ class TestExtractHelpers:
             pass
 
         assert eoe._extract_latency_ms(_No()) == 0.0
-
-
-# ---------------------------------------------------------------------------
-# 13. Legacy field sentinel (OMN-2473)
-# ---------------------------------------------------------------------------
-
-
-class TestLegacyFieldsAreMarkedForRemoval:
-    """Sentinel test enforcing that backward-compat fields are still present.
-
-    SENTINEL: When OMN-2473 is resolved and legacy fields are removed,
-    this test must be deleted and the canonical field names verified instead.
-    The test is intentionally designed to FAIL once the legacy fields are gone,
-    forcing the developer to update it rather than silently leaving stale code.
-    """
-
-    def test_legacy_fields_are_marked_for_removal(self) -> None:
-        """All backward-compat fields must still exist in the payload.
-
-        This test exists to convert TODO(OMN-2473) into an enforced
-        contract.  When the legacy fields are removed from
-        build_enrichment_event_payload, this test will fail, signalling that
-        the sentinel must be deleted and canonical fields verified instead.
-
-        SENTINEL: When OMN-2473 is resolved and legacy fields are
-        removed, this test must be deleted and the canonical field names
-        verified instead.
-        """
-        payload = eoe.build_enrichment_event_payload(
-            session_id="sentinel-session",
-            correlation_id="sentinel-corr",
-            enrichment_type="code_analysis",
-            model_used="sentinel-model",
-            latency_ms=1.0,
-            result_token_count=100,
-            relevance_score=0.5,
-            fallback_used=False,
-            net_tokens_saved=0,
-            was_dropped=False,
-            prompt_version="",
-            success=True,
-            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-
-        # SENTINEL: When OMN-2473 is resolved and legacy fields are removed,
-        # this test must be deleted and the canonical field names verified instead.
-        legacy_fields = {
-            "enrichment_type",
-            "model_used",
-            "result_token_count",
-            "relevance_score",
-            "tokens_saved",
-        }
-        for field in legacy_fields:
-            assert field in payload, (
-                f"Legacy field '{field}' missing from payload. "
-                f"If OMN-2473 has been resolved and this field was intentionally "
-                f"removed, delete this test and verify canonical field names instead."
-            )
