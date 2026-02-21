@@ -7,8 +7,8 @@ dependencies = [
     "omnibase-core>=0.18.1,<0.19.0",
     "omnibase-spi>=0.10.0,<0.11.0",
     "omnibase-infra>=0.9.0,<1.0.0",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
+    "pydantic>=2.12.5,<3.0.0",
+    "pydantic-settings>=2.4.0,<3.0.0",
     "cachetools>=5.0.0",
     "click>=8.1.0",
     "httpx>=0.27.0",
@@ -17,10 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 # aiokafka is optional: event publishers gracefully degrade when not installed.
-# Minimum version 0.9.0 required for Python 3.12 support.
+# Minimum version 0.11.0 required for Python 3.12 support.
 kafka = [
-    "aiokafka>=0.9.0",
-    "confluent-kafka>=2.3.0",
+    "aiokafka>=0.11.0,<0.12.0",
+    "confluent-kafka>=2.12.0,<3.0.0",
 ]
 
 [dependency-groups]
