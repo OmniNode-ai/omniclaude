@@ -52,7 +52,7 @@ analyze → fix_each_failure → local_review → release_ready
 
 ### Phase 1: analyze
 
-Invokes the `ci-failures` skill to fetch all GitHub Actions failures for the target PR or branch. Classifies each failure by:
+Dispatches an agent to fetch CI failures via gh CLI for the target PR or branch. Classifies each failure by:
 - **Scope**: small (≤`max_fix_files` files, single repo, no contract/node-wiring/infrastructure touches) vs large
 - **Cause**: compilation error, test failure, lint violation, type check failure, timeout, infrastructure, no-verify bypass
 
@@ -91,7 +91,7 @@ Parse arguments from `$ARGUMENTS`:
 | `pr_number_or_branch` | required | PR number (e.g., 42) or branch name (e.g., jonahgabriel/omn-1234-fix) |
 | `--dry-run` | false | Analyze and pre-flight only; no commits or fixes applied |
 | `--max-fix-files <n>` | 10 | Override scope threshold; failures touching more files create a ticket instead |
-| `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix`, `local_review`, or `release_ready` |
+| `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix` (no-op today; reserved for future confirmation gate), `local_review`, or `release_ready` |
 
 ### `--skip-to` handling
 
@@ -147,7 +147,7 @@ You do NOT analyze, fix, or review code yourself. All heavy work runs in separat
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
 
-**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
+**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
 
 ---
 
@@ -221,6 +221,7 @@ Task(
 - If `status: failed`, STOP and report the error.
 - If `total_failures: 0`, log "No CI failures found — pipeline complete." and STOP.
 - If `--dry-run`, log the classified failure list and STOP (do not advance).
+- If `status: partial` (some failures classified, some not): dispatch Phase 2 agents **only** for the fully-classified failures. Log a warning listing each unclassified failure (job name and available error excerpt) and mark them as `unresolved` in the final summary. Do NOT dispatch fix or ticket agents for unclassified failures.
 - Otherwise, AUTO-ADVANCE to Phase 2.
 
 ---
@@ -244,7 +245,8 @@ Task(
        - If unrelated uncommitted changes exist: STOP, do not proceed, report in RESULT.
     2. Run: gh auth status
        - If not authenticated: STOP, do not proceed, report in RESULT.
-    3. Run: git log --oneline -20 | grep -F "[corr:{correlation_id}:{failure_index}]"
+    3. Run: git log --oneline -20 | grep -F "[corr:${correlation_id}:${failure_index}]"
+       where ${correlation_id} and ${failure_index} are substituted as literal strings before the command runs (not shell variables). Always quote the grep pattern as shown — if the pattern is unquoted and correlation_id contains shell-special characters (e.g., slashes), the command will fail silently and the idempotency check will be bypassed. Note: the correlation_id passed here must already be the sanitized form (all `/` replaced with `-`) as produced by the orchestrator.
        - If corr commits already exist for this failure: log 'already fixed' and STOP (idempotent).
        Note: {failure_index} is the 0-based position of this failure in the failures list, passed to you in this prompt. This makes the idempotency check per-failure so parallel agents fixing different failures do not interfere with each other.
     4. If on main or master: create a new branch before any changes.
@@ -332,7 +334,7 @@ Task(
 **Orchestrator action after Phase 2:**
 - Collect all RESULT blocks from dispatched agents.
 - If any `preflight_failed`: STOP and report — do not proceed to Phase 3.
-- If all failures are `fixed`, `skipped`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
+- If all failures are `fixed`, `skipped`, `large_scope`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3. `large_scope` returned mid-fix (agent determined during fixing that scope exceeded threshold) is treated identically to a Phase 1 large-scope classification: a ticket was created, the failure is deferred, and the pipeline continues.
 - If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
 ---
@@ -341,7 +343,7 @@ Task(
 
 Before dispatching Phase 3, determine the base branch:
 - If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument.
-- If `{pr_number_or_branch}` is a branch name: default to `origin/main` as the `--since` argument.
+- If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default.
 
 ```
 Task(
@@ -411,6 +413,9 @@ Task(
     number (e.g., 42) before creating this Task. The orchestrator must substitute the real integer
     value — never pass a template placeholder like '{resolved_pr_number}' or '<resolved_pr_number>'
     literally. For example, if the PR number is 42, the args value is the string \"42\".
+    This substitution applies to BOTH the prompt body AND the description field of the Task
+    (which also contains '{resolved_pr_number}'). Replace it in both locations before the Task
+    is created.
 
     The goal is to confirm the PR is fully ready for merge after CI fixes were applied.
 
