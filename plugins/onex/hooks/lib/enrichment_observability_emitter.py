@@ -172,12 +172,18 @@ def build_enrichment_event_payload(
 ) -> dict[str, Any]:
     """Build the payload dict for a single enrichment observability event.
 
-    All values are explicitly typed; no defaults are applied here so
-    callers must supply every field (easy to test deterministically).
+    Most arguments are required; ``tokens_before``, ``repo``, ``agent_name``,
+    and ``emitted_at`` have defaults and may be omitted by callers.
 
     The payload includes both the original internal field names (for backward
     compatibility with any existing consumers) and the omnidash-canonical field
     names required by ``ContextEnrichmentEvent`` in omnidash's shared types.
+
+    Per the repository invariant, callers should pass ``emitted_at`` explicitly
+    so that the timestamp is deterministic in tests.  When ``emitted_at`` is
+    ``None`` (the default), this function falls back to ``datetime.now(UTC)``
+    as a safety net for call sites that do not supply a timestamp — but
+    production callers (i.e. ``emit_enrichment_events``) must always inject it.
 
     Args:
         session_id: The Claude Code session identifier.
@@ -206,13 +212,13 @@ def build_enrichment_event_payload(
             (success=False).
         tokens_before: Original prompt token count before enrichment.  Used for
             the summarization channel to compute net_tokens_saved.  Zero for all
-            other channels (they add context, not compress it).
+            other channels (they add context, not compress it).  Defaults to 0.
         repo: Repository name (basename of project_path).  None when unknown.
         agent_name: Agent that triggered the enrichment.  None when unknown.
         emitted_at: Explicit UTC timestamp for the event.  Callers should
-            inject this for deterministic testing.  When None (the default),
-            falls back to ``datetime.now(UTC)`` so production callers do not
-            need to change.
+            inject this for deterministic testing (repository invariant).
+            Defaults to None; falls back to ``datetime.now(UTC)`` only as a
+            safety net — production callers must pass this explicitly.
 
     Returns:
         Dict suitable for emission via emit_client_wrapper.emit_event().
@@ -353,6 +359,10 @@ def emit_enrichment_events(
         logger.debug("emit_client_wrapper not available; enrichment events skipped")
         return 0
 
+    # Capture the emission timestamp once for all events in this batch so that
+    # all channels share the same wall-clock instant and the repository invariant
+    # is satisfied: the caller (not the builder) injects the timestamp.
+    now = datetime.now(UTC)
     repo = _derive_repo(project_path)
     emitted = 0
 
@@ -378,6 +388,8 @@ def emit_enrichment_events(
 
         # net_tokens_saved: only meaningful for summarization
         if enrichment_type == "summarization" and success and result_token_count > 0:
+            # Clamp to 0: when tokens_after > tokens_before the outcome is "inflated"
+            # and net_tokens_saved is meaningless (tokens increased, not decreased).
             net_tokens_saved = max(0, original_prompt_token_count - result_token_count)  # noqa: secrets
         else:
             net_tokens_saved = 0
@@ -398,6 +410,7 @@ def emit_enrichment_events(
             tokens_before=tokens_before,
             repo=repo,
             agent_name=agent_name,
+            emitted_at=now,
         )
 
         try:

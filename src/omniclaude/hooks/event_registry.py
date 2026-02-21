@@ -507,19 +507,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        # OMN-2441: updated to use 'channel' (omnidash-canonical field name).
-        # 'enrichment_type' is still emitted for backward compatibility but
-        # is not required by the registry — the daemon only validates
-        # required_fields, not the full schema.
-        #
-        # BREAKING CHANGE (OMN-2441): 'enrichment_type' was removed from
-        # required_fields and replaced by 'channel'.  Any legacy payload that
-        # contains only 'enrichment_type' and not 'channel' will now fail
-        # daemon-level validation and be rejected.  This is intentional: the
-        # emitter (build_enrichment_event_payload) always sets 'channel', so
-        # only callers that bypass the emitter and construct raw payloads are
-        # affected.  If you see unexpected validation failures here, add
-        # 'channel' to the payload — do not revert to 'enrichment_type'.
+        # OMN-2441: 'channel' replaces 'enrichment_type' — payloads without 'channel' are intentionally rejected
         required_fields=["session_id", "channel"],
     ),
     # =========================================================================
