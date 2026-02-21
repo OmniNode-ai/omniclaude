@@ -512,6 +512,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         # 'enrichment_type' field — the only call site is embedded_publisher.py which forwards
         # the payload as-is from enrichment_observability_emitter.py (which already emits
         # 'channel').  No callers need updating.
+        # Manually verified at OMN-2441; re-audit if new validate_payload("context.enrichment", ...) call sites are added.
         required_fields=["session_id", "channel"],
     ),
     # =========================================================================

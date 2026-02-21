@@ -253,7 +253,8 @@ def build_enrichment_event_payload(
         "repo": repo,
         "agent_name": agent_name,
         # ---------------------------------------------------------------
-        # Internal fields retained for backward compatibility
+        # Backward-compat fields retained for consumer migration only.
+        # Tracked for removal in a follow-up to OMN-2441.
         # ---------------------------------------------------------------
         "enrichment_type": enrichment_type,
         "model_used": model_used,

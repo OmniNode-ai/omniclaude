@@ -491,6 +491,28 @@ class TestEmitEnrichmentEventsBasic:
             )
         assert count == 0
 
+    def test_emitted_timestamp_is_valid_utc_iso8601(self) -> None:
+        """timestamp in the emitted payload is a non-empty, timezone-aware ISO-8601 string."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        results = [_FakeResult(name="summarization", success=True, tokens=50)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="sess",
+                correlation_id="corr",
+                results=results,
+                kept_names={"summarization"},
+            )
+
+        ts = payloads[0]["timestamp"]
+        assert isinstance(ts, str) and ts, "timestamp must be a non-empty string"
+        parsed = datetime.fromisoformat(ts)
+        assert parsed.tzinfo is not None, "timestamp must be timezone-aware"
+
 
 # ---------------------------------------------------------------------------
 # 5. was_dropped logic

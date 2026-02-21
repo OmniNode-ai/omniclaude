@@ -524,6 +524,8 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED
     AGENT_NAME_FOR_ENRICHMENT="${AGENT_NAME:-}"
     [[ "$AGENT_NAME_FOR_ENRICHMENT" == "NO_AGENT_DETECTED" ]] && AGENT_NAME_FOR_ENRICHMENT=""
     [[ "$AGENT_NAME_FOR_ENRICHMENT" == "null" ]] && AGENT_NAME_FOR_ENRICHMENT=""
+    # Shell normalizes NO_AGENT_DETECTED/null → ""; Python normalizes "" → None via `or None`.
+    # Both guards are required: removing either breaks the contract.
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \
