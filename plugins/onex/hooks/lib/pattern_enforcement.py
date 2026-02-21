@@ -485,9 +485,10 @@ def enforce_patterns(
         domain: Domain filter for patterns.
         content_preview: File content (up to 32KB) for compliance.
         content_sha256: SHA-256 hash of content_preview for idempotency.
-        emitted_at: ISO-8601 timestamp string for the pattern.enforcement
-            observability event. If None, the current UTC time is used.
-            Pass an explicit value in tests for deterministic timestamps.
+        emitted_at: ISO-8601 timestamp for observability events. If None, the current UTC
+            time is used (production-only fallback). All tests MUST pass an explicit value
+            for deterministic output; the None default is intentionally provided only for
+            production CLI invocations where no timestamp is available at the call site.
 
     Returns:
         EnforcementResult with evaluation_submitted and metadata.
@@ -562,8 +563,8 @@ def enforce_patterns(
 
         # Step 4: Emit single compliance.evaluate event with all eligible patterns
         evaluation_submitted = False
-        enforcement_correlation_id = str(_uuid.uuid4())
         if eligible_patterns and not _budget_exceeded():
+            enforcement_correlation_id = str(_uuid.uuid4())
             evaluation_submitted = _emit_compliance_evaluate(
                 file_path=file_path,
                 content=content_preview,
@@ -579,10 +580,11 @@ def enforce_patterns(
                 _save_cooldown(session_id, {**cooldown, **new_cooldown})
 
             # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
-            # Intentionally emitted even when evaluation_submitted=False (e.g., daemon down).
-            # Rationale: pattern.enforcement records THAT patterns were evaluated against this file,
-            # not whether omniintelligence processed the results. Dashboard shows enforcement
-            # activity regardless of intelligence pipeline availability (best-effort, fire-and-forget).
+            # These populate the omnidash /enforcement dashboard (OMN-2442).
+            # Emitted for all eligible_patterns regardless of whether _emit_compliance_evaluate
+            # succeeded (e.g., daemon down). Rationale: pattern.enforcement records that patterns
+            # were evaluated against this file, not whether omniintelligence processed the results.
+            # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
             from datetime import UTC, datetime  # noqa: PLC0415
 
@@ -668,6 +670,9 @@ def main() -> None:
 
         params = json.loads(raw)
         session_id = params.get("session_id", "") or os.urandom(8).hex()
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _datetime
+
         result = enforce_patterns(
             file_path=params.get("file_path", ""),
             session_id=session_id,
@@ -675,6 +680,7 @@ def main() -> None:
             domain=params.get("domain"),
             content_preview=params.get("content_preview", ""),
             content_sha256=params.get("content_sha256", ""),
+            emitted_at=_datetime.now(UTC).isoformat(),
         )
         json.dump(result, sys.stdout)
 

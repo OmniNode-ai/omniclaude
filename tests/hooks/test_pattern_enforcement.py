@@ -1497,3 +1497,55 @@ class TestEmitPatternEnforcementEvent:
         assert call["language"] == "python"
         assert call["file_path"] == "/test/repo/file.py"
         assert len(call["patterns"]) == 1
+
+    def test_enforcement_emits_observability_even_when_compliance_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_emit_pattern_enforcement_event fires even when _emit_compliance_evaluate returns False."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        patterns = [
+            {
+                "id": "p-fail-001",
+                "pattern_signature": "sig-fail",
+                "domain_id": "python",
+                "confidence": 0.9,
+                "status": "validated",
+            }
+        ]
+        enforcement_events: list[dict[str, Any]] = []
+
+        def capture_enforcement_emit(
+            *,
+            session_id: str,
+            correlation_id: str,
+            language: str,
+            patterns: list[dict[str, Any]],
+            file_path: str,
+            emitted_at: str,
+        ) -> int:
+            enforcement_events.append({"session_id": session_id})
+            return len(patterns)
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate", return_value=False
+            ),  # Simulate daemon down
+            patch(
+                "pattern_enforcement._emit_pattern_enforcement_event",
+                side_effect=capture_enforcement_emit,
+            ),
+        ):
+            result = enforce_patterns(
+                file_path="/test/repo/file.py",
+                session_id="sess-compliance-fail",
+                language="python",
+                content_preview="def foo(): pass\n",
+                emitted_at="2026-01-01T00:00:00+00:00",
+            )
+
+        # evaluation_submitted is False (compliance evaluate failed)
+        assert result["evaluation_submitted"] is False
+        # But observability event still fires
+        assert len(enforcement_events) == 1
+        assert enforcement_events[0]["session_id"] == "sess-compliance-fail"

@@ -617,6 +617,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         ],
         partition_key_field="session_id",
         required_fields=[
+            "session_id",
             "correlation_id",
             "timestamp",
             "language",
