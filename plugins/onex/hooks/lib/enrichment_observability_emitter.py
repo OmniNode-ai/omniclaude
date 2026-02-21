@@ -156,7 +156,7 @@ def build_enrichment_event_payload(
     result_token_count: int,
     relevance_score: float | None,
     fallback_used: bool,
-    tokens_saved: int,
+    net_tokens_saved: int,
     was_dropped: bool,
     prompt_version: str,
     success: bool,
@@ -200,10 +200,11 @@ def build_enrichment_event_payload(
             None when the handler does not report a relevance score.
             Mapped to ``similarity_score`` in the canonical payload.
         fallback_used: True when the handler used a simpler fallback strategy.
-        tokens_saved: Tokens saved by the summarization channel
-            (tokens_before - tokens_after).  Zero for all other channels and
-            when summarization produced no output.
-            Mapped to ``net_tokens_saved`` in the canonical payload.
+        net_tokens_saved: Tokens saved by the summarization channel
+            (tokens_before - tokens_after, clamped to >= 0).  Zero for all
+            other channels and when summarization produced no output.
+            Emitted as ``net_tokens_saved`` in the canonical payload and as
+            ``tokens_saved`` in the backward-compatible internal fields.
         was_dropped: True when the enrichment ran successfully but was excluded
             by the token-cap drop policy (overflow).
         prompt_version: Prompt template version string from the handler, or "".
@@ -246,7 +247,7 @@ def build_enrichment_event_payload(
         "latency_ms": round(latency_ms, 3),
         "tokens_before": tokens_before,
         "tokens_after": result_token_count,  # omnidash field name
-        "net_tokens_saved": tokens_saved,  # omnidash field name
+        "net_tokens_saved": net_tokens_saved,  # omnidash field name
         "similarity_score": relevance_score,  # omnidash field name
         "quality_score": None,  # not tracked yet
         "repo": repo,
@@ -259,7 +260,7 @@ def build_enrichment_event_payload(
         "result_token_count": result_token_count,
         "relevance_score": relevance_score,
         "fallback_used": fallback_used,
-        "tokens_saved": tokens_saved,
+        "tokens_saved": net_tokens_saved,
         "was_dropped": was_dropped,
         "prompt_version": prompt_version,
     }
@@ -359,8 +360,12 @@ def emit_enrichment_events(
         return 0
 
     # Capture the emission timestamp once for all events in this batch so that
-    # all channels share the same wall-clock instant and the repository invariant
-    # is satisfied: the caller (not the builder) injects the timestamp.
+    # all channels share the same wall-clock instant.  Note: datetime.now(UTC)
+    # is called here (not inside the builder), satisfying the invariant that
+    # build_enrichment_event_payload never generates its own timestamp.
+    # Timestamp determinism is therefore only guaranteed when testing
+    # build_enrichment_event_payload directly (where callers pass a fixed
+    # emitted_at); tests of emit_enrichment_events will see a live clock value.
     now = datetime.now(UTC)
     repo = _derive_repo(project_path)
     emitted = 0
@@ -402,7 +407,7 @@ def emit_enrichment_events(
             result_token_count=result_token_count,
             relevance_score=_extract_relevance_score(result),
             fallback_used=_extract_fallback_used(result),
-            tokens_saved=net_tokens_saved,
+            net_tokens_saved=net_tokens_saved,
             was_dropped=was_dropped,
             prompt_version=_extract_prompt_version(result),
             success=success,

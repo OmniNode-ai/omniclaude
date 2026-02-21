@@ -101,7 +101,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=150,
             relevance_score=0.87,
             fallback_used=False,
-            tokens_saved=300,
+            net_tokens_saved=300,
             was_dropped=False,
             prompt_version="v2",
             success=True,
@@ -153,7 +153,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=200,
             relevance_score=0.5,
             fallback_used=True,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=True,
             prompt_version="v1",
             success=True,
@@ -198,7 +198,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=0,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -218,7 +218,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=0,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -243,7 +243,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=100,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -263,7 +263,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=100,
             relevance_score=0.9,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -282,7 +282,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=100,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -301,7 +301,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=0,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=True,
@@ -320,7 +320,7 @@ class TestBuildEnrichmentEventPayload:
             result_token_count=0,
             relevance_score=None,
             fallback_used=False,
-            tokens_saved=0,
+            net_tokens_saved=0,
             was_dropped=False,
             prompt_version="",
             success=False,
@@ -751,6 +751,9 @@ class TestOutcomeField:
             )
 
         assert payloads[0]["outcome"] == "inflated"
+        # Clamping invariant: when inflated, net_tokens_saved must be 0
+        # (tokens_after > tokens_before → max(0, negative) == 0).
+        assert payloads[0]["net_tokens_saved"] == 0
 
 
 # ---------------------------------------------------------------------------
