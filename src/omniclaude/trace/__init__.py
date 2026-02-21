@@ -11,7 +11,7 @@ This package also implements the core data models, persistence, and analysis
 infrastructure for tracking agent execution as ChangeFrames.
 """
 
-from omniclaude.trace.models import (
+from omniclaude.trace.change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,

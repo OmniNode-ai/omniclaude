@@ -15,7 +15,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.trace.models import (
+from omniclaude.trace.change_frame import (
     AssociationMethod,
     ChangeFrame,
     FailureType,
@@ -482,19 +482,19 @@ class TestChangeFrameSerializationRoundTrip:
 
 class TestEnums:
     def test_failure_type_values(self) -> None:
-        assert FailureType.test_fail.value == "test_fail"
-        assert FailureType.type_fail.value == "type_fail"
-        assert FailureType.lint_fail.value == "lint_fail"
-        assert FailureType.build_fail.value == "build_fail"
-        assert FailureType.runtime_fail.value == "runtime_fail"
+        assert FailureType.TEST_FAIL.value == "test_fail"
+        assert FailureType.TYPE_FAIL.value == "type_fail"
+        assert FailureType.LINT_FAIL.value == "lint_fail"
+        assert FailureType.BUILD_FAIL.value == "build_fail"
+        assert FailureType.RUNTIME_FAIL.value == "runtime_fail"
 
     def test_outcome_status_values(self) -> None:
-        assert OutcomeStatus.pass_.value == "pass"
-        assert OutcomeStatus.fail.value == "fail"
-        assert OutcomeStatus.partial.value == "partial"
+        assert OutcomeStatus.PASS.value == "pass"
+        assert OutcomeStatus.FAIL.value == "fail"
+        assert OutcomeStatus.PARTIAL.value == "partial"
 
     def test_association_method_values(self) -> None:
-        assert AssociationMethod.commit_ancestry.value == "commit_ancestry"
-        assert AssociationMethod.branch_name.value == "branch_name"
-        assert AssociationMethod.diff_overlap.value == "diff_overlap"
-        assert AssociationMethod.patch_hash.value == "patch_hash"
+        assert AssociationMethod.COMMIT_ANCESTRY.value == "commit_ancestry"
+        assert AssociationMethod.BRANCH_NAME.value == "branch_name"
+        assert AssociationMethod.DIFF_OVERLAP.value == "diff_overlap"
+        assert AssociationMethod.PATCH_HASH.value == "patch_hash"

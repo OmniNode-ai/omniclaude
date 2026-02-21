@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -22,31 +22,28 @@ from pydantic import BaseModel, field_validator, model_validator
 class FailureType(str, Enum):
     """Classification of the type of failure that occurred in a ChangeFrame."""
 
-    test_fail = "test_fail"
-    type_fail = "type_fail"
-    lint_fail = "lint_fail"
-    build_fail = "build_fail"
-    runtime_fail = "runtime_fail"
+    TEST_FAIL = "test_fail"
+    TYPE_FAIL = "type_fail"
+    LINT_FAIL = "lint_fail"
+    BUILD_FAIL = "build_fail"
+    RUNTIME_FAIL = "runtime_fail"
 
 
 class OutcomeStatus(str, Enum):
     """High-level classification of a ChangeFrame's outcome."""
 
-    pass_ = "pass"  # noqa: S105
-    fail = "fail"
-    partial = "partial"
-
-    # Allow serialization/deserialization with the literal value "pass"
-    # Pydantic will use the enum value for JSON output.
+    PASS = "pass"  # noqa: S105
+    FAIL = "fail"
+    PARTIAL = "partial"
 
 
 class AssociationMethod(str, Enum):
     """Method used to associate a ChangeFrame with a PREnvelope."""
 
-    commit_ancestry = "commit_ancestry"
-    branch_name = "branch_name"
-    diff_overlap = "diff_overlap"
-    patch_hash = "patch_hash"
+    COMMIT_ANCESTRY = "commit_ancestry"
+    BRANCH_NAME = "branch_name"
+    DIFF_OVERLAP = "diff_overlap"
+    PATCH_HASH = "patch_hash"
 
 
 # ---------------------------------------------------------------------------
@@ -54,20 +51,20 @@ class AssociationMethod(str, Enum):
 # ---------------------------------------------------------------------------
 
 
-class ModelFrameConfig(BaseModel, frozen=True):
+class ModelFrameConfig(BaseModel):
     """LLM configuration at the time the ChangeFrame was produced."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     temperature: float | None = None
     seed: int | None = None
     max_tokens: int | None = None
 
 
-class ModelIntentRef(BaseModel, frozen=True):
+class ModelIntentRef(BaseModel):
     """Reference to the intent (prompt) that triggered this ChangeFrame."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     prompt_hash: str
     ticket_id: str | None = None
@@ -76,15 +73,16 @@ class ModelIntentRef(BaseModel, frozen=True):
     @field_validator("prompt_hash")
     @classmethod
     def prompt_hash_nonempty(cls, v: str) -> str:
+        """Ensure prompt_hash is non-empty."""
         if not v.strip():
             raise ValueError("prompt_hash must not be empty")
         return v
 
 
-class ModelWorkspaceRef(BaseModel, frozen=True):
+class ModelWorkspaceRef(BaseModel):
     """Reference to the workspace state at frame capture time."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     repo: str
     branch: str
@@ -93,15 +91,16 @@ class ModelWorkspaceRef(BaseModel, frozen=True):
     @field_validator("base_commit")
     @classmethod
     def base_commit_nonempty(cls, v: str) -> str:
+        """Ensure base_commit is non-empty."""
         if not v.strip():
             raise ValueError("base_commit must not be empty")
         return v
 
 
-class ModelDelta(BaseModel, frozen=True):
+class ModelDelta(BaseModel):
     """The actual code change captured in this ChangeFrame."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     diff_patch: str
     files_changed: list[str]
@@ -113,15 +112,16 @@ class ModelDelta(BaseModel, frozen=True):
     @field_validator("loc_added", "loc_removed")
     @classmethod
     def loc_non_negative(cls, v: int) -> int:
+        """Ensure loc values are non-negative."""
         if v < 0:
             raise ValueError("loc values must be non-negative")
         return v
 
 
-class ModelToolEvent(BaseModel, frozen=True):
+class ModelToolEvent(BaseModel):
     """Record of a single tool invocation during frame execution."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     tool_name: str
     input_hash: str
@@ -129,10 +129,10 @@ class ModelToolEvent(BaseModel, frozen=True):
     raw_pointer: str | None = None
 
 
-class ModelCheckResult(BaseModel, frozen=True):
+class ModelCheckResult(BaseModel):
     """Result of a single quality check (lint, typecheck, test, etc.)."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     command: str
     environment_hash: str
@@ -141,19 +141,19 @@ class ModelCheckResult(BaseModel, frozen=True):
     truncated_output: str = ""
 
 
-class ModelOutcome(BaseModel, frozen=True):
+class ModelOutcome(BaseModel):
     """High-level outcome classification for a ChangeFrame."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     status: Literal["pass", "fail", "partial"]
     failure_signature_id: str | None = None
 
 
-class ModelEvidence(BaseModel, frozen=True):
+class ModelEvidence(BaseModel):
     """Evidence (logs) captured alongside the ChangeFrame."""
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     truncated_logs: str = ""
     full_log_pointer: str | None = None
@@ -164,7 +164,7 @@ class ModelEvidence(BaseModel, frozen=True):
 # ---------------------------------------------------------------------------
 
 
-class ChangeFrame(BaseModel, frozen=True):
+class ChangeFrame(BaseModel):
     """Atomic agent execution record — the fundamental unit of the trace system.
 
     A ChangeFrame captures everything that happened during one meaningful agent
@@ -178,7 +178,7 @@ class ChangeFrame(BaseModel, frozen=True):
     All three must hold or the frame is invalid.
     """
 
-    model_config = {"frozen": True, "extra": "ignore", "from_attributes": True}
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     frame_id: UUID
     parent_frame_id: UUID | None = None
