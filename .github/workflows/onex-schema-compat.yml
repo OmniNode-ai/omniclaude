@@ -1,0 +1,155 @@
+name: ONEX Schema Compatibility
+
+# Verifies omniclaude compatibility with the current ONEX Change Control schema.
+# Part of OMN-2452 (per-repo slice of OMN-2380 M4 completion).
+#
+# This gate:
+#   1. Checks out onex_change_control (the upstream schema authority)
+#   2. Validates any YAML schema artifacts in this repo against the current schema
+#   3. Runs is_compatible() from omnibase_spi to verify major version compatibility
+#
+# Graceful behavior: If no schema artifacts are found, the gate passes.
+# This is expected -- omniclaude has no contract YAML files in the initial phase.
+#
+# When this gate fails:
+#   - Schema artifact invalid: Fix the YAML against ModelTicketContract / ModelDayClose
+#   - Major version mismatch: Review breaking changes in onex_change_control and update
+#     reader_version in the "Check schema version compatibility" step below.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  schema-compat:
+    name: ONEX Change Control Schema Compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only run on PRs from the same repo -- forks lack access to private onex_change_control
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout onex_change_control
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/onex_change_control
+          path: onex_change_control
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-schema-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install omniclaude dependencies
+        run: uv sync --frozen
+
+      - name: Install onex_change_control schema validator
+        run: |
+          # Install from local checkout to get validate-yaml CLI and schema models.
+          # uv handles the poetry-core PEP 517 build automatically.
+          uv pip install ./onex_change_control
+
+      - name: Find schema artifact files
+        id: find-artifacts
+        run: |
+          set -e
+          # Find YAML files following onex_change_control schema naming patterns:
+          #   *contract*.yaml / *contract*.yml  -> validated as ModelTicketContract
+          #   *day_close*.yaml / *day_close*.yml -> validated as ModelDayClose
+          # Excludes: the checked-out onex_change_control repo, venvs, git dir.
+          FILES=$(find . \
+            -not -path './onex_change_control/*' \
+            -not -path './.venv/*' \
+            -not -path './plugins/onex/.venv/*' \
+            -not -path './.git/*' \
+            \( -name '*contract*.yaml' -o -name '*contract*.yml' \
+               -o -name '*day_close*.yaml' -o -name '*day_close*.yml' \) \
+            2>/dev/null | sort || true)
+
+          if [ -n "$FILES" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "files<<EOF"
+              echo "$FILES"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "Schema artifacts found:"
+            echo "$FILES"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "No schema artifacts found -- skipping artifact validation"
+            echo "(Expected: omniclaude has no contract YAML files in the initial phase)"
+          fi
+
+      - name: Validate schema artifacts
+        if: steps.find-artifacts.outputs.found == 'true'
+        run: |
+          # Validate each artifact against the current onex_change_control Pydantic models.
+          # validate-yaml auto-detects ModelTicketContract vs ModelDayClose by path/content.
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            echo "Validating: $file"
+            uv run validate-yaml "$file"
+          done <<< "${{ steps.find-artifacts.outputs.files }}"
+
+      - name: Check schema version compatibility
+        run: |
+          # Extract the onex_change_control package version (canonical schema version).
+          OCC_VERSION=$(uv run python3 -c "
+          import tomllib
+          with open('onex_change_control/pyproject.toml', 'rb') as f:
+              d = tomllib.load(f)
+          print(d['tool']['poetry']['version'])
+          ")
+          echo "onex_change_control upstream version: $OCC_VERSION"
+
+          # Verify major version compatibility using omnibase_spi is_compatible().
+          #
+          # READER_VERSION tracks the onex_change_control major version this repo was
+          # last validated against. When onex_change_control releases a new major version:
+          #   1. Review the breaking changes in onex_change_control
+          #   2. Update any schema artifacts in omniclaude to comply
+          #   3. Update reader_version here and open a PR
+          OCC_VERSION="$OCC_VERSION" uv run python3 -c "
+          import os, sys
+          from omnibase_spi.contracts.pipeline.contract_schema_compat import is_compatible
+
+          wire_version = os.environ['OCC_VERSION']
+          reader_version = '0.1.0'  # Update on major version bump in onex_change_control
+
+          print(f'Compatibility check: upstream={wire_version}, reader={reader_version}')
+
+          if not is_compatible(wire_version=wire_version, reader_version=reader_version):
+              print('ERROR: Schema compatibility broken!')
+              print(f'  onex_change_control upstream version: {wire_version}')
+              print(f'  omniclaude reader version:            {reader_version}')
+              print()
+              print('  Major version mismatch. onex_change_control released a breaking')
+              print('  schema change. To resolve:')
+              print('  1. Review breaking changes in onex_change_control CHANGELOG')
+              print('  2. Update schema artifacts in omniclaude to comply')
+              print('  3. Update reader_version in .github/workflows/onex-schema-compat.yml')
+              sys.exit(1)
+
+          print(f'OK: Schema compatible (upstream={wire_version}, reader={reader_version})')
+          "
