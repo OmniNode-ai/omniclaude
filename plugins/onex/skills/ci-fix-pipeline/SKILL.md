@@ -401,9 +401,9 @@ Task(
 - If `status: passed` and parsed count is 0: push commits to remote before advancing to Phase 4 (see push step below).
 - If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
 - If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
-- If `status` is any value other than `passed` or `failed`: treat it as `failed` (conservative default). STOP and log: "Phase 3 agent returned unexpected status: {status}. Treating as failed."
+- If `status` is any value other than `passed` or `failed`: treat it as `failed` (conservative default). STOP and log: "Phase 3 agent returned unexpected status: <actual-status-value-from-agent-response>. Treating as failed." (substitute the actual status string the agent returned in place of `<actual-status-value-from-agent-response>`).
 
-**Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch:
+**Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch. **Skip this push step if `--skip-to local_review` or `--skip-to release_ready` was used** — in those cases Phase 2 did not run and no new fix commits were made during this pipeline run, so there is nothing from this run to push. Proceed directly to Phase 4.
 
 ```
 Task(
