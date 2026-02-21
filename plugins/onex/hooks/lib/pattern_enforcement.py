@@ -411,11 +411,15 @@ def _emit_compliance_evaluate(
     session_id: str,
     content_sha256: str,
     patterns: list[dict[str, Any]],
+    correlation_id: str | None = None,
 ) -> bool:
     """Emit compliance.evaluate event. Returns True if accepted by daemon.
 
     Correlation ID is unique per request (not session_id) so that multiple
     compliance evaluations within one session are individually traceable.
+    If correlation_id is provided, it is used as-is so that this event shares
+    the same ID as the corresponding pattern.enforcement observability events,
+    enabling omnidash to JOIN the two event streams.
     session_id is passed separately for routing and projection lookups.
 
     Content safety: non-empty and UTF-8 safe within the 32KB cap.
@@ -436,7 +440,9 @@ def _emit_compliance_evaluate(
             )
 
         payload: dict[str, Any] = {
-            "correlation_id": str(_uuid.uuid4()),  # unique per request, not session
+            "correlation_id": correlation_id
+            if correlation_id is not None
+            else str(_uuid.uuid4()),  # unique per request, not session
             "session_id": session_id,  # separate field for routing/projection
             "source_path": file_path,
             "content": content,
@@ -496,6 +502,8 @@ def enforce_patterns(
         EnforcementResult with evaluation_submitted and metadata.
         advisories is always empty — results arrive asynchronously.
     """
+    from datetime import UTC, datetime  # noqa: PLC0415
+
     start = time.monotonic()
 
     def _elapsed_ms() -> float:
@@ -574,6 +582,7 @@ def enforce_patterns(
                 session_id=session_id,
                 content_sha256=content_sha256,
                 patterns=eligible_patterns,
+                correlation_id=enforcement_correlation_id,
             )
             if evaluation_submitted:
                 # Update cooldown for all submitted patterns with current timestamp
@@ -588,8 +597,6 @@ def enforce_patterns(
             # were evaluated against this file, not whether omniintelligence processed the results.
             # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
-            from datetime import UTC, datetime  # noqa: PLC0415
-
             _emitted_at = emitted_at or datetime.now(UTC).isoformat()
             _emit_pattern_enforcement_event(
                 session_id=session_id,

@@ -756,6 +756,7 @@ class TestEnforcePatternsEmit:
             session_id: str,
             content_sha256: str,
             patterns: list[dict[str, Any]],
+            correlation_id: str | None = None,
         ) -> bool:
             emitted_payloads.append({"patterns": patterns})
             return True
@@ -982,8 +983,9 @@ class TestEnforcePatternsEmit:
             session_id: str,
             content_sha256: str,
             patterns: list[dict[str, Any]],
+            correlation_id: str | None = None,
         ) -> bool:
-            # We can't capture correlation_id here — it's generated inside _emit_compliance_evaluate
+            # correlation_id is passed from enforce_patterns via enforcement_correlation_id
             return True
 
         with (
@@ -1488,6 +1490,7 @@ class TestEmitPatternEnforcementEvent:
                 session_id="sess-e2e",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
 
         assert result["evaluation_submitted"] is True
