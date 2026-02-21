@@ -226,7 +226,7 @@ Task(
 
 ### Phase 2: fix_each_failure — dispatch to polymorphic agent (one per small-scope failure)
 
-For each **small-scope** failure, dispatch one Polly. For each **large-scope** failure, dispatch one Polly with `create-ticket` invocation.
+For each **small-scope** failure with severity CRITICAL, MAJOR, or MINOR, dispatch one Polly. For each **large-scope** failure (any severity), dispatch one Polly with `create-ticket` invocation. **NIT-severity small-scope failures are not dispatched** — log each one as "optional — skipped" and include it in the final summary with no further action.
 
 **IMPORTANT — parallel dispatch required**: All small-scope fix Task calls and all large-scope ticket Task calls MUST be sent as parallel `Task()` invocations in a single message. Do NOT dispatch them sequentially (one at a time, waiting for each to finish before starting the next). Sending all dispatches in a single message is required by ONEX parallel execution standards and minimizes wall-clock time.
 
@@ -273,7 +273,7 @@ Task(
 
     Status definitions:
     - fixed: the failure was reproduced locally, a fix was applied, the CI command now passes, and the fix was committed.
-    - skipped: return this when (a) the idempotency check found an existing corr commit for this failure index, meaning it was already fixed in a prior pipeline run, OR (b) the failure no longer appears in the latest CI run for this branch (resolved upstream with no action needed). Do not attempt a fix in either case.
+    - skipped: return this when the idempotency check found an existing corr commit for this failure index, meaning it was already fixed in a prior pipeline run. Do not attempt a fix.
     - large_scope: the fix required more than {max_fix_files} files; no changes were committed.
     - preflight_failed: a pre-flight check (git status, gh auth, branch guard) prevented starting.
     - failed: the fix was attempted but the CI command still fails after changes, or an unexpected error occurred.
@@ -349,10 +349,9 @@ Task(
 
 **Orchestrator action after Phase 2:**
 - Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
-- If any agent returned `preflight_failed`: STOP and report all preflight failures after aggregating all results — do not proceed to Phase 3.
+- If any agent returned `preflight_failed` OR `failed`: STOP and produce a single combined report of ALL non-passing results — list every `preflight_failed` agent and every `failed` agent together with their error details. Do not proceed to Phase 3. Do not report preflight failures in isolation if there are also `failed` agents; the user must see the complete picture in one report.
 - If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. If any secondary ticket-creation agent returns `failed`: STOP with status `ticket_creation_failed`, report which failures had no ticket created. Do NOT advance to Phase 3. Only after all mid-fix `large_scope` tickets are confirmed `success` may the orchestrator treat those failures as `success` (ticket created) and advance.
 - If all failures are `fixed`, `skipped`, `large_scope` (ticket now created per the step above), or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
-- If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
 ---
 
