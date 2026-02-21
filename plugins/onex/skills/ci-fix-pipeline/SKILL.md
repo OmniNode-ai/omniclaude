@@ -243,9 +243,10 @@ Task(
        - If unrelated uncommitted changes exist: STOP, do not proceed, report in RESULT.
     2. Run: gh auth status
        - If not authenticated: STOP, do not proceed, report in RESULT.
-    3. Run: git log --oneline -20 | grep -F "[corr:${correlation_id}:${failure_index}]"
+    3. Run: git log --oneline -100 | grep -F "[corr:${correlation_id}:${failure_index}]"
        where ${correlation_id} and ${failure_index} are substituted as literal strings before the command runs (not shell variables). Always quote the grep pattern as shown — if the pattern is unquoted and correlation_id contains shell-special characters (e.g., slashes), the command will fail silently and the idempotency check will be bypassed. Note: the correlation_id passed here must already be the sanitized form (all `/` replaced with `-`) as produced by the orchestrator.
        - If corr commits already exist for this failure: log 'already fixed' and STOP (idempotent).
+       - WARNING: On branches with more than 100 commits the -100 window may not cover the full history. If this branch has more than 100 commits, log a warning: 'idempotency not guaranteed — branch exceeds 100-commit window'. Do not abort; continue with the fix attempt.
        Note: {failure_index} is the 0-based position of this failure in the failures list, passed to you in this prompt. This makes the idempotency check per-failure so parallel agents fixing different failures do not interfere with each other.
     4. If on main or master: create a new branch before any changes.
 
@@ -332,7 +333,8 @@ Task(
 **Orchestrator action after Phase 2:**
 - Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
 - If any agent returned `preflight_failed`: STOP and report all preflight failures after aggregating all results — do not proceed to Phase 3.
-- If all failures are `fixed`, `skipped`, `large_scope`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3. `large_scope` returned mid-fix (agent determined during fixing that scope exceeded threshold) is treated identically to a Phase 1 large-scope classification: a ticket was created, the failure is deferred, and the pipeline continues.
+- If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. Only after all mid-fix `large_scope` tickets are created may the orchestrator treat those failures as `success` (ticket created) and advance.
+- If all failures are `fixed`, `skipped`, `large_scope` (ticket now created per the step above), or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
 - If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
 ---
@@ -388,10 +390,10 @@ Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number using
 if {pr_number_or_branch} is numeric:
     resolved_pr_number = {pr_number_or_branch}
 else:
-    # Run: gh pr list --head {pr_number_or_branch} --json number --jq '.[0].number'
+    # Run: gh pr list --state open --head {pr_number_or_branch} --json number --jq '.[0].number'
     # Extract the first result's `.number` field (an integer).
     # Assign it to resolved_pr_number.
-    # Example: gh pr list --head jonahgabriel/omn-1234-fix --json number --jq '.[0].number'
+    # Example: gh pr list --state open --head jonahgabriel/omn-1234-fix --json number --jq '.[0].number'
     #          → 42
     #          resolved_pr_number = 42
     # If the command returns empty output or an error: STOP and report —
