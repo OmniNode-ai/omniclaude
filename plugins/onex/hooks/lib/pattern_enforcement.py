@@ -357,7 +357,7 @@ def _emit_pattern_enforcement_event(
     try:
         from emit_client_wrapper import emit_event  # noqa: PLC0415
 
-        # Derive repo from file path (best-effort, uses the parent directory of the file)
+        # Derive repo from file path (best-effort: uses immediate parent directory, e.g., "src" for nested paths)
         try:
             parts = Path(file_path).parts
             repo = parts[-2] if len(parts) >= 2 else parts[-1] if parts else "unknown"
@@ -366,6 +366,8 @@ def _emit_pattern_enforcement_event(
 
         emitted = 0
 
+        # Each emit_event() is a non-blocking Unix socket write to the local daemon
+        # (fire-and-forget, no Kafka ack wait). Budget impact: ~<1ms per pattern.
         for pattern in patterns:
             pattern_id = str(pattern.get("id", ""))
             pattern_name = str(
