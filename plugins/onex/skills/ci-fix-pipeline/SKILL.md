@@ -351,7 +351,8 @@ Task(
 - Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
 - If any agent returned `preflight_failed` OR `failed`: STOP and produce a single combined report of ALL non-passing results — list every `preflight_failed` agent and every `failed` agent together with their error details. Do not proceed to Phase 3. Do not report preflight failures in isolation if there are also `failed` agents; the user must see the complete picture in one report.
 - If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. If any secondary ticket-creation agent returns `failed`: STOP with status `ticket_creation_failed`, report which failures had no ticket created. Do NOT advance to Phase 3. Only after all mid-fix `large_scope` tickets are confirmed `success` may the orchestrator treat those failures as `success` (ticket created) and advance.
-- If all failures are `fixed`, `skipped`, `large_scope` (ticket now created per the step above), or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
+- If all failures are `fixed`, `skipped`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
+  NOTE: `large_scope` must NOT appear in this final condition. Any mid-fix `large_scope` result must have completed the secondary ticket-creation dispatch loop and been confirmed as `success` (ticket created) before it is counted here. An agent that sees a `large_scope` result at this point without a corresponding confirmed `success` from secondary dispatch MUST NOT advance — it must dispatch the secondary ticket agent and wait for confirmation.
 
 ---
 
@@ -422,8 +423,10 @@ else:
     # Example: gh pr list --state open --head jonahgabriel/omn-1234-fix --json number,state --jq '.[0].number'
     #          → 42
     #          resolved_pr_number = 42
+    # NOTE: When the list is empty, jq returns the string "null" (not an empty string).
+    # Treat both an empty string and the string "null" as "no result found" and fall through to Step 2.
 
-    # Step 2: If Step 1 returns empty (draft PRs and recently-merged PRs are excluded by --state open),
+    # Step 2: If Step 1 returns empty or null (draft PRs and recently-merged PRs are excluded by --state open),
     # retry without the state filter to capture open or draft PRs:
     # Run: gh pr list --head {pr_number_or_branch} --json number,state
     # Parse the JSON array, filter to entries where state is "OPEN" or "DRAFT",
