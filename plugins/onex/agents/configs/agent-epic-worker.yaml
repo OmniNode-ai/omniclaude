@@ -175,7 +175,7 @@ skills_available:
   git_worktrees:
     skill_name: "onex:using-git-worktrees"
     when_to_use:
-      - "Multiple pending tickets need parallel execution"
+      - "Multiple in_progress tickets need parallel execution"
       - "Creating isolated branches per ticket"
     worktree_root: "../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}"
     branch_pattern: "epic/{epic_id}/{ticket_id}/{run_id[:8]}"
