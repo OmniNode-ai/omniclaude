@@ -285,7 +285,7 @@ DB_CONFIG = {
     "port": 5436,
     "database": "omniclaude",
     "user": "postgres",
-    "password": "<your-postgres-password>",  # Set via POSTGRES_PASSWORD env var
+    "password": os.environ["POSTGRES_PASSWORD"],  # Read from environment at runtime
 }
 ```
 

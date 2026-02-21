@@ -46,7 +46,9 @@ _DEFAULT_STALE_SECONDS = 600
 # _CONSUMER_RETRY_SLEEP_S is the flat sleep between retry attempts; there is
 # intentionally no exponential backoff because the consumer is a long-lived
 # daemon and a flat 30-second pause is acceptable for infrastructure recovery.
-_MAX_CONSUMER_RETRIES: int | None = None
+_MAX_CONSUMER_RETRIES: int | None = (
+    None  # Unlimited: daemon retries indefinitely (30s interval)
+)
 _CONSUMER_RETRY_SLEEP_S: int = 30
 
 
@@ -320,6 +322,12 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                 # running are permanently skipped — the 10-minute staleness fallback
                 # in the cache handles the cold-start case by falling back to a
                 # full database query instead of relying on projection events.
+                #
+                # NOTE: Each process creates a unique consumer group that persists in
+                # the broker after the process exits. Over time, zombie groups accumulate.
+                # To clean up stale groups:
+                #   rpk group list | grep omniclaude-pattern-cache | xargs rpk group delete
+                # Or use Redpanda Console at http://192.168.86.200:8080
                 group_id=f"omniclaude-pattern-cache-{os.getpid()}",
                 value_deserializer=lambda v: v,  # raw bytes; we decode ourselves
                 consumer_timeout_ms=5000,  # poll loop timeout

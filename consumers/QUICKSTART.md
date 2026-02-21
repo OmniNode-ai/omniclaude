@@ -25,6 +25,7 @@ cd consumers
 pip install -r requirements.txt
 
 # 2. Apply database migration (if not already done)
+# Run 'source .env' first to set POSTGRES_PASSWORD
 PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p 5436 -U postgres -d omniclaude -f ../migrations/005_create_agent_actions_table.sql
 
 # 3. Start consumer
