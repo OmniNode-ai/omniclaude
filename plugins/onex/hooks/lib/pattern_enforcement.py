@@ -357,10 +357,41 @@ def _emit_pattern_enforcement_event(
     try:
         from emit_client_wrapper import emit_event  # noqa: PLC0415
 
-        # Derive repo from file path (best-effort: uses immediate parent directory, e.g., "src" for nested paths)
+        # Derive repo from file path by walking up the directory tree looking for a
+        # .git directory or pyproject.toml marker file.  The first ancestor directory
+        # that contains one of these markers is considered the repository root, and its
+        # name is used as the repo identifier.  This correctly handles nested source
+        # layouts (e.g. /workspace/omniclaude4/src/module.py → "omniclaude4") without
+        # relying on the penultimate path component, which gives misleading results
+        # ("src") for files more than one level below the repo root.
+        #
+        # Fallback: if no marker is found (e.g. the file is not inside a git repo,
+        # or the path is synthetic/test-only), the penultimate path component is used
+        # as before — this preserves the existing best-effort behaviour for shallow
+        # paths like /workspace/myrepo/file.py.
         try:
-            parts = Path(file_path).parts
-            repo = parts[-2] if len(parts) >= 2 else parts[-1] if parts else "unknown"
+            _markers = {".git", "pyproject.toml"}
+            _candidate = Path(file_path).parent
+            repo = "unknown"
+            # Walk up until we find a marker or run out of path components.
+            while True:
+                if any((_candidate / m).exists() for m in _markers):
+                    repo = _candidate.name or "unknown"
+                    break
+                parent = _candidate.parent
+                if parent == _candidate:
+                    # Reached filesystem root without finding a marker — fall back
+                    # to the penultimate path component (legacy behaviour).
+                    parts = Path(file_path).parts
+                    repo = (
+                        parts[-2]
+                        if len(parts) >= 2
+                        else parts[-1]
+                        if parts
+                        else "unknown"
+                    )
+                    break
+                _candidate = parent
         except Exception:
             repo = "unknown"
 
@@ -598,6 +629,14 @@ def enforce_patterns(
             # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
             _emitted_at = emitted_at or datetime.now(UTC).isoformat()
+            # The return value (number of events successfully emitted) is intentionally
+            # discarded here.  EnforcementResult is a TypedDict whose schema is consumed
+            # by the omnidash read-model consumer and the CLI stdout contract — adding an
+            # `events_emitted` field would require a coordinated downstream schema change.
+            # Observability event failures are already silent by design (fire-and-forget
+            # via the Unix-socket daemon); the count is only meaningful for unit-test
+            # assertions, where callers inspect the return value of
+            # _emit_pattern_enforcement_event directly.
             _emit_pattern_enforcement_event(
                 session_id=session_id,
                 correlation_id=enforcement_correlation_id,

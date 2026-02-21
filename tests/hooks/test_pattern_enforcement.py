@@ -1440,6 +1440,92 @@ class TestEmitPatternEnforcementEvent:
 
         assert captured[0]["repo"] == "omniclaude4"
 
+    def test_repo_derived_from_nested_file_path_with_marker(
+        self, tmp_path: Path
+    ) -> None:
+        """repo is derived from the git-root directory name for nested paths.
+
+        When a file lives deep in a repo (e.g. <root>/src/module.py), the old
+        penultimate-component approach returned "src" instead of the repo name.
+        The fixed implementation walks up the directory tree looking for a .git
+        or pyproject.toml marker and uses the containing directory's name.
+
+        This test creates a real temporary directory tree with a pyproject.toml
+        marker so the marker-walk finds the correct root.
+        """
+        # Create a realistic nested layout:  <tmp>/omniclaude4/src/module.py
+        # with pyproject.toml at the repo root so the walker finds it.
+        repo_root = tmp_path / "omniclaude4"
+        src_dir = repo_root / "src"
+        src_dir.mkdir(parents=True)
+        (repo_root / "pyproject.toml").write_text("[project]\nname = 'omniclaude4'\n")
+        nested_file = src_dir / "module.py"
+        nested_file.write_text("# placeholder\n")
+
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append(payload)
+            return True
+
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            _emit_pattern_enforcement_event(
+                session_id="sess-nested-repo",
+                correlation_id="corr-nested",
+                language="python",
+                patterns=[self._make_pattern("p-nested")],
+                file_path=str(nested_file),
+                emitted_at="2026-01-01T00:00:00+00:00",
+            )
+
+        # The marker walk should resolve to the repo root directory name,
+        # not the intermediate "src" directory.
+        assert captured[0]["repo"] == "omniclaude4", (
+            f"Expected repo='omniclaude4' (marker-walk result) but got "
+            f"repo={captured[0]['repo']!r}. The penultimate component 'src' "
+            "would indicate the old buggy behaviour is still active."
+        )
+
+    def test_repo_fallback_for_path_without_marker(self) -> None:
+        """When no .git or pyproject.toml marker is found, falls back to penultimate component.
+
+        Synthetic or test-only paths that don't exist on the real filesystem
+        will exhaust the marker walk and use the penultimate path component as
+        the repo identifier.  This preserves the existing best-effort behaviour
+        for shallow paths like /workspace/myrepo/file.py (→ "myrepo").
+        """
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append(payload)
+            return True
+
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            _emit_pattern_enforcement_event(
+                session_id="sess-fallback",
+                correlation_id="corr-fallback",
+                language="python",
+                patterns=[self._make_pattern("p-fallback")],
+                # Path that doesn't exist on disk — walk exhausts, falls back
+                # to penultimate component "myrepo".
+                file_path="/nonexistent/myrepo/file.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
+            )
+
+        # Fallback: penultimate component is "myrepo" for this shallow path.
+        assert captured[0]["repo"] == "myrepo", (
+            f"Expected fallback repo='myrepo' (penultimate component) but got "
+            f"repo={captured[0]['repo']!r}."
+        )
+
     def test_enforcement_emits_pattern_enforcement_event_end_to_end(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
