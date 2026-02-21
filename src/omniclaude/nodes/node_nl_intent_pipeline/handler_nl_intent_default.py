@@ -21,13 +21,15 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from typing import Any
 
 from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_intent_type import (
     EnumIntentType,
 )
 from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_resolution_path import (
     EnumResolutionPath,
+)
+from omniclaude.nodes.node_nl_intent_pipeline.models.model_classification_response import (
+    ModelClassificationResponse,
 )
 from omniclaude.nodes.node_nl_intent_pipeline.models.model_extracted_entity import (
     ModelExtractedEntity,
@@ -149,14 +151,12 @@ class HandlerNlIntentDefault:
             url_override=classification_url,
         )
 
-        if service_result is not None and service_result.get("success"):
-            intent_class_str = str(
-                service_result.get("intent_class", "GENERAL")
-            ).upper()
+        if service_result is not None and service_result.success:
+            intent_class_str = service_result.intent_class.upper()
             intent_type = _SERVICE_CLASS_MAP.get(
                 intent_class_str, EnumIntentType.UNKNOWN
             )
-            confidence = float(service_result.get("confidence", 0.5))
+            confidence = service_result.confidence
             logger.debug(
                 "Service classification: %s (confidence=%.2f, correlation_id=%s)",
                 intent_type.value,
@@ -296,7 +296,7 @@ def _call_classification_service(
     correlation_id: str,
     timeout_s: float,
     url_override: str | None,
-) -> dict[str, Any] | None:
+) -> ModelClassificationResponse | None:
     """Call the OMN-2348 intent classification service.
 
     Non-blocking: returns None on any error or timeout so callers can fall
@@ -310,7 +310,7 @@ def _call_classification_service(
         url_override: Override URL (for tests or alternative deployments).
 
     Returns:
-        Response dict on success, None on failure.
+        ModelClassificationResponse on success, None on failure.
     """
     import os
 
@@ -339,19 +339,18 @@ def _call_classification_service(
             }
         ).encode("utf-8")
 
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(  # noqa: S310  # nosec B310
             url,
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
             raw = resp.read().decode("utf-8")
 
-        data: dict[str, Any] = json.loads(raw)
         elapsed_ms = int((time.monotonic() - start) * 1000)
         logger.debug("Intent service responded in %dms", elapsed_ms)
-        return data
+        return ModelClassificationResponse.model_validate_json(raw)
 
     except (urllib.error.URLError, TimeoutError, OSError):
         logger.debug("Intent classification service unavailable (non-fatal)")

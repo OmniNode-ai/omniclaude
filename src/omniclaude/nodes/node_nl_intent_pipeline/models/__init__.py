@@ -2,6 +2,9 @@
 # Copyright (c) 2025 OmniNode Team
 """Models for the NL Intent Pipeline node."""
 
+from omniclaude.nodes.node_nl_intent_pipeline.models.model_classification_response import (
+    ModelClassificationResponse,
+)
 from omniclaude.nodes.node_nl_intent_pipeline.models.model_extracted_entity import (
     ModelExtractedEntity,
 )
@@ -13,6 +16,7 @@ from omniclaude.nodes.node_nl_intent_pipeline.models.model_nl_parse_request impo
 )
 
 __all__ = [
+    "ModelClassificationResponse",
     "ModelExtractedEntity",
     "ModelIntentObject",
     "ModelNlParseRequest",
