@@ -1284,6 +1284,7 @@ class TestEmitPatternEnforcementEvent:
                 language="python",
                 patterns=patterns,
                 file_path="/some/repo/file.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
 
         assert count == 2
@@ -1311,6 +1312,7 @@ class TestEmitPatternEnforcementEvent:
                 language="python",
                 patterns=[pattern],
                 file_path="/workspace/myrepo/src/api.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
 
         assert len(captured) == 1
@@ -1334,6 +1336,8 @@ class TestEmitPatternEnforcementEvent:
         assert payload["confidence"] == 0.85
         assert "pattern_lifecycle_state" in payload
         assert payload["pattern_lifecycle_state"] == "validated"
+        assert "pattern_id" in payload
+        assert payload["pattern_id"] == "p-003"
         assert "repo" in payload
 
     def test_outcome_is_always_hit(self) -> None:
@@ -1355,6 +1359,7 @@ class TestEmitPatternEnforcementEvent:
                 language="typescript",
                 patterns=[self._make_pattern("p-ts-001")],
                 file_path="/repo/file.ts",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
 
         assert captured[0]["outcome"] == "hit"
@@ -1372,6 +1377,7 @@ class TestEmitPatternEnforcementEvent:
                 language="python",
                 patterns=[self._make_pattern("p-fail")],
                 file_path="/some/file.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
         assert count == 0
 
@@ -1390,6 +1396,7 @@ class TestEmitPatternEnforcementEvent:
                 language="python",
                 patterns=[self._make_pattern("p-import-err")],
                 file_path="/file.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
             # May succeed (module found on path) or return 0 (import error) — both acceptable
             assert isinstance(count, int)
@@ -1410,12 +1417,13 @@ class TestEmitPatternEnforcementEvent:
                 language="python",
                 patterns=[],
                 file_path="/file.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
         assert count == 0
         mock_module.emit_event.assert_not_called()
 
     def test_repo_derived_from_file_path(self) -> None:
-        """repo field is derived from the penultimate path component."""
+        """repo field is derived from the penultimate path component (parent directory of the file)."""
         captured: list[dict[str, Any]] = []
 
         def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
@@ -1432,10 +1440,11 @@ class TestEmitPatternEnforcementEvent:
                 correlation_id="corr-repo",
                 language="python",
                 patterns=[self._make_pattern("p-repo")],
-                file_path="/workspace/omniclaude4/src/module.py",
+                file_path="/workspace/omniclaude4/module.py",
+                emitted_at="2026-01-01T00:00:00+00:00",
             )
 
-        assert captured[0]["repo"] == "src"
+        assert captured[0]["repo"] == "omniclaude4"
 
     def test_enforcement_emits_pattern_enforcement_event_end_to_end(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1460,6 +1469,7 @@ class TestEmitPatternEnforcementEvent:
             language: str,
             patterns: list[dict[str, Any]],
             file_path: str,
+            emitted_at: str,
         ) -> int:
             enforcement_events.append(
                 {
@@ -1468,6 +1478,7 @@ class TestEmitPatternEnforcementEvent:
                     "language": language,
                     "patterns": patterns,
                     "file_path": file_path,
+                    "emitted_at": emitted_at,
                 }
             )
             return len(patterns)

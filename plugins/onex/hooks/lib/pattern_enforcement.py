@@ -329,6 +329,7 @@ def _emit_pattern_enforcement_event(
     language: str,
     patterns: list[dict[str, Any]],
     file_path: str,
+    emitted_at: str,
 ) -> int:
     """Emit pattern.enforcement observability events to onex.evt.omniclaude.pattern-enforcement.v1.
 
@@ -348,23 +349,21 @@ def _emit_pattern_enforcement_event(
         language: Programming language of the evaluated file.
         patterns: Eligible patterns that were included in the evaluation.
         file_path: Path to the evaluated file (used to derive repo).
+        emitted_at: ISO-8601 timestamp string, injected by caller for deterministic testing.
 
     Returns:
         Number of events successfully emitted.
     """
     try:
-        from datetime import UTC, datetime  # noqa: PLC0415
-
         from emit_client_wrapper import emit_event  # noqa: PLC0415
 
-        # Derive repo from file path (best-effort, uses last two path components)
+        # Derive repo from file path (best-effort, uses the parent directory of the file)
         try:
             parts = Path(file_path).parts
             repo = parts[-2] if len(parts) >= 2 else parts[-1] if parts else "unknown"
         except Exception:
             repo = "unknown"
 
-        timestamp = datetime.now(UTC).isoformat()
         emitted = 0
 
         for pattern in patterns:
@@ -377,12 +376,13 @@ def _emit_pattern_enforcement_event(
             lifecycle_state = str(pattern.get("status", "validated"))
 
             payload: dict[str, Any] = {
-                "timestamp": timestamp,
+                "timestamp": emitted_at,
                 "correlation_id": correlation_id,
                 "session_id": session_id,
                 "repo": repo,
                 "language": language,
                 "domain": domain,
+                "pattern_id": pattern_id,
                 "pattern_name": pattern_name,
                 "pattern_lifecycle_state": lifecycle_state,
                 "outcome": "hit",  # Evaluated by enforcement engine; violations resolved asynchronously
@@ -576,13 +576,19 @@ def enforce_patterns(
 
             # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
             # These populate the omnidash /enforcement dashboard (OMN-2442).
-            # Emitted regardless of evaluation_submitted (best-effort, fire-and-forget).
+            # Emitted when eligible patterns exist and budget is not exceeded (best-effort,
+            # fire-and-forget). Budget exhaustion suppresses both compliance.evaluate and
+            # this observability event.
+            from datetime import UTC, datetime  # noqa: PLC0415
+
+            emitted_at = datetime.now(UTC).isoformat()
             _emit_pattern_enforcement_event(
                 session_id=session_id,
                 correlation_id=enforcement_correlation_id,
                 language=language or "unknown",
                 patterns=eligible_patterns,
                 file_path=file_path,
+                emitted_at=emitted_at,
             )
 
         return EnforcementResult(
