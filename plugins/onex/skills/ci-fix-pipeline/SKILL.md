@@ -1,6 +1,6 @@
 ---
 name: ci-fix-pipeline
-description: Autonomous CI failure fix pipeline that analyzes failures, applies fixes, validates locally, and confirms release readiness
+description: Use when CI is failing on a PR or branch and you want to automatically analyze, fix, local-review, and confirm release readiness in a single unattended pipeline — chains ci-failures, fix dispatch, local-review, and pr-release-ready with explicit policy switches governing all auto-advance decisions
 version: 1.0.0
 category: workflow
 tags:
@@ -82,6 +82,30 @@ Invokes the `pr-release-ready` skill to confirm the PR is fully ready for merge.
 
 Pipeline STOPS. Manual merge required.
 
+## Arguments
+
+Parse arguments from `$ARGUMENTS`:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `pr_number_or_branch` | required | PR number (e.g., 42) or branch name (e.g., jonahgabriel/omn-1234-fix) |
+| `--dry-run` | false | Analyze and pre-flight only; no commits or fixes applied |
+| `--max-fix-files <n>` | 10 | Override scope threshold; failures touching more files create a ticket instead |
+| `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix`, `local_review`, or `release_ready` |
+
+### `--skip-to` handling
+
+When `--skip-to` is provided, skip all earlier phases and begin execution at the named phase:
+
+- `--skip-to analyze` — start at Phase 1 (same as default)
+- `--skip-to fix` — skip Phase 1; go directly to Phase 2 using previously known failures (caller must provide context or the orchestrator must read a checkpoint)
+- `--skip-to local_review` — skip Phases 1 and 2; go directly to Phase 3
+- `--skip-to release_ready` — skip Phases 1–3; go directly to Phase 4
+
+If `--skip-to` names an unknown phase, STOP and report: `Error: unknown phase '{value}'. Valid values: analyze, fix, local_review, release_ready`
+
+**Note:** When skipping Phase 1, the orchestrator has no failure classification data. The agent must infer context from git log or a prior run. If context is insufficient to execute the target phase, STOP and report.
+
 ## Pipeline Policy
 
 All auto-advance behavior is governed by explicit policy switches, not agent judgment:
@@ -122,6 +146,8 @@ You do NOT analyze, fix, or review code yourself. All heavy work runs in separat
 
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
+
+**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` (e.g., `ci-fix-42-20260221T1030`). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
 
 ---
 
