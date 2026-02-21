@@ -716,6 +716,7 @@ class TestEnforcePatternsEmit:
                 file_path="/test/file.py",
                 session_id="session-1",
                 language="python",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []
@@ -737,6 +738,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-2",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result["advisories"] == []
         assert result["evaluation_submitted"] is True
@@ -773,6 +775,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-multi",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         # Single emit
         assert len(emitted_payloads) == 1
@@ -796,6 +799,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-3",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result1["evaluation_submitted"] is True
         assert result1["patterns_skipped_cooldown"] == 0
@@ -811,6 +815,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-3",
                 language="python",
                 content_preview="def bar(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         # Pattern already in cooldown, no emit
         mock_emit.assert_not_called()
@@ -833,12 +838,14 @@ class TestEnforcePatternsEmit:
                 session_id="session-A",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
             result_b = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="session-B",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
 
         assert result_a["evaluation_submitted"] is True
@@ -861,6 +868,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-cd",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
 
         cooldown = _load_cooldown("session-cd")
@@ -888,6 +896,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-ttl2",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         # Pattern was expired, so it should be re-submitted
         assert result["evaluation_submitted"] is True
@@ -918,6 +927,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-dup",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert len(emitted_counts) == 1
         assert emitted_counts[0] == 1  # deduplicated to one
@@ -934,6 +944,7 @@ class TestEnforcePatternsEmit:
                 file_path="/test/file.py",
                 session_id="session-err",
                 language="python",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result["enforced"] is False
         assert result["error"] == "boom"
@@ -950,6 +961,7 @@ class TestEnforcePatternsEmit:
                 file_path="/test/file.py",
                 session_id="session-time",
                 language="python",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result["elapsed_ms"] >= 0
 
@@ -965,6 +977,7 @@ class TestEnforcePatternsEmit:
                 session_id="session-empty",
                 language="python",
                 content_preview="",  # empty
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
         assert result["evaluation_submitted"] is False
 
@@ -997,6 +1010,7 @@ class TestEnforcePatternsEmit:
                 session_id="sess-cid-A",
                 language="python",
                 content_preview="def foo(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
             first_cid = (
                 mock_emit.call_args[0][1]["correlation_id"]
@@ -1014,6 +1028,7 @@ class TestEnforcePatternsEmit:
                 session_id="sess-cid-B",
                 language="python",
                 content_preview="def bar(): pass\n",
+                emitted_at="2025-01-01T00:00:00+00:00",
             )
             second_cid = (
                 mock_emit.call_args[0][1]["correlation_id"]
@@ -1417,7 +1432,12 @@ class TestEmitPatternEnforcementEvent:
         mock_module.emit_event.assert_not_called()
 
     def test_repo_derived_from_file_path(self) -> None:
-        """repo field is derived from the penultimate path component (parent directory of the file)."""
+        """repo field falls back to the penultimate path component when no repo marker is found.
+
+        The path /workspace/omniclaude4/module.py is synthetic (does not exist on disk),
+        so the marker-walk (looking for .git or pyproject.toml) exhausts without finding
+        a match and falls back to the penultimate component "omniclaude4".
+        """
         captured: list[dict[str, Any]] = []
 
         def record_emit(event_type: str, payload: dict[str, Any]) -> bool:

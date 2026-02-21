@@ -508,7 +508,7 @@ def enforce_patterns(
     domain: str | None = None,
     content_preview: str = "",
     content_sha256: str = "",
-    emitted_at: str | None = None,
+    emitted_at: str,
 ) -> EnforcementResult:
     """Run pattern enforcement for a file modification.
 
@@ -524,16 +524,18 @@ def enforce_patterns(
         domain: Domain filter for patterns.
         content_preview: File content (up to 32KB) for compliance.
         content_sha256: SHA-256 hash of content_preview for idempotency.
-        emitted_at: ISO-8601 timestamp for observability events. If None, the current UTC
-            time is used (production-only fallback). All tests MUST pass an explicit value
-            for deterministic output; the None default is intentionally provided only for
-            production CLI invocations where no timestamp is available at the call site.
+        emitted_at: ISO-8601 timestamp for observability events. Must be provided
+            explicitly by the caller — do not rely on datetime.now() defaults.
+            This is a required field to ensure deterministic, testable behaviour.
 
     Returns:
         EnforcementResult with evaluation_submitted and metadata.
         advisories is always empty — results arrive asynchronously.
     """
-    from datetime import UTC, datetime  # noqa: PLC0415
+    if emitted_at is None:  # type: ignore[comparison-overlap]
+        raise ValueError(
+            "emitted_at must be provided explicitly; do not rely on datetime.now() defaults"
+        )
 
     start = time.monotonic()
 
@@ -628,7 +630,7 @@ def enforce_patterns(
             # were evaluated against this file, not whether omniintelligence processed the results.
             # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
-            _emitted_at = emitted_at or datetime.now(UTC).isoformat()
+            _emitted_at = emitted_at
             # The return value (number of events successfully emitted) is intentionally
             # discarded here.  EnforcementResult is a TypedDict whose schema is consumed
             # by the omnidash read-model consumer and the CLI stdout contract — adding an
