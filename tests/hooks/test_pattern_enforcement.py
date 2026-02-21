@@ -1455,6 +1455,7 @@ class TestEmitPatternEnforcementEvent:
             }
         ]
         enforcement_events: list[dict[str, Any]] = []
+        compliance_calls: list[dict[str, Any]] = []
 
         def capture_enforcement_emit(
             *,
@@ -1477,9 +1478,16 @@ class TestEmitPatternEnforcementEvent:
             )
             return len(patterns)
 
+        def capture_compliance_emit(**kwargs: Any) -> bool:
+            compliance_calls.append(kwargs)
+            return True
+
         with (
             patch("pattern_enforcement.query_patterns", return_value=patterns),
-            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate",
+                side_effect=capture_compliance_emit,
+            ),
             patch(
                 "pattern_enforcement._emit_pattern_enforcement_event",
                 side_effect=capture_enforcement_emit,
@@ -1500,6 +1508,15 @@ class TestEmitPatternEnforcementEvent:
         assert call["language"] == "python"
         assert call["file_path"] == "/test/repo/file.py"
         assert len(call["patterns"]) == 1
+
+        # Verify shared correlation_id: both events must carry the same ID for omnidash JOINs
+        assert len(compliance_calls) == 1
+        compliance_correlation_id = compliance_calls[0].get("correlation_id")
+        enforcement_correlation_id = enforcement_events[0]["correlation_id"]
+        assert compliance_correlation_id == enforcement_correlation_id, (
+            f"compliance.evaluate correlation_id {compliance_correlation_id!r} must match "
+            f"pattern.enforcement correlation_id {enforcement_correlation_id!r}"
+        )
 
     def test_enforcement_emits_observability_even_when_compliance_fails(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

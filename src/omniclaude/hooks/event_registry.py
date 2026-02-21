@@ -612,7 +612,12 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             FanOutRule(
                 topic_base=TopicBase.PATTERN_ENFORCEMENT,
                 transform=None,  # Passthrough — no sensitive content, only enforcement metadata
-                description="Pattern enforcement evaluation result for omnidash dashboard",
+                description=(
+                    "Pattern enforcement evaluation result for omnidash /enforcement dashboard. "
+                    "correlation_id matches the corresponding compliance.evaluate event when the "
+                    "daemon is up; in daemon-down cases the correlation_id is orphaned (no matching "
+                    "compliance.evaluate row) — omnidash LEFT JOINs should handle nulls."
+                ),
             ),
         ],
         partition_key_field="session_id",
