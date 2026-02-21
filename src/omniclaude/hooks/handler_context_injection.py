@@ -36,7 +36,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -603,7 +603,9 @@ class HandlerContextInjection:
     # Pattern Source Methods
     # =========================================================================
 
-    def _map_raw_pattern_dict(self, raw_p: dict[str, Any]) -> ModelPatternRecord | None:
+    def _map_raw_pattern_dict(
+        self, raw_p: dict[str, object]
+    ) -> ModelPatternRecord | None:
         """Map a raw pattern dict (from cache or API) to a ModelPatternRecord.
 
         Performs field extraction, type coercion, and validation.  Returns
@@ -618,9 +620,9 @@ class HandlerContextInjection:
             A ModelPatternRecord on success, or None if the record must be
             excluded.
         """
-        pattern_id = _safe_str(raw_p.get("id"))
-        signature = _safe_str(raw_p.get("pattern_signature"))
-        confidence_raw = raw_p.get("confidence")
+        pattern_id = _safe_str(cast("str | None", raw_p.get("id")))
+        signature = _safe_str(cast("str | None", raw_p.get("pattern_signature")))
+        confidence_raw = cast("float | str | None", raw_p.get("confidence"))
 
         if not pattern_id or not signature or confidence_raw is None:
             return None
@@ -630,8 +632,11 @@ class HandlerContextInjection:
         except (TypeError, ValueError):
             return None
 
-        domain_id = _safe_str(raw_p.get("domain_id"), default="general") or "general"
-        quality_score_raw = raw_p.get("quality_score")
+        domain_id = (
+            _safe_str(cast("str | None", raw_p.get("domain_id")), default="general")
+            or "general"
+        )
+        quality_score_raw = cast("float | str | None", raw_p.get("quality_score"))
         if quality_score_raw is None:
             success_rate = 0.0
         else:
@@ -640,9 +645,9 @@ class HandlerContextInjection:
             except (TypeError, ValueError):
                 success_rate = 0.0
 
-        status = raw_p.get("status")
+        status_raw = cast("str | None", raw_p.get("status"))
         lifecycle_state: str | None = (
-            status if status in {"validated", "provisional"} else None
+            status_raw if status_raw in {"validated", "provisional"} else None
         )
 
         try:
