@@ -1,0 +1,233 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+name: Omni* Ecosystem Standards Compliance
+
+# Validates omniclaude-specific structural and ecosystem standards.
+# Part of OMN-2456 (M5 standards compliance gate).
+#
+# Jobs:
+#   structure-validation    - verify key omniclaude directories exist
+#   onex-validation         - run scripts/validate_onex.py against src/
+#   agent-yaml-compliance   - validate agent YAMLs have schema_version + correct naming
+#   ecosystem-validation    - verify CLAUDE.md, hooks.json, hooks.json schema validity
+#   legacy-compatibility-check - check for forbidden legacy patterns
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+  REPO_NAME: 'omniclaude'
+
+jobs:
+  structure-validation:
+    name: Repository Structure Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate omniclaude directory structure
+        run: |
+          MISSING=0
+
+          for dir in \
+            src/omniclaude \
+            plugins/onex \
+            plugins/onex/hooks \
+            plugins/onex/agents/configs \
+            plugins/onex/commands \
+            plugins/onex/skills; do
+            if [ ! -d "$dir" ]; then
+              echo "ERROR: Required directory missing: $dir"
+              MISSING=1
+            else
+              echo "OK: $dir"
+            fi
+          done
+
+          if [ $MISSING -ne 0 ]; then
+            echo "Structure validation failed — required directories are missing."
+            exit 1
+          fi
+
+          echo "All required omniclaude directories present."
+
+  onex-validation:
+    name: ONEX Architecture Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run ONEX validator
+        run: uv run python scripts/validate_onex.py src/
+
+  agent-yaml-compliance:
+    name: Agent YAML Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate agent YAML schema_version fields
+        run: |
+          ERRORS=0
+          CONFIGS_DIR="plugins/onex/agents/configs"
+
+          for yaml_file in "$CONFIGS_DIR"/*.yaml; do
+            [ -f "$yaml_file" ] || continue
+            basename=$(basename "$yaml_file")
+
+            # Check for schema_version: "1.0.0"
+            if ! grep -q 'schema_version:' "$yaml_file"; then
+              echo "ERROR: Missing schema_version in $basename"
+              ERRORS=1
+            fi
+
+            # Check agent_identity.name starts with "agent-"
+            # Extract the name value after "name:" inside agent_identity block
+            agent_name=$(awk '/^agent_identity:/,/^[^ ]/' "$yaml_file" \
+              | grep '^\s*name:' \
+              | head -1 \
+              | sed 's/.*name:\s*//' \
+              | tr -d '"'"'" )
+
+            if [ -n "$agent_name" ] && ! echo "$agent_name" | grep -q '^agent-'; then
+              echo "ERROR: agent_identity.name does not start with 'agent-' in $basename (found: $agent_name)"
+              ERRORS=1
+            fi
+          done
+
+          if [ $ERRORS -ne 0 ]; then
+            echo "Agent YAML compliance check failed."
+            exit 1
+          fi
+
+          echo "All agent YAMLs pass compliance checks."
+
+  ecosystem-validation:
+    name: Ecosystem Integration Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate CLAUDE.md exists
+        run: |
+          if [ ! -f "CLAUDE.md" ]; then
+            echo "ERROR: CLAUDE.md is required — omniclaude project instructions are missing."
+            exit 1
+          fi
+          echo "OK: CLAUDE.md found"
+
+      - name: Validate hooks.json exists and is valid JSON
+        run: |
+          HOOKS_JSON="plugins/onex/hooks/hooks.json"
+
+          if [ ! -f "$HOOKS_JSON" ]; then
+            echo "ERROR: $HOOKS_JSON not found"
+            exit 1
+          fi
+          echo "OK: hooks.json found"
+
+          # Validate JSON syntax
+          if ! python3 -c "import json, sys; json.load(open('$HOOKS_JSON'))" 2>&1; then
+            echo "ERROR: hooks.json is not valid JSON"
+            exit 1
+          fi
+          echo "OK: hooks.json is valid JSON"
+
+      - name: Validate hooks.json schema fields
+        run: |
+          python3 -c "
+          import json, sys
+
+          with open('plugins/onex/hooks/hooks.json') as f:
+              data = json.load(f)
+
+          hooks = data.get('hooks', [])
+          if not hooks:
+              print('WARNING: hooks.json contains no hooks entries')
+              sys.exit(0)
+
+          required_fields = {'type', 'command'}
+          errors = []
+          for i, hook in enumerate(hooks):
+              missing = required_fields - set(hook.keys())
+              if missing:
+                  errors.append(f'Hook [{i}] missing fields: {missing}')
+
+          if errors:
+              for e in errors:
+                  print(f'ERROR: {e}')
+              sys.exit(1)
+
+          print(f'OK: hooks.json schema valid ({len(hooks)} hooks)')
+          "
+
+  legacy-compatibility-check:
+    name: Legacy Compatibility Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for forbidden legacy patterns
+        run: |
+          ERRORS=0
+
+          # Check for /model/ directory alongside /models/ (ambiguous dual layout)
+          if [ -d "src/${{ env.REPO_NAME }}/model" ] && [ -d "src/${{ env.REPO_NAME }}/models" ]; then
+            echo "ERROR: Both src/${{ env.REPO_NAME }}/model/ and src/${{ env.REPO_NAME }}/models/ exist — remove /model/"
+            ERRORS=1
+          elif [ -d "src/${{ env.REPO_NAME }}/model" ]; then
+            echo "WARNING: src/${{ env.REPO_NAME }}/model/ found — prefer /models/ for consistency"
+          fi
+
+          # Check for scattered model files outside canonical locations
+          scattered=$(find . \
+            \( -path "./.venv" -o -path "./.git" \) -prune -o \
+            \( -name "*/api/models.py" -o -name "*/validation/models.py" \) \
+            -print 2>/dev/null | head -5)
+          if [ -n "$scattered" ]; then
+            echo "WARNING: Scattered model files found — consider consolidating into src/${{ env.REPO_NAME }}/models/"
+            echo "$scattered"
+          fi
+
+          # Check that no Poetry lock file has crept in (omniclaude uses uv)
+          if [ -f "poetry.lock" ]; then
+            echo "ERROR: poetry.lock found — omniclaude uses uv, not Poetry"
+            ERRORS=1
+          fi
+
+          if [ $ERRORS -ne 0 ]; then
+            echo "Legacy compatibility check failed."
+            exit 1
+          fi
+
+          echo "Legacy compatibility check passed."
