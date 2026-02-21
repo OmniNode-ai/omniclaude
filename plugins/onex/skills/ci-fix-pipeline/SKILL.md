@@ -89,7 +89,7 @@ Parse arguments from `$ARGUMENTS`:
 | `pr_number_or_branch` | required | PR number (e.g., 42) or branch name (e.g., jonahgabriel/omn-1234-fix) |
 | `--dry-run` | false | Analyze and pre-flight only; no commits or fixes applied |
 | `--max-fix-files <n>` | 10 | Override scope threshold; failures touching more files create a ticket instead |
-| `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix` (no-op today; reserved for future confirmation gate), `local_review`, or `release_ready` |
+| `--skip-to <phase>` | none | Resume from a specific phase: `analyze`, `fix` (no-op: re-runs from Phase 1 — behaves identically to the default auto-advance), `local_review`, or `release_ready` |
 
 ### `--skip-to` handling
 
@@ -133,7 +133,7 @@ These rules are enforced unconditionally, regardless of any flag or argument:
 3. **NEVER run destructive git commands:** `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
 4. **Pre-flight check**: run `git status` before any changes. If there are unrelated uncommitted changes, STOP and report — do not proceed.
 5. **Authentication check**: run `gh auth status` before Phase 2. If not authenticated, STOP and report.
-6. **Correlation tagging**: every commit must include `[corr:{correlation_id}:{failure_index}]` in the commit message, where `failure_index` is the 0-based position of that failure in the failures list. Before starting, check git log for existing `[corr:{correlation_id}:{failure_index}]` commits to detect re-runs and avoid duplicate work. Using a per-failure tag ensures parallel agents fixing different failures do not falsely detect each other's commits as "already fixed". **Note**: the idempotency check scans only the last 100 commits (`git log --oneline -100`); on branches with more than 100 commits the check window does not cover the full history, and idempotency is not guaranteed (see Phase 2 dispatch prompt for per-agent warning behavior).
+6. **Correlation tagging**: every commit must include `[corr:{correlation_id}:{failure_index}]` in the commit message, where `failure_index` is the 0-based position of that failure in the failures list. Before starting, check git log for existing `[corr:{correlation_id}:{failure_index}]` commits to detect re-runs and avoid duplicate work. Using a per-failure tag ensures parallel agents fixing different failures do not falsely detect each other's commits as "already fixed". **Note**: the idempotency check scans only the last 100 commits (`git log --oneline -100`); on branches with more than 100 commits the check window does not cover the full history, and idempotency is not guaranteed (see Phase 2 dispatch prompt for per-agent warning behavior). **The 100-commit window limitation is a known, accepted risk**: beyond that window, duplicate fix commits may occur on re-run (no data loss, just duplicate fix commits). This is the defined behavior and operators should be aware of it.
 7. **Branch guard**: if currently on main or master, create a new branch before making any changes.
 8. **Dry-run isolation**: `--dry-run` must produce zero side effects — no commits, no pushes, no ticket creation, no Linear status changes.
 
@@ -362,7 +362,7 @@ Task(
 ### Phase 3: local_review — dispatch to polymorphic agent
 
 Before dispatching Phase 3, determine the base branch:
-- If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument.
+- If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument. **If this command fails** (network error, unauthenticated CLI, or any non-zero exit): STOP immediately and emit: "Cannot resolve base branch for PR #{pr_number_or_branch} — gh pr view failed. Check GitHub CLI authentication." Unlike the branch-name path, there is no safe fallback for a PR number — the actual base branch is required.
 - If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default. **Fallback**: if this command fails (e.g., no GitHub remote configured, network error) or returns an empty string, fall back to `main` as the candidate default branch ref and log a warning: "Could not detect default branch via gh repo view — falling back to 'main'. Verify this is correct for the repository." After the fallback, verify that `origin/main` actually exists by running `git ls-remote --heads origin main`. If the command returns no output (i.e., `origin/main` is not found on the remote), STOP immediately and emit: "Cannot determine base branch — 'origin/main' not found on remote. Please specify the base branch explicitly with --base-ref." Do NOT proceed to dispatch Phase 3 with an unverified base branch ref.
 
 **IMPORTANT — substitute `{base_branch_ref}` before dispatching**: The orchestrator MUST replace `{base_branch_ref}` in the `args` string with the actual resolved base branch reference (e.g., `origin/main` or `origin/develop`) determined in the step above before creating this Task. Never pass the literal placeholder `{base_branch_ref}` to the agent.
@@ -400,6 +400,7 @@ Task(
 - If `status: passed` and parsed count is 0: push commits to remote before advancing to Phase 4 (see push step below).
 - If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
 - If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
+- If `status` is any value other than `passed` or `failed`: treat it as `failed` (conservative default). STOP and log: "Phase 3 agent returned unexpected status: {status}. Treating as failed."
 
 **Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch:
 
