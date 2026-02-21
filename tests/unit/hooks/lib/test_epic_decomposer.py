@@ -224,13 +224,12 @@ class TestPartLabelOverride:
         result = decompose_epic([ticket], manifest_path)
 
         # Should NOT be treated as override; keyword scoring takes over
-        cr_ids = [cr.ticket_id for cr in result.cross_repo]
         # T-008 might end up anywhere but not via explicit override
         # Verify it's not in ticket_scores with "Explicit label override"
-        if "T-008" in result.ticket_scores:
-            assert "Explicit label override" not in result.ticket_scores["T-008"].get(
-                "ordering_rationale", ""
-            )
+        assert "T-008" in result.ticket_scores
+        assert "Explicit label override" not in result.ticket_scores["T-008"].get(
+            "ordering_rationale", ""
+        )
 
     def test_part_labels_take_priority_over_keywords(self, manifest_path: str) -> None:
         # Even with strong keyword signal for one repo, explicit labels win
@@ -510,3 +509,93 @@ class TestExactLabelMatch:
         assert "T-024" in result.assignments["omniclaude"]
         assert result.unmatched == []
         assert result.cross_repo == []
+
+    def test_multiple_exact_repo_labels_falls_through_to_keyword_scoring(
+        self, manifest_path: str
+    ) -> None:
+        # When len(exact_matches) != 1, priority 4 does not fire.
+        # Falls through to keyword scoring (priority 5).
+        ticket = _ticket(
+            "T-025",
+            title="hook claude plugin",
+            description="",
+            labels=["omniclaude", "omniintelligence"],
+        )
+        result = decompose_epic([ticket], manifest_path)
+
+        # Priority 4 requires exactly one exact match; two exact matches → skipped.
+        # Keyword scoring takes over: omniclaude gets hook+claude+plugin=3 matches.
+        assert "T-025" in result.ticket_scores
+        scores = result.ticket_scores["T-025"]
+        # Must NOT be decided via exact label override path
+        assert (
+            scores.get("ordering_rationale", "")
+            != "exact label match to repo name: omniclaude"
+        )
+        assert (
+            scores.get("ordering_rationale", "")
+            != "exact label match to repo name: omniintelligence"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 12: multi-repo with 3+ repos (only first two used)
+# ---------------------------------------------------------------------------
+
+
+class TestMultiRepoThreePlusRepos:
+    def test_multi_repo_three_repos_uses_only_first_two(
+        self, manifest_path: str
+    ) -> None:
+        # Behavior spec: multi-repo:a,b,c silently drops extras; only first two used.
+        ticket = _ticket(
+            "T-026",
+            title="Some ticket",
+            labels=["multi-repo:omniclaude,omniintelligence,omnibase_core"],
+        )
+        result = decompose_epic([ticket], manifest_path)
+
+        assert len(result.cross_repo) == 1
+        cr = result.cross_repo[0]
+        assert cr.ticket_id == "T-026"
+        # Only first two repos retained; third is silently dropped
+        assert cr.repos == ["omniclaude", "omniintelligence"]
+        assert len(cr.repos) == 2
+
+
+# ---------------------------------------------------------------------------
+# Test 13: depends-on where dep_repo is the only repo in manifest → unmatched
+# ---------------------------------------------------------------------------
+
+
+class TestDependsOnUnmatchedFallback:
+    def test_depends_on_only_repo_falls_through_to_unmatched(
+        self, tmp_path: Path
+    ) -> None:
+        # Manifest with only one repo — depends-on that single repo leaves no
+        # primary candidates, so the ticket falls through to unmatched.
+        single_repo_manifest = {
+            "MIN_TOP_SCORE": 4,
+            "repos": [
+                {
+                    "name": "omniclaude",
+                    "description": "Only repo",
+                    "keywords": ["hook"],
+                    "precedence": 1,
+                }
+            ],
+        }
+        p = tmp_path / "single_repo_manifest.yaml"
+        p.write_text(yaml.dump(single_repo_manifest))
+
+        ticket = _ticket(
+            "T-027",
+            title="hook claude plugin",
+            description="",
+            labels=["depends-on:omniclaude"],
+        )
+        result = decompose_epic([ticket], str(p))
+
+        assert "T-027" in result.unmatched
+        assert len(result.cross_repo) == 0
+        assert result.ticket_scores["T-027"]["decision"] == "unmatched"

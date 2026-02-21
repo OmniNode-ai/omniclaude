@@ -81,7 +81,7 @@ def _score_ticket(ticket: dict, repos: list[dict]) -> dict[str, int]:
     scores: dict[str, int] = {}
     for repo in repos:
         count = 0
-        for keyword in repo.get("keywords", []):
+        for keyword in set(repo.get("keywords", [])):
             if keyword.lower() in text:
                 count += 1
         scores[repo["name"]] = count
@@ -303,10 +303,6 @@ def decompose_epic(tickets: list[dict], manifest_path: str) -> DecompositionResu
             key=lambda r: (-scores[r["name"]], r.get("precedence", 999)),
         )
 
-        top3 = [
-            {"repo": r["name"], "score": scores[r["name"]]} for r in sorted_repos[:3]
-        ]
-
         if not sorted_repos:
             unmatched.append(tid)
             ticket_scores[tid] = {
@@ -319,6 +315,10 @@ def decompose_epic(tickets: list[dict], manifest_path: str) -> DecompositionResu
                 "ordering_rationale": "no repos in manifest",
             }
             continue
+
+        top3 = [
+            {"repo": r["name"], "score": scores[r["name"]]} for r in sorted_repos[:3]
+        ]
 
         top_repo = sorted_repos[0]["name"]
         top_score = scores[top_repo]
