@@ -66,7 +66,7 @@ For each classified failure:
 - **Small scope** → dispatches fix to a polymorphic agent (Polly), mirroring exact CI commands from `.github/workflows/ci.yml`
 - **Large scope** → dispatches `create-ticket` to Polly with full context; marks failure as deferred
 
-AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`.
+AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, `large_scope` (ticket created), or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`.
 
 ### Phase 3: local_review
 
@@ -360,6 +360,8 @@ Task(
 Before dispatching Phase 3, determine the base branch:
 - If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument.
 - If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default.
+
+**IMPORTANT — substitute `{base_branch_ref}` before dispatching**: The orchestrator MUST replace `{base_branch_ref}` in the `args` string with the actual resolved base branch reference (e.g., `origin/main` or `origin/develop`) determined in the step above before creating this Task. Never pass the literal placeholder `{base_branch_ref}` to the agent.
 
 ```
 Task(
