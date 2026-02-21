@@ -23,7 +23,8 @@ Environment="POSTGRES_HOST=localhost"
 Environment="POSTGRES_PORT=5436"
 Environment="POSTGRES_DATABASE=omniclaude"
 Environment="POSTGRES_USER=postgres"
-Environment="POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024"
+# POSTGRES_PASSWORD must be set externally — use EnvironmentFile or systemctl set-environment
+# Do NOT hardcode credentials here; this file is tracked in git
 
 # Consumer tuning
 Environment="BATCH_SIZE=100"
