@@ -76,11 +76,13 @@ jobs:
           # Find YAML files following onex_change_control schema naming patterns:
           #   *contract*.yaml / *contract*.yml  -> validated as ModelTicketContract
           #   *day_close*.yaml / *day_close*.yml -> validated as ModelDayClose
-          # Excludes: the checked-out onex_change_control repo, venvs, git dir.
+          # Excludes: checked-out onex_change_control repo, venvs, git dir,
+          # and plugins/ (agent/command/skill YAMLs often contain "contract" in
+          # their names but are not ticket-contract schema artifacts).
           FILES=$(find . \
             -not -path './onex_change_control/*' \
             -not -path './.venv/*' \
-            -not -path './plugins/onex/.venv/*' \
+            -not -path './plugins/*' \
             -not -path './.git/*' \
             \( -name '*contract*.yaml' -o -name '*contract*.yml' \
                -o -name '*day_close*.yaml' -o -name '*day_close*.yml' \) \
