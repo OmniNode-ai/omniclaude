@@ -1096,3 +1096,31 @@ class TestTransformForObservabilityEdgeCases:
         assert result["prompt_preview"] == "{}"
         # Verify prompt_length reflects converted string length
         assert result["prompt_length"] == 2  # len("{}")
+
+
+# =============================================================================
+# Contract Guard Tests
+# =============================================================================
+
+
+class TestContractGuards:
+    """Tests that guard against silent breaking changes to event contracts.
+
+    These tests exist to catch cases where a schema field is renamed or removed
+    without updating all call sites. They are intentionally brittle: if one
+    fails, it means a contract changed and all callers must be audited.
+    """
+
+    def test_context_enrichment_required_field_is_channel(self) -> None:
+        """Guard: context.enrichment required_fields must be ["session_id", "channel"].
+
+        # GUARD: If this fails, someone changed the required_fields contract for
+        # context.enrichment. Re-audit all validate_payload("context.enrichment", ...)
+        # call sites. The field 'enrichment_type' was replaced by 'channel' in OMN-2441;
+        # any caller still passing 'enrichment_type' will fail validation silently.
+        """
+        from omniclaude.hooks.event_registry import get_registration
+
+        reg = get_registration("context.enrichment")
+        assert reg is not None
+        assert reg.required_fields == ["session_id", "channel"]
