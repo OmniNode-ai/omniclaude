@@ -21,7 +21,7 @@ Environment="KAFKA_GROUP_ID=agent-actions-postgres"
 # PostgreSQL configuration
 Environment="POSTGRES_HOST=localhost"
 Environment="POSTGRES_PORT=5436"
-Environment="POSTGRES_DATABASE=omninode_bridge"
+Environment="POSTGRES_DATABASE=omniclaude"
 Environment="POSTGRES_USER=postgres"
 Environment="POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024"
 
