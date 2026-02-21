@@ -271,6 +271,13 @@ Task(
     - NEVER use --no-verify when committing.
     - If a pre-commit hook fails: fix the hook failure first, then commit again.
 
+    Status definitions:
+    - fixed: the failure was reproduced locally, a fix was applied, the CI command now passes, and the fix was committed.
+    - skipped: return this when (a) the idempotency check found an existing corr commit for this failure index, meaning it was already fixed in a prior pipeline run, OR (b) the failure no longer appears in the latest CI run for this branch (resolved upstream with no action needed). Do not attempt a fix in either case.
+    - large_scope: the fix required more than {max_fix_files} files; no changes were committed.
+    - preflight_failed: a pre-flight check (git status, gh auth, branch guard) prevented starting.
+    - failed: the fix was attempted but the CI command still fails after changes, or an unexpected error occurred.
+
     RESULT:
     status: fixed | skipped | large_scope | preflight_failed | failed
     output: |
@@ -375,9 +382,18 @@ Task(
 
 **Orchestrator action after Phase 3:**
 - Parse `blocking issues found: <count>` from the output to extract the integer count. If parsing fails or the field is absent, treat the result conservatively: assume blocking issues exist, STOP, and report that Phase 3 result could not be parsed — do not advance to Phase 4.
-- If `status: passed` and parsed count is 0: AUTO-ADVANCE to Phase 4.
+- If `status: passed` and parsed count is 0: push commits to remote before advancing to Phase 4 (see push step below).
 - If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
 - If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
+
+**Push step (required before Phase 4):** After Phase 3 passes, push all commits to the remote branch:
+
+```
+Run: git push origin HEAD
+```
+
+- If the push succeeds: AUTO-ADVANCE to Phase 4.
+- If the push fails (e.g., diverged remote, rejected, authentication error): STOP immediately and report the push failure. Include the full error output and instruct the user to manually rebase and push (`git fetch origin && git rebase origin/{base_branch} && git push origin HEAD`) before re-running the pipeline from Phase 4 (`--skip-to release_ready`). Do NOT advance to Phase 4 until the push succeeds.
 
 ---
 
