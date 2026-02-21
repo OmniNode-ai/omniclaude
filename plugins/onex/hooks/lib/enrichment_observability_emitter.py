@@ -5,8 +5,7 @@ enrichment channel after the enrichment pipeline completes.
 
 Canonical fields emitted (omnidash ContextEnrichmentEvent schema, OMN-2441):
     session_id          -- Claude Code session identifier
-    emitted_at          -- ISO-8601 UTC timestamp injected by the caller
-    timestamp           -- ISO-8601 UTC timestamp of the event
+    timestamp           -- ISO-8601 UTC timestamp injected by the caller (parameter: ``emitted_at``)
     correlation_id      -- trace correlation ID propagated from the hook
     channel             -- enrichment channel: "summarization", "code_analysis", "similarity"
     model_name          -- model identifier (from handler, or "" if unknown)
@@ -424,8 +423,12 @@ def emit_enrichment_events(
         success: bool = bool(getattr(result, "success", False))
         result_token_count: int = int(getattr(result, "tokens", 0))  # noqa: secrets
 
-        # was_dropped: ran and produced content but excluded by token cap
-        was_dropped = success and (enrichment_type not in kept_names)
+        # was_dropped: ran and produced content but excluded by token cap.
+        # Guard tokens_after > 0: a miss (tokens_after=0) with success=True should
+        # not be flagged as dropped — there was nothing meaningful to drop.
+        was_dropped = (
+            success and (enrichment_type not in kept_names) and result_token_count > 0
+        )
 
         # tokens_before: for summarization this is the original prompt size;
         # for other channels the concept doesn't apply (they add context)
