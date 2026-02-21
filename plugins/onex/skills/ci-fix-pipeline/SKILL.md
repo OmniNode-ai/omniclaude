@@ -133,7 +133,7 @@ These rules are enforced unconditionally, regardless of any flag or argument:
 3. **NEVER run destructive git commands:** `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
 4. **Pre-flight check**: run `git status` before any changes. If there are unrelated uncommitted changes, STOP and report — do not proceed.
 5. **Authentication check**: run `gh auth status` before Phase 2. If not authenticated, STOP and report.
-6. **Correlation tagging**: every commit must include `[corr:{correlation_id}:{failure_index}]` in the commit message, where `failure_index` is the 0-based position of that failure in the failures list. Before starting, check git log for existing `[corr:{correlation_id}:{failure_index}]` commits to detect re-runs and avoid duplicate work. Using a per-failure tag ensures parallel agents fixing different failures do not falsely detect each other's commits as "already fixed".
+6. **Correlation tagging**: every commit must include `[corr:{correlation_id}:{failure_index}]` in the commit message, where `failure_index` is the 0-based position of that failure in the failures list. Before starting, check git log for existing `[corr:{correlation_id}:{failure_index}]` commits to detect re-runs and avoid duplicate work. Using a per-failure tag ensures parallel agents fixing different failures do not falsely detect each other's commits as "already fixed". **Note**: the idempotency check scans only the last 100 commits (`git log --oneline -100`); on branches with more than 100 commits the check window does not cover the full history, and idempotency is not guaranteed (see Phase 2 dispatch prompt for per-agent warning behavior).
 7. **Branch guard**: if currently on main or master, create a new branch before making any changes.
 8. **Dry-run isolation**: `--dry-run` must produce zero side effects — no commits, no pushes, no ticket creation, no Linear status changes.
 
@@ -147,7 +147,7 @@ You do NOT analyze, fix, or review code yourself. All heavy work runs in separat
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
 
-**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). **Truncate the branch-name portion to at most 30 characters** after sanitization to prevent the correlation_id from pushing commit subject lines past 72 characters (e.g., `jonahgabriel-omn-1234-fix-my-` if the sanitized branch exceeds 30 chars). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
+**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **The `short_timestamp` component MUST be generated in UTC** (e.g., via `date -u +%Y%m%dT%H%M%S` or equivalent) to ensure consistency across environments and avoid clock skew from timezone changes or DST transitions. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). **Truncate the branch-name portion to at most 30 characters** after sanitization to prevent the correlation_id from pushing commit subject lines past 72 characters (e.g., `jonahgabriel-omn-1234-fix-my-` if the sanitized branch exceeds 30 chars). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
 
 ---
 
@@ -221,7 +221,7 @@ Task(
 - If `status: failed`, STOP and report the error.
 - If `total_failures: 0`, log "No CI failures found — pipeline complete." and STOP.
 - If `--dry-run`, log the classified failure list and STOP (do not advance).
-- If `status: partial` (some failures classified, some not): dispatch Phase 2 agents **only** for the fully-classified failures. Log a warning: "{total_failures - (small_scope_count + large_scope_count)} failure(s) could not be classified and were skipped — re-check Phase 1 output or re-run with additional context." Mark them as `unresolved` in the final summary. Do NOT dispatch fix or ticket agents for unclassified failures.
+- If `status: partial` (some failures classified, some not): dispatch Phase 2 agents **only** for the fully-classified failures. Compute the unclassified count by evaluating `total_failures - (small_scope_count + large_scope_count)` (this is an arithmetic expression the orchestrator MUST evaluate before emitting — do NOT emit it as a literal template string). Log a warning: "{unclassified_count} failure(s) could not be classified and were skipped — re-check Phase 1 output or re-run with additional context." Mark them as `unresolved` in the final summary. Do NOT dispatch fix or ticket agents for unclassified failures.
 - Otherwise, AUTO-ADVANCE to Phase 2.
 
 ---
@@ -270,6 +270,7 @@ Task(
 
     After confirming the fix passes locally:
     - Commit with message: 'fix({cause}): {error_summary} [corr:{correlation_id}:{failure_index}]'
+      Truncate {error_summary} to at most 60 characters before inserting it into the subject line to keep the full subject within the conventional 72-character limit.
     - NEVER use --no-verify when committing.
     - If a pre-commit hook fails: fix the hook failure first, then commit again.
 
@@ -353,8 +354,8 @@ Task(
 - Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
 - If any agent returned `preflight_failed` OR `failed`: STOP and produce a single combined report of ALL non-passing results — list every `preflight_failed` agent and every `failed` agent together with their error details. Do not proceed to Phase 3. Do not report preflight failures in isolation if there are also `failed` agents; the user must see the complete picture in one report.
 - If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. If any secondary ticket-creation agent returns `failed`: STOP with status `ticket_creation_failed`, report which failures had no ticket created. Do NOT advance to Phase 3. Only after all mid-fix `large_scope` tickets are confirmed `success` may the orchestrator treat those failures as `success` (ticket created) and advance.
-- If all failures are `fixed`, `skipped`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
-  NOTE: `large_scope` must NOT appear in this final condition. Any mid-fix `large_scope` result must have completed the secondary ticket-creation dispatch loop and been confirmed as `success` (ticket created) before it is counted here. An agent that sees a `large_scope` result at this point without a corresponding confirmed `success` from secondary dispatch MUST NOT advance — it must dispatch the secondary ticket agent and wait for confirmation.
+- If all failures are `fixed` or `skipped` (fix-agent results) or `success` (large-scope ticket-agent results): AUTO-ADVANCE to Phase 3.
+  NOTE: `skipped` is a valid result only from fix-agents (idempotency — already fixed in a prior run). It is NOT a valid result from large-scope ticket-agents; ticket-agents return only `success` or `failed`. Any mid-fix `large_scope` result must have completed the secondary ticket-creation dispatch loop and been confirmed as `success` (ticket created) before it is counted here. An agent that sees a `large_scope` result at this point without a corresponding confirmed `success` from secondary dispatch MUST NOT advance — it must dispatch the secondary ticket agent and wait for confirmation.
 
 ---
 
@@ -362,7 +363,7 @@ Task(
 
 Before dispatching Phase 3, determine the base branch:
 - If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument.
-- If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default.
+- If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default. **Fallback**: if this command fails (e.g., no GitHub remote configured, network error) or returns an empty string, fall back to `main` as the default branch ref and log a warning: "Could not detect default branch via gh repo view — falling back to 'main'. Verify this is correct for the repository."
 
 **IMPORTANT — substitute `{base_branch_ref}` before dispatching**: The orchestrator MUST replace `{base_branch_ref}` in the `args` string with the actual resolved base branch reference (e.g., `origin/main` or `origin/develop`) determined in the step above before creating this Task. Never pass the literal placeholder `{base_branch_ref}` to the agent.
 
@@ -400,14 +401,26 @@ Task(
 - If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
 - If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
 
-**Push step (required before Phase 4):** After Phase 3 passes, push all commits to the remote branch:
+**Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch:
 
 ```
-Run: git push origin HEAD
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ci-fix-pipeline: push commits to remote after Phase 3 passed",
+  prompt="You are pushing committed CI fixes to the remote branch for PR/branch: {pr_number_or_branch}.
+
+    Run: git push origin HEAD
+
+    RESULT:
+    status: success | failed
+    output: |
+      Full output of the git push command
+    error: <full error output if status is failed, else null>"
+)
 ```
 
-- If the push succeeds: AUTO-ADVANCE to Phase 4.
-- If the push fails (e.g., diverged remote, rejected, authentication error): STOP immediately and report the push failure. Include the full error output and instruct the user to manually rebase and push (`git fetch origin && git rebase origin/<base_branch> && git push origin HEAD`) before re-running the pipeline from Phase 4 (`--skip-to release_ready`). Do NOT advance to Phase 4 until the push succeeds. **NOTE to orchestrator**: substitute the actual resolved base branch name (e.g., `main`, `develop`) in place of `<base_branch>` in the recovery message before reporting it to the user — never leave `<base_branch>` as a literal placeholder in user-facing output.
+- If the dispatched agent returns `status: success`: AUTO-ADVANCE to Phase 4.
+- If the dispatched agent returns `status: failed`: STOP immediately and report the push failure. Include the full error output from the agent's RESULT and instruct the user to manually rebase and push (`git fetch origin && git rebase origin/<base_branch> && git push origin HEAD`) before re-running the pipeline from Phase 4 (`--skip-to release_ready`). Do NOT advance to Phase 4 until the push succeeds. **NOTE to orchestrator**: substitute the actual resolved base branch name (e.g., `main`, `develop`) in place of `<base_branch>` in the recovery message before reporting it to the user — never leave `<base_branch>` as a literal placeholder in user-facing output.
 
 ---
 
@@ -446,20 +459,14 @@ else:
 
 Pass `resolved_pr_number` (the resolved integer, not the branch name) to `pr-release-ready`.
 
+**Before creating this Task, the orchestrator MUST substitute `{resolved_pr_number}` with the actual integer PR number (e.g., `42`) in BOTH the `description` field and the `prompt` body. Never pass the literal placeholder `{resolved_pr_number}` to the agent. For example, if the PR number is 42, the args value passed to the agent is the string `"42"`.**
+
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 4 pr-release-ready for PR #{resolved_pr_number}",
   prompt="You are confirming release readiness for PR #{resolved_pr_number} (original arg: {pr_number_or_branch}).
     Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"{resolved_pr_number}\")
-
-    IMPORTANT: Replace {resolved_pr_number} in the args string above with the actual integer PR
-    number (e.g., 42) before creating this Task. The orchestrator must substitute the real integer
-    value — never pass a template placeholder like '{resolved_pr_number}' literally.
-    For example, if the PR number is 42, the args value is the string \"42\".
-    This substitution applies to BOTH the prompt body AND the description field of the Task
-    (which also contains '{resolved_pr_number}'). Replace it in both locations before the Task
-    is created.
 
     The goal is to confirm the PR is fully ready for merge after CI fixes were applied.
 
