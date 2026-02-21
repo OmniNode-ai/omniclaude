@@ -93,7 +93,7 @@ Parse arguments from `$ARGUMENTS`:
 
 ### `--skip-to` handling
 
-**Note:** If `--dry-run` is also set, it takes precedence — evaluate the dry-run flag once at pipeline entry before any phase routing and stop immediately, regardless of `--skip-to`.
+**Note:** If `--dry-run` is also set, it takes precedence — evaluate the dry-run flag once at pipeline entry before any phase routing and stop immediately, regardless of `--skip-to`. If `--dry-run` is combined with `--skip-to local_review` or `--skip-to release_ready`, treat as `--dry-run` alone (run Phase 1 analysis only, then stop). The skip-to target is ignored when `--dry-run` is active.
 
 When `--skip-to` is provided, begin execution at the named phase. Note that Phase 1 data (failure classification) is required by Phase 2 and later phases, so `--skip-to fix` does NOT skip Phase 1 — it re-runs Phase 1 silently and immediately advances to Phase 2. Only `--skip-to local_review` and `--skip-to release_ready` genuinely bypass earlier phases.
 
@@ -145,6 +145,7 @@ You are an orchestrator. You coordinate phase transitions, pre-flight checks, po
 You do NOT analyze, fix, or review code yourself. All heavy work runs in separate agents (Polly) via `Task()`.
 
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
+Read-only commands (git status, git log, gh pr view, git ls-remote, gh repo view, etc.) are exempt from this rule — only commands that modify files, the git tree, or remote state require dispatch.
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
 
 **Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **The `short_timestamp` component MUST be generated in UTC** (e.g., via `date -u +%Y%m%dT%H%M%S` or equivalent) to ensure consistency across environments and avoid clock skew from timezone changes or DST transitions. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). **Truncate the branch-name portion to at most 30 characters** after sanitization to prevent the correlation_id from pushing commit subject lines past 72 characters (e.g., `jonahgabriel-omn-1234-fix-my-` if the sanitized branch exceeds 30 chars). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
@@ -270,7 +271,7 @@ Task(
 
     After confirming the fix passes locally:
     - Commit with message: 'fix({cause}): {error_summary} [corr:{correlation_id}:{failure_index}]'
-      Truncate {error_summary} to at most 60 characters before inserting it into the subject line to keep the full subject within the conventional 72-character limit.
+      Before building the commit subject, compute available_chars = 72 - len('fix({cause}): ') - len(' [corr:{correlation_id}:{failure_index}]'). Truncate {error_summary} to min(available_chars, 40) characters (the 40-char floor prevents overly short summaries when the prefix+suffix is large). If available_chars <= 0, use only 'fix({cause}): (details in body) [corr:{correlation_id}:{failure_index}]'.
     - NEVER use --no-verify when committing.
     - If a pre-commit hook fails: fix the hook failure first, then commit again.
 
@@ -363,7 +364,7 @@ Task(
 
 Before dispatching Phase 3, determine the base branch:
 - If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument. **If this command fails** (network error, unauthenticated CLI, or any non-zero exit): STOP immediately and emit: "Cannot resolve base branch for PR #{pr_number_or_branch} — gh pr view failed. Check GitHub CLI authentication." Unlike the branch-name path, there is no safe fallback for a PR number — the actual base branch is required.
-- If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default. **Fallback**: if this command fails (e.g., no GitHub remote configured, network error) or returns an empty string, fall back to `main` as the candidate default branch ref and log a warning: "Could not detect default branch via gh repo view — falling back to 'main'. Verify this is correct for the repository." After the fallback, verify that `origin/main` actually exists by running `git ls-remote --heads origin main`. If `git ls-remote` itself fails (no network connectivity or no remote configured), STOP immediately with: "Cannot verify base branch — git ls-remote failed. Check network connectivity and remote configuration." If the command succeeds but returns no output (i.e., `origin/main` is not found on the remote), STOP immediately and emit: "Cannot determine base branch — 'origin/main' not found on remote. Please specify the base branch explicitly with --base-ref." Do NOT proceed to dispatch Phase 3 with an unverified base branch ref.
+- If `{pr_number_or_branch}` is a branch name: detect the repo's actual default branch by running `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`. Use `origin/{detected_default_branch}` as the `--since` argument. Do NOT hard-code `origin/main` — repos may use `develop` or another default. **Fallback**: if this command fails (e.g., no GitHub remote configured, network error) or returns an empty string, fall back to `main` as the candidate default branch ref and log a warning: "WARNING: Could not detect default branch automatically. Using 'main' as fallback. Verify this is the correct base branch for your PR. If the repository uses a different base branch (e.g., 'develop'), re-run with an explicit `--base-ref develop` argument." After the fallback, verify that `origin/main` actually exists by running `git ls-remote --heads origin main`. If `git ls-remote` itself fails (no network connectivity or no remote configured), STOP immediately with: "Cannot verify base branch — git ls-remote failed. Check network connectivity and remote configuration." If the command succeeds but returns no output (i.e., `origin/main` is not found on the remote), STOP immediately and emit: "Cannot determine base branch — 'origin/main' not found on remote. Please specify the base branch explicitly with --base-ref." Do NOT proceed to dispatch Phase 3 with an unverified base branch ref.
 
 **IMPORTANT — substitute `{base_branch_ref}` before dispatching**: The orchestrator MUST replace `{base_branch_ref}` in the `args` string with the actual resolved base branch reference (e.g., `origin/main` or `origin/develop`) determined in the step above before creating this Task. Never pass the literal placeholder `{base_branch_ref}` to the agent.
 
@@ -410,7 +411,7 @@ Task(
   description="ci-fix-pipeline: push commits to remote after Phase 3 passed",
   prompt="You are pushing committed CI fixes to the remote branch for PR/branch: {pr_number_or_branch}.
 
-    Run: git push origin HEAD
+    Run: git push -u origin HEAD
 
     RESULT:
     status: success | failed
