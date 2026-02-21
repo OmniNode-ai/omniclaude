@@ -521,6 +521,8 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED
     # "null" is the literal string jq emits when the agent_name field is JSON null.
     # In both cases downstream dashboards expect null, not the sentinel string.
     # Python's `input_data.get("agent_name") or None` does NOT catch the string "null".
+    # Note: AGENT_NAME is always set by the routing block above (line 174); the :- default
+    # is a safety net for any future code path that bypasses routing, yielding empty string.
     AGENT_NAME_FOR_ENRICHMENT="${AGENT_NAME:-}"
     [[ "$AGENT_NAME_FOR_ENRICHMENT" == "NO_AGENT_DETECTED" ]] && AGENT_NAME_FOR_ENRICHMENT=""
     [[ "$AGENT_NAME_FOR_ENRICHMENT" == "null" ]] && AGENT_NAME_FOR_ENRICHMENT=""

@@ -513,6 +513,9 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         # the payload as-is from enrichment_observability_emitter.py (which already emits
         # 'channel').  No callers need updating.
         # Manually verified at OMN-2441; re-audit if new validate_payload("context.enrichment", ...) call sites are added.
+        # Migration hint: if validation fails with "missing field: channel", the caller was built
+        # against the old contract ('enrichment_type'); migrate to 'channel' per OMN-2441 and
+        # see OMN-2473 for the legacy field removal timeline.
         required_fields=["session_id", "channel"],
     ),
     # =========================================================================

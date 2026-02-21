@@ -839,3 +839,80 @@ class TestBuildEnrichmentContext:
         assert "## B" in context
         assert "Foo" in context
         assert "Bar" in context
+
+
+# ---------------------------------------------------------------------------
+# 10. agent_name empty-string → None coercion (OMN-2441)
+# ---------------------------------------------------------------------------
+
+
+class TestAgentNameCoercion:
+    """Tests for the `or None` coercion of agent_name in context_enrichment_runner.py.
+
+    The shell sentinel-normalization step reduces NO_AGENT_DETECTED and "null"
+    to an empty string before passing to the Python runner via JSON.  The runner
+    then applies `input_data.get("agent_name") or None` so that downstream
+    emit_enrichment_events always receives None (not "") when no agent was
+    selected.  This class verifies that coercion path is exercised.
+    """
+
+    def test_empty_string_agent_name_coerces_to_none(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """When agent_name is "" in JSON input, emit_enrichment_events receives None.
+
+        Exercises the `input_data.get("agent_name") or None` expression at
+        context_enrichment_runner.py line 408 (OMN-2441).
+        """
+        captured_agent_name: list[str | None] = []
+
+        def _fake_emit(
+            *,
+            session_id: str,
+            correlation_id: str,
+            results: object,
+            kept_names: object,
+            original_prompt_token_count: int,
+            project_path: str,
+            agent_name: str | None,
+        ) -> None:
+            captured_agent_name.append(agent_name)
+
+        mock_handler = _make_handler(markdown="## Summary\n\nOk.", tokens=10)
+        mock_cls = MagicMock(return_value=mock_handler)
+
+        input_json = json.dumps(
+            {
+                "prompt": "test prompt",
+                "session_id": "sid-001",
+                "correlation_id": "corr-001",
+                "project_path": "/tmp",
+                "agent_name": "",  # empty string — simulates shell sentinel normalisation
+            }
+        )
+
+        with (
+            patch.object(cer, "HandlerSummarizationEnrichment", mock_cls),
+            patch.object(cer, "HandlerCodeAnalysisEnrichment", None),
+            patch.object(cer, "HandlerSimilarityEnrichment", None),
+            patch.object(cer, "_emit_enrichment_events", _fake_emit),
+        ):
+            _invoke_main(
+                monkeypatch,
+                capsys,
+                stdin_data=input_json,
+                env={
+                    "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
+                    "ENABLE_LOCAL_ENRICHMENT": "true",
+                },
+            )
+
+        assert len(captured_agent_name) == 1, (
+            "emit_enrichment_events should have been called exactly once"
+        )
+        assert captured_agent_name[0] is None, (
+            f"Expected None but got {captured_agent_name[0]!r}; "
+            "`or None` coercion in context_enrichment_runner.py is broken"
+        )
