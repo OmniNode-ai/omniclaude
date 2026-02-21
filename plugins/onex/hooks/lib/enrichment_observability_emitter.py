@@ -20,15 +20,10 @@ Canonical fields emitted (omnidash ContextEnrichmentEvent schema, OMN-2441):
     repo                -- repository name derived from project_path
     agent_name          -- agent that triggered the enrichment
 
-Legacy/backward-compat fields (retained for consumer migration, see TODO(OMN-2473)):
-    enrichment_type     -- duplicate of ``channel`` under the old field name
-    model_used          -- duplicate of ``model_name`` under the old field name
-    result_token_count  -- duplicate of ``tokens_after`` under the old field name
-    relevance_score     -- duplicate of ``similarity_score`` under the old field name
-    tokens_saved        -- duplicate of ``net_tokens_saved`` under the old field name
-    fallback_used       -- True when handler fell back to a simpler strategy (not in omnidash schema)
-    was_dropped         -- True when the enrichment was produced but dropped by the token cap (not in omnidash schema)
-    prompt_version      -- optional prompt template version string (not in omnidash schema)
+Internal handler metadata fields (not in omnidash schema):
+    fallback_used       -- True when handler fell back to a simpler strategy
+    was_dropped         -- True when the enrichment was produced but dropped by the token cap
+    prompt_version      -- optional prompt template version string
 
 Usage::
 
@@ -58,12 +53,10 @@ Design notes:
 - ``net_tokens_saved`` applies only to the summarization channel: it is the
   difference between tokens_before (original prompt count) and tokens_after
   (summarized result count).  For all other channels it is 0.
-- Backward-compatible fields (enrichment_type, model_used, result_token_count,
-  tokens_saved, relevance_score) are retained alongside the new canonical names
-  so existing consumers are not broken.
-  TODO(OMN-2473): Remove legacy fields once omnidash consumers migrate
-  to the canonical schema (channel, model_name, tokens_after, net_tokens_saved,
-  similarity_score).  Track migration progress against OMN-2441.
+- Legacy backward-compat alias fields (enrichment_type, model_used,
+  result_token_count, tokens_saved, relevance_score) were removed in OMN-2463
+  after omnidash consumers completed migration to the canonical names
+  (channel, model_name, tokens_after, net_tokens_saved, similarity_score).
 """
 
 from __future__ import annotations
@@ -222,8 +215,7 @@ def build_enrichment_event_payload(
         net_tokens_saved: Tokens saved by the summarization channel
             (tokens_before - tokens_after, clamped to >= 0).  Zero for all
             other channels and when summarization produced no output.
-            Emitted as ``net_tokens_saved`` in the canonical payload and as
-            ``tokens_saved`` in the backward-compatible internal fields.
+            Emitted as ``net_tokens_saved`` in the canonical payload.
         was_dropped: True when the enrichment ran successfully but was excluded
             by the token-cap drop policy (overflow).
         prompt_version: Prompt template version string from the handler, or "".
