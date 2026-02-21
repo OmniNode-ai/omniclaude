@@ -390,14 +390,26 @@ Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number using
 if {pr_number_or_branch} is numeric:
     resolved_pr_number = {pr_number_or_branch}
 else:
-    # Run: gh pr list --state open --head {pr_number_or_branch} --json number --jq '.[0].number'
-    # Extract the first result's `.number` field (an integer).
-    # Assign it to resolved_pr_number.
-    # Example: gh pr list --state open --head jonahgabriel/omn-1234-fix --json number --jq '.[0].number'
+    # Step 1: Try open PRs first.
+    # Run: gh pr list --state open --head {pr_number_or_branch} --json number,state --jq '.[0].number'
+    # Example: gh pr list --state open --head jonahgabriel/omn-1234-fix --json number,state --jq '.[0].number'
     #          → 42
     #          resolved_pr_number = 42
-    # If the command returns empty output or an error: STOP and report —
-    # pr-release-ready requires a PR number to operate.
+
+    # Step 2: If Step 1 returns empty (draft PRs and recently-merged PRs are excluded by --state open),
+    # retry without the state filter to capture open or draft PRs:
+    # Run: gh pr list --head {pr_number_or_branch} --json number,state
+    # Parse the JSON array, filter to entries where state is "OPEN" or "DRAFT",
+    # sort by number descending, and take the first entry's .number.
+    # Example result: [{"number": 42, "state": "DRAFT"}]
+    #                 resolved_pr_number = 42
+
+    # Step 3: If Step 2 also returns empty or no OPEN/DRAFT entries, STOP and report:
+    # "No open or draft PR found for branch {pr_number_or_branch}.
+    #  Checked: (1) gh pr list --state open --head {branch} returned no results;
+    #           (2) gh pr list --head {branch} returned no OPEN or DRAFT entries.
+    #  pr-release-ready requires an open or draft PR number to operate.
+    #  If the PR was already merged, run /pr-release-ready <pr_number> directly."
 ```
 
 Pass `resolved_pr_number` (the resolved integer, not the branch name) to `pr-release-ready`.
