@@ -107,7 +107,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 |----------|-------------|---------|
 | `POSTGRES_HOST` | PostgreSQL host | `192.168.86.200` |
 | `POSTGRES_PORT` | PostgreSQL port | `5436` |
-| `POSTGRES_DATABASE` | Database name | `omninode_bridge` |
+| `POSTGRES_DATABASE` | Database name | `omniclaude` |
 | `POSTGRES_PASSWORD` | Database password | Required |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers | `192.168.86.200:29092` |
 | `QDRANT_URL` | Qdrant vector DB URL | `http://localhost:6333` |

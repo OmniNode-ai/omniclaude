@@ -6,7 +6,7 @@
 
 ```bash
 # 1. PostgreSQL running?
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
+psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT 1"
 
 # 2. Kafka/Redpanda running?
 telnet localhost 9092
@@ -25,7 +25,8 @@ cd consumers
 pip install -r requirements.txt
 
 # 2. Apply database migration (if not already done)
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omninode_bridge -f ../migrations/005_create_agent_actions_table.sql
+# Run 'source .env' first to set POSTGRES_PASSWORD
+PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p 5436 -U postgres -d omniclaude -f ../migrations/005_create_agent_actions_table.sql
 
 # 3. Start consumer
 python agent_actions_consumer.py
@@ -93,7 +94,7 @@ pip install kafka-python psycopg2-binary
 ### "relation 'agent_actions' does not exist"
 ```bash
 # Apply migration
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -f ../migrations/005_create_agent_actions_table.sql
+psql -h localhost -p 5436 -U postgres -d omniclaude -f ../migrations/005_create_agent_actions_table.sql
 ```
 
 ---

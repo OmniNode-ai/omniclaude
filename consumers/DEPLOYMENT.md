@@ -16,7 +16,7 @@ Quick deployment guide for the production Kafka consumer.
 
 ```bash
 # Check PostgreSQL
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT COUNT(*) FROM agent_actions"
+psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT COUNT(*) FROM agent_actions"
 
 # Check Kafka (if using rpk)
 rpk topic list
@@ -42,9 +42,9 @@ KAFKA_BROKERS=localhost:9092
 KAFKA_GROUP_ID=agent-actions-postgres
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5436
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_DATABASE=omniclaude
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+POSTGRES_PASSWORD=<your-postgres-password>
 BATCH_SIZE=100
 BATCH_TIMEOUT_MS=1000
 HEALTH_CHECK_PORT=8080
@@ -73,7 +73,7 @@ Expected output:
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Setting up DLQ producer...
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - DLQ producer initialized
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Setting up database connection...
-2025-10-20 18:45:32 - agent_actions_consumer - INFO - Database connection established: localhost:5436/omninode_bridge
+2025-10-20 18:45:32 - agent_actions_consumer - INFO - Database connection established: localhost:5436/omniclaude
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Starting health check server on port 8080...
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Health check server running at http://0.0.0.0:8080/health
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Consumer started successfully
@@ -218,9 +218,9 @@ docker run -d \
   -e KAFKA_BROKERS=localhost:9092 \
   -e POSTGRES_HOST=localhost \
   -e POSTGRES_PORT=5436 \
-  -e POSTGRES_DATABASE=omninode_bridge \
+  -e POSTGRES_DATABASE=omniclaude \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024 \
+  -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
   --restart unless-stopped \
   agent-actions-consumer:latest
 ```
@@ -252,7 +252,7 @@ data:
   KAFKA_GROUP_ID: "agent-actions-postgres"
   POSTGRES_HOST: "postgres.default.svc.cluster.local"
   POSTGRES_PORT: "5432"
-  POSTGRES_DATABASE: "omninode_bridge"
+  POSTGRES_DATABASE: "omniclaude"
   BATCH_SIZE: "100"
   BATCH_TIMEOUT_MS: "1000"
   HEALTH_CHECK_PORT: "8080"
@@ -456,11 +456,11 @@ max_poll_records=1000
 
 ```bash
 # Backup agent_actions table
-pg_dump -h localhost -p 5436 -U postgres -d omninode_bridge \
+pg_dump -h localhost -p 5436 -U postgres -d omniclaude \
   -t agent_actions -f agent_actions_backup.sql
 
 # Restore
-psql -h localhost -p 5436 -U postgres -d omninode_bridge \
+psql -h localhost -p 5436 -U postgres -d omniclaude \
   -f agent_actions_backup.sql
 ```
 
@@ -560,10 +560,10 @@ curl http://localhost:8080/health
 ```bash
 # Run during low traffic
 # Clean old debug logs
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT cleanup_old_debug_logs();"
+psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT cleanup_old_debug_logs();"
 
 # Vacuum table
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "VACUUM ANALYZE agent_actions;"
+psql -h localhost -p 5436 -U postgres -d omniclaude -c "VACUUM ANALYZE agent_actions;"
 ```
 
 ## Support & Escalation

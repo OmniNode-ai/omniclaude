@@ -283,9 +283,9 @@ All skills use shared database configuration from `skills/_shared/db_helper.py`:
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,
-    "database": "omninode_bridge",
+    "database": "omniclaude",
     "user": "postgres",
-    "password": "omninode-bridge-postgres-dev-2024",
+    "password": os.environ["POSTGRES_PASSWORD"],  # Read from environment at runtime
 }
 ```
 

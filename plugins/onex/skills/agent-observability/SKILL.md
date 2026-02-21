@@ -335,7 +335,7 @@ User: "Diagnose recent agent failures"
 
 Skills use shared database helper with connection pooling:
 - **Host**: localhost:5436
-- **Database**: omninode_bridge
+- **Database**: omniclaude
 - **User**: postgres
 - **Password**: From environment (DB_PASSWORD)
 

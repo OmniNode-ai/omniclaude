@@ -6,8 +6,8 @@
   "batch_timeout_ms": 1000,
   "postgres_host": "localhost",
   "postgres_port": 5436,
-  "postgres_database": "omninode_bridge",
+  "postgres_database": "omniclaude",
   "postgres_user": "postgres",
-  "postgres_password": "omninode-bridge-postgres-dev-2024",
+  "postgres_password": "<set_in_env>",
   "health_check_port": 8080
 }

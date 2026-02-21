@@ -242,8 +242,8 @@ KAFKA_BROKERS=localhost:29092
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5436
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_PASSWORD=<your-postgres-password>
+POSTGRES_DATABASE=omniclaude
 
 # Consumer
 BATCH_SIZE=100
@@ -342,7 +342,7 @@ docker exec omniclaude_test_redpanda rpk group describe agent-action-consumer
 
 ```bash
 # Connect to PostgreSQL
-docker exec -it omniclaude_test_postgres psql -U postgres -d omninode_bridge
+docker exec -it omniclaude_test_postgres psql -U postgres -d omniclaude
 
 # Query agent actions
 SELECT

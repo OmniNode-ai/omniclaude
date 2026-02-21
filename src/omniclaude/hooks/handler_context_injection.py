@@ -848,6 +848,9 @@ class HandlerContextInjection:
         # the cache-read path (AttributeError, NameError, TypeError, etc.) will
         # be logged via logger.exception so they are visible in logs rather than
         # silently swallowed.
+        # NOTE: plugins.onex.hooks.lib is not an installed package — this import requires
+        # the repo root in sys.path (set by pytest rootdir or OMNICLAUDE_PROJECT_ROOT).
+        # Falls back gracefully to HTTP API if import fails.
         try:
             from plugins.onex.hooks.lib.pattern_cache import (
                 get_pattern_cache as _get_pattern_cache,

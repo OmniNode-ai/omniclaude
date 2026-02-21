@@ -72,7 +72,7 @@ pip install -r requirements.txt
 Apply the database migration:
 
 ```bash
-psql -h localhost -p 5436 -U postgres -d omninode_bridge \
+psql -h localhost -p 5436 -U postgres -d omniclaude \
   -f migrations/005_create_agent_actions_table.sql
 ```
 
@@ -88,9 +88,9 @@ export KAFKA_GROUP_ID="agent-actions-postgres"
 # PostgreSQL Configuration
 export POSTGRES_HOST="localhost"
 export POSTGRES_PORT="5436"
-export POSTGRES_DATABASE="omninode_bridge"
+export POSTGRES_DATABASE="omniclaude"
 export POSTGRES_USER="postgres"
-export POSTGRES_PASSWORD="omninode-bridge-postgres-dev-2024"
+export POSTGRES_PASSWORD="<your-postgres-password>"
 
 # Consumer Tuning
 export BATCH_SIZE="100"
@@ -302,7 +302,7 @@ Check consumer logs for "Kafka consumer connected" message.
 1. **Test PostgreSQL connection**:
 
 ```bash
-psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
+psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT 1"
 ```
 
 2. **Check credentials**:
@@ -417,7 +417,7 @@ Schedule with cron:
 
 ```cron
 # Run cleanup daily at 2 AM
-0 2 * * * psql -h localhost -p 5436 -U postgres -d omninode_bridge -c "SELECT cleanup_old_debug_logs();"
+0 2 * * * psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT cleanup_old_debug_logs();"
 ```
 
 ### Log Rotation

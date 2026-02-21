@@ -15,7 +15,7 @@ Successfully deployed agent_actions_consumer with shell script wrapper that prop
 ### Configuration
 ```bash
 Kafka Bootstrap: 192.168.86.200:29092
-PostgreSQL: postgres@omninode-bridge-postgres:5436/omninode_bridge
+PostgreSQL: postgres@omninode-bridge-postgres:5436/omniclaude
 Consumer Group: agent-observability-postgres
 Batch Size: 100
 Health Check Port: 8080
@@ -26,7 +26,7 @@ Log Level: INFO
 - ✅ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 - ✅ POSTGRES_HOST=omninode-bridge-postgres (resolves to 192.168.86.200)
 - ✅ POSTGRES_PORT=5436
-- ✅ POSTGRES_DATABASE=omninode_bridge
+- ✅ POSTGRES_DATABASE=omniclaude
 - ✅ POSTGRES_USER=postgres
 - ✅ POSTGRES_PASSWORD=(loaded from .env)
 
@@ -55,7 +55,7 @@ Health: ✅ Healthy
 
 ### Database Connection
 ```
-✅ Connected to omninode-bridge-postgres:5436/omninode_bridge
+✅ Connected to omninode-bridge-postgres:5436/omniclaude
 ✅ Records successfully persisted
 ```
 
