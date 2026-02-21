@@ -20,8 +20,11 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Literal
 from uuid import UUID, uuid4
+
+#: Type alias for JSON-serializable tool input/output dicts.
+type ToolInputDict = dict[str, object]
 
 from omniclaude.trace.change_frame import (
     ChangeFrame,
@@ -219,7 +222,7 @@ def sha256_of(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def sha256_of_dict(data: dict[str, Any]) -> str:
+def sha256_of_dict(data: ToolInputDict) -> str:
     """Compute SHA-256 hash of a JSON-serializable dict."""
     return hashlib.sha256(
         json.dumps(data, sort_keys=True, default=str).encode("utf-8")
@@ -350,7 +353,7 @@ def _compute_environment_hash(repo_root: str) -> str:
 
 def assemble_change_frame(
     tool_name: str,
-    tool_input: dict[str, Any],
+    tool_input: ToolInputDict,
     tool_output: str,
     session_context: SessionContext,
     timestamp_utc: str,
@@ -434,12 +437,13 @@ def assemble_change_frame(
                 failure_sig = None
 
     # 5. Classify outcome
+    outcome_status: Literal["pass", "fail", "partial"]
     if all(c.exit_code == 0 for c in check_results):
-        status: str = "pass"
+        outcome_status = "pass"
     elif all(c.exit_code != 0 for c in check_results):
-        status = "fail"
+        outcome_status = "fail"
     else:
-        status = "partial"
+        outcome_status = "partial"
 
     # 6. Build tool event record
     tool_event = ModelToolEvent(
@@ -481,7 +485,7 @@ def assemble_change_frame(
             tool_events=[tool_event],
             checks=check_results,
             outcome=ModelOutcome(
-                status=status,
+                status=outcome_status,
                 failure_signature_id=failure_sig.signature_id if failure_sig else None,
             ),
             evidence=ModelEvidence(),
