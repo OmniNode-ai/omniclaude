@@ -1037,6 +1037,24 @@ class TestEnforcePatternsEmit:
             f"got {first_cid!r} for both"
         )
 
+    def test_empty_emitted_at_raises_value_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """enforce_patterns raises ValueError when emitted_at is an empty string.
+
+        The runtime guard exists to catch dynamic callers that bypass type checking
+        (e.g. passing emitted_at="" explicitly). This test asserts the invariant so
+        regressions in the guard are caught immediately.
+        """
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        with pytest.raises(ValueError):
+            enforce_patterns(
+                file_path="/test/file.py",
+                session_id="sess-empty-emitted-at",
+                language="python",
+                emitted_at="",
+            )
+
 
 # ---------------------------------------------------------------------------
 # CLI main() tests
