@@ -108,6 +108,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_before=500,
             repo="omniclaude2",
             agent_name="polymorphic-agent",
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         # Internal / backward-compat fields
@@ -159,6 +160,7 @@ class TestBuildEnrichmentEventPayload:
             tokens_before=300,
             repo="myrepo",
             agent_name="code-agent",
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
 
         # Internal fields
@@ -200,6 +202,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=True,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["relevance_score"] is None
         assert payload["similarity_score"] is None
@@ -219,6 +222,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=True,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["latency_ms"] == round(12.3456789, 3)
 
@@ -263,6 +267,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=True,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["cache_hit"] is False
 
@@ -281,6 +286,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=True,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["quality_score"] is None
 
@@ -299,6 +305,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=True,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["outcome"] == "miss"
 
@@ -317,6 +324,7 @@ class TestBuildEnrichmentEventPayload:
             was_dropped=False,
             prompt_version="",
             success=False,
+            emitted_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert payload["outcome"] == "error"
 

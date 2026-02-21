@@ -516,12 +516,17 @@ ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
 ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
 if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+    # Normalize the routing sentinel to empty string so Python maps it to None.
+    # "NO_AGENT_DETECTED" is a jq fallback for absent/malformed routing JSON,
+    # not a real agent name — downstream dashboards expect null, not the sentinel.
+    AGENT_NAME_FOR_ENRICHMENT="${AGENT_NAME:-}"
+    [[ "$AGENT_NAME_FOR_ENRICHMENT" == "NO_AGENT_DETECTED" ]] && AGENT_NAME_FOR_ENRICHMENT=""
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg project_path "$PROJECT_ROOT" \
-        --arg agent_name "${AGENT_NAME:-}" \
+        --arg agent_name "$AGENT_NAME_FOR_ENRICHMENT" \
         '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path, agent_name: $agent_name}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e

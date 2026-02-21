@@ -164,26 +164,26 @@ def build_enrichment_event_payload(
     tokens_before: int = 0,
     repo: str | None = None,
     agent_name: str | None = None,
-    # Caller-injected timestamp for deterministic testing (repository invariant:
-    # no datetime.now() defaults).  Production callers may omit this parameter;
-    # the fallback to datetime.now(UTC) is intentional so existing call sites
-    # do not need to change.
-    emitted_at: datetime | None = None,
+    # Caller-injected timestamp (repository invariant: no datetime.now() defaults).
+    # Required: callers must supply the timestamp so it is deterministic in tests.
+    # emit_enrichment_events() captures datetime.now(UTC) once per batch and passes
+    # it here; test callers pass a fixed datetime directly.
+    emitted_at: datetime,
 ) -> dict[str, Any]:
     """Build the payload dict for a single enrichment observability event.
 
-    Most arguments are required; ``tokens_before``, ``repo``, ``agent_name``,
-    and ``emitted_at`` have defaults and may be omitted by callers.
+    Most arguments are required; ``tokens_before``, ``repo``, and ``agent_name``
+    have defaults and may be omitted by callers.  ``emitted_at`` is required
+    (repository invariant: no ``datetime.now()`` defaults inside builders).
 
     The payload includes both the original internal field names (for backward
     compatibility with any existing consumers) and the omnidash-canonical field
     names required by ``ContextEnrichmentEvent`` in omnidash's shared types.
 
-    Per the repository invariant, callers should pass ``emitted_at`` explicitly
-    so that the timestamp is deterministic in tests.  When ``emitted_at`` is
-    ``None`` (the default), this function falls back to ``datetime.now(UTC)``
-    as a safety net for call sites that do not supply a timestamp — but
-    production callers (i.e. ``emit_enrichment_events``) must always inject it.
+    Per the repository invariant, callers must pass ``emitted_at`` explicitly
+    so that the timestamp is deterministic in tests.  ``emit_enrichment_events``
+    captures ``datetime.now(UTC)`` once per batch and passes the same instant
+    to every per-channel call.  Test callers pass a fixed ``datetime`` directly.
 
     Args:
         session_id: The Claude Code session identifier.
@@ -215,10 +215,9 @@ def build_enrichment_event_payload(
             other channels (they add context, not compress it).  Defaults to 0.
         repo: Repository name (basename of project_path).  None when unknown.
         agent_name: Agent that triggered the enrichment.  None when unknown.
-        emitted_at: Explicit UTC timestamp for the event.  Callers should
-            inject this for deterministic testing (repository invariant).
-            Defaults to None; falls back to ``datetime.now(UTC)`` only as a
-            safety net — production callers must pass this explicitly.
+        emitted_at: UTC timestamp for the event.  Required (repository invariant:
+            no ``datetime.now()`` defaults inside builders).  Callers capture
+            the timestamp once and pass it explicitly for deterministic testing.
 
     Returns:
         Dict suitable for emission via emit_client_wrapper.emit_event().
@@ -237,7 +236,7 @@ def build_enrichment_event_payload(
         # ---------------------------------------------------------------
         # Canonical omnidash ContextEnrichmentEvent fields (OMN-2441)
         # ---------------------------------------------------------------
-        "timestamp": (emitted_at or datetime.now(UTC)).isoformat(),
+        "timestamp": emitted_at.isoformat(),
         "correlation_id": correlation_id,
         "session_id": session_id,
         "channel": enrichment_type,  # omnidash field name
