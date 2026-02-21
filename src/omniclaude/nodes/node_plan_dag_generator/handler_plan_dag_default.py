@@ -30,6 +30,12 @@ from omniclaude.nodes.node_plan_dag_generator.models.model_plan_dag_request impo
 from omniclaude.nodes.node_plan_dag_generator.models.model_work_unit import (
     ModelWorkUnit,
 )
+from omniclaude.nodes.node_plan_dag_generator.protocol_pattern_cache import (
+    PatternCacheProtocol,
+)
+from omniclaude.nodes.node_plan_dag_generator.protocol_promoted_pattern import (
+    PromotedPatternProtocol,
+)
 
 __all__ = ["HandlerPlanDagDefault"]
 
@@ -372,25 +378,6 @@ def _instantiate_pattern(
     )
 
 
-# ---------------------------------------------------------------------------
-# Protocol stubs for OmniMemory integration (OMN-2506)
-# ---------------------------------------------------------------------------
-
-
-class PatternCacheProtocol:
-    """Protocol for OmniMemory pattern cache (defined in OMN-2506).
-
-    Provides a minimal interface so the DAG generator can query for cached
-    patterns without importing OMN-2506's concrete implementation.
-    """
-
-    def get_pattern(self, pattern_id: str) -> PromotedPatternProtocol | None:
-        """Retrieve a promoted pattern by ID.  Returns None on cache miss."""
-        raise NotImplementedError
-
-
-class PromotedPatternProtocol:
-    """Protocol for promoted OmniMemory patterns (defined in OMN-2506)."""
-
-    unit_specs: list[_WorkUnitSpec]
-    dep_specs: list[_DepSpec]
+# PatternCacheProtocol and PromotedPatternProtocol are defined in their own
+# files (protocol_pattern_cache.py, protocol_promoted_pattern.py) and
+# imported at the top of this module.
