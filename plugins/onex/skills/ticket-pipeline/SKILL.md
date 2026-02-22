@@ -186,7 +186,7 @@ Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
   - `auto_merge` returns `held` → keep entry (pipeline is paused, not done)
   - `auto_merge` returns `failed` → clear entry with error note
   - Pipeline stopped early (capped, timeout) → clear entry
-- On new invocation: check ledger first; if entry exists → post "already running (run-id: {run_id})" to Slack and exit 0
+- On new invocation: check ledger first; if entry exists → print "already running (run_id={run_id})" and exit 1 (Slack not yet initialized at this point)
 - `--force-run` breaks stale lock: removes existing entry, starts fresh
 
 ## Dry Run Mode
@@ -252,7 +252,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
-    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2\")
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
 
     Branch: {branch_name}
     Repo: {repo_path}
