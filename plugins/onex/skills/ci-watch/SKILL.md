@@ -83,7 +83,7 @@ Loop:
       ci_fix_cycle += 1
       If ci_fix_cycle > max_ci_fix_cycles:
         → Create Linear hardening sub-ticket (parentId=ticket_id)
-        → Slack MEDIUM_RISK gate: "CI still failing after {N} fix attempts — manual review required"
+        → Slack MEDIUM_RISK notification: "CI still failing after {N} fix attempts — capped, manual review required"
         → Return status: capped
       If auto_fix_ci:
         → Invoke ci-fix-pipeline --pr {pr_number} --ticket-id {ticket_id}
@@ -144,20 +144,19 @@ Auto-fix is disabled. Approve to continue watching (fix manually), reject to hal
 Silence (15 min) = continue watching.
 ```
 
-### CI Fix Cap — MEDIUM_RISK
+### CI Fix Cap — MEDIUM_RISK (notification, not interactive gate)
 
 After `max_ci_fix_cycles` fix attempts with CI still failing:
 
 ```
-[MEDIUM_RISK] ci-watch: CI still failing after {N} attempts
+[MEDIUM_RISK] ci-watch: CI still failing after {N} attempts — capped
 
 PR: #{pr_number}
 Ticket: {ticket_id}
 Fix cycles used: {N}/{max_fix_cycles}
 
 A hardening sub-ticket has been created: {sub_ticket_id}
-Reply with 'approve' to continue watching, 'reject' to stop.
-Silence (15 min) = stop (status: capped).
+CI watch is stopping. Manual intervention required.
 ```
 
 ### Timeout — MEDIUM_RISK
