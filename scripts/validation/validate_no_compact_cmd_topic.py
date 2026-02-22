@@ -36,7 +36,7 @@ _SCAN_DIRS = ["sql", "config", "scripts", "src"]
 _SCAN_EXTENSIONS = {".yaml", ".yml", ".json", ".properties", ".conf"}
 
 # Suppression comment token checked in file content (not a password)
-_NOQA_TOKEN = "# noqa: arch-no-compact-cmd-topic"  # noqa: S105
+_NOQA_TOKEN = "# noqa: arch-no-compact-cmd-topic"  # noqa: S105, secrets
 
 
 def scan_file(filepath: Path, verbose: bool = False) -> list[str]:
