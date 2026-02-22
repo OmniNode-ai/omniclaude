@@ -188,12 +188,12 @@ class RowFixTransition:
     """Represents a row in the fix_transitions table."""
 
     transition_id: UUID
-    failure_signature_id: str
     initial_frame_id: UUID
     success_frame_id: UUID
     delta_hash: str
     files_involved: list[str]
     created_at: datetime
+    failure_signature_id: str | None = None
 
     TABLE_NAME: str = field(default="fix_transitions", init=False, repr=False)
 
