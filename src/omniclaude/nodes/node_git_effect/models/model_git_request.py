@@ -38,7 +38,6 @@ class ModelGitRequest(BaseModel):
         pr_number: Pull request number (for pr_update, pr_close).
         ticket_id: Linear ticket ID for PR stamp block (for pr_create).
         base_branch: Base branch for PR (for pr_create).
-        team_id: Linear team ID (for ticket_create).
         correlation_id: Correlation ID for tracing.
     """
 
