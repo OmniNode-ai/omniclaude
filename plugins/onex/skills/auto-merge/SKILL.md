@@ -103,7 +103,7 @@ All three must be true before proceeding:
    → Post Slack: "Merged PR #{pr_number} for {ticket_id}"
    → Update Linear ticket status: Done
    → Return status: merged
-7. On 'reject' / 'no' / 'cancel' reply:
+7. On 'no' / 'cancel' / 'hold' / 'stop' / 'reject' reply:
    → Return status: held
 ```
 
