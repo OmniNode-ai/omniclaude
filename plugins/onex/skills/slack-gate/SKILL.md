@@ -163,7 +163,7 @@ Audit records are appended to `~/.claude/gates/audit.jsonl` (append-only log).
 
 Reply with:
   • approve / yes / lgtm / go / ok — to approve
-  • reject / no / stop / cancel — to reject
+  • reject / no / stop / hold / cancel — to reject
 
 Risk: {risk}
 Timeout: {timeout_seconds}s
@@ -219,5 +219,5 @@ return decision
 ## See Also
 
 - `ticket-pipeline` skill — invokes slack-gate at spec approval and review override gates
-- `ci-fix-pipeline` skill — invokes slack-gate for MEDIUM_RISK architectural classification
-- `auto-merge` skill — invokes slack-gate at HIGH_RISK for merge approval
+- `ci-fix-pipeline` skill (planned) — invokes slack-gate for MEDIUM_RISK architectural classification
+- `auto-merge` skill (planned) — invokes slack-gate at HIGH_RISK for merge approval
