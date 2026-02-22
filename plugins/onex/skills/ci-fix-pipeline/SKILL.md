@@ -265,5 +265,5 @@ This ensures large-scope failures are never silently dropped — they are tracke
 
 - `ci-failures` skill — fetch and analyze CI failures (read-only)
 - `local-review` skill — review and fix local code changes
-- `ticket-pipeline` skill — invokes ci-fix-pipeline as Phase 3 (ci_watch + fix loop)
+- `ticket-pipeline` skill — end-to-end ticket pipeline (implement → local_review → create_pr → ready_for_merge)
 - `HandlerSlackWebhook` in omnibase_infra — Slack delivery infrastructure used for start/complete notifications and architectural approval gates
