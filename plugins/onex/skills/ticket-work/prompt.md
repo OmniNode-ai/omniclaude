@@ -2,9 +2,20 @@
 
 You are executing contract-driven ticket work. This prompt defines the complete orchestration logic.
 
+## Autonomous Mode
+
+If `--autonomous` was passed, gate behavior changes across all phases. Before running any phase
+handler, check whether autonomous mode is active. In autonomous mode:
+
+- Hard keyboard gates are replaced by Slack soft-gates or auto-advance (see SKILL.md for the
+  full gate behavior table).
+- The phase handlers below describe **interactive mode** (default) gate behavior.
+- For each phase exit, substitute the autonomous-mode behavior from SKILL.md when `--autonomous`
+  is active.
+
 ## Initialization
 
-When `/ticket-work {ticket_id}` is invoked:
+When `/ticket-work {ticket_id} [--autonomous]` is invoked:
 
 1. **Fetch the ticket:**
    ```
