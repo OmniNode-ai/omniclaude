@@ -239,5 +239,5 @@ via the Claude Code slash command interface or programmatically from `ticket-pip
 ## See Also
 
 - `ci-fix-pipeline` skill — auto-invoked on CI failure (planned; must exist before ci-watch is used in production)
-- `slack-gate` skill — MEDIUM_RISK gate for cap and timeout (planned; must exist before ci-watch is used in production)
+- `slack-gate` skill — MEDIUM_RISK gate for timeout and LOW_RISK gate for no-auto-fix; cap uses notification only (planned; must exist before ci-watch is used in production)
 - `ticket-pipeline` skill — composable; ci-watch is planned as a future phase extension (not yet in ticket-pipeline)
