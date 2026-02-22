@@ -101,6 +101,13 @@ Task(
 )
 ```
 
+**Branch resolution**: After Phase 1, the orchestrator must have a branch name for use in later
+phases. Resolve as follows:
+- If `--branch` was provided: use that value directly.
+- If `--pr` was provided (no `--branch`): run `gh pr view {N} --json headRefName --jq '.headRefName'`
+  to get the branch name.
+- If neither was provided: use the current branch (already known from `ci-quick-review` invocation).
+
 ### Phase 2: Slack Start Notification
 
 If `slack_on_start: true` and Slack is available, notify:
