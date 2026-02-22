@@ -45,12 +45,12 @@ if "--skip-to" in args:
 State is stored at `~/.claude/pipelines/{ticket_id}/state.yaml`:
 
 ```yaml
-pipeline_state_version: "2.0"
+pipeline_state_version: "3.0"
 run_id: "uuid-v4"               # Stable correlation ID for this pipeline run
 ticket_id: "OMN-XXXX"
 started_by: "user"              # "user" or "agent" (for future team-pipeline)
 dry_run: false                  # true if --dry-run mode
-policy_version: "2.0"
+policy_version: "3.0"           # 1.0: initial; 2.0: ci_watch (OMN-2523); 3.0: pr_review_loop (OMN-2528)
 slack_thread_ts: null           # Placeholder for P0 (threading deferred)
 
 policy:
@@ -61,12 +61,15 @@ policy:
   max_review_iterations: 3
   stop_on_major: true
   stop_on_repeat: true
-  stop_on_cross_repo: false
+  stop_on_cross_repo: false     # Auto-split via decompose-epic instead of stopping
   stop_on_invariant: true
   auto_fix_ci: true
   ci_watch_timeout_minutes: 60
   max_ci_fix_cycles: 3
-  cap_escalation: "slack_notify_and_continue"
+  auto_fix_pr_review: true
+  auto_fix_nits: false
+  pr_review_timeout_hours: 24
+  max_pr_review_cycles: 3
 
 phases:
   pre_flight:
@@ -132,6 +135,27 @@ phases:
 ## Initialization
 
 When `/ticket-pipeline {ticket_id}` is invoked:
+
+### 0. Check Ticket-Run Ledger
+
+Before acquiring the per-ticket lock, check the global ledger at `~/.claude/pipelines/ledger.json`
+to prevent duplicate pipeline runs across sessions. If an active entry exists for this ticket_id,
+post "already running ({run-id})" to Slack and exit.
+
+```python
+ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
+if ledger_path.exists():
+    try:
+        ledger = json.loads(ledger_path.read_text())
+        entry = ledger.get(ticket_id)
+        if entry and not force_run:
+            print(f"Error: Pipeline already running for {ticket_id} (run_id={entry.get('active_run_id')}). "
+                  f"Use --force-run to override.")
+            exit(1)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"Warning: Could not read ledger: {e}. Continuing with lock-based deduplication.")
+# NOTE: Ledger entry is written after lock acquisition (step 1) and cleared on terminal state.
+```
 
 ### 1. Acquire Lock
 
@@ -230,8 +254,8 @@ if state_path.exists() and not force_run:
 
     # Version migration check
     state_version = state.get("pipeline_state_version", "0.0")
-    if state_version != "2.0":
-        print(f"Warning: State file version {state_version} differs from expected 2.0. "
+    if state_version != "3.0":
+        print(f"Warning: State file version {state_version} differs from expected 3.0. "
               f"Pipeline may behave unexpectedly. Use --force-run to create fresh state.")
 
     # Preserve the stable correlation ID from the existing state.
@@ -244,12 +268,12 @@ if state_path.exists() and not force_run:
 else:
     # Create new state
     state = {
-        "pipeline_state_version": "2.0",
+        "pipeline_state_version": "3.0",
         "run_id": run_id,
         "ticket_id": ticket_id,
         "started_by": "user",
         "dry_run": dry_run,
-        "policy_version": "2.0",
+        "policy_version": "3.0",  # 1.0: initial; 2.0: ci_watch (OMN-2523); 3.0: pr_review_loop (OMN-2528)
         "slack_thread_ts": None,
         "policy": {
             "auto_advance": True,
@@ -259,12 +283,15 @@ else:
             "max_review_iterations": 3,
             "stop_on_major": True,
             "stop_on_repeat": True,
-            "stop_on_cross_repo": False,
+            "stop_on_cross_repo": False,  # Auto-split via decompose-epic instead of stopping
             "stop_on_invariant": True,
             "auto_fix_ci": True,
             "ci_watch_timeout_minutes": 60,
             "max_ci_fix_cycles": 3,
-            "cap_escalation": "slack_notify_and_continue",
+            "auto_fix_pr_review": True,
+            "auto_fix_nits": False,
+            "pr_review_timeout_hours": 24,
+            "max_pr_review_cycles": 3,
         },
         "phases": {
             phase_name: {
@@ -636,7 +663,14 @@ def build_phase_payload(phase_name, state, result):
     artifacts = result.get("artifacts", {})
     head_sha = get_head_sha()
 
-    if phase_name == "implement":
+    if phase_name == "pre_flight":
+        return {
+            "issues_fixed": artifacts.get("issues_fixed", 0),
+            "issues_deferred": artifacts.get("issues_deferred", 0),
+            "commit_sha": head_sha,
+        }
+
+    elif phase_name == "implement":
         branch = get_current_branch()
         return {
             "branch_name": artifacts.get("branch_name", branch),
@@ -660,15 +694,22 @@ def build_phase_payload(phase_name, state, result):
 
     elif phase_name == "ci_watch":
         return {
-            "status": artifacts.get("status", ""),
             "ci_fix_cycles_used": artifacts.get("ci_fix_cycles_used", 0),
             "watch_duration_minutes": artifacts.get("watch_duration_minutes", 0),
+            "status": artifacts.get("status", ""),
         }
 
-    elif phase_name in ("pr_review_loop", "auto_merge", "pre_flight"):
-        # Placeholder phases — return minimal payload
+    elif phase_name == "pr_review_loop":
         return {
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "pr_review_cycles_used": artifacts.get("pr_review_cycles_used", 0),
+            "watch_duration_hours": artifacts.get("watch_duration_hours", 0),
+            "status": artifacts.get("status", ""),
+        }
+
+    elif phase_name == "auto_merge":
+        return {
+            "merge_status": artifacts.get("merge_status", ""),
+            "merged_at": artifacts.get("merged_at", ""),
         }
 
     print(f"Warning: build_phase_payload called with unrecognized phase '{phase_name}'. Returning empty payload.")
@@ -708,6 +749,10 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
         artifacts["branch_name"] = payload.get("branch_name", "")
         artifacts["commit_sha"] = payload.get("commit_sha", "")
         artifacts["files_changed"] = payload.get("files_changed", [])
+    elif phase == "pre_flight":
+        artifacts["issues_fixed"] = payload.get("issues_fixed", 0)
+        artifacts["issues_deferred"] = payload.get("issues_deferred", 0)
+        artifacts["commit_sha"] = payload.get("commit_sha", "")
     elif phase == "local_review":
         artifacts["iterations"] = payload.get("iteration_count", 1)
         artifacts["last_clean_sha"] = payload.get("last_clean_sha", "")
@@ -715,9 +760,16 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
         artifacts["pr_url"] = payload.get("pr_url", "")
         artifacts["pr_number"] = payload.get("pr_number", 0)
     elif phase == "ci_watch":
-        artifacts["status"] = payload.get("status", "")
         artifacts["ci_fix_cycles_used"] = payload.get("ci_fix_cycles_used", 0)
         artifacts["watch_duration_minutes"] = payload.get("watch_duration_minutes", 0)
+        artifacts["status"] = payload.get("status", "")
+    elif phase == "pr_review_loop":
+        artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
+        artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0)
+        artifacts["status"] = payload.get("status", "")
+    elif phase == "auto_merge":
+        artifacts["merge_status"] = payload.get("merge_status", "")
+        artifacts["merged_at"] = payload.get("merged_at", "")
 
     return artifacts
 ```
@@ -1096,112 +1148,7 @@ def execute_phase(phase_name, state):
 
 ## Phase Handlers
 
-### Phase 1: IMPLEMENT
-
-**Invariants:**
-- Pipeline is initialized with valid ticket_id
-- Lock is acquired
-
-**Actions:**
-
-1. **Dispatch ticket-work to a separate agent:**
-   ```
-   Task(
-     subagent_type="onex:polymorphic-agent",
-     description="Implement {ticket_id}: {title}",
-     prompt="You are executing ticket-work for {ticket_id}.
-       Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
-
-       Ticket: {ticket_id} - {title}
-       Description: {description}
-       Branch: {branch_name}
-       Repo: {repo_path}
-
-       Execute the full ticket-work workflow (intake -> research -> questions -> spec -> implementation).
-       Do NOT commit changes -- the orchestrator handles git operations.
-       Report back with: files changed, tests run, any blockers encountered."
-   )
-   ```
-   This spawns a polymorphic agent with its own context window to run the full ticket-work
-   workflow including human gates (questions, spec, approval). The pipeline waits for the
-   agent to complete and reads its result.
-
-2. **Cross-repo check** (always runs; behavior controlled by `policy.stop_on_cross_repo`):
-   After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
-   ```python
-   from cross_repo_detector import detect_cross_repo_changes
-
-   cross_repo_result = detect_cross_repo_changes()
-   if cross_repo_result.error:
-       print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
-       # Non-blocking error: log but don't stop pipeline
-   elif cross_repo_result.violation:
-       if state["policy"]["stop_on_cross_repo"]:
-           # Legacy hard-stop behavior (stop_on_cross_repo=true)
-           return {
-               "status": "blocked",
-               "block_kind": "blocked_policy",
-               "reason": f"Cross-repo change detected: {cross_repo_result.violating_file} resolves outside {cross_repo_result.repo_root}",
-               "blocking_issues": 1,
-               "nit_count": 0,
-               "artifacts": {}
-           }
-       else:
-           # Default behavior (stop_on_cross_repo=false): invoke decompose-epic
-           # to split into per-repo sub-tickets, then hand off to epic-team.
-           # NOTE: decompose-epic dispatch is planned — full implementation deferred.
-           print(f"Cross-repo change detected. stop_on_cross_repo=false — invoking decompose-epic (planned).")
-           # TODO: Task(subagent_type="onex:polymorphic-agent", ...)
-           # For now, log and continue (placeholder behavior)
-   ```
-
-3. **Verify implementation is complete:**
-   Check the ticket-work contract to confirm implementation phase is done:
-   - Ticket contract phase should be `review` or `done`
-   - At least one commit exists in the contract
-
-4. **On success:**
-   ```python
-   result = {
-       "status": "completed",
-       "blocking_issues": 0,
-       "nit_count": 0,
-       "artifacts": {"commits": "N commits from ticket-work"},
-       "reason": None,
-       "block_kind": None
-   }
-   ```
-
-5. **Dry-run behavior:** In dry-run mode, Phase 1 runs ticket-work normally (including human gates) because ticket-work does not support a dry-run flag. The pipeline tracks state as `dry_run: true` but cannot prevent ticket-work from making commits. Dry-run is fully effective starting from Phase 2 onward. To safely dry-run Phase 1, run `/ticket-work` separately first, then use `--skip-to local_review --dry-run`.
-
-**Mutations:**
-- `phases.implement.started_at`
-- `phases.implement.completed_at`
-- `phases.implement.artifacts`
-
-**Exit conditions:**
-- **Completed:** ticket-work finishes, cross-repo check passes
-- **Blocked (human gate):** ticket-work waiting for human input
-- **Blocked (policy):** cross-repo violation detected
-- **Failed:** ticket-work errors out
-
----
-
-### Phase 2: LOCAL REVIEW
-
-**Invariants:**
-- Phase 1 (implement) is completed
-- Working directory has changes to review
-
-**Actions:**
-
-1. **Dispatch local-review to a separate agent:**
-   ```
-   Task(
-     subagent_type="onex:polymorphic-agent",
-     description="Local review for {ticket_id}",
-     prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
@@ -1427,229 +1374,87 @@ EOF
 
 ---
 
-### Phase 0: PRE_FLIGHT
-
-**Invariants:**
-- Pipeline lock is acquired
-- Working directory is clean checkout
-
-**Actions:**
-
-Runs pre-commit hooks and mypy on clean checkout. Classifies pre-existing issues as AUTO-FIX or DEFER.
-- AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing):`
-- DEFER: creates Linear sub-ticket, notes in PR description
-
-For Phase 0, the executor currently runs inline (no sub-agent dispatch needed for pre-flight checks).
-
-```python
-# execute_pre_flight — placeholder implementation
-# Full inline implementation goes here (pre-commit hooks + mypy + issue classification).
-# Until implemented, block to avoid a false-positive completed status.
-return {
-    "status": "blocked",
-    "blocking_issues": 0,
-    "nit_count": 0,
-    "artifacts": {"pre_flight_status": "not_implemented"},
-    "reason": "pre_flight not implemented yet",
-    "block_kind": "blocked_policy",
-}
-```
-
-**Mutations:**
-- `phases.pre_flight.started_at`
-- `phases.pre_flight.completed_at`
-- `phases.pre_flight.artifacts` (pre_flight_status)
-
-**Exit conditions:**
-- **Blocked (placeholder):** pipeline halts until full pre-flight implementation is in place
-- **Completed:** pre-flight checks passed or pre-existing issues classified and handled (when implemented)
-
----
-
-### Phase 4: CI WATCH
+### Phase 4: CI_WATCH
 
 **Invariants:**
 - Phase 3 (create_pr) is completed
-- PR number is available in `state["phases"]["create_pr"]["artifacts"]["pr_number"]`
+- PR exists and has a PR number in artifacts
 
 **Actions:**
 
-1. **Dispatch ci-watch to a polymorphic agent:**
-   ```
-   Task(
-     subagent_type="onex:polymorphic-agent",
-     description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
-     prompt="You are executing ci-watch for {ticket_id}.
-       Invoke: Skill(skill=\"onex:ci-watch\",
-         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles} --auto-fix {auto_fix_ci}\")
+Dispatches `ci-watch` sub-skill per the SKILL.md dispatch contract. See SKILL.md "Phase 4: ci_watch"
+for full dispatch contract details.
 
-       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/ci-watch.json
-       Report back with: status (completed|capped|timeout|failed), ci_fix_cycles_used, watch_duration_minutes."
-   )
-   ```
+Returns `status: completed | capped | timeout | failed`.
 
-2. **Handle ci_watch result** (read from ModelSkillResult, not text parsing):
-   ```python
-   ci_status = result.get("status")  # completed | capped | timeout | failed
-
-   if ci_status == "completed":
-       # CI green — advance to Phase 5
-       return {
-           "status": "completed",
-           "blocking_issues": 0,
-           "nit_count": 0,
-           "artifacts": {
-               "status": ci_status,
-               "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
-               "watch_duration_minutes": result.get("watch_duration_minutes", 0),
-           },
-           "reason": None,
-           "block_kind": None,
-       }
-
-   elif ci_status in ("capped", "timeout"):
-       # Log warning; behavior depends on cap_escalation policy switch
-       warning_msg = (
-           "CI fix cap reached — continuing to Phase 5 with degraded confidence"
-           if ci_status == "capped"
-           else "CI watch timed out — continuing to Phase 5"
-       )
-       print(f"Warning: {warning_msg}")
-       thread_ts = notify_sync(slack_notifier, "notify_blocked",
-           phase="ci_watch",
-           reason=warning_msg,
-           block_kind="blocked_policy",
-           thread_ts=state.get("slack_thread_ts"),
-       )
-       state["slack_thread_ts"] = thread_ts
-       save_state(state, state_path)
-       # Honor cap_escalation policy switch
-       if state["policy"].get("cap_escalation") == "slack_notify_and_continue":
-           # Continue to Phase 5 with degraded confidence note
-           return {
-               "status": "completed",
-               "blocking_issues": 0,
-               "nit_count": 0,
-               "artifacts": {
-                   "status": ci_status,
-                   "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
-                   "watch_duration_minutes": result.get("watch_duration_minutes", 0),
-                   "degraded_confidence": True,
-               },
-               "reason": warning_msg,
-               "block_kind": None,
-           }
-       else:
-           # cap_escalation is not slack_notify_and_continue — treat as failure
-           return {
-               "status": "failed",
-               "blocking_issues": 1,
-               "nit_count": 0,
-               "artifacts": {
-                   "status": ci_status,
-                   "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
-                   "watch_duration_minutes": result.get("watch_duration_minutes", 0),
-               },
-               "reason": warning_msg,
-               "block_kind": "failed_exception",
-           }
-
-   else:  # ci_status == "failed"
-       # Post Slack MEDIUM_RISK gate and stop pipeline
-       pr_number = state["phases"]["create_pr"]["artifacts"].get("pr_number", "?")
-       slack_message = f"""[MEDIUM_RISK] ticket-pipeline: CI watch failed for {ticket_id}
-
-PR #{pr_number} CI failed and could not be fixed automatically.
-Reply 'skip' to continue to PR review anyway, 'stop' to halt pipeline.
-Silence (15 min) = stop."""
-       thread_ts = notify_sync(slack_notifier, "notify_blocked",
-           phase="ci_watch",
-           reason=slack_message,
-           block_kind="failed_exception",
-           thread_ts=state.get("slack_thread_ts"),
-       )
-       state["slack_thread_ts"] = thread_ts
-       save_state(state, state_path)
-       return {
-           "status": "failed",
-           "blocking_issues": 1,
-           "nit_count": 0,
-           "artifacts": {
-               "status": ci_status,
-               "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
-               "watch_duration_minutes": result.get("watch_duration_minutes", 0),
-           },
-           "reason": f"CI watch failed for {ticket_id} — pipeline stopped",
-           "block_kind": "failed_exception",
-       }
-   ```
-
-3. **Dry-run behavior:** ci-watch dispatch is skipped. Returns completed with `status: completed` and zero cycles used.
+**On result:**
+- `completed`: auto-advance to Phase 5
+- `capped` or `timeout`: log warning and auto-advance to Phase 5 (degraded confidence)
+- `failed`: post Slack MEDIUM_RISK gate, stop pipeline
 
 **Mutations:**
 - `phases.ci_watch.started_at`
 - `phases.ci_watch.completed_at`
-- `phases.ci_watch.artifacts` (status, ci_fix_cycles_used, watch_duration_minutes)
+- `phases.ci_watch.artifacts` (ci_fix_cycles_used, watch_duration_minutes, status)
 
 **Exit conditions:**
-- **Completed:** CI green, or capped/timeout (pipeline continues with warning)
-- **Failed:** CI failed and could not be fixed — Slack MEDIUM_RISK gate posted
+- **Completed:** CI green (or capped/timeout with warning)
+- **Failed:** unrecoverable CI failure
 
 ---
 
-### Phase 5: PR REVIEW LOOP (Placeholder — OMN-2528)
+### Phase 5: PR_REVIEW_LOOP
 
 **Invariants:**
 - Phase 4 (ci_watch) is completed
+- PR exists and has a PR number in artifacts
 
 **Actions:**
 
-Placeholder. Implemented in OMN-2528 via `pr-watch` sub-skill.
+Dispatches `pr-watch` sub-skill per the SKILL.md dispatch contract. See SKILL.md "Phase 5: pr_review_loop"
+for full dispatch contract details including MEDIUM_RISK Slack gate templates for capped/timeout outcomes.
 
-```python
-# execute_pr_review_loop — placeholder implementation
-# Full implementation in OMN-2528 via pr-watch sub-skill.
-# Block until implemented to prevent skipping the PR review gate.
-return {
-    "status": "blocked",
-    "blocking_issues": 0,
-    "nit_count": 0,
-    "artifacts": {"placeholder": True},
-    "reason": "pr_review_loop not implemented yet (OMN-2528)",
-    "block_kind": "blocked_policy",
-}
-```
+Returns `status: approved | capped | timeout | failed`.
+
+**On result:**
+- `approved`: auto-advance to Phase 6
+- `capped`: post Slack MEDIUM_RISK gate and stop pipeline
+- `timeout`: post Slack MEDIUM_RISK gate and stop pipeline
+- `failed`: post Slack MEDIUM_RISK gate and stop pipeline
+
+**Mutations:**
+- `phases.pr_review_loop.started_at`
+- `phases.pr_review_loop.completed_at`
+- `phases.pr_review_loop.artifacts` (pr_review_cycles_used, watch_duration_hours, status)
 
 **Exit conditions:**
-- **Blocked (placeholder):** pipeline halts until OMN-2528 is implemented
+- **Completed:** PR approved
+- **Blocked (capped/timeout/failed):** stop pipeline, requires human intervention
 
 ---
 
-### Phase 6: AUTO MERGE (Placeholder — OMN-2529)
+### Phase 6: AUTO_MERGE (see OMN-2529)
 
 **Invariants:**
-- Phase 5 (pr_review_loop) is completed
+- Phase 5 (pr_review_loop) is completed with status `approved`
 
 **Actions:**
 
-Placeholder. Implemented in OMN-2529 via `auto-merge` sub-skill.
+Placeholder — full implementation in OMN-2529. Dispatches `auto-merge` sub-skill.
+Default behavior: HIGH_RISK Slack gate requiring explicit "merge" reply.
 
-```python
-# execute_auto_merge — placeholder implementation
-# Full implementation in OMN-2529 via auto-merge sub-skill.
-# Block until implemented to prevent bypassing the HIGH_RISK merge gate.
-return {
-    "status": "blocked",
-    "blocking_issues": 0,
-    "nit_count": 0,
-    "artifacts": {"placeholder": True},
-    "reason": "auto_merge not implemented yet (OMN-2529)",
-    "block_kind": "blocked_policy",
-}
-```
+**On result:**
+- `merged`: clear ticket-run ledger entry, post success to Slack
+- `held`: pipeline exits cleanly (human will reply to Slack thread)
+
+**Mutations:**
+- `phases.auto_merge.started_at`
+- `phases.auto_merge.completed_at`
+- `phases.auto_merge.artifacts`
 
 **Exit conditions:**
-- **Blocked (placeholder):** pipeline halts until OMN-2529 is implemented
+- **Completed (merged):** pipeline done, ledger cleared
+- **Completed (held):** pipeline exits, awaiting human reply
 
 ---
 

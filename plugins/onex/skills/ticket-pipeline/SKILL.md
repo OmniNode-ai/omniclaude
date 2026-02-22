@@ -126,7 +126,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 | Switch | Default | Description |
 |--------|---------|-------------|
-| `policy_version` | `"3.0"` | Version the policy for forward compatibility |
+| `policy_version` | `"3.0"` | Version the policy for forward compatibility (1.0: initial; 2.0: ci_watch OMN-2523; 3.0: pr_review_loop OMN-2528) |
 | `auto_advance` | `true` | Auto-advance between phases |
 | `auto_commit` | `true` | Allow local-review to commit fixes |
 | `auto_push` | `true` | Allow pushing to remote branch |
@@ -275,7 +275,7 @@ Task(
   description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
   prompt="You are executing pr-watch for {ticket_id}.
     Invoke: Skill(skill=\"onex:pr-watch\",
-      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}{' --fix-nits' if auto_fix_nits else ''}\")
+      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles} [--fix-nits if auto_fix_nits]\")
 
     Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/pr-watch.json
     Report back with: status (approved|capped|timeout|failed), pr_review_cycles_used, watch_duration_hours."
