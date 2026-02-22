@@ -121,6 +121,7 @@ quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
                 "consecutive_clean_runs": 0, "final_signature": None,
                 "blocking_issue_count": 0, "nit_count": 0}
 suppression_registry = []  # Loaded from ~/.claude/review-suppressions.yml on first use
+session_start_ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")  # For notes file naming
 ```
 
 **3a. Load suppression registry** (non-blocking, runs after step 3):
@@ -733,6 +734,46 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
     except Exception as _cp_err:
         print(f"Warning: Checkpoint write failed: {_cp_err}")
         # Non-blocking: continue pipeline
+```
+
+### Step 2.5c: Append Iteration to Notes File
+
+After each iteration (whether issues were fixed, skipped, or failed), append a record to the
+session notes file. Notes write failure is **non-blocking**.
+
+```python
+from pathlib import Path
+import datetime
+
+try:
+    notes_dir = Path.home() / ".claude" / "review-notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    session_ts = session_start_ts  # Set once in Phase 1 (YYYYMMDD-HHMMSS)
+    notes_file = notes_dir / f"{session_ts}-{branch_slug}.md"
+
+    lines = [f"\n## Iteration {iteration + 1} — {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"]
+    lines.append("\n### Issues Found\n")
+    for sev in ["critical", "major", "minor"]:
+        for issue in _original_issues.get(sev, []):
+            key = (issue["file"], issue["line"])
+            if key in {(f["file"], f["line"]) for f in failed_fixes}:
+                status = "[FAILED]"
+            else:
+                status = "[FIXED]"
+            lines.append(f"- [{sev.upper()}] {status} {issue['file']}:{issue['line']} - {issue['description']}\n")
+    for issue in issues.get("nit", []):
+        lines.append(f"- [NIT] [SKIPPED] {issue['file']}:{issue['line']} - {issue['description']}\n")
+
+    with open(notes_file, "a") as f:
+        f.writelines(lines)
+except Exception as _notes_err:
+    print(f"Warning: Notes write failed: {_notes_err}")
+    # Non-blocking: continue pipeline
+```
+
+**Note**: `session_start_ts` must be set once in Phase 1 (before the review loop):
+```python
+session_start_ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 ```
 
 ### Step 2.6: Check Loop Condition
