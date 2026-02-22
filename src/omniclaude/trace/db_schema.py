@@ -84,8 +84,8 @@ CREATE INDEX IF NOT EXISTS idx_frame_pr_association_pr_id
 CREATE TABLE IF NOT EXISTS fix_transitions (
     transition_id       UUID PRIMARY KEY,
     failure_signature_id TEXT REFERENCES failure_signatures(signature_id),
-    initial_frame_id    UUID REFERENCES change_frames(frame_id),
-    success_frame_id    UUID REFERENCES change_frames(frame_id),
+    initial_frame_id    UUID NOT NULL REFERENCES change_frames(frame_id),
+    success_frame_id    UUID NOT NULL REFERENCES change_frames(frame_id),
     delta_hash          TEXT NOT NULL,
     files_involved      TEXT[] NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
