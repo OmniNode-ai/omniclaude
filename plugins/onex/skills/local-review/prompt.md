@@ -18,16 +18,18 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
+| `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to ~/.claude/review-suppressions.yml (exits immediately after writing) |
 
 **Examples**:
 ```bash
-/local-review                           # Review all changes since base branch
-/local-review --uncommitted             # Only uncommitted changes
-/local-review --since main              # Explicit base
-/local-review --max-iterations 5        # Limit iterations
-/local-review --files "src/**/*.py"     # Specific files only
-/local-review --no-fix                  # Report only mode
-/local-review --required-clean-runs 1   # Fast iteration (skip confirmation pass)
+/local-review                                    # Review all changes since base branch
+/local-review --uncommitted                      # Only uncommitted changes
+/local-review --since main                       # Explicit base
+/local-review --max-iterations 5                 # Limit iterations
+/local-review --files "src/**/*.py"              # Specific files only
+/local-review --no-fix                           # Report only mode
+/local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
+/local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
 ```
 
 ---
@@ -57,13 +59,32 @@ max_iterations = <from args or 10>
 commits_made = []
 total_issues_fixed = 0
 nit_count = 0  # Track deferred nits for final summary
-failed_fixes = []  # Track {file, line, description} of issues that failed to fix (do not retry)
+failed_fixes = []  # Track {file, line, description, fingerprint, consecutive_count} of issues that failed to fix (do not retry)
 consecutive_clean_runs = 0
 required_clean_runs = <from args or 2>
 last_clean_signature = None
 quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
                 "consecutive_clean_runs": 0, "final_signature": None,
                 "blocking_issue_count": 0, "nit_count": 0}
+suppression_registry = []  # Loaded from ~/.claude/review-suppressions.yml on first use
+```
+
+**3a. Load suppression registry** (non-blocking, runs after step 3):
+```python
+import yaml
+from pathlib import Path
+
+_registry_path = Path.home() / ".claude" / "review-suppressions.yml"
+if _registry_path.exists():
+    try:
+        _registry_data = yaml.safe_load(_registry_path.read_text()) or {}
+        suppression_registry = [
+            s for s in _registry_data.get("suppressions", [])
+            if s.get("status") == "active"
+        ]
+    except Exception as _e:
+        print(f"Warning: Could not load suppression registry: {_e}")
+        suppression_registry = []
 ```
 
 **4. Display configuration**:
@@ -267,6 +288,40 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 
 **Guard for error states**: If `PARSE_FAILED` or `AGENT_FAILED` is set, skip directly to the early exit conditions below (do not attempt to display issues, as the `issues` dict may not exist).
 
+**Apply suppression registry** (before displaying findings):
+```python
+import fnmatch
+
+suppressed = []  # {file, line, description, suppression_id, suppression_reason}
+
+def _is_suppressed(issue, suppression_registry):
+    for s in suppression_registry:
+        if s.get("status") != "active":
+            continue
+        pattern = s.get("pattern", "")
+        file_glob = s.get("file_glob", "*")
+        if pattern and pattern in issue["description"]:
+            if fnmatch.fnmatch(issue["file"], file_glob):
+                return s
+    return None
+
+for severity in ["critical", "major", "minor", "nit"]:
+    remaining = []
+    for issue in issues[severity]:
+        match = _is_suppressed(issue, suppression_registry)
+        if match:
+            suppressed.append({
+                "file": issue["file"],
+                "line": issue["line"],
+                "description": issue["description"],
+                "suppression_id": match.get("id", "?"),
+                "suppression_reason": match.get("reason", ""),
+            })
+        else:
+            remaining.append(issue)
+    issues[severity] = remaining
+```
+
 ```markdown
 ## Review Iteration {iteration+1}
 
@@ -282,8 +337,13 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 ### NIT ({count}) - Optional
 - **{file}:{line}** - {description} [`{keyword}`]
 
+### SUPPRESSED ({len(suppressed)}) — Known False Positives
+- {file}:{line} - {description} [{suppression_id}: {suppression_reason}]
+
 **Merge Status**: {Ready | Blocked by N issues}
 ```
+
+(Omit the SUPPRESSED section if `suppressed` is empty.)
 
 **Track nit count**: After successfully parsing the review response (not on PARSE_FAILED or AGENT_FAILED),
 record the final nit count: `nit_count = len(issues["nit"])` (replaces previous value, not cumulative).
@@ -393,16 +453,46 @@ Fix the following {severity} issues:
 1. Log the error with details
 2. Add affected issues to `failed_fixes` list (do not retry in subsequent iterations):
    ```python
+   import re as _re
    for issue in affected_issues:
-       failed_fixes.append({"file": issue["file"], "line": issue["line"], "description": issue["description"]})
+       # Compute fingerprint for auto-flag tracking
+       desc_keywords = "_".join(_re.findall(r'\w+', issue["description"].lower())[:5])
+       line_approx = (issue["line"] // 10) * 10  # bucket to nearest 10 lines
+       fingerprint = f"{issue['file']}:{line_approx}:{desc_keywords}"
+
+       # Check if fingerprint already tracked
+       existing = next((f for f in failed_fixes if f.get("fingerprint") == fingerprint), None)
+       if existing:
+           existing["consecutive_count"] = existing.get("consecutive_count", 1) + 1
+       else:
+           failed_fixes.append({
+               "file": issue["file"],
+               "line": issue["line"],
+               "description": issue["description"],
+               "fingerprint": fingerprint,
+               "consecutive_count": 1,
+           })
    ```
-3. Continue to next severity level (attempt remaining fixes)
-4. If ALL fixes fail:
+3. **Auto-flag check**: After updating `failed_fixes`, check if any fingerprint has reached the threshold:
+   ```python
+   AUTO_FLAG_THRESHOLD = 3
+   for ff in failed_fixes:
+       if ff.get("consecutive_count", 0) >= AUTO_FLAG_THRESHOLD and not ff.get("auto_flagged"):
+           ff["auto_flagged"] = True  # Mark so we don't write duplicate entries on future iterations
+           _write_suppression_entry(ff["file"], ff["description"], status="active",
+                                    reason="Auto-flagged: 3 consecutive failed fixes")
+           print(f"Auto-flagged false positive: {ff['fingerprint']} -> written to ~/.claude/review-suppressions.yml")
+           # Reload registry so it's suppressed on next iteration
+           suppression_registry = _reload_suppression_registry()
+   ```
+   (See `_write_suppression_entry` helper in Implementation Notes below.)
+4. Continue to next severity level (attempt remaining fixes)
+5. If ALL fixes fail:
    ```
    iteration += 1  # A review cycle was attempted but all fixes failed
    goto Phase 3    # Status: "Fix failed - {n} issues need manual attention"
    ```
-5. If SOME fixes succeed: proceed to Step 2.5 to commit successful fixes, note failed issues in commit message
+6. If SOME fixes succeed: proceed to Step 2.5 to commit successful fixes, note failed issues in commit message
 
 ### Step 2.5: Stage and Commit Fixes
 
@@ -654,6 +744,62 @@ else:
 
 ## Implementation Notes
 
+### Suppression Registry Helpers (OMN-2514)
+
+> **Note**: These helpers must be defined before the Argument Parsing section because
+> `--flag-false-positive` calls `_write_suppression_entry` at parse time and exits immediately.
+
+```python
+import yaml
+import re as _re
+from pathlib import Path
+from datetime import date
+
+_REGISTRY_PATH = Path.home() / ".claude" / "review-suppressions.yml"
+
+def _load_registry():
+    """Load raw registry dict from disk, or return empty structure."""
+    if _REGISTRY_PATH.exists():
+        try:
+            return yaml.safe_load(_REGISTRY_PATH.read_text()) or {"version": 1, "suppressions": []}
+        except Exception:
+            return {"version": 1, "suppressions": []}
+    return {"version": 1, "suppressions": []}
+
+def _reload_suppression_registry():
+    """Return list of active suppression entries (for use after auto-flag write)."""
+    data = _load_registry()
+    return [s for s in data.get("suppressions", []) if s.get("status") == "active"]
+
+def _write_suppression_entry(file_context, description, status, reason):
+    """Append a new suppression entry to the registry file."""
+    data = _load_registry()
+    suppressions = data.get("suppressions", [])
+
+    # Generate next ID
+    existing_ids = [s.get("id", "") for s in suppressions]
+    next_num = len(suppressions) + 1
+    new_id = f"fp_{next_num:03d}"
+    while new_id in existing_ids:
+        next_num += 1
+        new_id = f"fp_{next_num:03d}"
+
+    new_entry = {
+        "id": new_id,
+        "pattern": description,
+        "file_glob": file_context if file_context != "*" else "*",
+        "reason": reason,
+        "added": str(date.today()),
+        "status": status,
+    }
+    suppressions.append(new_entry)
+    data["suppressions"] = suppressions
+
+    _REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _REGISTRY_PATH.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+    return new_id
+```
+
 ### Argument Parsing
 
 Extract from `$ARGUMENTS` string:
@@ -724,6 +870,28 @@ if "--checkpoint" in args:
         else:
             print(f"Warning: --checkpoint requires format 'ticket_id:run_id', got '{checkpoint_arg}'. Ignoring.")
             checkpoint_arg = None
+
+# Extract --flag-false-positive value (OMN-2514)
+# This flag causes an immediate write to the registry and exits (does not start the review loop)
+flag_false_positive_pattern = None
+if "--flag-false-positive" in args:
+    idx = args.index("--flag-false-positive")
+    if idx + 1 < len(args) and not args[idx + 1].startswith("--"):
+        flag_false_positive_pattern = args[idx + 1]
+    else:
+        print("Error: --flag-false-positive requires a pattern argument")
+        exit(1)
+    # Write entry to registry immediately and exit
+    _write_suppression_entry(
+        file_context="*",
+        description=flag_false_positive_pattern,
+        status="pending_review",
+        reason="Manually flagged",
+    )
+    print(f"Suppression entry written: pattern='{flag_false_positive_pattern}' status=pending_review")
+    print(f"Registry: ~/.claude/review-suppressions.yml")
+    print("Review the entry and change status to 'active' to suppress it in future runs.")
+    exit(0)
 ```
 
 ### Base Branch Detection

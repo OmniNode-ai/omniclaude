@@ -34,6 +34,9 @@ args:
   - name: --required-clean-runs
     description: "Number of consecutive clean runs required before passing (default 2, min 1)"
     required: false
+  - name: --flag-false-positive
+    description: "Flag a finding description as a false positive (substring match); writes to ~/.claude/review-suppressions.yml with status: pending_review"
+    required: false
 ---
 
 # Local Review
@@ -53,14 +56,15 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 ## Quick Start
 
 ```
-/local-review                           # Review all changes since base branch
-/local-review --uncommitted             # Only uncommitted changes
-/local-review --since main              # Explicit base
-/local-review --max-iterations 5        # Limit iterations
-/local-review --files "src/**/*.py"     # Specific files only
-/local-review --no-fix                  # Report only mode
-/local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
-/local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
+/local-review                                    # Review all changes since base branch
+/local-review --uncommitted                      # Only uncommitted changes
+/local-review --since main                       # Explicit base
+/local-review --max-iterations 5                 # Limit iterations
+/local-review --files "src/**/*.py"              # Specific files only
+/local-review --no-fix                           # Report only mode
+/local-review --checkpoint OMN-2144:abcd1234     # Write checkpoints per iteration
+/local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
+/local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
 ```
 
 ## Arguments
@@ -77,6 +81,59 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
+| `--flag-false-positive <pattern>` | none | Flag a finding as a false positive (substring match on description) |
+
+## Suppression Registry
+
+The suppression registry prevents recurring false positives (e.g., asyncio_mode config,
+lambda variable capture, symlink behavior) from consuming iterations without converging.
+
+### Registry File: `~/.claude/review-suppressions.yml`
+
+```yaml
+version: 1
+suppressions:
+  - id: fp_001
+    pattern: "asyncio_mode"        # substring match on finding description
+    file_glob: "*"                  # optional file pattern (glob)
+    reason: "Project-level pytest config"
+    added: "2026-02-21"
+    status: "active"               # active | disabled | pending_review
+```
+
+### Behavior
+
+**Before reporting any finding**: check the registry. If any active suppression's `pattern`
+is a substring of the finding's description AND the file matches `file_glob` (if specified),
+suppress the finding and show it in the SUPPRESSED section instead.
+
+**Display in each iteration output**:
+```
+### SUPPRESSED (2) — Known False Positives
+- tests/conftest.py:12 - asyncio_mode setting [fp_001: Project-level pytest config]
+```
+
+### `--flag-false-positive <pattern>` Behavior
+
+Writes a new entry to `~/.claude/review-suppressions.yml` with `status: pending_review`:
+```yaml
+- id: fp_XXX
+  pattern: "<pattern argument>"
+  file_glob: "*"
+  reason: "Manually flagged"
+  added: "<today>"
+  status: "pending_review"
+```
+
+### Auto-Flag Logic
+
+When the same fingerprint (`file:line_approx:description_keywords`) appears in consecutive
+failed_fixes 3+ times without being resolved, the skill automatically:
+
+1. Writes the finding to the registry with `status: active`
+2. Reloads the registry so the finding is suppressed in the same run (run converges)
+
+The auto-flag threshold is 3 consecutive failed attempts at the same issue.
 
 ## Dispatch Contracts (Execution-Critical)
 
@@ -213,3 +270,4 @@ Load `prompt.md` only if you need reference details for edge case handling or im
 - `pr-review` skill (keyword-based priority classification reference)
 - `ticket-pipeline` skill (chains local-review as Phase 2)
 - `ticket-work` skill (implementation phase before review)
+- `~/.claude/review-suppressions.yml` (suppression registry — created on first `--flag-false-positive` use)
