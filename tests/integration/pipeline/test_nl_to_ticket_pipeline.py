@@ -63,9 +63,6 @@ pytest.importorskip(
 )
 
 # ---------------------------------------------------------------------------
-# Stage 1: NL → Intent
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Stage 3.5: Ambiguity Gate
 # ---------------------------------------------------------------------------
 from omniclaude.nodes.node_ambiguity_gate.handler_ambiguity_gate_default import (  # noqa: E402
@@ -99,6 +96,10 @@ from omniclaude.nodes.node_evidence_bundle.models.model_bundle_generate_request 
 from omniclaude.nodes.node_evidence_bundle.store_bundle_in_memory import (  # noqa: E402
     StoreBundleInMemory,
 )
+
+# ---------------------------------------------------------------------------
+# Stage 1: NL → Intent
+# ---------------------------------------------------------------------------
 from omniclaude.nodes.node_nl_intent_pipeline.handler_nl_intent_default import (  # noqa: E402
     HandlerNlIntentDefault,
 )
@@ -391,7 +392,6 @@ class TestE2eAmbiguityRejection:
     def test_e2e_ambiguity_rejection_vague_title(
         self,
         gate_handler: HandlerAmbiguityGateDefault,
-        ticket_handler: HandlerTicketCompileDefault,
     ) -> None:
         """Vague work unit title blocks ticket compilation at the gate."""
         correlation_id = uuid.uuid4()
@@ -408,22 +408,10 @@ class TestE2eAmbiguityRejection:
             correlation_id=correlation_id,
         )
 
-        ticket_compiled = None
         with pytest.raises(AmbiguityGateError) as exc_info:
             gate_handler.check(gate_req)
-            ticket_compiled = ticket_handler.compile_ticket(
-                ModelTicketCompileRequest(
-                    work_unit_id=gate_req.unit_id,
-                    work_unit_title=gate_req.unit_title,
-                    work_unit_type=gate_req.unit_type,
-                    dag_id=dag_id,
-                    intent_id=intent_id,
-                    correlation_id=correlation_id,
-                )
-            )
 
-        # Gate rejected; no ticket was compiled
-        assert ticket_compiled is None
+        # Gate rejected before ticket compilation; verify rejection details
         assert exc_info.value.result.verdict.value == "FAIL"
 
         # Error includes which ambiguity type and suggested resolution
