@@ -354,10 +354,9 @@ recent file before beginning investigation. This surfaces:
 - Suppressions already in effect
 - Issues auto-flagged in prior sessions
 
-### Notes in systematic-debugging and ci-fix-pipeline
+### Notes in systematic-debugging
 
 The `systematic-debugging` skill reads the branch notes file before root cause investigation.
-The `ci-fix-pipeline` skill reads notes before each fix attempt.
 
 ## Detailed Orchestration
 
