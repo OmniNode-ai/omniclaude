@@ -191,6 +191,7 @@ def store_intent_in_correlation(
         if state_dir is None:
             state_dir = Path.home() / ".claude" / "hooks" / ".state"
 
+        state_dir.mkdir(parents=True, exist_ok=True)
         state_file = Path(state_dir) / "correlation_id.json"
 
         existing: dict[str, Any] = {}
