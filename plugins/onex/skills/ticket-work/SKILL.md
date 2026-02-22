@@ -14,6 +14,9 @@ args:
   - name: ticket_id
     description: Linear ticket ID (e.g., OMN-1807)
     required: true
+  - name: --autonomous
+    description: Collapse 5 hard keyboard gates to async Slack soft-gates (silence=consent for LOW_RISK); enables headless operation
+    required: false
 ---
 
 # Contract-Driven Ticket Execution
@@ -29,7 +32,8 @@ Orchestrate ticket execution through structured phases with Linear as the single
 ## Quick Start
 
 ```
-/ticket-work OMN-1234
+/ticket-work OMN-1234                   # Interactive mode (default)
+/ticket-work OMN-1234 --autonomous      # Autonomous mode (headless; Slack gates)
 ```
 
 This will:
@@ -79,6 +83,54 @@ pr_url: null
 
 The skill preserves all existing ticket description content above the contract section.
 
+## Autonomous Mode (`--autonomous`)
+
+When `--autonomous` is passed (or invoked from ticket-pipeline), the 5 hard keyboard gates
+collapse to at most 2 async Slack soft-gates. Enables headless operation from ticket-assigned
+to implementation-complete without requiring keyboard input.
+
+**Critical Principle:** Interactive mode is unchanged. Autonomous mode ONLY affects gate behavior.
+
+### Gate Behavior in Autonomous Mode
+
+| Phase Transition | Interactive (default) | Autonomous Mode |
+|------------------|-----------------------|-----------------|
+| intake → research | Auto | Auto |
+| research → questions | Hard keyboard gate | Auto-generate questions; if >0, post to Slack LOW_RISK gate (30 min timeout; silence = no questions needed) |
+| questions → spec | Hard keyboard gate | Post spec summary to Slack LOW_RISK gate (10 min timeout; silence = approved) |
+| spec → implementation | Hard keyboard gate | Auto-advance |
+| implementation → review | Hard keyboard gate | Auto-advance |
+| review → done | Hard keyboard gate | Auto-advance (merge gate moved to ticket-pipeline Phase 6) |
+
+### Autonomous Policy (stored in state.yaml)
+
+```yaml
+autonomous:
+  enabled: true
+  question_timeout_minutes: 30
+  spec_timeout_minutes: 10
+  silence_is_consent: true     # LOW_RISK gates only
+  slack_channel: "#dev-pipeline"
+```
+
+### Slack Message Format (Spec Approval Gate)
+
+```
+[OMN-2356] Spec ready for review
+
+Plan: {spec_summary}
+Files to change: {file_list} ({N} files)
+Estimated scope: {Small|Medium|Large}
+
+Reply "reject: {reason}" within 10 minutes to cancel. Silence = proceed.
+```
+
+### Invocation Sources
+
+- **Interactive** (default): `/ticket-work OMN-1234` — unchanged keyboard gate behavior
+- **From ticket-pipeline**: `--autonomous` flag passed automatically
+- **From Linear webhook (future)**: always autonomous
+
 ## Human Gates
 
 | Transition | Trigger Keywords |
@@ -89,6 +141,9 @@ The skill preserves all existing ticket description content above the contract s
 | spec → implementation | "approve spec", "build it" |
 | implementation → review | "create PR", "ready for review" |
 | review → done | "approve merge", "ship it" |
+
+> **Note**: Human gates above apply to interactive mode only. In autonomous mode, gates are
+> replaced by Slack soft-gates as described in the Autonomous Mode section above.
 
 ## Slack Notifications
 
