@@ -121,7 +121,7 @@ Task(
   prompt="Invoke: Skill(skill=\"onex:ci-fix-pipeline\",
     args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
-  Report back with: status (completed|capped|timeout|failed), failures_fixed, failures_skipped."
+  Report back with: status (completed | capped | timeout | failed), failures_fixed, failures_skipped."
 )
 ```
 
@@ -159,7 +159,7 @@ A hardening sub-ticket has been created: {sub_ticket_id}
 CI watch is stopping. Manual intervention required.
 ```
 
-### Timeout — MEDIUM_RISK
+### Timeout — MEDIUM_RISK (interactive gate)
 
 After `ci_watch_timeout_minutes` elapsed:
 
@@ -227,14 +227,53 @@ Written to `~/.claude/skill-results/{context_id}/ci-watch.json`:
 
 ## Executable Scripts
 
-This skill has no standalone executable scripts. It is invoked as a composable sub-skill
-via the Claude Code slash command interface or programmatically from `ticket-pipeline`.
+### `ci-watch.sh`
+
+Bash wrapper for programmatic and CI invocation of this skill.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ci-watch.sh — wrapper for the ci-watch skill
+# Usage: ci-watch.sh --pr <PR> [--ticket-id <ID>] [--timeout-minutes <N>] [--max-fix-cycles <N>] [--no-auto-fix]
+
+PR=""
+TICKET_ID=""
+TIMEOUT_MINUTES="60"
+MAX_FIX_CYCLES="3"
+AUTO_FIX_CI="true"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr)             PR="$2";             shift 2 ;;
+    --ticket-id)      TICKET_ID="$2";      shift 2 ;;
+    --timeout-minutes) TIMEOUT_MINUTES="$2"; shift 2 ;;
+    --max-fix-cycles) MAX_FIX_CYCLES="$2"; shift 2 ;;
+    --no-auto-fix)    AUTO_FIX_CI="false"; shift   ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "$PR" ]]; then
+  echo "Error: --pr is required" >&2
+  exit 1
+fi
+
+exec claude --skill onex:ci-watch \
+  --arg "pr_number=${PR}" \
+  --arg "ticket_id=${TICKET_ID}" \
+  --arg "policy.timeout_minutes=${TIMEOUT_MINUTES}" \
+  --arg "policy.max_fix_cycles=${MAX_FIX_CYCLES}" \
+  --arg "policy.auto_fix_ci=${AUTO_FIX_CI}"
+```
 
 | Invocation | Description |
 |------------|-------------|
 | `/ci-watch --pr {N}` | Interactive: poll CI on PR N, auto-fix on failure |
 | `/ci-watch --pr {N} --no-auto-fix` | Interactive: poll CI on PR N, gate on failure |
 | `Skill(skill="onex:ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
+| `ci-watch.sh --pr {N} --ticket-id {T} --timeout-minutes 90` | Shell: direct invocation with all parameters |
 
 ## See Also
 
