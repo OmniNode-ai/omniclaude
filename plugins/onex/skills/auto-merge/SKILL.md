@@ -34,7 +34,7 @@ inputs:
   - name: ticket_id
     description: str — context ticket ID
   - name: policy
-    description: AutoMergePolicy — auto_merge, merge_strategy, delete_branch_on_merge, gate_timeout_hours
+    description: AutoMergePolicy — auto_merge, merge_strategy, delete_branch_on_merge, merge_gate_timeout_hours
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: merged | held | failed"
@@ -97,7 +97,7 @@ All three must be true before proceeding:
     Reply 'merge' to proceed. Silence = hold (HIGH_RISK)."
 3. Wait for explicit 'merge' reply (no timeout auto-advance)
 4. At reminder_at_hours: post reminder to Slack
-5. At gate_timeout_hours: post reminder + hold (still require explicit reply)
+5. At merge_gate_timeout_hours: post reminder + hold (still require explicit reply)
 6. On 'merge' reply:
    → gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
    → Post Slack: "Merged PR #{pr_number} for {ticket_id}"
