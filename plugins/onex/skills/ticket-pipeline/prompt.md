@@ -1071,6 +1071,85 @@ def execute_phase(phase_name, state):
 
 ## Phase Handlers
 
+### Phase 0: PRE_FLIGHT
+
+**Invariants:**
+- Pipeline is initialized with valid ticket_id
+- Lock is acquired
+- Working tree is on a clean checkout (no uncommitted changes)
+
+**Actions:**
+
+1. **Dispatch pre-flight checks to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 0 pre-flight for {ticket_id}",
+     prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+
+       Run Phase 0 pre-flight checks for ticket {ticket_id}.
+
+       ## Steps
+
+       1. Run: pre-commit run --all-files
+       2. Run: mypy src/ --strict  (or detected equivalent from pyproject.toml)
+       3. For each failure, classify as AUTO-FIX or DEFER:
+          - AUTO-FIX: <= 10 files, same subsystem as ticket, low-risk change
+          - DEFER: otherwise (auto-create Linear sub-ticket, note in PR description)
+       4. Apply AUTO-FIX changes (do NOT commit — orchestrator commits separately)
+
+       ## Output Format
+
+       Return JSON:
+       {\"auto_fixed\": [{\"file\": str, \"issue\": str}],
+        \"deferred\": [{\"file\": str, \"issue\": str, \"sub_ticket\": str}],
+        \"clean\": bool}
+
+       If no pre-existing issues: {\"auto_fixed\": [], \"deferred\": [], \"clean\": true}"
+   )
+   ```
+
+2. **Commit auto-fixes (if any):**
+   ```python
+   if raw_output and auto_fixed:
+       # Stage and commit auto-fixed files only
+       for item in auto_fixed:
+           subprocess.run(["git", "add", item["file"]], check=True)
+       subprocess.run([
+           "git", "commit", "-m",
+           "chore(pre-existing): fix pre-existing lint/type errors"
+       ], check=True)
+   ```
+
+3. **Parse result and build artifacts:**
+   ```python
+   result = {
+       "status": "completed",
+       "blocking_issues": 0,
+       "nit_count": 0,
+       "artifacts": {
+           "auto_fixed": auto_fixed,   # list of {file, issue}
+           "deferred": deferred,        # list of {file, issue, sub_ticket}
+           "clean": clean,              # bool
+       },
+       "reason": None,
+       "block_kind": None,
+   }
+   ```
+
+4. **Dry-run behavior:** Pre-commit and mypy checks run normally. Auto-fix changes are applied but the commit is skipped. Deferred sub-ticket creation is skipped.
+
+**Mutations:**
+- `phases.pre_flight.started_at`
+- `phases.pre_flight.completed_at`
+- `phases.pre_flight.artifacts` (auto_fixed, deferred, clean)
+
+**Exit conditions:**
+- **Completed:** Checks ran, auto-fixes applied and committed (or no issues found)
+- **Failed:** pre-commit or mypy execution errors out unexpectedly
+
+---
+
 ### Phase 1: IMPLEMENT
 
 **Invariants:**

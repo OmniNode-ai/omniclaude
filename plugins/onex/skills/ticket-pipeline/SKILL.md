@@ -74,7 +74,7 @@ implementation by fixing an unrelated subsystem is worse than deferring with a f
    - **DEFER** if any criterion fails (> 10 files, architectural, unrelated subsystem)
 4. For AUTO-FIX: apply fixes, commit as `chore(pre-existing): fix pre-existing lint/type errors`
 5. For DEFER: auto-create a Linear sub-ticket via MCP; record in PR description note section
-6. Write Phase 0 result to state (`pre_flight_result`)
+6. Write Phase 0 result to state (`phases.pre_flight.artifacts`)
 7. AUTO-ADVANCE to Phase 1 (implementation begins on now-cleaner codebase)
 
 **Phase 0 commits are always separate from feature work.**
