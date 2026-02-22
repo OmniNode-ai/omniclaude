@@ -142,9 +142,13 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
 
-### Ticket-Run Ledger
+### Ticket-Run Ledger (planned)
 
-Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
+> **Note**: The ledger is not yet implemented in `prompt.md`. The lock file
+> (`~/.claude/pipelines/{ticket_id}/lock`) provides equivalent single-session duplicate-run
+> protection in the interim. Full ledger implementation is deferred to a future ticket.
+
+Prevents duplicate pipeline runs across sessions. Stored at `~/.claude/pipelines/ledger.json`:
 
 ```json
 {
