@@ -214,7 +214,7 @@ ci-fix-pipeline complete
   Fixed: {N} failures
   Skipped: {M} failures (patterns: {patterns})
   Sub-tickets created: {K} (large-scope failures)
-  Escalated: {L} (architectural — awaiting decision)
+  Escalated: {L} (architectural — declined or timed out)
   Ticket: {ticket_id if provided}
   Branch: {branch}
 ```
@@ -243,7 +243,7 @@ if the session ID is unavailable:
 **Status values**:
 - `completed` — All fixable failures resolved
 - `capped` — Some failures deferred to sub-tickets; fixed what was in scope
-- `escalated` — One or more architectural failures awaiting human decision
+- `escalated` — One or more architectural failures declined or timed out; human review required
 - `failed` — CI fetch failed or commit failed; pipeline halted
 
 ## Failure Handling
