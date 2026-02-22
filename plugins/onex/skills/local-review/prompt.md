@@ -117,6 +117,7 @@ failed_fixes = []  # Track {file, line, description, fingerprint, consecutive_co
 consecutive_clean_runs = 0
 required_clean_runs = <from args or 2>
 last_clean_signature = None
+retry_count = 0  # Transient failure retry counter; resets to 0 on any successful iteration
 quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
                 "consecutive_clean_runs": 0, "final_signature": None,
                 "blocking_issue_count": 0, "nit_count": 0}
@@ -351,16 +352,16 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
    - Use extracted issues and proceed normally to Step 2.3 (display issues)
 4. **If extraction fails** (no recognizable patterns):
    - Log the raw response for debugging
-   - Mark iteration as `PARSE_FAILED` (not "clean")
-   - Display: "Warning: Review response could not be parsed. Manual review required."
-   - Proceed to Step 2.3 where `PARSE_FAILED` triggers counter increment and exit to Phase 3
-5. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
+   - Mark iteration as `PARSE_FAILED` (not "clean"); set `last_error = "could not parse review response"`
+   - Display: "Warning: Review response could not be parsed. {retry_count < 2 ? f'Retry {retry_count+1}/2...' : 'Retry limit reached — hard exit.'}"
+   - Proceed to Step 2.3 where `PARSE_FAILED` triggers retry logic (hard exit after 2 retries)
+5. On `PARSE_FAILED` after retry exhaustion, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 **Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
 1. Log the error with details (timeout duration, error message, etc.)
-2. Mark iteration as `AGENT_FAILED` (not "clean" or "parse failed")
-3. Display: "Warning: Review agent failed: {error}. Manual review required."
-4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with counter increment)
+2. Mark iteration as `AGENT_FAILED` (not "clean" or "parse failed"); set `last_error = {error}`
+3. Display: "Warning: Review agent failed: {error}. {retry_count < 2 ? f'Retry {retry_count+1}/2...' : 'Retry limit reached — hard exit.'}"
+4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with retry logic; hard exit after 2 retries)
 
 ### Step 2.3: Display Issues and Handle Error States
 
@@ -439,6 +440,7 @@ if last_clean_signature is not None and current_signature != last_clean_signatur
 
 consecutive_clean_runs += 1
 last_clean_signature = current_signature
+retry_count = 0  # Reset retry counter on any successful iteration
 iteration += 1
 
 if consecutive_clean_runs >= required_clean_runs:
@@ -458,17 +460,24 @@ else:
 ```
 - Nits alone do NOT block - they are optional
 
-**If `PARSE_FAILED`**:
+**If `PARSE_FAILED` or `AGENT_FAILED`**:
 ```
-iteration += 1  # A review was attempted even though parsing failed
-goto Phase 3
+# Retry policy: up to 2 retries before hard exit (declared in SKILL.md frontmatter)
+if retry_count < 2:
+    retry_count += 1
+    error_type = "PARSE_FAILED" if PARSE_FAILED else "AGENT_FAILED"
+    print(f"Retry {retry_count}/2 for {error_type} at iteration {iteration+1}. Reason: {last_error}")
+    # Re-dispatch the review phase (goto Step 2.1 without incrementing iteration)
+    goto Step 2.1
+else:
+    # Retry exhaustion: hard exit
+    iteration += 1  # A review was attempted even though it failed
+    error_type = "PARSE_FAILED" if PARSE_FAILED else "AGENT_FAILED"
+    goto Phase 3  # exits with status: failed, reason: "{error_type} after 2 retries: {last_error}"
 ```
 
-**If `AGENT_FAILED`**:
-```
-iteration += 1  # A review was attempted even though agent failed
-goto Phase 3
-```
+Note: `retry_count` resets to 0 on any successful iteration (i.e., whenever the review agent
+returns a parseable response, regardless of whether issues were found).
 
 **If `--no-fix`**:
 ```
@@ -485,6 +494,7 @@ if consecutive_clean_runs > 0:
     print(f"Blocking issues found -> clean run counter reset to 0 (was {consecutive_clean_runs})")
 consecutive_clean_runs = 0
 last_clean_signature = None
+retry_count = 0  # Review succeeded (parseable response) -- reset retry counter
 ```
 
 **Pre-filter previously failed issues**:
@@ -1056,9 +1066,9 @@ Review iteration: {current}/{max}
 | No git repo | "Error: Not in a git repository" |
 | No changes | "No changes to review. Working tree clean." |
 | Invalid --since ref | "Error: Invalid ref '{ref}'. Use branch name or commit SHA." |
-| Review agent failure | Log error, mark iteration as `AGENT_FAILED`, increment counter via Step 2.3, then exit to Phase 3 with status "Agent failed - {error}. Manual review required." |
+| Review agent failure | Log error, mark iteration as `AGENT_FAILED`; retry up to 2 times (Step 2.3 retry logic); after retry exhaustion exit to Phase 3 with status "Agent failed after 2 retries - {error}. Manual re-invocation required." |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
-| Malformed JSON response | Try text extraction; if fails, mark `PARSE_FAILED` (see Fallback) |
+| Malformed JSON response | Try text extraction; if fails, mark `PARSE_FAILED` and retry up to 2 times; after retry exhaustion exit to Phase 3 with status "Parse failed after 2 retries - manual review needed." |
 | Commit failure (general) | Log error, increment counter, files remain staged, exit to Phase 3 |
 | Commit failure (hooks) | Report hook output, increment counter, suggest `--no-verify`, exit to Phase 3 |
 | Commit failure (conflicts) | Log "Merge conflict detected", increment counter, exit to Phase 3 |
