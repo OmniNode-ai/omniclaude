@@ -73,6 +73,10 @@ Initialize:
   ci_fix_cycle = 0
 
 Loop:
+  → If timeout_elapsed >= ci_watch_timeout_minutes:
+      → Slack MEDIUM_RISK gate: "CI watch timed out after {timeout} minutes on PR #{pr_number}"
+      → On approve: extend watch by 30 minutes, continue polling
+      → On reject: return status: timeout
   → Run: gh pr checks {pr_number} --json name,state,conclusion
   → If all checks passing: return status: completed
   → If any check failed:
@@ -89,10 +93,6 @@ Loop:
         → Slack LOW_RISK gate: "CI failed on PR #{pr_number} — auto-fix disabled. Approve to continue watching, reject to halt."
         → On approve: continue polling (human will fix manually)
         → On reject: return status: failed
-  → If timeout_elapsed >= ci_watch_timeout_minutes:
-      → Slack MEDIUM_RISK gate: "CI watch timed out after {timeout} minutes on PR #{pr_number}"
-      → On approve: extend watch by 30 minutes, continue polling
-      → On reject: return status: timeout
   → Sleep poll_interval_seconds, loop
 ```
 
@@ -157,7 +157,7 @@ Fix cycles used: {N}/{max_fix_cycles}
 
 A hardening sub-ticket has been created: {sub_ticket_id}
 Reply with 'approve' to continue watching, 'reject' to stop.
-Silence (15 min) = escalate to hardening ticket.
+Silence (15 min) = stop (status: capped).
 ```
 
 ### Timeout — MEDIUM_RISK
@@ -241,4 +241,4 @@ via the Claude Code slash command interface or programmatically from `ticket-pip
 
 - `ci-fix-pipeline` skill — auto-invoked on CI failure (planned; must exist before ci-watch is used in production)
 - `slack-gate` skill — MEDIUM_RISK gate for cap and timeout (planned; must exist before ci-watch is used in production)
-- `ticket-pipeline` skill — invokes ci-watch as Phase 4 (ci_watch)
+- `ticket-pipeline` skill — composable; ci-watch is planned as a future phase extension (not yet in ticket-pipeline)
