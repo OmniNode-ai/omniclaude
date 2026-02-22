@@ -38,6 +38,11 @@ from omniclaude.trace.pr_envelope import (
     PRDescriptionDelta,
     PREnvelope,
 )
+from omniclaude.trace.replay_engine import (
+    ReplayEngine,
+    ReplayMode,
+    ReplayResult,
+)
 
 __all__ = [
     # change_frame exports
@@ -61,4 +66,8 @@ __all__ = [
     "ModelPRTimeline",
     "PRDescriptionDelta",
     "PREnvelope",
+    # replay_engine exports
+    "ReplayEngine",
+    "ReplayMode",
+    "ReplayResult",
 ]
