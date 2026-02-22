@@ -312,7 +312,7 @@ The skill runs a 3-phase loop:
 - `Max iterations reached` -- Hit limit with blocking issues remaining
 - `Report only` -- `--no-fix` mode
 - `Changes staged` -- `--no-commit` mode, fixes applied but not committed
-- `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states requiring manual intervention
+- `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states after retry exhaustion (manual re-invocation required)
 
 ## Retry Policy
 
