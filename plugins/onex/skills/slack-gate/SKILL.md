@@ -194,8 +194,9 @@ Or inline (for orchestrators that manage their own loop):
 
 ```python
 # Check gate state before posting
-gate_path = f"~/.claude/gates/{gate_id}.json"
+gate_path = os.path.expanduser(f"~/.claude/gates/{gate_id}.json")
 if gate_exists(gate_path):
+    gate = load_gate_state(gate_path)
     if gate["status"] == "resolved":
         return gate["decision"]  # cached — no Slack post
     # else: resume polling existing thread
