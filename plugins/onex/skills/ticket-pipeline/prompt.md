@@ -1562,7 +1562,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
      prompt="You are executing ticket-work for {ticket_id}.
-       Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
+       Invoke: Skill(skill=\"ticket-work\", args=\"{ticket_id}\")
 
        Ticket: {ticket_id} - {title}
        Description: {description}
@@ -1652,7 +1652,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
