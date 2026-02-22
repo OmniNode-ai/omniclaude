@@ -18,7 +18,7 @@ args:
     description: Branch name to fix CI failures for (default: current branch)
     required: false
   - name: --skip-patterns
-    description: "Comma-separated failure categories to skip (e.g., 'test_*,lint')"
+    description: "Comma-separated job/step name patterns to skip (e.g., 'test_*,lint')"
     required: false
   - name: --max-fix-files
     description: "Max files in scope before creating a sub-ticket instead of fixing (default: 10)"
@@ -62,7 +62,7 @@ policy:
 /ci-fix-pipeline --pr 42                 # Fix failures for PR #42
 /ci-fix-pipeline --ticket-id OMN-1234    # Include ticket context in Slack messages
 /ci-fix-pipeline --no-slack              # Suppress Slack notifications
-/ci-fix-pipeline --skip-patterns "test_*"  # Skip test failures (category filter)
+/ci-fix-pipeline --skip-patterns "test_*"  # Skip jobs/steps matching pattern
 /ci-fix-pipeline --max-fix-files 20       # Raise the sub-ticket threshold
 ```
 
@@ -72,7 +72,7 @@ policy:
 |----------|---------|-------------|
 | `--pr <number>` | none | PR number for CI failure fetch |
 | `--branch <ref>` | current | Branch name for CI failure fetch |
-| `--skip-patterns <patterns>` | none | Comma-separated categories to skip |
+| `--skip-patterns <patterns>` | none | Comma-separated job/step name patterns to skip |
 | `--max-fix-files <n>` | 10 | Files-in-scope threshold; above this → sub-ticket |
 | `--no-slack` | false | Disable Slack notifications |
 | `--ticket-id <id>` | none | Context ticket ID for Slack messages |
