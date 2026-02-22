@@ -80,10 +80,6 @@ Initialize:
 Loop:
   elapsed = now() - start_time
 
-  → If elapsed >= timeout_hours * 3600:
-      → Slack MEDIUM_RISK gate: "PR #{pr_number} timeout — no approval in {timeout_hours}h"
-      → Return status: timeout
-
   → If elapsed >= halfway_notification_hours * 3600 AND NOT halfway_notified:
       → Slack MEDIUM_RISK notification: "PR #{pr_number} still awaiting review ({elapsed // 3600:.1f}h elapsed)"
       → halfway_notified = true
@@ -92,6 +88,10 @@ Loop:
 
   → If reviewDecision == APPROVED AND no unresolved CHANGES_REQUESTED:
       → Return status: approved
+
+  → If elapsed >= timeout_hours * 3600:
+      → Slack MEDIUM_RISK gate: "PR #{pr_number} timeout — no approval in {timeout_hours}h"
+      → Return status: timeout
 
   → If new CHANGES_REQUESTED reviews since last check:
       pr_review_cycle += 1
