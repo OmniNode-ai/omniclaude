@@ -58,7 +58,7 @@ policy:
   auto_commit: true
   auto_push: true
   auto_pr_create: true
-  max_review_iterations: 3
+  max_review_iterations: 7
   stop_on_major: true
   stop_on_repeat: true
   stop_on_cross_repo: true
@@ -228,7 +228,7 @@ else:
             "auto_commit": True,
             "auto_push": True,
             "auto_pr_create": True,
-            "max_review_iterations": 3,
+            "max_review_iterations": 7,
             "stop_on_major": True,
             "stop_on_repeat": True,
             "stop_on_cross_repo": True,
@@ -784,7 +784,7 @@ def parse_phase_output(raw_output, phase_name):
 
     KNOWN LIMITATION: This is fragile string parsing. Expected output format contract:
     - Local-review outputs status lines like "Clean - Confirmed (N/N clean runs)" or
-      "Clean with nits - Confirmed (N/N clean runs)" (deterministic 2-clean-run gate, OMN-2327)
+      "Clean with nits - Confirmed (N/N clean runs)" (deterministic 1-clean-run gate, OMN-2327)
     - Blocked states should mention "blocked by", "max iterations", or "waiting for"
     - Error states should include "error", "failed", or "parse failed"
     If no recognized pattern is found, defaults to "failed" status.
@@ -835,7 +835,7 @@ def parse_phase_output(raw_output, phase_name):
 
     # Extract status indicators from local-review output
     # OMN-2327: local-review now outputs "Clean - Confirmed (N/N clean runs)" and
-    # "Clean with nits - Confirmed (N/N clean runs)" from the deterministic 2-clean-run gate.
+    # "Clean with nits - Confirmed (N/N clean runs)" from the deterministic 1-clean-run gate.
     if "confirmed (" in output_lower:
         # Covers both "Clean - Confirmed (...)" and "Clean with nits - Confirmed (...)"
         # The trailing open-paren avoids false positives from casual uses of "confirmed"
@@ -858,7 +858,7 @@ def parse_phase_output(raw_output, phase_name):
 
     # Backwards-compatibility branch for pre-OMN-2327 output that doesn't include
     # "Confirmed (N/N clean runs)".  New-format output like
-    # "Clean with nits - Confirmed (2/2 clean runs)" matches "confirmed (" above,
+    # "Clean with nits - Confirmed (1/1 clean runs)" matches "confirmed (" above,
     # so this branch only triggers for old-format "clean with nits" without a
     # confirmation suffix.  Intentionally does not populate quality_gate — the
     # Phase 4 fallback handles that case.
@@ -1149,7 +1149,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
@@ -1379,7 +1379,7 @@ EOF
 
 **Invariants:**
 - Phase 3 (create_pr) is completed
-- Quality gate from local_review passed (2 confirmed-clean runs)
+- Quality gate from local_review passed (1 confirmed-clean run)
 
 **Actions:**
 
@@ -1396,12 +1396,12 @@ EOF
        # Local review completed without structured quality_gate data --
        # treat confirmed completion as passing the gate (backwards compat)
        print("Note: quality_gate not found in local_review artifacts but phase completed. Treating as passed.")
-       qg = {"status": "passed", "consecutive_clean_runs": 2, "required_clean_runs": 2}
+       qg = {"status": "passed", "consecutive_clean_runs": 1, "required_clean_runs": 1}
 
    if qg.get("status") != "passed":
        return {"status": "blocked", "block_kind": "blocked_policy",
                "reason": f"Quality gate not passed: {qg.get('status', 'missing')}"}
-   required = qg.get("required_clean_runs", 2)
+   required = qg.get("required_clean_runs", 1)
    actual = qg.get("consecutive_clean_runs", 0)
    if actual < required:
        return {"status": "blocked", "block_kind": "blocked_policy",

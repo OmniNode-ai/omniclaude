@@ -50,7 +50,7 @@ Chain existing skills into an autonomous per-ticket pipeline: implement -> local
 stateDiagram-v2
     [*] --> implement
     implement --> local_review : auto (policy)
-    local_review --> create_pr : auto (2 confirmed-clean runs)
+    local_review --> create_pr : auto (1 confirmed-clean run)
     create_pr --> ready_for_merge : auto (policy)
     ready_for_merge --> [*] : manual merge
 ```
@@ -67,9 +67,9 @@ stateDiagram-v2
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
-- Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
+- Requires 1 confirmed-clean run with stable run signature before advancing
+- Stop on: 0 blocking issues (confirmed by 1 clean run), max iterations, repeat issues, new major after iteration 1
+- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 1 confirmed-clean run)
 
 ### Phase 3: create_pr
 
@@ -96,7 +96,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `auto_commit` | `true` | Allow local-review to commit fixes |
 | `auto_push` | `true` | Allow pushing to remote branch |
 | `auto_pr_create` | `true` | Allow creating PRs |
-| `max_review_iterations` | `3` | Cap review loops (local + PR) |
+| `max_review_iterations` | `7` | Cap review loops (local + PR) |
 | `stop_on_major` | `true` | Stop if new major appears after first iteration |
 | `stop_on_repeat` | `true` | Stop if same issues appear twice (fingerprint-based) |
 | `stop_on_cross_repo` | `true` | Stop if changes touch multiple repo roots |
@@ -166,7 +166,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
-    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations}\")
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
 
     Branch: {branch_name}
     Repo: {repo_path}
