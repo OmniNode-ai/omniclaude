@@ -323,6 +323,29 @@ class TestHandlerPatternPromotionDefault:
         assert r2.promoted_pattern is not None
         assert r1.promoted_pattern.pattern_id == r2.promoted_pattern.pattern_id
 
+    def test_lower_evidence_does_not_version_bump(self) -> None:
+        # First promotion at evidence_count=4
+        extra_bundle = f"bundle-{uuid.uuid4()}"
+        req1 = _request(
+            evidence_count=4,
+            min_evidence_count=3,
+            evidence_bundle_ids=_BUNDLE_IDS + (extra_bundle,),
+        )
+        r1 = self.handler.promote(req1)
+        assert r1.status == EnumPromotionStatus.PROMOTED
+
+        # Re-promote with lower evidence_count=3 — must not bump version
+        req2 = _request(evidence_count=3, min_evidence_count=3)
+        r2 = self.handler.promote(req2)
+
+        assert r2.status == EnumPromotionStatus.ALREADY_CURRENT
+        assert r1.promoted_pattern is not None
+        assert r2.promoted_pattern is not None
+        assert r2.promoted_pattern.version == 1
+        assert (
+            r2.promoted_pattern.evidence_count == 4
+        )  # higher-evidence pattern preserved
+
     def test_result_contains_evidence_count(self) -> None:
         extra_bundles = tuple(f"bundle-{uuid.uuid4()}" for _ in range(2))
         req = _request(
