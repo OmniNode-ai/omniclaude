@@ -25,7 +25,7 @@ args:
 
 Orchestrate ticket execution through structured phases with Linear as the single source of truth. The contract YAML block in the ticket description tracks all state.
 
-**Critical Principle:** This skill requires explicit human confirmation for meaningful phase transitions. The intake→research transition is automatic (nothing to review), but all other transitions require human approval.
+**Critical Principle:** In interactive mode (default), this skill requires explicit human confirmation for meaningful phase transitions. The intake→research transition is automatic (nothing to review), but all other transitions require human approval. In autonomous mode (`--autonomous`), gates are replaced by Slack soft-gates or auto-advance — see [Autonomous Mode](#autonomous-mode---autonomous).
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
