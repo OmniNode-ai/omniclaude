@@ -84,11 +84,10 @@ Loop:
       → Return status: timeout
 
   → If elapsed >= halfway_notification_hours * 3600 AND NOT halfway_notified:
-      → Slack MEDIUM_RISK notification: "PR #{pr_number} still awaiting review ({elapsed}h elapsed)"
+      → Slack MEDIUM_RISK notification: "PR #{pr_number} still awaiting review ({elapsed // 3600:.1f}h elapsed)"
       → halfway_notified = true
 
-  → Run: gh pr reviews {pr_number} --json state,body,comments
-  → Check PR approval status: gh pr view {pr_number} --json reviewDecision,reviews
+  → Run: gh pr view {pr_number} --json reviewDecision,reviews
 
   → If reviewDecision == APPROVED AND no unresolved CHANGES_REQUESTED:
       → Return status: approved
@@ -144,7 +143,7 @@ git push
 
 Then re-request review:
 ```bash
-gh pr review {pr_number} --request-review {reviewer_logins}
+gh pr edit {pr_number} --add-reviewer {reviewer_logins}
 ```
 
 ## Slack Notifications
@@ -203,7 +202,7 @@ Written to `~/.claude/skill-results/{context_id}/pr-watch.json`:
 
 | Error | Behavior |
 |-------|----------|
-| `gh pr reviews` unavailable | Retry 3x, then `status: failed` with error |
+| `gh pr view --json reviews` unavailable | Retry 3x, then `status: failed` with error |
 | pr-review-dev hard-fails | Log error, continue watching without fix |
 | Push fails after fix | Log error, continue watching (don't re-request review) |
 | Slack unavailable for gate | Skip gate, apply default (stop) |
@@ -211,6 +210,6 @@ Written to `~/.claude/skill-results/{context_id}/pr-watch.json`:
 ## See Also
 
 - `pr-review-dev` skill — invoked to fix review comments
-- `slack-gate` skill — MEDIUM_RISK gates used for cap and timeout
-- `auto-merge` skill — invoked after pr-watch returns `approved`
-- `ticket-pipeline` skill — invokes pr-watch as Phase 5 (pr_review_loop)
+- `slack-gate` skill — MEDIUM_RISK gates used for cap and timeout (planned, not yet implemented)
+- `auto-merge` skill — invoked after pr-watch returns `approved` (planned, not yet implemented)
+- `ticket-pipeline` skill — planned integration as Phase 5 (pr_review_loop); not yet wired
