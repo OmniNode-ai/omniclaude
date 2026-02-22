@@ -1,7 +1,7 @@
 ---
 name: ticket-pipeline
 description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
-version: 2.0.0
+version: 3.0.0
 category: workflow
 tags:
   - pipeline
@@ -52,7 +52,7 @@ stateDiagram-v2
     [*] --> pre_flight
     pre_flight --> implement : auto (policy)
     implement --> local_review : auto (policy)
-    local_review --> create_pr : auto (1 confirmed-clean run)
+    local_review --> create_pr : auto (2 confirmed-clean runs)
     create_pr --> ci_watch : auto (policy)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
     pr_review_loop --> auto_merge : auto (approved)
@@ -80,9 +80,9 @@ stateDiagram-v2
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Requires 1 confirmed-clean run before advancing
-- Stop on: 0 blocking issues (confirmed by 1 clean run), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 1 confirmed-clean run)
+- Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
+- Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
+- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
 
 ### Phase 3: create_pr
 
@@ -92,7 +92,7 @@ stateDiagram-v2
 - Pushes branch, creates PR via `gh`, updates Linear status
 - AUTO-ADVANCE to Phase 4
 
-### Phase 4: ci_watch [NEW]
+### Phase 4: ci_watch
 
 - Invokes `ci-watch` sub-skill (OMN-2523) with configured policy
 - `ci-watch` polls `gh pr checks` every 5 minutes
@@ -102,13 +102,16 @@ stateDiagram-v2
 - On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
 - On `failed`: Slack MEDIUM_RISK gate, stop pipeline
 
-### Phase 5: pr_review_loop (see OMN-2528)
+### Phase 5: pr_review_loop [NEW]
 
-- Placeholder: invokes `pr-watch` sub-skill
+- Invokes `pr-watch` sub-skill (OMN-2524) with configured policy
+- `pr-watch` polls `gh pr reviews` every 10 minutes
+- Auto-invokes `pr-review-dev` on CHANGES_REQUESTED reviews, pushes fixes, re-requests review
 - Returns: `status: approved | capped | timeout | failed`
 - On `approved`: AUTO-ADVANCE to Phase 6
-- On `capped`: Slack MEDIUM_RISK "merge blocked" + stop
-- On `timeout`: Slack MEDIUM_RISK notification + stop
+- On `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
+- On `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
+- On `failed`: Slack MEDIUM_RISK gate, stop pipeline
 
 ### Phase 6: auto_merge (see OMN-2529)
 
@@ -123,7 +126,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 | Switch | Default | Description |
 |--------|---------|-------------|
-| `policy_version` | `"2.0"` | Version the policy for forward compatibility |
+| `policy_version` | `"3.0"` | Version the policy for forward compatibility (1.0: initial; 2.0: ci_watch OMN-2523; 3.0: pr_review_loop OMN-2528) |
 | `auto_advance` | `true` | Auto-advance between phases |
 | `auto_commit` | `true` | Allow local-review to commit fixes |
 | `auto_push` | `true` | Allow pushing to remote branch |
@@ -136,19 +139,18 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `auto_fix_ci` | `true` | Auto-invoke ci-fix-pipeline on CI failure |
 | `ci_watch_timeout_minutes` | `60` | Max minutes waiting for CI before timeout |
 | `max_ci_fix_cycles` | `3` | Max ci-fix-pipeline invocations before capping |
-| `cap_escalation` | `"slack_notify_and_continue"` | On ci_watch cap: notify Slack and continue to Phase 5 |
+| `auto_fix_pr_review` | `true` | Auto-invoke pr-review-dev on CHANGES_REQUESTED reviews |
+| `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
+| `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
+| `max_pr_review_cycles` | `3` | Max pr-review-dev fix cycles before capping |
 
 ## State Management
 
 Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
 
-### Ticket-Run Ledger (planned)
+### Ticket-Run Ledger
 
-> **Note**: The ledger is not yet implemented in `prompt.md`. The lock file
-> (`~/.claude/pipelines/{ticket_id}/lock`) provides equivalent single-session duplicate-run
-> protection in the interim. Full ledger implementation is deferred to a future ticket.
-
-Prevents duplicate pipeline runs across sessions. Stored at `~/.claude/pipelines/ledger.json`:
+Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
 
 ```json
 {
@@ -174,6 +176,7 @@ If pipeline runs unattended, worst case:
 - Pushes code to a feature branch (not main) -- reversible
 - Creates a PR -- closeable, doesn't auto-merge without explicit "merge" reply
 - Runs CI fixes (ci-fix-pipeline) -- reversible via git
+- Runs PR review fixes and pushes -- reversible via git revert
 - Sends Slack notifications -- ignorable
 - Updates Linear status -- manually reversible
 
@@ -197,11 +200,6 @@ You do NOT implement, review, or fix code yourself. Heavy phases run in separate
 **Rule: The coordinator must NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an
 edit, that is the signal to dispatch instead.
-
-### Phase 0: pre_flight — runs inline (no sub-agent dispatch needed)
-
-Pre-flight checks run inline in the orchestrator. No `Task()` dispatch. The orchestrator runs
-pre-commit hooks and mypy directly, classifies issues, and auto-advances to Phase 1.
 
 ### Phase 1: implement — dispatch to polymorphic agent
 
@@ -269,18 +267,51 @@ Task(
 - `timeout`: log warning "CI watch timed out — continuing to Phase 5", auto-advance to Phase 5
 - `failed`: post Slack MEDIUM_RISK gate, stop pipeline
 
-**MEDIUM_RISK Slack gate on ci_watch failed:**
+### Phase 5: pr_review_loop — dispatch to polymorphic agent
+
 ```
-[MEDIUM_RISK] ticket-pipeline: CI watch failed for {ticket_id}
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
+  prompt="You are executing pr-watch for {ticket_id}.
+    Invoke: Skill(skill=\"onex:pr-watch\",
+      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles} [--fix-nits if auto_fix_nits]\")
 
-PR #{pr_number} CI failed and could not be fixed automatically.
-Reply 'skip' to continue to PR review anyway, 'stop' to halt pipeline.
-Silence (15 min) = stop.
+    Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/pr-watch.json
+    Report back with: status (approved|capped|timeout|failed), pr_review_cycles_used, watch_duration_hours."
+)
 ```
 
-### Phase 5: pr_review_loop — dispatch to polymorphic agent (see OMN-2528)
+**On pr_review_loop result:**
+- `approved`: auto-advance to Phase 6
+- `capped`: post Slack MEDIUM_RISK gate and stop pipeline
 
-Placeholder — implemented in OMN-2528.
+  ```
+  [MEDIUM_RISK] ticket-pipeline: PR review blocked for {ticket_id}
+
+  PR #{pr_number} has been through {N} automated fix cycles and still has
+  unresolved review comments. Manual review required.
+
+  Ticket: {ticket_id}
+  Review cycles used: {N}/{max_pr_review_cycles}
+
+  Reply 'continue' to attempt Phase 6 anyway, 'stop' to halt.
+  Silence (15 min) = stop.
+  ```
+
+- `timeout`: post Slack MEDIUM_RISK gate and stop pipeline
+
+  ```
+  [MEDIUM_RISK] ticket-pipeline: PR review timeout for {ticket_id}
+
+  PR #{pr_number} has been waiting {hours}h for approval without merge readiness.
+  Ticket: {ticket_id}
+
+  Reply 'extend' for 12 more hours of watching, 'stop' to halt.
+  Silence (15 min) = stop.
+  ```
+
+- `failed`: post Slack MEDIUM_RISK gate and stop pipeline
 
 ### Phase 6: auto_merge — dispatch to polymorphic agent (see OMN-2529)
 
@@ -301,9 +332,9 @@ edge case handling.
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
-- `ci-watch` skill (Phase 4, OMN-2523 — planned)
-- `pr-watch` skill (Phase 5, OMN-2524 — planned)
-- `auto-merge` skill (Phase 6, OMN-2525 — planned)
+- `ci-watch` skill (Phase 4, OMN-2523)
+- `pr-watch` skill (Phase 5, OMN-2524)
+- `auto-merge` skill (Phase 6, OMN-2525)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)
