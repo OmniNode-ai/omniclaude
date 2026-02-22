@@ -29,6 +29,10 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
     OutcomeStatus,
 )
+from omniclaude.trace.failure_signature import (
+    FailureSignature,
+    compute_failure_signature,
+)
 from omniclaude.trace.fix_transition import (
     FixTransition,
     OpenFailure,
@@ -74,6 +78,9 @@ __all__ = [
     "ReplayEngine",
     "ReplayMode",
     "ReplayResult",
+    # failure_signature exports
+    "FailureSignature",
+    "compute_failure_signature",
     # fix_transition exports
     "FixTransition",
     "OpenFailure",
