@@ -91,10 +91,11 @@ class HandlerPatternPromotionDefault:
         if not criteria_met:
             logger.debug(
                 "Pattern promotion SKIPPED for intent=%s "
-                "(evidence=%d < required=%d, acs_gate_met=%s)",
+                "(evidence=%d, required=%d, evidence_threshold_met=%s, acs_gate_met=%s)",
                 request.intent_type,
                 request.evidence_count,
                 request.criteria.min_evidence_count,
+                evidence_threshold_met,
                 acs_gate_met,
             )
             return ModelPatternPromotionResult(
