@@ -44,6 +44,8 @@ This will:
 
 ## Phase Flow
 
+> **Note**: Diagram reflects interactive mode (default). In autonomous mode, hard gates are replaced by Slack soft-gates or auto-advance. See [Autonomous Mode](#autonomous-mode---autonomous) for details.
+
 ```mermaid
 stateDiagram-v2
     [*] --> intake
@@ -116,11 +118,11 @@ autonomous:
 ### Slack Message Format (Spec Approval Gate)
 
 ```
-[OMN-2356] Spec ready for review
+🔧 [OMN-2356] Spec ready for review
 
-Plan: {spec_summary}
-Files to change: {file_list} ({N} files)
-Estimated scope: {Small|Medium|Large}
+**Plan**: {spec_summary}
+**Files to change**: {file_list} ({N} files)
+**Estimated scope**: {Small|Medium|Large}
 
 Reply "reject: {reason}" within 10 minutes to cancel. Silence = proceed.
 ```
