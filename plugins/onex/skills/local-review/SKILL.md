@@ -32,7 +32,7 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/local-review.json"
     fields:
-      - status: clean | clean_with_nits | max_iterations_reached | report_only | error
+      - status: clean | clean_with_nits | max_iterations_reached | report_only | changes_staged | error
       - iterations_run: int
       - issues_remaining: dict (critical/major/minor/nit counts)
 args:

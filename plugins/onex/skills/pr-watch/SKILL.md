@@ -39,6 +39,7 @@ outputs:
       - status: approved | changes_requested_fixed | timeout | capped | error
       - pr_number: int
       - fix_cycles_used: int
+      - elapsed_hours: float
 args:
   - name: pr_number
     description: GitHub PR number to watch

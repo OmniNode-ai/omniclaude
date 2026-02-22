@@ -82,7 +82,7 @@ when CI reaches a terminal state: `passed`, `failed` (exhausted fix cycles), `ti
    - Dispatch fix agent (polymorphic-agent) with failure details
    - Increment fix cycle count
    - Wait 30s, then re-poll
-4. If fix cycles exhausted: exit with `status: failed`
+4. If fix cycles exhausted: exit with `status: capped`
 5. If elapsed > timeout_minutes: exit with `status: timeout`
 
 ## Fix Dispatch Contract

@@ -79,7 +79,7 @@ or timed out.
 1. Verify PR is mergeable: `gh pr view {pr_number} --repo {repo} --json mergeable,reviews`
 2. Post HIGH_RISK Slack gate (see message format below)
 3. Poll for "merge" reply (check every 5 minutes):
-   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy} --delete-branch`
+   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is ` --delete-branch` if `delete_branch=true`, else empty
    - On timeout: exit with `status: timeout`
 4. Post Slack notification on merge completion
 
