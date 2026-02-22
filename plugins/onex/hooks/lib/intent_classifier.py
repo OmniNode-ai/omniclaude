@@ -193,6 +193,7 @@ def store_intent_in_correlation(
 
         state_dir.mkdir(parents=True, exist_ok=True)
         state_file = Path(state_dir) / "correlation_id.json"
+        state_file.parent.mkdir(parents=True, exist_ok=True)
 
         existing: dict[str, Any] = {}
         if state_file.exists():
