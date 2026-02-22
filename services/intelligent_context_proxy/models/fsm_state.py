@@ -54,10 +54,10 @@ class FSMTransition(BaseModel):
     )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "from_state": "idle",
                 "to_state": "request_received",
@@ -65,7 +65,8 @@ class FSMTransition(BaseModel):
                 "timestamp": "2025-11-09T14:30:00Z",
                 "metadata": {},
             }
-        }
+        },
+    }
 
 
 class FSMState(BaseModel):
@@ -91,10 +92,10 @@ class FSMState(BaseModel):
     )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "workflow_id": "abc-123",
                 "current_state": "request_received",
@@ -104,7 +105,8 @@ class FSMState(BaseModel):
                 "updated_at": "2025-11-09T14:30:01Z",
                 "metadata": {},
             }
-        }
+        },
+    }
 
 
 class FSMStateManager:

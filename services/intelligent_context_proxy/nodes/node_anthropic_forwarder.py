@@ -349,9 +349,11 @@ class NodeAnthropicForwarderEffect:
                     )
                     raise
 
-        # Should not reach here, but raise last exception if we do
+        # Should not reach here (all paths either return or raise above)
+        # Defensive fallback in case max_retries=0 or logic changes
         if last_exception:
             raise last_exception
+        raise RuntimeError("_forward_with_retry exhausted retries without result or exception")
 
     async def _capture_response(
         self,

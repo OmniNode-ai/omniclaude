@@ -33,17 +33,18 @@ class ProxyReducerInput(BaseModel):
     )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "event_type": "REQUEST_RECEIVED",
                 "correlation_id": "abc-123",
                 "input_state": {"request_data": {}, "oauth_token": "Bearer ..."},
                 "metadata": {},
             }
-        }
+        },
+    }
 
 
 class ProxyReducerOutput(BaseModel):
@@ -58,10 +59,10 @@ class ProxyReducerOutput(BaseModel):
     correlation_id: str = Field(..., description="Request correlation ID")
     timestamp: Optional[str] = Field(None, description="Processing timestamp")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "result": {
                     "current_state": "request_received",
@@ -72,7 +73,8 @@ class ProxyReducerOutput(BaseModel):
                 "correlation_id": "abc-123",
                 "timestamp": "2025-11-09T14:30:00Z",
             }
-        }
+        },
+    }
 
 
 # ============================================================================
@@ -92,10 +94,10 @@ class ProxyOrchestratorInput(BaseModel):
     correlation_id: str = Field(..., description="Request correlation ID")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "request_data": {
                     "model": "claude-sonnet-4",
@@ -106,7 +108,8 @@ class ProxyOrchestratorInput(BaseModel):
                 "correlation_id": "abc-123",
                 "metadata": {},
             }
-        }
+        },
+    }
 
 
 class ProxyOrchestratorOutput(BaseModel):
@@ -124,10 +127,10 @@ class ProxyOrchestratorOutput(BaseModel):
     total_time_ms: int = Field(0, description="Total processing time")
     success: bool = Field(default=True, description="Whether workflow succeeded")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "response_data": {
                     "id": "msg_123",
@@ -142,4 +145,5 @@ class ProxyOrchestratorOutput(BaseModel):
                 "total_time_ms": 2030,
                 "success": True,
             }
-        }
+        },
+    }
