@@ -1125,7 +1125,7 @@ def execute_phase(phase_name, state):
 
 3. **Commit auto-fixes (if any):**
    ```python
-   if auto_fixed:
+   if auto_fixed and not dry_run:
        # Stage and commit auto-fixed files only
        for item in auto_fixed:
            subprocess.run(["git", "add", item["file"]], check=True)
