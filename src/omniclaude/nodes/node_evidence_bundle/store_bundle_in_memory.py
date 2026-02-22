@@ -32,12 +32,18 @@ class StoreBundleInMemory:
             bundle: The bundle to persist.
 
         Raises:
-            RuntimeError: If a bundle with the same ID already exists.
+            RuntimeError: If a bundle with the same bundle_id already exists.
+            RuntimeError: If a bundle for the same ticket_id already exists.
         """
         if bundle.bundle_id in self._by_bundle_id:
             raise RuntimeError(
                 f"Evidence bundle {bundle.bundle_id!r} already exists — "
                 "bundles are immutable and may not be overwritten."
+            )
+        if bundle.ticket_id in self._by_ticket_id:
+            raise RuntimeError(
+                f"An evidence bundle for ticket {bundle.ticket_id!r} already exists — "
+                "each ticket produces exactly one bundle."
             )
         self._by_bundle_id[bundle.bundle_id] = bundle
         self._by_ticket_id[bundle.ticket_id] = bundle
