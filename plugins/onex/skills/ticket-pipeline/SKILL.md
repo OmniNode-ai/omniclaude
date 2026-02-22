@@ -297,9 +297,9 @@ edge case handling.
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
-- `ci-watch` skill (Phase 4, OMN-2523)
-- `pr-watch` skill (Phase 5, OMN-2524)
-- `auto-merge` skill (Phase 6, OMN-2525)
+- `ci-watch` skill (Phase 4, OMN-2523 — planned)
+- `pr-watch` skill (Phase 5, OMN-2524 — planned)
+- `auto-merge` skill (Phase 6, OMN-2525 — planned)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)
