@@ -228,9 +228,8 @@ def _extract_entities(text: str) -> tuple[ModelExtractedEntity, ...]:
     """Extract simple named entities from NL text.
 
     Recognises:
-    - Ticket references: OMN-NNNN, OMN-NNNN patterns
+    - Ticket references: OMN-NNNN, LIN-NNN patterns
     - Repository names: omniclaude, omnibase-core, omnibase-spi, etc.
-    - Quoted strings: "..." or '...' as generic VALUE entities
 
     Args:
         text: Raw NL text.
