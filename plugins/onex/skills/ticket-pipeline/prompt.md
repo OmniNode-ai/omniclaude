@@ -1198,32 +1198,61 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
-1. **Run pre-commit hooks:**
+1. **Write ticket-run ledger entry:**
+   ```python
+   import json
+   from pathlib import Path
+
+   ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
+   ledger_path.parent.mkdir(parents=True, exist_ok=True)
+   try:
+       ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+   except (json.JSONDecodeError, OSError):
+       ledger = {}
+
+   # Check for existing active run (duplicate pipeline guard)
+   if ticket_id in ledger and not force_run:
+       existing = ledger[ticket_id]
+       # Only block if it's a different run_id
+       if existing.get("active_run_id") != run_id:
+           print(f"Error: Pipeline already running for {ticket_id} (run_id={existing.get('active_run_id')}). Use --force-run to override.")
+           exit(1)
+
+   ledger[ticket_id] = {
+       "active_run_id": run_id,
+       "started_at": datetime.now(timezone.utc).isoformat(),
+       "log": str(Path.home() / ".claude" / "pipeline-logs" / f"{ticket_id}.log"),
+   }
+   ledger_path.write_text(json.dumps(ledger, indent=2))
+   ```
+
+2. **Run pre-commit hooks:**
    ```bash
    pre-commit run --all-files 2>&1
    ```
    Capture output. Classify failures as AUTO-FIX (<=10 files, same subsystem, low-risk) or DEFER.
 
-2. **Run mypy:**
+3. **Run mypy:**
    ```bash
    mypy src/ 2>&1
    ```
    Capture output. Same classification logic.
 
-3. **AUTO-FIX path:** Apply fixes inline (lightweight). Commit as:
+4. **AUTO-FIX path:** Apply fixes inline (lightweight). Commit as:
    ```
    chore(pre-existing): fix pre-existing issues [OMN-XXXX]
    ```
    If fix attempt fails: downgrade to DEFER.
 
-4. **DEFER path:** Create Linear sub-ticket via MCP for deferred issues. Note in PR description template.
+5. **DEFER path:** Create Linear sub-ticket via MCP for deferred issues. Note in PR description template.
 
-5. **AUTO-ADVANCE to Phase 1.**
+6. **AUTO-ADVANCE to Phase 1.**
 
 **Mutations:**
 - `phases.pre_flight.started_at`
 - `phases.pre_flight.completed_at`
 - `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids)
+- `~/.claude/pipelines/ledger.json` (entry created)
 
 **Exit conditions:**
 - **Completed:** pre-commit and mypy issues resolved or deferred (AUTO-ADVANCE)
@@ -1659,8 +1688,21 @@ EOF
    - `held`: pipeline exits cleanly; resumes when human replies "merge" to Slack HIGH_RISK gate.
    - `failed`: post Slack MEDIUM_RISK gate, stop pipeline.
 
-3. **On merged:** update Linear status to Done:
+3. **On merged:** clear ledger entry and update Linear status to Done:
    ```python
+   # Clear ticket-run ledger entry
+   import json
+   from pathlib import Path
+   ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
+   try:
+       ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+       ledger.pop(ticket_id, None)
+       ledger_path.write_text(json.dumps(ledger, indent=2))
+   except Exception as e:
+       print(f"Warning: Failed to clear ledger entry for {ticket_id}: {e}")
+       # Non-blocking
+
+   # Update Linear to Done
    try:
        mcp__linear-server__update_issue(id=ticket_id, state="Done")
    except Exception as e:
@@ -1674,6 +1716,7 @@ EOF
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
 - `phases.auto_merge.artifacts` (status, merged_at, branch_deleted)
+- `~/.claude/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
 - **Completed (merged):** PR merged, branch deleted (if policy), Linear set to Done
