@@ -6,7 +6,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_intent_type import (
+    EnumIntentType,
+)
 
 
 class ModelNlParseRequest(BaseModel):
@@ -17,7 +21,7 @@ class ModelNlParseRequest(BaseModel):
         correlation_id: Correlation UUID for distributed tracing.
         session_id: Optional session identifier for context threading.
         force_intent_type: Optional override to skip classification and force
-            a specific intent type string (e.g. for tests or explicit routing).
+            a specific intent type (e.g. for tests or explicit routing).
             Accepts any string that maps to EnumIntentType; invalid values
             fall back to UNKNOWN.
     """
@@ -39,10 +43,23 @@ class ModelNlParseRequest(BaseModel):
         max_length=256,
         description="Optional session identifier for context threading",
     )
-    force_intent_type: str | None = Field(
+    force_intent_type: EnumIntentType | None = Field(
         default=None,
-        description="Optional override to force a specific intent type string",
+        description="Optional override to force a specific intent type",
     )
+
+    @field_validator("force_intent_type", mode="before")
+    @classmethod
+    def coerce_intent_type(cls, v: object) -> EnumIntentType | None:
+        """Coerce raw strings to EnumIntentType; invalid values fall back to UNKNOWN."""
+        if v is None:
+            return None
+        if isinstance(v, EnumIntentType):
+            return v
+        try:
+            return EnumIntentType(str(v))
+        except ValueError:
+            return EnumIntentType.UNKNOWN
 
 
 __all__ = ["ModelNlParseRequest"]
