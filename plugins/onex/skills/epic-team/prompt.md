@@ -226,6 +226,7 @@ state = {
     "ticket_scores": {},
     "ticket_status_map": {},
     "pr_urls": {},
+    "cleaned_worktrees": [],    # worktree paths already cleaned up (merged PRs)
 }
 os.makedirs(STATE_DIR, exist_ok=True)
 write_yaml(STATE_FILE, state)
@@ -244,11 +245,19 @@ state = load_yaml(STATE_FILE)
 assert state["phase"] == "intake", f"Expected phase=intake, got {state['phase']}"
 
 # 1. Load repo manifest
-MANIFEST_PATH = "plugins/onex/skills/epic-team/repo_manifest.yaml"
+MANIFEST_PATH = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
 manifest = load_yaml(MANIFEST_PATH)
 if manifest is None:
     print(f"ERROR: repo_manifest.yaml not found at {MANIFEST_PATH}")
+    print("Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.md for schema")
     exit(1)
+
+def manifest_repo_path(repo_name):
+    """Return the expanded filesystem path for a repo from the manifest."""
+    for entry in manifest.get("repos", []):
+        if entry["name"] == repo_name:
+            return os.path.expanduser(entry["path"])
+    raise KeyError(f"Repo '{repo_name}' not found in manifest at {MANIFEST_PATH}")
 
 # 2. Decompose epic
 from plugins.onex.skills.epic_team.epic_decomposer import decompose_epic, validate_decomposition
@@ -522,6 +531,13 @@ while True:
     #   - Do NOT update ticket_status_map from messages alone
     # (This block executes when a message arrives between polling turns)
 
+    # --- Background cleanup: remove worktrees for merged PRs ---
+    # For each ticket with a known pr_url and status==completed:
+    #   1. Call gh pr view {pr_url} --json mergedAt (non-fatal if gh fails)
+    #   2. If mergedAt is non-null: git -C {repo_path} worktree remove --force {wt_path}
+    #   3. Track cleaned-up worktrees in state["cleaned_worktrees"] to avoid re-checking
+    # This runs as a non-blocking background step — any exception is logged and skipped.
+
     # --- Check for finalization ---
     if new_map and all(v in terminal_statuses for v in new_map.values()):
         print("All tasks terminal. Proceeding to Phase 5.")
@@ -613,15 +629,16 @@ if failed:
 
 # 3. Print worktree locations and cleanup commands
 print("=== Worktree Locations ===")
-print("Each worker created a git worktree. Locations (workers do NOT auto-delete them):")
+print("Each worker created a git worktree. Locations (merged worktrees auto-deleted; unmerged preserved):")
 for repo in assignments:
     for ticket_id in assignments[repo]:
-        wt_path = f"../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}"
+        wt_path = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}")
         branch  = f"epic/{epic_id}/{ticket_id}/{run_id[:8]}"
+        repo_path = manifest_repo_path(repo)  # resolved from ~/.claude/epic-team/repo_manifest.yaml
         print(f"\n  {ticket_id} [{repo}]")
         print(f"    Path:   {wt_path}")
         print(f"    Branch: {branch}")
-        print(f"    Remove: git -C ../{repo} worktree remove --force {wt_path}")
+        print(f"    Remove: git -C {repo_path} worktree remove --force {wt_path}")
 
 print()
 print("=== Cleanup ===")
@@ -768,8 +785,16 @@ For each ticket, create a git worktree at the canonical path:
 
 ```python
 def setup_worktree(ticket_id):
-    repo_path = f"../{repo}"
-    worktree_root = f"{{repo_path}}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}"
+    import os, yaml
+    # Load repo path from user-global manifest (no manifest_repo_path in worker scope)
+    _manifest_path = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
+    with open(_manifest_path) as _f:
+        _manifest = yaml.safe_load(_f)
+    _entries = {{e["name"]: e for e in _manifest.get("repos", [])}}
+    if "{repo}" not in _entries:
+        raise KeyError(f"Repo '{{'{repo}'}}' not found in manifest at {{_manifest_path}}")
+    repo_path = os.path.expanduser(_entries["{repo}"]["path"])
+    worktree_root = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}")
     branch = f"epic/{epic_id}/{{ticket_id}}/{run_id_short}"
 
     # Create worktree
@@ -785,7 +810,7 @@ def setup_worktree(ticket_id):
     return worktree_root, branch
 ```
 
-Canonical root path: `../{repo}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
+Canonical root path: `~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
 Branch format: `epic/{epic_id}/{{ticket_id}}/{run_id_short}`
 
 ## Ticket Work Execution
@@ -939,6 +964,8 @@ ticket_status_map:                 # Subject -> status (rebuilt from TaskList ea
 
 pr_urls:                           # ticket_id -> PR URL (populated by worker messages)
   OMN-1001: "https://github.com/org/omniclaude/pull/42"
+
+cleaned_worktrees: []              # worktree paths already removed (merged PR cleanup)
 ```
 
 ### `~/.claude/epics/{epic_id}/revoked_runs.yaml`
@@ -966,7 +993,7 @@ revoked:
 | Working dir missing plugins/onex | `ERROR: Working directory guard failed. Missing: plugins/onex` | 1 |
 | Working dir missing ../omnibase_core | `ERROR: Working directory guard failed. Missing: ../omnibase_core` | 1 |
 | No child tickets | `ERROR: No child tickets found. Nothing to do.` | 1 |
-| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml` | 1 |
+| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at ~/.claude/epic-team/repo_manifest.yaml` | 1 |
 | Decomposition validation errors | `HARD FAIL: Decomposition validation errors: [...]` | 1 |
 | Unmatched tickets without --force-unmatched | `ERROR: Unmatched tickets block decomposition. Use --force-unmatched...` | 1 |
 | --resume with no state.yaml | `ERROR: state.yaml not found. Cannot resume.` | 1 |
@@ -987,4 +1014,4 @@ Before marking any phase complete, verify:
 - [ ] TaskUpdate (completed/failed) fires BEFORE SendMessage in workers
 - [ ] TeamDelete called best-effort (non-fatal) in Phase 5
 - [ ] Slack notifications non-fatal everywhere
-- [ ] Worktree locations printed for manual cleanup (never auto-deleted)
+- [ ] Worktree locations printed for manual cleanup (unmerged worktrees never auto-deleted; merged worktrees cleaned up automatically)
