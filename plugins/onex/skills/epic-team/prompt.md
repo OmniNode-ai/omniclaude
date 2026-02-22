@@ -244,10 +244,11 @@ state = load_yaml(STATE_FILE)
 assert state["phase"] == "intake", f"Expected phase=intake, got {state['phase']}"
 
 # 1. Load repo manifest
-MANIFEST_PATH = "plugins/onex/skills/epic-team/repo_manifest.yaml"
+MANIFEST_PATH = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
 manifest = load_yaml(MANIFEST_PATH)
 if manifest is None:
     print(f"ERROR: repo_manifest.yaml not found at {MANIFEST_PATH}")
+    print("Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.md for schema")
     exit(1)
 
 # 2. Decompose epic
@@ -616,12 +617,13 @@ print("=== Worktree Locations ===")
 print("Each worker created a git worktree. Locations (workers do NOT auto-delete them):")
 for repo in assignments:
     for ticket_id in assignments[repo]:
-        wt_path = f"../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}"
+        wt_path = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}")
         branch  = f"epic/{epic_id}/{ticket_id}/{run_id[:8]}"
+        repo_path = manifest_repo_path(repo)  # resolved from ~/.claude/epic-team/repo_manifest.yaml
         print(f"\n  {ticket_id} [{repo}]")
         print(f"    Path:   {wt_path}")
         print(f"    Branch: {branch}")
-        print(f"    Remove: git -C ../{repo} worktree remove --force {wt_path}")
+        print(f"    Remove: git -C {repo_path} worktree remove --force {wt_path}")
 
 print()
 print("=== Cleanup ===")
@@ -768,8 +770,9 @@ For each ticket, create a git worktree at the canonical path:
 
 ```python
 def setup_worktree(ticket_id):
-    repo_path = f"../{repo}"
-    worktree_root = f"{{repo_path}}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}"
+    import os
+    repo_path = os.path.expanduser(manifest_repo_path("{repo}"))  # from ~/.claude/epic-team/repo_manifest.yaml
+    worktree_root = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}")
     branch = f"epic/{epic_id}/{{ticket_id}}/{run_id_short}"
 
     # Create worktree
@@ -785,7 +788,7 @@ def setup_worktree(ticket_id):
     return worktree_root, branch
 ```
 
-Canonical root path: `../{repo}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
+Canonical root path: `~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
 Branch format: `epic/{epic_id}/{{ticket_id}}/{run_id_short}`
 
 ## Ticket Work Execution
@@ -966,7 +969,7 @@ revoked:
 | Working dir missing plugins/onex | `ERROR: Working directory guard failed. Missing: plugins/onex` | 1 |
 | Working dir missing ../omnibase_core | `ERROR: Working directory guard failed. Missing: ../omnibase_core` | 1 |
 | No child tickets | `ERROR: No child tickets found. Nothing to do.` | 1 |
-| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml` | 1 |
+| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at ~/.claude/epic-team/repo_manifest.yaml` | 1 |
 | Decomposition validation errors | `HARD FAIL: Decomposition validation errors: [...]` | 1 |
 | Unmatched tickets without --force-unmatched | `ERROR: Unmatched tickets block decomposition. Use --force-unmatched...` | 1 |
 | --resume with no state.yaml | `ERROR: state.yaml not found. Cannot resume.` | 1 |
