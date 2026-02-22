@@ -226,6 +226,7 @@ state = {
     "ticket_scores": {},
     "ticket_status_map": {},
     "pr_urls": {},
+    "cleaned_worktrees": [],    # worktree paths already cleaned up (merged PRs)
 }
 os.makedirs(STATE_DIR, exist_ok=True)
 write_yaml(STATE_FILE, state)
@@ -529,6 +530,13 @@ while True:
     #   - Update pr_urls in state.yaml if message contains pr_url
     #   - Do NOT update ticket_status_map from messages alone
     # (This block executes when a message arrives between polling turns)
+
+    # --- Background cleanup: remove worktrees for merged PRs ---
+    # For each ticket with a known pr_url and status==completed:
+    #   1. Call gh pr view {pr_url} --json mergedAt (non-fatal if gh fails)
+    #   2. If mergedAt is non-null: git -C {repo_path} worktree remove --force {wt_path}
+    #   3. Track cleaned-up worktrees in state["cleaned_worktrees"] to avoid re-checking
+    # This runs as a non-blocking background step — any exception is logged and skipped.
 
     # --- Check for finalization ---
     if new_map and all(v in terminal_statuses for v in new_map.values()):
@@ -956,6 +964,8 @@ ticket_status_map:                 # Subject -> status (rebuilt from TaskList ea
 
 pr_urls:                           # ticket_id -> PR URL (populated by worker messages)
   OMN-1001: "https://github.com/org/omniclaude/pull/42"
+
+cleaned_worktrees: []              # worktree paths already removed (merged PR cleanup)
 ```
 
 ### `~/.claude/epics/{epic_id}/revoked_runs.yaml`
