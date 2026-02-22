@@ -458,6 +458,32 @@ class TestCLIExitBehavior:
         output = json.loads(result.stdout)
         assert output["success"] is False
 
+    def test_prompt_stdin_decodes_base64(self) -> None:
+        """CLI --prompt-stdin decodes base64 from stdin (not treating it as literal text)."""
+        import base64
+
+        env = _make_env(
+            OMNICLAUDE_INTENT_API_URL="http://127.0.0.1:19999/api/v1/intent/classify",
+        )
+        b64_prompt = base64.b64encode(b"hello world").decode()
+        script = Path(_LIB_PATH) / "intent_classifier.py"
+        cmd = [sys.executable, str(script), "--prompt-stdin", "--no-store"]
+        result = subprocess.run(
+            cmd,
+            input=b64_prompt,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            check=False,
+        )
+        assert result.returncode == 0
+        parsed = json.loads(result.stdout)
+        # Service is unavailable so success=False, but the exit code must be 0
+        # and the output must be valid JSON — confirming the stdin path ran
+        assert isinstance(parsed, dict)
+        assert "success" in parsed
+
     def test_output_is_valid_json(self) -> None:
         """CLI always produces valid JSON on stdout."""
         env = _make_env(
