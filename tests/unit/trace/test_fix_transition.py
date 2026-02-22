@@ -23,6 +23,7 @@ from uuid import uuid4
 
 import pytest
 
+from omniclaude.hooks.topics import TopicBase, build_topic
 from omniclaude.trace.change_frame import (
     ChangeFrame,
     ModelCheckResult,
@@ -35,7 +36,6 @@ from omniclaude.trace.change_frame import (
     ModelWorkspaceRef,
 )
 from omniclaude.trace.fix_transition import (
-    FIX_TRANSITION_TOPIC,
     FixTransition,
     OpenFailure,
     compute_fix_diff_hash,
@@ -44,6 +44,9 @@ from omniclaude.trace.fix_transition import (
     extract_unique_files,
     serialize_fix_transition_event,
 )
+
+#: Expected Kafka topic for fix transition events (mirrors the emit call)
+_EXPECTED_FIX_TRANSITION_TOPIC = build_topic("", TopicBase.AGENT_TRACE_FIX_TRANSITION)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -415,7 +418,7 @@ class TestEmitFixTransitionEvent:
             timestamp_utc=TIMESTAMP,
             emit_fn=mock_emit,
         )
-        assert received_topic == [FIX_TRANSITION_TOPIC]
+        assert received_topic == [_EXPECTED_FIX_TRANSITION_TOPIC]
 
     def test_returns_true_on_success(self) -> None:
         t = self._make_transition()

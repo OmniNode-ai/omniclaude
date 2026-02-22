@@ -6,8 +6,9 @@ This package contains CLI entry points for debugging and development tools.
 
 Modules:
     patterns: Pattern query CLI for debugging learned_patterns in PostgreSQL
+    trace: Agent trace inspection CLI (omn trace)
 """
 
 from __future__ import annotations
 
-__all__ = ["patterns"]
+__all__ = ["patterns", "trace"]
