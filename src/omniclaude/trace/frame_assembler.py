@@ -255,6 +255,11 @@ DEFAULT_CHECKS: list[CheckSpec] = [
         failure_type=FailureType.TYPE_FAIL,
         timeout=30,
     ),
+    CheckSpec(
+        command=["uv", "run", "pyright", "src/omniclaude/"],
+        failure_type=FailureType.TYPE_FAIL,
+        timeout=30,
+    ),
 ]
 
 
