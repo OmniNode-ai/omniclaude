@@ -329,14 +329,14 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 4. **If extraction fails** (no recognizable patterns):
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean"); set `last_error = "could not parse review response"`
-   - Display: "Warning: Review response could not be parsed. Retry {retry_count+1}/2..."
+   - Display: "Warning: Review response could not be parsed. {retry_count < 2 ? f'Retry {retry_count+1}/2...' : 'Retry limit reached — hard exit.'}"
    - Proceed to Step 2.3 where `PARSE_FAILED` triggers retry logic (hard exit after 2 retries)
 5. On `PARSE_FAILED` after retry exhaustion, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 **Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
 1. Log the error with details (timeout duration, error message, etc.)
 2. Mark iteration as `AGENT_FAILED` (not "clean" or "parse failed"); set `last_error = {error}`
-3. Display: "Warning: Review agent failed: {error}. Retry {retry_count+1}/2..."
+3. Display: "Warning: Review agent failed: {error}. {retry_count < 2 ? f'Retry {retry_count+1}/2...' : 'Retry limit reached — hard exit.'}"
 4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with retry logic; hard exit after 2 retries)
 
 ### Step 2.3: Display Issues and Handle Error States

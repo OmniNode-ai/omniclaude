@@ -323,7 +323,7 @@ Transient agent failures no longer cause hard exits. The orchestrator retries au
 | Error Type | Description | Retry Policy |
 |------------|-------------|--------------|
 | `AGENT_FAILED` | Sub-agent Task() failure (network, resource, timeout) | Up to 2 retries before hard exit |
-| `PARSE_FAILED` | ModelSkillResult parse error from legacy skill output | Up to 2 retries before hard exit |
+| `PARSE_FAILED` | Review agent response could not be parsed (JSON parsing and text extraction both failed) | Up to 2 retries before hard exit |
 
 ### Retry Procedure
 
