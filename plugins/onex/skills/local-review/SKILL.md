@@ -90,7 +90,8 @@ NEVER mix pre-existing fixes with the feature branch changes.
 
 ```
 Phase 0: Pre-existing issue scan
-  1. Run pre-commit run --all-files on clean checkout (before reviewing diff)
+  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
+     fixes are applied; do NOT stash or alter the working tree to run this step)
   2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
   3. Classify each failure:
        - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
@@ -103,7 +104,8 @@ Phase 0: Pre-existing issue scan
        - Auto-file a follow-up Linear sub-ticket (if Linear MCP available)
        - Note in session: "Pre-existing issues deferred to {ticket_id}: {count} issues"
        - Add deferred issues to PR description note section
-  6. Write Phase 0 results to session notes (F3 integration)
+  6. Write Phase 0 results to session notes (session notes = the structured context block
+     injected into the Claude session via the F3/context-injection subsystem)
   7. Proceed to normal diff review
 ```
 
@@ -112,7 +114,7 @@ Phase 0: Pre-existing issue scan
 | Criterion | Value |
 |-----------|-------|
 | Files touched | ≤ 10 |
-| Subsystem | Same as the feature work (no cross-subsystem fixes) |
+| Subsystem | Same as the feature work (determine by inspecting `git diff {base}..HEAD --name-only`; the top-level directory prefix of the majority of changed files identifies the subsystem — e.g. `src/omniclaude/hooks/` or `plugins/onex/skills/`) |
 | Risk level | Low (formatting, import ordering, type annotation style) |
 
 ### Phase 0 Output in Session Notes
