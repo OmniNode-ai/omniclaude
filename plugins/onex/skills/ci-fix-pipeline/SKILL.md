@@ -40,7 +40,7 @@ Autonomous pipeline that fetches GitHub Actions CI failures and fixes them — A
 default. No selective mode. Failures beyond `max_fix_files` trigger sub-ticket creation and
 continue with the remaining fixable failures.
 
-**Workflow**: Slack start → Fetch CI failures → Classify → Fix ALL fixable → Sub-ticket large-scope → Slack complete → ModelSkillResult
+**Workflow**: Fetch CI failures → Slack start → Classify → Fix ALL fixable → Sub-ticket large-scope → Commit → Slack complete → ModelSkillResult
 
 **Announce at start:** "I'm using the ci-fix-pipeline skill to fix CI failures."
 
@@ -120,18 +120,14 @@ For each failure:
    - No → continue
 
 2. **Scope check**: Does `len(files_in_scope) > max_fix_files`?
-   - Yes → mark as `capped`, create Linear sub-ticket (see Sub-Ticket Creation below)
-   - No → continue to fix
+   - Yes → mark as `capped`, create Linear sub-ticket inline (see Sub-Ticket Creation below), continue to next failure
+   - No → add to fix queue
 
-3. **Architectural check**: Did the fix agent classify failure as `architectural`?
-   - Yes → trigger Slack MEDIUM_RISK gate, wait for human decision
-   - Approved → fix; Declined → mark `escalated`
-
-4. **Fix**: Dispatch fix agent for all remaining failures.
+Result: failures split into `skipped`, `capped`, and `to_fix` buckets.
 
 ### Phase 4: Fix Failures
 
-Dispatch one polymorphic agent per severity group (critical first, then major, then minor):
+Dispatch one polymorphic agent per severity group (critical first, then major, then minor) for all `to_fix` failures:
 
 ```
 Task(
@@ -155,6 +151,10 @@ Task(
 )
 ```
 
+**Post-fix architectural check**: For each failure returned as `architectural` by the fix agent:
+- Trigger Slack MEDIUM_RISK gate, wait for human decision
+- Approved → apply fix; Declined → mark `escalated`
+
 ### Phase 5: Commit Fixes
 
 Orchestrator stages and commits inline (no dispatch needed):
@@ -166,9 +166,9 @@ git commit -m "fix(ci): resolve {N} CI failures [OMN-XXXX]"
 
 Commit message format: `fix(ci): resolve {N} {severity} failures [{ticket_id}]`
 
-### Phase 6: Sub-Ticket Creation
+### Sub-Ticket Creation
 
-For each `capped` failure (files_in_scope > max_fix_files):
+For each `capped` failure (files_in_scope > max_fix_files), created inline during Phase 3:
 
 ```python
 mcp__linear-server__create_issue(
@@ -195,7 +195,7 @@ mcp__linear-server__create_issue(
 )
 ```
 
-### Phase 7: Slack Complete Notification
+### Phase 6: Slack Complete Notification
 
 If `slack_on_complete: true`, notify with diff summary:
 
@@ -215,11 +215,12 @@ Emits to `~/.claude/skill-results/{context_id}/ci-fix-pipeline.json`:
 
 ```json
 {
-  "status": "completed|capped|escalated",
+  "status": "completed|capped|escalated|failed",
   "fixed_count": 5,
   "skipped_count": 1,
   "capped_count": 2,
   "escalated_count": 0,
+  "unfixable_count": 0,
   "sub_tickets": ["OMN-XXXX", "OMN-XYYY"],
   "commit": "abc1234",
   "branch": "feature/my-branch",
@@ -231,6 +232,7 @@ Emits to `~/.claude/skill-results/{context_id}/ci-fix-pipeline.json`:
 - `completed` — All fixable failures resolved
 - `capped` — Some failures deferred to sub-tickets; fixed what was in scope
 - `escalated` — One or more architectural failures awaiting human decision
+- `failed` — CI fetch failed or commit failed; pipeline halted
 
 ## Failure Handling
 
