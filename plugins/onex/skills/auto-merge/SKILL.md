@@ -127,7 +127,7 @@ Ticket: {ticket_id}
 PR: {PR URL}
 CI: all green
 Reviews: {N} approvals, 0 changes-requested
-Merge strategy: squash --delete-branch
+Merge strategy: {merge_strategy}{", delete branch" if delete_branch_on_merge else ""}
 
 Reply 'merge' to merge this PR.
 This is HIGH_RISK — silence will NOT auto-advance.
@@ -136,7 +136,7 @@ This is HIGH_RISK — silence will NOT auto-advance.
 **Keyword matching**: `merge`, `go`, `yes`, `approve` → approve merge;
 `no`, `cancel`, `hold`, `stop`, `reject` → hold.
 
-## 24-Hour Reminder
+## Reminder (at `reminder_at_hours`)
 
 At `reminder_at_hours` elapsed without response:
 
