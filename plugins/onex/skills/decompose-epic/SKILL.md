@@ -43,12 +43,13 @@ decompose-epic OMN-XXXX
      - Assign to repo using keyword matching from manifest
      - Estimate scope (small/medium/large)
   4. Present decomposition plan (always shown, even without --dry-run)
-  5. Post Slack LOW_RISK gate:
+  5. If --dry-run: write result.json with status: dry_run and exit — skip steps 6-9
+  6. Post Slack LOW_RISK gate:
      "Proposed N sub-tickets for {epic_id} — reply 'proceed' to create or 'reject' to abort within 30 min"
      Silence = proceed (LOW_RISK)
-  6. If rejected via Slack: abort, log reason
-  7. Create sub-tickets in Linear as children of epic (if not --dry-run)
-  8. Write result to ~/.claude/skill-results/decompose-epic-{epic_id}/result.json
+  7. If rejected via Slack: abort, log reason
+  8. Create sub-tickets in Linear as children of epic
+  9. Write result to ~/.claude/skill-results/decompose-epic-{epic_id}/result.json
 ```
 
 ## Decomposition Algorithm
