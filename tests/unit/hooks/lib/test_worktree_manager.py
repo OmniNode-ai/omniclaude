@@ -97,7 +97,7 @@ class TestWorktree:
     def test_frozen(self) -> None:
         wt = Worktree(path="/repo", branch="refs/heads/main", head="abc")
         with pytest.raises(Exception):
-            wt.path = "/other"  # type: ignore[misc]
+            wt.path = "/other"  # noqa: E501 (FrozenInstanceError raised at runtime; mypy sees no type error)
 
 
 # ---------------------------------------------------------------------------
