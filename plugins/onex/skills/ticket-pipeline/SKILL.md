@@ -1,7 +1,7 @@
 ---
 name: ticket-pipeline
-description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, and merge readiness into a single unattended workflow with Slack notifications and policy guardrails
-version: 1.0.0
+description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
+version: 2.0.0
 category: workflow
 tags:
   - pipeline
@@ -11,13 +11,14 @@ tags:
   - review
   - pr
   - slack
+  - ci
 author: OmniClaude Team
 args:
   - name: ticket_id
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ready_for_merge)
+    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge)
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -31,7 +32,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> implement -> local_review -> create_pr -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
 
@@ -49,41 +50,29 @@ Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> impl
 ```mermaid
 stateDiagram-v2
     [*] --> pre_flight
-    pre_flight --> implement : auto (after classify + optional auto-fix)
+    pre_flight --> implement : auto (policy)
     implement --> local_review : auto (policy)
     local_review --> create_pr : auto (1 confirmed-clean run)
-    create_pr --> ready_for_merge : auto (policy)
-    ready_for_merge --> [*] : manual merge
+    create_pr --> ci_watch : auto (policy)
+    ci_watch --> pr_review_loop : auto (CI green or capped with warning)
+    pr_review_loop --> auto_merge : auto (approved)
+    pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
+    auto_merge --> [*] : merged or held
 ```
 
 ### Phase 0: pre_flight
 
-Runs BEFORE implementation on a clean checkout to detect and classify pre-existing issues.
-
-**Key invariant**: Phase 0 is detect-and-classify, NOT "always fix everything." Derailing ticket
-implementation by fixing an unrelated subsystem is worse than deferring with a follow-up ticket.
-
-**Procedure**:
-1. Run `pre-commit run --all-files` on clean checkout
-2. Run `mypy src/ --strict` (or repo-equivalent from `pyproject.toml`)
-3. Classify each failure:
-   - **AUTO-FIX** if ALL of these are true:
-     - <= 10 files touched
-     - Same subsystem as the ticket's work
-     - Low-risk change (formatting, import ordering, type annotation style)
-   - **DEFER** if any criterion fails (> 10 files, architectural, unrelated subsystem)
-4. For AUTO-FIX: apply fixes, commit as `chore(pre-existing): fix pre-existing lint/type errors`
-5. For DEFER: auto-create a Linear sub-ticket via MCP; record in PR description note section
-6. Write Phase 0 result to state (`phases.pre_flight.artifacts`)
-7. AUTO-ADVANCE to Phase 1 (implementation begins on now-cleaner codebase)
-
-**Phase 0 commits are always separate from feature work.**
+- Runs pre-commit hooks + mypy on clean checkout
+- Classifies pre-existing issues as AUTO-FIX or DEFER
+- AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing):`
+- DEFER: creates Linear sub-ticket, notes in PR description
+- AUTO-ADVANCE to Phase 1
 
 ### Phase 1: implement
 
 - Dispatches `ticket-work` to a polymorphic agent via `Task()` (own context window)
 - Human gates still fire for questions/spec within the agent
-- Cross-repo detection: blocks if changes touch multiple repo roots
+- Cross-repo detection: invokes `decompose-epic` to create per-repo sub-tickets (MEDIUM_RISK gate, 10 min), then hands off to `epic-team` instead of hard-stopping
 - Slack: `notification.blocked` when waiting for human input
 - AUTO-ADVANCE to Phase 2
 
@@ -91,7 +80,7 @@ implementation by fixing an unrelated subsystem is worse than deferring with a f
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Requires 1 confirmed-clean run with stable run signature before advancing
+- Requires 1 confirmed-clean run before advancing
 - Stop on: 0 blocking issues (confirmed by 1 clean run), max iterations, repeat issues, new major after iteration 1
 - AUTO-ADVANCE to Phase 3 (only if quality gate passed: 1 confirmed-clean run)
 
@@ -103,11 +92,30 @@ implementation by fixing an unrelated subsystem is worse than deferring with a f
 - Pushes branch, creates PR via `gh`, updates Linear status
 - AUTO-ADVANCE to Phase 4
 
-### Phase 4: ready_for_merge
+### Phase 4: ci_watch [NEW]
 
-- Adds `ready-for-merge` label to Linear
-- Slack notification with blocking/nit counts
-- Pipeline STOPS (manual merge only)
+- Invokes `ci-watch` sub-skill (OMN-2523) with configured policy
+- `ci-watch` polls `gh pr checks` every 5 minutes
+- Auto-invokes `ci-fix-pipeline` on CI failure (respects `max_ci_fix_cycles` cap)
+- Returns: `status: completed | capped | timeout | failed`
+- On `completed`: AUTO-ADVANCE to Phase 5
+- On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
+- On `failed`: Slack MEDIUM_RISK gate, stop pipeline
+
+### Phase 5: pr_review_loop (see OMN-2528)
+
+- Placeholder: invokes `pr-watch` sub-skill
+- Returns: `status: approved | capped | timeout | failed`
+- On `approved`: AUTO-ADVANCE to Phase 6
+- On `capped`: Slack MEDIUM_RISK "merge blocked" + stop
+- On `timeout`: Slack MEDIUM_RISK notification + stop
+
+### Phase 6: auto_merge (see OMN-2529)
+
+- Placeholder: invokes `auto-merge` sub-skill
+- Default: HIGH_RISK Slack gate requiring explicit "merge" reply
+- On `merged`: clear ticket-run ledger entry, post success to Slack
+- On `held`: pipeline exits cleanly (human will reply to Slack)
 
 ## Pipeline Policy
 
@@ -115,20 +123,46 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 | Switch | Default | Description |
 |--------|---------|-------------|
-| `policy_version` | `"1.0"` | Version the policy for forward compatibility |
+| `policy_version` | `"2.0"` | Version the policy for forward compatibility |
 | `auto_advance` | `true` | Auto-advance between phases |
 | `auto_commit` | `true` | Allow local-review to commit fixes |
 | `auto_push` | `true` | Allow pushing to remote branch |
 | `auto_pr_create` | `true` | Allow creating PRs |
-| `max_review_iterations` | `7` | Cap review loops (local + PR) |
+| `max_review_iterations` | `3` | Cap review loops (local + PR) |
 | `stop_on_major` | `true` | Stop if new major appears after first iteration |
 | `stop_on_repeat` | `true` | Stop if same issues appear twice (fingerprint-based) |
-| `stop_on_cross_repo` | `true` | Stop if changes touch multiple repo roots |
+| `stop_on_cross_repo` | `false` | Auto-split via decompose-epic instead of stopping |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
+| `auto_fix_ci` | `true` | Auto-invoke ci-fix-pipeline on CI failure |
+| `ci_watch_timeout_minutes` | `60` | Max minutes waiting for CI before timeout |
+| `max_ci_fix_cycles` | `3` | Max ci-fix-pipeline invocations before capping |
+| `cap_escalation` | `"slack_notify_and_continue"` | On ci_watch cap: notify Slack and continue to Phase 5 |
 
 ## State Management
 
 Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
+
+### Ticket-Run Ledger (planned)
+
+> **Note**: The ledger is not yet implemented in `prompt.md`. The lock file
+> (`~/.claude/pipelines/{ticket_id}/lock`) provides equivalent single-session duplicate-run
+> protection in the interim. Full ledger implementation is deferred to a future ticket.
+
+Prevents duplicate pipeline runs across sessions. Stored at `~/.claude/pipelines/ledger.json`:
+
+```json
+{
+  "OMN-2356": {
+    "active_run_id": "run-abc123",
+    "started_at": "2026-02-21T14:00:00Z",
+    "log": "~/.claude/pipeline-logs/OMN-2356.log"
+  }
+}
+```
+
+- Entry created when pipeline starts (Phase 0)
+- Entry cleared when pipeline reaches terminal state (merged, failed, capped)
+- On new invocation: check ledger first; if entry exists → post "already running ({run-id})" to Slack and exit
 
 ## Dry Run Mode
 
@@ -138,7 +172,8 @@ Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the 
 
 If pipeline runs unattended, worst case:
 - Pushes code to a feature branch (not main) -- reversible
-- Creates a PR -- closeable, doesn't auto-merge
+- Creates a PR -- closeable, doesn't auto-merge without explicit "merge" reply
+- Runs CI fixes (ci-fix-pipeline) -- reversible via git
 - Sends Slack notifications -- ignorable
 - Updates Linear status -- manually reversible
 
@@ -163,38 +198,10 @@ You do NOT implement, review, or fix code yourself. Heavy phases run in separate
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an
 edit, that is the signal to dispatch instead.
 
-### Phase 0: pre_flight — dispatch to polymorphic agent
+### Phase 0: pre_flight — runs inline (no sub-agent dispatch needed)
 
-```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="ticket-pipeline: Phase 0 pre-flight for {ticket_id}",
-  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
-
-    Run Phase 0 pre-flight checks for ticket {ticket_id}.
-
-    ## Steps
-
-    1. Run: pre-commit run --all-files
-    2. Run: mypy src/ --strict  (or detected equivalent from pyproject.toml)
-    3. For each failure, classify as AUTO-FIX or DEFER:
-       - AUTO-FIX: <= 10 files, same subsystem as ticket, low-risk change
-       - DEFER: otherwise (auto-create Linear sub-ticket, note in PR description)
-    4. Apply AUTO-FIX changes (do NOT commit — orchestrator commits separately)
-
-    ## Output Format
-
-    Return JSON:
-    {\"auto_fixed\": [{\"file\": str, \"issue\": str}],
-     \"deferred\": [{\"file\": str, \"issue\": str, \"sub_ticket\": str}],
-     \"clean\": bool}
-
-    If no pre-existing issues: {\"auto_fixed\": [], \"deferred\": [], \"clean\": true}"
-)
-```
-
-After dispatch: if `auto_fixed` is non-empty, orchestrator commits:
-`git add <changed_files> && git commit -m "chore(pre-existing): fix pre-existing lint/type errors"`
+Pre-flight checks run inline in the orchestrator. No `Task()` dispatch. The orchestrator runs
+pre-commit hooks and mypy directly, classifies issues, and auto-advances to Phase 1.
 
 ### Phase 1: implement — dispatch to polymorphic agent
 
@@ -203,7 +210,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
   prompt="You are executing ticket-work for {ticket_id}.
-    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
+    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
 
     Ticket: {ticket_id} - {title}
     Description: {description}
@@ -241,9 +248,43 @@ Task(
 
 No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
 
-### Phase 4: ready_for_merge — runs inline (Linear label + Slack notification only)
+### Phase 4: ci_watch — dispatch to polymorphic agent
 
-No dispatch needed. The orchestrator adds labels and sends notifications directly.
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
+  prompt="You are executing ci-watch for {ticket_id}.
+    Invoke: Skill(skill=\"onex:ci-watch\",
+      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
+
+    Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/ci-watch.json
+    Report back with: status (completed|capped|timeout|failed), ci_fix_cycles_used, watch_duration_minutes."
+)
+```
+
+**On ci_watch result:**
+- `completed`: auto-advance to Phase 5
+- `capped`: log warning "CI fix cap reached — continuing to Phase 5 with degraded confidence", auto-advance to Phase 5
+- `timeout`: log warning "CI watch timed out — continuing to Phase 5", auto-advance to Phase 5
+- `failed`: post Slack MEDIUM_RISK gate, stop pipeline
+
+**MEDIUM_RISK Slack gate on ci_watch failed:**
+```
+[MEDIUM_RISK] ticket-pipeline: CI watch failed for {ticket_id}
+
+PR #{pr_number} CI failed and could not be fixed automatically.
+Reply 'skip' to continue to PR review anyway, 'stop' to halt pipeline.
+Silence (15 min) = stop.
+```
+
+### Phase 5: pr_review_loop — dispatch to polymorphic agent (see OMN-2528)
+
+Placeholder — implemented in OMN-2528.
+
+### Phase 6: auto_merge — dispatch to polymorphic agent (see OMN-2529)
+
+Placeholder — implemented in OMN-2529.
 
 ---
 
@@ -260,6 +301,9 @@ edge case handling.
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
+- `ci-watch` skill (Phase 4, OMN-2523 — planned)
+- `pr-watch` skill (Phase 5, OMN-2524 — planned)
+- `auto-merge` skill (Phase 6, OMN-2525 — planned)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)
