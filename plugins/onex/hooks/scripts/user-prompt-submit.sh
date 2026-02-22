@@ -412,12 +412,12 @@ fi
 # -----------------------------
 # Intent Classification (OMN-2493)
 # -----------------------------
-# Run intent classification asynchronously in the background.
+# Run intent classification synchronously (inline, capped by run_with_timeout).
 # The classifier stores intent_id + intent_class in the correlation file.
 # Classification result is also injected into additionalContext so Claude
 # can apply model selection and validator hints inline.
 #
-# Non-blocking design:
+# Design:
 #   - run_with_timeout caps wall-clock to 1s (consistent with injection budget)
 #   - Any failure → INTENT_CONTEXT="" → no context change, hook continues
 #   - Exits 0 on all failures (invariant)
