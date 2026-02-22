@@ -141,7 +141,30 @@ if _registry_path.exists():
         suppression_registry = []
 ```
 
-**4. Display configuration**:
+**4. Load prior session notes** (if any exist for the current branch):
+
+```python
+import os, glob
+from pathlib import Path
+
+branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
+branch_slug = branch.replace("/", "-")
+notes_dir = Path.home() / ".claude" / "review-notes"
+pattern = str(notes_dir / f"*-{branch_slug}.md")
+prior_notes = sorted(glob.glob(pattern))  # Alphabetical = chronological (YYYYMMDD prefix)
+
+if prior_notes:
+    most_recent = prior_notes[-1]
+    print(f"Loading prior session notes from {most_recent}")
+    with open(most_recent) as f:
+        prior_notes_content = f.read()
+    print(prior_notes_content)
+    # Surface prior dead ends to avoid re-hitting them
+else:
+    prior_notes_content = None
+```
+
+**5. Display configuration**:
 ```
 ## Review Configuration
 
