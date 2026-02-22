@@ -47,14 +47,6 @@ _SHORT_SHA = "abc1234"
 _LONG_SHA = "abc1234def5678901234567890abcdef12345678"
 
 
-def _bash_payload(output: str) -> dict:
-    return {
-        "tool_name": "Bash",
-        "sessionId": "test-session",
-        "tool_response": {"output": output},
-    }
-
-
 # ---------------------------------------------------------------------------
 # TestDetectCommitSha
 # ---------------------------------------------------------------------------
@@ -275,9 +267,9 @@ class TestProcessToolUse:
 
         assert result is not None
 
-    def test_completely_broken_tool_info_returns_none(self, tmp_path: Path) -> None:
-        # Passing a non-dict should be handled gracefully
-        result = process_tool_use({}, state_dir=tmp_path)  # type: ignore[arg-type]
+    def test_empty_tool_info_returns_none(self, tmp_path: Path) -> None:
+        # An empty dict has no tool_name, so no commit is detected
+        result = process_tool_use({}, state_dir=tmp_path)
         assert result is None
 
 
