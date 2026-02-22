@@ -75,6 +75,7 @@ Initialize:
   pr_review_cycle = 0
   start_time = now()
   halfway_notified = false
+  last_seen_review_ids = set()
 
 Loop:
   elapsed = now() - start_time
@@ -102,6 +103,7 @@ Loop:
       → Re-request review from original reviewers
       → Continue polling
 
+  → Update last_seen_review_ids with IDs from current gh pr view response
   → Sleep poll_interval_minutes * 60, loop
 ```
 
@@ -154,7 +156,7 @@ Not a gate (no waiting for response); informational only:
 ```
 [MEDIUM_RISK] pr-watch: PR #{pr_number} still awaiting review
 
-12 hours elapsed without approval.
+{halfway_notification_hours} hours elapsed without approval.
 Ticket: {ticket_id}
 Reviewers: {reviewer_list}
 ```
