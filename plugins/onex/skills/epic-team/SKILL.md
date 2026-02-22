@@ -1,7 +1,7 @@
 ---
 name: epic-team
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
-version: 1.2.0
+version: 1.1.0
 category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
 args:
@@ -87,7 +87,7 @@ Task(
   prompt="The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
     Invoke: Skill(skill=\"onex:decompose-epic\", args=\"{epic_id}\")
 
-    Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/decompose-epic.json
+    Read the ModelSkillResult from ~/.claude/skill-results/{run_id}/decompose-epic.json
     Report back with: created_tickets (list of ticket IDs and titles), count."
 )
 ```
@@ -98,31 +98,61 @@ In dry-run mode, if the epic is empty: invoke decompose-epic with `--dry-run` fl
 
 ## Repo Manifest
 
-Repo assignment for tickets uses the user-global manifest at `~/.claude/epic-team/repo_manifest.yaml`:
+Repo assignment for tickets uses the repo-local manifest at `plugins/onex/skills/epic-team/repo_manifest.yaml`:
 
 ```yaml
+MIN_TOP_SCORE: 4
+
 repos:
   - name: omniclaude
-    path: ~/Code/omniclaude
-    keywords: [hooks, skills, agents, claude, plugin, ticket-pipeline]
+    description: >
+      Claude Code plugin — hooks, skills, agents, slash commands,
+      context injection, emit daemon, and Claude Code integrations.
+    keywords:
+      - claude
+      - hook
+      - skill
+      - plugin
+      - epic-team
+    precedence: 4
+
   - name: omnibase_core
-    path: ~/Code/omnibase_core
-    keywords: [nodes, contracts, runtime, onex]
+    description: >
+      Core ONEX runtime framework — node types, contract models,
+      Pydantic base schemas, enum governance, and type system.
+    keywords:
+      - core
+      - node
+      - contract
+      - schema
+      - runtime
+    precedence: 1
+
   - name: omnibase_infra
-    path: ~/Code/omnibase_infra
-    keywords: [kubernetes, deploy, infra, helm]
+    description: >
+      Infrastructure layer — Kafka, Slack, PostgreSQL, event emission,
+      migrations, and external-service integrations.
+    keywords:
+      - kafka
+      - slack
+      - postgres
+      - infra
+      - event
+    precedence: 3
 ```
 
-Keyword matching is case-insensitive. Tickets matching no repo are UNMATCHED (routed to triage or omniplan with `--force-unmatched`).
+`MIN_TOP_SCORE` sets the minimum keyword-match score required for repo assignment; tickets below this threshold are routed to omniplan for triage. Keyword matching is case-insensitive. Tickets matching no repo are UNMATCHED (routed to triage or omniplan with `--force-unmatched`).
 
 ## Worktree Policy
 
 Workers create isolated git worktrees at:
 ```
-~/.claude/worktrees/{epic_id}/{run_id}/{ticket_id}/
+../{repo}/.claude/worktrees/{epic_id}/{run_id_short}/{ticket_id}/
 ```
 
-After merge, stale worktrees are cleaned up automatically when `auto_cleanup_merged_worktrees: true` (default).
+Where `run_id_short` is the first 8 characters of the run UUID. The path is repo-relative (sibling of the omniclaude root). Branch format: `epic/{epic_id}/{ticket_id}/{run_id_short}`.
+
+Worktrees are NOT auto-deleted after merge. The Phase 5 summary prints each worktree path and the `git worktree remove` command needed to clean up.
 
 ## Architecture
 
@@ -134,5 +164,5 @@ The team lead runs in this session and is responsible for fetching the epic from
 - `/ticket-work` — per-ticket execution skill used by each worker
 - `decompose-epic` skill (OMN-2522) — invoked when epic has zero child tickets
 - `slack-gate` skill (OMN-2521) — LOW_RISK gate for decompose confirmation
-- `~/.claude/epic-team/repo_manifest.yaml` — user-global repo assignment manifest
+- `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo-local repo assignment manifest
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
