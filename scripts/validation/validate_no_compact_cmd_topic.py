@@ -35,8 +35,8 @@ _COMPACT_POLICY_PATTERN = re.compile(r"cleanup\.policy\s*[=:]\s*compact", re.IGN
 _SCAN_DIRS = ["sql", "config", "scripts", "src"]
 _SCAN_EXTENSIONS = {".yaml", ".yml", ".json", ".properties", ".conf"}
 
-# Suppression comment token checked in file content (not a password)
-_NOQA_TOKEN = "# noqa: arch-no-compact-cmd-topic"  # noqa: S105, secrets
+# Inline suppression comment for arch-no-compact-cmd-topic violations
+_ARCH_SUPPRESS = "# noqa: arch-no-compact-cmd-topic"
 
 
 def scan_file(filepath: Path, verbose: bool = False) -> list[str]:
@@ -63,7 +63,7 @@ def scan_file(filepath: Path, verbose: bool = False) -> list[str]:
     # appear near each other (within 20 lines). Also check single-line properties.
     for i, line in enumerate(lines):
         # Skip suppressed lines
-        if _NOQA_TOKEN in line:
+        if _ARCH_SUPPRESS in line:
             continue
 
         # Check for inline single-line pattern (e.g., properties files):
@@ -80,7 +80,7 @@ def scan_file(filepath: Path, verbose: bool = False) -> list[str]:
             # Scan the next 20 lines for cleanup.policy=compact
             end_idx = min(i + 20, len(lines))
             for j in range(i, end_idx):
-                if _NOQA_TOKEN in lines[j]:
+                if _ARCH_SUPPRESS in lines[j]:
                     break
                 if _COMPACT_POLICY_PATTERN.search(lines[j]):
                     topic_match = _CMD_TOPIC_PATTERN.search(line)
