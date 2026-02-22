@@ -137,6 +137,7 @@ Written to `~/.claude/skill-results/decompose-epic-{epic_id}/result.json`:
   "artifacts": {
     "epic_id": "OMN-2511",
     "created_tickets": ["OMN-2512", "OMN-2513", "OMN-2514"],
+    "failed_tickets": [],
     "dry_run_plan": null
   }
 }
