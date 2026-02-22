@@ -197,7 +197,11 @@ if not has_omniclaude or not has_omnibase:
 epic = mcp_linear_get_issue(id=epic_id)
 print(f"Epic: {epic.title} ({epic_id})")
 
-# 2. Fetch all child tickets
+# 2. Generate run_id (needed before empty-ticket check for auto-decompose dispatch)
+import uuid
+run_id = str(uuid.uuid4())
+
+# 3. Fetch all child tickets
 tickets = mcp_linear_list_issues(parentId=epic_id, limit=250)
 print(f"Found {len(tickets)} child tickets")
 if len(tickets) == 0:
@@ -240,8 +244,9 @@ if len(tickets) == 0:
         f"{tickets_list}\n\n"
         f'Reply "reject" within 30 minutes to cancel. Silence = proceed with orchestration.'
     )
+    gate_status = "approved"  # default: proceed on gate failure (fail-open)
     try:
-        Task(
+        gate_result = Task(
             subagent_type="onex:polymorphic-agent",
             description=f"epic-team: post Slack LOW_RISK gate for {epic_id}",
             prompt=f"""Post this Slack gate message and wait up to 30 minutes for a "reject" reply.
@@ -251,9 +256,14 @@ if len(tickets) == 0:
     If timeout (silence): report status="approved"
     Report back with: status (approved or rejected)."""
         )
+        gate_status = gate_result.get("status", "approved")
     except Exception as e:
         print(f"Warning: Slack gate failed (non-fatal): {e}")
         # On Slack gate failure, proceed (fail-open)
+
+    if gate_status == "rejected":
+        print(f"Decomposition rejected by human via Slack. Stopping.")
+        exit(0)
 
     # Re-fetch newly created tickets after gate approval
     tickets = mcp_linear_list_issues(parentId=epic_id, limit=250)
@@ -261,10 +271,6 @@ if len(tickets) == 0:
     if len(tickets) == 0:
         print("ERROR: decompose-epic created no tickets. Cannot proceed.")
         exit(1)
-
-# 3. Generate run_id
-import uuid
-run_id = str(uuid.uuid4())
 
 # 4. PERSIST state.yaml
 import datetime
