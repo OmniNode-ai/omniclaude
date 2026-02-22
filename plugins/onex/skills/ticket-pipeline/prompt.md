@@ -1538,7 +1538,11 @@ EOF
 
 ---
 
-### Phase 0: PRE_FLIGHT
+### Backward-Compat: READY FOR MERGE (execute_ready_for_merge)
+
+> **Note:** This handler exists only for backward compatibility when resuming old-format
+> (v1.0) state files that contain a `ready_for_merge` phase. In the current pipeline
+> (v4.0), Phase 4 is `ci_watch`. This handler is not part of the normal phase order.
 
 **Invariants:**
 - Phase 3 (create_pr) is completed
@@ -1576,7 +1580,31 @@ Runs pre-commit hooks and mypy on clean checkout. Classifies pre-existing issues
        Invoke: Skill(skill=\"onex:ci-watch\",
          args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles} --auto-fix {auto_fix_ci}\")
 
-Returns `status: completed | capped | timeout | failed`.
+2. **Add ready-for-merge label to Linear:**
+   ```python
+   try:
+       # Fetch existing labels to avoid overwriting them
+       issue = mcp__linear-server__get_issue(id=ticket_id)
+       existing_labels = [label["name"] for label in issue.get("labels", {}).get("nodes", [])]
+       if "ready-for-merge" not in existing_labels:
+           existing_labels.append("ready-for-merge")
+       mcp__linear-server__update_issue(id=ticket_id, labels=existing_labels)
+   except Exception as e:
+       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+       # Non-blocking: Linear label update failure is logged but does not stop pipeline
+   ```
+
+3. **Send Slack notification:**
+   ```python
+   thread_ts = notify_sync(slack_notifier, "notify_phase_completed",
+       phase="ready_for_merge",
+       summary=f"{ticket_id} ready for merge -- 0 blocking, {nit_count} nits",
+       thread_ts=state.get("slack_thread_ts"),
+       pr_url=state["phases"]["create_pr"]["artifacts"].get("pr_url"),
+   )
+   state["slack_thread_ts"] = thread_ts
+   save_state(state, state_path)
+   ```
 
 **On result:**
 - `completed`: auto-advance to Phase 5
