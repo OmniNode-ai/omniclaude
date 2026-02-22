@@ -1313,7 +1313,7 @@ Runs inline in orchestrator (lightweight — no Task() dispatch needed).
      subagent_type="onex:polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
