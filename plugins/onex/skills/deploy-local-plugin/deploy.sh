@@ -474,6 +474,21 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     done
 
+    # Prune old version directories — keep only NEW_VERSION.
+    # Runs last so all writes (registry, settings) succeed before we remove rollback targets.
+    # Only delete directories whose names match the semver pattern X.Y.Z to avoid
+    # accidentally removing non-version directories under CACHE_BASE.
+    echo "  Pruning old version directories..."
+    shopt -s nullglob
+    for old_dir in "${CACHE_BASE}"/[0-9]*.[0-9]*.[0-9]*/; do
+        old_version=$(basename "$old_dir")
+        if [[ "$old_version" != "$NEW_VERSION" ]]; then
+            rm -rf "$old_dir"
+            echo -e "${GREEN}  Removed old version: ${old_version}${NC}"
+        fi
+    done
+    shopt -u nullglob
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
