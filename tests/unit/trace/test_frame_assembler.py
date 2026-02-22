@@ -19,7 +19,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
+from omniclaude.trace.change_frame import FailureType
 from omniclaude.trace.frame_assembler import (
     CheckSpec,
     SessionContext,
@@ -518,9 +520,3 @@ class TestPersistFrameToJsonl:
         assert p1 == p2
         lines = p1.read_text().strip().split("\n")
         assert len(lines) == 2
-
-
-# Import needed for test
-from uuid import uuid4  # noqa: E402
-
-from omniclaude.trace.change_frame import FailureType  # noqa: E402
