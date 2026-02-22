@@ -99,7 +99,7 @@ All three must be true before proceeding:
 4. At reminder_at_hours: post reminder to Slack
 5. At gate_timeout_hours: post reminder + hold (still require explicit reply)
 6. On 'merge' reply:
-   → gh pr merge {pr_number} --{strategy} {--delete-branch if policy}
+   → gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
    → Post Slack: "Merged PR #{pr_number} for {ticket_id}"
    → Update Linear ticket status: Done
    → Return status: merged
@@ -194,5 +194,5 @@ Written to `~/.claude/skill-results/{context_id}/auto-merge.json`:
 
 ## See Also
 
-- `ticket-pipeline` skill — composable pipeline; invokes auto-merge as Phase 6 (auto_merge phase) after ready_for_merge
+- `ticket-pipeline` skill — composable pipeline; auto-merge can be composed after the ready_for_merge phase
 - `~/.claude/pipelines/{ticket_id}/ticket-run-ledger.yaml` — merge audit log
