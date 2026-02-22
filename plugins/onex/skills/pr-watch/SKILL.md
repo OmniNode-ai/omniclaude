@@ -40,12 +40,24 @@ outputs:
       - pr_number: int
       - fix_cycles_used: int
 args:
-  - name: pr_number (required): GitHub PR number to watch
-  - name: repo (required): "GitHub repo slug (org/repo)"
-  - name: --timeout-hours: Max hours to wait for review (default 24)
-  - name: --max-review-cycles: Max fix cycles before escalating (default 3)
-  - name: --no-auto-fix: Poll only, don't attempt fixes
-  - name: --fix-nits: Also auto-fix Nit-level comments
+  - name: pr_number
+    description: GitHub PR number to watch
+    required: true
+  - name: repo
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: --timeout-hours
+    description: Max hours to wait for review (default 24)
+    required: false
+  - name: --max-review-cycles
+    description: Max fix cycles before escalating (default 3)
+    required: false
+  - name: --no-auto-fix
+    description: Poll only, don't attempt fixes
+    required: false
+  - name: --fix-nits
+    description: Also auto-fix Nit-level comments
+    required: false
 ---
 
 # PR Watch

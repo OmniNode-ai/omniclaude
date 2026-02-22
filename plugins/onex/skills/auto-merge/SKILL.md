@@ -36,11 +36,21 @@ outputs:
       - pr_number: int
       - merge_commit: str | null
 args:
-  - name: pr_number (required): GitHub PR number to merge
-  - name: repo (required): "GitHub repo slug (org/repo)"
-  - name: --strategy: "Merge strategy: squash|merge|rebase (default squash)"
-  - name: --gate-timeout-hours: Hours to wait for Slack approval (default 24)
-  - name: --no-delete-branch: Don't delete branch after merge
+  - name: pr_number
+    description: GitHub PR number to merge
+    required: true
+  - name: repo
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: --strategy
+    description: "Merge strategy: squash|merge|rebase (default squash)"
+    required: false
+  - name: --gate-timeout-hours
+    description: Hours to wait for Slack approval (default 24)
+    required: false
+  - name: --no-delete-branch
+    description: Don't delete branch after merge
+    required: false
 ---
 
 # Auto Merge

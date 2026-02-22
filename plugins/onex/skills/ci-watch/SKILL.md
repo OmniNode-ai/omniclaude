@@ -27,12 +27,31 @@ inputs:
     type: bool
     description: Auto-fix CI failures (default true)
     required: false
+outputs:
+  - name: skill_result
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/ci-watch.json"
+    fields:
+      - status: passed | failed | timeout | capped | error
+      - pr_number: int
+      - fix_cycles_used: int
+      - elapsed_minutes: int
 args:
-  - name: pr_number (required): GitHub PR number to watch
-  - name: repo (required): "GitHub repo slug (org/repo)"
-  - name: --timeout-minutes: Max minutes to wait for CI (default 60)
-  - name: --max-fix-cycles: Max auto-fix cycles before escalating (default 3)
-  - name: --no-auto-fix: Poll only, don't attempt fixes
+  - name: pr_number
+    description: GitHub PR number to watch
+    required: true
+  - name: repo
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: --timeout-minutes
+    description: Max minutes to wait for CI (default 60)
+    required: false
+  - name: --max-fix-cycles
+    description: Max auto-fix cycles before escalating (default 3)
+    required: false
+  - name: --no-auto-fix
+    description: Poll only, don't attempt fixes
+    required: false
 ---
 
 # CI Watch

@@ -24,8 +24,12 @@ outputs:
       - created_tickets: list[{id, title, repo_hint}]
       - count: int
 args:
-  - name: epic_id (required): Linear epic ID (e.g., OMN-2000)
-  - name: --dry-run: Print decomposition plan without creating tickets
+  - name: epic_id
+    description: Linear epic ID (e.g., OMN-2000)
+    required: true
+  - name: --dry-run
+    description: Print decomposition plan without creating tickets
+    required: false
 ---
 
 # Decompose Epic

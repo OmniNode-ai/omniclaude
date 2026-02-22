@@ -36,9 +36,15 @@ outputs:
       - risk_level: str
       - reply: str | null
 args:
-  - name: risk_level (required): "Gate tier: LOW_RISK|MEDIUM_RISK|HIGH_RISK"
-  - name: message (required): Gate message body
-  - name: --timeout-minutes: Override default timeout for this tier
+  - name: risk_level
+    description: "Gate tier: LOW_RISK|MEDIUM_RISK|HIGH_RISK"
+    required: true
+  - name: message
+    description: Gate message body
+    required: true
+  - name: --timeout-minutes
+    description: Override default timeout for this tier
+    required: false
 ---
 
 # Slack Gate
