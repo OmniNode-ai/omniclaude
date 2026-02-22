@@ -331,8 +331,7 @@ Transient agent failures no longer cause hard exits. The orchestrator retries au
 Iteration N: Review phase dispatched
   → AGENT_FAILED received
   → Log: "Retry 1/2 for AGENT_FAILED at iteration N. Reason: {error}"
-  → Wait briefly (no sleep — just log and re-dispatch)
-  → Re-dispatch review phase
+  → Re-dispatch review phase immediately (no sleep)
   → If AGENT_FAILED again: retry 2/2
   → If AGENT_FAILED again: hard exit with status: failed, reason in ModelSkillResult
   → Retry count resets on any successful iteration
