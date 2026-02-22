@@ -1109,9 +1109,23 @@ def execute_phase(phase_name, state):
    )
    ```
 
-2. **Commit auto-fixes (if any):**
+2. **Parse result from Task JSON output:**
    ```python
-   if raw_output and auto_fixed:
+   import json, re
+   # Phase 0 agent returns structured JSON -- extract it from the Task output
+   json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+   if json_match:
+       phase_output = json.loads(json_match.group())
+   else:
+       phase_output = {}
+   auto_fixed = phase_output.get("auto_fixed", [])
+   deferred = phase_output.get("deferred", [])
+   clean = phase_output.get("clean", False)
+   ```
+
+3. **Commit auto-fixes (if any):**
+   ```python
+   if auto_fixed:
        # Stage and commit auto-fixed files only
        for item in auto_fixed:
            subprocess.run(["git", "add", item["file"]], check=True)
@@ -1121,7 +1135,7 @@ def execute_phase(phase_name, state):
        ], check=True)
    ```
 
-3. **Parse result and build artifacts:**
+4. **Build result:**
    ```python
    result = {
        "status": "completed",
@@ -1137,7 +1151,7 @@ def execute_phase(phase_name, state):
    }
    ```
 
-4. **Dry-run behavior:** Pre-commit and mypy checks run normally. Auto-fix changes are applied but the commit is skipped. Deferred sub-ticket creation is skipped.
+5. **Dry-run behavior:** Pre-commit and mypy checks run normally. Auto-fix changes are applied but the commit is skipped. Deferred sub-ticket creation is skipped.
 
 **Mutations:**
 - `phases.pre_flight.started_at`
