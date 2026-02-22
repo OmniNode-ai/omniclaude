@@ -1126,18 +1126,19 @@ def execute_phase(phase_name, state):
    workflow including human gates (questions, spec, approval). The pipeline waits for the
    agent to complete and reads its result.
 
-2. **Cross-repo check** (if `policy.stop_on_cross_repo == true`):
+2. **Cross-repo check** (always runs; behavior controlled by `policy.stop_on_cross_repo`):
    After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
    ```python
    from cross_repo_detector import detect_cross_repo_changes
 
-   if state["policy"]["stop_on_cross_repo"]:
-       cross_repo_result = detect_cross_repo_changes()
-       if cross_repo_result.error:
-           print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
-           # Non-blocking error: log but don't stop pipeline
-       elif cross_repo_result.violation:
-           result = {
+   cross_repo_result = detect_cross_repo_changes()
+   if cross_repo_result.error:
+       print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
+       # Non-blocking error: log but don't stop pipeline
+   elif cross_repo_result.violation:
+       if state["policy"]["stop_on_cross_repo"]:
+           # Legacy hard-stop behavior (stop_on_cross_repo=true)
+           return {
                "status": "blocked",
                "block_kind": "blocked_policy",
                "reason": f"Cross-repo change detected: {cross_repo_result.violating_file} resolves outside {cross_repo_result.repo_root}",
@@ -1145,7 +1146,13 @@ def execute_phase(phase_name, state):
                "nit_count": 0,
                "artifacts": {}
            }
-           return result
+       else:
+           # Default behavior (stop_on_cross_repo=false): invoke decompose-epic
+           # to split into per-repo sub-tickets, then hand off to epic-team.
+           # NOTE: decompose-epic dispatch is planned — full implementation deferred.
+           print(f"Cross-repo change detected. stop_on_cross_repo=false — invoking decompose-epic (planned).")
+           # TODO: Task(subagent_type="onex:polymorphic-agent", ...)
+           # For now, log and continue (placeholder behavior)
    ```
 
 3. **Verify implementation is complete:**
