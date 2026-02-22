@@ -412,13 +412,14 @@ class ReplayEngine:
             output_hash=sha256_of("workspace-setup-failed"),
             truncated_output="Workspace setup failed during replay",
         )
+        diverged = original_outcome != OutcomeStatus.FAIL
         return ReplayResult(
             frame_id=frame.frame_id,
             mode=mode,
             original_outcome=original_outcome,
             replayed_outcome=OutcomeStatus.FAIL,
-            diverged=original_outcome != OutcomeStatus.FAIL,
-            divergence_reason=reason,
+            diverged=diverged,
+            divergence_reason=reason if diverged else None,
             check_results=[failed_check],
             duration_seconds=0.0,
         )
