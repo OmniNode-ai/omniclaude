@@ -1,6 +1,6 @@
 ---
 name: gap-analysis
-description: Cross-repo integration health audit — closes closed Linear Epics to find Kafka topic drift, model type mismatches, FK reference drift, API contract drift, and DB boundary violations across repo boundaries
+description: Cross-repo integration health audit — audits closed Linear Epics to find Kafka topic drift, model type mismatches, FK reference drift, API contract drift, and DB boundary violations across repo boundaries
 version: 1.0.0
 category: workflow
 tags:

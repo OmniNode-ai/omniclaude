@@ -57,10 +57,10 @@ class ModelGapFinding(BaseModel):
         description="Compact description of the mismatch (for fingerprint stability)",
     )
 
-    # Ticket linkage (populated after Phase 3)
+    # Ticket linkage (set at construction time during Phase 3 ticket creation)
     ticket_id: str | None = None
 
-    # Marker block fields (populated when writing ticket)
+    # Marker block fields (set at construction time when generating ticket description)
     detected_at: str | None = None
 
     class Config:
