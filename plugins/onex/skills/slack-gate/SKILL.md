@@ -11,20 +11,25 @@ tags:
   - idempotent
 author: OmniClaude Team
 composable: true
-inputs:
+args:
   - name: gate_id
+    type: str
     description: Unique identifier for this gate (hash of ticket_id + phase + attempt)
     required: true
   - name: message
+    type: str
     description: Message to post to Slack asking for approval
     required: true
   - name: risk
+    type: enum
     description: "Risk level: LOW_RISK | MEDIUM_RISK | HIGH_RISK"
     required: true
   - name: timeout_seconds
+    type: int
     description: How long to wait for a response before applying silence behavior (default 600)
     required: false
   - name: channel
+    type: str
     description: Slack channel to post in (default from env SLACK_GATE_CHANNEL)
     required: false
 outputs:
@@ -82,9 +87,9 @@ state_path = ~/.claude/gates/{gate_id}.json
   "slack_thread_ts": "1234567890.123456",
   "status": "open | resolved",
   "decision": "silence_consent | explicit_approve | explicit_reject | timeout_escalated | null",
-  "response_text": "approved" | null,
+  "response_text": null,
   "posted_at": "2026-02-21T14:30:00Z",
-  "resolved_at": "2026-02-21T14:32:00Z" | null
+  "resolved_at": null
 }
 ```
 
@@ -155,7 +160,7 @@ Reply with:
 
 Risk: {risk}
 Timeout: {timeout_seconds}s
-{LOW_RISK: "Silence = auto-approve after {timeout}s" | HIGH_RISK: "Silence = hold (will not auto-advance)"}
+{LOW_RISK: "Silence = auto-approve after {timeout}s" | MEDIUM_RISK: "Silence = escalate + Linear ticket after {timeout}s" | HIGH_RISK: "Silence = hold (will not auto-advance)"}
 ```
 
 ## Composable Usage
@@ -167,7 +172,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="Slack gate for {phase}",
   prompt="Invoke: Skill(skill=\"onex:slack-gate\", args={
-    gate_id: \"{ticket_id}:{phase}:{attempt}\",
+    gate_id: sha256(\"{ticket_id}:{phase}:{attempt}\")[:12],
     message: \"{approval_request}\",
     risk: \"LOW_RISK\",
     timeout_seconds: 600,
