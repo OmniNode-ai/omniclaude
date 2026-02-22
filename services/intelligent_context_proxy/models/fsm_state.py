@@ -14,8 +14,6 @@ This module provides:
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from uuid import UUID
-
 from pydantic import BaseModel, Field
 
 

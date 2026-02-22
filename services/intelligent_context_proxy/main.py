@@ -38,10 +38,9 @@ from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from aiokafka.errors import KafkaError
 from config import settings
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 
 from .models.event_envelope import (
     BaseEventEnvelope,
@@ -101,20 +100,21 @@ async def lifespan(app: FastAPI):
 
         logger.info("✅ Intelligent Context Proxy started successfully")
 
+        yield
+
     except Exception as e:
         logger.error(f"Failed to start Kafka connections: {e}", exc_info=True)
         raise
 
-    yield
+    finally:
+        logger.info("Shutting down Intelligent Context Proxy...")
 
-    logger.info("Shutting down Intelligent Context Proxy...")
+        if kafka_producer:
+            await kafka_producer.stop()
+        if kafka_consumer:
+            await kafka_consumer.stop()
 
-    if kafka_producer:
-        await kafka_producer.stop()
-    if kafka_consumer:
-        await kafka_consumer.stop()
-
-    logger.info("Intelligent Context Proxy stopped")
+        logger.info("Intelligent Context Proxy stopped")
 
 
 # FastAPI app

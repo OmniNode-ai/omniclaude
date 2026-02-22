@@ -36,7 +36,6 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from aiokafka.errors import KafkaError
 from config import settings
 
 from ..models.event_envelope import (
