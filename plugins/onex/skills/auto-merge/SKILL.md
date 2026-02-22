@@ -98,7 +98,7 @@ All three must be true before proceeding:
 3. Wait for explicit 'merge' reply (no timeout auto-advance)
 4. At reminder_at_hours: post reminder to Slack
 5. At merge_gate_timeout_hours: post reminder + hold (still require explicit reply)
-6. On 'merge' reply:
+6. On 'merge' / 'go' / 'yes' / 'approve' reply:
    → gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
    → Post Slack: "Merged PR #{pr_number} for {ticket_id}"
    → Update Linear ticket status: Done
