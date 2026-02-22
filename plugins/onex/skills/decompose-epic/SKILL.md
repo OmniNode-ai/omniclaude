@@ -133,7 +133,7 @@ Written to `~/.claude/skill-results/decompose-epic-{epic_id}/result.json`:
 
 ```json
 {
-  "status": "completed | dry_run | rejected",
+  "status": "completed | dry_run | rejected | failed | partial",
   "artifacts": {
     "epic_id": "OMN-2511",
     "created_tickets": ["OMN-2512", "OMN-2513", "OMN-2514"],
@@ -165,7 +165,7 @@ For `--dry-run`:
 | repo_manifest missing | Hard exit: "repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml" |
 | Epic description empty | Abort with `status: failed`, suggest manual ticket creation |
 | Slack gate rejected | Abort with `status: rejected`, log reason |
-| Linear ticket creation fails | Log partial success, continue with remaining, report failed in result |
+| Linear ticket creation fails | Log partial success, continue with remaining, write `status: partial` with failed ticket IDs in result |
 
 ## See Also
 
