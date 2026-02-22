@@ -293,7 +293,14 @@ def main() -> None:
 
     # Resolve prompt
     if args.prompt_stdin:
-        prompt = sys.stdin.read()
+        # stdin carries the base64-encoded prompt (same convention as
+        # local_delegation_handler.py --prompt-stdin).  Decode it so the
+        # classifier works on the actual prompt text, not the base64 bytes.
+        raw_b64 = sys.stdin.read().strip()
+        try:
+            prompt = base64.b64decode(raw_b64).decode("utf-8", "replace")
+        except Exception:
+            prompt = ""
     elif args.prompt_b64:
         try:
             prompt = base64.b64decode(args.prompt_b64).decode("utf-8", "replace")
