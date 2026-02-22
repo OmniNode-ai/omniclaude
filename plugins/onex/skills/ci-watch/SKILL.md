@@ -78,8 +78,8 @@ Loop:
   → If any check failed:
       ci_fix_cycle += 1
       If ci_fix_cycle > max_ci_fix_cycles:
-        → Slack MEDIUM_RISK gate: "CI still failing after {N} fix attempts — manual review required"
         → Create Linear hardening sub-ticket (parentId=ticket_id)
+        → Slack MEDIUM_RISK gate: "CI still failing after {N} fix attempts — manual review required"
         → Return status: capped
       If auto_fix_ci:
         → Invoke ci-fix-pipeline --pr {pr_number} --ticket-id {ticket_id}
@@ -239,6 +239,6 @@ via the Claude Code slash command interface or programmatically from `ticket-pip
 
 ## See Also
 
-- `ci-fix-pipeline` skill — auto-invoked on CI failure
-- `slack-gate` skill — MEDIUM_RISK gate for cap and timeout
+- `ci-fix-pipeline` skill — auto-invoked on CI failure (planned; must exist before ci-watch is used in production)
+- `slack-gate` skill — MEDIUM_RISK gate for cap and timeout (planned; must exist before ci-watch is used in production)
 - `ticket-pipeline` skill — invokes ci-watch as Phase 4 (ci_watch)
