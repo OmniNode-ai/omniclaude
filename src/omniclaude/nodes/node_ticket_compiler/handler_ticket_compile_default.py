@@ -149,7 +149,7 @@ _UNIT_TYPE_TEMPLATES: dict[
         EnumSandboxLevel.NONE,
         (),
         [
-            ("file_exists", "Documentation file created", "test -f docs/"),
+            ("file_exists", "Documentation directory exists", "test -d docs/"),
         ],
     ),
     "INFRASTRUCTURE": (
@@ -224,7 +224,11 @@ _UNIT_TYPE_TEMPLATES: dict[
         EnumSandboxLevel.STANDARD,
         (),
         [
-            ("report_exists", "Investigation report created", "test -f"),
+            (
+                "report_exists",
+                "Investigation report created",
+                "test -f docs/investigation_report.md",
+            ),
         ],
     ),
     "EPIC_TICKET": (
@@ -375,7 +379,11 @@ def _build_acceptance_criteria(
         elif command.startswith("uv run mypy"):
             assertion_type = EnumAssertionType.TYPE_CHECK_PASSES
             expected_value = "0"
-        elif command.startswith("test -f") or command.startswith("ls "):
+        elif (
+            command.startswith("test -f")
+            or command.startswith("test -d")
+            or command.startswith("ls ")
+        ):
             assertion_type = EnumAssertionType.FILE_EXISTS
             expected_value = "true"
         elif not command:

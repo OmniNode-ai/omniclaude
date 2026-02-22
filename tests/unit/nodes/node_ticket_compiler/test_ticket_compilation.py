@@ -337,6 +337,13 @@ class TestBuildAcceptanceCriteria:
         )
         assert criteria[0].assertion_type == EnumAssertionType.FILE_EXISTS
 
+    def test_test_d_command_yields_file_exists(self) -> None:
+        criteria = _build_acceptance_criteria(
+            work_unit_id="wu-001",
+            ac_specs=[("dir_exists", "Directory exists", "test -d docs/")],
+        )
+        assert criteria[0].assertion_type == EnumAssertionType.FILE_EXISTS
+
     def test_empty_command_yields_pr_review_approved(self) -> None:
         criteria = _build_acceptance_criteria(
             work_unit_id="wu-001",
