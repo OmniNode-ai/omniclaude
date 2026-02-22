@@ -37,6 +37,10 @@ args:
   - name: --flag-false-positive
     description: "Flag a finding description as a false positive (substring match); writes to ~/.claude/review-suppressions.yml with status: pending_review"
     required: false
+retry_on:
+  - AGENT_FAILED
+  - PARSE_FAILED
+max_retries: 2
 ---
 
 # Local Review
@@ -299,7 +303,7 @@ The skill runs a 3-phase loop:
 - N consecutive clean runs with stable run signature (default N=2; set via `--required-clean-runs`)
 - Max iterations reached
 - `--no-fix` mode (report only, exits after first review)
-- Agent failure or parse failure (exits with warning status)
+- Agent failure or parse failure after retry exhaustion (see Retry Policy below)
 
 **Status indicators**:
 - `Clean - Confirmed (N/N clean runs)` -- No blocking issues, confirmed by N consecutive clean runs
@@ -309,6 +313,52 @@ The skill runs a 3-phase loop:
 - `Report only` -- `--no-fix` mode
 - `Changes staged` -- `--no-commit` mode, fixes applied but not committed
 - `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states requiring manual intervention
+
+## Retry Policy
+
+Transient agent failures no longer cause hard exits. The orchestrator retries automatically:
+
+### Retry Behavior
+
+| Error Type | Description | Retry Policy |
+|------------|-------------|--------------|
+| `AGENT_FAILED` | Sub-agent Task() failure (network, resource, timeout) | Up to 2 retries before hard exit |
+| `PARSE_FAILED` | ModelSkillResult parse error from legacy skill output | Up to 2 retries before hard exit |
+
+### Retry Procedure
+
+```
+Iteration N: Review phase dispatched
+  → AGENT_FAILED received
+  → Log: "Retry 1/2 for AGENT_FAILED at iteration N. Reason: {error}"
+  → Wait briefly (no sleep — just log and re-dispatch)
+  → Re-dispatch review phase
+  → If AGENT_FAILED again: retry 2/2
+  → If AGENT_FAILED again: hard exit with status: failed, reason in ModelSkillResult
+  → Retry count resets on any successful iteration
+```
+
+Retry attempts are logged to the per-session notes file (if F3 notes are enabled).
+
+### Hard Exit After Retry Exhaustion
+
+After 2 retries with no success, the skill exits with:
+```
+status: failed
+reason: "AGENT_FAILED after 2 retries: {last_error}"
+```
+
+This is a hard exit — no further iterations are attempted. Manual re-invocation required.
+
+**Implementation note**: This retry policy is declared in the SKILL.md frontmatter; the node
+handler executes it. Do NOT implement a separate retry module in the orchestrator.
+
+```yaml
+retry_on:
+  - AGENT_FAILED
+  - PARSE_FAILED
+max_retries: 2
+```
 
 ## Detailed Orchestration
 
