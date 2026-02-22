@@ -210,7 +210,7 @@ class TestModelWorkspaceRef:
 class TestModelDelta:
     def test_happy_path(self) -> None:
         delta = make_delta()
-        assert delta.diff_patch
+        assert delta.diff_patch.startswith("--- a/foo.py")
         assert delta.loc_added == 1
 
     def test_negative_loc_raises(self) -> None:
