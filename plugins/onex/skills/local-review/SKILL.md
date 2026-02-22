@@ -342,7 +342,7 @@ write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/local-review.j
 ```json
 {
   "skill": "local-review",
-  "status": "clean",
+  "status": "clean_with_nits",
   "iterations_run": 3,
   "issues_remaining": {"critical": 0, "major": 0, "minor": 0, "nit": 2},
   "context_id": "{context_id}"
