@@ -145,7 +145,7 @@ if _registry_path.exists():
 **4. Load prior session notes** (if any exist for the current branch):
 
 ```python
-import os, glob
+import glob
 from pathlib import Path
 
 branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
