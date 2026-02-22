@@ -738,8 +738,8 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
 
 ### Step 2.5c: Append Iteration to Notes File
 
-After each iteration (whether issues were fixed, skipped, or failed), append a record to the
-session notes file. Notes write failure is **non-blocking**.
+After a successful commit (same trigger as Step 2.5b), append a record to the session notes
+file. Notes write failure is **non-blocking**.
 
 ```python
 from pathlib import Path
