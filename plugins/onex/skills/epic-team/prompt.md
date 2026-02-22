@@ -251,6 +251,13 @@ if manifest is None:
     print("Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.md for schema")
     exit(1)
 
+def manifest_repo_path(repo_name):
+    """Return the expanded filesystem path for a repo from the manifest."""
+    for entry in manifest.get("repos", []):
+        if entry["name"] == repo_name:
+            return os.path.expanduser(entry["path"])
+    raise KeyError(f"Repo '{repo_name}' not found in manifest at {MANIFEST_PATH}")
+
 # 2. Decompose epic
 from plugins.onex.skills.epic_team.epic_decomposer import decompose_epic, validate_decomposition
 result = decompose_epic(tickets=state["tickets"], manifest_path=MANIFEST_PATH)
@@ -771,7 +778,7 @@ For each ticket, create a git worktree at the canonical path:
 ```python
 def setup_worktree(ticket_id):
     import os
-    repo_path = os.path.expanduser(manifest_repo_path("{repo}"))  # from ~/.claude/epic-team/repo_manifest.yaml
+    repo_path = manifest_repo_path("{repo}")  # from ~/.claude/epic-team/repo_manifest.yaml
     worktree_root = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}")
     branch = f"epic/{epic_id}/{{ticket_id}}/{run_id_short}"
 
