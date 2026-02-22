@@ -34,8 +34,10 @@ args:
     required: false
 outputs:
   - name: decision
+    type: enum
     description: "silence_consent | explicit_approve | explicit_reject | timeout_escalated"
   - name: response_text
+    type: str
     description: Slack response text, or null if silence
 ---
 
@@ -103,10 +105,11 @@ timeout = gate.timeout_seconds (default 600s)
 
 loop:
   → Check gate state file for external resolution (another process may have resolved it)
-  → Check Slack thread for reply containing "approve", "reject", "yes", "no", "lgtm"
+  → Check Slack thread for reply containing "approve", "yes", "lgtm", "go", "ok",
+      "reject", "no", "stop", "hold", "cancel"
   → If reply found: resolve with explicit_approve or explicit_reject
+  → Wait poll_interval
   → If timeout reached: apply silence behavior based on risk level
-  → Wait poll_interval, repeat
 ```
 
 **Keyword matching** (case-insensitive): `approve`, `yes`, `lgtm`, `go`, `ok` → `explicit_approve`;
@@ -127,6 +130,10 @@ log warning, continue pipeline (with reduced confidence).
 
 After timeout: post a reminder to Slack, reset poll timer, continue waiting.
 Never auto-advance. Only explicit `approve` unblocks.
+
+> **Note**: Reminder messages must not contain the words `hold`, `cancel`, `stop`, `no`, or `reject`
+> (any keyword that maps to `explicit_reject`), as the gate polls all replies including its own reminders
+> if they appear in the thread.
 
 ## Audit Event
 
@@ -155,8 +162,8 @@ Audit records are appended to `~/.claude/gates/audit.jsonl` (append-only log).
 {message}
 
 Reply with:
-  • approve / yes / lgtm — to approve
-  • reject / no / stop — to reject
+  • approve / yes / lgtm / go / ok — to approve
+  • reject / no / stop / cancel — to reject
 
 Risk: {risk}
 Timeout: {timeout_seconds}s
