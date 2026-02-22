@@ -237,6 +237,7 @@ if len(tickets) == 0:
     ticket_count = len(created_tickets)
 
     # Post LOW_RISK Slack gate
+    import shlex
     tickets_list = "\n".join(f"  - {t['id']}: {t['title']}" for t in created_tickets)
     slack_gate_message = (
         f"[LOW_RISK] epic-team: Auto-decomposed {epic_id}\n\n"
@@ -250,7 +251,7 @@ if len(tickets) == 0:
             subagent_type="onex:polymorphic-agent",
             description=f"epic-team: post Slack LOW_RISK gate for {epic_id}",
             prompt=f"""Post this Slack gate message and wait up to 30 minutes for a "reject" reply.
-    Invoke: Skill(skill="onex:slack-gate", args='--message "{slack_gate_message}" --timeout 30m --keyword reject')
+    Invoke: Skill(skill="onex:slack-gate", args='--message {shlex.quote(slack_gate_message)} --timeout 30m --keyword reject')
 
     If "reject" received: report status="rejected"
     If timeout (silence): report status="approved"
