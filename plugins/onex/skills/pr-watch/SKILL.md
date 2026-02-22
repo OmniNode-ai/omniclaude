@@ -150,7 +150,7 @@ gh pr edit {pr_number} --add-reviewer {reviewer_logins}
 
 ## Slack Notifications
 
-### 12-Hour Mark — MEDIUM_RISK Notification
+### Halfway Mark — MEDIUM_RISK Notification
 
 Not a gate (no waiting for response); informational only:
 ```
