@@ -58,7 +58,7 @@ policy:
   auto_commit: true
   auto_push: true
   auto_pr_create: true
-  max_review_iterations: 3
+  max_review_iterations: 7
   stop_on_major: true
   stop_on_repeat: true
   stop_on_cross_repo: true
@@ -228,7 +228,7 @@ else:
             "auto_commit": True,
             "auto_push": True,
             "auto_pr_create": True,
-            "max_review_iterations": 3,
+            "max_review_iterations": 7,
             "stop_on_major": True,
             "stop_on_repeat": True,
             "stop_on_cross_repo": True,
@@ -1149,7 +1149,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
