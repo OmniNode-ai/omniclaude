@@ -34,6 +34,60 @@ Parse arguments from `$ARGUMENTS`:
 
 ---
 
+## Phase 0: Pre-Existing Issue Scan
+
+Phase 0 runs BEFORE the diff review loop. It detects and handles pre-existing lint/mypy
+failures so they don't surface as CI surprises after the feature work is merged.
+
+**Key invariant**: Pre-existing fixes are committed separately from the feature work.
+NEVER mix pre-existing fixes with the feature branch changes.
+
+### Phase 0 Procedure
+
+```
+Phase 0: Pre-existing issue scan
+  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
+     fixes are applied; do NOT stash or alter the working tree to run this step)
+  2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
+  3. Classify each failure:
+       - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
+       - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
+  4. For AUTO-FIX:
+       - Apply fixes
+       - Commit as: chore(pre-existing): fix pre-existing lint/type errors
+       - This commit is separate from all feature commits
+  5. For DEFER:
+       - Auto-file a follow-up Linear sub-ticket (if Linear MCP available)
+       - Note in session: "Pre-existing issues deferred to {ticket_id}: {count} issues"
+       - Add deferred issues to PR description note section
+  6. Write Phase 0 results to session notes (session notes = the structured context block
+     injected into the Claude session via the context-injection subsystem)
+  7. Proceed to Phase 1 (Initialize)
+```
+
+### Auto-Fix Criteria (ALL must be true)
+
+| Criterion | Value |
+|-----------|-------|
+| Files touched | ≤ 10 |
+| Subsystem | Same as the feature work (determine by inspecting `git diff {base}..HEAD --name-only`; the top-level directory prefix of the majority of changed files identifies the subsystem — e.g. `src/omniclaude/hooks/` or `plugins/onex/skills/`) |
+| Risk level | Low (formatting, import ordering, type annotation style) |
+
+### Phase 0 Output in Session Notes
+
+```markdown
+## Phase 0 — Pre-existing Issues — {timestamp}
+
+### Auto-Fixed (committed separately)
+- src/api.py: missing type annotation on `user_id` param
+- src/utils.py: ruff E501 line too long
+
+### Deferred to follow-up
+- src/legacy/: 23 issues across 15 files (too broad — created OMN-XXXX)
+```
+
+---
+
 ## Phase 1: Initialize
 
 **1. Parse arguments** from `$ARGUMENTS`
