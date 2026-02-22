@@ -1148,7 +1148,127 @@ def execute_phase(phase_name, state):
 
 ## Phase Handlers
 
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
+### Phase 0: PRE_FLIGHT
+
+**Invariants:**
+- Pipeline is initialized with valid ticket_id
+- Lock is acquired and state is fresh
+
+**Actions:**
+
+Runs pre-commit hooks and mypy on a clean checkout to classify pre-existing issues.
+See SKILL.md "Phase 0: pre_flight" for the AUTO-FIX vs DEFER classification rules.
+Runs inline in orchestrator (lightweight — no Task() dispatch needed).
+
+**Exit conditions:**
+- **Completed:** always auto-advances (pre-existing issues either fixed or deferred as sub-tickets)
+
+**Mutations:**
+- `phases.pre_flight.started_at`
+- `phases.pre_flight.completed_at`
+- `phases.pre_flight.artifacts` (issues_fixed, issues_deferred, commit_sha)
+
+---
+
+### Phase 1: IMPLEMENT
+
+**Invariants:**
+- Pipeline is initialized with valid ticket_id
+- Lock is acquired
+
+**Actions:**
+
+1. **Dispatch ticket-work to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="Implement {ticket_id}: {title}",
+     prompt="You are executing ticket-work for {ticket_id}.
+       Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
+
+       Ticket: {ticket_id} - {title}
+       Description: {description}
+       Branch: {branch_name}
+       Repo: {repo_path}
+
+       Execute the full ticket-work workflow (intake -> research -> questions -> spec -> implementation).
+       Do NOT commit changes -- the orchestrator handles git operations.
+       Report back with: files changed, tests run, any blockers encountered."
+   )
+   ```
+   This spawns a polymorphic agent with its own context window to run the full ticket-work
+   workflow including human gates (questions, spec, approval). The pipeline waits for the
+   agent to complete and reads its result.
+
+2. **Cross-repo check** (if `policy.stop_on_cross_repo == true`):
+   After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
+   ```python
+   from cross_repo_detector import detect_cross_repo_changes
+
+   if state["policy"]["stop_on_cross_repo"]:
+       cross_repo_result = detect_cross_repo_changes()
+       if cross_repo_result.error:
+           print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
+           # Non-blocking error: log but don't stop pipeline
+       elif cross_repo_result.violation:
+           result = {
+               "status": "blocked",
+               "block_kind": "blocked_policy",
+               "reason": f"Cross-repo change detected: {cross_repo_result.violating_file} resolves outside {cross_repo_result.repo_root}",
+               "blocking_issues": 1,
+               "nit_count": 0,
+               "artifacts": {}
+           }
+           return result
+   ```
+
+3. **Verify implementation is complete:**
+   Check the ticket-work contract to confirm implementation phase is done:
+   - Ticket contract phase should be `review` or `done`
+   - At least one commit exists in the contract
+
+4. **On success:**
+   ```python
+   result = {
+       "status": "completed",
+       "blocking_issues": 0,
+       "nit_count": 0,
+       "artifacts": {"commits": "N commits from ticket-work"},
+       "reason": None,
+       "block_kind": None
+   }
+   ```
+
+5. **Dry-run behavior:** In dry-run mode, Phase 1 runs ticket-work normally (including human gates) because ticket-work does not support a dry-run flag. The pipeline tracks state as `dry_run: true` but cannot prevent ticket-work from making commits. Dry-run is fully effective starting from Phase 2 onward. To safely dry-run Phase 1, run `/ticket-work` separately first, then use `--skip-to local_review --dry-run`.
+
+**Mutations:**
+- `phases.implement.started_at`
+- `phases.implement.completed_at`
+- `phases.implement.artifacts`
+
+**Exit conditions:**
+- **Completed:** ticket-work finishes, cross-repo check passes
+- **Blocked (human gate):** ticket-work waiting for human input
+- **Blocked (policy):** cross-repo violation detected
+- **Failed:** ticket-work errors out
+
+---
+
+### Phase 2: LOCAL REVIEW
+
+**Invariants:**
+- Phase 1 (implement) is completed
+- Working directory has changes to review
+
+**Actions:**
+
+1. **Dispatch local-review to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="Local review for {ticket_id}",
+     prompt="You are executing local-review for {ticket_id}.
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
 
        Branch: {branch_name}
        Repo: {repo_path}
