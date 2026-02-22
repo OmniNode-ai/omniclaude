@@ -1443,15 +1443,15 @@ For Phase 0, the executor currently runs inline (no sub-agent dispatch needed fo
 
 ```python
 # execute_pre_flight — placeholder implementation
-# Runs pre-commit hooks and mypy inline, classifies issues, then returns completed.
-# Full inline implementation goes here. For now, returns completed immediately.
+# Full inline implementation goes here (pre-commit hooks + mypy + issue classification).
+# Until implemented, block to avoid a false-positive completed status.
 return {
-    "status": "completed",
+    "status": "blocked",
     "blocking_issues": 0,
     "nit_count": 0,
-    "artifacts": {"pre_flight_status": "passed"},
-    "reason": None,
-    "block_kind": None,
+    "artifacts": {"pre_flight_status": "not_implemented"},
+    "reason": "pre_flight not implemented yet",
+    "block_kind": "blocked_policy",
 }
 ```
 
@@ -1461,7 +1461,8 @@ return {
 - `phases.pre_flight.artifacts` (pre_flight_status)
 
 **Exit conditions:**
-- **Completed:** pre-flight checks passed or pre-existing issues classified and handled
+- **Blocked (placeholder):** pipeline halts until full pre-flight implementation is in place
+- **Completed:** pre-flight checks passed or pre-existing issues classified and handled (when implemented)
 
 ---
 
@@ -1480,7 +1481,7 @@ return {
      description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
      prompt="You are executing ci-watch for {ticket_id}.
        Invoke: Skill(skill=\"onex:ci-watch\",
-         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
+         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles} --auto-fix {auto_fix_ci}\")
 
        Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/ci-watch.json
        Report back with: status (completed|capped|timeout|failed), ci_fix_cycles_used, watch_duration_minutes."
@@ -1507,7 +1508,7 @@ return {
        }
 
    elif ci_status in ("capped", "timeout"):
-       # Log warning but continue to Phase 5 with degraded confidence note
+       # Log warning; behavior depends on cap_escalation policy switch
        warning_msg = (
            "CI fix cap reached — continuing to Phase 5 with degraded confidence"
            if ci_status == "capped"
@@ -1522,20 +1523,36 @@ return {
        )
        state["slack_thread_ts"] = thread_ts
        save_state(state, state_path)
-       # Return completed so pipeline continues to Phase 5
-       return {
-           "status": "completed",
-           "blocking_issues": 0,
-           "nit_count": 0,
-           "artifacts": {
-               "status": ci_status,
-               "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
-               "watch_duration_minutes": result.get("watch_duration_minutes", 0),
-               "degraded_confidence": True,
-           },
-           "reason": warning_msg,
-           "block_kind": None,
-       }
+       # Honor cap_escalation policy switch
+       if state["policy"].get("cap_escalation") == "slack_notify_and_continue":
+           # Continue to Phase 5 with degraded confidence note
+           return {
+               "status": "completed",
+               "blocking_issues": 0,
+               "nit_count": 0,
+               "artifacts": {
+                   "status": ci_status,
+                   "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
+                   "watch_duration_minutes": result.get("watch_duration_minutes", 0),
+                   "degraded_confidence": True,
+               },
+               "reason": warning_msg,
+               "block_kind": None,
+           }
+       else:
+           # cap_escalation is not slack_notify_and_continue — treat as failure
+           return {
+               "status": "failed",
+               "blocking_issues": 1,
+               "nit_count": 0,
+               "artifacts": {
+                   "status": ci_status,
+                   "ci_fix_cycles_used": result.get("ci_fix_cycles_used", 0),
+                   "watch_duration_minutes": result.get("watch_duration_minutes", 0),
+               },
+               "reason": warning_msg,
+               "block_kind": "failed_exception",
+           }
 
    else:  # ci_status == "failed"
        # Post Slack MEDIUM_RISK gate and stop pipeline
@@ -1591,20 +1608,20 @@ Placeholder. Implemented in OMN-2528 via `pr-watch` sub-skill.
 
 ```python
 # execute_pr_review_loop — placeholder implementation
-# Returns completed immediately so pipeline can advance to auto_merge.
-# Full implementation in OMN-2528.
+# Full implementation in OMN-2528 via pr-watch sub-skill.
+# Block until implemented to prevent skipping the PR review gate.
 return {
-    "status": "completed",
+    "status": "blocked",
     "blocking_issues": 0,
     "nit_count": 0,
     "artifacts": {"placeholder": True},
-    "reason": None,
-    "block_kind": None,
+    "reason": "pr_review_loop not implemented yet (OMN-2528)",
+    "block_kind": "blocked_policy",
 }
 ```
 
 **Exit conditions:**
-- **Completed (placeholder):** advances to Phase 6
+- **Blocked (placeholder):** pipeline halts until OMN-2528 is implemented
 
 ---
 
@@ -1619,19 +1636,20 @@ Placeholder. Implemented in OMN-2529 via `auto-merge` sub-skill.
 
 ```python
 # execute_auto_merge — placeholder implementation
-# Returns completed immediately. Full implementation in OMN-2529.
+# Full implementation in OMN-2529 via auto-merge sub-skill.
+# Block until implemented to prevent bypassing the HIGH_RISK merge gate.
 return {
-    "status": "completed",
+    "status": "blocked",
     "blocking_issues": 0,
     "nit_count": 0,
     "artifacts": {"placeholder": True},
-    "reason": None,
-    "block_kind": None,
+    "reason": "auto_merge not implemented yet (OMN-2529)",
+    "block_kind": "blocked_policy",
 }
 ```
 
 **Exit conditions:**
-- **Completed (placeholder):** pipeline done
+- **Blocked (placeholder):** pipeline halts until OMN-2529 is implemented
 
 ---
 
