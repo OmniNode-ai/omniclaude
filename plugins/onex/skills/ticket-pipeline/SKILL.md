@@ -344,7 +344,14 @@ No dispatch needed. The orchestrator runs pre-commit hooks and mypy directly, cl
 # AUTO-ADVANCE to Phase 1
 ```
 
-### Phase 1: implement — dispatch to polymorphic agent
+After dispatch: if `auto_fixed` is non-empty, orchestrator commits:
+`git add <changed_files> && git commit -m "chore(pre-existing): fix pre-existing lint/type errors"`
+
+### Phase 1: implement — Step 0 then dispatch to polymorphic agent
+
+Step 0 runs inline (no dispatch) to create/checkout the git branch before ticket-work.
+`{branch_name}` is resolved from `state["phases"]["implement"]["artifacts"]["branch_name"]`
+after Step 0 completes. ticket-work is dispatched only after Step 0 artifacts exist.
 
 ```
 Task(
@@ -355,7 +362,7 @@ Task(
 
     Ticket: {ticket_id} - {title}
     Description: {description}
-    Branch: {branch_name}
+    Branch: {branch_name}   # Resolved from Step 0 artifacts (not a template placeholder)
     Repo: {repo_path}
 
     Execute the full ticket-work workflow.
