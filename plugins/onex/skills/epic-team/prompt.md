@@ -997,4 +997,4 @@ Before marking any phase complete, verify:
 - [ ] TaskUpdate (completed/failed) fires BEFORE SendMessage in workers
 - [ ] TeamDelete called best-effort (non-fatal) in Phase 5
 - [ ] Slack notifications non-fatal everywhere
-- [ ] Worktree locations printed for manual cleanup (never auto-deleted)
+- [ ] Worktree locations printed for manual cleanup (unmerged worktrees never auto-deleted; merged worktrees cleaned up automatically)
