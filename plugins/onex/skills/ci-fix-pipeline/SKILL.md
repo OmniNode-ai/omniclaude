@@ -91,10 +91,13 @@ Task(
 
     Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review {N | branch_name}
 
-    Return JSON with structure:
-    {\"failures\": [{\"id\": str, \"severity\": str, \"job\": str, \"step\": str,
-                    \"error\": str, \"category\": str, \"files_in_scope\": [str]}],
-     \"total\": N}"
+    Return the raw JSON from ci-quick-review (pass through unchanged).
+    The response has structure:
+    {\"repository\": str, \"pr_number\": int,
+     \"summary\": {\"total\": N, \"critical\": N, \"major\": N, \"minor\": N},
+     \"failures\": [{\"workflow\": str, \"job\": str, \"job_id\": str, \"step\": str,
+                    \"severity\": str, \"workflow_id\": str, \"job_url\": str}],
+     \"fetched_at\": str}"
 )
 ```
 
@@ -115,13 +118,15 @@ Skip silently if Slack unavailable (non-blocking).
 
 For each failure:
 
-1. **Skip check**: Does the failure category match `--skip-patterns`?
+1. **Skip check**: Does the failure `job` or `step` name match any `--skip-patterns` pattern?
    - Yes → mark as `skipped`, record reason
    - No → continue
 
-2. **Scope check**: Does `len(files_in_scope) > max_fix_files`?
-   - Yes → mark as `capped`, create Linear sub-ticket inline (see Sub-Ticket Creation below), continue to next failure
-   - No → add to fix queue
+2. **Scope check**: Does the failure `job` touch more than `max_fix_files` files?
+   Determine scope by inspecting the job logs (via `gh api repos/{repo}/actions/jobs/{job_id}/logs`)
+   to count affected files. If log inspection is unavailable, treat scope as within threshold.
+   - Scope > max_fix_files → mark as `capped`, create Linear sub-ticket inline (see Sub-Ticket Creation below), continue to next failure
+   - Scope ≤ max_fix_files → add to fix queue
 
 Result: failures split into `skipped`, `capped`, and `to_fix` buckets.
 
@@ -172,28 +177,27 @@ where `{severity}` is the highest severity fixed (e.g., `critical`, `major`, `mi
 
 ### Sub-Ticket Creation
 
-For each `capped` failure (files_in_scope > max_fix_files), created inline during Phase 3:
+For each `capped` failure (scope > max_fix_files), created inline during Phase 3:
 
 ```python
 # current_team: resolved from --ticket-id parent team (via mcp__linear-server__get_issue),
 # or from the first team returned by mcp__linear-server__list_teams if no ticket is provided.
 mcp__linear-server__create_issue(
-    title=f"CI: {failure.job} — {failure.step} ({len(failure.files_in_scope)} files)",
+    title=f"CI: {failure.job} — {failure.step} (large scope)",
     team=current_team,
     description=f"""
 ## CI Failure Requiring Human Review
 
-**Failure**: {failure.error}
-**Scope**: {len(failure.files_in_scope)} files (exceeds max_fix_files={max_fix_files})
+**Job**: {failure.job}
+**Step**: {failure.step}
+**Severity**: {failure.severity}
+**Scope**: Exceeds max_fix_files={max_fix_files} threshold
 **Triggered by**: ci-fix-pipeline run for {ticket_id or branch}
-
-## Files in Scope
-
-{file_list}
+**Job URL**: {failure.job_url}
 
 ## Definition of Done
 
-- [ ] All files reviewed and fixed
+- [ ] All affected files reviewed and fixed
 - [ ] CI passing on {branch}
     """,
     parentId=ticket_id if ticket_id else None,
