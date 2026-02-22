@@ -770,6 +770,8 @@ class TestEventRegistryIntegration:
             "delegation.shadow.comparison",
             # Pattern enforcement observability (OMN-2442)
             "pattern.enforcement",
+            # Intent-to-commit binding (OMN-2492)
+            "intent.commit.bound",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

@@ -74,6 +74,7 @@ class TestModuleImport:
             "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
             "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
             "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation
+            "intent.commit.bound",  # OMN-2492 - Intent-to-commit binding record
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

@@ -664,6 +664,24 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["agent_name", "session_id", "state", "message"],
     ),
+    # =========================================================================
+    # Intent-to-Commit Binding (OMN-2492)
+    # =========================================================================
+    # Emitted by commit_intent_binder.py when a Bash PostToolUse output
+    # contains a git commit SHA.  Links the commit to the active intent_id
+    # from the correlation state file.  Preview-safe: no prompt content.
+    "intent.commit.bound": EventRegistration(
+        event_type="intent.commit.bound",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.INTENT_COMMIT_BOUND,
+                transform=None,  # Passthrough — no sensitive data in binding record
+                description="Intent-to-commit binding record for audit trail",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["commit_sha", "session_id"],
+    ),
 }
 
 

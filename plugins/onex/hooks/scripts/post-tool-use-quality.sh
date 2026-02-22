@@ -420,6 +420,25 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emission started for $TOOL_NAME" >> "$LOG_FILE"
 fi
 
+# -----------------------------------------------------------------------
+# Intent-to-Commit Binding (OMN-2492)
+# -----------------------------------------------------------------------
+# When the Bash tool completes, check if the output contains a git commit
+# and link it to the active intent via the emit daemon.  Runs in a
+# background subshell — never blocks; hook exits 0 on all failures.
+# -----------------------------------------------------------------------
+if [[ "$TOOL_NAME" == "Bash" ]]; then
+    COMMIT_BINDER="${HOOKS_LIB}/commit_intent_binder.py"
+    if [[ -f "$COMMIT_BINDER" ]]; then
+        (
+            printf '%s\n' "$TOOL_INFO" \
+                | "$PYTHON_CMD" "$COMMIT_BINDER" \
+                    --session-id "$SESSION_ID" \
+                    2>>"$LOG_FILE" || true
+        ) &
+    fi
+fi
+
 # Always pass through original output
 printf '%s\n' "$TOOL_INFO"
 exit 0

@@ -172,6 +172,11 @@ class TopicBase(StrEnum):
     # ==========================================================================
     PATTERN_ENFORCEMENT = "onex.evt.omniclaude.pattern-enforcement.v1"
 
+    # ==========================================================================
+    # Intent-to-commit binding topics (OMN-2492)
+    # ==========================================================================
+    INTENT_COMMIT_BOUND = "onex.evt.omniclaude.intent-commit-bound.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
