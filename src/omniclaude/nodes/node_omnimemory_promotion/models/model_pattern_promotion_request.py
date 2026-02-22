@@ -26,6 +26,9 @@ class ModelPatternPromotionRequest(BaseModel):
         dep_specs: Dependency template specs.
         evidence_bundle_ids: IDs of successful evidence bundles supporting this pattern.
         evidence_count: Count of successful evidence bundles.
+        all_acs_passing: True if all acceptance criteria in the contributing evidence
+            bundles have PASS verdicts. Enforced when criteria.require_all_acs_passing
+            is True (the default).
         criteria: Promotion eligibility criteria.
         correlation_id: Correlation UUID for distributed tracing.
     """
