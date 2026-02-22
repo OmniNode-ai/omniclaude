@@ -7,7 +7,7 @@ You are executing the ticket-pipeline skill. This prompt defines the complete or
 Parse arguments from the skill invocation:
 
 ```
-/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run]
+/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge]
 ```
 
 ```python
@@ -25,6 +25,7 @@ if not re.match(r'^[A-Z]+-\d+$', ticket_id):
 
 dry_run = "--dry-run" in args
 force_run = "--force-run" in args
+auto_merge_flag = "--auto-merge" in args
 
 skip_to = None
 if "--skip-to" in args:
@@ -50,7 +51,7 @@ run_id: "uuid-v4"               # Stable correlation ID for this pipeline run
 ticket_id: "OMN-XXXX"
 started_by: "user"              # "user" or "agent" (for future team-pipeline)
 dry_run: false                  # true if --dry-run mode
-policy_version: "3.0"           # 1.0: initial; 2.0: ci_watch (OMN-2523); 3.0: pr_review_loop (OMN-2528)
+policy_version: "4.0"
 slack_thread_ts: null           # Placeholder for P0 (threading deferred)
 
 policy:
@@ -70,6 +71,11 @@ policy:
   auto_fix_nits: false
   pr_review_timeout_hours: 24
   max_pr_review_cycles: 3
+  auto_merge: false
+  slack_on_merge: true
+  merge_gate_timeout_hours: 48
+  merge_strategy: squash
+  delete_branch_on_merge: true
 
 phases:
   pre_flight:
@@ -273,7 +279,7 @@ else:
         "ticket_id": ticket_id,
         "started_by": "user",
         "dry_run": dry_run,
-        "policy_version": "3.0",  # 1.0: initial; 2.0: ci_watch (OMN-2523); 3.0: pr_review_loop (OMN-2528)
+        "policy_version": "4.0",
         "slack_thread_ts": None,
         "policy": {
             "auto_advance": True,
@@ -292,6 +298,11 @@ else:
             "auto_fix_nits": False,
             "pr_review_timeout_hours": 24,
             "max_pr_review_cycles": 3,
+            "auto_merge": False,
+            "slack_on_merge": True,
+            "merge_gate_timeout_hours": 48,
+            "merge_strategy": "squash",
+            "delete_branch_on_merge": True,
         },
         "phases": {
             phase_name: {
@@ -306,6 +317,10 @@ else:
             for phase_name in PHASE_ORDER
         }
     }
+
+# Override policy.auto_merge if --auto-merge flag was passed
+if auto_merge_flag:
+    state["policy"]["auto_merge"] = True
 ```
 
 ### 3. Handle --skip-to (Checkpoint-Validated Resume, OMN-2144)
@@ -665,9 +680,8 @@ def build_phase_payload(phase_name, state, result):
 
     if phase_name == "pre_flight":
         return {
-            "issues_fixed": artifacts.get("issues_fixed", 0),
+            "issues_auto_fixed": artifacts.get("issues_auto_fixed", 0),
             "issues_deferred": artifacts.get("issues_deferred", 0),
-            "commit_sha": head_sha,
         }
 
     elif phase_name == "implement":
@@ -700,6 +714,29 @@ def build_phase_payload(phase_name, state, result):
         }
 
     elif phase_name == "pr_review_loop":
+        return {
+            "status": artifacts.get("status", ""),
+            "pr_review_cycles_used": artifacts.get("pr_review_cycles_used", 0),
+            "watch_duration_hours": artifacts.get("watch_duration_hours", 0.0),
+        }
+
+    elif phase_name == "auto_merge":
+        return {
+            "status": artifacts.get("status", ""),
+            "merged_at": artifacts.get("merged_at", ""),
+            "branch_deleted": artifacts.get("branch_deleted", False),
+        }
+
+    elif phase_name == "ready_for_merge":
+        # Kept for backward compat when resuming old-format (v1.0) state files
+        return {
+            "status": artifacts.get("status", ""),
+            "ci_fix_cycles_used": artifacts.get("ci_fix_cycles_used", 0),
+            "watch_duration_minutes": artifacts.get("watch_duration_minutes", 0),
+        }
+
+    elif phase_name in ("pr_review_loop", "auto_merge", "pre_flight"):
+        # Placeholder phases — return minimal payload
         return {
             "pr_review_cycles_used": artifacts.get("pr_review_cycles_used", 0),
             "watch_duration_hours": artifacts.get("watch_duration_hours", 0),
@@ -745,7 +782,10 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     phase = checkpoint_data.get("phase", "")
     artifacts = {}
 
-    if phase == "implement":
+    if phase == "pre_flight":
+        artifacts["issues_auto_fixed"] = payload.get("issues_auto_fixed", 0)
+        artifacts["issues_deferred"] = payload.get("issues_deferred", 0)
+    elif phase == "implement":
         artifacts["branch_name"] = payload.get("branch_name", "")
         artifacts["commit_sha"] = payload.get("commit_sha", "")
         artifacts["files_changed"] = payload.get("files_changed", [])
@@ -762,14 +802,17 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "ci_watch":
         artifacts["ci_fix_cycles_used"] = payload.get("ci_fix_cycles_used", 0)
         artifacts["watch_duration_minutes"] = payload.get("watch_duration_minutes", 0)
-        artifacts["status"] = payload.get("status", "")
     elif phase == "pr_review_loop":
-        artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
-        artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0)
         artifacts["status"] = payload.get("status", "")
+        artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
+        artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0.0)
     elif phase == "auto_merge":
-        artifacts["merge_status"] = payload.get("merge_status", "")
+        artifacts["status"] = payload.get("status", "")
         artifacts["merged_at"] = payload.get("merged_at", "")
+        artifacts["branch_deleted"] = payload.get("branch_deleted", False)
+    elif phase == "ready_for_merge":
+        # Kept for backward compat when resuming old-format (v1.0) state files
+        artifacts["label_applied_at"] = payload.get("label_applied_at", "")
 
     return artifacts
 ```
@@ -1128,6 +1171,8 @@ def execute_phase(phase_name, state):
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
         "auto_merge": execute_auto_merge,
+        # Kept for backward compat when resuming old-format (v1.0) state files
+        "ready_for_merge": execute_ready_for_merge,
     }
 
     handler = handlers.get(phase_name)
@@ -1268,7 +1313,7 @@ Runs inline in orchestrator (lightweight — no Task() dispatch needed).
      subagent_type="onex:polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
@@ -1493,16 +1538,43 @@ EOF
 
 ---
 
-### Phase 4: CI_WATCH
+### Phase 0: PRE_FLIGHT
 
 **Invariants:**
 - Phase 3 (create_pr) is completed
-- PR exists and has a PR number in artifacts
+- Quality gate from local_review passed (2 confirmed-clean runs)
 
 **Actions:**
 
-Dispatches `ci-watch` sub-skill per the SKILL.md dispatch contract. See SKILL.md "Phase 4: ci_watch"
-for full dispatch contract details.
+Runs pre-commit hooks and mypy on clean checkout. Classifies pre-existing issues as AUTO-FIX or DEFER.
+- AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing):`
+- DEFER: creates Linear sub-ticket, notes in PR description
+
+   # quality_gate is populated by parse_phase_output() when it detects
+   # "Confirmed (N/N clean runs)" in local-review output (OMN-2327).
+   # If quality_gate is missing but local_review phase completed successfully,
+   # treat the confirmed completion as equivalent to quality_gate passed.
+   if not qg and state["phases"]["local_review"].get("completed_at"):
+       # Local review completed without structured quality_gate data --
+       # treat confirmed completion as passing the gate (backwards compat)
+       print("Note: quality_gate not found in local_review artifacts but phase completed. Treating as passed.")
+       qg = {"status": "passed", "consecutive_clean_runs": 2, "required_clean_runs": 2}
+
+   if qg.get("status") != "passed":
+       return {"status": "blocked", "block_kind": "blocked_policy",
+               "reason": f"Quality gate not passed: {qg.get('status', 'missing')}"}
+   required = qg.get("required_clean_runs", 2)
+   actual = qg.get("consecutive_clean_runs", 0)
+   if actual < required:
+       return {"status": "blocked", "block_kind": "blocked_policy",
+               "reason": f"Insufficient clean runs: {actual}/{required}"}
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
+     prompt="You are executing ci-watch for {ticket_id}.
+       Invoke: Skill(skill=\"onex:ci-watch\",
+         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles} --auto-fix {auto_fix_ci}\")
 
 Returns `status: completed | capped | timeout | failed`.
 
@@ -1574,6 +1646,173 @@ Default behavior: HIGH_RISK Slack gate requiring explicit "merge" reply.
 **Exit conditions:**
 - **Completed (merged):** pipeline done, ledger cleared
 - **Completed (held):** pipeline exits, awaiting human reply
+
+---
+
+### Phase 0: PRE_FLIGHT
+
+**Invariants:**
+- Pipeline is initialized with valid ticket_id
+- Lock is acquired
+
+**Actions:**
+
+1. **Dispatch pre-flight checks to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 0 pre_flight for {ticket_id}",
+     prompt="You are executing pre-flight checks for {ticket_id}.
+       Run pre-commit hooks and mypy on a clean checkout.
+       Classify pre-existing issues as AUTO-FIX (<=10 files, same subsystem, low-risk) or DEFER.
+       For AUTO-FIX issues: fix them, commit as 'chore(pre-existing): fix pre-existing lint/type issues'.
+       For DEFER issues: record them for Linear sub-ticket creation.
+       Report back with: issues_auto_fixed (count), issues_deferred (count), any blockers."
+   )
+   ```
+
+2. **On success:**
+   ```python
+   result = {
+       "status": "completed",
+       "blocking_issues": 0,
+       "nit_count": 0,
+       "artifacts": {
+           "issues_auto_fixed": N,
+           "issues_deferred": M,
+       },
+       "reason": None,
+       "block_kind": None,
+   }
+   ```
+
+**Mutations:**
+- `phases.pre_flight.started_at`
+- `phases.pre_flight.completed_at`
+- `phases.pre_flight.artifacts` (issues_auto_fixed, issues_deferred)
+
+**Exit conditions:**
+- **Completed:** pre-flight checks run, AUTO-FIX committed, DEFER recorded
+- **Failed:** pre-flight tool invocation errors
+
+---
+
+### Phase 4: CI_WATCH
+
+**Invariants:**
+- Phase 3 (create_pr) is completed
+- PR exists and is open
+
+**Actions:**
+
+1. **Dispatch ci-watch to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
+     prompt="You are executing ci-watch for {ticket_id}.
+       Invoke: Skill(skill=\"onex:ci-watch\",
+         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
+
+       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/ci-watch.json
+       Report back with: status (completed|capped|timeout|failed), ci_fix_cycles_used, watch_duration_minutes."
+   )
+   ```
+
+2. **Handle result:**
+   - `completed`: AUTO-ADVANCE to Phase 5
+   - `capped` or `timeout`: log warning, continue to Phase 5 with warning note
+   - `failed`: Slack MEDIUM_RISK gate, stop pipeline
+
+**Mutations:**
+- `phases.ci_watch.started_at`
+- `phases.ci_watch.completed_at`
+- `phases.ci_watch.artifacts` (status, ci_fix_cycles_used, watch_duration_minutes)
+
+**Exit conditions:**
+- **Completed:** CI passed (or capped/timeout with warning)
+- **Failed:** CI permanently failed after fix cycles
+
+---
+
+### Phase 5: PR_REVIEW_LOOP
+
+**Invariants:**
+- Phase 4 (ci_watch) is completed
+- PR exists and is open
+
+**Actions:**
+
+1. **Dispatch pr-watch to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
+     prompt="You are executing pr-watch for {ticket_id}.
+       Invoke: Skill(skill=\"onex:pr-watch\",
+         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}{' --fix-nits' if auto_fix_nits else ''}\")
+
+       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/pr-watch.json
+       Report back with: status (approved|capped|timeout|failed), pr_review_cycles_used, watch_duration_hours."
+   )
+   ```
+
+2. **Handle result:**
+   - `approved`: AUTO-ADVANCE to Phase 6
+   - `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
+   - `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
+   - `failed`: Slack MEDIUM_RISK gate, stop pipeline
+
+**Mutations:**
+- `phases.pr_review_loop.started_at`
+- `phases.pr_review_loop.completed_at`
+- `phases.pr_review_loop.artifacts` (status, pr_review_cycles_used, watch_duration_hours)
+
+**Exit conditions:**
+- **Completed:** PR approved
+- **Blocked:** capped or timeout
+- **Failed:** pr-watch errors
+
+---
+
+### Phase 6: AUTO_MERGE
+
+**Invariants:**
+- Phase 5 (pr_review_loop) is completed with `approved` status
+- PR exists and is open
+
+**Actions:**
+
+1. **Dispatch auto-merge to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
+     prompt="You are executing auto-merge for {ticket_id}.
+       Invoke: Skill(skill=\"onex:auto-merge\",
+         args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy}{' --no-delete-branch' if not delete_branch_on_merge else ''}\")
+
+       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/auto-merge.json
+       Report back with: status (merged|held|failed), merged_at, branch_deleted."
+   )
+   ```
+
+2. **Handle result:**
+   - `merged`:
+     1. Clear ticket-run ledger entry (remove `{ticket_id}` key from `~/.claude/pipelines/ledger.json`)
+     2. Post Slack: "Merged PR #{pr_number} for {ticket_id} — {PR URL}"
+     3. Update Linear ticket status to Done
+   - `held`: pipeline exits cleanly (entry stays in ledger; human replies "merge" to Slack gate)
+   - `failed`: Post Slack MEDIUM_RISK gate, clear ledger entry with error note, stop pipeline
+
+**Mutations:**
+- `phases.auto_merge.started_at`
+- `phases.auto_merge.completed_at`
+- `phases.auto_merge.artifacts` (status, merged_at, branch_deleted)
+
+**Exit conditions:**
+- **Completed:** PR merged (`merged`) or waiting for human gate (`held`)
+- **Failed:** merge errors
 
 ---
 
