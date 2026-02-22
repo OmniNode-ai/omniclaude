@@ -120,17 +120,59 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/slack-gate.jso
 - `rejected`: Reply matched reject_keywords
 - `timeout`: MEDIUM_RISK or HIGH_RISK gate timed out without reply
 
-## Implementation Status
+## Executable Scripts
 
-Scripts deferred — this skill is specification-only in this PR.
+### `slack-gate.sh`
 
-The following executable scripts are planned but not yet created:
+Bash wrapper for programmatic invocation of this skill.
 
-- `scripts/post-slack-message.sh` — posts gate message to Slack webhook with risk prefix
-- `scripts/poll-slack-reply.sh` — polls Slack thread for accept/reject keywords at tier interval
-- `scripts/write-skill-result.sh` — writes `ModelSkillResult` JSON to the skill-results output path
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-Scripts will be added when OMN-2521 moves to active implementation.
+# slack-gate.sh — wrapper for the slack-gate skill
+# Usage: slack-gate.sh <RISK_LEVEL> <MESSAGE> [--timeout-minutes N]
+
+RISK_LEVEL=""
+MESSAGE=""
+TIMEOUT_MINUTES=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-minutes)  TIMEOUT_MINUTES="$2";  shift 2 ;;
+    -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)
+      if [[ -z "$RISK_LEVEL" ]]; then RISK_LEVEL="$1"; shift
+      elif [[ -z "$MESSAGE" ]];   then MESSAGE="$1";    shift
+      else echo "Unexpected argument: $1" >&2; exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$RISK_LEVEL" || -z "$MESSAGE" ]]; then
+  echo "Usage: slack-gate.sh <RISK_LEVEL> <MESSAGE> [--timeout-minutes N]" >&2
+  echo "  RISK_LEVEL: LOW_RISK | MEDIUM_RISK | HIGH_RISK" >&2
+  exit 1
+fi
+
+TIMEOUT_ARG=""
+if [[ -n "$TIMEOUT_MINUTES" ]]; then
+  TIMEOUT_ARG="--arg timeout_minutes=${TIMEOUT_MINUTES}"
+fi
+
+exec claude --skill onex:slack-gate \
+  --arg "risk_level=${RISK_LEVEL}" \
+  --arg "message=${MESSAGE}" \
+  ${TIMEOUT_ARG}
+```
+
+| Invocation | Description |
+|------------|-------------|
+| `/slack-gate LOW_RISK "Decomposed epic into 3 sub-tickets. Reply reject to cancel."` | Interactive: post LOW_RISK gate, silence = consent after 30 min |
+| `/slack-gate HIGH_RISK "Ready to merge PR #123. Reply merge to proceed."` | Interactive: post HIGH_RISK gate, requires explicit approval |
+| `Skill(skill="onex:slack-gate", args="MEDIUM_RISK CI failed 3 times. --timeout-minutes 60")` | Programmatic: composable invocation from orchestrator |
+| `slack-gate.sh HIGH_RISK "Deploy to production?" --timeout-minutes 1440` | Shell: direct invocation with 24h timeout |
 
 ## See Also
 

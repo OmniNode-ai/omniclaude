@@ -127,17 +127,59 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 - `timeout`: gate_timeout_hours elapsed with no "merge" reply
 - `error`: Merge failed (conflicts, permissions, etc.)
 
-## Implementation Status
+## Executable Scripts
 
-Scripts deferred — this skill is specification-only in this PR.
+### `auto-merge.sh`
 
-The following executable scripts are planned but not yet created:
+Bash wrapper for programmatic invocation of this skill.
 
-- `scripts/verify-mergeability.sh` — checks `gh pr view` for merge conflicts and required reviews
-- `scripts/post-high-risk-gate.sh` — posts HIGH_RISK Slack gate message via webhook
-- `scripts/execute-merge.sh` — runs `gh pr merge` with strategy and branch-delete flags
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-Scripts will be added when OMN-2525 moves to active implementation.
+# auto-merge.sh — wrapper for the auto-merge skill
+# Usage: auto-merge.sh <PR_NUMBER> <REPO> [--strategy squash|merge|rebase] [--gate-timeout-hours N] [--no-delete-branch]
+
+PR_NUMBER=""
+REPO=""
+STRATEGY="squash"
+GATE_TIMEOUT_HOURS="24"
+DELETE_BRANCH="true"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --strategy)            STRATEGY="$2";            shift 2 ;;
+    --gate-timeout-hours)  GATE_TIMEOUT_HOURS="$2";  shift 2 ;;
+    --no-delete-branch)    DELETE_BRANCH="false";     shift   ;;
+    -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)
+      if [[ -z "$PR_NUMBER" ]]; then PR_NUMBER="$1"; shift
+      elif [[ -z "$REPO" ]];     then REPO="$1";      shift
+      else echo "Unexpected argument: $1" >&2; exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$PR_NUMBER" || -z "$REPO" ]]; then
+  echo "Usage: auto-merge.sh <PR_NUMBER> <REPO> [options]" >&2
+  exit 1
+fi
+
+exec claude --skill onex:auto-merge \
+  --arg "pr_number=${PR_NUMBER}" \
+  --arg "repo=${REPO}" \
+  --arg "strategy=${STRATEGY}" \
+  --arg "gate_timeout_hours=${GATE_TIMEOUT_HOURS}" \
+  --arg "delete_branch=${DELETE_BRANCH}"
+```
+
+| Invocation | Description |
+|------------|-------------|
+| `/auto-merge 123 org/repo` | Interactive: merge PR 123 with default HIGH_RISK gate (24h timeout) |
+| `/auto-merge 123 org/repo --strategy merge` | Interactive: use merge commit strategy |
+| `Skill(skill="onex:auto-merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
+| `auto-merge.sh 123 org/repo --no-delete-branch` | Shell: direct invocation, keep branch after merge |
 
 ## See Also
 
