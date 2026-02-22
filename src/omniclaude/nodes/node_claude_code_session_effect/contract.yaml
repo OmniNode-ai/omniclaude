@@ -1,0 +1,135 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeClaudeCodeSessionEffect
+#
+# Capability-oriented effect node for Claude Code session management.
+# Named by capability ("claude_code.session"), not by vendor.
+# Principle: "I'm interested in what you do, not what you are"
+#
+# All operations emit ModelSkillResult envelopes as output.
+
+# Contract identifiers
+name: node_claude_code_session_effect
+contract_name: node_claude_code_session_effect
+node_name: node_claude_code_session_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for Claude Code session management.
+  Handles session lifecycle (start, query, end) with pluggable backends.
+  All operations emit ModelSkillResult envelopes as output.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelClaudeCodeSessionRequest
+  module: omniclaude.nodes.node_claude_code_session_effect.models
+
+output_model:
+  name: ModelSkillResult
+  module: omniclaude.nodes.shared.models.model_skill_result
+
+# Capabilities
+capabilities:
+  - name: claude_code.session
+    description: Claude Code session lifecycle management
+    version: 1.0.0
+
+  - name: claude_code.session.start
+    description: Start a new Claude Code session in a working directory
+
+  - name: claude_code.session.query
+    description: Submit a prompt to an active Claude Code session
+
+  - name: claude_code.session.end
+    description: Terminate a Claude Code session
+
+# IO operations
+io_operations:
+  - operation: session_start
+    description: Start a new Claude Code session
+    protocol_method: session_start
+    input_fields:
+      - working_directory: str
+      - session_config: ModelClaudeCodeSessionRequest
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelSkillResult
+    idempotent: false
+
+  - operation: session_query
+    description: Submit a query to an active session
+    protocol_method: session_query
+    input_fields:
+      - session_id: str
+      - prompt: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelSkillResult
+    idempotent: false
+
+  - operation: session_end
+    description: Terminate a Claude Code session
+    protocol_method: session_end
+    input_fields:
+      - session_id: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelSkillResult
+    idempotent: true
+
+# Dependencies
+dependencies:
+  - name: protocol_claude_code_session
+    type: protocol
+    class_name: ProtocolClaudeCodeSession
+    module: omniclaude.nodes.node_claude_code_session_effect.protocols
+    pluggable: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: subprocess
+  backends:
+    - backend: subprocess
+      handler_key: subprocess
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 1
+    initial_delay_ms: 1000
+    max_delay_ms: 10000
+    exponential_base: 2
+    retry_on:
+      - SessionTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 3
+    reset_timeout_ms: 120000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2593
+  maturity: stub
+  tags:
+    - effect
+    - claude-code
+    - session
+    - skill-result

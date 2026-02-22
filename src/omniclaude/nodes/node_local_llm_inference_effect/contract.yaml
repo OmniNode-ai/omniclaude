@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeLocalLlmInferenceEffect
+#
+# Capability-oriented effect node for local LLM inference.
+# Named by capability ("local_llm.inference"), not by vendor.
+# Principle: "I'm interested in what you do, not what you are"
+#
+# All operations emit ModelSkillResult envelopes as output.
+
+# Contract identifiers
+name: node_local_llm_inference_effect
+contract_name: node_local_llm_inference_effect
+node_name: node_local_llm_inference_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for local LLM inference.
+  Handles inference requests with pluggable backends (Ollama, llama.cpp, etc.).
+  All operations emit ModelSkillResult envelopes as output.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelLocalLlmInferenceRequest
+  module: omniclaude.nodes.node_local_llm_inference_effect.models
+
+output_model:
+  name: ModelSkillResult
+  module: omniclaude.nodes.shared.models.model_skill_result
+
+# Capabilities
+capabilities:
+  - name: local_llm.inference
+    description: Local LLM inference with pluggable backends
+    version: 1.0.0
+
+  - name: local_llm.inference.infer
+    description: Submit a prompt and return the LLM response
+
+# IO operations
+io_operations:
+  - operation: infer
+    description: Submit a prompt to the local LLM and return a response
+    protocol_method: infer
+    input_fields:
+      - prompt: str
+      - model: str | None
+      - max_tokens: int | None
+      - temperature: float | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelSkillResult
+    idempotent: false
+
+# Dependencies
+dependencies:
+  - name: protocol_local_llm_inference
+    type: protocol
+    class_name: ProtocolLocalLlmInference
+    module: omniclaude.nodes.node_local_llm_inference_effect.protocols
+    pluggable: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: ollama
+  backends:
+    - backend: ollama
+      handler_key: ollama
+    - backend: llamacpp
+      handler_key: llamacpp
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 2
+    initial_delay_ms: 2000
+    max_delay_ms: 30000
+    exponential_base: 2
+    retry_on:
+      - InferenceTimeoutError
+      - InferenceConnectionError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2593
+  maturity: stub
+  tags:
+    - effect
+    - local-llm
+    - inference
+    - skill-result
+    - ollama
