@@ -1247,7 +1247,7 @@ Runs inline in orchestrator (lightweight — no Task() dispatch needed).
    ```
    Task(
      subagent_type="onex:polymorphic-agent",
-     description="Implement {ticket_id}: {title}",
+     description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
      prompt="You are executing ticket-work for {ticket_id}.
        Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
 
@@ -1331,7 +1331,7 @@ Runs inline in orchestrator (lightweight — no Task() dispatch needed).
    ```
    Task(
      subagent_type="onex:polymorphic-agent",
-     description="Local review for {ticket_id}",
+     description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
        Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
 
