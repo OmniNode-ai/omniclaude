@@ -1,7 +1,7 @@
 ---
 name: local-review
 description: Local code review loop that iterates through review, fix, commit cycles without pushing
-version: 1.0.0
+version: 2.0.0
 category: workflow
 tags:
   - review
@@ -9,6 +9,32 @@ tags:
   - local
   - iteration
 author: OmniClaude Team
+composable: true
+inputs:
+  - name: since
+    type: str
+    description: Base ref for diff (branch/commit); auto-detected if omitted
+    required: false
+  - name: max_iterations
+    type: int
+    description: Maximum review-fix cycles (default 10)
+    required: false
+  - name: required_clean_runs
+    type: int
+    description: Consecutive clean runs required before passing (default 2)
+    required: false
+  - name: files
+    type: str
+    description: Glob pattern to limit scope
+    required: false
+outputs:
+  - name: skill_result
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/local-review.json"
+    fields:
+      - status: clean | clean_with_nits | max_iterations_reached | report_only | error
+      - iterations_run: int
+      - issues_remaining: dict (critical/major/minor/nit counts)
 args:
   - name: --uncommitted
     description: Only review uncommitted changes (ignore committed)
@@ -34,16 +60,6 @@ args:
   - name: --required-clean-runs
     description: "Number of consecutive clean runs required before passing (default 2, min 1)"
     required: false
-  - name: --flag-false-positive
-    description: "Flag a finding description as a false positive (substring match); writes to ~/.claude/review-suppressions.yml with status: pending_review"
-    required: false
-  - name: --path
-    description: "Path to the git worktree to review (default: CWD). Enables running local-review from omni_home against any worktree."
-    required: false
-retry_on:
-  - AGENT_FAILED
-  - PARSE_FAILED
-max_retries: 2
 ---
 
 # Local Review
@@ -52,7 +68,7 @@ max_retries: 2
 
 Review local changes, fix issues, commit fixes, and iterate until clean or max iterations reached.
 
-**Workflow**: Phase 0 (pre-existing scan) -> Gather changes -> Review -> Fix -> Commit -> Repeat until clean
+**Workflow**: Gather changes -> Review -> Fix -> Commit -> Repeat until clean
 
 **Announce at start:** "I'm using the local-review skill to review local changes."
 
@@ -63,16 +79,14 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 ## Quick Start
 
 ```
-/local-review                                    # Review all changes since base branch
-/local-review --uncommitted                      # Only uncommitted changes
-/local-review --since main                       # Explicit base
-/local-review --max-iterations 5                 # Limit iterations
-/local-review --files "src/**/*.py"              # Specific files only
-/local-review --no-fix                           # Report only mode
-/local-review --checkpoint OMN-2144:abcd1234     # Write checkpoints per iteration
-/local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
-/local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
-/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-2607/omniclaude  # Review a specific worktree
+/local-review                           # Review all changes since base branch
+/local-review --uncommitted             # Only uncommitted changes
+/local-review --since main              # Explicit base
+/local-review --max-iterations 5        # Limit iterations
+/local-review --files "src/**/*.py"     # Specific files only
+/local-review --no-fix                  # Report only mode
+/local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
+/local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
 ```
 
 ## Arguments
@@ -89,112 +103,6 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
-| `--flag-false-positive <pattern>` | none | Flag a finding as a false positive (substring match on description) |
-| `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home. |
-
-## Suppression Registry
-
-The suppression registry prevents recurring false positives (e.g., asyncio_mode config,
-lambda variable capture, symlink behavior) from consuming iterations without converging.
-
-### Registry File: `~/.claude/review-suppressions.yml`
-
-```yaml
-version: 1
-suppressions:
-  - id: fp_001
-    pattern: "asyncio_mode"        # substring match on finding description
-    file_glob: "*"                  # optional file pattern (glob)
-    reason: "Project-level pytest config"
-    added: "2026-02-21"
-    status: "active"               # active | disabled | pending_review
-```
-
-### Behavior
-
-**Before reporting any finding**: check the registry. If any active suppression's `pattern`
-is a substring of the finding's description AND the file matches `file_glob` (if specified),
-suppress the finding and show it in the SUPPRESSED section instead.
-
-**Display in each iteration output**:
-```
-### SUPPRESSED (2) — Known False Positives
-- tests/conftest.py:12 - asyncio_mode setting [fp_001: Project-level pytest config]
-```
-
-### `--flag-false-positive <pattern>` Behavior
-
-Writes a new entry to `~/.claude/review-suppressions.yml` with `status: pending_review`:
-```yaml
-- id: fp_XXX
-  pattern: "<pattern argument>"
-  file_glob: "*"
-  reason: "Manually flagged"
-  added: "<today>"
-  status: "pending_review"
-```
-
-### Auto-Flag Logic
-
-When the same fingerprint (`file:line_approx:description_keywords`) appears in consecutive
-failed_fixes 3+ times without being resolved, the skill automatically:
-
-1. Writes the finding to the registry with `status: active`
-2. Reloads the registry so the finding is suppressed in the same run (run converges)
-
-The auto-flag threshold is 3 consecutive failed attempts at the same issue.
-
-## Phase 0: Pre-Existing Issue Scan
-
-Phase 0 runs BEFORE the diff review loop. It detects and handles pre-existing lint/mypy
-failures so they don't surface as CI surprises after the feature work is merged.
-
-**Key invariant**: Pre-existing fixes are committed separately from the feature work.
-NEVER mix pre-existing fixes with the feature branch changes.
-
-### Phase 0 Procedure
-
-```
-Phase 0: Pre-existing issue scan
-  1. Run pre-commit run --all-files from {path} against the current HEAD state (i.e. before any
-     uncommitted fixes are applied; do NOT stash or alter the working tree to run this step)
-  2. Run mypy src/ --strict from {path} (or repo-equivalent detected from pyproject.toml)
-  3. Classify each failure:
-       - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
-       - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
-  4. For AUTO-FIX:
-       - Apply fixes
-       - Commit as: chore(pre-existing): fix pre-existing lint/type errors
-       - This commit is separate from all feature commits
-  5. For DEFER:
-       - Auto-file a follow-up Linear sub-ticket (if Linear MCP available)
-       - Note in session: "Pre-existing issues deferred to {ticket_id}: {count} issues"
-       - Add deferred issues to PR description note section
-  6. Write Phase 0 results to session notes (session notes = the structured context block
-     injected into the Claude session via the context-injection subsystem)
-  7. Proceed to normal diff review
-```
-
-### Auto-Fix Criteria (ALL must be true)
-
-| Criterion | Value |
-|-----------|-------|
-| Files touched | ≤ 10 |
-| Subsystem | Same as the feature work (determine by inspecting `git diff {base}..HEAD --name-only`; the top-level directory prefix of the majority of changed files identifies the subsystem — e.g. `src/omniclaude/hooks/` or `plugins/onex/skills/`) |
-| Risk level | Low (formatting, import ordering, type annotation style) |
-
-### Phase 0 Output in Session Notes
-
-```markdown
-## Phase 0 — Pre-existing Issues — 2026-02-21 14:32
-
-### Auto-Fixed (committed separately)
-- src/api.py: missing type annotation on `user_id` param
-- src/utils.py: ruff E501 line too long
-
-### Deferred to follow-up
-- src/legacy/: 23 issues across 15 files (too broad — created OMN-XXXX)
-```
 
 ## Dispatch Contracts (Execution-Critical)
 
@@ -426,10 +334,51 @@ extraction fallback, state tracking, status selection logic, example session) is
 `prompt.md`. The dispatch contracts above are sufficient to execute the review loop.
 Load `prompt.md` only if you need reference details for edge case handling or implementation notes.
 
+## Skill Result Output
+
+When invoked as a composable sub-skill (from ticket-pipeline, epic-team, or other orchestrators),
+write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/local-review.json` on exit.
+
+```json
+{
+  "skill": "local-review",
+  "status": "clean",
+  "iterations_run": 3,
+  "issues_remaining": {"critical": 0, "major": 0, "minor": 0, "nit": 2},
+  "context_id": "{context_id}"
+}
+```
+
+**Status values**: `clean` | `clean_with_nits` | `max_iterations_reached` | `report_only` | `changes_staged` | `error`
+
+**On error** (agent failed, parse failed, fix failed): set `status: error`, include `error_message`.
+
+When invoked directly by a human (`/local-review`), skip writing the result file.
+
+## Error Recovery (Executable)
+
+When an agent failure or unrecoverable error occurs during the fix phase:
+
+**Auto-dispatch systematic-debugging:**
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="local-review: systematic-debugging on fix failure",
+  prompt="A fix agent failed during local-review iteration {iteration}.
+    Error: {error_details}
+
+    Invoke: Skill(skill=\"onex:systematic-debugging\")
+
+    Investigate root cause of the fix failure. Report: root cause, recommended fix, files involved."
+)
+```
+
+This replaces the former advisory annotation `REQUIRED SUB-SKILL: systematic-debugging`.
+
 ## See Also
 
 - `pr-review` skill (keyword-based priority classification reference)
 - `ticket-pipeline` skill (chains local-review as Phase 2)
 - `ticket-work` skill (implementation phase before review)
-- `~/.claude/review-suppressions.yml` (suppression registry — created on first `--flag-false-positive` use)
-- `~/.claude/review-notes/` (per-session issue notes directory)
+- `systematic-debugging` skill (auto-dispatched on fix failure)
