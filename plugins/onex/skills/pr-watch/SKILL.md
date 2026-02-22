@@ -94,7 +94,7 @@ Loop:
 
   → If new CHANGES_REQUESTED reviews since last check:
       pr_review_cycle += 1
-      If pr_review_cycle >= max_pr_review_cycles:
+      If pr_review_cycle > max_pr_review_cycles:
         → Slack MEDIUM_RISK gate: "PR #{pr_number} blocked — {N} review cycles with no approval"
         → Return status: capped
       → Invoke pr-review-dev to fix issues (see Fix Invocation below)
