@@ -410,6 +410,65 @@ if [[ -f "$ADVISORY_FORMATTER" ]]; then
 fi
 
 # -----------------------------
+# Intent Classification (OMN-2493)
+# -----------------------------
+# Run intent classification synchronously (inline, capped by run_with_timeout).
+# The classifier stores intent_id + intent_class in the correlation file.
+# Classification result is also injected into additionalContext so Claude
+# can apply model selection and validator hints inline.
+#
+# Design:
+#   - run_with_timeout caps wall-clock to 1s (consistent with injection budget)
+#   - Any failure → INTENT_CONTEXT="" → no context change, hook continues
+#   - Exits 0 on all failures (invariant)
+INTENT_CONTEXT=""
+INTENT_CLASSIFIER="${HOOKS_LIB}/intent_classifier.py"
+if [[ -f "$INTENT_CLASSIFIER" ]]; then
+    set +e
+    INTENT_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 1 "$PYTHON_CMD" \
+        "$INTENT_CLASSIFIER" \
+        --prompt-stdin \
+        --session-id "$SESSION_ID" \
+        --correlation-id "$CORRELATION_ID" \
+        2>>"$LOG_FILE")"
+    set -e
+
+    _INTENT_SUCCESS="$(echo "$INTENT_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
+    if [[ "$_INTENT_SUCCESS" == "true" ]]; then
+        _INTENT_CLASS="$(echo "$INTENT_RESULT" | jq -r '.intent_class // "GENERAL"' 2>/dev/null || echo 'GENERAL')"
+        _INTENT_CONF="$(echo "$INTENT_RESULT" | jq -r '.confidence // 0' 2>/dev/null || echo '0')"
+        _INTENT_ID="$(echo "$INTENT_RESULT" | jq -r '.intent_id // ""' 2>/dev/null || echo '')"
+        _INTENT_ELAPSED="$(echo "$INTENT_RESULT" | jq -r '.elapsed_ms // 0' 2>/dev/null || echo '0')"
+        log "Intent classified: class=${_INTENT_CLASS} confidence=${_INTENT_CONF} elapsed_ms=${_INTENT_ELAPSED}"
+
+        # Build intent context block using the model hints module
+        INTENT_CONTEXT="$(
+            export HOOKS_LIB="$HOOKS_LIB"
+            export INTENT_CLASS="$_INTENT_CLASS"
+            export INTENT_CONF="$_INTENT_CONF"
+            export INTENT_ID="$_INTENT_ID"
+            $PYTHON_CMD - <<'PYBLOCK' 2>>"$LOG_FILE" || echo ""
+import os, sys
+sys.path.insert(0, os.environ["HOOKS_LIB"])
+try:
+    import intent_model_hints as imh
+    print(imh.format_intent_context(
+        intent_class=os.environ.get("INTENT_CLASS", "GENERAL"),
+        confidence=float(os.environ.get("INTENT_CONF", "0")),
+        intent_id=os.environ.get("INTENT_ID", ""),
+    ))
+except Exception:
+    pass
+PYBLOCK
+        )"
+        _TS_INT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "[$_TS_INT] [UserPromptSubmit] INTENT class=${_INTENT_CLASS} confidence=${_INTENT_CONF} elapsed_ms=${_INTENT_ELAPSED}" >> "$TRACE_LOG"
+    else
+        log "INFO: Intent classification unavailable or failed — proceeding without intent context"
+    fi
+fi
+
+# -----------------------------
 # Local Model Delegation Dispatch (OMN-2271)
 # -----------------------------
 # Delegation runs AFTER routing + injection + advisory because:
@@ -579,6 +638,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         --arg patterns "$LEARNED_PATTERNS" \
         --arg enrichment "$ENRICHMENT_CONTEXT" \
         --arg advisory "$PATTERN_ADVISORY" \
+        --arg intent "$INTENT_CONTEXT" \
         --arg name "$AGENT_NAME" \
         --arg conf "$CONFIDENCE" \
         --arg domain "$AGENT_DOMAIN" \
@@ -591,6 +651,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         $yaml + "\n" + $patterns + "\n" +
         (if $enrichment != "" then $enrichment + "\n" else "" end) +
         (if $advisory != "" then $advisory + "\n" else "" end) +
+        (if $intent != "" then $intent + "\n" else "" end) +
         "========================================================================\n" +
         "AGENT CONTEXT\n" +
         "========================================================================\n" +
