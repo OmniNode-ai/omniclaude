@@ -94,7 +94,7 @@ Loop:
 
   → If new CHANGES_REQUESTED reviews since last check:
       pr_review_cycle += 1
-      If pr_review_cycle > max_pr_review_cycles:
+      If pr_review_cycle >= max_pr_review_cycles:
         → Slack MEDIUM_RISK gate: "PR #{pr_number} blocked — {N} review cycles with no approval"
         → Return status: capped
       → Invoke pr-review-dev to fix issues (see Fix Invocation below)
@@ -205,7 +205,8 @@ Written to `~/.claude/skill-results/{context_id}/pr-watch.json`:
 | `gh pr view --json reviews` unavailable | Retry 3x, then `status: failed` with error |
 | pr-review-dev hard-fails | Log error, continue watching without fix |
 | Push fails after fix | Log error, continue watching (don't re-request review) |
-| Slack unavailable for gate | Skip gate, apply default (stop) |
+| Slack unavailable for cap gate | Skip gate, apply default (status: capped) |
+| Slack unavailable for timeout gate | Skip gate, apply default (status: timeout/stop) |
 
 ## See Also
 
