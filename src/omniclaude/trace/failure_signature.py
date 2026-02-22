@@ -35,7 +35,7 @@ class FailureSignature(BaseModel):
     SHA-256 fingerprint.
     """
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     signature_id: str
     failure_type: FailureType
