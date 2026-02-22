@@ -126,12 +126,14 @@ class HandlerPatternPromotionDefault:
                 min_evidence_required=request.criteria.min_evidence_count,
             )
 
-        if existing.evidence_count == request.evidence_count:
-            # Idempotent: already at this version
+        if request.evidence_count <= existing.evidence_count:
+            # Idempotent or stale: do not downgrade or overwrite higher-evidence pattern
             logger.debug(
-                "Pattern ALREADY_CURRENT for intent=%s key=%s",
+                "Pattern ALREADY_CURRENT for intent=%s key=%s (evidence=%d <= %d)",
                 request.intent_type,
                 pattern_key,
+                request.evidence_count,
+                existing.evidence_count,
             )
             return ModelPatternPromotionResult(
                 status=EnumPromotionStatus.ALREADY_CURRENT,

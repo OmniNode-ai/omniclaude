@@ -256,7 +256,13 @@ class TestHandlerPatternPromotionDefault:
         assert result.criteria_met is True
 
     def test_promoted_pattern_has_correct_intent_type(self) -> None:
-        req = _request(intent_type="SECURITY", evidence_count=5, min_evidence_count=3)
+        extra_bundles = tuple(f"bundle-{uuid.uuid4()}" for _ in range(2))
+        req = _request(
+            intent_type="SECURITY",
+            evidence_count=5,
+            min_evidence_count=3,
+            evidence_bundle_ids=_BUNDLE_IDS + extra_bundles,
+        )
         result = self.handler.promote(req)
         assert result.promoted_pattern is not None
         assert result.promoted_pattern.intent_type == "SECURITY"
@@ -318,7 +324,12 @@ class TestHandlerPatternPromotionDefault:
         assert r1.promoted_pattern.pattern_id == r2.promoted_pattern.pattern_id
 
     def test_result_contains_evidence_count(self) -> None:
-        req = _request(evidence_count=5, min_evidence_count=3)
+        extra_bundles = tuple(f"bundle-{uuid.uuid4()}" for _ in range(2))
+        req = _request(
+            evidence_count=5,
+            min_evidence_count=3,
+            evidence_bundle_ids=_BUNDLE_IDS + extra_bundles,
+        )
         result = self.handler.promote(req)
         assert result.evidence_count == 5
 

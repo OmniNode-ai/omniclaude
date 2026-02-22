@@ -13,7 +13,7 @@ Generator's PatternCacheProtocol.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Type aliases matching PromotedPatternProtocol from OMN-2502
 _WorkUnitSpec = tuple[str, str, str, str]  # (local_id, title, unit_type, scope)
@@ -76,6 +76,16 @@ class ModelPromotedPattern(BaseModel):
         ge=1,
         description="Monotonically increasing version",
     )
+
+    @model_validator(mode="after")
+    def _validate_evidence_bundle_count(self) -> ModelPromotedPattern:
+        """evidence_count must equal the number of evidence_bundle_ids."""
+        if len(self.evidence_bundle_ids) != self.evidence_count:
+            raise ValueError(
+                f"evidence_count ({self.evidence_count}) must match "
+                f"len(evidence_bundle_ids) ({len(self.evidence_bundle_ids)})"
+            )
+        return self
 
 
 __all__ = ["ModelPromotedPattern"]
