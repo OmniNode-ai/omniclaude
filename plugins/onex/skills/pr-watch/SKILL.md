@@ -136,8 +136,8 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/pr-watch.json`
 
 ## See Also
 
-- `ticket-pipeline` skill (invokes pr-watch as Phase 5)
-- `ci-watch` skill (Phase 4, runs before pr-watch)
-- `auto-merge` skill (Phase 6, runs after pr-watch passes)
+- `ticket-pipeline` skill (planned: invokes pr-watch after ci-watch passes)
+- `ci-watch` skill (planned: runs before pr-watch)
+- `auto-merge` skill (planned: runs after pr-watch passes)
 - `pr-review-dev` skill (invoked to fix review comments)
 - OMN-2524 — implementation ticket

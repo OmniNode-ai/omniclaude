@@ -134,6 +134,6 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/decompose-epic
 ## See Also
 
 - `epic-team` skill (invokes decompose-epic when epic has 0 child tickets)
-- `ticket-pipeline` skill (invokes decompose-epic on cross-repo auto-split)
+- `ticket-pipeline` skill (planned: invokes decompose-epic on cross-repo auto-split)
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - OMN-2522 — implementation ticket

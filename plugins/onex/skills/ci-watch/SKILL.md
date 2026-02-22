@@ -129,6 +129,6 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ci-watch.json`
 
 ## See Also
 
-- `ticket-pipeline` skill (invokes ci-watch as Phase 4)
-- `pr-watch` skill (Phase 5, runs after ci-watch passes)
+- `ticket-pipeline` skill (planned: invokes ci-watch after create_pr phase)
+- `pr-watch` skill (planned: runs after ci-watch passes)
 - OMN-2523 — implementation ticket

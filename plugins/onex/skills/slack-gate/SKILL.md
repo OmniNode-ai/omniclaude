@@ -124,5 +124,5 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/slack-gate.jso
 
 - `auto-merge` skill (uses HIGH_RISK gate before merging)
 - `epic-team` skill (uses LOW_RISK gate for empty epic auto-decompose)
-- `ticket-pipeline` skill (uses MEDIUM_RISK gate for CI/PR escalation)
+- `ticket-pipeline` skill (planned: uses MEDIUM_RISK gate for CI/PR escalation)
 - OMN-2521 — implementation ticket

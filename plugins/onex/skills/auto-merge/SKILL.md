@@ -129,7 +129,7 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 
 ## See Also
 
-- `ticket-pipeline` skill (invokes auto-merge as Phase 6)
-- `pr-watch` skill (Phase 5, runs before auto-merge)
+- `ticket-pipeline` skill (planned: invokes auto-merge after pr-watch passes)
+- `pr-watch` skill (planned: runs before auto-merge)
 - `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
 - OMN-2525 — implementation ticket
