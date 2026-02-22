@@ -201,8 +201,66 @@ print(f"Epic: {epic.title} ({epic_id})")
 tickets = mcp_linear_list_issues(parentId=epic_id, limit=250)
 print(f"Found {len(tickets)} child tickets")
 if len(tickets) == 0:
-    print("ERROR: No child tickets found. Nothing to do.")
-    exit(1)
+    # Auto-decompose: invoke decompose-epic sub-skill, post LOW_RISK Slack gate
+    if dry_run:
+        # Dry-run: invoke decompose-epic with --dry-run flag (plan only, no tickets created)
+        Task(
+            subagent_type="onex:polymorphic-agent",
+            description=f"epic-team: dry-run decompose empty epic {epic_id}",
+            prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic in dry-run mode.
+    Run ID: {run_id}
+    Invoke: Skill(skill="onex:decompose-epic", args="{epic_id} --dry-run")
+
+    Print the decomposition plan returned by decompose-epic.
+    Do NOT create any tickets. Do NOT post Slack gate.
+    Report back with: the decomposition plan."""
+        )
+        print("\n--- DRY RUN: Empty epic decomposition plan above. No tickets created. ---")
+        exit(0)
+
+    # Normal run: auto-decompose and post Slack gate
+    decompose_result = Task(
+        subagent_type="onex:polymorphic-agent",
+        description=f"epic-team: auto-decompose empty epic {epic_id}",
+        prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
+    Run ID: {run_id}
+    Invoke: Skill(skill="onex:decompose-epic", args="{epic_id}")
+
+    Read the ModelSkillResult from ~/.claude/skill-results/{run_id}/decompose-epic.json
+    Report back with: created_tickets (list of ticket IDs and titles), count."""
+    )
+    created_tickets = decompose_result.get("created_tickets", [])
+    ticket_count = len(created_tickets)
+
+    # Post LOW_RISK Slack gate
+    tickets_list = "\n".join(f"  - {t['id']}: {t['title']}" for t in created_tickets)
+    slack_gate_message = (
+        f"[LOW_RISK] epic-team: Auto-decomposed {epic_id}\n\n"
+        f"Epic had no child tickets. Created {ticket_count} sub-tickets:\n"
+        f"{tickets_list}\n\n"
+        f'Reply "reject" within 30 minutes to cancel. Silence = proceed with orchestration.'
+    )
+    try:
+        Task(
+            subagent_type="onex:polymorphic-agent",
+            description=f"epic-team: post Slack LOW_RISK gate for {epic_id}",
+            prompt=f"""Post this Slack gate message and wait up to 30 minutes for a "reject" reply.
+    Invoke: Skill(skill="onex:slack-gate", args='--message "{slack_gate_message}" --timeout 30m --keyword reject')
+
+    If "reject" received: report status="rejected"
+    If timeout (silence): report status="approved"
+    Report back with: status (approved or rejected)."""
+        )
+    except Exception as e:
+        print(f"Warning: Slack gate failed (non-fatal): {e}")
+        # On Slack gate failure, proceed (fail-open)
+
+    # Re-fetch newly created tickets after gate approval
+    tickets = mcp_linear_list_issues(parentId=epic_id, limit=250)
+    print(f"Auto-decompose complete. Re-fetched {len(tickets)} child tickets.")
+    if len(tickets) == 0:
+        print("ERROR: decompose-epic created no tickets. Cannot proceed.")
+        exit(1)
 
 # 3. Generate run_id
 import uuid
@@ -226,7 +284,6 @@ state = {
     "ticket_scores": {},
     "ticket_status_map": {},
     "pr_urls": {},
-    "cleaned_worktrees": [],    # worktree paths already cleaned up (merged PRs)
 }
 os.makedirs(STATE_DIR, exist_ok=True)
 write_yaml(STATE_FILE, state)
@@ -245,19 +302,11 @@ state = load_yaml(STATE_FILE)
 assert state["phase"] == "intake", f"Expected phase=intake, got {state['phase']}"
 
 # 1. Load repo manifest
-MANIFEST_PATH = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
+MANIFEST_PATH = "plugins/onex/skills/epic-team/repo_manifest.yaml"
 manifest = load_yaml(MANIFEST_PATH)
 if manifest is None:
     print(f"ERROR: repo_manifest.yaml not found at {MANIFEST_PATH}")
-    print("Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.md for schema")
     exit(1)
-
-def manifest_repo_path(repo_name):
-    """Return the expanded filesystem path for a repo from the manifest."""
-    for entry in manifest.get("repos", []):
-        if entry["name"] == repo_name:
-            return os.path.expanduser(entry["path"])
-    raise KeyError(f"Repo '{repo_name}' not found in manifest at {MANIFEST_PATH}")
 
 # 2. Decompose epic
 from plugins.onex.skills.epic_team.epic_decomposer import decompose_epic, validate_decomposition
@@ -531,13 +580,6 @@ while True:
     #   - Do NOT update ticket_status_map from messages alone
     # (This block executes when a message arrives between polling turns)
 
-    # --- Background cleanup: remove worktrees for merged PRs ---
-    # For each ticket with a known pr_url and status==completed:
-    #   1. Call gh pr view {pr_url} --json mergedAt (non-fatal if gh fails)
-    #   2. If mergedAt is non-null: git -C {repo_path} worktree remove --force {wt_path}
-    #   3. Track cleaned-up worktrees in state["cleaned_worktrees"] to avoid re-checking
-    # This runs as a non-blocking background step — any exception is logged and skipped.
-
     # --- Check for finalization ---
     if new_map and all(v in terminal_statuses for v in new_map.values()):
         print("All tasks terminal. Proceeding to Phase 5.")
@@ -629,16 +671,15 @@ if failed:
 
 # 3. Print worktree locations and cleanup commands
 print("=== Worktree Locations ===")
-print("Each worker created a git worktree. Locations (merged worktrees auto-deleted; unmerged preserved):")
+print("Each worker created a git worktree. Locations (workers do NOT auto-delete them):")
 for repo in assignments:
     for ticket_id in assignments[repo]:
-        wt_path = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}")
+        wt_path = f"../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}"
         branch  = f"epic/{epic_id}/{ticket_id}/{run_id[:8]}"
-        repo_path = manifest_repo_path(repo)  # resolved from ~/.claude/epic-team/repo_manifest.yaml
         print(f"\n  {ticket_id} [{repo}]")
         print(f"    Path:   {wt_path}")
         print(f"    Branch: {branch}")
-        print(f"    Remove: git -C {repo_path} worktree remove --force {wt_path}")
+        print(f"    Remove: git -C ../{repo} worktree remove --force {wt_path}")
 
 print()
 print("=== Cleanup ===")
@@ -785,16 +826,8 @@ For each ticket, create a git worktree at the canonical path:
 
 ```python
 def setup_worktree(ticket_id):
-    import os, yaml
-    # Load repo path from user-global manifest (no manifest_repo_path in worker scope)
-    _manifest_path = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
-    with open(_manifest_path) as _f:
-        _manifest = yaml.safe_load(_f)
-    _entries = {{e["name"]: e for e in _manifest.get("repos", [])}}
-    if "{repo}" not in _entries:
-        raise KeyError(f"Repo '{{'{repo}'}}' not found in manifest at {{_manifest_path}}")
-    repo_path = os.path.expanduser(_entries["{repo}"]["path"])
-    worktree_root = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}")
+    repo_path = f"../{repo}"
+    worktree_root = f"{{repo_path}}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}"
     branch = f"epic/{epic_id}/{{ticket_id}}/{run_id_short}"
 
     # Create worktree
@@ -810,7 +843,7 @@ def setup_worktree(ticket_id):
     return worktree_root, branch
 ```
 
-Canonical root path: `~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
+Canonical root path: `../{repo}/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}`
 Branch format: `epic/{epic_id}/{{ticket_id}}/{run_id_short}`
 
 ## Ticket Work Execution
@@ -964,8 +997,6 @@ ticket_status_map:                 # Subject -> status (rebuilt from TaskList ea
 
 pr_urls:                           # ticket_id -> PR URL (populated by worker messages)
   OMN-1001: "https://github.com/org/omniclaude/pull/42"
-
-cleaned_worktrees: []              # worktree paths already removed (merged PR cleanup)
 ```
 
 ### `~/.claude/epics/{epic_id}/revoked_runs.yaml`
@@ -992,8 +1023,8 @@ revoked:
 | Active workers without --force-kill | `ERROR: {n} workers still active. Use --force-kill...` | 1 |
 | Working dir missing plugins/onex | `ERROR: Working directory guard failed. Missing: plugins/onex` | 1 |
 | Working dir missing ../omnibase_core | `ERROR: Working directory guard failed. Missing: ../omnibase_core` | 1 |
-| No child tickets | `ERROR: No child tickets found. Nothing to do.` | 1 |
-| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at ~/.claude/epic-team/repo_manifest.yaml` | 1 |
+| No child tickets (decompose-epic returned 0) | `ERROR: decompose-epic created no tickets. Cannot proceed.` | 1 |
+| repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml` | 1 |
 | Decomposition validation errors | `HARD FAIL: Decomposition validation errors: [...]` | 1 |
 | Unmatched tickets without --force-unmatched | `ERROR: Unmatched tickets block decomposition. Use --force-unmatched...` | 1 |
 | --resume with no state.yaml | `ERROR: state.yaml not found. Cannot resume.` | 1 |
@@ -1014,4 +1045,4 @@ Before marking any phase complete, verify:
 - [ ] TaskUpdate (completed/failed) fires BEFORE SendMessage in workers
 - [ ] TeamDelete called best-effort (non-fatal) in Phase 5
 - [ ] Slack notifications non-fatal everywhere
-- [ ] Worktree locations printed for manual cleanup (unmerged worktrees never auto-deleted; merged worktrees cleaned up automatically)
+- [ ] Worktree locations printed for manual cleanup (never auto-deleted)

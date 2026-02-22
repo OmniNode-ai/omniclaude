@@ -167,7 +167,7 @@ The team lead runs in this session and is responsible for fetching the epic from
 
 - `prompt.md` — full orchestration logic, state machine, and error handling reference
 - `/ticket-work` — per-ticket execution skill used by each worker
-- `decompose-epic` skill (OMN-2522) — invoked when epic has zero child tickets
-- `slack-gate` skill (OMN-2521) — LOW_RISK gate for decompose confirmation
+- `decompose-epic` skill (OMN-2522, planned) — invoked when epic has zero child tickets
+- `slack-gate` skill (OMN-2521, planned) — LOW_RISK gate for decompose confirmation
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo-local repo assignment manifest
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
