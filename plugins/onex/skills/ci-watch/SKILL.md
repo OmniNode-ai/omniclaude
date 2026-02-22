@@ -32,7 +32,7 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/ci-watch.json"
     fields:
-      - status: passed | failed | timeout | capped | error
+      - status: passed | capped | timeout | error
       - pr_number: int
       - fix_cycles_used: int
       - elapsed_minutes: int
@@ -59,7 +59,7 @@ args:
 ## Overview
 
 Poll GitHub Actions CI status for a pull request. Auto-fix test/lint failures and re-push. Exit
-when CI reaches a terminal state: `passed`, `failed` (exhausted fix cycles), `timeout`, or `capped`.
+when CI reaches a terminal state: `passed`, `capped` (fix cycles exhausted), `timeout`, or `error`.
 
 **Announce at start:** "I'm using the ci-watch skill to monitor CI for PR #{pr_number}."
 
@@ -119,12 +119,11 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ci-watch.json`
 }
 ```
 
-**Status values**: `passed` | `failed` | `timeout` | `capped` | `error`
+**Status values**: `passed` | `capped` | `timeout` | `error`
 
 - `passed`: All CI checks green
-- `failed`: CI failed and fix cycles exhausted
+- `capped`: Reached max_fix_cycles without CI passing
 - `timeout`: CI still running after timeout_minutes
-- `capped`: Reached max_fix_cycles without passing
 - `error`: Unexpected error (API failure, auth issue)
 
 ## See Also
