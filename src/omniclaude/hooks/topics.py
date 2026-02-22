@@ -186,6 +186,11 @@ class TopicBase(StrEnum):
     # Restricted topic — full payload including agent_rationale and reproducibility_snapshot
     DECISION_RECORDED_CMD = "onex.cmd.omniintelligence.decision-recorded.v1"
 
+    # ==========================================================================
+    # Agent trace topics (OMN-2412)
+    # ==========================================================================
+    AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.agent-trace-fix-transition.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
