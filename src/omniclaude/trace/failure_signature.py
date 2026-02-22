@@ -183,7 +183,7 @@ def compute_failure_signature(
         A FailureSignature with stable signature_id and fingerprint
 
     Raises:
-        ValueError: If raw_output is empty after normalization
+        ValueError: If raw_output is empty or whitespace-only before normalization
     """
     if not raw_output.strip():
         raise ValueError("raw_output must not be empty")

@@ -11,6 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import pytest
 from pydantic import ValidationError
 
 from omniclaude.trace.change_frame import FailureType
@@ -77,10 +78,12 @@ class TestNormalizeFailureOutput:
         assert "/home/user/myproject" not in normalized
 
     def test_empty_repo_root_no_crash(self) -> None:
-        """Empty repo_root should not cause errors."""
+        """Empty repo_root should not cause errors and should skip path stripping."""
         raw = "Some error output"
         normalized = normalize_failure_output(raw, "")
-        assert normalized == raw  # No path stripping when repo_root is empty
+        # Path stripping is skipped when repo_root is empty; other normalizations
+        # (timestamps, PIDs, etc.) still run but this input has none, so output matches.
+        assert normalized == raw
 
     def test_non_volatile_content_preserved(self) -> None:
         """Error messages, exception types, test names must be preserved."""
@@ -438,7 +441,3 @@ class TestEmptyRawOutputRaises:
                 repro_command="pytest",
                 suspected_files=[],
             )
-
-
-# Need to import pytest for the validation error test
-import pytest  # noqa: E402
