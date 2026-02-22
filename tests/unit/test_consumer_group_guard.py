@@ -11,7 +11,11 @@ Tests:
 
 from __future__ import annotations
 
+import importlib.util
 import re
+import types
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -250,141 +254,76 @@ class TestSkillNodeConsumerGroups:
             )
 
 
+def _load_validate_script() -> types.ModuleType:
+    """Load the validate_no_compact_cmd_topic script as a module."""
+    script_path = (
+        Path(__file__).parent.parent.parent
+        / "scripts"
+        / "validation"
+        / "validate_no_compact_cmd_topic.py"
+    )
+    assert script_path.exists(), f"Script not found: {script_path}"
+    spec = importlib.util.spec_from_file_location("validate_no_compact", script_path)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    return module  # type: ignore[return-value]
+
+
 class TestValidateNoCompactCmdTopicScript:
     """Tests for validate_no_compact_cmd_topic.py script."""
 
-    def test_script_imports_cleanly(self) -> None:
+    @pytest.fixture
+    def script_module(self) -> Any:
+        """Load the validation script module once per test."""
+        return _load_validate_script()
+
+    def test_script_imports_cleanly(self, script_module: Any) -> None:
         """The validation script module should be importable."""
-        import importlib.util
-        from pathlib import Path
+        assert hasattr(script_module, "main")
+        assert hasattr(script_module, "scan_file")
 
-        script_path = (
-            Path(__file__).parent.parent.parent
-            / "scripts"
-            / "validation"
-            / "validate_no_compact_cmd_topic.py"
-        )
-        assert script_path.exists(), f"Script not found: {script_path}"
-
-        spec = importlib.util.spec_from_file_location(
-            "validate_no_compact", script_path
-        )
-        assert spec is not None
-        module = importlib.util.module_from_spec(spec)
-        assert spec.loader is not None
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
-        assert hasattr(module, "main")
-        assert hasattr(module, "scan_file")
-
-    def test_no_violations_on_existing_codebase(self) -> None:
+    def test_no_violations_on_existing_codebase(self, script_module: Any) -> None:
         """The existing codebase should not have any compact cmd topic violations."""
-        import importlib.util
-        from pathlib import Path
-
-        script_path = (
-            Path(__file__).parent.parent.parent
-            / "scripts"
-            / "validation"
-            / "validate_no_compact_cmd_topic.py"
-        )
-        spec = importlib.util.spec_from_file_location(
-            "validate_no_compact", script_path
-        )
-        assert spec is not None
-        module = importlib.util.module_from_spec(spec)
-        assert spec.loader is not None
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
-        result = module.main([])
+        result = script_module.main([])
         assert result == 0, "validate_no_compact_cmd_topic found violations in codebase"
 
     def test_scan_file_detects_compact_violation(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:  # type: ignore[name-defined]
+        self, tmp_path: Path, script_module: Any
+    ) -> None:
         """scan_file should detect cleanup.policy=compact on cmd topics."""
-        import importlib.util
-        from pathlib import Path
-
-        script_path = (
-            Path(__file__).parent.parent.parent
-            / "scripts"
-            / "validation"
-            / "validate_no_compact_cmd_topic.py"
-        )
-        spec = importlib.util.spec_from_file_location(
-            "validate_no_compact", script_path
-        )
-        assert spec is not None
-        module = importlib.util.module_from_spec(spec)
-        assert spec.loader is not None
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
         # Create a config file with a cmd topic and compact policy
         config_file = tmp_path / "topic_config.yaml"
         config_file.write_text(
             "topic: onex.cmd.omniclaude.my-event.v1\ncleanup.policy: compact\n"
         )
 
-        violations = module.scan_file(config_file)
+        violations = script_module.scan_file(config_file)
         assert len(violations) > 0, "Expected violation for compact cmd topic"
 
     def test_scan_file_allows_compact_on_evt_topic(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:  # type: ignore[name-defined]
+        self, tmp_path: Path, script_module: Any
+    ) -> None:
         """scan_file should NOT flag cleanup.policy=compact on evt topics."""
-        import importlib.util
-        from pathlib import Path
-
-        script_path = (
-            Path(__file__).parent.parent.parent
-            / "scripts"
-            / "validation"
-            / "validate_no_compact_cmd_topic.py"
-        )
-        spec = importlib.util.spec_from_file_location(
-            "validate_no_compact", script_path
-        )
-        assert spec is not None
-        module = importlib.util.module_from_spec(spec)
-        assert spec.loader is not None
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
         # evt topics CAN use compact policy
         config_file = tmp_path / "evt_topic_config.yaml"
         config_file.write_text(
             "topic: onex.evt.omniclaude.session-started.v1\ncleanup.policy: compact\n"
         )
 
-        violations = module.scan_file(config_file)
+        violations = script_module.scan_file(config_file)
         assert len(violations) == 0, f"Unexpected violation for evt topic: {violations}"
 
     def test_scan_file_respects_noqa_suppression(
-        self, tmp_path: pytest.TempPathFactory
-    ) -> None:  # type: ignore[name-defined]
+        self, tmp_path: Path, script_module: Any
+    ) -> None:
         """scan_file should skip lines with # noqa: arch-no-compact-cmd-topic."""
-        import importlib.util
-        from pathlib import Path
-
-        script_path = (
-            Path(__file__).parent.parent.parent
-            / "scripts"
-            / "validation"
-            / "validate_no_compact_cmd_topic.py"
-        )
-        spec = importlib.util.spec_from_file_location(
-            "validate_no_compact", script_path
-        )
-        assert spec is not None
-        module = importlib.util.module_from_spec(spec)
-        assert spec.loader is not None
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-
         config_file = tmp_path / "suppressed.yaml"
         config_file.write_text(
             "topic: onex.cmd.omniclaude.my-event.v1  # noqa: arch-no-compact-cmd-topic\n"
             "cleanup.policy: compact\n"
         )
 
-        violations = module.scan_file(config_file)
+        violations = script_module.scan_file(config_file)
         assert len(violations) == 0, f"Expected suppression to work: {violations}"

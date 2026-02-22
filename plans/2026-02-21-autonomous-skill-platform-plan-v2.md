@@ -29,7 +29,7 @@ configuration file sets `cleanup.policy=compact` on a `cmd` topic.
 
 **Rule**: All consumer group IDs must include a version component.
 
-**Format**: `omniclaude-{node-name}-{version}`
+**Format**: `omniclaude-{node-name}.v{N}`
 
 **Examples**:
 - `omniclaude-compliance-subscriber.v1` ✓
