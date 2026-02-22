@@ -105,7 +105,7 @@ Phase 0: Pre-existing issue scan
        - Note in session: "Pre-existing issues deferred to {ticket_id}: {count} issues"
        - Add deferred issues to PR description note section
   6. Write Phase 0 results to session notes (session notes = the structured context block
-     injected into the Claude session via the F3/context-injection subsystem)
+     injected into the Claude session via the context-injection subsystem)
   7. Proceed to normal diff review
 ```
 
