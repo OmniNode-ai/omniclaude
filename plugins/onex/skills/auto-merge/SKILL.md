@@ -20,7 +20,7 @@ args:
     description: Ticket ID context for Slack messages and Linear updates
     required: false
   - name: --auto-merge
-    description: Merge immediately without Slack gate (use with caution)
+    description: "Set auto_merge: true in policy — merge immediately without Slack gate (use with caution)"
     required: false
   - name: --strategy
     description: "Merge strategy: squash | merge | rebase (default: squash)"
@@ -50,7 +50,7 @@ merges immediately without human input.
 
 **Announce at start:** "I'm using the auto-merge skill for PR #{pr_number}."
 
-**SAFETY INVARIANT**: Branch deletion is a HIGH_RISK action. Silence is NEVER consent for
+**SAFETY INVARIANT**: PR merge is a HIGH_RISK action. Silence is NEVER consent for
 merge. Explicit "merge" reply required unless `auto_merge: true` is explicitly set.
 
 ## Quick Start
@@ -194,5 +194,5 @@ Written to `~/.claude/skill-results/{context_id}/auto-merge.json`:
 
 ## See Also
 
-- `ticket-pipeline` skill — composable pipeline; auto-merge can be invoked after pipeline completes
+- `ticket-pipeline` skill — composable pipeline; invokes auto-merge as Phase 6 (auto_merge phase) after ready_for_merge
 - `~/.claude/pipelines/{ticket_id}/ticket-run-ledger.yaml` — merge audit log
