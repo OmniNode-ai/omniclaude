@@ -189,7 +189,7 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Agent trace topics (OMN-2412)
     # ==========================================================================
-    AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.agent-trace-fix-transition.v1"
+    AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.fix-transition.v1"
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:
