@@ -393,6 +393,26 @@ if skip_to:
 ```python
 save_state(state, state_path)
 
+# Write ticket-run ledger entry (prevents duplicate pipeline runs)
+# Stored at ~/.claude/pipelines/ledger.json
+ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
+try:
+    existing_ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+    if ticket_id in existing_ledger and not force_run:
+        existing_run = existing_ledger[ticket_id]
+        existing_run_id = existing_run.get("active_run_id", "?")
+        print(f"Error: Pipeline already running for {ticket_id} (run_id={existing_run_id}). Use --force-run to override.")
+        exit(1)
+    existing_ledger[ticket_id] = {
+        "active_run_id": run_id,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "log": str(Path.home() / ".claude" / "pipeline-logs" / f"{ticket_id}.log"),
+    }
+    ledger_path.write_text(json.dumps(existing_ledger, indent=2))
+except Exception as e:
+    print(f"Warning: Failed to write ledger entry for {ticket_id}: {e}")
+    # Non-blocking: ledger failure does not stop pipeline
+
 # Determine current phase
 current_phase = get_current_phase(state)
 
