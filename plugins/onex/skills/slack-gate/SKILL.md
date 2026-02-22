@@ -1,231 +1,182 @@
 ---
 name: slack-gate
-description: Risk-classified Slack gate — posts approval request to Slack and waits for response with idempotent state, audit logging, and silence=consent for low-risk gates
+description: Post a risk-tiered Slack gate and wait for human reply or timeout
 version: 1.0.0
 category: workflow
-tags:
-  - slack
-  - gate
-  - approval
-  - human-in-the-loop
-  - idempotent
+tags: [slack, gate, human-in-loop, notification]
 author: OmniClaude Team
 composable: true
-args:
-  - name: gate_id
+inputs:
+  - name: risk_level
     type: str
-    description: Unique identifier for this gate (hash of ticket_id + phase + attempt)
+    description: "Gate risk tier: LOW_RISK | MEDIUM_RISK | HIGH_RISK"
     required: true
-  - name: ticket_id
-    type: str
-    description: Ticket identifier (e.g., OMN-2356) stored in gate state and audit log
-    required: false
-  - name: phase
-    type: str
-    description: Pipeline phase name (e.g., spec_approval) used in Slack message header, gate state, and audit log
-    required: false
   - name: message
     type: str
-    description: Message to post to Slack asking for approval
+    description: Gate message body (Markdown)
     required: true
-  - name: risk
-    type: enum
-    description: "Risk level: LOW_RISK | MEDIUM_RISK | HIGH_RISK"
-    required: true
-  - name: timeout_seconds
+  - name: timeout_minutes
     type: int
-    description: How long to wait for a response before applying silence behavior (default 600)
+    description: Minutes before gate times out (default varies by tier)
     required: false
-  - name: channel
-    type: str
-    description: Slack channel to post in (default from env SLACK_GATE_CHANNEL)
+  - name: accept_keywords
+    type: list[str]
+    description: "Replies that mean 'proceed' (default: ['yes', 'proceed', 'merge', 'approve'])"
+    required: false
+  - name: reject_keywords
+    type: list[str]
+    description: "Replies that mean 'reject' (default: ['no', 'reject', 'cancel', 'hold'])"
     required: false
 outputs:
-  - name: decision
-    type: enum
-    description: "silence_consent | explicit_approve | explicit_reject | timeout_escalated"
-  - name: response_text
-    type: str
-    description: Slack response text, or null if silence
+  - name: skill_result
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/slack-gate.json"
+    fields:
+      - status: accepted | rejected | timeout
+      - risk_level: str
+      - reply: str | null
+      - elapsed_minutes: int
+args:
+  - name: risk_level
+    description: "Gate tier: LOW_RISK|MEDIUM_RISK|HIGH_RISK"
+    required: true
+  - name: message
+    description: Gate message body
+    required: true
+  - name: --timeout-minutes
+    description: Override default timeout for this tier
+    required: false
 ---
 
 # Slack Gate
 
 ## Overview
 
-Composable sub-skill that posts a Slack message and waits for a human response. Replaces
-hard keyboard gates across all pipeline skills. Risk classification determines silence behavior —
-LOW_RISK gates auto-advance on timeout; HIGH_RISK gates hold until explicit approval.
+Post a risk-tiered gate message to Slack and wait for human reply. The gate outcome determines
+whether the calling orchestrator proceeds, escalates, or holds.
 
-**Announce at start:** "I'm using the slack-gate skill for gate {gate_id}."
+**Announce at start:** "I'm using the slack-gate skill to post a [{risk_level}] gate."
 
-## Risk Classification
+**Implements**: OMN-2521
 
-| Risk Level | Examples | Silence Behavior |
-|------------|----------|------------------|
-| **LOW_RISK** | "no questions" timeout, small-scope spec approval, nit review | Silence = `silence_consent` after timeout |
-| **MEDIUM_RISK** | Review override, "scope unclear" CI fix, architectural classification | Silence = escalate + create Linear ticket |
-| **HIGH_RISK** | Merge (branch delete), mass refactor >10 files, infra/secrets changes | Silence = hold indefinitely; requires explicit "approve" |
-
-## Idempotency Model
-
-Every gate invocation is idempotent — safe to call on retry or restart:
+## Quick Start
 
 ```
-gate_id = hash(ticket_id + phase + attempt)
-state_path = ~/.claude/gates/{gate_id}.json
+/slack-gate LOW_RISK "Epic has no tickets — auto-decomposed into 3 sub-tickets. Reply 'reject' to cancel."
+/slack-gate MEDIUM_RISK "CI failed 3 times on PR #123. Reply 'skip-ci' to proceed or 'abort' to cancel."
+/slack-gate HIGH_RISK "Ready to merge PR #123 to main. Reply 'merge' to proceed."
 ```
 
-**Before posting to Slack**:
-1. Check if `~/.claude/gates/{gate_id}.json` exists
-2. If status is `open`: resume polling existing thread (no re-post)
-3. If status is `resolved`: return cached decision immediately
-4. If not found: create gate, post to Slack, start polling
+## Risk Tiers
 
-**State file is written atomically** (tmp file → rename) to prevent corruption on crash.
+| Tier | Default Timeout | Silence Behavior | Use Case |
+|------|----------------|------------------|----------|
+| `LOW_RISK` | 30 minutes | Proceed (silence = consent) | Auto-decomposition, minor decisions |
+| `MEDIUM_RISK` | 60 minutes | Escalate (notify again, hold) | CI failures, cross-repo splits |
+| `HIGH_RISK` | 24 hours | Hold (explicit approval required) | Merges to main, destructive ops |
 
-## Gate State Schema
+## Gate Flow
 
-```json
-{
-  "gate_id": "abc123def456",
-  "ticket_id": "OMN-2356",
-  "phase": "spec_approval",
-  "risk": "LOW_RISK",
-  "timeout_seconds": 600,
-  "channel": "#pipeline-gates",
-  "slack_thread_ts": "1234567890.123456",
-  "status": "open | resolved",
-  "decision": "silence_consent | explicit_approve | explicit_reject | timeout_escalated | null",
-  "response_text": null,
-  "posted_at": "2026-02-21T14:30:00Z",
-  "resolved_at": null
-}
-```
-
-## Polling Behavior
-
-After posting the Slack message, the gate polls for a reply:
-
-```
-poll_interval = 30s
-timeout = gate.timeout_seconds (default 600s)
-
-loop:
-  → Check gate state file for external resolution (another process may have resolved it)
-  → Check Slack thread for reply containing "approve", "yes", "lgtm", "go", "ok",
-      "reject", "no", "stop", "hold", "cancel"
-  → If reply found: resolve with explicit_approve or explicit_reject
-  → Wait poll_interval
-  → If timeout reached: apply silence behavior based on risk level
-```
-
-**Keyword matching** (case-insensitive): `approve`, `yes`, `lgtm`, `go`, `ok` → `explicit_approve`;
-`reject`, `no`, `stop`, `hold`, `cancel` → `explicit_reject`.
-
-## Silence Behavior by Risk Level
-
-### LOW_RISK — Silence = Consent
-
-After timeout: resolve with `decision: silence_consent`, continue pipeline.
-
-### MEDIUM_RISK — Silence = Escalate
-
-After timeout: create a Linear sub-ticket for human review, resolve with `decision: timeout_escalated`,
-log warning, continue pipeline (with reduced confidence).
-
-### HIGH_RISK — Silence = Hold
-
-After timeout: post a reminder to Slack, reset poll timer, continue waiting.
-Never auto-advance. Only explicit `approve` unblocks.
-
-> **Note**: Reminder messages must not contain any approval keywords (`approve`, `yes`, `lgtm`, `go`,
-> `ok`) or rejection keywords (`reject`, `no`, `stop`, `hold`, `cancel`), as the gate polls all
-> replies including its own reminders if they appear in the thread.
-
-## Audit Event
-
-Every gate decision (silence or explicit) logs an audit record:
-
-```json
-{
-  "gate_id": "abc123def456",
-  "ticket_id": "OMN-2356",
-  "phase": "spec_approval",
-  "risk": "LOW_RISK",
-  "timeout_seconds": 600,
-  "decision": "silence_consent",
-  "response_text": null,
-  "timestamp": "2026-02-21T14:32:00Z"
-}
-```
-
-Audit records are appended to `~/.claude/gates/audit.jsonl` (append-only log).
+1. Post message to Slack with `[{risk_level}]` prefix
+2. Poll for reply every 60 seconds (LOW_RISK: 30s):
+   - If reply matches `accept_keywords`: exit with `status: accepted`
+   - If reply matches `reject_keywords`: exit with `status: rejected`
+   - If timeout reached: apply silence behavior
+3. LOW_RISK timeout → exit with `status: accepted` (silence = consent)
+4. MEDIUM_RISK timeout → re-notify + exit with `status: timeout`
+5. HIGH_RISK timeout → exit with `status: timeout` (caller must hold)
 
 ## Slack Message Format
 
-```
-[{risk}] Gate: {gate_id} — {ticket_id} {phase}
-
-{message}
-
-Reply with:
-  • approve / yes / lgtm / go / ok — to approve
-  • reject / no / stop / hold / cancel — to reject
-
-Risk: {risk}
-Timeout: {timeout_seconds}s
-{LOW_RISK: "Silence = auto-approve after {timeout}s" | MEDIUM_RISK: "Silence = escalate + Linear ticket after {timeout}s" | HIGH_RISK: "Silence = hold (will not auto-advance)"}
-```
-
-## Composable Usage
-
-From other skills (e.g., ticket-pipeline, ci-fix-pipeline):
+Messages are posted with prefix `[{risk_level}]` in bold:
 
 ```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="Slack gate for {phase}",
-  prompt="Invoke: Skill(skill=\"onex:slack-gate\", args={
-    gate_id: sha256(\"{ticket_id}:{phase}:{attempt}\")[:12],
-    message: \"{approval_request}\",
-    risk: \"LOW_RISK\",
-    timeout_seconds: 600,
-    channel: \"#pipeline-gates\"
-  })
+*[LOW_RISK]* slack-gate: {short_summary}
 
-  Return the gate decision when complete."
-)
+{message_body}
+
+Reply "{accept_keywords[0]}" to proceed. {silence_note}
+Gate expires in {timeout_minutes} minutes.
 ```
 
-Or inline (for orchestrators that manage their own loop):
+## Skill Result Output
 
-```python
-# Check gate state before posting
-gate_path = os.path.expanduser(f"~/.claude/gates/{gate_id}.json")
-if gate_exists(gate_path):
-    gate = load_gate_state(gate_path)
-    if gate["status"] == "resolved":
-        return gate["decision"]  # cached — no Slack post
-    # else: resume polling existing thread
+Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/slack-gate.json` on exit.
 
-# Post to Slack and poll
-post_slack_gate(gate_id, message, risk, timeout, channel)
-decision = poll_until_resolved(gate_id)
-return decision
+```json
+{
+  "skill": "slack-gate",
+  "status": "accepted",
+  "risk_level": "LOW_RISK",
+  "reply": null,
+  "elapsed_minutes": 0,
+  "context_id": "{context_id}"
+}
 ```
 
-## Failure Handling
+**Status values**: `accepted` | `rejected` | `timeout`
 
-| Error | Behavior |
-|-------|----------|
-| Slack unavailable | Degrade to `silence_consent` for LOW_RISK; `timeout_escalated` for MEDIUM_RISK; hard hold for HIGH_RISK |
-| Gate state file unwritable | Log error, continue in-memory (no idempotency this invocation) |
-| Linear ticket creation fails (MEDIUM_RISK timeout) | Log warning, continue |
-| Poll timeout exceeded | Apply silence behavior for risk level |
+- `accepted`: Reply matched accept_keywords, or LOW_RISK timed out (silence = consent)
+- `rejected`: Reply matched reject_keywords
+- `timeout`: MEDIUM_RISK or HIGH_RISK gate timed out without reply
+
+## Executable Scripts
+
+### `slack-gate.sh`
+
+Bash wrapper for programmatic invocation of this skill.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# slack-gate.sh — wrapper for the slack-gate skill
+# Usage: slack-gate.sh <RISK_LEVEL> <MESSAGE> [--timeout-minutes N]
+
+RISK_LEVEL=""
+MESSAGE=""
+TIMEOUT_MINUTES=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --timeout-minutes)  TIMEOUT_MINUTES="$2";  shift 2 ;;
+    -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)
+      if [[ -z "$RISK_LEVEL" ]]; then RISK_LEVEL="$1"; shift
+      elif [[ -z "$MESSAGE" ]];   then MESSAGE="$1";    shift
+      else echo "Unexpected argument: $1" >&2; exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$RISK_LEVEL" || -z "$MESSAGE" ]]; then
+  echo "Usage: slack-gate.sh <RISK_LEVEL> <MESSAGE> [--timeout-minutes N]" >&2
+  echo "  RISK_LEVEL: LOW_RISK | MEDIUM_RISK | HIGH_RISK" >&2
+  exit 1
+fi
+
+TIMEOUT_ARG=""
+if [[ -n "$TIMEOUT_MINUTES" ]]; then
+  TIMEOUT_ARG="--arg timeout_minutes=${TIMEOUT_MINUTES}"
+fi
+
+exec claude --skill onex:slack-gate \
+  --arg "risk_level=${RISK_LEVEL}" \
+  --arg "message=${MESSAGE}" \
+  ${TIMEOUT_ARG}
+```
+
+| Invocation | Description |
+|------------|-------------|
+| `/slack-gate LOW_RISK "Decomposed epic into 3 sub-tickets. Reply reject to cancel."` | Interactive: post LOW_RISK gate, silence = consent after 30 min |
+| `/slack-gate HIGH_RISK "Ready to merge PR #123. Reply merge to proceed."` | Interactive: post HIGH_RISK gate, requires explicit approval |
+| `Skill(skill="onex:slack-gate", args="MEDIUM_RISK CI failed 3 times. --timeout-minutes 60")` | Programmatic: composable invocation from orchestrator |
+| `slack-gate.sh HIGH_RISK "Deploy to production?" --timeout-minutes 1440` | Shell: direct invocation with 24h timeout |
 
 ## See Also
 
-- `ticket-pipeline` skill — invokes slack-gate at spec approval and review override gates
-- `ci-fix-pipeline` skill (planned) — invokes slack-gate for MEDIUM_RISK architectural classification
-- `auto-merge` skill (planned) — invokes slack-gate at HIGH_RISK for merge approval
+- `auto-merge` skill (uses HIGH_RISK gate before merging)
+- `epic-team` skill (uses LOW_RISK gate for empty epic auto-decompose)
+- `ticket-pipeline` skill (planned: uses MEDIUM_RISK gate for CI/PR escalation)
+- OMN-2521 — implementation ticket

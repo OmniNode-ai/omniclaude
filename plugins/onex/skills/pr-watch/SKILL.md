@@ -1,218 +1,143 @@
 ---
 name: pr-watch
-description: Poll a PR for review comments and automatically invoke pr-review-dev to fix them — replaces the manual review-check-and-fix step
+description: Poll GitHub PR for review feedback, auto-fix issues, and report terminal state
 version: 1.0.0
 category: workflow
-tags:
-  - pr
-  - github
-  - review
-  - polling
-  - autonomous
-  - pipeline
+tags: [pr, github, review, automation, polling]
 author: OmniClaude Team
 composable: true
-args:
-  - name: --pr
-    description: PR number to watch
-    required: true
-  - name: --ticket-id
-    description: Ticket ID context for Slack messages
-    required: false
-  - name: --timeout-hours
-    description: "Max hours to wait for approval (default: 24)"
-    required: false
-  - name: --max-review-cycles
-    description: "Max fix cycles before capping (default: 3)"
-    required: false
-  - name: --fix-nits
-    description: Also fix nit-level comments (default: false)
-    required: false
 inputs:
   - name: pr_number
-    description: int — PR number to watch
-  - name: ticket_id
-    description: str — context ticket ID
-  - name: policy
-    description: PrWatchPolicy — timeout_hours, max_review_cycles, auto_fix_nits
+    type: int
+    description: GitHub PR number to watch
+    required: true
+  - name: repo
+    type: str
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: timeout_hours
+    type: float
+    description: Max hours to wait for review (default 24)
+    required: false
+  - name: max_review_cycles
+    type: int
+    description: Max auto-fix cycles before escalating (default 3)
+    required: false
+  - name: auto_fix
+    type: bool
+    description: Auto-fix Critical/Major/Minor review comments (default true)
+    required: false
+  - name: fix_nits
+    type: bool
+    description: Also auto-fix Nit-level comments (default false)
+    required: false
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: approved | capped | timeout | failed"
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/pr-watch.json"
+    fields:
+      - status: approved | changes_requested_fixed | timeout | capped | error
+      - pr_number: int
+      - repo: str
+      - fix_cycles_used: int
+      - elapsed_hours: float
+args:
+  - name: pr_number
+    description: GitHub PR number to watch
+    required: true
+  - name: repo
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: --timeout-hours
+    description: Max hours to wait for review (default 24)
+    required: false
+  - name: --max-review-cycles
+    description: Max fix cycles before escalating (default 3)
+    required: false
+  - name: --no-auto-fix
+    description: Poll only, don't attempt fixes
+    required: false
+  - name: --fix-nits
+    description: Also auto-fix Nit-level comments
+    required: false
 ---
 
 # PR Watch
 
 ## Overview
 
-Composable sub-skill that polls a PR for new review comments and automatically invokes
-`pr-review-dev` to fix Critical/Major/Minor issues when reviews arrive. Replaces the manual
-"check for PR review → invoke pr-review-dev" step in the autonomous ticket pipeline.
+Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by default) using
+`pr-review-dev`. Exit when PR reaches a terminal state: `approved`, `changes_requested_fixed`
+(all blocking issues resolved), `timeout`, or `capped` (max fix cycles reached).
 
-**Announce at start:** "I'm using the pr-watch skill for PR #{pr_number}."
+**Announce at start:** "I'm using the pr-watch skill to monitor reviews for PR #{pr_number}."
+
+**Implements**: OMN-2524
 
 ## Quick Start
 
 ```
-/pr-watch --pr 142 --ticket-id OMN-2356
-/pr-watch --pr 142 --timeout-hours 48 --max-review-cycles 5
-/pr-watch --pr 142 --fix-nits    # Also fix nit comments
+/pr-watch 123 org/repo
+/pr-watch 123 org/repo --timeout-hours 48
+/pr-watch 123 org/repo --max-review-cycles 5
+/pr-watch 123 org/repo --fix-nits
+/pr-watch 123 org/repo --no-auto-fix
 ```
 
-## Policy Defaults
+## Poll Loop
 
-```yaml
-pr_review_timeout_hours: 24     # Max hours waiting for approval before timeout
-max_pr_review_cycles: 3         # Max fix cycles before Slack MEDIUM_RISK gate
-auto_fix_nits: false            # Nits skipped by default
-poll_interval_minutes: 10       # Minutes between review status checks
-halfway_notification_hours: 12  # Slack MEDIUM_RISK notification at halfway mark
-```
+1. Fetch PR review state via `gh pr view {pr_number} --repo {repo} --json reviews,reviewDecision`
+2. If `reviewDecision == APPROVED`: exit with `status: approved`
+3. If `reviewDecision == CHANGES_REQUESTED` and `auto_fix=true` and cycles remaining:
+   - Dispatch pr-review-dev agent with review comments
+   - Increment fix cycle count
+   - Wait for CI (delegate to ci-watch if needed), then re-request review
+4. If fix cycles exhausted: exit with `status: capped`
+5. If elapsed > timeout_hours: exit with `status: timeout`
+6. If all blocking issues resolved but no explicit approval: exit with `status: changes_requested_fixed`
 
-## Polling Loop
-
-```
-Initialize:
-  pr_review_cycle = 0
-  start_time = now()
-  halfway_notified = false
-  last_seen_review_ids = set()
-
-Loop:
-  elapsed = now() - start_time
-
-  → If elapsed >= halfway_notification_hours * 3600 AND NOT halfway_notified:
-      → Slack MEDIUM_RISK notification: "PR #{pr_number} still awaiting review ({elapsed // 3600:.1f}h elapsed)"
-      → halfway_notified = true
-
-  → Run: gh pr view {pr_number} --json reviewDecision,reviews
-
-  → If reviewDecision == APPROVED AND no unresolved CHANGES_REQUESTED:
-      → Return status: approved
-
-  → If elapsed >= timeout_hours * 3600:
-      → Slack MEDIUM_RISK gate: "PR #{pr_number} timeout — no approval in {timeout_hours}h"
-      → Return status: timeout
-
-  → If new CHANGES_REQUESTED reviews since last check:
-      pr_review_cycle += 1
-      If pr_review_cycle > max_pr_review_cycles:
-        → Slack MEDIUM_RISK gate: "PR #{pr_number} blocked — {N} review cycles with no approval"
-        → Return status: capped
-      → Invoke pr-review-dev to fix issues (see Fix Invocation below)
-      → Push fixes to PR branch
-      → Re-request review from original reviewers
-      → Continue polling
-
-  → Update last_seen_review_ids with IDs from current gh pr view response
-  → Sleep poll_interval_minutes * 60, loop
-```
-
-## Review Detection
-
-**New review detection**: Track last-seen review IDs in local state. A review is "new" if:
-- Its ID was not seen in the previous poll cycle
-- Its state is `CHANGES_REQUESTED` or `COMMENTED`
-- It contains at least one actionable comment (not empty body)
-
-**Approval detection**: `reviewDecision == APPROVED` and no CHANGES_REQUESTED reviews from
-any reviewer who still has that status.
-
-## Fix Invocation
-
-When CHANGES_REQUESTED reviews arrive:
+## Fix Dispatch Contract
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="pr-watch: fix review comments for PR #{pr_number} (cycle {N})",
-  prompt="Invoke: Skill(skill=\"onex:pr-review-dev\", args=\"{pr_number}\")
+  description="pr-watch: fix PR review comments (cycle {cycle}/{max_cycles})",
+  prompt="PR #{pr_number} in {repo} has review comments requiring fixes.
 
-  This is review cycle {N}/{max_cycles} for ticket {ticket_id}.
-  Fix all Critical, Major, and Minor issues.
-  {If auto_fix_nits: 'Also fix Nit issues.'}
-  {Else: 'Skip Nit issues.'}
+    Review comments:
+    {review_comments}
 
-  After fixing, DO NOT push — report back files changed for orchestrator to push."
+    Invoke: Skill(skill=\"onex:pr-review-dev\", args=\"{pr_number}\")
+
+    Fix all Critical, Major, and Minor issues.{nit_instruction}
+    Push fixes to branch: {branch_name}
+
+    Report: issues fixed, files changed, any issues skipped."
 )
 ```
 
-After fix agent completes, orchestrator pushes:
-```bash
-git add <changed_files>
-git commit -m "fix(review): address PR review comments — cycle {N} [{ticket_id}]"
-git push
-```
+## Skill Result Output
 
-Then re-request review:
-```bash
-gh pr edit {pr_number} --add-reviewer {reviewer_logins}
-```
-
-## Slack Notifications
-
-### Halfway Mark — MEDIUM_RISK Notification
-
-Not a gate (no waiting for response); informational only:
-```
-[MEDIUM_RISK] pr-watch: PR #{pr_number} still awaiting review
-
-{halfway_notification_hours} hours elapsed without approval.
-Ticket: {ticket_id}
-Reviewers: {reviewer_list}
-```
-
-### Cap Reached — MEDIUM_RISK Gate
-
-```
-[MEDIUM_RISK] pr-watch: PR #{pr_number} blocked — {N} review cycles with issues remaining
-
-This PR has been through {N} automated fix cycles and still has unresolved review comments.
-Manual review required.
-
-Reply 'approve' to continue watching, 'reject' to mark as blocked.
-Silence (15 min) = blocked (status: capped).
-```
-
-### Timeout — MEDIUM_RISK Gate
-
-```
-[MEDIUM_RISK] pr-watch: Timeout — {timeout_hours}h with no PR approval
-
-PR #{pr_number}
-Ticket: {ticket_id}
-
-Reply 'extend' for 12 more hours, 'stop' to halt.
-Silence (15 min) = stop (status: timeout).
-```
-
-## ModelSkillResult Output
-
-Written to `~/.claude/skill-results/{context_id}/pr-watch.json`:
+Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/pr-watch.json` on exit.
 
 ```json
 {
-  "status": "approved | capped | timeout | failed",
-  "pr_number": 142,
-  "ticket_id": "OMN-2356",
-  "pr_review_cycles_used": 2,
-  "watch_duration_hours": 8.5,
-  "final_review_decision": "APPROVED | CHANGES_REQUESTED | pending"
+  "skill": "pr-watch",
+  "status": "approved",
+  "pr_number": 123,
+  "repo": "org/repo",
+  "fix_cycles_used": 2,
+  "elapsed_hours": 3.5,
+  "context_id": "{context_id}"
 }
 ```
 
-## Failure Handling
-
-| Error | Behavior |
-|-------|----------|
-| `gh pr view --json reviews` unavailable | Retry 3x, then `status: failed` with error |
-| pr-review-dev hard-fails | Log error, continue watching without fix |
-| Push fails after fix | Log error, continue watching (don't re-request review) |
-| Slack unavailable for cap gate | Skip gate, apply default (status: capped) |
-| Slack unavailable for timeout gate | Skip gate, apply default (status: timeout/stop) |
+**Status values**: `approved` | `changes_requested_fixed` | `timeout` | `capped` | `error`
 
 ## See Also
 
-- `pr-review-dev` skill — invoked to fix review comments
-- `slack-gate` skill — MEDIUM_RISK gates used for cap and timeout (planned, not yet implemented)
-- `auto-merge` skill — invoked after pr-watch returns `approved` (planned, not yet implemented)
-- `ticket-pipeline` skill — planned integration as Phase 5 (pr_review_loop); not yet wired
+- `ticket-pipeline` skill (planned: invokes pr-watch after ci-watch passes)
+- `ci-watch` skill (planned: runs before pr-watch)
+- `auto-merge` skill (planned: runs after pr-watch passes)
+- `pr-review-dev` skill (invoked to fix review comments)
+- OMN-2524 — implementation ticket
