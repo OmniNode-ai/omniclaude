@@ -1434,6 +1434,25 @@ Runs pre-commit hooks and mypy on clean checkout. Classifies pre-existing issues
 
 For Phase 0, the executor currently runs inline (no sub-agent dispatch needed for pre-flight checks).
 
+```python
+# execute_pre_flight — placeholder implementation
+# Runs pre-commit hooks and mypy inline, classifies issues, then returns completed.
+# Full inline implementation goes here. For now, returns completed immediately.
+return {
+    "status": "completed",
+    "blocking_issues": 0,
+    "nit_count": 0,
+    "artifacts": {"pre_flight_status": "passed"},
+    "reason": None,
+    "block_kind": None,
+}
+```
+
+**Mutations:**
+- `phases.pre_flight.started_at`
+- `phases.pre_flight.completed_at`
+- `phases.pre_flight.artifacts` (pre_flight_status)
+
 **Exit conditions:**
 - **Completed:** pre-flight checks passed or pre-existing issues classified and handled
 

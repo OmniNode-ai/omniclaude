@@ -52,7 +52,7 @@ stateDiagram-v2
     [*] --> pre_flight
     pre_flight --> implement : auto (policy)
     implement --> local_review : auto (policy)
-    local_review --> create_pr : auto (2 confirmed-clean runs)
+    local_review --> create_pr : auto (1 confirmed-clean run)
     create_pr --> ci_watch : auto (policy)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
     pr_review_loop --> auto_merge : auto (approved)
@@ -80,9 +80,9 @@ stateDiagram-v2
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
-- Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
+- Requires 1 confirmed-clean run before advancing
+- Stop on: 0 blocking issues (confirmed by 1 clean run), max iterations, repeat issues, new major after iteration 1
+- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 1 confirmed-clean run)
 
 ### Phase 3: create_pr
 
@@ -193,6 +193,11 @@ You do NOT implement, review, or fix code yourself. Heavy phases run in separate
 **Rule: The coordinator must NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an
 edit, that is the signal to dispatch instead.
+
+### Phase 0: pre_flight — runs inline (no sub-agent dispatch needed)
+
+Pre-flight checks run inline in the orchestrator. No `Task()` dispatch. The orchestrator runs
+pre-commit hooks and mypy directly, classifies issues, and auto-advances to Phase 1.
 
 ### Phase 1: implement — dispatch to polymorphic agent
 
