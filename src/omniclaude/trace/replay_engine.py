@@ -52,13 +52,15 @@ class ReplayMode(str, Enum):
 # Divergence reason constants
 # ---------------------------------------------------------------------------
 
-#: Outcome differs and tool output hashes changed
+#: Outcome differs and tool output hashes changed (live tool re-execution detected divergence)
 REASON_NON_DETERMINISTIC_TOOL: Literal["non_deterministic_tool"] = (
     "non_deterministic_tool"
 )
 #: Outcome differs and environment hash changed
 REASON_ENV_CHANGED: Literal["env_changed"] = "env_changed"
-#: Outcome differs for unknown reason (e.g. FULL mode)
+#: Outcome differs for unknown reason in STUBBED mode (tools not re-run; likely check flakiness)
+REASON_STUBBED_UNKNOWN: Literal["stubbed_unknown"] = "stubbed_unknown"
+#: Outcome differs for unknown reason (e.g. FULL mode before tool re-execution is implemented)
 REASON_UNKNOWN: Literal["unknown"] = "unknown"
 
 
@@ -258,11 +260,11 @@ def _detect_divergence_reason(
         return REASON_ENV_CHANGED
 
     # In STUBBED mode, tool outputs are replaced with stored values rather than
-    # re-executed live. Any remaining divergence after environment checks is
-    # attributed to REASON_NON_DETERMINISTIC_TOOL as a conservative fallback —
-    # the true root cause cannot be determined without live tool re-execution.
+    # re-executed live. Any remaining divergence is unknown — tools were not
+    # re-run, so non-determinism cannot be confirmed. Likely check flakiness or
+    # timing differences in the stubbed environment.
     if mode == ReplayMode.STUBBED:
-        return REASON_NON_DETERMINISTIC_TOOL
+        return REASON_STUBBED_UNKNOWN
 
     return REASON_UNKNOWN
 
@@ -369,12 +371,15 @@ class ReplayEngine:
 
         # FULL mode: also simulate re-execution of tool events
         if mode == ReplayMode.FULL:
-            # Known limitation: FULL mode is documented to re-run everything
-            # (including tool events), but live LLM tool call replay is not yet
-            # implemented. Currently only check execution runs (same as TEST_ONLY
-            # and STUBBED). Full tool re-execution requires deterministic tool
-            # invocation infrastructure that is not yet available.
-            pass
+            # TODO(OMN-2412): Implement live tool re-execution for FULL mode.
+            # FULL mode is documented to re-run everything (including tool events),
+            # but live LLM tool call replay is not yet implemented — it requires
+            # deterministic tool invocation infrastructure that is not yet available.
+            # Until implemented, FULL mode behaves identically to TEST_ONLY.
+            raise NotImplementedError(
+                "FULL replay mode (live tool re-execution) is not yet implemented. "
+                "Use ReplayMode.TEST_ONLY or ReplayMode.STUBBED instead."
+            )
 
         # STUBBED mode: verify stored output hashes still match
         # (no additional action needed — checks already run on the patched state)

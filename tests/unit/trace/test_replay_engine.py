@@ -36,7 +36,7 @@ from omniclaude.trace.change_frame import (
 )
 from omniclaude.trace.replay_engine import (
     REASON_ENV_CHANGED,
-    REASON_NON_DETERMINISTIC_TOOL,
+    REASON_STUBBED_UNKNOWN,
     REASON_UNKNOWN,
     ReplayEngine,
     ReplayMode,
@@ -353,13 +353,18 @@ class TestDetectDivergenceReason:
         reason = _detect_divergence_reason(frame, replayed, ReplayMode.FULL)
         assert reason == REASON_ENV_CHANGED
 
-    def test_non_deterministic_tool_in_stubbed_mode(self) -> None:
+    def test_stubbed_unknown_in_stubbed_mode(self) -> None:
+        """STUBBED mode with matching env hashes returns REASON_STUBBED_UNKNOWN.
+
+        Tools are not re-run in STUBBED mode so non-determinism cannot be
+        confirmed — the reason accurately reflects unknown divergence.
+        """
         frame = make_change_frame(
             check_results=[make_check_result(env_hash="same-hash")]
         )
         replayed = [make_check_result(env_hash="same-hash")]
         reason = _detect_divergence_reason(frame, replayed, ReplayMode.STUBBED)
-        assert reason == REASON_NON_DETERMINISTIC_TOOL
+        assert reason == REASON_STUBBED_UNKNOWN
 
     def test_unknown_in_full_mode(self) -> None:
         frame = make_change_frame(
@@ -451,8 +456,8 @@ class TestReplayEngine:
         assert result.divergence_reason == REASON_ENV_CHANGED
         assert result.diverged is True
 
-    def test_full_mode_no_divergence(self) -> None:
-        """FULL mode: workspace succeeds and checks pass → no divergence."""
+    def test_full_mode_raises_not_implemented(self) -> None:
+        """FULL mode raises NotImplementedError until live tool re-execution is built."""
         engine = self._make_engine()
         frame = make_change_frame(outcome_status="pass")
 
@@ -464,10 +469,8 @@ class TestReplayEngine:
             return m
 
         with patch("subprocess.run", side_effect=fake_subprocess):
-            result = engine.replay(frame, mode=ReplayMode.FULL)
-
-        assert result.mode == ReplayMode.FULL
-        assert not result.diverged
+            with pytest.raises(NotImplementedError, match="FULL replay mode"):
+                engine.replay(frame, mode=ReplayMode.FULL)
 
     def test_stubbed_mode(self) -> None:
         """STUBBED mode: workspace succeeds and checks pass → no divergence."""

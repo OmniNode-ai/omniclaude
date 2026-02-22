@@ -40,7 +40,7 @@ class FixTransition(BaseModel):
     Immutable after creation — emitted to Kafka and persisted to DB.
     """
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     transition_id: UUID
     failure_signature_id: str  # Which failure class was resolved
