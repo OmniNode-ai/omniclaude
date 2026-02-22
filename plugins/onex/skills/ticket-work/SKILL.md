@@ -99,8 +99,8 @@ to implementation-complete without requiring keyboard input.
 |------------------|-----------------------|-----------------|
 | intake → research | Auto | Auto |
 | research → questions | Hard keyboard gate | Auto-generate questions; if >0, post to Slack LOW_RISK gate (30 min timeout; silence = no questions needed) |
-| questions → spec | Hard keyboard gate | Post spec summary to Slack LOW_RISK gate (10 min timeout; silence = approved) |
-| spec → implementation | Hard keyboard gate | Auto-advance |
+| questions → spec | Hard keyboard gate | Auto-advance (spec generated automatically) |
+| spec → implementation | Hard keyboard gate | Post spec summary to Slack LOW_RISK gate (10 min timeout; silence = approved) |
 | implementation → review | Hard keyboard gate | Auto-advance |
 | review → done | Hard keyboard gate | Auto-advance (merge gate moved to ticket-pipeline Phase 6) |
 
@@ -118,7 +118,7 @@ autonomous:
 ### Slack Message Format (Spec Approval Gate)
 
 ```
-🔧 [OMN-2356] Spec ready for review
+🔧 [{ticket_id}] Spec ready for review
 
 **Plan**: {spec_summary}
 **Files to change**: {file_list} ({N} files)
