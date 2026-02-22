@@ -54,7 +54,7 @@ class AssociationMethod(str, Enum):
 class ModelFrameConfig(BaseModel):
     """LLM configuration at the time the ChangeFrame was produced."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     temperature: float | None = None
     seed: int | None = None
@@ -64,7 +64,7 @@ class ModelFrameConfig(BaseModel):
 class ModelIntentRef(BaseModel):
     """Reference to the intent (prompt) that triggered this ChangeFrame."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     prompt_hash: str
     ticket_id: str | None = None
@@ -82,7 +82,7 @@ class ModelIntentRef(BaseModel):
 class ModelWorkspaceRef(BaseModel):
     """Reference to the workspace state at frame capture time."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     repo: str
     branch: str
@@ -100,7 +100,7 @@ class ModelWorkspaceRef(BaseModel):
 class ModelDelta(BaseModel):
     """The actual code change captured in this ChangeFrame."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     diff_patch: str
     files_changed: list[str]
@@ -121,7 +121,7 @@ class ModelDelta(BaseModel):
 class ModelToolEvent(BaseModel):
     """Record of a single tool invocation during frame execution."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     tool_name: str
     input_hash: str
@@ -132,7 +132,7 @@ class ModelToolEvent(BaseModel):
 class ModelCheckResult(BaseModel):
     """Result of a single quality check (lint, typecheck, test, etc.)."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     command: str
     environment_hash: str
@@ -144,7 +144,7 @@ class ModelCheckResult(BaseModel):
 class ModelOutcome(BaseModel):
     """High-level outcome classification for a ChangeFrame."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     status: Literal["pass", "fail", "partial"]
     failure_signature_id: str | None = None
@@ -153,7 +153,7 @@ class ModelOutcome(BaseModel):
 class ModelEvidence(BaseModel):
     """Evidence (logs) captured alongside the ChangeFrame."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     truncated_logs: str = ""
     full_log_pointer: str | None = None
@@ -178,7 +178,7 @@ class ChangeFrame(BaseModel):
     All three must hold or the frame is invalid.
     """
 
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     frame_id: UUID
     parent_frame_id: UUID | None = None
