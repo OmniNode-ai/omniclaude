@@ -327,11 +327,11 @@ current git branch name (with `/` replaced by `-`).
 ### Notes Format (Append-Only)
 
 Each iteration appends to the notes file (never overwrites). In-file iteration
-timestamps use `YYYY-MM-DD HH:MM:SS` (human-readable, distinct from the filename
-`YYYYMMDD-HHMMSS` format):
+timestamps use `YYYY-MM-DD HH:MM:SS ±HH:MM` (human-readable with timezone, distinct
+from the filename `YYYYMMDD-HHMMSS` format):
 
 ```markdown
-## Iteration 3 — 2026-02-21 14:32:00
+## Iteration 3 — 2026-02-21 14:32:00 +00:00
 
 ### Issues Found
 - [MAJOR] [FIXED] src/api.py:45 - Missing validation on user input
