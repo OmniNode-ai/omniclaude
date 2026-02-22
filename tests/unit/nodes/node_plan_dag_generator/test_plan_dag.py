@@ -251,24 +251,24 @@ class TestTopologicalSort:
         assert ids.index("C") < ids.index("D")
 
     def test_cycle_raises_value_error(self) -> None:
-        # Force a cycle by bypassing ModelPlanDag validator
-        # We build a DAG with valid edge references but manually trigger
-        # topological_sort on a DAG that we construct with __new__ + model_fields_set
+        # Build a DAG with a back-edge (u3 → u1) to create a cycle.
+        # ModelPlanDag validates edge references (all unit_ids exist) but does
+        # NOT reject cycles at construction time — that is enforced by
+        # topological_sort() which uses Kahn's algorithm.
         u1 = _work_unit("u1")
         u2 = _work_unit("u2")
         u3 = _work_unit("u3")
-        # Build with valid edges (no cycle), then call sort on a manipulated copy
         e1 = ModelDagEdge(from_unit_id="u1", to_unit_id="u2")
         e2 = ModelDagEdge(from_unit_id="u2", to_unit_id="u3")
+        e3 = ModelDagEdge(from_unit_id="u3", to_unit_id="u1")  # back-edge: cycle
         dag = ModelPlanDag(
             dag_id="d1",
             intent_id="i1",
             nodes=(u1, u2, u3),
-            edges=(e1, e2),
+            edges=(e1, e2, e3),
         )
-        # Verify normal sort works
-        result = dag.topological_sort()
-        assert len(result) == 3
+        with pytest.raises(ValueError, match="Cycle detected"):
+            dag.topological_sort()
 
     def test_cycle_in_template_build_raises(self) -> None:
         """_build_dag_from_template raises if cycle is introduced."""
@@ -311,17 +311,19 @@ class TestOrphanedNodes:
         assert orphaned == frozenset()
 
     def test_node_only_reachable_via_cycle_is_orphaned(self) -> None:
-        # Build: root1 → a, b → c → b (cycle, not reachable from root1)
+        # Build: root1 → a; b ↔ c (cycle disconnected from root1)
+        # b and c have incoming edges only from each other — they form a cycle
+        # unreachable from any root. _find_orphaned_nodes detects them as orphaned
+        # because they have no path from a true root (a node with no incoming edges
+        # from outside the cycle).
         units = tuple(_work_unit(uid) for uid in ("root1", "a", "b", "c"))
         edges = (
             ModelDagEdge(from_unit_id="root1", to_unit_id="a"),
-            # b and c form a cycle disconnected from root1
+            ModelDagEdge(from_unit_id="b", to_unit_id="c"),
+            ModelDagEdge(from_unit_id="c", to_unit_id="b"),  # cycle
         )
         orphaned = _find_orphaned_nodes(units, edges)
-        # b and c have no incoming edges from the non-cycle part — they are roots
-        # In this case, orphaned should be empty since b and c are roots themselves
-        # (they have no incoming edges)
-        assert "a" not in orphaned
+        assert orphaned == frozenset({"b", "c"})
 
 
 # ---------------------------------------------------------------------------

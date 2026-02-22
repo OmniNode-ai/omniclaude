@@ -283,6 +283,14 @@ def _build_dag_from_template(
         for local_id, title, unit_type, scope in unit_specs
     )
 
+    unknown_deps = [
+        (from_local, to_local)
+        for from_local, to_local in dep_specs
+        if from_local not in local_to_uuid or to_local not in local_to_uuid
+    ]
+    if unknown_deps:
+        raise ValueError(f"Dependency references unknown local_id(s): {unknown_deps!r}")
+
     edges = tuple(
         ModelDagEdge(
             from_unit_id=local_to_uuid[from_local],

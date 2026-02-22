@@ -9,6 +9,8 @@ The Plan DAG is the system-of-record output of Stage 3.  It is consumed by:
 
 from __future__ import annotations
 
+from collections import Counter
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omniclaude.nodes.node_plan_dag_generator.models.model_dag_edge import ModelDagEdge
@@ -59,7 +61,13 @@ class ModelPlanDag(BaseModel):
     @model_validator(mode="after")
     def _validate_edge_references(self) -> ModelPlanDag:
         """All edge endpoints must reference nodes that exist in this DAG."""
-        unit_ids = {n.unit_id for n in self.nodes}
+        unit_id_list = [n.unit_id for n in self.nodes]
+        duplicates = {uid for uid, count in Counter(unit_id_list).items() if count > 1}
+        if duplicates:
+            raise ValueError(
+                f"Duplicate unit_id(s) in Plan DAG nodes: {sorted(duplicates)}"
+            )
+        unit_ids = set(unit_id_list)
         for edge in self.edges:
             if edge.from_unit_id not in unit_ids:
                 raise ValueError(
