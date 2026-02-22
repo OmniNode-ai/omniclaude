@@ -64,14 +64,14 @@ async def test_round_trip_flow():
         logger.info(f"   Payload: {json.dumps(payload, indent=2)}")
 
         # Send request
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
         try:
             response = await client.post(url, json=payload, headers=headers)
         except Exception as e:
             logger.error(f"❌ Request failed: {e}")
             return False
 
-        end_time = asyncio.get_event_loop().time()
+        end_time = asyncio.get_running_loop().time()
         latency_ms = int((end_time - start_time) * 1000)
 
         logger.info(f"\n2. Received response:")

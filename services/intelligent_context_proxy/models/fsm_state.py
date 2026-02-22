@@ -13,7 +13,7 @@ This module provides:
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -54,7 +54,7 @@ class FSMTransition(BaseModel):
         default_factory=lambda: datetime.now(UTC).isoformat(),
         description="ISO 8601 timestamp",
     )
-    metadata: Dict[str, any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     class Config:
         """Pydantic config."""
@@ -91,7 +91,7 @@ class FSMState(BaseModel):
         default_factory=lambda: datetime.now(UTC).isoformat(),
         description="Last update timestamp",
     )
-    metadata: Dict[str, any] = Field(default_factory=dict, description="Additional metadata")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     class Config:
         """Pydantic config."""

@@ -66,10 +66,11 @@ class BaseEventEnvelope(BaseModel):
     version: str = Field(default="v1", description="Schema version")
     payload: Dict[str, Any] = Field(..., description="Event-specific payload")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "frozen": True,
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "event_id": "550e8400-e29b-41d4-a716-446655440000",
                 "event_type": "REQUEST_RECEIVED",
@@ -79,7 +80,8 @@ class BaseEventEnvelope(BaseModel):
                 "version": "v1",
                 "payload": {},
             }
-        }
+        },
+    }
 
 
 # ============================================================================
@@ -268,10 +270,11 @@ class PersistStateIntent(BaseModel):
     )
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = {
+        "frozen": True,
+        "extra": "ignore",
+        "from_attributes": True,
+        "json_schema_extra": {
             "example": {
                 "intent_type": "PERSIST_STATE",
                 "correlation_id": "abc-123",
@@ -283,7 +286,8 @@ class PersistStateIntent(BaseModel):
                 "timestamp": "2025-11-09T14:30:00Z",
                 "metadata": {},
             }
-        }
+        },
+    }
 
 
 # ============================================================================

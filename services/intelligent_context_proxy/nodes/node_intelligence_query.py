@@ -192,7 +192,7 @@ class NodeIntelligenceQueryEffect:
             request_data: Original HTTP request from Claude Code
             intent: Extracted intent (task_type, entities, operations, files)
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
 
         try:
             # Extract user prompt from request
@@ -212,7 +212,7 @@ class NodeIntelligenceQueryEffect:
                     force_refresh=False,  # Use cache if available
                 )
 
-            end_time = asyncio.get_event_loop().time()
+            end_time = asyncio.get_running_loop().time()
             query_time_ms = int((end_time - start_time) * 1000)
 
             logger.info(

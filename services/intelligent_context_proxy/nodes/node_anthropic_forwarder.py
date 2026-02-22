@@ -195,7 +195,7 @@ class NodeAnthropicForwarderEffect:
             rewritten_request: Rewritten messages + system prompt
             oauth_token: OAuth token (passthrough)
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
 
         try:
             # Build headers
@@ -235,7 +235,7 @@ class NodeAnthropicForwarderEffect:
                 json_data=request_data,
             )
 
-            end_time = asyncio.get_event_loop().time()
+            end_time = asyncio.get_running_loop().time()
             forward_time_ms = int((end_time - start_time) * 1000)
 
             logger.info(

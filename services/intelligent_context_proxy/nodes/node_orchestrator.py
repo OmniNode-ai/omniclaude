@@ -34,7 +34,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -247,7 +247,6 @@ class NodeContextProxyOrchestrator:
 
             logger.info(f"FSM state confirmed: request_received (correlation_id={correlation_id})")
 
-
             # ========================================================================
             # Phase 2+: Full Workflow Implementation
             # ========================================================================
@@ -255,14 +254,14 @@ class NodeContextProxyOrchestrator:
             # Step 2: Query Intelligence
             logger.info(f"→ Step 1/3: Querying intelligence (correlation_id={correlation_id})")
             await self._publish_query_event(correlation_id=correlation_id, request_data=request_data)
-            
+
             # Wait for FSM transition: request_received → intelligence_queried
             await self._wait_for_fsm_state(
                 correlation_id=correlation_id,
                 expected_state=WorkflowState.INTELLIGENCE_QUERIED,
                 timeout_ms=5000,
             )
-            
+
             intelligence_result = self._get_step_result(correlation_id, "intelligence")
             logger.info(f"✓ Intelligence queried (correlation_id={correlation_id})")
 
@@ -275,14 +274,14 @@ class NodeContextProxyOrchestrator:
                 intelligence=intelligence_result.get("intelligence", {}),
                 intent=intelligence_result.get("intent", {}),
             )
-            
+
             # Wait for FSM transition: intelligence_queried → context_rewritten
             await self._wait_for_fsm_state(
                 correlation_id=correlation_id,
                 expected_state=WorkflowState.CONTEXT_REWRITTEN,
                 timeout_ms=2000,
             )
-            
+
             rewrite_result = self._get_step_result(correlation_id, "rewritten_context")
             logger.info(f"✓ Context rewritten (correlation_id={correlation_id})")
 
@@ -298,14 +297,14 @@ class NodeContextProxyOrchestrator:
                 },
                 oauth_token=oauth_token,
             )
-            
+
             # Wait for FSM transition: context_rewritten → completed
             await self._wait_for_fsm_state(
                 correlation_id=correlation_id,
                 expected_state=WorkflowState.COMPLETED,
                 timeout_ms=30000,
             )
-            
+
             anthropic_result = self._get_step_result(correlation_id, "anthropic_response")
             logger.info(f"✓ Anthropic response received (correlation_id={correlation_id})")
 
@@ -322,7 +321,6 @@ class NodeContextProxyOrchestrator:
             # Clean up
             self._step_results.pop(correlation_id, None)
 
-            logger.info(f"✅ Full workflow completed (correlation_id={correlation_id})")
             logger.info(f"✅ Workflow completed successfully (correlation_id={correlation_id})")
 
         except asyncio.TimeoutError:
@@ -347,7 +345,7 @@ class NodeContextProxyOrchestrator:
         Raises:
             TimeoutError: If FSM state does not transition within timeout
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
         timeout_seconds = timeout_ms / 1000.0
 
         while True:
@@ -363,7 +361,7 @@ class NodeContextProxyOrchestrator:
                 raise Exception("Workflow failed during FSM transition")
 
             # Check timeout
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = asyncio.get_running_loop().time() - start_time
             if elapsed > timeout_seconds:
                 raise TimeoutError(
                     f"FSM state did not transition to {expected_state} within {timeout_ms}ms "
@@ -486,10 +484,93 @@ class NodeContextProxyOrchestrator:
         except Exception as e:
             logger.error(f"Failed to publish error event: {e}", exc_info=True)
 
+    # ============================================================================
+    # Phase 2+ Helper Methods (Full Workflow)
+    # ============================================================================
+
+    def _cache_step_result(self, correlation_id: str, step_name: str, result: Dict[str, Any]) -> None:
+        """Cache step result for workflow aggregation."""
+        if correlation_id not in self._step_results:
+            self._step_results[correlation_id] = {}
+        self._step_results[correlation_id][step_name] = result
+
+    def _get_step_result(self, correlation_id: str, step_name: str) -> Dict[str, Any]:
+        """Get cached step result."""
+        if correlation_id not in self._step_results:
+            logger.warning(f"No step results for correlation_id={correlation_id}")
+            return {}
+        return self._step_results[correlation_id].get(step_name, {})
+
+    async def _publish_query_event(self, correlation_id: str, request_data: Dict[str, Any]) -> None:
+        """Publish intelligence query event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+
+        event = ContextQueryRequestedEvent(
+            correlation_id=correlation_id,
+            payload={"request_data": request_data, "intent": None},
+        )
+
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_QUERY_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
+
+    async def _publish_rewrite_event(
+        self,
+        correlation_id: str,
+        messages: List[Dict[str, Any]],
+        system_prompt: str,
+        intelligence: Dict[str, Any],
+        intent: Dict[str, Any],
+    ) -> None:
+        """Publish context rewrite event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+
+        event = ContextRewriteRequestedEvent(
+            correlation_id=correlation_id,
+            payload={
+                "messages": messages,
+                "system_prompt": system_prompt,
+                "intelligence": intelligence,
+                "intent": intent,
+            },
+        )
+
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_REWRITE_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
+
+    async def _publish_forward_event(
+        self, correlation_id: str, rewritten_request: Dict[str, Any], oauth_token: str
+    ) -> None:
+        """Publish Anthropic forward event."""
+        if not self.producer:
+            raise RuntimeError("Producer not available")
+
+        event = ContextForwardRequestedEvent(
+            correlation_id=correlation_id,
+            payload={
+                "rewritten_request": rewritten_request,
+                "oauth_token": oauth_token,
+            },
+        )
+
+        await self.producer.send_and_wait(
+            topic=KafkaTopics.CONTEXT_FORWARD_REQUESTED,
+            value=event.model_dump(),
+            key=correlation_id.encode("utf-8"),
+        )
+
 
 # ============================================================================
 # Main entry point (for testing)
 # ============================================================================
+
 
 async def main():
     """Main entry point for testing."""
@@ -522,81 +603,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-    # ============================================================================
-    # Phase 2+ Helper Methods (Full Workflow)
-    # ============================================================================
-
-    def _cache_step_result(self, correlation_id: str, step_name: str, result: Dict[str, Any]) -> None:
-        """Cache step result for workflow aggregation."""
-        if correlation_id not in self._step_results:
-            self._step_results[correlation_id] = {}
-        self._step_results[correlation_id][step_name] = result
-
-    def _get_step_result(self, correlation_id: str, step_name: str) -> Dict[str, Any]:
-        """Get cached step result."""
-        if correlation_id not in self._step_results:
-            logger.warning(f"No step results for correlation_id={correlation_id}")
-            return {}
-        return self._step_results[correlation_id].get(step_name, {})
-
-    async def _publish_query_event(self, correlation_id: str, request_data: Dict[str, Any]) -> None:
-        """Publish intelligence query event."""
-        if not self.producer:
-            raise RuntimeError("Producer not available")
-        
-        event = ContextQueryRequestedEvent(
-            correlation_id=correlation_id,
-            payload={"request_data": request_data, "intent": None},
-        )
-        
-        await self.producer.send_and_wait(
-            topic=KafkaTopics.CONTEXT_QUERY_REQUESTED,
-            value=event.model_dump(),
-            key=correlation_id.encode("utf-8"),
-        )
-
-    async def _publish_rewrite_event(
-        self, correlation_id: str, messages: List[Dict[str, Any]], system_prompt: str,
-        intelligence: Dict[str, Any], intent: Dict[str, Any]
-    ) -> None:
-        """Publish context rewrite event."""
-        if not self.producer:
-            raise RuntimeError("Producer not available")
-        
-        event = ContextRewriteRequestedEvent(
-            correlation_id=correlation_id,
-            payload={
-                "messages": messages,
-                "system_prompt": system_prompt,
-                "intelligence": intelligence,
-                "intent": intent,
-            },
-        )
-        
-        await self.producer.send_and_wait(
-            topic=KafkaTopics.CONTEXT_REWRITE_REQUESTED,
-            value=event.model_dump(),
-            key=correlation_id.encode("utf-8"),
-        )
-
-    async def _publish_forward_event(
-        self, correlation_id: str, rewritten_request: Dict[str, Any], oauth_token: str
-    ) -> None:
-        """Publish Anthropic forward event."""
-        if not self.producer:
-            raise RuntimeError("Producer not available")
-        
-        event = ContextForwardRequestedEvent(
-            correlation_id=correlation_id,
-            payload={
-                "rewritten_request": rewritten_request,
-                "oauth_token": oauth_token,
-            },
-        )
-        
-        await self.producer.send_and_wait(
-            topic=KafkaTopics.CONTEXT_FORWARD_REQUESTED,
-            value=event.model_dump(),
-            key=correlation_id.encode("utf-8"),
-        )

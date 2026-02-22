@@ -201,7 +201,7 @@ class NodeContextRewriterCompute:
             intelligence: Intelligence data from query effect
             intent: Extracted intent (task_type, entities, operations, files)
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
 
         try:
             # Count tokens before
@@ -233,7 +233,7 @@ class NodeContextRewriterCompute:
                 final_system
             )
 
-            end_time = asyncio.get_event_loop().time()
+            end_time = asyncio.get_running_loop().time()
             processing_time_ms = int((end_time - start_time) * 1000)
 
             logger.info(

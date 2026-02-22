@@ -32,6 +32,7 @@ Status: Phase 1 - Foundation
 import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 from uuid import uuid4
@@ -56,13 +57,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# FastAPI app
-app = FastAPI(
-    title="Intelligent Context Proxy",
-    description="Transparent proxy between Claude Code and Anthropic API with intelligence injection",
-    version="1.0.0",
-)
-
 # Global state
 kafka_producer: Optional[AIOKafkaProducer] = None
 kafka_consumer: Optional[AIOKafkaConsumer] = None
@@ -70,13 +64,13 @@ pending_requests: Dict[str, asyncio.Future] = {}  # correlation_id → Future[re
 
 
 # ============================================================================
-# Startup/Shutdown Events
+# Lifespan (Startup/Shutdown)
 # ============================================================================
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize Kafka producer and consumer on startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage Kafka producer and consumer lifecycle."""
     global kafka_producer, kafka_consumer
 
     logger.info("Starting Intelligent Context Proxy...")
@@ -111,11 +105,7 @@ async def startup_event():
         logger.error(f"Failed to start Kafka connections: {e}", exc_info=True)
         raise
 
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close Kafka connections on shutdown."""
-    global kafka_producer, kafka_consumer
+    yield
 
     logger.info("Shutting down Intelligent Context Proxy...")
 
@@ -125,6 +115,15 @@ async def shutdown_event():
         await kafka_consumer.stop()
 
     logger.info("Intelligent Context Proxy stopped")
+
+
+# FastAPI app
+app = FastAPI(
+    title="Intelligent Context Proxy",
+    description="Transparent proxy between Claude Code and Anthropic API with intelligence injection",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 
 # ============================================================================
@@ -234,7 +233,7 @@ async def proxy_messages(request: Request) -> Response:
         )
 
         # Create future for response
-        response_future = asyncio.get_event_loop().create_future()
+        response_future = asyncio.get_running_loop().create_future()
         pending_requests[correlation_id] = response_future
 
         # Publish event to Kafka
