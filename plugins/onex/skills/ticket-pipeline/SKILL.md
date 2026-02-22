@@ -17,7 +17,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (implement|local_review|create_pr|ready_for_merge)
+    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ready_for_merge)
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -31,7 +31,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: implement -> local_review -> create_pr -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> implement -> local_review -> create_pr -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
 
@@ -48,12 +48,36 @@ Chain existing skills into an autonomous per-ticket pipeline: implement -> local
 
 ```mermaid
 stateDiagram-v2
-    [*] --> implement
+    [*] --> pre_flight
+    pre_flight --> implement : auto (after classify + optional auto-fix)
     implement --> local_review : auto (policy)
     local_review --> create_pr : auto (2 confirmed-clean runs)
     create_pr --> ready_for_merge : auto (policy)
     ready_for_merge --> [*] : manual merge
 ```
+
+### Phase 0: pre_flight
+
+Runs BEFORE implementation on a clean checkout to detect and classify pre-existing issues.
+
+**Key invariant**: Phase 0 is detect-and-classify, NOT "always fix everything." Derailing ticket
+implementation by fixing an unrelated subsystem is worse than deferring with a follow-up ticket.
+
+**Procedure**:
+1. Run `pre-commit run --all-files` on clean checkout
+2. Run `mypy src/ --strict` (or repo-equivalent from `pyproject.toml`)
+3. Classify each failure:
+   - **AUTO-FIX** if ALL of these are true:
+     - <= 10 files touched
+     - Same subsystem as the ticket's work
+     - Low-risk change (formatting, import ordering, type annotation style)
+   - **DEFER** if any criterion fails (> 10 files, architectural, unrelated subsystem)
+4. For AUTO-FIX: apply fixes, commit as `chore(pre-existing): fix pre-existing lint/type errors`
+5. For DEFER: auto-create a Linear sub-ticket via MCP; record in PR description note section
+6. Write Phase 0 result to state (`pre_flight_result`)
+7. AUTO-ADVANCE to Phase 1 (implementation begins on now-cleaner codebase)
+
+**Phase 0 commits are always separate from feature work.**
 
 ### Phase 1: implement
 
@@ -138,6 +162,39 @@ You do NOT implement, review, or fix code yourself. Heavy phases run in separate
 **Rule: The coordinator must NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an
 edit, that is the signal to dispatch instead.
+
+### Phase 0: pre_flight — dispatch to polymorphic agent
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-pipeline: Phase 0 pre-flight for {ticket_id}",
+  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+
+    Run Phase 0 pre-flight checks for ticket {ticket_id}.
+
+    ## Steps
+
+    1. Run: pre-commit run --all-files
+    2. Run: mypy src/ --strict  (or detected equivalent from pyproject.toml)
+    3. For each failure, classify as AUTO-FIX or DEFER:
+       - AUTO-FIX: <= 10 files, same subsystem as ticket, low-risk change
+       - DEFER: otherwise (auto-create Linear sub-ticket, note in PR description)
+    4. Apply AUTO-FIX changes (do NOT commit — orchestrator commits separately)
+
+    ## Output Format
+
+    Return JSON:
+    {\"auto_fixed\": [{\"file\": str, \"issue\": str}],
+     \"deferred\": [{\"file\": str, \"issue\": str, \"sub_ticket\": str}],
+     \"clean\": bool}
+
+    If no pre-existing issues: {\"auto_fixed\": [], \"deferred\": [], \"clean\": true}"
+)
+```
+
+After dispatch: if `auto_fixed` is non-empty, orchestrator commits:
+`git add <changed_files> && git commit -m "chore(pre-existing): fix pre-existing lint/type errors"`
 
 ### Phase 1: implement — dispatch to polymorphic agent
 
