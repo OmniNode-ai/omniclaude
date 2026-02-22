@@ -34,7 +34,6 @@ from pathlib import Path
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
-from env_loader import load_env_file
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Relative path resolution from execute_kafka.py:
@@ -56,10 +55,6 @@ sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
 )
 from omniclaude.hooks.topics import TopicBase
-
-# Load .env on import
-load_env_file()
-
 
 def publish_to_kafka(event: dict, topic: str = TopicBase.ROUTING_DECISION) -> bool:
     """
