@@ -230,8 +230,14 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
     ),
     # Bearer tokens
-    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),  # pragma: allowlist secret
-    # Password in URLs (postgres://user:password@host, mysql://user:password@host, mongodb://...)
+    (
+        re.compile(
+            r"(Bearer\s+)[a-zA-Z0-9._-]{20,}",
+            re.IGNORECASE,  # pragma: allowlist secret
+        ),
+        r"\1***REDACTED***",
+    ),
+    # Password in URLs (postgres://user:password@host, mysql://user:password@host, mongodb://...)  # pragma: allowlist secret
     # This pattern intentionally covers all database connection string formats
     (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
     # Generic secret patterns in key=value format
