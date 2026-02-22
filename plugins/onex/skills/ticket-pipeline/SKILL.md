@@ -185,7 +185,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `max_pr_review_cycles` | `3` | Max pr-review-dev fix cycles before capping |
 | `auto_merge` | `false` | Merge immediately without HIGH_RISK Slack gate |
 | `slack_on_merge` | `true` | Post Slack notification on successful merge |
-| `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance) |
+| `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance); on expiry the ledger entry is cleared and the pipeline exits with `timeout` state requiring a new run |
 | `merge_strategy` | `squash` | Merge strategy: squash \| merge \| rebase |
 | `delete_branch_on_merge` | `true` | Delete branch after successful merge |
 
@@ -256,7 +256,8 @@ Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
 ```
 
 - Entry **created** when pipeline starts (Phase 0)
-- Entry **cleared** when pipeline reaches terminal state (merged, failed, capped, cross-repo-split)
+- Entry **cleared** when pipeline reaches terminal state (merged, failed, capped, cross-repo-split, timeout)
+- `held` is a **non-terminal** waiting state (Phase 6 HIGH_RISK gate): the ledger entry is **not** cleared, preventing duplicate runs while awaiting human "merge" reply. Entry clears on merge or `merge_gate_timeout_hours` expiry.
 - On new invocation: check ledger first; if entry exists → post "already running" to Slack and exit 0
 - `--force-run` breaks stale lock
 
