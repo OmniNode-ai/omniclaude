@@ -36,7 +36,7 @@ class ModelLocalLlmInferenceRequest(BaseModel):
         default=None,
         description="Model name/identifier (backend-specific, uses default if None)",
     )
-    max_tokens: int | None = Field(
+    max_tokens: int | None = Field(  # noqa: secrets
         default=None,
         ge=1,
         description="Maximum tokens to generate",
