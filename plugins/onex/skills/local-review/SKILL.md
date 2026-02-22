@@ -350,8 +350,10 @@ reason: "AGENT_FAILED after 2 retries: {last_error}"
 
 This is a hard exit — no further iterations are attempted. Manual re-invocation required.
 
-**Implementation note**: This retry policy is declared in the SKILL.md frontmatter; the node
-handler executes it. Do NOT implement a separate retry module in the orchestrator.
+**Implementation note**: This retry policy is declared in the SKILL.md frontmatter and also
+implemented in the orchestrator (see `prompt.md` Step 2.3). The frontmatter declaration informs
+the node handler; the orchestrator logic in `prompt.md` implements the actual retry loop with
+`retry_count` state tracking. Both must agree on `max_retries: 2`.
 
 ```yaml
 retry_on:
