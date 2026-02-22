@@ -621,7 +621,7 @@ if failed:
 
 # 3. Print worktree locations and cleanup commands
 print("=== Worktree Locations ===")
-print("Each worker created a git worktree. Locations (workers do NOT auto-delete them):")
+print("Each worker created a git worktree. Locations (merged worktrees auto-deleted; unmerged preserved):")
 for repo in assignments:
     for ticket_id in assignments[repo]:
         wt_path = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}")
@@ -777,8 +777,15 @@ For each ticket, create a git worktree at the canonical path:
 
 ```python
 def setup_worktree(ticket_id):
-    import os
-    repo_path = manifest_repo_path("{repo}")  # from ~/.claude/epic-team/repo_manifest.yaml
+    import os, yaml
+    # Load repo path from user-global manifest (no manifest_repo_path in worker scope)
+    _manifest_path = os.path.expanduser("~/.claude/epic-team/repo_manifest.yaml")
+    with open(_manifest_path) as _f:
+        _manifest = yaml.safe_load(_f)
+    _entries = {{e["name"]: e for e in _manifest.get("repos", [])}}
+    if "{repo}" not in _entries:
+        raise KeyError(f"Repo '{{'{repo}'}}' not found in manifest at {{_manifest_path}}")
+    repo_path = os.path.expanduser(_entries["{repo}"]["path"])
     worktree_root = os.path.expanduser(f"~/.claude/worktrees/{epic_id}/{run_id_short}/{{ticket_id}}")
     branch = f"epic/{epic_id}/{{ticket_id}}/{run_id_short}"
 
