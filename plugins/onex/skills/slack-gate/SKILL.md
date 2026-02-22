@@ -16,6 +16,10 @@ args:
     type: str
     description: Unique identifier for this gate (hash of ticket_id + phase + attempt)
     required: true
+  - name: ticket_id
+    type: str
+    description: Ticket identifier (e.g., OMN-2356) stored in gate state and audit log
+    required: false
   - name: message
     type: str
     description: Message to post to Slack asking for approval
