@@ -130,8 +130,8 @@ Writes a new entry to `~/.claude/review-suppressions.yml` with `status: pending_
 When the same fingerprint (`file:line_approx:description_keywords`) appears in consecutive
 failed_fixes 3+ times without being resolved, the skill automatically:
 
-1. Writes the finding to the registry with `status: pending_review`
-2. On next run: suppresses the finding (run converges)
+1. Writes the finding to the registry with `status: active`
+2. Reloads the registry so the finding is suppressed in the same run (run converges)
 
 The auto-flag threshold is 3 consecutive failed attempts at the same issue.
 

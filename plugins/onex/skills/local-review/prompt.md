@@ -69,7 +69,7 @@ quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
 suppression_registry = []  # Loaded from ~/.claude/review-suppressions.yml on first use
 ```
 
-**4a. Load suppression registry** (non-blocking):
+**3a. Load suppression registry** (non-blocking, runs after step 3):
 ```python
 import yaml
 from pathlib import Path
@@ -477,8 +477,9 @@ Fix the following {severity} issues:
    ```python
    AUTO_FLAG_THRESHOLD = 3
    for ff in failed_fixes:
-       if ff.get("consecutive_count", 0) >= AUTO_FLAG_THRESHOLD:
-           _write_suppression_entry(ff["file"], ff["description"], status="pending_review",
+       if ff.get("consecutive_count", 0) >= AUTO_FLAG_THRESHOLD and not ff.get("auto_flagged"):
+           ff["auto_flagged"] = True  # Mark so we don't write duplicate entries on future iterations
+           _write_suppression_entry(ff["file"], ff["description"], status="active",
                                     reason="Auto-flagged: 3 consecutive failed fixes")
            print(f"Auto-flagged false positive: {ff['fingerprint']} -> written to ~/.claude/review-suppressions.yml")
            # Reload registry so it's suppressed on next iteration
@@ -743,6 +744,62 @@ else:
 
 ## Implementation Notes
 
+### Suppression Registry Helpers (OMN-2514)
+
+> **Note**: These helpers must be defined before the Argument Parsing section because
+> `--flag-false-positive` calls `_write_suppression_entry` at parse time and exits immediately.
+
+```python
+import yaml
+import re as _re
+from pathlib import Path
+from datetime import date
+
+_REGISTRY_PATH = Path.home() / ".claude" / "review-suppressions.yml"
+
+def _load_registry():
+    """Load raw registry dict from disk, or return empty structure."""
+    if _REGISTRY_PATH.exists():
+        try:
+            return yaml.safe_load(_REGISTRY_PATH.read_text()) or {"version": 1, "suppressions": []}
+        except Exception:
+            return {"version": 1, "suppressions": []}
+    return {"version": 1, "suppressions": []}
+
+def _reload_suppression_registry():
+    """Return list of active suppression entries (for use after auto-flag write)."""
+    data = _load_registry()
+    return [s for s in data.get("suppressions", []) if s.get("status") == "active"]
+
+def _write_suppression_entry(file_context, description, status, reason):
+    """Append a new suppression entry to the registry file."""
+    data = _load_registry()
+    suppressions = data.get("suppressions", [])
+
+    # Generate next ID
+    existing_ids = [s.get("id", "") for s in suppressions]
+    next_num = len(suppressions) + 1
+    new_id = f"fp_{next_num:03d}"
+    while new_id in existing_ids:
+        next_num += 1
+        new_id = f"fp_{next_num:03d}"
+
+    new_entry = {
+        "id": new_id,
+        "pattern": description,
+        "file_glob": file_context if file_context != "*" else "*",
+        "reason": reason,
+        "added": str(date.today()),
+        "status": status,
+    }
+    suppressions.append(new_entry)
+    data["suppressions"] = suppressions
+
+    _REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _REGISTRY_PATH.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+    return new_id
+```
+
 ### Argument Parsing
 
 Extract from `$ARGUMENTS` string:
@@ -835,59 +892,6 @@ if "--flag-false-positive" in args:
     print(f"Registry: ~/.claude/review-suppressions.yml")
     print("Review the entry and change status to 'active' to suppress it in future runs.")
     exit(0)
-```
-
-### Suppression Registry Helpers (OMN-2514)
-
-```python
-import yaml
-import re as _re
-from pathlib import Path
-from datetime import date
-
-_REGISTRY_PATH = Path.home() / ".claude" / "review-suppressions.yml"
-
-def _load_registry():
-    """Load raw registry dict from disk, or return empty structure."""
-    if _REGISTRY_PATH.exists():
-        try:
-            return yaml.safe_load(_REGISTRY_PATH.read_text()) or {"version": 1, "suppressions": []}
-        except Exception:
-            return {"version": 1, "suppressions": []}
-    return {"version": 1, "suppressions": []}
-
-def _reload_suppression_registry():
-    """Return list of active suppression entries (for use after auto-flag write)."""
-    data = _load_registry()
-    return [s for s in data.get("suppressions", []) if s.get("status") == "active"]
-
-def _write_suppression_entry(file_context, description, status, reason):
-    """Append a new suppression entry to the registry file."""
-    data = _load_registry()
-    suppressions = data.get("suppressions", [])
-
-    # Generate next ID
-    existing_ids = [s.get("id", "") for s in suppressions]
-    next_num = len(suppressions) + 1
-    new_id = f"fp_{next_num:03d}"
-    while new_id in existing_ids:
-        next_num += 1
-        new_id = f"fp_{next_num:03d}"
-
-    new_entry = {
-        "id": new_id,
-        "pattern": description,
-        "file_glob": file_context if file_context != "*" else "*",
-        "reason": reason,
-        "added": str(date.today()),
-        "status": status,
-    }
-    suppressions.append(new_entry)
-    data["suppressions"] = suppressions
-
-    _REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _REGISTRY_PATH.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
-    return new_id
 ```
 
 ### Base Branch Detection
