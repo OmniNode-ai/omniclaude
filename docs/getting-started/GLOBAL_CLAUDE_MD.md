@@ -47,4 +47,4 @@ moving to the next fix. Do not introduce new issues while fixing old ones.
 ## Worktree Preference
 
 For any multi-ticket or multi-session workflow, use git worktrees by default. Create worktrees at
-`../{repo}/.claude/worktrees/{context_id}/` unless the task is a single quick fix.
+`../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}` unless the task is a single quick fix.
