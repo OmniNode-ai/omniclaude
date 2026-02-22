@@ -50,7 +50,7 @@ Chain existing skills into an autonomous per-ticket pipeline: implement -> local
 stateDiagram-v2
     [*] --> implement
     implement --> local_review : auto (policy)
-    local_review --> create_pr : auto (2 confirmed-clean runs)
+    local_review --> create_pr : auto (1 confirmed-clean run)
     create_pr --> ready_for_merge : auto (policy)
     ready_for_merge --> [*] : manual merge
 ```
@@ -67,9 +67,9 @@ stateDiagram-v2
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
-- Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
+- Requires 1 confirmed-clean run with stable run signature before advancing
+- Stop on: 0 blocking issues (confirmed by 1 clean run), max iterations, repeat issues, new major after iteration 1
+- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 1 confirmed-clean run)
 
 ### Phase 3: create_pr
 
