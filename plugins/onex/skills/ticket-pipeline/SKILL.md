@@ -219,11 +219,6 @@ Phase 1 cross-repo detected:
 
 ### decompose-epic Dispatch for Cross-Repo
 
-> **Note**: `decompose-epic` is a planned skill (OMN-2522) not yet implemented. Until available,
-> the cross-repo split step must be performed manually: create per-repo sub-tickets in Linear,
-> then invoke `epic-team` with the parent epic ID. This dispatch contract documents the intended
-> future interface.
-
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
@@ -412,7 +407,7 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `auto-merge` skill (Phase 6, OMN-2525)
 - `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
 - `ci-failures` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
-- `decompose-epic` skill (cross-repo split, OMN-2522 — planned)
+- `decompose-epic` skill (cross-repo split, OMN-2522)
 - `epic-team` skill (receives handoff after cross-repo split)
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)
 - `~/.claude/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)

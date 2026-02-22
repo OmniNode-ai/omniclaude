@@ -1,17 +1,20 @@
 ---
 name: decompose-epic
-description: Analyze a Linear epic description and automatically create sub-tickets as children, enabling epic-team to handle epics with zero initial child tickets
+description: Analyze a Linear epic and create per-repo child tickets — invoked by epic-team and ticket-pipeline when cross-repo work is detected
 version: 1.0.0
 category: workflow
-tags: [epic, linear, decomposition, tickets, autonomous]
+tags: [linear, epic, tickets, cross-repo, decomposition]
 author: OmniClaude Team
-composable: true
+ticket: OMN-2522
 args:
   - name: epic_id
-    description: Linear epic identifier (e.g., OMN-2511)
+    description: Linear epic ID (e.g., OMN-2522)
     required: true
+  - name: --repos
+    description: Comma-separated repo names — constrains decomposition to specific repos (Mode B); omit to infer from epic description (Mode A)
+    required: false
   - name: --dry-run
-    description: Show decomposition plan without creating tickets
+    description: Analyze and print decomposition plan without creating tickets; no ModelSkillResult written; exits 0
     required: false
 ---
 
@@ -19,157 +22,79 @@ args:
 
 ## Overview
 
-Analyze a Linear epic's description and create sub-tickets automatically as children of the epic.
-Run this skill BEFORE `epic-team` when an epic has zero child tickets — `epic-team` hard-exits
-when no child tickets exist, so decompose-epic is used to pre-populate the epic first.
+Analyze a Linear epic and create N per-repo sub-tickets as Linear children. Invoked as a composable sub-skill by `epic-team` (OMN-2530) and `ticket-pipeline` (OMN-2531) when cross-repo work is detected.
 
-**Announce at start:** "I'm using the decompose-epic skill for epic {epic_id}."
+Two modes of operation:
 
-## Quick Start
+- **Mode A** (no `--repos`): reads epic description, infers repo breakdown from `repo_manifest.yaml`, creates sub-tickets with one per identified work area matched to its owning repo
+- **Mode B** (`--repos omniclaude,omnibase_core,...`): repos are pre-determined; creates one focused sub-ticket per repo, scoped to that repo's concerns
 
-```
-/decompose-epic OMN-2511             # Decompose and create sub-tickets
-/decompose-epic OMN-2511 --dry-run   # Show plan without creating tickets
-```
-
-## Workflow
+## Usage Examples
 
 ```
-decompose-epic OMN-XXXX
-  1. Fetch epic from Linear (description, title, team, project)
-  2. Load repo manifest from plugins/onex/skills/epic-team/repo_manifest.yaml
-  3. Analyze epic description to identify logical work units:
-     - Each work unit = one sub-ticket
-     - Assign to repo using keyword matching from manifest
-     - Estimate scope (small/medium/large)
-  4. Present decomposition plan (always shown, even without --dry-run)
-  5. If --dry-run: write result.json with status: dry_run and exit — skip steps 6-9
-  6. Post Slack LOW_RISK gate:
-     "Proposed N sub-tickets for {epic_id} — reply 'proceed' to create or 'reject' to abort within 30 min"
-     Silence = proceed (LOW_RISK)
-  7. If rejected via Slack: abort, log reason
-  8. Create sub-tickets in Linear as children of epic
-  9. Write result to ~/.claude/skill-results/decompose-epic-{epic_id}/result.json
+/decompose-epic OMN-2522
+/decompose-epic OMN-2522 --dry-run
+/decompose-epic OMN-2522 --repos omniclaude,omnibase_core
+/decompose-epic OMN-2522 --repos omniclaude,omnibase_core --dry-run
 ```
 
-## Decomposition Algorithm
+## Dispatch Contracts
 
-### Step 1: Fetch Epic
+Uses Linear MCP tools directly (NOT gh CLI for Linear operations):
 
-```python
-epic = mcp__linear-server__get_issue(epic_id, includeRelations=True)
-# Use: epic.title, epic.description, epic.team
-```
+- `mcp__linear-server__get_issue(id=epic_id)` — read epic title, description, team
+- `mcp__linear-server__create_issue(...)` — create each sub-ticket with `parentId=epic_id`
+- `mcp__linear-server__list_issue_labels(...)` — find repo label IDs for assignment
 
-### Step 2: Identify Work Units
+## Repo Manifest
 
-Analyze the epic description by looking for:
+Reads `~/.claude/epic-team/repo_manifest.yaml` (home-dir path first). Falls back to `plugins/onex/skills/epic-team/repo_manifest.yaml` if the home-dir path does not exist. Each manifest entry maps a repo name to its team ID, label name, and description.
 
-- Numbered lists (1. item, 2. item → each is a work unit)
-- Section headers (## Section → potential work unit boundary)
-- "Changes" or "Tasks" sections (each bullet = work unit)
-- Distinct file paths or modules mentioned
-- Explicit "Phase N" or "Step N" markers
+## Sub-Ticket Format
 
-Group related items if they touch the same subsystem and can be done atomically.
+| Field | Value |
+|-------|-------|
+| `title` | `[{repo}] {scoped description from epic analysis}` |
+| `description` | Parent epic reference, repo context, acceptance criteria scoped to that repo |
+| `parentId` | `epic_id` |
+| `team` | From `repo_manifest` entry for that repo |
+| `labels` | Repo label if available (resolved via `mcp__linear-server__list_issue_labels`) |
 
-### Step 3: Assign to Repos
+## ModelSkillResult
 
-For each work unit:
-1. Load `plugins/onex/skills/epic-team/repo_manifest.yaml`
-2. Score each repo by keyword matches in the work unit description
-3. Assign to highest-scoring repo; if tie, assign to first matched
-4. If no match: assign to `unmatched` (create ticket in same team, no repo label)
-
-### Step 4: Create Sub-Tickets
-
-```python
-mcp__linear-server__create_issue(
-    title=f"[{repo_name}] {work_unit.title}",
-    team=epic.team,
-    description=f"""
-{work_unit.description}
-
-## Source
-
-Decomposed from [{epic_id}]({epic.url}) by decompose-epic skill.
-    """,
-    parentId=epic.id,
-    labels=[repo_name, "auto-decomposed"],
-    priority=epic.priority or 3
-)
-```
-
-## Slack Gate (LOW_RISK)
-
-After computing the decomposition plan (before creating tickets), post a Slack message and wait
-for approval. Generate a `timestamp` at skill start using `import time; timestamp = int(time.time())`.
-
-Message to post:
-
-```
-[LOW_RISK] decompose-epic: {epic_id}
-
-Proposed decomposition for "{epic.title}":
-  {N} sub-tickets across {M} repos:
-  - omniclaude (K tickets): {titles...}
-  - omnibase_core (J tickets): {titles...}
-
-Reply 'proceed' to create tickets, 'reject' to abort.
-Gate ID: decompose-epic:{epic_id}:{timestamp}
-Timeout: 30 min → auto-proceed (LOW_RISK)
-```
-
-Wait up to 30 minutes (1800 seconds) for a reply:
-- Reply contains 'proceed' (case-insensitive): continue to ticket creation
-- Reply contains 'reject' (case-insensitive): abort with `status: rejected`
-- No reply after 30 min: auto-proceed (LOW_RISK = silence means proceed)
-
-Slack notification is **non-fatal**: if posting fails, log the error and auto-proceed.
-
-## ModelSkillResult Output
-
-Written to `~/.claude/skill-results/decompose-epic-{epic_id}/result.json`:
+Written to `~/.claude/skill-results/{epic_id}/decompose-epic.json` after live execution (not written on `--dry-run`):
 
 ```json
 {
-  "status": "completed | dry_run | rejected | failed | partial",
-  "artifacts": {
-    "epic_id": "OMN-2511",
-    "created_tickets": ["OMN-2512", "OMN-2513", "OMN-2514"],
-    "failed_tickets": [],
-    "dry_run_plan": null
-  }
+  "status": "completed",
+  "created_tickets": [
+    {"id": "OMN-YYYY", "title": "[omniclaude] ...", "repo": "omniclaude"},
+    {"id": "OMN-ZZZZ", "title": "[omnibase_core] ...", "repo": "omnibase_core"}
+  ],
+  "repos_affected": ["omniclaude", "omnibase_core"],
+  "epic_id": "OMN-XXXX",
+  "count": 2,
+  "dry_run": false
 }
 ```
 
-For `--dry-run`:
-```json
-{
-  "status": "dry_run",
-  "artifacts": {
-    "epic_id": "OMN-2511",
-    "created_tickets": [],
-    "dry_run_plan": [
-      {"title": "...", "repo": "omniclaude", "scope": "small"},
-      {"title": "...", "repo": "omnibase_core", "scope": "medium"}
-    ]
-  }
-}
-```
+Where `{epic_id}` is the positional argument (e.g., `OMN-2522`). The `context_id` used for the result path equals `epic_id`.
 
-## Failure Handling
+## Error Handling
 
-| Error | Behavior |
-|-------|----------|
-| Epic not found in Linear | Hard exit with error message |
-| repo_manifest missing | Hard exit: "repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml" |
-| Epic description empty | Abort with `status: failed`, suggest manual ticket creation |
-| Slack gate rejected | Abort with `status: rejected`, log reason |
-| Linear ticket creation fails | Log partial success, continue with remaining, write `status: partial` with failed ticket IDs in result |
+| Condition | Exit code | Message |
+|-----------|-----------|---------|
+| Epic not found in Linear | 1 | `decompose-epic: epic {epic_id} not found in Linear` |
+| Epic description empty (Mode A) | 1 | `decompose-epic: epic {epic_id} has no description — add context before decomposing` |
+| Zero tickets generated | 1 | `decompose-epic: analysis produced 0 sub-tickets — check epic description` |
+| Partial create failure | 0 | warn, report partial success in ModelSkillResult |
+
+Partial create failure: if some tickets are created and some fail, the skill exits 0 with `status: "partial"` in the ModelSkillResult. It reports which succeeded and which failed so callers can retry only the failing repos.
 
 ## See Also
 
-- `epic-team` skill — orchestrates agent teams across repos for epics that already have child tickets; hard-exits if no child tickets exist — run decompose-epic first to pre-populate
-- `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo routing configuration (keyword-based repo assignment)
-- Linear MCP tools (`mcp__linear-server__*`) — issue creation and fetching
+- `prompt.md` — full execution logic, argument parsing, and step-by-step flow
+- `epic-team` skill — orchestrator that calls decompose-epic in Phase 2
+- `ticket-pipeline` skill — invokes decompose-epic for cross-repo split in Phase 1b
+- `~/.claude/epic-team/repo_manifest.yaml` — repo-to-team mapping
+- Linear MCP tools (`mcp__linear-server__*`)
