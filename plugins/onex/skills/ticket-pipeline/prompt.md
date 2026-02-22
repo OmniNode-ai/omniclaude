@@ -30,7 +30,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|ready_for_merge)")
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ready_for_merge)")
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -65,6 +65,14 @@ policy:
   stop_on_invariant: true
 
 phases:
+  pre_flight:
+    started_at: null
+    completed_at: null
+    artifacts: {}
+    blocked_reason: null
+    block_kind: null             # blocked_human_gate | blocked_policy | blocked_review_limit | failed_exception
+    last_error: null
+    last_error_at: null
   implement:
     started_at: null
     completed_at: null
@@ -112,7 +120,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["implement", "local_review", "create_pr", "ready_for_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "create_pr", "ready_for_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -604,7 +612,14 @@ def build_phase_payload(phase_name, state, result):
     artifacts = result.get("artifacts", {})
     head_sha = get_head_sha()
 
-    if phase_name == "implement":
+    if phase_name == "pre_flight":
+        return {
+            "auto_fixed": list(artifacts.get("auto_fixed", [])),
+            "deferred": list(artifacts.get("deferred", [])),
+            "clean": artifacts.get("clean", False),
+        }
+
+    elif phase_name == "implement":
         branch = get_current_branch()
         return {
             "branch_name": artifacts.get("branch_name", branch),
@@ -664,7 +679,11 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     phase = checkpoint_data.get("phase", "")
     artifacts = {}
 
-    if phase == "implement":
+    if phase == "pre_flight":
+        artifacts["auto_fixed"] = payload.get("auto_fixed", [])
+        artifacts["deferred"] = payload.get("deferred", [])
+        artifacts["clean"] = payload.get("clean", False)
+    elif phase == "implement":
         artifacts["branch_name"] = payload.get("branch_name", "")
         artifacts["commit_sha"] = payload.get("commit_sha", "")
         artifacts["files_changed"] = payload.get("files_changed", [])
@@ -1027,6 +1046,7 @@ def execute_phase(phase_name, state):
         block_kind: str | None
     """
     handlers = {
+        "pre_flight": execute_pre_flight,
         "implement": execute_implement,
         "local_review": execute_local_review,
         "create_pr": execute_create_pr,
@@ -1050,6 +1070,99 @@ def execute_phase(phase_name, state):
 ---
 
 ## Phase Handlers
+
+### Phase 0: PRE_FLIGHT
+
+**Invariants:**
+- Pipeline is initialized with valid ticket_id
+- Lock is acquired
+- Working tree is on a clean checkout (no uncommitted changes)
+
+**Actions:**
+
+1. **Dispatch pre-flight checks to a separate agent:**
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 0 pre-flight for {ticket_id}",
+     prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+
+       Run Phase 0 pre-flight checks for ticket {ticket_id}.
+
+       ## Steps
+
+       1. Run: pre-commit run --all-files
+       2. Run: mypy src/ --strict  (or detected equivalent from pyproject.toml)
+       3. For each failure, classify as AUTO-FIX or DEFER:
+          - AUTO-FIX: <= 10 files, same subsystem as ticket, low-risk change
+          - DEFER: otherwise (auto-create Linear sub-ticket, note in PR description)
+       4. Apply AUTO-FIX changes (do NOT commit — orchestrator commits separately)
+
+       ## Output Format
+
+       Return JSON:
+       {\"auto_fixed\": [{\"file\": str, \"issue\": str}],
+        \"deferred\": [{\"file\": str, \"issue\": str, \"sub_ticket\": str}],
+        \"clean\": bool}
+
+       If no pre-existing issues: {\"auto_fixed\": [], \"deferred\": [], \"clean\": true}"
+   )
+   ```
+
+2. **Parse result from Task JSON output:**
+   ```python
+   import json, re
+   # Phase 0 agent returns structured JSON -- extract it from the Task output
+   json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
+   if json_match:
+       phase_output = json.loads(json_match.group())
+   else:
+       phase_output = {}
+   auto_fixed = phase_output.get("auto_fixed", [])
+   deferred = phase_output.get("deferred", [])
+   clean = phase_output.get("clean", False)
+   ```
+
+3. **Commit auto-fixes (if any):**
+   ```python
+   if auto_fixed and not dry_run:
+       # Stage and commit auto-fixed files only
+       for item in auto_fixed:
+           subprocess.run(["git", "add", item["file"]], check=True)
+       subprocess.run([
+           "git", "commit", "-m",
+           "chore(pre-existing): fix pre-existing lint/type errors"
+       ], check=True)
+   ```
+
+4. **Build result:**
+   ```python
+   result = {
+       "status": "completed",
+       "blocking_issues": 0,
+       "nit_count": 0,
+       "artifacts": {
+           "auto_fixed": auto_fixed,   # list of {file, issue}
+           "deferred": deferred,        # list of {file, issue, sub_ticket}
+           "clean": clean,              # bool
+       },
+       "reason": None,
+       "block_kind": None,
+   }
+   ```
+
+5. **Dry-run behavior:** Pre-commit and mypy checks run normally. Auto-fix changes are applied but the commit is skipped. Deferred sub-ticket creation is skipped.
+
+**Mutations:**
+- `phases.pre_flight.started_at`
+- `phases.pre_flight.completed_at`
+- `phases.pre_flight.artifacts` (auto_fixed, deferred, clean)
+
+**Exit conditions:**
+- **Completed:** Checks ran, auto-fixes applied and committed (or no issues found)
+- **Failed:** pre-commit or mypy execution errors out unexpectedly
+
+---
 
 ### Phase 1: IMPLEMENT
 
