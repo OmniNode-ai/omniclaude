@@ -30,7 +30,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|ready_for_merge)")
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ready_for_merge)")
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -65,6 +65,14 @@ policy:
   stop_on_invariant: true
 
 phases:
+  pre_flight:
+    started_at: null
+    completed_at: null
+    artifacts: {}
+    blocked_reason: null
+    block_kind: null             # blocked_human_gate | blocked_policy | blocked_review_limit | failed_exception
+    last_error: null
+    last_error_at: null
   implement:
     started_at: null
     completed_at: null
@@ -112,7 +120,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["implement", "local_review", "create_pr", "ready_for_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "create_pr", "ready_for_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -604,7 +612,14 @@ def build_phase_payload(phase_name, state, result):
     artifacts = result.get("artifacts", {})
     head_sha = get_head_sha()
 
-    if phase_name == "implement":
+    if phase_name == "pre_flight":
+        return {
+            "auto_fixed": list(artifacts.get("auto_fixed", [])),
+            "deferred": list(artifacts.get("deferred", [])),
+            "clean": artifacts.get("clean", False),
+        }
+
+    elif phase_name == "implement":
         branch = get_current_branch()
         return {
             "branch_name": artifacts.get("branch_name", branch),
@@ -664,7 +679,11 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     phase = checkpoint_data.get("phase", "")
     artifacts = {}
 
-    if phase == "implement":
+    if phase == "pre_flight":
+        artifacts["auto_fixed"] = payload.get("auto_fixed", [])
+        artifacts["deferred"] = payload.get("deferred", [])
+        artifacts["clean"] = payload.get("clean", False)
+    elif phase == "implement":
         artifacts["branch_name"] = payload.get("branch_name", "")
         artifacts["commit_sha"] = payload.get("commit_sha", "")
         artifacts["files_changed"] = payload.get("files_changed", [])
@@ -1027,6 +1046,7 @@ def execute_phase(phase_name, state):
         block_kind: str | None
     """
     handlers = {
+        "pre_flight": execute_pre_flight,
         "implement": execute_implement,
         "local_review": execute_local_review,
         "create_pr": execute_create_pr,
