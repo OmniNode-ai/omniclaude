@@ -88,7 +88,15 @@ def should_trace_tool(tool_name: str) -> bool:
 
 
 def run_git_diff_patch(repo_root: str) -> str:
-    """Run git diff --patch to capture staged and unstaged changes.
+    """Run git diff --patch to capture staged, unstaged, and untracked changes.
+
+    Captures three categories of changes:
+    1. Staged and unstaged modifications via ``git diff HEAD``
+    2. Staged-only modifications via ``git diff --cached`` (fallback when HEAD diff is empty)
+    3. Untracked files via ``git ls-files --others --exclude-standard`` + ``git diff --no-index``
+
+    Untracked files are appended to the diff so that newly created files that
+    have not yet been staged are included in the frame delta.
 
     Args:
         repo_root: Absolute path to the repository root
@@ -117,9 +125,67 @@ def run_git_diff_patch(repo_root: str) -> str:
                 check=False,
             )
             diff = result2.stdout.strip()
+
+        # Append no-index diffs for untracked files (not covered by git diff HEAD)
+        untracked_diff = _diff_untracked_files(repo_root)
+        if untracked_diff:
+            diff = (diff + "\n" + untracked_diff).strip()
+
         return diff
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
         return ""
+
+
+def _diff_untracked_files(repo_root: str) -> str:
+    """Return a unified diff for all untracked (new) files in the repository.
+
+    Uses ``git ls-files --others --exclude-standard`` to enumerate untracked
+    files, then produces a ``git diff --no-index /dev/null <file>`` patch for
+    each one.  This captures newly written files that have not yet been staged
+    and would otherwise be invisible to ``git diff HEAD`` or ``git diff --cached``.
+
+    Args:
+        repo_root: Absolute path to the repository root
+
+    Returns:
+        Concatenated unified diff for all untracked files, or empty string
+    """
+    try:
+        ls_result = subprocess.run(  # noqa: S603
+            ["git", "ls-files", "--others", "--exclude-standard"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=10,
+            check=False,
+        )
+        untracked_files = [f for f in ls_result.stdout.splitlines() if f.strip()]
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        return ""
+
+    parts: list[str] = []
+    for rel_path in untracked_files:
+        try:
+            diff_result = subprocess.run(  # noqa: S603
+                ["git", "diff", "--no-index", "/dev/null", rel_path],  # noqa: S607
+                capture_output=True,
+                text=True,
+                cwd=repo_root,
+                timeout=10,
+                check=False,
+            )
+            # git diff --no-index exits 1 when files differ (normal for new files)
+            chunk = diff_result.stdout.strip()
+            if chunk:
+                parts.append(chunk)
+        except (
+            subprocess.TimeoutExpired,
+            subprocess.SubprocessError,
+            FileNotFoundError,
+        ):
+            continue
+
+    return "\n".join(parts)
 
 
 def get_current_commit(repo_root: str) -> str:

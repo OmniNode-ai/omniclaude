@@ -171,7 +171,18 @@ class TestHashHelpers:
 class TestRunGitDiffPatch:
     @patch("omniclaude.trace.frame_assembler.subprocess.run")
     def test_returns_diff_when_available(self, mock_run: MagicMock) -> None:
-        mock_run.return_value = MagicMock(stdout=SAMPLE_DIFF, returncode=0)
+        # HEAD diff returns a patch; ls-files returns no untracked files.
+        def side_effect(cmd: list, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            cmd_str = " ".join(str(c) for c in cmd)
+            if "ls-files" in cmd_str:
+                result.stdout = ""
+            else:
+                result.stdout = SAMPLE_DIFF
+            return result
+
+        mock_run.side_effect = side_effect
         diff = run_git_diff_patch("/repo")
         assert diff == SAMPLE_DIFF.strip()
 
@@ -196,6 +207,35 @@ class TestRunGitDiffPatch:
         mock_run.side_effect = subprocess.TimeoutExpired("git", 10)
         diff = run_git_diff_patch("/repo")
         assert diff == ""
+
+    @patch("omniclaude.trace.frame_assembler.subprocess.run")
+    def test_includes_untracked_new_files(self, mock_run: MagicMock) -> None:
+        """Newly created (untracked) files must appear in the returned diff."""
+        untracked_diff = (
+            "--- /dev/null\n"
+            "+++ b/src/new_file.py\n"
+            "@@ -0,0 +1,2 @@\n"
+            "+def hello():\n"
+            '+    return "world"\n'
+        )
+
+        def side_effect(cmd: list, **kwargs: object) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 0
+            cmd_str = " ".join(str(c) for c in cmd)
+            if "ls-files" in cmd_str:
+                result.stdout = "src/new_file.py\n"
+            elif "no-index" in cmd_str:
+                result.stdout = untracked_diff
+                result.returncode = 1  # git diff --no-index exits 1 when files differ
+            else:
+                result.stdout = ""
+            return result
+
+        mock_run.side_effect = side_effect
+        diff = run_git_diff_patch("/repo")
+        assert "src/new_file.py" in diff
+        assert "+def hello():" in diff
 
 
 # ---------------------------------------------------------------------------
