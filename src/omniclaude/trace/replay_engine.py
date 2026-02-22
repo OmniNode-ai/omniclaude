@@ -257,7 +257,10 @@ def _detect_divergence_reason(
     if original_env_hashes != replayed_env_hashes:
         return REASON_ENV_CHANGED
 
-    # In STUBBED mode, if tool outputs were replaced but still diverged
+    # In STUBBED mode, tool outputs are replaced with stored values rather than
+    # re-executed live. Any remaining divergence after environment checks is
+    # attributed to REASON_NON_DETERMINISTIC_TOOL as a conservative fallback —
+    # the true root cause cannot be determined without live tool re-execution.
     if mode == ReplayMode.STUBBED:
         return REASON_NON_DETERMINISTIC_TOOL
 
@@ -366,10 +369,11 @@ class ReplayEngine:
 
         # FULL mode: also simulate re-execution of tool events
         if mode == ReplayMode.FULL:
-            # For FULL mode: tool events would be re-executed live, but
-            # since we can't actually replay LLM tool calls deterministically,
-            # we validate that the stored output_hash is consistent.
-            # Real implementation would invoke the tools and compare outputs.
+            # Known limitation: FULL mode is documented to re-run everything
+            # (including tool events), but live LLM tool call replay is not yet
+            # implemented. Currently only check execution runs (same as TEST_ONLY
+            # and STUBBED). Full tool re-execution requires deterministic tool
+            # invocation infrastructure that is not yet available.
             pass
 
         # STUBBED mode: verify stored output hashes still match

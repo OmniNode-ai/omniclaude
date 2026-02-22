@@ -341,10 +341,15 @@ def _render_failure_path(
         (f for f in frames if f.outcome.status != "pass"),
         None,
     )
-    pass_frame = next(
-        (f for f in frames if f.outcome.status == "pass"),
-        None,
-    )
+    # Select the first passing frame that is strictly after the first failure frame,
+    # to avoid picking a passing frame that predates the failure.
+    pass_frame = None
+    if fail_frame is not None:
+        fail_idx = frames.index(fail_frame)
+        pass_frame = next(
+            (f for f in frames[fail_idx + 1 :] if f.outcome.status == "pass"),
+            None,
+        )
 
     console.rule(f"Failure Path — PR #{pr.pr_number}")
 
