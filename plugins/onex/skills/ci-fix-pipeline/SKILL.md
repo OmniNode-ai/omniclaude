@@ -171,7 +171,9 @@ Task(
 
 ### Phase 5: Commit Fixes
 
-Orchestrator stages and commits inline (no dispatch needed):
+**Skip this phase if `fixed` count is 0** (no code was changed — all failures were skipped, capped, or unfixable). Proceed directly to Phase 6 with `commit: null` in ModelSkillResult.
+
+Otherwise, orchestrator stages and commits inline (no dispatch needed):
 
 ```bash
 git add <changed_files>
