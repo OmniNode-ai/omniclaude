@@ -20,6 +20,10 @@ args:
     type: str
     description: Ticket identifier (e.g., OMN-2356) stored in gate state and audit log
     required: false
+  - name: phase
+    type: str
+    description: Pipeline phase name (e.g., spec_approval) used in Slack message header, gate state, and audit log
+    required: false
   - name: message
     type: str
     description: Message to post to Slack asking for approval
@@ -135,9 +139,9 @@ log warning, continue pipeline (with reduced confidence).
 After timeout: post a reminder to Slack, reset poll timer, continue waiting.
 Never auto-advance. Only explicit `approve` unblocks.
 
-> **Note**: Reminder messages must not contain the words `hold`, `cancel`, `stop`, `no`, or `reject`
-> (any keyword that maps to `explicit_reject`), as the gate polls all replies including its own reminders
-> if they appear in the thread.
+> **Note**: Reminder messages must not contain any approval keywords (`approve`, `yes`, `lgtm`, `go`,
+> `ok`) or rejection keywords (`reject`, `no`, `stop`, `hold`, `cancel`), as the gate polls all
+> replies including its own reminders if they appear in the thread.
 
 ## Audit Event
 
