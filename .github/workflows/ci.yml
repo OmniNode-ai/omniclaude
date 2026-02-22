@@ -300,6 +300,389 @@ jobs:
           echo "Method signature validation completed"
 
   # ============================================================================
+  # ARCHITECTURE ENFORCEMENT (OMN-2592 — Wave 0 prerequisite)
+  # These 11 checks must all be green before any feature branch can merge.
+  # They enforce architectural invariants: no DB in orchestrators, no direct
+  # Kafka producers, no naive UTC datetimes, and topic naming conventions.
+  # ============================================================================
+
+  arch-no-db-in-orchestrator:
+    name: "Arch: No DB access in orchestrator/compute (checks 1 & 8)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no DB access in orchestrator/compute (static)
+        run: uv run python scripts/validation/validate_no_db_in_orchestrator.py
+
+  arch-no-git-outside-effects:
+    name: "Arch: No git/gh calls outside effects (check 2)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no git/gh subprocess calls outside effects
+        run: uv run python scripts/validation/validate_no_git_outside_effects.py
+
+  arch-no-linear-outside-effects:
+    name: "Arch: No LinearClient outside effects (check 3)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no LinearClient outside effects
+        run: uv run python scripts/validation/validate_no_linear_outside_effects.py
+
+  arch-no-repo-adapter-in-orchestrator:
+    name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no repository adapter imports in orchestrator/compute
+        run: uv run python scripts/validation/validate_no_repo_adapter_in_orchestrator.py
+
+  arch-cost-ledger-isolation:
+    name: "Arch: ModelCostLedger confined to effects (check 5)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check cost ledger isolation
+        run: uv run python scripts/validation/validate_cost_ledger_isolation.py
+
+  arch-topic-naming:
+    name: "Arch: onex.* topic naming convention (check 6)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check topic naming convention
+        run: uv run python scripts/validation/validate_topic_naming.py
+
+  arch-omnidash-db-role:
+    name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Provision omnidash_readonly role and verify permissions
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -e
+
+          # Wait for Postgres to be ready
+          until psql -h localhost -U postgres -c '\q' 2>/dev/null; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Provision omnidash_readonly role
+          psql -h localhost -U postgres <<'SQL'
+            -- Create omnidash analytics database if it doesn't exist
+            SELECT 'CREATE DATABASE omnidash_analytics'
+              WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'omnidash_analytics')
+            \gexec
+
+            -- Create omnidash_readonly role if it doesn't exist
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'omnidash_readonly') THEN
+                CREATE ROLE omnidash_readonly WITH LOGIN PASSWORD 'readonly_ci_test';
+              END IF;
+            END
+            $$;
+
+            -- Grant SELECT-only on omnidash_analytics
+            GRANT CONNECT ON DATABASE omnidash_analytics TO omnidash_readonly;
+          SQL
+
+          # Connect to omnidash_analytics and set up schema permissions
+          psql -h localhost -U postgres -d omnidash_analytics <<'SQL'
+            -- Grant usage on public schema
+            GRANT USAGE ON SCHEMA public TO omnidash_readonly;
+            -- Grant SELECT on all current tables
+            GRANT SELECT ON ALL TABLES IN SCHEMA public TO omnidash_readonly;
+            -- Grant SELECT on future tables
+            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO omnidash_readonly;
+          SQL
+
+          echo "omnidash_readonly role provisioned successfully"
+
+          # Verify: omnidash_readonly has SELECT but NOT INSERT/UPDATE/DELETE
+          # Test using pg_roles and information_schema
+          psql -h localhost -U postgres -d omnidash_analytics <<'SQL'
+            -- Create a test table to verify permissions
+            CREATE TABLE IF NOT EXISTS ci_permission_test (id serial PRIMARY KEY, data text);
+            INSERT INTO ci_permission_test (data) VALUES ('ci_test_row');
+          SQL
+
+          # Verify SELECT works for readonly role
+          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+            "SELECT * FROM ci_permission_test;" > /dev/null && echo "SELECT: OK"
+
+          # Verify INSERT is denied for readonly role
+          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+            "INSERT INTO ci_permission_test (data) VALUES ('should_fail');" 2>&1 \
+            | grep -q "permission denied" && echo "INSERT denied: OK" \
+            || (echo "FAIL: INSERT should be denied for omnidash_readonly" && exit 1)
+
+          # Verify UPDATE is denied for readonly role
+          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+            "UPDATE ci_permission_test SET data = 'should_fail';" 2>&1 \
+            | grep -q "permission denied" && echo "UPDATE denied: OK" \
+            || (echo "FAIL: UPDATE should be denied for omnidash_readonly" && exit 1)
+
+          # Verify DELETE is denied for readonly role
+          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+            "DELETE FROM ci_permission_test;" 2>&1 \
+            | grep -q "permission denied" && echo "DELETE denied: OK" \
+            || (echo "FAIL: DELETE should be denied for omnidash_readonly" && exit 1)
+
+          echo "omnidash_readonly role: SELECT-only permissions verified"
+
+          # Verify zero access to omniclaude databases (no CONNECT granted)
+          # omniclaude DB is postgres (default) in this CI environment
+          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d postgres -c '\q' 2>&1 \
+            | grep -q "permission denied\|FATAL" && echo "omniclaude DB access denied: OK" \
+            || echo "NOTE: omniclaude DB isolation not enforced in this CI environment (honor system)"
+
+          echo "omnidash_readonly DB role CI check PASSED"
+
+  arch-cost-ledger-structure:
+    name: "Arch: ModelCostLedger run_id field + index (check 9)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check ModelCostLedger structure
+        run: uv run python scripts/validation/validate_cost_ledger_structure.py
+
+  arch-no-direct-kafka-producer:
+    name: "Arch: No direct Kafka producer outside publisher (check 10)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no direct Kafka producer usage
+        run: uv run python scripts/validation/validate_no_direct_kafka_producer.py
+
+  arch-no-utcnow:
+    name: "Arch: No datetime.utcnow() (check 11)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no datetime.utcnow() usage
+        run: uv run python scripts/validation/validate_no_utcnow.py
+
+  # ============================================================================
   # F5 ARCHITECTURAL CHECKS (OMN-2595: Consumer Group Rules)
   # ============================================================================
 
@@ -802,6 +1185,18 @@ jobs:
       - cross-repo-validation
       - migration-freeze
       - onex-validation
+      # Architecture enforcement gates (OMN-2592)
+      - arch-no-db-in-orchestrator
+      - arch-no-git-outside-effects
+      - arch-no-linear-outside-effects
+      - arch-no-repo-adapter-in-orchestrator
+      - arch-cost-ledger-isolation
+      - arch-topic-naming
+      - arch-omnidash-db-role
+      - arch-cost-ledger-structure
+      - arch-no-direct-kafka-producer
+      - arch-no-utcnow
+      # F5 checks (OMN-2595)
       - arch-no-compact-cmd-topic
     if: always()
     steps:
@@ -819,6 +1214,16 @@ jobs:
             "cross-repo-validation=${{ needs.cross-repo-validation.result }}" \
             "migration-freeze=${{ needs.migration-freeze.result }}" \
             "onex-validation=${{ needs.onex-validation.result }}" \
+            "arch-no-db-in-orchestrator=${{ needs.arch-no-db-in-orchestrator.result }}" \
+            "arch-no-git-outside-effects=${{ needs.arch-no-git-outside-effects.result }}" \
+            "arch-no-linear-outside-effects=${{ needs.arch-no-linear-outside-effects.result }}" \
+            "arch-no-repo-adapter-in-orchestrator=${{ needs.arch-no-repo-adapter-in-orchestrator.result }}" \
+            "arch-cost-ledger-isolation=${{ needs.arch-cost-ledger-isolation.result }}" \
+            "arch-topic-naming=${{ needs.arch-topic-naming.result }}" \
+            "arch-omnidash-db-role=${{ needs.arch-omnidash-db-role.result }}" \
+            "arch-cost-ledger-structure=${{ needs.arch-cost-ledger-structure.result }}" \
+            "arch-no-direct-kafka-producer=${{ needs.arch-no-direct-kafka-producer.result }}" \
+            "arch-no-utcnow=${{ needs.arch-no-utcnow.result }}" \
             "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"

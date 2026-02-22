@@ -40,7 +40,7 @@ class IntelligenceEventClient:
     # Legacy topic — stable constant during dual-publish migration window (OMN-2368).
     # Public so tests can pin the exact value and guard against silent renames.
     # TODO(OMN-2367): remove after migration complete
-    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
+    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"  # noqa: arch-topic-naming
 
     _INSTANCE_NAME = "intelligence"
 
