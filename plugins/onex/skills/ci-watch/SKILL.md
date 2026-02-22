@@ -193,7 +193,7 @@ PR #{pr_number} CI still failing after {N} automated fix cycles.
 
 ## Definition of Done
 
-- [ ] CI passing on branch {branch}
+- [ ] CI passing on PR #{pr_number}
 - [ ] Root cause documented
     """,
     parentId=ticket_id,
