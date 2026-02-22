@@ -85,6 +85,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="epic-team: auto-decompose empty epic {epic_id}",
   prompt="The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
+    Run ID: {run_id}
     Invoke: Skill(skill=\"onex:decompose-epic\", args=\"{epic_id}\")
 
     Read the ModelSkillResult from ~/.claude/skill-results/{run_id}/decompose-epic.json
@@ -98,7 +99,7 @@ In dry-run mode, if the epic is empty: invoke decompose-epic with `--dry-run` fl
 
 ## Repo Manifest
 
-Repo assignment for tickets uses the repo-local manifest at `plugins/onex/skills/epic-team/repo_manifest.yaml`:
+Repo assignment for tickets uses the repo-local manifest at `plugins/onex/skills/epic-team/repo_manifest.yaml` (14 repos total; abbreviated excerpt below):
 
 ```yaml
 MIN_TOP_SCORE: 4
@@ -139,6 +140,10 @@ repos:
       - infra
       - event
     precedence: 3
+
+  # ... 11 more repos (omniagent, omnibase_spi, omniintelligence, omnimemory,
+  #     omnimcp, omninode_infra, omninode_planning, omninode_review,
+  #     omnidash, omniplan, omniweb) — see repo_manifest.yaml for full list
 ```
 
 `MIN_TOP_SCORE` sets the minimum keyword-match score required for repo assignment; tickets below this threshold are routed to omniplan for triage. Keyword matching is case-insensitive. Tickets matching no repo are UNMATCHED (routed to triage or omniplan with `--force-unmatched`).
