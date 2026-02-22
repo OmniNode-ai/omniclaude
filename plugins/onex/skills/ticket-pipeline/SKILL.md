@@ -1,7 +1,7 @@
 ---
 name: ticket-pipeline
 description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
-version: 3.0.0
+version: 4.0.0
 category: workflow
 tags:
   - pipeline
@@ -12,6 +12,7 @@ tags:
   - pr
   - slack
   - ci
+  - merge
 author: OmniClaude Team
 args:
   - name: ticket_id
@@ -25,6 +26,9 @@ args:
     required: false
   - name: --force-run
     description: Break stale lock and start fresh run
+    required: false
+  - name: --auto-merge
+    description: Pass auto_merge=true to auto-merge sub-skill (skip HIGH_RISK gate)
     required: false
 ---
 
@@ -43,6 +47,7 @@ Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> impl
 /ticket-pipeline OMN-1234 --dry-run
 /ticket-pipeline OMN-1234 --skip-to create_pr
 /ticket-pipeline OMN-1234 --force-run
+/ticket-pipeline OMN-1234 --auto-merge    # Skip HIGH_RISK merge gate
 ```
 
 ## Pipeline Flow
@@ -57,7 +62,7 @@ stateDiagram-v2
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
     pr_review_loop --> auto_merge : auto (approved)
     pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
-    auto_merge --> [*] : merged or held
+    auto_merge --> [*] : merged (ledger cleared) or held (Slack waiting)
 ```
 
 ### Phase 0: pre_flight
@@ -102,7 +107,7 @@ stateDiagram-v2
 - On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
 - On `failed`: Slack MEDIUM_RISK gate, stop pipeline
 
-### Phase 5: pr_review_loop [NEW]
+### Phase 5: pr_review_loop
 
 - Invokes `pr-watch` sub-skill (OMN-2524) with configured policy
 - `pr-watch` polls `gh pr reviews` every 10 minutes
@@ -113,12 +118,19 @@ stateDiagram-v2
 - On `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
 - On `failed`: Slack MEDIUM_RISK gate, stop pipeline
 
-### Phase 6: auto_merge (see OMN-2529)
+### Phase 6: auto_merge [NEW]
 
-- Placeholder: invokes `auto-merge` sub-skill
-- Default: HIGH_RISK Slack gate requiring explicit "merge" reply
-- On `merged`: clear ticket-run ledger entry, post success to Slack
-- On `held`: pipeline exits cleanly (human will reply to Slack)
+- Invokes `auto-merge` sub-skill (OMN-2525) with configured policy
+- Default (`auto_merge: false`): HIGH_RISK Slack gate requiring explicit "merge" reply
+- With `--auto-merge` flag: merges immediately without gate
+- All three merge conditions must be met before proceeding:
+  1. CI passing (all required checks `conclusion: success`)
+  2. At least 1 approved review, no current CHANGES_REQUESTED
+  3. No unresolved review comments
+- Returns: `status: merged | held | failed`
+- On `merged`: clear ticket-run ledger entry, post Slack "merged", update Linear to Done
+- On `held`: pipeline exits cleanly (human will reply "merge" to Slack gate when ready)
+- On `failed`: post Slack MEDIUM_RISK gate, stop pipeline
 
 ## Pipeline Policy
 
@@ -126,7 +138,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 | Switch | Default | Description |
 |--------|---------|-------------|
-| `policy_version` | `"3.0"` | Version the policy for forward compatibility (1.0: initial; 2.0: ci_watch OMN-2523; 3.0: pr_review_loop OMN-2528) |
+| `policy_version` | `"4.0"` | Version the policy for forward compatibility |
 | `auto_advance` | `true` | Auto-advance between phases |
 | `auto_commit` | `true` | Allow local-review to commit fixes |
 | `auto_push` | `true` | Allow pushing to remote branch |
@@ -143,6 +155,11 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
 | `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
 | `max_pr_review_cycles` | `3` | Max pr-review-dev fix cycles before capping |
+| `auto_merge` | `false` | Merge immediately without HIGH_RISK Slack gate |
+| `slack_on_merge` | `true` | Post Slack notification on successful merge |
+| `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance) |
+| `merge_strategy` | `squash` | Merge strategy: squash \| merge \| rebase |
+| `delete_branch_on_merge` | `true` | Delete branch after successful merge |
 
 ## State Management
 
@@ -162,9 +179,15 @@ Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
 }
 ```
 
-- Entry created when pipeline starts (Phase 0)
-- Entry cleared when pipeline reaches terminal state (merged, failed, capped)
-- On new invocation: check ledger first; if entry exists → post "already running ({run-id})" to Slack and exit
+**Ledger lifecycle:**
+- Entry **created** when pipeline starts (Phase 0), before any side effects
+- Entry **cleared** when pipeline reaches terminal state:
+  - `auto_merge` returns `merged` → clear entry, post "merged" to Slack
+  - `auto_merge` returns `held` → keep entry (pipeline is paused, not done)
+  - `auto_merge` returns `failed` → clear entry with error note
+  - Pipeline stopped early (capped, timeout) → clear entry
+- On new invocation: check ledger first; if entry exists → post "already running (run-id: {run_id})" to Slack and exit 0
+- `--force-run` breaks stale lock: removes existing entry, starts fresh
 
 ## Dry Run Mode
 
@@ -172,13 +195,14 @@ Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
 
 ## Maximum Damage Assessment
 
-If pipeline runs unattended, worst case:
-- Pushes code to a feature branch (not main) -- reversible
-- Creates a PR -- closeable, doesn't auto-merge without explicit "merge" reply
-- Runs CI fixes (ci-fix-pipeline) -- reversible via git
-- Runs PR review fixes and pushes -- reversible via git revert
-- Sends Slack notifications -- ignorable
-- Updates Linear status -- manually reversible
+If pipeline runs unattended with `--auto-merge`, worst case:
+- Pushes code to main via squash-merge — can be reverted
+- Deletes feature branch — recreatable from merge commit
+- Runs CI fixes (ci-fix-pipeline) — committed to branch before merge
+- Sends Slack notifications — ignorable
+- Updates Linear status to Done — manually reversible
+
+Without `--auto-merge` (default): pipeline halts at Phase 6 waiting for explicit "merge" reply. Maximum damage: PR created, branch pushed.
 
 ## Supporting Modules (OMN-1970)
 
@@ -261,12 +285,6 @@ Task(
 )
 ```
 
-**On ci_watch result:**
-- `completed`: auto-advance to Phase 5
-- `capped`: log warning "CI fix cap reached — continuing to Phase 5 with degraded confidence", auto-advance to Phase 5
-- `timeout`: log warning "CI watch timed out — continuing to Phase 5", auto-advance to Phase 5
-- `failed`: post Slack MEDIUM_RISK gate, stop pipeline
-
 ### Phase 5: pr_review_loop — dispatch to polymorphic agent
 
 ```
@@ -275,47 +293,52 @@ Task(
   description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
   prompt="You are executing pr-watch for {ticket_id}.
     Invoke: Skill(skill=\"onex:pr-watch\",
-      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles} [--fix-nits if auto_fix_nits]\")
+      args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}{' --fix-nits' if auto_fix_nits else ''}\")
 
     Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/pr-watch.json
     Report back with: status (approved|capped|timeout|failed), pr_review_cycles_used, watch_duration_hours."
 )
 ```
 
-**On pr_review_loop result:**
-- `approved`: auto-advance to Phase 6
-- `capped`: post Slack MEDIUM_RISK gate and stop pipeline
+### Phase 6: auto_merge — dispatch to polymorphic agent
 
-  ```
-  [MEDIUM_RISK] ticket-pipeline: PR review blocked for {ticket_id}
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
+  prompt="You are executing auto-merge for {ticket_id}.
+    Invoke: Skill(skill=\"onex:auto-merge\",
+      args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy}{' --no-delete-branch' if not delete_branch_on_merge else ''}\")
 
-  PR #{pr_number} has been through {N} automated fix cycles and still has
-  unresolved review comments. Manual review required.
+    Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/auto-merge.json
+    Report back with: status (merged|held|failed), merged_at, branch_deleted."
+)
+```
 
-  Ticket: {ticket_id}
-  Review cycles used: {N}/{max_pr_review_cycles}
+**On auto_merge result:**
+- `merged`:
+  1. Clear ticket-run ledger entry (remove `{ticket_id}` key from `~/.claude/pipelines/ledger.json`)
+  2. Post Slack: "Merged PR #{pr_number} for {ticket_id} — {PR URL}"
+  3. Update Linear ticket status to Done
+  4. Emit `status: finished, progress: 1.00` via emit_ticket_status.py
+- `held`:
+  - Pipeline exits cleanly. Entry remains in ledger.
+  - Human will reply "merge" to the HIGH_RISK Slack gate posted by auto-merge sub-skill
+- `failed`:
+  - Post Slack MEDIUM_RISK gate
+  - Clear ledger entry with error note
+  - Stop pipeline
 
-  Reply 'continue' to attempt Phase 6 anyway, 'stop' to halt.
-  Silence (15 min) = stop.
-  ```
+**MEDIUM_RISK Slack gate on auto_merge failed:**
+```
+[MEDIUM_RISK] ticket-pipeline: Merge failed for {ticket_id}
 
-- `timeout`: post Slack MEDIUM_RISK gate and stop pipeline
+PR #{pr_number} could not be merged. Reason: {held_reason}
+Ticket: {ticket_id}
 
-  ```
-  [MEDIUM_RISK] ticket-pipeline: PR review timeout for {ticket_id}
-
-  PR #{pr_number} has been waiting {hours}h for approval without merge readiness.
-  Ticket: {ticket_id}
-
-  Reply 'extend' for 12 more hours of watching, 'stop' to halt.
-  Silence (15 min) = stop.
-  ```
-
-- `failed`: post Slack MEDIUM_RISK gate and stop pipeline
-
-### Phase 6: auto_merge — dispatch to polymorphic agent (see OMN-2529)
-
-Placeholder — implemented in OMN-2529.
+Reply 'retry' to attempt merge again, 'stop' to halt.
+Silence (15 min) = stop.
+```
 
 ---
 
@@ -335,7 +358,9 @@ edge case handling.
 - `ci-watch` skill (Phase 4, OMN-2523)
 - `pr-watch` skill (Phase 5, OMN-2524)
 - `auto-merge` skill (Phase 6, OMN-2525)
+- `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
+- `~/.claude/pipelines/ledger.json` (ticket-run ledger)
 - OMN-2157 (Web API threading support — future dependency)
 - Linear MCP tools (`mcp__linear-server__*`)
