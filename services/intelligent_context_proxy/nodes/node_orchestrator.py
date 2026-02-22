@@ -124,9 +124,16 @@ class NodeContextProxyOrchestrator:
             value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
 
-        # Start connections
-        await self.consumer.start()
-        await self.producer.start()
+        # Start connections (clean up on partial failure)
+        try:
+            await self.consumer.start()
+            await self.producer.start()
+        except Exception:
+            if self.consumer:
+                await self.consumer.stop()
+            if self.producer:
+                await self.producer.stop()
+            raise
 
         self._running = True
         logger.info("NodeContextProxyOrchestrator started successfully")

@@ -115,9 +115,18 @@ class NodeAnthropicForwarderEffect:
             follow_redirects=True,
         )
 
-        # Start connections
-        await self.consumer.start()
-        await self.producer.start()
+        # Start connections (clean up on partial failure)
+        try:
+            await self.consumer.start()
+            await self.producer.start()
+        except Exception:
+            if self.consumer:
+                await self.consumer.stop()
+            if self.producer:
+                await self.producer.stop()
+            if self.http_client:
+                await self.http_client.aclose()
+            raise
 
         self._running = True
         logger.info("NodeAnthropicForwarderEffect started successfully")
