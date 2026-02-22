@@ -37,6 +37,9 @@ args:
   - name: --flag-false-positive
     description: "Flag a finding description as a false positive (substring match); writes to ~/.claude/review-suppressions.yml with status: pending_review"
     required: false
+  - name: --path
+    description: "Path to the git worktree to review (default: CWD). Enables running local-review from omni_home against any worktree."
+    required: false
 retry_on:
   - AGENT_FAILED
   - PARSE_FAILED
@@ -69,6 +72,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 /local-review --checkpoint OMN-2144:abcd1234     # Write checkpoints per iteration
 /local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
 /local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
+/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-2607/omniclaude  # Review a specific worktree
 ```
 
 ## Arguments
@@ -86,6 +90,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 | `--flag-false-positive <pattern>` | none | Flag a finding as a false positive (substring match on description) |
+| `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home. |
 
 ## Suppression Registry
 
@@ -151,9 +156,9 @@ NEVER mix pre-existing fixes with the feature branch changes.
 
 ```
 Phase 0: Pre-existing issue scan
-  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
-     fixes are applied; do NOT stash or alter the working tree to run this step)
-  2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
+  1. Run pre-commit run --all-files from {path} against the current HEAD state (i.e. before any
+     uncommitted fixes are applied; do NOT stash or alter the working tree to run this step)
+  2. Run mypy src/ --strict from {path} (or repo-equivalent detected from pyproject.toml)
   3. Classify each failure:
        - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
        - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
@@ -223,14 +228,16 @@ Task(
     **Files to review**: {file_list}
     **Mode**: {--uncommitted | all changes}
 
+    **Working directory**: {path} (run all git commands from this directory)
+
     # If --uncommitted mode:
-    Run: git diff -- {files}  # Unstaged changes
-    Also run: git diff --cached -- {files}  # Staged but uncommitted changes
+    Run: git -C {path} diff -- {files}  # Unstaged changes
+    Also run: git -C {path} diff --cached -- {files}  # Staged but uncommitted changes
 
     # If all changes mode (default):
-    Run: git diff {base_ref}..HEAD -- {files}  # Committed changes
-    Also run: git diff -- {files}  # Unstaged changes
-    Also run: git diff --cached -- {files}  # Staged but uncommitted changes
+    Run: git -C {path} diff {base_ref}..HEAD -- {files}  # Committed changes
+    Also run: git -C {path} diff -- {files}  # Unstaged changes
+    Also run: git -C {path} diff --cached -- {files}  # Staged but uncommitted changes
 
     Read each changed file fully to understand context.
 
@@ -282,13 +289,15 @@ Task(
     3. Verify the fix doesn't break other code
     4. Do NOT commit - just make the changes
 
-    **Files to modify**: {file_list}"
+    **Files to modify**: {file_list}
+    **Working directory**: {path} (all file paths are relative to this directory)"
 )
 ```
 
 ### Commit Phase -- runs inline (lightweight git only)
 
 No dispatch needed. The orchestrator handles git add + git commit directly.
+When `--path` is provided, all git commands use `git -C {path} add` / `git -C {path} commit`.
 Commit messages use the format: `fix(review): [{severity}] {summary}`
 
 ## Review Loop Summary
@@ -374,6 +383,7 @@ across disconnections and re-starts. Prior dead ends are surfaced before new inv
 
 Where `{timestamp}` is the session start in `YYYYMMDD-HHMMSS` format and `{branch}` is the
 current git branch name (with `/` replaced by `-`).
+When `--path` is provided, `{branch}` is derived from `git -C {path} rev-parse --abbrev-ref HEAD`.
 
 ### Notes Format (Append-Only)
 
