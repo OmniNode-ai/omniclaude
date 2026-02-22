@@ -8,12 +8,13 @@ Evaluates whether a ticket generation pattern meets promotion criteria and,
 if so, writes it to OmniMemory via the injected ProtocolPatternStore.
 
 Promotion is idempotent:
-- If the exact same pattern key already exists with the same evidence count,
-  the result is ALREADY_CURRENT (no-op).
-- If the pattern exists but with higher evidence count, the version is
+- If the exact same pattern key already exists with the same or higher evidence
+  count, the result is ALREADY_CURRENT (no-op, stale requests are safe).
+- If the pattern exists but with strictly lower evidence count, the version is
   incremented (VERSION_BUMPED).
 - If the pattern is new and meets criteria, it is PROMOTED.
-- If criteria are not met, the result is SKIPPED (no write).
+- If criteria are not met (evidence threshold or ACs gate), the result is
+  SKIPPED (no write).
 
 Promoted patterns are retrievable by the Plan DAG Generator (OMN-2502)
 via pattern_key lookup to short-circuit full DAG generation.
@@ -79,14 +80,22 @@ class HandlerPatternPromotionDefault:
             ModelPatternPromotionResult with status and promoted pattern (if any).
         """
         pattern_key = _derive_pattern_key(request.intent_type, request.unit_specs)
-        criteria_met = request.evidence_count >= request.criteria.min_evidence_count
+        evidence_threshold_met = (
+            request.evidence_count >= request.criteria.min_evidence_count
+        )
+        acs_gate_met = (
+            not request.criteria.require_all_acs_passing or request.all_acs_passing
+        )
+        criteria_met = evidence_threshold_met and acs_gate_met
 
         if not criteria_met:
             logger.debug(
-                "Pattern promotion SKIPPED for intent=%s (evidence=%d < required=%d)",
+                "Pattern promotion SKIPPED for intent=%s "
+                "(evidence=%d < required=%d, acs_gate_met=%s)",
                 request.intent_type,
                 request.evidence_count,
                 request.criteria.min_evidence_count,
+                acs_gate_met,
             )
             return ModelPatternPromotionResult(
                 status=EnumPromotionStatus.SKIPPED,
@@ -144,7 +153,7 @@ class HandlerPatternPromotionDefault:
                 min_evidence_required=request.criteria.min_evidence_count,
             )
 
-        # Version bump — more evidence available
+        # Version bump — more evidence available than currently stored
         bumped = ModelPromotedPattern(
             pattern_id=existing.pattern_id,
             pattern_key=pattern_key,

@@ -55,6 +55,13 @@ class ModelPatternPromotionRequest(BaseModel):
         ge=0,
         description="Count of successful evidence bundles",
     )
+    all_acs_passing: bool = Field(
+        default=False,
+        description=(
+            "True if all ACs in the contributing evidence bundles have PASS verdicts. "
+            "Required when criteria.require_all_acs_passing is True."
+        ),
+    )
     criteria: ModelPromotionCriteria = Field(
         default_factory=ModelPromotionCriteria,
         description="Promotion eligibility criteria",

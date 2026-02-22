@@ -71,6 +71,7 @@ def _request(
     intent_type: str = "FEATURE",
     evidence_count: int = 3,
     min_evidence_count: int = 3,
+    all_acs_passing: bool = True,
     **kwargs: object,
 ) -> ModelPatternPromotionRequest:
     defaults: dict[str, object] = {
@@ -79,6 +80,7 @@ def _request(
         "dep_specs": _DEP_SPECS,
         "evidence_bundle_ids": _BUNDLE_IDS[:evidence_count],
         "evidence_count": evidence_count,
+        "all_acs_passing": all_acs_passing,
         "criteria": ModelPromotionCriteria(min_evidence_count=min_evidence_count),
         "correlation_id": uuid.uuid4(),
     }
@@ -366,6 +368,64 @@ class TestHandlerPatternPromotionDefault:
         self.handler.promote(req)
         key = _derive_pattern_key(req.intent_type, req.unit_specs)
         assert self.store.get_by_key(key) is None
+
+    def test_acs_gate_skips_when_require_all_acs_passing_and_not_all_passing(
+        self,
+    ) -> None:
+        req = _request(
+            evidence_count=3,
+            min_evidence_count=3,
+            all_acs_passing=False,
+        )
+        # criteria defaults require_all_acs_passing=True
+        result = self.handler.promote(req)
+        assert result.status == EnumPromotionStatus.SKIPPED
+        assert result.criteria_met is False
+
+    def test_acs_gate_promotes_when_all_acs_passing(self) -> None:
+        req = _request(
+            evidence_count=3,
+            min_evidence_count=3,
+            all_acs_passing=True,
+        )
+        result = self.handler.promote(req)
+        assert result.status == EnumPromotionStatus.PROMOTED
+
+    def test_acs_gate_bypassed_when_require_all_acs_passing_false(self) -> None:
+        # Override criteria to not require all ACs passing
+        req2 = ModelPatternPromotionRequest(
+            intent_type="FEATURE",
+            unit_specs=_UNIT_SPECS,
+            dep_specs=_DEP_SPECS,
+            evidence_bundle_ids=_BUNDLE_IDS,
+            evidence_count=3,
+            all_acs_passing=False,
+            criteria=ModelPromotionCriteria(
+                min_evidence_count=3, require_all_acs_passing=False
+            ),
+            correlation_id=uuid.uuid4(),
+        )
+        result = self.handler.promote(req2)
+        assert result.status == EnumPromotionStatus.PROMOTED
+
+    def test_stale_request_lower_evidence_returns_already_current(self) -> None:
+        # First promote with evidence_count=4 (4 bundle IDs)
+        extra_bundle = f"bundle-{uuid.uuid4()}"
+        req1 = _request(
+            evidence_count=4,
+            min_evidence_count=3,
+            evidence_bundle_ids=_BUNDLE_IDS + (extra_bundle,),
+        )
+        self.handler.promote(req1)
+
+        # Then receive a stale request with only evidence_count=3 (fewer bundles)
+        req_stale = _request(evidence_count=3, min_evidence_count=3)
+        result = self.handler.promote(req_stale)
+        assert result.status == EnumPromotionStatus.ALREADY_CURRENT
+        # Version must not have been bumped; original higher count preserved
+        stored = self.store.get_by_key(result.pattern_key)
+        assert stored is not None
+        assert stored.evidence_count == 4
 
 
 # ---------------------------------------------------------------------------
