@@ -172,6 +172,10 @@ class NodeAnthropicForwarderEffect:
                     correlation_id = event.get("correlation_id")
                     payload = event.get("payload", {})
 
+                    if not correlation_id:
+                        logger.warning("Received event missing correlation_id, skipping")
+                        continue
+
                     logger.info(f"Processing forward request (correlation_id={correlation_id})")
 
                     # Process forward (async task to avoid blocking)

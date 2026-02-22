@@ -170,6 +170,10 @@ class NodeContextRewriterCompute:
                     correlation_id = event.get("correlation_id")
                     payload = event.get("payload", {})
 
+                    if not correlation_id:
+                        logger.warning("Received event missing correlation_id, skipping")
+                        continue
+
                     logger.info(f"Processing context rewrite (correlation_id={correlation_id})")
 
                     # Process rewrite (async task to avoid blocking)

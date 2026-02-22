@@ -180,6 +180,10 @@ class NodeContextRequestReducer:
                     correlation_id = event.get("correlation_id")
                     payload = event.get("payload", {})
 
+                    if not correlation_id:
+                        logger.warning("Received event missing correlation_id, skipping")
+                        continue
+
                     logger.debug(
                         f"Received event: {event_type} (correlation_id={correlation_id})"
                     )

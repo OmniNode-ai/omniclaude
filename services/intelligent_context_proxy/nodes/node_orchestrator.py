@@ -182,6 +182,10 @@ class NodeContextProxyOrchestrator:
                     correlation_id = event.get("correlation_id")
                     payload = event.get("payload", {})
 
+                    if not correlation_id:
+                        logger.warning("Received event missing correlation_id, skipping")
+                        continue
+
                     # Handle different event types
                     if event_type == "REQUEST_RECEIVED":
                         logger.info(f"Orchestrating request (correlation_id={correlation_id})")
