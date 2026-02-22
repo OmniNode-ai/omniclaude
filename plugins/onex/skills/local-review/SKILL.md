@@ -310,6 +310,53 @@ The skill runs a 3-phase loop:
 - `Changes staged` -- `--no-commit` mode, fixes applied but not committed
 - `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states requiring manual intervention
 
+## Per-Session Issue Notes (Audit Trail)
+
+Every review/debug skill session maintains a notes file that persists investigation history
+across disconnections and re-starts. Prior dead ends are surfaced before new investigation begins.
+
+### Notes File Location
+
+```
+~/.claude/review-notes/{timestamp}-{branch}.md
+```
+
+Where `{timestamp}` is the session start in `YYYYMMDD-HHMMSS` format and `{branch}` is the
+current git branch name (with `/` replaced by `-`).
+
+### Notes Format (Append-Only)
+
+Each iteration appends to the notes file (never overwrites):
+
+```markdown
+## Iteration 3 — 2026-02-21 14:32
+
+### Issues Found
+- [MAJOR] [FIXED] src/api.py:45 - Missing validation on user input
+- [MINOR] [FAILED] src/config.py:12 - Magic number (failed_fixes_count: 3)
+
+### Suppressed
+- tests/conftest.py:12 - asyncio_mode [fp_001]
+
+### Auto-Flagged for Suppression
+- src/utils.py:89 - lambda capture in loop (appeared 3x, adding to pending_review)
+```
+
+Fix status values: `[FIXED]` | `[FAILED]` | `[PENDING]` | `[SKIPPED]`
+
+### Init Behavior
+
+At skill start, if a notes file exists for the current branch (any timestamp), read the most
+recent file before beginning investigation. This surfaces:
+- Issues previously attempted and failed (avoid re-hitting dead ends)
+- Suppressions already in effect
+- Issues auto-flagged in prior sessions
+
+### Notes in systematic-debugging and ci-fix-pipeline
+
+The `systematic-debugging` skill reads the branch notes file before root cause investigation.
+The `ci-fix-pipeline` skill reads notes before each fix attempt.
+
 ## Detailed Orchestration
 
 Full orchestration logic (phase details, argument parsing, error handling, JSON parsing with text
@@ -323,3 +370,4 @@ Load `prompt.md` only if you need reference details for edge case handling or im
 - `ticket-pipeline` skill (chains local-review as Phase 2)
 - `ticket-work` skill (implementation phase before review)
 - `~/.claude/review-suppressions.yml` (suppression registry — created on first `--flag-false-positive` use)
+- `~/.claude/review-notes/` (per-session issue notes directory)
