@@ -1275,7 +1275,6 @@ Runs inline in orchestrator (lightweight — no Task() dispatch needed).
        Previous phase: implementation complete
 
        Execute the local review loop.
-       Do NOT commit changes -- the orchestrator handles git operations.
        Report back with:
        - Number of iterations completed
        - Blocking issues found (count and descriptions)
