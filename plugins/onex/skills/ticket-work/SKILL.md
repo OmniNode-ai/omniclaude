@@ -15,7 +15,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1807)
     required: true
   - name: --autonomous
-    description: Collapse 5 hard keyboard gates to async Slack soft-gates (silence=consent for LOW_RISK); enables headless operation
+    description: Collapse 5 hard keyboard gates to at most 2 async Slack soft-gates (silence=consent for LOW_RISK); enables headless operation
     required: false
 ---
 
