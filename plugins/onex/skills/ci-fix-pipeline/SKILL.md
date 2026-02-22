@@ -152,8 +152,10 @@ Task(
 ```
 
 **Post-fix architectural check**: For each failure returned as `architectural` by the fix agent:
-- Trigger Slack MEDIUM_RISK gate, wait for human decision
-- Approved → apply fix; Declined → mark `escalated`
+- Send a Slack message (via `HandlerSlackWebhook` in omnibase_infra) describing the architectural
+  change and asking for human approval. Include the failure description, the proposed fix, and
+  the files affected. Wait for a reply (poll or webhook callback).
+- Approved (human replies "approve" or "yes") → apply fix; Declined (any other reply or timeout after 10 min) → mark `escalated`
 
 ### Phase 5: Commit Fixes
 
@@ -161,16 +163,20 @@ Orchestrator stages and commits inline (no dispatch needed):
 
 ```bash
 git add <changed_files>
-git commit -m "fix(ci): resolve {N} CI failures [OMN-XXXX]"
+git commit -m "fix(ci): resolve {N} {severity} failures [{ticket_id}]"
 ```
 
 Commit message format: `fix(ci): resolve {N} {severity} failures [{ticket_id}]`
+where `{severity}` is the highest severity fixed (e.g., `critical`, `major`, `minor`) and
+`{ticket_id}` is the value from `--ticket-id` (or omitted if not provided).
 
 ### Sub-Ticket Creation
 
 For each `capped` failure (files_in_scope > max_fix_files), created inline during Phase 3:
 
 ```python
+# current_team: resolved from --ticket-id parent team (via mcp__linear-server__get_issue),
+# or from the first team returned by mcp__linear-server__list_teams if no ticket is provided.
 mcp__linear-server__create_issue(
     title=f"CI: {failure.job} — {failure.step} ({len(failure.files_in_scope)} files)",
     team=current_team,
@@ -211,7 +217,9 @@ ci-fix-pipeline complete
 
 ## ModelSkillResult Output
 
-Emits to `~/.claude/skill-results/{context_id}/ci-fix-pipeline.json`:
+Emits to `~/.claude/skill-results/{context_id}/ci-fix-pipeline.json`
+where `{context_id}` is the Claude session ID (from `$CLAUDE_SESSION_ID` env var) or `default`
+if the session ID is unavailable:
 
 ```json
 {
@@ -257,5 +265,5 @@ This ensures large-scope failures are never silently dropped — they are tracke
 
 - `ci-failures` skill — fetch and analyze CI failures (read-only)
 - `local-review` skill — review and fix local code changes
-- `slack-gate` skill — human-in-the-loop Slack approval gate
 - `ticket-pipeline` skill — invokes ci-fix-pipeline as Phase 3 (ci_watch + fix loop)
+- `HandlerSlackWebhook` in omnibase_infra — Slack delivery infrastructure used for start/complete notifications and architectural approval gates
