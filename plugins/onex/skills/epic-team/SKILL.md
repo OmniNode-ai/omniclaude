@@ -81,8 +81,10 @@ actionable error: `"Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.
 Worker worktrees use the **user-global** location (not repo-relative):
 
 ```
-~/.claude/worktrees/{epic_id}/{run_id}/{ticket_id}/
+~/.claude/worktrees/{epic_id}/{run_id_short}/{ticket_id}/
 ```
+
+Where `run_id_short` is the first 8 characters of the run UUID.
 
 This matches the actual path convention in use and is consistent across all repos.
 
