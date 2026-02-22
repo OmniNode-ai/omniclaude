@@ -1,7 +1,7 @@
 ---
 name: epic-team
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
-version: 1.1.0
+version: 1.2.0
 category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
 args:
@@ -20,6 +20,8 @@ args:
 ## Overview
 
 Decompose a Linear epic into per-repo workstreams and autonomously drive them to completion using a team-lead + worker topology. The team lead (this session) owns planning, monitoring, state persistence, and lifecycle notifications. Per-repo workers are spawned as Task() subagents and execute tickets independently using the ticket-work skill.
+
+**If the epic has zero child tickets**, epic-team automatically invokes the `decompose-epic` sub-skill to analyze the epic description and create sub-tickets, then posts a Slack LOW_RISK gate. Silence for 30 minutes means proceed with newly created tickets.
 
 ## Usage Examples
 
@@ -43,79 +45,129 @@ Decompose a Linear epic into per-repo workstreams and autonomously drive them to
 /epic-team OMN-2000 --force-unmatched
 ```
 
+## Empty Epic Auto-Decompose
+
+When fetching child tickets from Linear returns 0 results, epic-team no longer hard-stops. Instead:
+
+```
+epic-team OMN-XXXX
+  → Fetch child tickets from Linear
+  → If 0 child tickets:
+      → Invoke decompose-epic OMN-XXXX (OMN-2522)
+        → decompose-epic analyzes epic description
+        → Creates N sub-tickets as Linear children (uses repo_manifest for repo assignment)
+        → Returns ModelSkillResult with created_tickets list
+      → Post Slack LOW_RISK gate:
+          "Epic OMN-XXXX has no child tickets — auto-decomposed into N sub-tickets.
+           Reply reject within 30 minutes to cancel. Silence = proceed."
+      → On reject reply: stop, post "decomposition rejected by human" to Slack
+      → On silence (30 min): fetch newly created tickets, continue with existing behavior
+  → If >0 child tickets: existing behavior (assign to repos, spawn workers)
+```
+
+### Slack Message Format (Empty Epic Gate)
+
+```
+[LOW_RISK] epic-team: Auto-decomposed OMN-XXXX
+
+Epic had no child tickets. Created N sub-tickets:
+  - OMN-YYYY: [title]
+  - OMN-ZZZZ: [title]
+  ...
+
+Reply reject within 30 minutes to cancel. Silence = proceed with orchestration.
+```
+
+### decompose-epic Dispatch
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="epic-team: auto-decompose empty epic {epic_id}",
+  prompt="The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
+    Run ID: {run_id}
+    Invoke: Skill(skill=\"onex:decompose-epic\", args=\"{epic_id}\")
+
+    Read the ModelSkillResult from ~/.claude/skill-results/{run_id}/decompose-epic.json
+    Report back with: created_tickets (list of ticket IDs and titles), count."
+)
+```
+
+### --dry-run behavior
+
+In dry-run mode, if the epic is empty: invoke decompose-epic with `--dry-run` flag (returns plan without creating tickets). Print the decomposition plan. Do not post Slack gate.
+
 ## Repo Manifest
 
-The repo manifest lives at a **user-global** location so epic-team can be invoked from any repo
-without needing to know where the plugin is installed:
-
-```
-~/.claude/epic-team/repo_manifest.yaml
-```
-
-This makes epic-team repo-agnostic — you can run `/epic-team` from omniclaude, omnibase_core,
-omnidash, or any other repo and it will always find the manifest.
-
-### Manifest Schema
+Repo assignment for tickets uses the repo-local manifest at `plugins/onex/skills/epic-team/repo_manifest.yaml` (14 repos total; abbreviated excerpt below):
 
 ```yaml
+MIN_TOP_SCORE: 4
+
 repos:
   - name: omniclaude
-    path: ~/Code/omniclaude          # absolute or ~ path to repo root
-    keywords: ["claude", "skill", "hook", "plugin", "agent"]
+    description: >
+      Claude Code plugin — hooks, skills, agents, slash commands,
+      context injection, emit daemon, and Claude Code integrations.
+    keywords:
+      - claude
+      - hook
+      - skill
+      - plugin
+      - epic-team
+    precedence: 4
+
   - name: omnibase_core
-    path: ~/Code/omnibase_core
-    keywords: ["node", "contract", "protocol"]
-  - name: omnidash
-    path: ~/Code/omnidash
-    keywords: ["dashboard", "ui", "frontend"]
-  - name: omniintelligence
-    path: ~/Code/omniintelligence
-    keywords: ["intelligence", "search", "rag"]
+    description: >
+      Core ONEX runtime framework — node types, contract models,
+      Pydantic base schemas, enum governance, and type system.
+    keywords:
+      - core
+      - node
+      - contract
+      - schema
+      - runtime
+    precedence: 1
+
+  - name: omnibase_infra
+    description: >
+      Infrastructure layer — Kafka, Slack, PostgreSQL, event emission,
+      migrations, and external-service integrations.
+    keywords:
+      - kafka
+      - slack
+      - postgres
+      - infra
+      - event
+    precedence: 3
+
+  # ... 11 more repos (omniagent, omnibase_spi, omniintelligence, omnimemory,
+  #     omnimcp, omninode_infra, omninode_planning, omninode_review,
+  #     omnidash, omniplan, omniweb) — see repo_manifest.yaml for full list
 ```
 
-**Loading**: Read `~/.claude/epic-team/repo_manifest.yaml` at startup. If missing, abort with
-actionable error: `"Create ~/.claude/epic-team/repo_manifest.yaml — see SKILL.md for schema"`.
+`MIN_TOP_SCORE` sets the minimum keyword-match score required for repo assignment; tickets below this threshold are routed to omniplan for triage. Keyword matching is case-insensitive. Tickets matching no repo are UNMATCHED (routed to triage or omniplan with `--force-unmatched`).
 
-## Worktree Paths
+## Worktree Policy
 
-Worker worktrees use the **user-global** location (not repo-relative):
-
+Workers create isolated git worktrees at:
 ```
-~/.claude/worktrees/{epic_id}/{run_id_short}/{ticket_id}/
+../{repo}/.claude/worktrees/{epic_id}/{run_id_short}/{ticket_id}/
 ```
 
-Where `run_id_short` is the first 8 characters of the run UUID.
+Where `run_id_short` is the first 8 characters of the run UUID. The path is repo-relative (sibling of the omniclaude root). Branch format: `epic/{epic_id}/{ticket_id}/{run_id_short}`.
 
-This matches the actual path convention in use and is consistent across all repos.
-
-## Auto-Cleanup Policy
-
-After a worker's PR is merged, its worktree is automatically deleted:
-
-```yaml
-auto_cleanup_merged_worktrees: true
-```
-
-**Behavior**:
-- When a ticket transitions to `Done` and its PR is merged: `git worktree remove --force {path}`
-- Unmerged worktrees are always preserved (never auto-deleted)
-- Cleanup runs as a background step in the monitoring loop, not blocking ticket processing
+Worktrees are NOT auto-deleted after merge. The Phase 5 summary prints each worktree path and the `git worktree remove` command needed to clean up.
 
 ## Architecture
 
-The team lead runs in this session and is responsible for fetching the epic from Linear,
-decomposing its child tickets into per-repo groups, and spawning one worker agent per repo via
-`Task()`. Each worker runs the ticket-work skill sequentially for every ticket assigned to its
-repo, reporting results back to the team lead as each ticket reaches a terminal state. The team
-lead monitors all workers, aggregates their outcomes, and sends Slack notifications at key
-lifecycle events — epic started, individual ticket completed or failed, and epic done. All
-runtime state (worker assignments, ticket statuses, worker task handles) is persisted to
-`~/.claude/epics/{epic_id}/state.yaml` so that a disconnected session can be resumed with
-`--resume` without losing progress. For full orchestration behavior, state-machine logic, and
-edge-case handling, see `prompt.md` in this directory.
+The team lead runs in this session and is responsible for fetching the epic from Linear, decomposing its child tickets into per-repo groups, and spawning one worker agent per repo via `Task()`. Each worker runs the ticket-work skill sequentially for every ticket assigned to its repo, reporting results back to the team lead as each ticket reaches a terminal state. The team lead monitors all workers, aggregates their outcomes, and sends Slack notifications at key lifecycle events — epic started, individual ticket completed or failed, and epic done. All runtime state (worker assignments, ticket statuses, worker task handles) is persisted to `~/.claude/epics/{epic_id}/state.yaml` so that a disconnected session can be resumed with `--resume` without losing progress. For full orchestration behavior, state-machine logic, and edge-case handling, see `prompt.md` in this directory.
 
 ## See Also
 
 - `prompt.md` — full orchestration logic, state machine, and error handling reference
 - `/ticket-work` — per-ticket execution skill used by each worker
+- `decompose-epic` skill (OMN-2522, planned) — invoked when epic has zero child tickets
+- `slack-gate` skill (OMN-2521, planned) — LOW_RISK gate for decompose confirmation
+- `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo-local repo assignment manifest
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
