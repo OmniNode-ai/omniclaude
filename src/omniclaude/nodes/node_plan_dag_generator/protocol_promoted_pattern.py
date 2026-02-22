@@ -8,13 +8,15 @@ Plan DAG Generator can use to short-circuit full DAG generation.
 
 from __future__ import annotations
 
+from typing import Protocol
+
 # Type aliases for work unit and dependency specs (replicated here to avoid
 # circular imports with handler_plan_dag_default)
 _WorkUnitSpec = tuple[str, str, str, str]  # (local_id, title, unit_type, scope)
 _DepSpec = tuple[str, str]  # (from_local_id, to_local_id)
 
 
-class PromotedPatternProtocol:
+class PromotedPatternProtocol(Protocol):
     """Protocol for promoted OmniMemory patterns (concrete class in OMN-2506).
 
     Attributes:

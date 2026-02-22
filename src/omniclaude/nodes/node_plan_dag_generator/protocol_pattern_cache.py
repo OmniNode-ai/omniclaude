@@ -8,12 +8,14 @@ for promoted patterns without importing the concrete implementation.
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from omniclaude.nodes.node_plan_dag_generator.protocol_promoted_pattern import (
     PromotedPatternProtocol,
 )
 
 
-class PatternCacheProtocol:
+class PatternCacheProtocol(Protocol):
     """Protocol for OmniMemory pattern cache (defined in OMN-2506).
 
     Provides a minimal interface so the DAG generator can query for cached
@@ -22,7 +24,7 @@ class PatternCacheProtocol:
 
     def get_pattern(self, pattern_id: str) -> PromotedPatternProtocol | None:
         """Retrieve a promoted pattern by ID.  Returns None on cache miss."""
-        raise NotImplementedError
+        ...
 
 
 __all__ = ["PatternCacheProtocol"]
