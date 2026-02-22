@@ -74,7 +74,7 @@ stateDiagram-v2
 
 - Runs pre-commit hooks + mypy on clean checkout
 - Classifies pre-existing issues as AUTO-FIX or DEFER
-- AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing):`
+- AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing): fix pre-existing issues [OMN-XXXX]`
 - DEFER: creates Linear sub-ticket, notes in PR description
 - AUTO-ADVANCE to Phase 1
 
@@ -304,7 +304,7 @@ No dispatch needed. The orchestrator runs pre-commit hooks and mypy directly, cl
 # 1. Run: pre-commit run --all-files (capture output)
 # 2. Run: mypy src/ (capture output)
 # 3. Classify issues: AUTO-FIX (<=10 files, same subsystem) or DEFER (else)
-# 4. AUTO-FIX: apply fixes, commit as chore(pre-existing): [OMN-XXXX]
+# 4. AUTO-FIX: apply fixes, commit as chore(pre-existing): fix pre-existing issues [OMN-XXXX]
 # 5. DEFER: create Linear sub-ticket via MCP, note in PR description template
 # 6. Update state.yaml: phase=implement
 # AUTO-ADVANCE to Phase 1
