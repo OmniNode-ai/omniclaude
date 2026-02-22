@@ -58,7 +58,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 ## Decomposition Flow
 
 1. Fetch epic from Linear: `mcp__linear-server__get_issue({epic_id}, includeRelations=true)`
-2. Read `~/.claude/epic-team/repo_manifest.yaml` for keyword-to-repo mapping
+2. Read `plugins/onex/skills/epic-team/repo_manifest.yaml` for keyword-to-repo mapping
 3. Analyze epic description + goals:
    - Identify distinct workstreams (one ticket per independent deliverable)
    - Keep tickets atomic: each ticket = one thing, one repo, one PR
@@ -99,7 +99,7 @@ mcp__linear-server__create_issue(
 
 ## Repo Manifest
 
-Loaded from `~/.claude/epic-team/repo_manifest.yaml`:
+Loaded from `plugins/onex/skills/epic-team/repo_manifest.yaml`:
 
 ```yaml
 repos:
@@ -135,5 +135,5 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/decompose-epic
 
 - `epic-team` skill (invokes decompose-epic when epic has 0 child tickets)
 - `ticket-pipeline` skill (invokes decompose-epic on cross-repo auto-split)
-- `~/.claude/epic-team/repo_manifest.yaml` — repo keyword mapping
+- `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - OMN-2522 — implementation ticket

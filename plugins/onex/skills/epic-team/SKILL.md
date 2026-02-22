@@ -195,7 +195,7 @@ Slack gate.
 
 ## Repo Manifest
 
-Ticket-to-repo assignment uses `~/.claude/epic-team/repo_manifest.yaml`:
+Ticket-to-repo assignment uses `plugins/onex/skills/epic-team/repo_manifest.yaml`:
 
 ```yaml
 MIN_TOP_SCORE: 4
@@ -254,5 +254,5 @@ It does NOT own:
 - `auto-merge` skill (OMN-2525) — merge gate
 - `decompose-epic` skill (OMN-2522) — empty epic auto-decompose
 - `slack-gate` skill (OMN-2521) — LOW/MEDIUM/HIGH_RISK gates
-- `~/.claude/epic-team/repo_manifest.yaml` — repo keyword mapping
+- `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
