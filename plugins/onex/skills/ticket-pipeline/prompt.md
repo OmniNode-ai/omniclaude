@@ -1830,6 +1830,7 @@ Default behavior: HIGH_RISK Slack gate requiring explicit "merge" reply.
      1. Clear ticket-run ledger entry (remove `{ticket_id}` key from `~/.claude/pipelines/ledger.json`)
      2. Post Slack: "Merged PR #{pr_number} for {ticket_id} — {PR URL}"
      3. Update Linear ticket status to Done
+     4. Emit `status: finished, progress: 1.00` via emit_ticket_status.py
    - `held`: pipeline exits cleanly (entry stays in ledger; human replies "merge" to Slack gate)
    - `failed`: Post Slack MEDIUM_RISK gate, clear ledger entry with error note, stop pipeline
 
