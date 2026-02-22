@@ -15,6 +15,7 @@ Stage 4 of DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import subprocess
@@ -592,6 +593,10 @@ def persist_frame_to_jsonl(frame: ChangeFrame, session_id: str) -> Path:
     frame_json = frame.model_dump_json()
 
     with jsonl_path.open("a") as f:
-        f.write(frame_json + "\n")
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.write(frame_json + "\n")
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
     return jsonl_path

@@ -124,9 +124,11 @@ def load_frame_from_jsonl(
                     continue
                 try:
                     data = json.loads(line)
+                    if not isinstance(data, dict):
+                        continue
                     if data.get("frame_id") == target_str:
                         return ChangeFrame.model_validate(data)
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError, AttributeError):
                     continue
     except OSError:
         return None
