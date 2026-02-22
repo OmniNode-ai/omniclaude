@@ -262,7 +262,11 @@ if len(tickets) == 0:
         # On Slack gate failure, proceed (fail-open)
 
     if gate_status == "rejected":
-        print(f"Decomposition rejected by human via Slack. Stopping.")
+        print("Decomposition rejected by human via Slack. Stopping.")
+        try:
+            notify_pipeline_rejected(epic_id=epic_id, run_id=run_id)
+        except Exception as e:
+            print(f"Warning: Slack rejection notification failed (non-fatal): {e}")
         exit(0)
 
     # Re-fetch newly created tickets after gate approval
@@ -1030,6 +1034,7 @@ revoked:
 | Working dir missing plugins/onex | `ERROR: Working directory guard failed. Missing: plugins/onex` | 1 |
 | Working dir missing ../omnibase_core | `ERROR: Working directory guard failed. Missing: ../omnibase_core` | 1 |
 | No child tickets (decompose-epic returned 0) | `ERROR: decompose-epic created no tickets. Cannot proceed.` | 1 |
+| Slack gate rejected by human | `Decomposition rejected by human via Slack. Stopping.` | 0 |
 | repo_manifest.yaml not found | `ERROR: repo_manifest.yaml not found at plugins/onex/skills/epic-team/repo_manifest.yaml` | 1 |
 | Decomposition validation errors | `HARD FAIL: Decomposition validation errors: [...]` | 1 |
 | Unmatched tickets without --force-unmatched | `ERROR: Unmatched tickets block decomposition. Use --force-unmatched...` | 1 |
