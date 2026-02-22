@@ -34,7 +34,9 @@ outputs:
     fields:
       - status: merged | held | timeout | error
       - pr_number: int
+      - repo: str
       - merge_commit: str | null
+      - strategy: str
 args:
   - name: pr_number
     description: GitHub PR number to merge

@@ -35,6 +35,7 @@ outputs:
       - status: accepted | rejected | timeout
       - risk_level: str
       - reply: str | null
+      - elapsed_minutes: int
 args:
   - name: risk_level
     description: "Gate tier: LOW_RISK|MEDIUM_RISK|HIGH_RISK"

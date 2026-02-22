@@ -34,6 +34,7 @@ outputs:
     fields:
       - status: passed | capped | timeout | error
       - pr_number: int
+      - repo: str
       - fix_cycles_used: int
       - elapsed_minutes: int
 args:

@@ -38,6 +38,7 @@ outputs:
     fields:
       - status: approved | changes_requested_fixed | timeout | capped | error
       - pr_number: int
+      - repo: str
       - fix_cycles_used: int
       - elapsed_hours: float
 args:

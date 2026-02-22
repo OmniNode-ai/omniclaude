@@ -21,6 +21,7 @@ outputs:
     description: "Written to ~/.claude/skill-results/{context_id}/decompose-epic.json"
     fields:
       - status: created | dry_run | error
+      - epic_id: str
       - created_tickets: list[{id, title, repo_hint}]
       - count: int
 args:
