@@ -513,12 +513,20 @@ save_state(state, state_path)
 Replaces the inline bash cross-repo check with `cross_repo_detector.py`
 from `plugins/onex/hooks/lib/cross_repo_detector.py`. Used in Phase 1 (implement).
 
+Default behavior (`stop_on_cross_repo: false`): detects violation and delegates to
+`execute_cross_repo_split()` which invokes decompose-epic and hands off to epic-team.
+Legacy behavior (`stop_on_cross_repo: true`): hard-stops with blocked result.
+
 ```python
 from cross_repo_detector import detect_cross_repo_changes
 
-if state["policy"]["stop_on_cross_repo"]:
-    cross_repo_result = detect_cross_repo_changes()
-    if cross_repo_result.violation:
+cross_repo_result = detect_cross_repo_changes()
+if cross_repo_result.error:
+    print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
+    # Non-blocking error: log but don't stop pipeline
+elif cross_repo_result.violation:
+    if state["policy"]["stop_on_cross_repo"]:
+        # Legacy hard-stop behavior
         result = {
             "status": "blocked",
             "block_kind": "blocked_policy",
@@ -527,6 +535,10 @@ if state["policy"]["stop_on_cross_repo"]:
             "nit_count": 0,
             "artifacts": {},
         }
+        return result
+    else:
+        # Default: auto-split via decompose-epic (see Phase 1b in SKILL.md)
+        return execute_cross_repo_split(state, cross_repo_result)
 ```
 
 ### Linear Contract Patcher (OMN-1970)
@@ -1364,7 +1376,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
