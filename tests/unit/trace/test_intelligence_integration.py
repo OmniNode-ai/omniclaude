@@ -427,7 +427,7 @@ class TestProcessFixTransitionEvent:
 
     def test_context_item_stored(self) -> None:
         payload = make_valid_payload(failure_sig="sig-abc")
-        _stored, _ = self._make_stores()
+        stored, _ = self._make_stores()
         result = process_fix_transition_event(payload, self._store, self._lookup)
         assert result is not None
         assert result.context_item_stored is True
