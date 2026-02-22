@@ -128,7 +128,7 @@ ticket-pipeline OMN-XXXX
 
 - Invokes `ci-watch` sub-skill (OMN-2523) with configured policy
 - `ci-watch` polls `gh pr checks` every 5 minutes
-- Auto-invokes `ci-fix-pipeline` on CI failure (respects `max_ci_fix_cycles` cap)
+- Auto-invokes `ci-failures` skill on CI failure to diagnose and fix failing checks (respects `max_ci_fix_cycles` cap)
 - Returns: `status: completed | capped | timeout | failed`
 - On `completed`: AUTO-ADVANCE to Phase 5
 - On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
@@ -156,7 +156,7 @@ ticket-pipeline OMN-XXXX
   3. No unresolved review comments
 - Returns: `status: merged | held | failed`
 - On `merged`: clear ticket-run ledger entry, post Slack "merged", update Linear to Done
-- On `held`: pipeline exits cleanly (human will reply "merge" to Slack gate when ready)
+- On `held`: pipeline exits cleanly; `held` is **not** a terminal state — the pipeline resumes when a human replies "merge" to the Slack HIGH_RISK gate. `merge_gate_timeout_hours` (default 48h) controls how long the gate stays open before expiring. On expiry, the ledger entry is cleared and a new pipeline run is required.
 - On `failed`: post Slack MEDIUM_RISK gate, stop pipeline
 
 ## Pipeline Policy
@@ -176,9 +176,9 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `stop_on_cross_repo` | `false` | Auto-split via decompose-epic instead of stopping |
 | `cross_repo_gate_timeout_minutes` | `10` | Minutes to wait for Slack reply before handing off to epic-team |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
-| `auto_fix_ci` | `true` | Auto-invoke ci-fix-pipeline on CI failure |
+| `auto_fix_ci` | `true` | Auto-invoke ci-failures skill on CI failure |
 | `ci_watch_timeout_minutes` | `60` | Max minutes waiting for CI before timeout |
-| `max_ci_fix_cycles` | `3` | Max ci-fix-pipeline invocations before capping |
+| `max_ci_fix_cycles` | `3` | Max ci-failures skill invocations before capping |
 | `auto_fix_pr_review` | `true` | Auto-invoke pr-review-dev on CHANGES_REQUESTED reviews |
 | `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
 | `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
@@ -218,6 +218,11 @@ Phase 1 cross-repo detected:
 ```
 
 ### decompose-epic Dispatch for Cross-Repo
+
+> **Note**: `decompose-epic` is a planned skill (OMN-2522) not yet implemented. Until available,
+> the cross-repo split step must be performed manually: create per-repo sub-tickets in Linear,
+> then invoke `epic-team` with the parent epic ID. This dispatch contract documents the intended
+> future interface.
 
 ```
 Task(
@@ -290,6 +295,21 @@ You do NOT implement, review, or fix code yourself. Heavy phases run in separate
 **Rule: The coordinator must NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent.
 
+### Phase 0: pre_flight — runs inline (lightweight checks only)
+
+No dispatch needed. The orchestrator runs pre-commit hooks and mypy directly, classifies issues, and auto-fixes or defers as appropriate. No Task() dispatch because pre_flight is lightweight and must complete before the first agent is spawned.
+
+```
+# Inline orchestrator actions for Phase 0:
+# 1. Run: pre-commit run --all-files (capture output)
+# 2. Run: mypy src/ (capture output)
+# 3. Classify issues: AUTO-FIX (<=10 files, same subsystem) or DEFER (else)
+# 4. AUTO-FIX: apply fixes, commit as chore(pre-existing): [OMN-XXXX]
+# 5. DEFER: create Linear sub-ticket via MCP, note in PR description template
+# 6. Update state.yaml: phase=implement
+# AUTO-ADVANCE to Phase 1
+```
+
 ### Phase 1: implement — dispatch to polymorphic agent
 
 ```
@@ -297,7 +317,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
   prompt="You are executing ticket-work for {ticket_id}.
-    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id} --autonomous\")
+    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
 
     Ticket: {ticket_id} - {title}
     Description: {description}
@@ -319,7 +339,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
-    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2 --checkpoint {ticket_id}:{run_id}\")
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 2\")
 
     Branch: {branch_name}
     Repo: {repo_path}
@@ -359,12 +379,16 @@ Task(
 
 ### Phase 6: auto_merge — dispatch to polymorphic agent
 
+`merge_gate_timeout_hours` is passed to `auto-merge` to control the HIGH_RISK Slack gate lifetime.
+When `auto_merge: false`, the gate waits up to `merge_gate_timeout_hours` (default 48h) for a human
+"merge" reply before expiring. On expiry, the pipeline clears the ledger and a new run is required.
+
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
   prompt="Invoke: Skill(skill=\"onex:auto-merge\",
-    args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy}\")
+    args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
     Report back with: status, merged_at, branch_deleted."
 )
 ```
@@ -385,7 +409,9 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `ci-watch` skill (Phase 4, OMN-2523)
 - `pr-watch` skill (Phase 5, OMN-2524)
 - `auto-merge` skill (Phase 6, OMN-2525)
-- `decompose-epic` skill (cross-repo split, OMN-2522)
+- `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
+- `ci-failures` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
+- `decompose-epic` skill (cross-repo split, OMN-2522 — planned)
 - `epic-team` skill (receives handoff after cross-repo split)
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)
 - `~/.claude/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)
