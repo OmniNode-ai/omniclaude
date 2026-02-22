@@ -86,12 +86,13 @@ Loop:
         → Wait for ci-fix-pipeline to complete
         → Continue polling
       Else:
-        → Slack LOW_RISK gate: "CI failed on PR #{pr_number} — auto-fix disabled. Approve to skip, reject to halt."
+        → Slack LOW_RISK gate: "CI failed on PR #{pr_number} — auto-fix disabled. Approve to continue watching, reject to halt."
         → On approve: continue polling (human will fix manually)
         → On reject: return status: failed
   → If timeout_elapsed >= ci_watch_timeout_minutes:
       → Slack MEDIUM_RISK gate: "CI watch timed out after {timeout} minutes on PR #{pr_number}"
-      → Return status: timeout
+      → On approve: extend watch by 30 minutes, continue polling
+      → On reject: return status: timeout
   → Sleep poll_interval_seconds, loop
 ```
 
@@ -120,13 +121,28 @@ Task(
   prompt="Invoke: Skill(skill=\"onex:ci-fix-pipeline\",
     args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
-  Report back with: status (completed|capped|escalated), failures_fixed, failures_skipped."
+  Report back with: status (completed|capped|timeout|failed), failures_fixed, failures_skipped."
 )
 ```
 
 After each ci-fix-pipeline invocation: wait for CI to re-run (continue polling loop).
 
 ## Slack Gates
+
+### Auto-Fix Disabled (`--no-auto-fix`) — LOW_RISK
+
+When `auto_fix_ci: false` and CI fails:
+
+```
+[LOW_RISK] ci-watch: CI failed — auto-fix disabled
+
+PR: #{pr_number}
+Ticket: {ticket_id}
+Failure summary: {failure_summary}
+
+Auto-fix is disabled. Approve to continue watching (fix manually), reject to halt.
+Silence (15 min) = continue watching.
+```
 
 ### CI Fix Cap — MEDIUM_RISK
 
@@ -154,7 +170,7 @@ After `ci_watch_timeout_minutes` elapsed:
 PR: #{pr_number} — CI still not passing
 Ticket: {ticket_id}
 
-Reply 'approve' to extend 30 more minutes, 'reject' to stop.
+Reply 'approve' to extend watch by 30 more minutes, 'reject' to stop (status: timeout).
 Silence (15 min) = stop (status: timeout).
 ```
 
@@ -209,6 +225,17 @@ Written to `~/.claude/skill-results/{context_id}/ci-watch.json`:
 | ci-fix-pipeline hard-fails | Log error, continue watching (don't retry fix) |
 | Slack unavailable for gate | Skip gate, apply default behavior for risk level |
 | Linear sub-ticket creation fails | Log warning, continue |
+
+## Executable Scripts
+
+This skill has no standalone executable scripts. It is invoked as a composable sub-skill
+via the Claude Code slash command interface or programmatically from `ticket-pipeline`.
+
+| Invocation | Description |
+|------------|-------------|
+| `/ci-watch --pr {N}` | Interactive: poll CI on PR N, auto-fix on failure |
+| `/ci-watch --pr {N} --no-auto-fix` | Interactive: poll CI on PR N, gate on failure |
+| `Skill(skill="onex:ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
 
 ## See Also
 
