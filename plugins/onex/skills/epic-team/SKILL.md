@@ -59,8 +59,8 @@ epic-team OMN-XXXX
         → Returns ModelSkillResult with created_tickets list
       → Post Slack LOW_RISK gate:
           "Epic OMN-XXXX has no child tickets — auto-decomposed into N sub-tickets.
-           Reply 'reject' within 30 minutes to cancel. Silence = proceed."
-      → On 'reject' reply: stop, post "decomposition rejected by human" to Slack
+           Reply reject within 30 minutes to cancel. Silence = proceed."
+      → On reject reply: stop, post "decomposition rejected by human" to Slack
       → On silence (30 min): fetch newly created tickets, continue with existing behavior
   → If >0 child tickets: existing behavior (assign to repos, spawn workers)
 ```
@@ -75,7 +75,7 @@ Epic had no child tickets. Created N sub-tickets:
   - OMN-ZZZZ: [title]
   ...
 
-Reply "reject" within 30 minutes to cancel. Silence = proceed with orchestration.
+Reply reject within 30 minutes to cancel. Silence = proceed with orchestration.
 ```
 
 ### decompose-epic Dispatch
