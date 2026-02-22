@@ -127,6 +127,18 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 - `timeout`: gate_timeout_hours elapsed with no "merge" reply
 - `error`: Merge failed (conflicts, permissions, etc.)
 
+## Implementation Status
+
+Scripts deferred — this skill is specification-only in this PR.
+
+The following executable scripts are planned but not yet created:
+
+- `scripts/verify-mergeability.sh` — checks `gh pr view` for merge conflicts and required reviews
+- `scripts/post-high-risk-gate.sh` — posts HIGH_RISK Slack gate message via webhook
+- `scripts/execute-merge.sh` — runs `gh pr merge` with strategy and branch-delete flags
+
+Scripts will be added when OMN-2525 moves to active implementation.
+
 ## See Also
 
 - `ticket-pipeline` skill (planned: invokes auto-merge after pr-watch passes)

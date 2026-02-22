@@ -120,6 +120,18 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/slack-gate.jso
 - `rejected`: Reply matched reject_keywords
 - `timeout`: MEDIUM_RISK or HIGH_RISK gate timed out without reply
 
+## Implementation Status
+
+Scripts deferred — this skill is specification-only in this PR.
+
+The following executable scripts are planned but not yet created:
+
+- `scripts/post-slack-message.sh` — posts gate message to Slack webhook with risk prefix
+- `scripts/poll-slack-reply.sh` — polls Slack thread for accept/reject keywords at tier interval
+- `scripts/write-skill-result.sh` — writes `ModelSkillResult` JSON to the skill-results output path
+
+Scripts will be added when OMN-2521 moves to active implementation.
+
 ## See Also
 
 - `auto-merge` skill (uses HIGH_RISK gate before merging)

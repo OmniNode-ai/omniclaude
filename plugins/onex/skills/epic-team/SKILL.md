@@ -130,6 +130,7 @@ Task(
 
     For each ticket, invoke:
     Skill(skill=\"onex:ticket-pipeline\", args=\"{ticket_id}\")
+    <!-- ticket-pipeline is a downstream dependency defined in its own skill (PR #245 / OMN-2531). -->
 
     Wait for each ticket-pipeline to complete before starting the next.
     Read result from ~/.claude/skill-results/{context_id}/ticket-pipeline.json after each ticket.
