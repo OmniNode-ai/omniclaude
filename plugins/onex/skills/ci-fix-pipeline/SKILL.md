@@ -40,7 +40,7 @@ Autonomous pipeline that fetches GitHub Actions CI failures and fixes them — A
 default. No selective mode. Failures beyond `max_fix_files` trigger sub-ticket creation and
 continue with the remaining fixable failures.
 
-**Workflow**: Fetch CI failures → Slack start → Classify → Fix ALL fixable → Sub-ticket large-scope → Commit → Slack complete → ModelSkillResult
+**Workflow**: Fetch CI failures → Slack start → Classify + Sub-ticket large-scope → Fix ALL fixable → Commit → Slack complete → ModelSkillResult
 
 **Announce at start:** "I'm using the ci-fix-pipeline skill to fix CI failures."
 
@@ -89,7 +89,7 @@ Task(
   description="Fetch CI failures for ci-fix-pipeline",
   prompt="Fetch CI failures using the ci-failures skill.
 
-    Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review {--pr N | --branch name}
+    Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review {N | branch_name}
 
     Return JSON with structure:
     {\"failures\": [{\"id\": str, \"severity\": str, \"job\": str, \"step\": str,
