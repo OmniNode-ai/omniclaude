@@ -10,9 +10,15 @@ from __future__ import annotations
 
 from typing import Protocol
 
-# Type aliases for work unit and dependency specs (replicated here to avoid
-# circular imports with handler_plan_dag_default)
-_WorkUnitSpec = tuple[str, str, str, str]  # (local_id, title, unit_type, scope)
+from omniclaude.nodes.node_plan_dag_generator.enums.enum_work_unit_type import (
+    EnumWorkUnitType,
+)
+
+# Type aliases for work unit and dependency specs.
+# unit_type uses EnumWorkUnitType to match _build_dag_from_template's signature.
+_WorkUnitSpec = tuple[
+    str, str, EnumWorkUnitType, str
+]  # (local_id, title, unit_type, scope)
 _DepSpec = tuple[str, str]  # (from_local_id, to_local_id)
 
 
