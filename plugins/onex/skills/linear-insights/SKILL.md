@@ -26,7 +26,7 @@ Analytics and reporting skills for Linear project management. Provides comprehen
 ## Deep Dive Report
 
 Generates a comprehensive analysis of work completed in a specified time period.
-Format matches the established deep dive pattern (see `${HOME}/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`).
+Format matches the established deep dive pattern (see `${HOME}/Code/omni_home/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`).
 
 ### Usage
 
@@ -61,7 +61,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --repos omnibase_core,omn
 |--------|---------|----------|
 | `--output-dir` flag | `--output-dir ~/reports` | Highest |
 | `LINEAR_INSIGHTS_OUTPUT_DIR` env | `export LINEAR_INSIGHTS_OUTPUT_DIR=~/reports` | Medium |
-| Default | `${HOME}/Code/omni_save` | Lowest |
+| Default | `${HOME}/Code/omni_home/omni_save` | Lowest |
 
 **Filename Pattern**: `{MONTH}_{DAY}_{YEAR}_DEEP_DIVE.md`
 - Example: `DECEMBER_13_2025_DEEP_DIVE.md`
@@ -374,4 +374,4 @@ def calculate_velocity(issues_completed, period_days):
 - Linear MCP tools: `mcp__linear-server__*`
 - Linear ticket skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 - PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
-- Deep dive reference: `${HOME}/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`
+- Deep dive reference: `${HOME}/Code/omni_home/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`

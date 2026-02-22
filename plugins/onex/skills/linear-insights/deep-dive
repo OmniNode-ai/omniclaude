@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Configurable output directory
 # Priority: --output-dir flag > LINEAR_INSIGHTS_OUTPUT_DIR env > default
-# Default: ${HOME}/Code/omni_save (cross-platform fallback)
-DEFAULT_OUTPUT_DIR="${HOME}/Code/omni_save"
+# Default: ${HOME}/Code/omni_home/omni_save (cross-platform fallback)
+DEFAULT_OUTPUT_DIR="${HOME}/Code/omni_home/omni_save"
 OUTPUT_DIR="${LINEAR_INSIGHTS_OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
 
 usage() {
@@ -39,7 +39,7 @@ Options:
 
 Environment Variables:
   LINEAR_INSIGHTS_OUTPUT_DIR    Default output directory for saved reports
-                                (default: ${HOME}/Code/omni_save)
+                                (default: ${HOME}/Code/omni_home/omni_save)
 
 Examples:
   # Today's deep dive (display only)
@@ -245,7 +245,8 @@ discover_active_repos() {
 # =============================================================================
 # Code Root Detection & Local Clone Discovery
 # =============================================================================
-# Discovers all local repo clone directories (omniclaude, omniclaude2, ...) so
+# Discovers all local repo clone directories (e.g. omniclaude, omnibase_core under
+# omni_home/, or worktrees under omni_worktrees/<ticket>/<repo>/) so
 # git log commands can be emitted for every clone, not just the primary one.
 # =============================================================================
 
@@ -261,7 +262,7 @@ if [[ -z "$CODE_ROOT" ]]; then
 fi
 
 # discover_local_clones: print absolute paths to every git repo under CODE_ROOT
-# whose name starts with "omni" (includes omniclaude, omniclaude2, omnibase_infra6, etc.)
+# whose name starts with "omni" (e.g. omniclaude, omnibase_core, omnibase_infra, etc.)
 discover_local_clones() {
     local code_root="$1"
     [[ -d "$code_root" ]] || return 0
