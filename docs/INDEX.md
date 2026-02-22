@@ -50,6 +50,7 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 | [INSTALLATION.md](getting-started/INSTALLATION.md) | Install plugin, configure hooks, verify daemon |
 | [QUICK_START.md](getting-started/QUICK_START.md) | Zero to working session in 10 minutes |
 | [FIRST_HOOK.md](getting-started/FIRST_HOOK.md) | Add your first hook handler end-to-end |
+| [GLOBAL_CLAUDE_MD.md](getting-started/GLOBAL_CLAUDE_MD.md) | Behavioral rules to add to `~/.claude/CLAUDE.md` for autonomous pipelines |
 
 ### Architecture (`architecture/`)
 
