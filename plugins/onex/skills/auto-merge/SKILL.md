@@ -112,7 +112,7 @@ All three must be true before proceeding:
 ```
 1. Verify merge conditions
 2. Execute immediately:
-   gh pr merge {pr_number} --squash --delete-branch
+   gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
 3. Post Slack: "Auto-merged PR #{pr_number} for {ticket_id} — {PR URL}"
 4. Update Linear ticket status: Done
 5. Return status: merged
@@ -194,7 +194,5 @@ Written to `~/.claude/skill-results/{context_id}/auto-merge.json`:
 
 ## See Also
 
-- `slack-gate` skill — HIGH_RISK gate used for merge approval
-- `pr-watch` skill — invokes auto-merge after PR is approved
-- `ticket-pipeline` skill — invokes auto-merge as Phase 6 (auto_merge)
+- `ticket-pipeline` skill — composable pipeline; auto-merge can be invoked after pipeline completes
 - `~/.claude/pipelines/{ticket_id}/ticket-run-ledger.yaml` — merge audit log
