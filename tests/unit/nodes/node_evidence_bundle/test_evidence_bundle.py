@@ -243,6 +243,14 @@ class TestStoreBundleInMemory:
         with pytest.raises(RuntimeError, match="already exists"):
             self.store.save(bundle)
 
+    def test_duplicate_ticket_id_raises_runtime_error(self) -> None:
+        ticket_id = f"ticket-{uuid.uuid4()}"
+        b1 = self._bundle(ticket_id=ticket_id)
+        b2 = self._bundle(ticket_id=ticket_id)  # different bundle_id, same ticket
+        self.store.save(b1)
+        with pytest.raises(RuntimeError, match="already exists"):
+            self.store.save(b2)
+
     def test_multiple_bundles_stored_independently(self) -> None:
         b1 = self._bundle()
         b2 = self._bundle()
