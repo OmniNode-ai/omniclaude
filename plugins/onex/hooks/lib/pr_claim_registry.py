@@ -545,12 +545,19 @@ def _cli_main() -> None:
                 )
     elif len(sys.argv) > 2 and sys.argv[1] == "release":
         pr_key = sys.argv[2]
-        run_id = sys.argv[3] if len(sys.argv) > 3 else ""
+        if len(sys.argv) < 4:
+            print(
+                "Error: release requires <run_id>. "
+                "Use 'list' to find the run_id of the claim to release.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        run_id = sys.argv[3]
         registry.release(pr_key, run_id)
-        print(f"Released claim for {pr_key}")
+        print(f"Released claim for {pr_key} (run: {run_id})")
     else:
         print("Usage: pr_claim_registry.py list")
-        print("       pr_claim_registry.py release <pr_key> [<run_id>]")
+        print("       pr_claim_registry.py release <pr_key> <run_id>")
 
 
 if __name__ == "__main__":
