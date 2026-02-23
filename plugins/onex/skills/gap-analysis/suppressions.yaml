@@ -1,0 +1,17 @@
+# gap-analysis suppressions
+# Suppress known false positives or accepted integration gaps.
+#
+# Precedence: fingerprint > path_glob
+# Expired suppressions: NOT applied, emit WARNING in expired_suppressions_warned
+#
+# Schema:
+#   suppressions:
+#     - fingerprint: "<sha256>"        # exact fingerprint match
+#       reason: "explanation"
+#       expires: "YYYY-MM-DD"          # optional; if past, suppression is expired
+#     - path_glob: "tests/**"          # glob match on repo_relative_path
+#       rule: "db_boundary"            # optional rule_name filter
+#       reason: "explanation"
+#       expires: "YYYY-MM-DD"          # optional
+
+suppressions: []
