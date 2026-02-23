@@ -459,14 +459,13 @@ if not _state_file_existed and skip_to is None and not force_run:
         _branch = None
 
     if not _branch:
-        # Derive a fallback branch name when Linear doesn't provide gitBranchName.
-        # Use the lowercased ticket ID directly (e.g., "omn-2614") — keeping the hyphen
-        # so the branch is identifiable. The primary path (gitBranchName from Linear)
-        # is preferred; this fallback only fires when that field is absent.
-        _slug = ticket_id.lower()  # e.g., omn-2614
-        _branch = f"jonah/{_slug}"
+        # Linear did not provide gitBranchName — do not guess a user-specific branch
+        # name (e.g. "jonah/omn-2614" would break for any other user).  Instead, leave
+        # _branch as None so the PR search falls back to searching by ticket ID in the
+        # PR title/body, which is user-agnostic.
+        _branch = None
 
-    # Step 2: Check for an open PR on that branch
+    # Step 2: Check for an open PR on that branch (or by ticket ID if branch unknown)
     import subprocess
     try:
         _repo = subprocess.check_output(
@@ -483,13 +482,26 @@ if not _state_file_existed and skip_to is None and not force_run:
 
     if _repo_slug:
         try:
+            if _branch:
+                _gh_args = ["gh", "pr", "list", "--repo", _repo_slug,
+                            "--head", _branch, "--state", "open",
+                            "--json", "number,url,title,headRefName"]
+            else:
+                # No branch name available — search by ticket ID in PR title/body
+                _gh_args = ["gh", "pr", "list", "--repo", _repo_slug,
+                            "--state", "open", "--search", ticket_id,
+                            "--json", "number,url,title,headRefName"]
             _open_pr_raw = subprocess.run(
-                ["gh", "pr", "list", "--repo", _repo_slug,
-                 "--head", _branch, "--state", "open",
-                 "--json", "number,url,title,headRefName"],
+                _gh_args,
                 capture_output=True, text=True, timeout=20,
             )
-            _open_prs = json.loads(_open_pr_raw.stdout) if _open_pr_raw.stdout.strip() else []
+            if _open_pr_raw.returncode != 0:
+                print(f"Warning: gh pr list failed (auth issue?): {_open_pr_raw.stderr.strip()}")
+                print("Auto-detection skipped — cannot query GitHub. Starting from 'implement'.")
+                _open_prs = []
+                _repo_slug = None  # Prevent further gh queries below
+            else:
+                _open_prs = json.loads(_open_pr_raw.stdout) if _open_pr_raw.stdout.strip() else []
         except Exception as _e:
             print(f"Warning: Auto-detection GitHub query failed: {_e}. Starting from beginning.")
             _open_prs = []
@@ -518,6 +530,13 @@ if not _state_file_existed and skip_to is None and not force_run:
                         pass
                 else:
                     print(f"[DRY RUN] Would mark {ticket_id} as Done (PR already merged)")
+                # Clear ledger entry so future pipeline runs are not blocked by a stale lock
+                try:
+                    _ledger = json.loads(_ledger_path.read_text()) if _ledger_path.exists() else {}
+                    _ledger.pop(ticket_id, None)
+                    _ledger_path.write_text(json.dumps(_ledger, indent=2))
+                except Exception as _e:
+                    print(f"Warning: Could not clear ledger for {ticket_id}: {_e}")
                 release_lock(lock_path)
                 exit(0)
             else:
@@ -638,7 +657,6 @@ if not _state_file_existed and skip_to is None and not force_run:
             # (no checkpoint exists yet — this is a fresh state file)
             _now_ts = datetime.now(timezone.utc).isoformat()
             _phase_data["completed_at"] = _now_ts
-            _phase_data["artifacts"] = _phase_data.get("artifacts", {})
             print(f"Auto-detection: marking phase '{_phase_name}' complete (inferred from GitHub state).")
         save_state(state, state_path)
 ```

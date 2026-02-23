@@ -67,8 +67,9 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
   (inferred from GitHub state — no checkpoint files are created for them).
 - `--skip-to PHASE` overrides auto-detection when provided explicitly.
 - `--force-run` bypasses auto-detection entirely and starts from `implement`.
-- If GitHub queries fail (network error, auth issue), detection is skipped and the pipeline
-  starts normally from the beginning with a logged warning.
+- If the GitHub repo slug cannot be determined, detection is skipped entirely. If individual
+  queries (PR list, CI checks) fail, detection degrades gracefully — a failed CI query defaults
+  to `ci_watch` (the safe choice for any open PR).
 
 ## Quick Start
 
