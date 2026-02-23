@@ -504,6 +504,11 @@ if not _state_file_existed and skip_to is None and not force_run:
                 _repo_slug = None  # Prevent further gh queries below
             else:
                 _open_prs = json.loads(_open_pr_raw.stdout) if _open_pr_raw.stdout.strip() else []
+                if not _branch:
+                    # Filter to PRs whose title or headRefName contains the ticket ID to avoid false positives
+                    _open_prs = [p for p in _open_prs
+                                 if ticket_id.upper() in (p.get("title") or "").upper()
+                                 or ticket_id.upper() in (p.get("headRefName") or "").upper()]
         except Exception as _e:
             print(f"Warning: Auto-detection GitHub query failed: {_e}. Starting from beginning.")
             _open_prs = []
@@ -522,8 +527,23 @@ if not _state_file_existed and skip_to is None and not force_run:
                 except Exception:
                     _merged_prs = []
             else:
-                print("  No branch name available — skipping merged-PR check.")
-                _merged_prs = []
+                # No branch name — fall back to ticket ID search for merged PRs
+                _merged_fallback = subprocess.run(
+                    ["gh", "pr", "list", "--repo", _repo_slug, "--state", "merged",
+                     "--search", ticket_id, "--json", "number,url,mergedAt,title,headRefName"],
+                    capture_output=True, text=True
+                )
+                if _merged_fallback.returncode == 0 and _merged_fallback.stdout.strip():
+                    try:
+                        _all_merged = json.loads(_merged_fallback.stdout)
+                        # Filter to PRs whose title or headRefName contains the ticket ID
+                        _merged_prs = [p for p in _all_merged
+                                       if ticket_id.upper() in (p.get("title") or "").upper()
+                                       or ticket_id.upper() in (p.get("headRefName") or "").upper()]
+                    except Exception:
+                        _merged_prs = []
+                else:
+                    _merged_prs = []
 
             if _merged_prs:
                 # PR already merged — nothing to do
@@ -543,6 +563,8 @@ if not _state_file_existed and skip_to is None and not force_run:
                     ledger_path.write_text(json.dumps(_ledger, indent=2))
                 except Exception as _e:
                     print(f"Warning: Could not clear ledger for {ticket_id}: {_e}")
+                # Remove state file so future runs start clean (not as a stale resume)
+                state_path.unlink(missing_ok=True)
                 release_lock(lock_path)
                 exit(0)
             else:
@@ -590,21 +612,17 @@ if not _state_file_existed and skip_to is None and not force_run:
             except Exception:
                 _ci_checks = []
 
-            # CI is "passing" when every check has conclusion "success" or "skipped"
-            _ci_passing = bool(_ci_checks) and all(
-                c.get("conclusion") in ("success", "skipped", "neutral")
-                for c in _ci_checks
-                if c.get("conclusion")  # ignore checks with no conclusion yet
-            ) and not any(
-                c.get("status") in ("in_progress", "queued", "pending")
-                for c in _ci_checks
-            )
+            # CI is "passing" when every check has conclusion "success", "skipped", or "neutral"
             _ci_pending = any(
                 c.get("status") in ("in_progress", "queued", "pending")
                 for c in _ci_checks
             )
             _ci_failing = bool(_ci_checks) and any(
                 c.get("conclusion") in ("failure", "timed_out", "cancelled")
+                for c in _ci_checks
+            )
+            _ci_passing = bool(_ci_checks) and not _ci_pending and not _ci_failing and all(
+                c.get("conclusion") in ("success", "skipped", "neutral")
                 for c in _ci_checks
             )
 
@@ -661,7 +679,7 @@ if not _state_file_existed and skip_to is None and not force_run:
         try:
             skip_idx = PHASE_ORDER.index(skip_to)
         except ValueError:
-            print(f"Warning: auto-detected phase '{skip_to}' not in PHASE_ORDER. Starting from 'implement'.")
+            print(f"Warning: auto-detected phase '{skip_to}' not in PHASE_ORDER. Starting from the beginning (phase: pre_flight).")
             skip_to = None
             _auto_start_phase = None
             # fall through to normal phase loop with no skip
