@@ -528,21 +528,21 @@ if not _state_file_existed and skip_to is None and not force_run:
                     _merged_prs = []
             else:
                 # No branch name — fall back to ticket ID search for merged PRs
-                _merged_fallback = subprocess.run(
-                    ["gh", "pr", "list", "--repo", _repo_slug, "--state", "merged",
-                     "--search", ticket_id, "--json", "number,url,mergedAt,title,headRefName"],
-                    capture_output=True, text=True
-                )
-                if _merged_fallback.returncode == 0 and _merged_fallback.stdout.strip():
-                    try:
+                try:
+                    _merged_fallback = subprocess.run(
+                        ["gh", "pr", "list", "--repo", _repo_slug, "--state", "merged",
+                         "--search", ticket_id, "--json", "number,url,mergedAt,title,headRefName"],
+                        capture_output=True, text=True, timeout=20,
+                    )
+                    if _merged_fallback.returncode == 0 and _merged_fallback.stdout.strip():
                         _all_merged = json.loads(_merged_fallback.stdout)
                         # Filter to PRs whose title or headRefName contains the ticket ID
                         _merged_prs = [p for p in _all_merged
                                        if ticket_id.upper() in (p.get("title") or "").upper()
                                        or ticket_id.upper() in (p.get("headRefName") or "").upper()]
-                    except Exception:
+                    else:
                         _merged_prs = []
-                else:
+                except Exception:
                     _merged_prs = []
 
             if _merged_prs:
