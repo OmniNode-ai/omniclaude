@@ -52,10 +52,27 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 
 # ONEX error handling
+# Import chain: try repo-internal paths first, then installed packages, then stub fallback.
+# In deployed plugin environments (cache), neither claude.lib.core nor agents.lib.errors exist,
+# but omnibase_core.errors is always available in the plugin venv.
 try:
     from claude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+    try:
+        from agents.lib.errors import EnumCoreErrorCode, OnexError
+    except ImportError:
+        try:
+            from omnibase_core.errors import EnumCoreErrorCode, OnexError
+        except ImportError:
+            # Final stub fallback: define minimal stand-ins so the module loads
+            # in any environment without crashing the hook.
+            from enum import Enum
+
+            class EnumCoreErrorCode(str, Enum):  # type: ignore[no-redef]
+                IMPORT_ERROR = "IMPORT_ERROR"
+
+            class OnexError(Exception):  # type: ignore[no-redef]
+                pass
 
 # ONEX types for routing alternatives (replaces dict union soup)
 from omnibase_core.types import TypedDictRoutingAlternative
