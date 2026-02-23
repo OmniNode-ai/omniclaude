@@ -330,6 +330,7 @@ def _emit_routing_decision(
     result: dict[str, Any],
     prompt: str,
     correlation_id: str,
+    session_id: str | None = None,
 ) -> None:
     """Emit routing decision event via the emit daemon.
 
@@ -345,6 +346,7 @@ def _emit_routing_decision(
         result: Routing decision result dictionary.
         prompt: Original user prompt (will be sanitized before emission).
         correlation_id: Correlation ID for tracking.
+        session_id: Session identifier for Kafka partition key.
     """
     if _emit_event_fn is None:
         logger.debug("emit_event not available, skipping routing decision emission")
@@ -352,6 +354,7 @@ def _emit_routing_decision(
 
     try:
         payload: dict[str, object] = {
+            "session_id": session_id or "unknown",
             "correlation_id": correlation_id,
             "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
             "confidence": result.get("confidence", 0.5),
@@ -1366,7 +1369,7 @@ def route_via_events(
                     "llm-fuzzy-agreement thread already running, skipping spawn"
                 )
             _emit_routing_decision(
-                result=llm_result, prompt=prompt, correlation_id=correlation_id
+                result=llm_result, prompt=prompt, correlation_id=correlation_id, session_id=session_id
             )
             # OMN-2273: emit LLM-specific decision event with determinism audit fields.
             # agreement is not yet known here (background thread), so we emit without
@@ -1510,7 +1513,7 @@ def route_via_events(
     }
 
     # Emit routing decision event for observability (non-blocking)
-    _emit_routing_decision(result=result, prompt=prompt, correlation_id=correlation_id)
+    _emit_routing_decision(result=result, prompt=prompt, correlation_id=correlation_id, session_id=session_id)
 
     return result
 

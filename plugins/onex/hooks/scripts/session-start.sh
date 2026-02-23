@@ -2,6 +2,31 @@
 # SessionStart Hook - Portable Plugin Version
 # Captures session initialization intelligence
 # Performance target: <50ms execution time
+#
+# =============================================================================
+# Claude Code SessionStart JSON Schema (as of 2026-02, snake_case API)
+# Source: https://code.claude.com/docs/en/hooks
+# =============================================================================
+# {
+#   "session_id": "abc123",         # Primary session identifier (snake_case)
+#   "transcript_path": "/path/...", # Path to conversation JSON file
+#   "cwd": "/path/to/project",      # Current working directory
+#   "permission_mode": "default",   # default | plan | acceptEdits | dontAsk | bypassPermissions
+#   "hook_event_name": "SessionStart",
+#   "source": "startup",            # startup | resume | clear | compact
+#   "model": "claude-sonnet-4-6"    # Model identifier
+# }
+#
+# IMPORTANT: Claude Code switched from camelCase (sessionId, projectPath) to
+# snake_case (session_id, cwd) around 2026-02-18. The field is NOW session_id.
+# Both forms are tried for backwards compatibility but session_id is primary.
+#
+# KNOWN ISSUE: Some sessions receive EMPTY or non-JSON stdin, producing:
+#   "ERROR: Malformed JSON on stdin, using empty object"
+# This appears to happen on specific session types (e.g., resume, compact).
+# When this occurs, SESSION_ID is empty and all idempotency guards are bypassed.
+# Raw input is logged to /tmp/claude-hook-debug-sessionstart.json for diagnosis.
+# =============================================================================
 
 set -euo pipefail
 
@@ -59,7 +84,7 @@ export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:
 # SessionStart injection config (OMN-1675)
 SESSION_INJECTION_ENABLED="${OMNICLAUDE_SESSION_INJECTION_ENABLED:-true}"
 SESSION_INJECTION_ENABLED=$(_normalize_bool "$SESSION_INJECTION_ENABLED")
-SESSION_INJECTION_TIMEOUT_MS="${OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS:-500}"
+SESSION_INJECTION_TIMEOUT_MS="${OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS:-8000}"
 SESSION_INJECTION_MAX_PATTERNS="${OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS:-10}"
 SESSION_INJECTION_MIN_CONFIDENCE="${OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE:-0.7}"
 SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:-false}"
@@ -251,9 +276,27 @@ START_TIME=$(get_time_ms)
 
 # Read stdin
 INPUT=$(cat)
+
+# Log raw input for debugging the actual payload format.
+# Only written when OMNICLAUDE_DEBUG_SESSION_INPUT is set to "true" or "1".
+# Gated to prevent unbounded growth of the debug file on every SessionStart.
+_DEBUG_SESSION_INPUT="${OMNICLAUDE_DEBUG_SESSION_INPUT:-false}"
+_DEBUG_FILE="/tmp/claude-hook-debug-sessionstart.json"
+if [[ "$_DEBUG_SESSION_INPUT" == "true" || "$_DEBUG_SESSION_INPUT" == "1" ]]; then
+    {
+        echo "--- $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
+        echo "$INPUT"
+    } >> "$_DEBUG_FILE" 2>/dev/null
+fi
+
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
+    if [[ -z "$INPUT" ]]; then
+        log "WARNING: Empty stdin received from Claude Code, using empty object"
+        log "  Check /tmp/claude-hook-debug-sessionstart.json for raw payload"
+        INPUT='{}'
+    elif ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
         log "ERROR: Malformed JSON on stdin, using empty object"
+        log "  Check /tmp/claude-hook-debug-sessionstart.json for raw payload"
         INPUT='{}'
     fi
 fi
@@ -262,10 +305,16 @@ log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
 
 # Extract session information
+# Claude Code API (2026-02+): snake_case field names (session_id, cwd, etc.)
+# Claude Code API (pre-2026-02): camelCase field names (sessionId, projectPath, etc.)
+# Both forms are tried for backwards compatibility; snake_case is primary.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
-    PROJECT_PATH=$(echo "$INPUT" | jq -r '.projectPath // .project_path // ""')
+    SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // .sessionId // ""')
+    PROJECT_PATH=$(echo "$INPUT" | jq -r '.project_path // .projectPath // ""')
     CWD=$(echo "$INPUT" | jq -r '.cwd // ""' || pwd)
+    # Log what fields were actually present to aid diagnosis
+    _ACTUAL_KEYS=$(echo "$INPUT" | jq -r 'keys | join(",")' 2>/dev/null || echo "unknown")
+    log "Input fields present: $_ACTUAL_KEYS"
     # Generate correlation ID for this session (used for pattern injection tracking)
     CORRELATION_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "session-${SESSION_ID:-unknown}-$(date +%s)")
 else
@@ -504,14 +553,14 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
                 emit_event: true
             }' 2>/dev/null)"
 
-        # Call wrapper with timeout (500ms default, convert to seconds)
+        # Call wrapper with timeout (8000ms default, convert to seconds)
         # Use bc if available, otherwise fall back to shell arithmetic
         if [[ "$BC_AVAILABLE" -eq 1 ]]; then
-            TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
+            TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-8000} / 1000" | bc)
         else
             # Shell arithmetic fallback: integer division + one decimal place
-            # e.g., 500ms -> 0.5s, 1000ms -> 1.0s, 1500ms -> 1.5s
-            _timeout_ms="${SESSION_INJECTION_TIMEOUT_MS:-500}"
+            # e.g., 500ms -> 0.5s, 1000ms -> 1.0s, 8000ms -> 8.0s
+            _timeout_ms="${SESSION_INJECTION_TIMEOUT_MS:-8000}"
             _timeout_sec=$((_timeout_ms / 1000))
             _timeout_decimal=$(((_timeout_ms % 1000) / 100))
             TIMEOUT_SEC="${_timeout_sec}.${_timeout_decimal}"
@@ -527,7 +576,7 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
             # Exit codes: 142 = SIGALRM (timeout), 1 = general error, other = script-specific
             _async_log "WARNING: Pattern injection failed - exit_code=${INJECTION_EXIT_CODE} timeout_sec=${TIMEOUT_SEC} session=${SESSION_ID:-unknown}"
             if [[ $INJECTION_EXIT_CODE -eq 142 ]]; then
-                _async_log "DEBUG: Injection timed out after ${TIMEOUT_SEC}s (SIGALRM). Consider increasing SESSION_INJECTION_TIMEOUT_MS (current: ${SESSION_INJECTION_TIMEOUT_MS:-500})"
+                _async_log "DEBUG: Injection timed out after ${TIMEOUT_SEC}s (SIGALRM). Consider increasing SESSION_INJECTION_TIMEOUT_MS (current: ${SESSION_INJECTION_TIMEOUT_MS:-8000})"
             else
                 _async_log "DEBUG: Injection error (check stderr above in log). Wrapper: ${HOOKS_LIB}/context_injection_wrapper.py"
             fi
@@ -761,6 +810,12 @@ if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_c
         if [[ -n "$ACTIVE_TICKET" ]] && [[ -n "$TICKET_CONTEXT" ]]; then
             log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms)"
             log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+            # Write .ticket file for statusline tab label (omni_home tabs have no git branch)
+            if [[ -n "${ITERM_SESSION_ID:-}" ]]; then
+                _ticket_guid="${ITERM_SESSION_ID#*:}"
+                mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
+                printf '%s' "$ACTIVE_TICKET" > "/tmp/omniclaude-tabs/${_ticket_guid}.ticket" 2>/dev/null || true
+            fi
         else
             log "No active ticket found"
         fi

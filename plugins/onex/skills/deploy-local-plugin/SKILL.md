@@ -30,11 +30,15 @@ This skill solves the deployment gap between development and testing.
 # Preview what would change
 /deploy-local-plugin
 
-# Actually deploy
+# Actually deploy (syncs files + builds lib/.venv)
 /deploy-local-plugin --execute
 
 # Deploy without bumping version
 /deploy-local-plugin --execute --no-version-bump
+
+# Repair: build lib/.venv in the active deployed version (no file sync, no version bump)
+# Use when hooks fail with "No valid Python found" after a deploy
+/deploy-local-plugin --repair-venv
 ```
 
 ## How It Works
@@ -128,6 +132,22 @@ ls -la ~/.claude/plugins/
    ```bash
    cat ~/.claude/plugins/installed_plugins.json | jq '.plugins["onex@omninode-tools"]'
    ```
+
+### "No valid Python found" / hooks fail with exit 1
+
+This means `lib/.venv` is missing from the active plugin cache directory. This can happen if:
+- The cache directory was populated by a source other than `deploy.sh --execute`
+- The deploy was interrupted between the file sync and venv build steps
+- A manual rsync was used to copy plugin files without building the venv
+
+**Fix**:
+```bash
+${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv
+```
+
+This builds `lib/.venv` in the currently-active deployed version (from `installed_plugins.json`)
+without syncing files or bumping the version. A smoke test confirms the venv is healthy before
+the command returns. Restart Claude Code after the repair completes.
 
 ## Skills Location
 

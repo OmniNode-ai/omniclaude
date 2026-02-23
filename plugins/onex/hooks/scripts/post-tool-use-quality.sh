@@ -122,6 +122,14 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
         echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
     else
         echo "[$TS] [PostToolUse] SKILL_LOADED skill=$SKILL_NAME args=[REDACTED]" >> "$TRACE_LOG"
+        # Write mode file for statusline tab label.
+        # Strips "onex:" prefix so "onex:ticket-work" displays as "ticket-work".
+        if [[ -n "${ITERM_SESSION_ID:-}" ]]; then
+            _mode_guid="${ITERM_SESSION_ID#*:}"
+            _display_skill="${SKILL_NAME#onex:}"
+            mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
+            printf '%s' "$_display_skill" > "/tmp/omniclaude-tabs/${_mode_guid}.mode" 2>/dev/null || true
+        fi
     fi
 elif [[ "$TOOL_NAME" == "Task" ]]; then
     SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null) || SUBAGENT_TYPE="unknown"
