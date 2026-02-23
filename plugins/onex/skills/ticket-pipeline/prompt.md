@@ -463,7 +463,7 @@ if not _state_file_existed and skip_to is None and not force_run:
         # name (e.g. "jonah/omn-2614" would break for any other user).  Instead, leave
         # _branch as None so the PR search falls back to searching by ticket ID in the
         # PR title/body, which is user-agnostic.
-        _branch = None
+        pass
 
     # Step 2: Check for an open PR on that branch (or by ticket ID if branch unknown)
     import subprocess
@@ -507,16 +507,20 @@ if not _state_file_existed and skip_to is None and not force_run:
             _open_prs = []
 
         if not _open_prs:
-            # Step 3a: No open PR — check for a merged PR
-            try:
-                _merged_pr_raw = subprocess.run(
-                    ["gh", "pr", "list", "--repo", _repo_slug,
-                     "--head", _branch, "--state", "merged",
-                     "--json", "number,url,mergedAt"],
-                    capture_output=True, text=True, timeout=20,
-                )
-                _merged_prs = json.loads(_merged_pr_raw.stdout) if _merged_pr_raw.stdout.strip() else []
-            except Exception:
+            # Step 3a: No open PR — check for a merged PR (only possible if branch name is known)
+            if _branch:
+                try:
+                    _merged_pr_raw = subprocess.run(
+                        ["gh", "pr", "list", "--repo", _repo_slug,
+                         "--head", _branch, "--state", "merged",
+                         "--json", "number,url,mergedAt"],
+                        capture_output=True, text=True, timeout=20,
+                    )
+                    _merged_prs = json.loads(_merged_pr_raw.stdout) if _merged_pr_raw.stdout.strip() else []
+                except Exception:
+                    _merged_prs = []
+            else:
+                print(f"  No branch name available — skipping merged-PR check.")
                 _merged_prs = []
 
             if _merged_prs:
@@ -532,23 +536,26 @@ if not _state_file_existed and skip_to is None and not force_run:
                     print(f"[DRY RUN] Would mark {ticket_id} as Done (PR already merged)")
                 # Clear ledger entry so future pipeline runs are not blocked by a stale lock
                 try:
-                    _ledger = json.loads(_ledger_path.read_text()) if _ledger_path.exists() else {}
+                    _ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
                     _ledger.pop(ticket_id, None)
-                    _ledger_path.write_text(json.dumps(_ledger, indent=2))
+                    ledger_path.write_text(json.dumps(_ledger, indent=2))
                 except Exception as _e:
                     print(f"Warning: Could not clear ledger for {ticket_id}: {_e}")
                 release_lock(lock_path)
                 exit(0)
             else:
                 # No PR exists at all — also check if the branch exists on remote
-                try:
-                    _branch_check = subprocess.run(
-                        ["git", "ls-remote", "--heads", "origin", _branch],
-                        capture_output=True, text=True, timeout=20,
-                    )
-                    _branch_exists = bool(_branch_check.stdout.strip())
-                except Exception:
-                    _branch_exists = False
+                if _branch:
+                    try:
+                        _branch_check = subprocess.run(
+                            ["git", "ls-remote", "--heads", "origin", _branch],
+                            capture_output=True, text=True, timeout=20,
+                        )
+                        _branch_exists = bool(_branch_check.stdout.strip())
+                    except Exception:
+                        _branch_exists = False
+                else:
+                    _branch_exists = False  # _branch unknown — cannot query remote
 
                 if _branch_exists:
                     # Branch pushed but no PR yet — start at local_review
@@ -568,7 +575,7 @@ if not _state_file_existed and skip_to is None and not force_run:
             # Record PR info into pipeline state so create_pr phase can skip creation
             state["phases"]["create_pr"]["artifacts"]["pr_number"] = _pr_number
             state["phases"]["create_pr"]["artifacts"]["pr_url"] = _pr_url
-            state["phases"]["create_pr"]["artifacts"]["branch_name"] = _branch
+            state["phases"]["create_pr"]["artifacts"]["branch_name"] = _pr.get("headRefName") or _branch
 
             # Check CI status
             try:
