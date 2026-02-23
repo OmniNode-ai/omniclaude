@@ -48,8 +48,12 @@ Extract `findings: list[ModelGapFinding]`. Each finding has:
 
 ### 0.2 Load decisions.json
 
-Load `~/.claude/gap-analysis/<run_id>/decisions.json` if it exists. This contains previously
-resolved gate decisions. These are used to skip re-prompting on resume.
+Load `~/.claude/gap-analysis/<source_run_id>/decisions.json` if it exists. This contains
+previously resolved gate decisions. These are used to skip re-prompting on resume.
+
+`<source_run_id>` is the run ID of the original gap-analysis report — extracted from the
+resolved report path, NOT the newly-generated `fix_run_id`. This ensures decisions are
+co-located with the source analysis run, not scattered under separate fix run directories.
 
 ```json
 {
@@ -200,7 +204,7 @@ No PR creation step. Skip Phase 3.3.
 
 After all ticket-pipeline dispatches complete, write `prs_created_path`:
 ```
-~/.claude/gap-analysis/<run_id>/gap-fix-output.json
+~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json
 ```
 
 Invoke pr-queue-pipeline scoped to the created PRs only:
@@ -209,7 +213,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="gap-fix: Phase 3 pr-queue-pipeline for created PRs",
   prompt="Invoke: Skill(skill=\"onex:pr-queue-pipeline\",
-    args=\"--prs ~/.claude/gap-analysis/<run_id>/gap-fix-output.json\")
+    args=\"--prs ~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json\")
     Report back with: status, total_prs_merged, total_prs_still_blocked."
 )
 ```
@@ -309,7 +313,7 @@ Date: <ISO timestamp> | Mode: <mode> | Dry-run: <true|false>
 
 ### 5.3 Write ModelSkillResult
 
-Write `~/.claude/gap-analysis/<run_id>/gap-fix-result.json`:
+Write `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
 
 ```json
 {
@@ -327,7 +331,7 @@ Write `~/.claude/gap-analysis/<run_id>/gap-fix-result.json`:
   "findings_fixed": 4,
   "findings_still_open": 1,
   "gate_pending": ["GAP-b7e2d5f8", "GAP-c3a1e2d4"],
-  "output_path": "~/.claude/gap-analysis/<run_id>/gap-fix-output.json"
+  "output_path": "~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json"
 }
 ```
 

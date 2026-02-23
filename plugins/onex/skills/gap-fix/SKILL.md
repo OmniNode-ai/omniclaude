@@ -114,7 +114,7 @@ Phase 5: Report — append fix section to .md artifact; update decisions ledger
 
 ## Artifacts
 
-`~/.claude/gap-analysis/<run_id>/gap-fix-output.json`:
+`~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json`:
 
 ```json
 {
@@ -125,8 +125,10 @@ Phase 5: Report — append fix section to .md artifact; update decisions ledger
 }
 ```
 
-`~/.claude/gap-analysis/<run_id>/decisions.json` — persisted decisions so `--choose` selections
-are not re-prompted on every run:
+`~/.claude/gap-analysis/<source_run_id>/decisions.json` — persisted decisions so `--choose`
+selections are not re-prompted on every run. `<source_run_id>` is the gap-analysis run
+identifier (the original analysis run), NOT the fix run ID — so decisions live alongside
+the source report, not in a separate fix-run directory:
 
 ```json
 {
@@ -136,7 +138,7 @@ are not re-prompted on every run:
 
 ## ModelSkillResult
 
-Written to `~/.claude/gap-analysis/<run_id>/gap-fix-result.json`:
+Written to `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
 
 ```json
 {
@@ -153,7 +155,7 @@ Written to `~/.claude/gap-analysis/<run_id>/gap-fix-result.json`:
   "findings_fixed": 4,
   "findings_still_open": 1,
   "gate_pending": ["GAP-b7e2d5f8", "GAP-c3a1e2d4"],
-  "output_path": "~/.claude/gap-analysis/<run_id>/gap-fix-output.json"
+  "output_path": "~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json"
 }
 ```
 
@@ -176,4 +178,4 @@ Status values:
 - `ticket-pipeline` skill — dispatched per auto finding
 - `pr-queue-pipeline` skill — merges created PRs
 - `~/.claude/gap-analysis/` — report output directory
-- `~/.claude/gap-analysis/<run_id>/decisions.json` — persisted gate decisions
+- `~/.claude/gap-analysis/<source_run_id>/decisions.json` — persisted gate decisions
