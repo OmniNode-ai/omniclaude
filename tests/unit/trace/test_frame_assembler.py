@@ -26,6 +26,7 @@ from omniclaude.trace.frame_assembler import (
     CheckSpec,
     SessionContext,
     assemble_change_frame,
+    emit_change_frame,
     parse_diff_stats,
     persist_frame_to_jsonl,
     run_git_diff_patch,
@@ -560,3 +561,128 @@ class TestPersistFrameToJsonl:
         assert p1 == p2
         lines = p1.read_text().strip().split("\n")
         assert len(lines) == 2
+
+
+# ===========================================================================
+# emit_change_frame tests (OMN-2651)
+# ===========================================================================
+
+import pytest
+
+from omniclaude.trace.change_frame import (
+    ChangeFrame,
+    ModelCheckResult,
+    ModelDelta,
+    ModelEvidence,
+    ModelFrameConfig,
+    ModelIntentRef,
+    ModelOutcome,
+    ModelWorkspaceRef,
+)
+
+
+def _make_frame() -> ChangeFrame:
+    """Build a minimal valid ChangeFrame for testing."""
+    return ChangeFrame(
+        frame_id=uuid4(),
+        trace_id="trace-emit-test",
+        timestamp_utc="2026-02-23T12:00:00Z",
+        agent_id="test-agent",
+        model_id="test-model",
+        frame_config=ModelFrameConfig(),
+        intent_ref=ModelIntentRef(prompt_hash="abc123"),
+        workspace_ref=ModelWorkspaceRef(
+            repo="test-repo", branch="main", base_commit="deadbeef"
+        ),
+        delta=ModelDelta(
+            diff_patch="--- a/f\n+++ b/f\n@@ -1 +1 @@\n+new\n",
+            files_changed=["f"],
+            loc_added=1,
+            loc_removed=0,
+        ),
+        checks=[
+            ModelCheckResult(
+                command="check", environment_hash="h", exit_code=0, output_hash="h"
+            )
+        ],
+        outcome=ModelOutcome(status="pass"),
+        evidence=ModelEvidence(),
+    )
+
+
+@pytest.mark.unit
+class TestEmitChangeFrame:
+    """Tests for emit_change_frame (OMN-2651)."""
+
+    def test_emit_calls_emit_event_with_correct_args(self) -> None:
+        """emit_change_frame should call emit_event with the right event type and payload."""
+        frame = _make_frame()
+        mock_emit = MagicMock(return_value=True)
+
+        with patch.dict(
+            "sys.modules",
+            {"emit_client_wrapper": MagicMock(emit_event=mock_emit)},
+        ):
+            # Re-import to pick up the mock
+            import importlib
+
+            import omniclaude.trace.frame_assembler as mod
+
+            importlib.reload(mod)
+            result = mod.emit_change_frame(frame, "session-123")
+
+        assert result is True
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args
+        assert call_args[0][0] == "change.frame.emitted"
+        payload = call_args[0][1]
+        assert payload["session_id"] == "session-123"
+        assert payload["frame_id"] == str(frame.frame_id)
+        assert payload["trace_id"] == "trace-emit-test"
+
+    def test_emit_returns_false_when_import_fails(self) -> None:
+        """emit_change_frame returns False when emit_client_wrapper is unavailable."""
+        frame = _make_frame()
+
+        with patch.dict("sys.modules", {"emit_client_wrapper": None}):
+            result = emit_change_frame(frame, "session-123")
+
+        assert result is False
+
+    def test_emit_returns_false_on_exception(self) -> None:
+        """emit_change_frame returns False and never raises on emit failure."""
+        frame = _make_frame()
+        mock_emit = MagicMock(side_effect=RuntimeError("daemon exploded"))
+
+        with patch.dict(
+            "sys.modules",
+            {"emit_client_wrapper": MagicMock(emit_event=mock_emit)},
+        ):
+            import importlib
+
+            import omniclaude.trace.frame_assembler as mod
+
+            importlib.reload(mod)
+            result = mod.emit_change_frame(frame, "session-456")
+
+        assert result is False
+
+    def test_emit_payload_includes_session_id(self) -> None:
+        """Payload must include session_id for Kafka partitioning."""
+        frame = _make_frame()
+        captured_payload: dict[str, object] = {}
+
+        def capture_emit(event_type: str, payload: dict[str, object]) -> bool:
+            captured_payload.update(payload)
+            return True
+
+        mock_module = MagicMock(emit_event=capture_emit)
+        with patch.dict("sys.modules", {"emit_client_wrapper": mock_module}):
+            import importlib
+
+            import omniclaude.trace.frame_assembler as mod
+
+            importlib.reload(mod)
+            mod.emit_change_frame(frame, "my-session")
+
+        assert captured_payload["session_id"] == "my-session"

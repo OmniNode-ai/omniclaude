@@ -772,6 +772,8 @@ class TestEventRegistryIntegration:
             "pattern.enforcement",
             # Intent-to-commit binding (OMN-2492)
             "intent.commit.bound",
+            # ChangeFrame emission (OMN-2651)
+            "change.frame.emitted",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

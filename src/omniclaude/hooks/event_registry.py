@@ -682,6 +682,26 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["commit_sha", "session_id"],
     ),
+    # =========================================================================
+    # ChangeFrame Emission (OMN-2651)
+    # =========================================================================
+    # Emitted by frame_assembler.py after JSONL persistence.
+    # Payload is frame.model_dump() — the flat Pydantic dict of ChangeFrame.
+    # No payload transform — ChangeFrame contains only code metadata
+    # (diff patches, check results, outcome status), no secrets or prompts.
+    # Consumed by omnidash for real-time ChangeFrame display.
+    "change.frame.emitted": EventRegistration(
+        event_type="change.frame.emitted",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CHANGE_FRAME_EMITTED,
+                transform=None,  # Passthrough — ChangeFrame contains no secrets
+                description="ChangeFrame emitted after JSONL persist for omnidash consumption",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["frame_id", "trace_id", "session_id"],
+    ),
 }
 
 

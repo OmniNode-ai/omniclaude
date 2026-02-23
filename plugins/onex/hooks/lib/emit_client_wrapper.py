@@ -131,6 +131,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
         "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation for omnidash dashboard
         "intent.commit.bound",  # OMN-2492 - Intent-to-commit binding record
+        "change.frame.emitted",  # OMN-2651 - ChangeFrame emission after JSONL persist
     ]
 )
 
