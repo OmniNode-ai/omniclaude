@@ -174,6 +174,45 @@ exec claude --skill onex:slack-gate \
 | `Skill(skill="onex:slack-gate", args="MEDIUM_RISK CI failed 3 times. --timeout-minutes 60")` | Programmatic: composable invocation from orchestrator |
 | `slack-gate.sh HIGH_RISK "Deploy to production?" --timeout-minutes 1440` | Shell: direct invocation with 24h timeout |
 
+## Credential Resolution
+
+The agent executing this skill must resolve Slack credentials before posting. Resolution order:
+
+1. **Check `~/.omnibase/.env`** — source of truth for shared credentials:
+   ```
+   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+   SLACK_BOT_TOKEN=xoxb-...
+   SLACK_CHANNEL_ID=C0...
+   ```
+
+2. **Fetch from Infisical** (if not in local .env):
+   - Addr: `http://localhost:8880` (or `INFISICAL_ADDR` from `~/.omnibase/.env`)
+   - Project: `1efd8d15-99f3-429b-b973-3b10491af449` (`INFISICAL_PROJECT_ID`)
+   - Environment: `prod`
+   - Path: `/shared/env`
+   - Credentials: `INFISICAL_CLIENT_ID` / `INFISICAL_CLIENT_SECRET` from `~/.omnibase/.env`
+
+   ```bash
+   source ~/.omnibase/.env
+   TOKEN=$(curl -s -X POST "$INFISICAL_ADDR/api/v1/auth/universal-auth/login" \
+     -H "Content-Type: application/json" \
+     -d "{\"clientId\":\"$INFISICAL_CLIENT_ID\",\"clientSecret\":\"$INFISICAL_CLIENT_SECRET\"}" \
+     | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+   SLACK_WEBHOOK_URL=$(curl -s \
+     "$INFISICAL_ADDR/api/v3/secrets/raw/SLACK_WEBHOOK_URL?workspaceId=$INFISICAL_PROJECT_ID&environment=prod&secretPath=/shared/env" \
+     -H "Authorization: Bearer $TOKEN" \
+     | python3 -c "import sys,json; print(json.load(sys.stdin)['secret']['secretValue'])")
+   ```
+
+3. **Post via webhook** (for fire-and-forget notifications):
+   ```bash
+   curl -s -X POST "$SLACK_WEBHOOK_URL" \
+     -H "Content-Type: application/json" \
+     -d "{\"text\": \"$message\"}"
+   ```
+
+> **Note**: Slack Slack link syntax for clickable URLs: `<https://example.com|Link text>`
+
 ## See Also
 
 - `auto-merge` skill (uses HIGH_RISK gate before merging)
