@@ -163,7 +163,7 @@ APPLESCRIPT
         [ "$_tkt" = "-" ] && continue; [ -z "$_tkt" ] && continue
         _eg="${_guid#*:}"
         _mf="${TAB_REGISTRY_DIR}/${_eg}.mode"
-        _m=""; [ -f "$_mf" ] && _m=$(cat "$_mf" 2>/dev/null | tr -d '[:space:]')
+        _m=""; [ -f "$_mf" ] && _m=$(cat "$_mf" 2>/dev/null | tr -d '\n\r\t')
         [ -z "$_m" ] && continue
         _ticket_mode_pairs="${_ticket_mode_pairs}${_tkt}|${_m}"$'\n'
       done <<< "$FORMATTED"
@@ -193,12 +193,12 @@ APPLESCRIPT
         # Read .mode file (written by post-tool-use hook on Skill calls)
         mode=""
         mode_file="${TAB_REGISTRY_DIR}/${entry_guid}.mode"
-        [ -f "$mode_file" ] && mode=$(cat "$mode_file" 2>/dev/null | tr -d '[:space:]')
+        [ -f "$mode_file" ] && mode=$(cat "$mode_file" 2>/dev/null | tr -d '\n\r\t')
 
         # Read .ticket file (written by session-start for omni_home tabs without a git branch)
         if [ -z "$ticket" ] && [ -n "$entry_guid" ]; then
           ticket_file="${TAB_REGISTRY_DIR}/${entry_guid}.ticket"
-          [ -f "$ticket_file" ] && ticket=$(cat "$ticket_file" 2>/dev/null | tr -d '[:space:]')
+          [ -f "$ticket_file" ] && ticket=$(cat "$ticket_file" 2>/dev/null | tr -d '\n\r\t')
         fi
 
         # Read tab activity color (ANSI 256-color code written by hooks)

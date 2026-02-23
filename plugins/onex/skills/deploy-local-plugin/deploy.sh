@@ -41,6 +41,7 @@ NC='\033[0m' # No Color
 # Parse arguments
 EXECUTE=false
 NO_VERSION_BUMP=true
+BUMP_VERSION=false
 REPAIR_VENV=false
 
 for arg in "$@"; do
@@ -49,10 +50,12 @@ for arg in "$@"; do
             EXECUTE=true
             ;;
         --no-version-bump)
+            echo -e "${YELLOW}Warning: --no-version-bump is deprecated; no-bump is now the default. Use --bump-version to increment.${NC}" >&2
             NO_VERSION_BUMP=true
             ;;
         --bump-version)
             NO_VERSION_BUMP=false
+            BUMP_VERSION=true
             ;;
         --repair-venv)
             REPAIR_VENV=true
@@ -76,6 +79,15 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Guard: --no-version-bump and --bump-version are mutually exclusive.
+# Since --no-version-bump sets NO_VERSION_BUMP=true and --bump-version sets
+# BUMP_VERSION=true, detect the conflict explicitly rather than relying on
+# argument order (last-writer-wins is confusing and unpredictable).
+if [[ "$NO_VERSION_BUMP" == "true" && "$BUMP_VERSION" == "true" ]]; then
+    echo -e "${RED}Error: --no-version-bump and --bump-version are mutually exclusive.${NC}" >&2
+    exit 1
+fi
 
 # Determine source directory
 # Try CLAUDE_PLUGIN_ROOT first, then fall back to script location
@@ -635,12 +647,16 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Update statusLine in settings.json to point at new version's statusline.sh
     SETTINGS_JSON="$HOME/.claude/settings.json"
     if [[ -f "$SETTINGS_JSON" ]]; then
+        # Single backup before ANY modification to settings.json.
+        # Placed here so it covers both the statusLine block and the hooks block
+        # below regardless of which branches execute. The hooks block previously
+        # had its own cp that would overwrite this backup; that duplicate was removed.
+        cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
+
         # Use ~ prefix: Claude Code's settings parser expands ~ to $HOME
         STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
 
         if jq -e '.statusLine.command' "$SETTINGS_JSON" >/dev/null 2>&1; then
-            # Backup before modification (recoverable if jq fails mid-write)
-            cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
             jq --arg cmd "$STATUSLINE_PATH_SHORT" '
                 .statusLine.command = $cmd
             ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
@@ -665,7 +681,6 @@ if [[ "$EXECUTE" == "true" ]]; then
         PRETOOL_MATCHER='^(Edit|Write)$'
         POSTTOOL_MATCHER='^(Read|Write|Edit|Bash|Glob|Grep|Task|Skill|WebFetch|WebSearch|NotebookEdit|NotebookRead)$'
 
-        cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
         jq --arg base "$HOOKS_BASE" \
            --arg ptum "$PRETOOL_MATCHER" \
            --arg ptoom "$POSTTOOL_MATCHER" '

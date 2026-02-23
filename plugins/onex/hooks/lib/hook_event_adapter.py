@@ -74,8 +74,12 @@ except ImportError:
             class OnexError(Exception):  # type: ignore[no-redef]
                 pass
 
+
 # ONEX types for routing alternatives (replaces dict union soup)
-from omnibase_core.types import TypedDictRoutingAlternative
+try:
+    from omnibase_core.types import TypedDictRoutingAlternative
+except ImportError:
+    TypedDictRoutingAlternative = dict  # type: ignore[assignment,misc]
 
 # Topic constants and builder (centralized in omniclaude.hooks.topics)
 try:

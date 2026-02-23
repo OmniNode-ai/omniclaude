@@ -278,13 +278,16 @@ START_TIME=$(get_time_ms)
 INPUT=$(cat)
 
 # Log raw input for debugging the actual payload format.
-# This captures what Claude Code actually sends on each SessionStart so we can
-# verify field names match our extraction logic. File is appended to, not overwritten.
+# Only written when OMNICLAUDE_DEBUG_SESSION_INPUT is set to "true" or "1".
+# Gated to prevent unbounded growth of the debug file on every SessionStart.
+_DEBUG_SESSION_INPUT="${OMNICLAUDE_DEBUG_SESSION_INPUT:-false}"
 _DEBUG_FILE="/tmp/claude-hook-debug-sessionstart.json"
-{
-    echo "--- $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
-    echo "$INPUT"
-} >> "$_DEBUG_FILE" 2>/dev/null
+if [[ "$_DEBUG_SESSION_INPUT" == "true" || "$_DEBUG_SESSION_INPUT" == "1" ]]; then
+    {
+        echo "--- $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
+        echo "$INPUT"
+    } >> "$_DEBUG_FILE" 2>/dev/null
+fi
 
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
     if [[ -z "$INPUT" ]]; then
