@@ -16,6 +16,7 @@ from threading import Lock
 from typing import Any
 
 import requests
+
 from config import settings
 
 

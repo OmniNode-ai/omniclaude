@@ -15,6 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from agents.lib.manifest_injector import ManifestInjector
+
 from config import settings
 
 
