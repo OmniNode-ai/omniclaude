@@ -71,6 +71,16 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
   queries (PR list, CI checks) fail, detection degrades gracefully — a failed CI query defaults
   to `ci_watch` (the safe choice for any open PR).
 
+### Limitations
+
+- **No checkpoint artifacts for skipped phases**: When auto-detection skips to (e.g.) `ci_watch`,
+  prior phases are marked complete with timestamps but no checkpoint files are written.
+  A subsequent `--skip-to implement` on the same ticket will fail checkpoint validation.
+  Use `--force-run` to restart from scratch if needed.
+- **Detection skipped when GitHub is unreachable**: If the repo slug cannot be determined
+  or `gh` returns an auth error, detection is skipped entirely and the pipeline starts
+  from `implement` (normal fresh-run behavior).
+
 ## Quick Start
 
 ```

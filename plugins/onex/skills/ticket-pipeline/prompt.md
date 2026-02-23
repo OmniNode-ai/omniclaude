@@ -393,9 +393,11 @@ if skip_to:
 ### 4. Save State and Announce
 
 ```python
-# Capture whether the state file already existed BEFORE save_state() creates/overwrites it.
-# This is used by the auto-detection block below: after save_state() the file always exists,
-# so the check must happen here to correctly distinguish fresh start vs. resume.
+# Capture whether a state file already existed before our save_state() call below.
+# NOTE: Section 3 (--skip-to validation) may have already called save_state() if a
+# checkpoint was restored. However, if skip_to is set, auto-detection will not run
+# anyway (guarded by `skip_to is None`), so this value is only meaningful and correct
+# when skip_to is None (the fresh-run case).
 _state_file_existed = state_path.exists() and not force_run
 
 save_state(state, state_path)
@@ -520,7 +522,7 @@ if not _state_file_existed and skip_to is None and not force_run:
                 except Exception:
                     _merged_prs = []
             else:
-                print(f"  No branch name available — skipping merged-PR check.")
+                print("  No branch name available — skipping merged-PR check.")
                 _merged_prs = []
 
             if _merged_prs:
@@ -566,7 +568,7 @@ if not _state_file_existed and skip_to is None and not force_run:
                     # Branch doesn't exist either — normal fresh start
                     _auto_start_phase = None  # run from beginning (implement)
 
-        else:
+        elif _repo_slug and _open_prs:
             # Step 4: Open PR found — probe CI and review status
             _pr = _open_prs[0]
             _pr_number = _pr["number"]
@@ -649,6 +651,11 @@ if not _state_file_existed and skip_to is None and not force_run:
             print(f"Auto-detected: PR #{_pr_number} exists "
                   f"(CI: {_ci_status_label}, reviews: {_review_status_label}). "
                   f"Starting at {_auto_start_phase}.")
+
+        else:
+            # _repo_slug is None (auth failure or not a git repo) — skip detection entirely
+            print("  Auto-detection skipped (could not query GitHub). Starting from 'implement'.")
+            _auto_start_phase = None
 
     # Step 6: Apply auto-detected phase as skip_to and mark prior phases complete inline
     if _auto_start_phase is not None:
