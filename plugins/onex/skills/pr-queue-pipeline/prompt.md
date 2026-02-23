@@ -19,6 +19,7 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--merge-method <method>` — default: squash
    - `--allow-force-push` — default: false
    - `--slack-report` — default: false
+   - `--max-parallel-repos <n>` — default: 3
    - `--skip-review` — ignored in v0 (Phase 1 always skipped)
 
 3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
@@ -33,7 +34,7 @@ When `/pr-queue-pipeline [args]` is invoked:
 
 ## Phase 0: Scan + Classify + Build Plan
 
-Scan all repos in scope. For each repo (up to `--max-parallel-repos` = 3 concurrently):
+Scan all repos in scope. For each repo (up to `--max-parallel-repos` concurrently):
 
 ```bash
 gh pr list \

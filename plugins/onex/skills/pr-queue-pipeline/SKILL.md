@@ -44,6 +44,9 @@ args:
   - name: --slack-report
     description: Post final report summary to Slack (default: false)
     required: false
+  - name: --max-parallel-repos
+    description: Repos scanned in parallel during Phase 0 and re-query; forwarded to sub-skills (default: 3)
+    required: false
   - name: --skip-review
     description: "Reserved for v1: skip Phase 1 (review-all-prs). Ignored in v0 (Phase 1 always skipped)"
     required: false
@@ -107,6 +110,7 @@ Phase 5: REPORT
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` (forwarded to merge-sweep) |
 | `--allow-force-push` | false | Forwarded to fix-prs |
 | `--slack-report` | false | Post report summary to Slack after completion |
+| `--max-parallel-repos` | 3 | Repos scanned in parallel (forwarded to sub-skills) |
 | `--skip-review` | — | Reserved for v1; ignored in v0 |
 
 **First production run recommendation**: use `--authors me` to limit blast radius to your own PRs.
