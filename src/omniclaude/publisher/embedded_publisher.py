@@ -40,6 +40,7 @@ from omniclaude.hooks.event_registry import (
 )
 
 if TYPE_CHECKING:
+    from omnibase_core.types.type_json import JsonType
     from omnibase_infra.protocols import ProtocolEventBusLike
 
 from omniclaude.publisher.event_queue import BoundedEventQueue, ModelQueuedEvent
@@ -402,7 +403,7 @@ class EmbeddedEventPublisher:
                 event_id=event_id,
                 event_type=event_type,
                 topic=topic,
-                payload=transformed,
+                payload=cast("JsonType", transformed),
                 partition_key=partition_key,
                 queued_at=datetime.now(UTC),
             )

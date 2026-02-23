@@ -523,7 +523,11 @@ if not _state_file_existed and skip_to is None and not force_run:
                          "--json", "number,url,mergedAt"],
                         capture_output=True, text=True, timeout=20,
                     )
-                    _merged_prs = json.loads(_merged_pr_raw.stdout) if _merged_pr_raw.stdout.strip() else []
+                    if _merged_pr_raw.returncode != 0:
+                        print(f"[auto-detect] merged-PR query failed (rc={_merged_pr_raw.returncode})")
+                        _merged_prs = []
+                    else:
+                        _merged_prs = json.loads(_merged_pr_raw.stdout) if _merged_pr_raw.stdout.strip() else []
                 except Exception:
                     _merged_prs = []
             else:
@@ -552,8 +556,8 @@ if not _state_file_existed and skip_to is None and not force_run:
                 if not dry_run:
                     try:
                         mcp__linear-server__update_issue(id=ticket_id, state="Done")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"[auto-detect] Linear update failed: {e}")
                 else:
                     print(f"[DRY RUN] Would mark {ticket_id} as Done (PR already merged)")
                 # Clear ledger entry so future pipeline runs are not blocked by a stale lock
@@ -644,7 +648,12 @@ if not _state_file_existed and skip_to is None and not force_run:
                      "--json", "reviewDecision,reviews"],
                     capture_output=True, text=True, timeout=20,
                 )
-                _review_data = json.loads(_review_raw.stdout) if _review_raw.stdout.strip() else {}
+                if _review_raw.returncode != 0:
+                    print(f"Warning: gh pr view failed (rc={_review_raw.returncode}): {_review_raw.stderr.strip()}")
+                    _review_data = {}
+                    _review_decision = ""
+                else:
+                    _review_data = json.loads(_review_raw.stdout) if _review_raw.stdout.strip() else {}
             except Exception:
                 _review_data = {}
 

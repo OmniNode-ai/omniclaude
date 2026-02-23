@@ -60,12 +60,11 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import required modules
+# Import Pydantic Settings for type-safe configuration
+from config import settings
 from manifest_injector import ManifestInjector
 from relevance_scorer import RelevanceScorer
 from task_classifier import TaskClassifier, TaskContext
-
-# Import Pydantic Settings for type-safe configuration
-from config import settings
 
 
 @dataclass

@@ -56,6 +56,7 @@ sys.path.insert(
 )
 from omniclaude.hooks.topics import TopicBase
 
+
 def publish_to_kafka(event: dict, topic: str = TopicBase.ROUTING_DECISION) -> bool:
     """
     Publish event to Kafka topic.
