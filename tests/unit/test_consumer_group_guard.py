@@ -33,27 +33,35 @@ _GROUP_ID_PATTERN = re.compile(r"^omniclaude-[a-z][a-z0-9-]+\.v\d+$")
 class TestHasVersionSuffix:
     """Tests for has_version_suffix()."""
 
+    @pytest.mark.unit
     def test_returns_true_for_v1_suffix(self) -> None:
         assert has_version_suffix("omniclaude-git-effect.v1") is True
 
+    @pytest.mark.unit
     def test_returns_true_for_v2_suffix(self) -> None:
         assert has_version_suffix("omniclaude-compliance-subscriber.v2") is True
 
+    @pytest.mark.unit
     def test_returns_true_for_large_version(self) -> None:
         assert has_version_suffix("omniclaude-something.v100") is True
 
+    @pytest.mark.unit
     def test_returns_false_for_missing_version(self) -> None:
         assert has_version_suffix("omniclaude-git-effect") is False
 
+    @pytest.mark.unit
     def test_returns_false_for_v_without_number(self) -> None:
         assert has_version_suffix("omniclaude-git-effect.v") is False
 
+    @pytest.mark.unit
     def test_returns_false_for_wrong_suffix(self) -> None:
         assert has_version_suffix("omniclaude-git-effect-v1") is False
 
+    @pytest.mark.unit
     def test_returns_false_for_empty_string(self) -> None:
         assert has_version_suffix("") is False
 
+    @pytest.mark.unit
     def test_existing_compliance_subscriber(self) -> None:
         """Existing consumer omniclaude-compliance-subscriber.v1 should pass."""
         assert has_version_suffix("omniclaude-compliance-subscriber.v1") is True
@@ -62,6 +70,7 @@ class TestHasVersionSuffix:
 class TestValidateConsumerGroupConfig:
     """Tests for validate_consumer_group_config()."""
 
+    @pytest.mark.unit
     def test_latest_offset_reset_always_passes(self) -> None:
         """F5.3 only applies to 'earliest' resets."""
         # Should not raise even with missing version
@@ -71,6 +80,7 @@ class TestValidateConsumerGroupConfig:
             has_committed_offsets=True,
         )
 
+    @pytest.mark.unit
     def test_none_offset_reset_passes(self) -> None:
         """'none' offset reset is not a reset, should pass."""
         validate_consumer_group_config(
@@ -79,6 +89,7 @@ class TestValidateConsumerGroupConfig:
             has_committed_offsets=True,
         )
 
+    @pytest.mark.unit
     def test_earliest_with_version_passes(self) -> None:
         """earliest reset with versioned group ID is allowed."""
         validate_consumer_group_config(
@@ -87,6 +98,7 @@ class TestValidateConsumerGroupConfig:
             has_committed_offsets=True,
         )
 
+    @pytest.mark.unit
     def test_earliest_with_version_first_run_passes(self) -> None:
         """earliest reset on first run (no committed offsets) passes."""
         validate_consumer_group_config(
@@ -95,6 +107,7 @@ class TestValidateConsumerGroupConfig:
             has_committed_offsets=False,
         )
 
+    @pytest.mark.unit
     def test_earliest_without_version_first_run_passes(self) -> None:
         """First run bypass: no committed offsets means guard skipped."""
         validate_consumer_group_config(
@@ -103,6 +116,7 @@ class TestValidateConsumerGroupConfig:
             has_committed_offsets=False,  # first run bypass
         )
 
+    @pytest.mark.unit
     def test_earliest_without_version_with_offsets_raises(self) -> None:
         """F5.3: earliest + no version + committed offsets → FatalStartupError."""
         with pytest.raises(FatalStartupError) as exc_info:
@@ -116,6 +130,7 @@ class TestValidateConsumerGroupConfig:
         assert err.auto_offset_reset == "earliest"
         assert err.rule == "F5.3"
 
+    @pytest.mark.unit
     def test_fatal_startup_error_message_is_actionable(self) -> None:
         """FatalStartupError message should tell the user how to fix it."""
         with pytest.raises(FatalStartupError) as exc_info:
@@ -129,6 +144,7 @@ class TestValidateConsumerGroupConfig:
         assert "version" in msg.lower()
         assert "F5.3" in msg
 
+    @pytest.mark.unit
     def test_default_has_committed_offsets_is_false(self) -> None:
         """Default value is False (safe default for first-run bypass)."""
         # Should not raise: default has_committed_offsets=False
@@ -141,6 +157,7 @@ class TestValidateConsumerGroupConfig:
 class TestFatalStartupError:
     """Tests for FatalStartupError exception."""
 
+    @pytest.mark.unit
     def test_attributes_set_correctly(self) -> None:
         err = FatalStartupError(
             group_id="omniclaude-test",
@@ -151,6 +168,7 @@ class TestFatalStartupError:
         assert err.auto_offset_reset == "earliest"
         assert err.rule == "F5.3"
 
+    @pytest.mark.unit
     def test_is_exception(self) -> None:
         err = FatalStartupError(
             group_id="omniclaude-test",
@@ -159,6 +177,7 @@ class TestFatalStartupError:
         )
         assert isinstance(err, Exception)
 
+    @pytest.mark.unit
     def test_message_includes_group_id(self) -> None:
         err = FatalStartupError(
             group_id="my-group-id",
@@ -180,22 +199,26 @@ class TestSkillNodeConsumerGroups:
         "NodeLocalCodingOrchestrator",
     }
 
+    @pytest.mark.unit
     def test_all_6_skill_nodes_have_group_id(self) -> None:
         """F5.4: All 6 skill nodes from OMN-2593 must have consumer group IDs."""
         assert set(SKILL_NODE_CONSUMER_GROUPS.keys()) == self._EXPECTED_NODES
 
+    @pytest.mark.unit
     def test_all_group_ids_have_omniclaude_prefix(self) -> None:
         for node, group_id in SKILL_NODE_CONSUMER_GROUPS.items():
             assert group_id.startswith("omniclaude-"), (
                 f"{node}: group_id '{group_id}' must start with 'omniclaude-'"
             )
 
+    @pytest.mark.unit
     def test_all_group_ids_have_version_suffix(self) -> None:
         for node, group_id in SKILL_NODE_CONSUMER_GROUPS.items():
             assert has_version_suffix(group_id), (
                 f"{node}: group_id '{group_id}' must have a version suffix (.v{{N}})"
             )
 
+    @pytest.mark.unit
     def test_all_group_ids_match_naming_convention(self) -> None:
         """F5.4: omniclaude-{node-name}.v{N} format."""
         for node, group_id in SKILL_NODE_CONSUMER_GROUPS.items():
@@ -204,45 +227,53 @@ class TestSkillNodeConsumerGroups:
                 "omniclaude-{{name}}.v{{N}} pattern"
             )
 
+    @pytest.mark.unit
     def test_git_effect_group_id(self) -> None:
         assert SKILL_NODE_CONSUMER_GROUPS["NodeGitEffect"] == "omniclaude-git-effect.v1"
 
+    @pytest.mark.unit
     def test_claude_code_session_group_id(self) -> None:
         assert (
             SKILL_NODE_CONSUMER_GROUPS["NodeClaudeCodeSessionEffect"]
             == "omniclaude-claude-code-session-effect.v1"
         )
 
+    @pytest.mark.unit
     def test_local_llm_inference_group_id(self) -> None:
         assert (
             SKILL_NODE_CONSUMER_GROUPS["NodeLocalLlmInferenceEffect"]
             == "omniclaude-local-llm-inference-effect.v1"
         )
 
+    @pytest.mark.unit
     def test_linear_effect_group_id(self) -> None:
         assert (
             SKILL_NODE_CONSUMER_GROUPS["NodeLinearEffect"]
             == "omniclaude-linear-effect.v1"
         )
 
+    @pytest.mark.unit
     def test_ticketing_effect_group_id(self) -> None:
         assert (
             SKILL_NODE_CONSUMER_GROUPS["NodeTicketingEffect"]
             == "omniclaude-ticketing-effect.v1"
         )
 
+    @pytest.mark.unit
     def test_local_coding_orchestrator_group_id(self) -> None:
         assert (
             SKILL_NODE_CONSUMER_GROUPS["NodeLocalCodingOrchestrator"]
             == "omniclaude-local-coding-orchestrator.v1"
         )
 
+    @pytest.mark.unit
     def test_no_duplicate_group_ids(self) -> None:
         group_ids = list(SKILL_NODE_CONSUMER_GROUPS.values())
         assert len(group_ids) == len(set(group_ids)), (
             "Duplicate consumer group IDs found in SKILL_NODE_CONSUMER_GROUPS"
         )
 
+    @pytest.mark.unit
     def test_all_group_ids_pass_startup_validation(self) -> None:
         """All skill node group IDs must pass F5.3 validation with earliest reset."""
         for node, group_id in SKILL_NODE_CONSUMER_GROUPS.items():
@@ -279,16 +310,19 @@ class TestValidateNoCompactCmdTopicScript:
         """Load the validation script module once per test."""
         return _load_validate_script()
 
+    @pytest.mark.unit
     def test_script_imports_cleanly(self, script_module: Any) -> None:
         """The validation script module should be importable."""
         assert hasattr(script_module, "main")
         assert hasattr(script_module, "scan_file")
 
+    @pytest.mark.unit
     def test_no_violations_on_existing_codebase(self, script_module: Any) -> None:
         """The existing codebase should not have any compact cmd topic violations."""
         result = script_module.main([])
         assert result == 0, "validate_no_compact_cmd_topic found violations in codebase"
 
+    @pytest.mark.unit
     def test_scan_file_detects_compact_violation(
         self, tmp_path: Path, script_module: Any
     ) -> None:
@@ -302,6 +336,7 @@ class TestValidateNoCompactCmdTopicScript:
         violations = script_module.scan_file(config_file)
         assert len(violations) > 0, "Expected violation for compact cmd topic"
 
+    @pytest.mark.unit
     def test_scan_file_allows_compact_on_evt_topic(
         self, tmp_path: Path, script_module: Any
     ) -> None:
@@ -315,6 +350,7 @@ class TestValidateNoCompactCmdTopicScript:
         violations = script_module.scan_file(config_file)
         assert len(violations) == 0, f"Unexpected violation for evt topic: {violations}"
 
+    @pytest.mark.unit
     def test_scan_file_respects_noqa_suppression(
         self, tmp_path: Path, script_module: Any
     ) -> None:
