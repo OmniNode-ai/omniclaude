@@ -324,10 +324,6 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = ["src/omniclaude/lib/"]
 
-[[tool.mypy.overrides]]
-module = ["omnibase_infra", "omnibase_infra.*", "kafka", "kafka.*"]
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

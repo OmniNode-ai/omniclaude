@@ -229,8 +229,8 @@ def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:
         sys.path.insert(0, lib_dir)
 
     try:
-        from pattern_advisory_formatter import (  # type: ignore[import-not-found]
-            save_advisories,  # noqa: PLC0415
+        from pattern_advisory_formatter import (  # noqa: PLC0415
+            save_advisories,
         )
 
         result: bool = save_advisories(session_id, advisories)
