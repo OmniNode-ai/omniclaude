@@ -1369,7 +1369,10 @@ def route_via_events(
                     "llm-fuzzy-agreement thread already running, skipping spawn"
                 )
             _emit_routing_decision(
-                result=llm_result, prompt=prompt, correlation_id=correlation_id, session_id=session_id
+                result=llm_result,
+                prompt=prompt,
+                correlation_id=correlation_id,
+                session_id=session_id,
             )
             # OMN-2273: emit LLM-specific decision event with determinism audit fields.
             # agreement is not yet known here (background thread), so we emit without
@@ -1513,7 +1516,12 @@ def route_via_events(
     }
 
     # Emit routing decision event for observability (non-blocking)
-    _emit_routing_decision(result=result, prompt=prompt, correlation_id=correlation_id, session_id=session_id)
+    _emit_routing_decision(
+        result=result,
+        prompt=prompt,
+        correlation_id=correlation_id,
+        session_id=session_id,
+    )
 
     return result
 

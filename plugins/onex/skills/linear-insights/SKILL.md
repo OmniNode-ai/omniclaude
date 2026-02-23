@@ -12,6 +12,7 @@ Analytics and reporting skills for Linear project management. Provides comprehen
 1. **deep-dive** - Generate a comprehensive daily work analysis (like DECEMBER_9_2025_DEEP_DIVE.md)
 2. **velocity-estimate** - Calculate velocity and estimate milestone completion dates
 3. **estimation-accuracy** - Track how accurate your estimates have been over time
+4. **project-status** - Quick health dashboard; supports `--emit` to relay snapshots to Kafka
 
 ## When to Use
 
@@ -358,6 +359,54 @@ def calculate_velocity(issues_completed, period_days):
 
 ---
 
+## Project Status — Kafka Emission (--emit)
+
+The `project-status` skill supports a `--emit` flag that serializes a workstream snapshot
+and relays it to Kafka via the `onex-linear-relay` CLI. This is the primary ingress path for
+Linear workstream data into the ONEX event bus.
+
+### Usage
+
+```bash
+# Show dashboard for MVP project + emit snapshot to Kafka
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status MVP --emit
+
+# All projects overview + emit
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status --all --emit
+
+# JSON output + emit (useful for scripting)
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status MVP --json --emit
+```
+
+### How Emission Works
+
+1. After generating the status output, `--emit` serializes a snapshot to `/tmp/linear-snapshot-{timestamp}.json`:
+   ```json
+   {
+     "workstreams": ["MVP", "Beta"],
+     "project": "MVP - OmniNode Platform Foundation",
+     "project_shortcut": "MVP",
+     "source": "project-status",
+     "generated_at": "2026-02-23T22:00:00+00:00"
+   }
+   ```
+2. Calls `onex-linear-relay emit --snapshot-file /tmp/linear-snapshot-{timestamp}.json`
+3. The relay publishes to `onex.evt.linear.snapshot.v1` (non-blocking, exits 0 even if Kafka is unreachable)
+
+### Requirements
+
+- `onex-linear-relay` must be installed and available on `PATH`
+- Install via: `pip install omnibase_infra` (or `uv add omnibase_infra` in your project)
+- Related ticket: OMN-2656 (Phase 2 — effect nodes and CLIs in omnibase_infra)
+
+### IMPORTANT: Do NOT Call REST Endpoint
+
+The `POST /api/linear/snapshot` endpoint in omnidash is **debug-only ingress**.
+It must never be called from production code or skills. Use `--emit` (which calls
+`onex-linear-relay`) as the only correct production path for Linear data into the event bus.
+
+---
+
 ## Skills Location
 
 **Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/`
@@ -366,6 +415,7 @@ def calculate_velocity(issues_completed, period_days):
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive` - Daily deep dive generator
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate` - Velocity and ETA calculator
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy` - Estimation tracking
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status` - Quick health dashboard with Kafka emission support
 
 ---
 
@@ -375,3 +425,4 @@ def calculate_velocity(issues_completed, period_days):
 - Linear ticket skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 - PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
 - Deep dive reference: `${HOME}/Code/omni_home/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`
+- `onex-linear-relay` CLI — `omnibase_infra` package (OMN-2656)
