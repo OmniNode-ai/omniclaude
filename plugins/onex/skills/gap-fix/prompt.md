@@ -20,7 +20,8 @@ Parse from `$ARGUMENTS`:
 
 **Entry point resolution** (exactly one must resolve):
 1. If `--ticket`: load finding from Linear ticket marker block → synthetic one-finding report
-2. If `--report <run_path>`: load `~/.claude/gap-analysis/<run_path>/<run_id>.json`
+2. If `--report <run_path>`: list `~/.claude/gap-analysis/<run_path>/` → load the `.json` file
+   (there must be exactly one; error if zero or multiple)
 3. If `--latest`: resolve `~/.claude/gap-analysis/latest/` symlink → load its `.json` report
 4. If none provided: resolve `~/.claude/gap-analysis/latest/` (same as `--latest`)
 
@@ -285,7 +286,8 @@ If `--dry-run`: do NOT write decisions.json.
 
 ### 5.2 Append Fix Section to Report .md
 
-Append to the existing `~/.claude/gap-analysis/<run_id>.md` artifact:
+Append to the existing gap-analysis source report at `~/.claude/gap-analysis/<source_run_path>/<report>.md`
+(the same `.md` produced by gap-analysis for this run — not the fix_run_id):
 
 ```markdown
 ## Gap-Fix Run — <fix_run_id>

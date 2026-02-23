@@ -29,6 +29,6 @@ Pass all user-provided flags through as `$ARGUMENTS`.
 /gap-fix --report multi-epic-2026-02-23/run-001
 /gap-fix --ticket OMN-2500                 # Single finding via Linear ticket marker block
 /gap-fix --dry-run                         # Classify + print plan, no side effects
-/gap-fix --choose GAP-b7e2d5f8=A          # Provide decision for a gated finding
-/gap-fix --mode implement-only            # Implement fixes directly, no ticket-pipeline
+/gap-fix --choose GAP-b7e2d5f8=A         # Provide decision for a gated finding
+/gap-fix --mode implement-only           # Implement fixes directly, no ticket-pipeline
 ```
