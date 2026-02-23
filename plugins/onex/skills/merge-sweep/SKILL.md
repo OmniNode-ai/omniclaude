@@ -86,18 +86,21 @@ this gate. Explicit approval required unless `--no-gate` is passed with a valid 
 ## PR Readiness Predicate
 
 ```python
-def is_merge_ready(pr) -> bool:
-    return (
-        pr["mergeable"] == "MERGEABLE"
-        and is_green(pr)          # all REQUIRED checks have conclusion == "SUCCESS"
-        and pr["reviewDecision"] in {"APPROVED", None}
-    )
+def is_merge_ready(pr, require_approval=True) -> bool:
+    if pr["mergeable"] != "MERGEABLE":
+        return False
+    if not is_green(pr):
+        return False
+    if require_approval:
+        # APPROVED = explicit approval; None = no review required by branch policy
+        return pr.get("reviewDecision") in ("APPROVED", None)
+    return True  # --require-approval false: skip review check entirely
 
 def is_green(pr) -> bool:
     required_checks = [c for c in pr["statusCheckRollup"] if c.get("isRequired")]
     if not required_checks:
         return True  # no required checks = green
-    return all(c["conclusion"] == "SUCCESS" for c in required_checks)
+    return all(c.get("conclusion") == "SUCCESS" for c in required_checks)
 ```
 
 `mergeable == "UNKNOWN"` — skip with warning (GitHub is computing merge state). Not an error.

@@ -40,13 +40,7 @@ IF --no-gate is set AND --gate-token is absent:
 
 ## Step 2: Determine Repo Scope
 
-If `--repos` is provided, use that list. Otherwise, discover all repos in omni_home:
-
-```bash
-# Get repos from omni_home manifest or list directories
-ls ~/Code/  # inspect to find omni_home repos
-# Alternatively use a static known list from the workspace
-```
+If `--repos` is provided, use that list. Otherwise, use the canonical omni_home repo list:
 
 Known omni_home repos (update as workspace grows):
 - `OmniNode-ai/omniclaude`
@@ -54,6 +48,9 @@ Known omni_home repos (update as workspace grows):
 - `OmniNode-ai/omniintelligence`
 - `OmniNode-ai/omniarchon`
 - `OmniNode-ai/omnidash`
+
+If a repo manifest exists at `~/Code/omni_home/repos.yaml`, read from it instead of the
+hardcoded list above.
 
 ---
 
@@ -124,7 +121,8 @@ IF candidates is empty:
 IF --dry-run:
   → Print candidates table (see format below)
   → Print: "Dry run complete. No gate posted, no merges performed."
-  → EXIT (no ModelSkillResult emit needed)
+  → Emit ModelSkillResult(status=nothing_to_merge, candidates_found=<N>, merged=0, skipped=0, failed=0)
+  → EXIT
 ```
 
 ### Dry Run Output Format
