@@ -361,9 +361,9 @@ If `--slack-report`:
       "skipped": <bool>
     },
     "fix_prs": {
-      "status": "<fix_result.status>",
-      "prs_fixed": <fix_result.prs_fixed>,
-      "skipped": false
+      "status": "<fix_result.status or 'skipped'>",
+      "prs_fixed": <fix_result.prs_fixed or 0>,
+      "skipped": <bool based on --skip-fix>
     },
     "merge_sweep_phase3": {
       "status": "<merge_phase3_result.status>",

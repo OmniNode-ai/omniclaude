@@ -187,7 +187,7 @@ Written to `~/.claude/pr-queue/<date>/pipeline_<run_id>.json`:
       "prs_reviewed": 8,
       "prs_fixed_and_pushed": 2
     },
-    "fix_prs": {"status": "partial", "prs_fixed": 3, "prs_failed": 1},
+    "fix_prs": {"status": "partial", "prs_fixed": 3, "prs_failed": 1, "skipped": false},
     "merge_sweep_phase3": {"status": "merged", "merged": 3},
     "merge_sweep_phase4": {"status": "merged", "merged": 2}
   },
@@ -213,11 +213,14 @@ Status values:
 **CRITICAL**: Phases run strictly sequentially. No phase starts until the previous completes.
 
 ```
-Phase 1 (review-all-prs) → MUST COMPLETE → Phase 0 re-scan → Phase 2 (fix-prs)
+Phase 1 (review-all-prs) → MUST COMPLETE (includes Phase 0 re-scan) → Phase 2 (fix-prs)
 Phase 2 (fix-prs) → MUST COMPLETE → Phase 3 (gate+merge)
 Phase 3 (merge) → MUST COMPLETE → Phase 4 (conditional merge)
 Phase 4 (merge) → MUST COMPLETE → Phase 5 (report)
 ```
+
+Note: "Phase 0 re-scan" is the final step of Phase 1 (not a separate phase). After
+`review-all-prs` completes, the orchestrator re-runs the scan before handing off to Phase 2.
 
 ## Failure Handling
 
