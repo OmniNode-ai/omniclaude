@@ -1054,46 +1054,52 @@ else:
                 ["git", "rev-parse", "--show-toplevel"],
                 text=True, stderr=subprocess.DEVNULL, cwd=str(_cwd)
             ).strip())
-            _in_main = _git_root == _main_wt
+            _in_main = _git_root.resolve() == _main_wt.resolve()
         except Exception:
             _in_main = False
 
-        if _in_main:
-            # Collect linked worktrees (all except the main one)
-            _linked = [wt for wt in _worktrees[1:] if not wt.get("bare")]
-
-            if not _linked:
-                print(f"Error: Running from the main worktree ({_main_wt}) with no linked worktrees.")
-                print("Create a worktree first:")
-                print(f"  git worktree add <path> -b <branch>")
-                print("Or use --path to specify an existing worktree.")
-                exit(1)
-
-            # Score candidates by commits ahead of origin/main
-            _candidates = []
-            for _wt in _linked:
-                try:
-                    _ahead = subprocess.check_output(
-                        ["git", "-C", str(_wt["path"]), "rev-list", "--count", "origin/main..HEAD"],
-                        text=True, stderr=subprocess.DEVNULL
-                    ).strip()
-                    _candidates.append((_wt["path"], _wt.get("branch", ""), int(_ahead or 0)))
-                except Exception:
-                    _candidates.append((_wt["path"], _wt.get("branch", ""), 0))
-
-            if len(_candidates) == 1:
-                repo_path, _branch, _ahead = _candidates[0]
-                print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
-            else:
-                # Prefer most commits ahead
-                _candidates.sort(key=lambda x: x[2], reverse=True)
-                repo_path, _branch, _ahead = _candidates[0]
-                _others = [str(c[0]) for c in _candidates[1:]]
-                print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
-                print(f"Other candidates (use --path to select): {_others}")
-
     except Exception as _e:
         print(f"Warning: local-review: worktree auto-detection failed ({_e}), using CWD", file=sys.stderr)
+    else:
+        if _in_main:
+            try:
+                # Collect linked worktrees (all except the main one)
+                _linked = [wt for wt in _worktrees[1:] if not wt.get("bare")]
+
+                if not _linked:
+                    print(f"Error: Running from the main worktree ({_main_wt}) with no linked worktrees.")
+                    print("Create a worktree first:")
+                    print(f"  git worktree add <path> -b <branch>")
+                    print("Or use --path to specify an existing worktree.")
+                    exit(1)
+
+                # Score candidates by commits ahead of origin/main
+                _candidates = []
+                for _wt in _linked:
+                    try:
+                        _ahead = subprocess.check_output(
+                            ["git", "-C", str(_wt["path"]), "rev-list", "--count", "origin/main..HEAD"],
+                            text=True, stderr=subprocess.DEVNULL
+                        ).strip()
+                        _candidates.append((_wt["path"], _wt.get("branch", ""), int(_ahead or 0)))
+                    except Exception:
+                        _candidates.append((_wt["path"], _wt.get("branch", ""), 0))
+
+                if len(_candidates) == 1:
+                    repo_path, _branch, _ahead = _candidates[0]
+                    print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
+                else:
+                    # Prefer most commits ahead
+                    _candidates.sort(key=lambda x: x[2], reverse=True)
+                    repo_path, _branch, _ahead = _candidates[0]
+                    _others = [str(c[0]) for c in _candidates[1:]]
+                    print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
+                    print(f"Other candidates (use --path to select): {_others}")
+
+            except Exception as _e2:
+                print(f"Error: local-review: worktree candidate selection failed ({_e2})", file=sys.stderr)
+                print("Cannot determine which worktree to review. Use --path to specify explicitly.")
+                exit(1)
 
 # Helper: git command with optional -C path
 def git_cmd(args_list):
