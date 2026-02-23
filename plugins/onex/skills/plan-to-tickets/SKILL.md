@@ -76,9 +76,10 @@ If file doesn't exist, report error and stop.
 ## Step 2: Detect Plan Structure
 
 **Detection Cascade:**
-1. If `## Phase` sections exist -> use them (canonical)
-2. Else if `## Milestones Overview` table exists -> fall back
-3. Else -> fail fast with clear error
+1. If `## Phase N:` sections exist → use them (canonical)
+2. Else if `## Milestones Overview` table with `**M#**` rows exists → fall back
+3. Else if `**P0 —`/`**P1 —` priority labels exist → use them (priority_labels)
+4. Else → fail fast with clear error listing all three formats
 
 ```python
 import re
@@ -87,7 +88,10 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
     """Detect plan structure and extract entries.
 
     Returns:
-        (structure_type, entries) where structure_type is 'phase_sections' or 'milestone_table'
+        (structure_type, entries) where structure_type is one of:
+          'phase_sections'  — ## Phase N: Title headings
+          'milestone_table' — ## Milestones Overview with **M#** rows
+          'priority_labels' — **P0 — title**: prose blocks
         entries is list of {id, title, content, dependencies}
     """
     # Try Phase sections first (canonical)
@@ -174,6 +178,58 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                 })
 
             return ('milestone_table', entries)
+
+    # Try priority labels (third fallback)
+    # Matches bold P-prefixed labels used in ## Implementation Priority sections:
+    #   **P0 — title**: description...
+    #   **P0 — title** description...
+    # The em-dash (—), en-dash (–), or hyphen (-) are all accepted.
+    priority_pattern = r'^\*\*P(\d+)\s*[—\-–]\s*(.+?)(?:\*\*:|\*\*\s)'
+    priority_matches = list(re.finditer(priority_pattern, content, re.MULTILINE))
+
+    if not priority_matches:
+        # Broader fallback: **P0 — anything** at start of line
+        priority_pattern = r'^\*\*P(\d+)\s*[—\-–]\s*([^\n*]+?)(?:\*\*|$)'
+        priority_matches = list(re.finditer(priority_pattern, content, re.MULTILINE))
+
+    if priority_matches:
+        entries = []
+        for i, match in enumerate(priority_matches):
+            p_num = match.group(1)
+            title = match.group(2).strip().rstrip(':').strip()
+
+            # Content: from start of label line to next P-label or ## heading
+            label_start = match.start()
+            content_start = match.end()
+            if i + 1 < len(priority_matches):
+                end = priority_matches[i + 1].start()
+            else:
+                next_h2 = re.search(r'^## ', content[content_start:], re.MULTILINE)
+                end = content_start + next_h2.start() if next_h2 else len(content)
+
+            # Include the label line for full context in the ticket description
+            p_content = content[label_start:end].strip()
+            deps = parse_dependencies(p_content)
+
+            entries.append({
+                'id': f'P{p_num}',
+                'title': f'P{p_num}: {title}',
+                'content': p_content,
+                'dependencies': deps
+            })
+
+        # Check for duplicate IDs - fail fast
+        seen_ids = {}
+        for entry in entries:
+            if entry['id'] in seen_ids:
+                raise ValueError(
+                    f"Duplicate priority ID '{entry['id']}' found. "
+                    f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
+                    f"Fix plan file to use unique priority numbers."
+                )
+            seen_ids[entry['id']] = entry['title']
+
+        return ('priority_labels', entries)
 
     # No valid structure found - fail fast
     return ('none', [])
@@ -805,17 +861,28 @@ if structure_type == 'none' or not entries:
 Error: No valid plan structure found in {args.plan_file}
 
 Expected one of:
-  1. Phase sections: ## Phase 1: Title, ## Phase 2: Title, ...
-  2. Milestones table: ## Milestones Overview with **M1**, **M2** rows
+  1. Phase sections (canonical):
+       ## Phase 1: Title
+       ## Phase 2: Title
+  2. Priority labels:
+       **P0 — Title**: description...
+       **P1 — Title**: description...
+  3. Milestones table:
+       ## Milestones Overview  (with **M1**, **M2** rows)
 
-Example (Phase sections):
+Example (phase sections):
   # My Plan
   ## Phase 1: Setup
   Description...
   ## Phase 2: Implementation
   Description...
 
-Provide a plan with explicit phases or milestones.
+Example (priority labels — no section headings needed):
+  # My Plan
+  **P0 — shared library**: Implement all helpers...
+  **P1 — exception safety**: Wrap every acquire_claim()...
+
+Provide a plan with one of the above structures.
 """)
     # Stop execution
     raise SystemExit(1)
