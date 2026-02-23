@@ -14,7 +14,7 @@ import sys
 
 def main() -> None:
     try:
-        from omnibase_core.validation.validator_local_paths import (
+        from omnibase_core.validation.validator_local_paths import (  # type: ignore[import-not-found]
             main as validator_main,
         )
     except ModuleNotFoundError:
