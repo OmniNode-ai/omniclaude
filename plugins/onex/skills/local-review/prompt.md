@@ -1002,11 +1002,9 @@ if "--checkpoint" in args:
             checkpoint_arg = None
 
 # Extract --path value (OMN-2608)
-# When running from omni_home (canonical clone registry), auto-detect the active worktree
-# so that /local-review works without requiring an explicit --path every time.
+# When running from the main (canonical) worktree of a repo, auto-detect the active
+# feature worktree using `git worktree list` — no hardcoded paths required.
 repo_path = None  # None means use CWD
-_OMNI_HOME = Path("/Volumes/PRO-G40/Code/omni_home")
-_WORKTREES_BASE = Path("/Volumes/PRO-G40/Code/omni_worktrees")
 
 if "--path" in args:
     idx = args.index("--path")
@@ -1020,51 +1018,75 @@ if "--path" in args:
     if not (repo_path / ".git").exists():
         print(f"Warning: --path directory may not be a git repo: {repo_path}")
 else:
-    # Auto-detect: if CWD is inside omni_home, find the matching worktree
-    _cwd = Path(os.getcwd())
+    # Auto-detect: check if CWD is the main worktree (not a linked worktree).
+    # If so, list all linked worktrees and offer them as candidates.
+    # This uses `git worktree list --porcelain` which works for any repo layout —
+    # no hardcoded paths needed.
     try:
-        _rel = _cwd.relative_to(_OMNI_HOME)
-        _repo_name = _rel.parts[0] if _rel.parts else None
-    except ValueError:
-        _repo_name = None  # Not in omni_home
+        _wt_output = subprocess.check_output(
+            ["git", "worktree", "list", "--porcelain"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip()
 
-    if _repo_name and _WORKTREES_BASE.exists():
-        # Scan worktrees dir for candidates matching this repo
-        _candidates = []
-        for _ticket_dir in sorted(_WORKTREES_BASE.iterdir()):
-            if not _ticket_dir.is_dir():
-                continue
-            _candidate = _ticket_dir / _repo_name
-            if _candidate.is_dir() and (_candidate / ".git").exists():
+        # Parse porcelain output into list of {path, head, branch, bare}
+        _worktrees = []
+        _current = {}
+        for _line in _wt_output.splitlines():
+            if _line.startswith("worktree "):
+                if _current:
+                    _worktrees.append(_current)
+                _current = {"path": Path(_line[9:]), "branch": None, "bare": False}
+            elif _line.startswith("branch "):
+                _current["branch"] = _line[7:]
+            elif _line == "bare":
+                _current["bare"] = True
+        if _current:
+            _worktrees.append(_current)
+
+        _cwd = Path(os.getcwd())
+        _main_wt = _worktrees[0]["path"] if _worktrees else None
+
+        # Are we in the main worktree?
+        _in_main = _main_wt is not None and (
+            _cwd == _main_wt or str(_cwd).startswith(str(_main_wt) + "/")
+        )
+
+        if _in_main:
+            # Collect linked worktrees (all except the main one)
+            _linked = [wt for wt in _worktrees[1:] if not wt.get("bare")]
+
+            if not _linked:
+                print(f"Error: Running from the main worktree ({_main_wt}) with no linked worktrees.")
+                print("Create a worktree first:")
+                print(f"  git worktree add <path> -b <branch>")
+                print("Or use --path to specify an existing worktree.")
+                exit(1)
+
+            # Score candidates by commits ahead of origin/main
+            _candidates = []
+            for _wt in _linked:
                 try:
-                    _branch = subprocess.check_output(
-                        ["git", "-C", str(_candidate), "rev-parse", "--abbrev-ref", "HEAD"],
-                        text=True, stderr=subprocess.DEVNULL
-                    ).strip()
                     _ahead = subprocess.check_output(
-                        ["git", "-C", str(_candidate), "rev-list", "--count", "origin/main..HEAD"],
+                        ["git", "-C", str(_wt["path"]), "rev-list", "--count", "origin/main..HEAD"],
                         text=True, stderr=subprocess.DEVNULL
                     ).strip()
-                    _candidates.append((_ticket_dir.name, _candidate, _branch, int(_ahead or 0)))
+                    _candidates.append((_wt["path"], _wt.get("branch", ""), int(_ahead or 0)))
                 except Exception:
-                    pass
+                    _candidates.append((_wt["path"], _wt.get("branch", ""), 0))
 
-        if not _candidates:
-            print(f"Error: Running from omni_home/{_repo_name} (canonical clone) but no worktrees found.")
-            print(f"Create a worktree first:")
-            print(f"  git -C {_OMNI_HOME}/{_repo_name} worktree add {_WORKTREES_BASE}/<TICKET>/{_repo_name} -b <BRANCH>")
-            print("Or use --path to specify an existing worktree.")
-            exit(1)
-        elif len(_candidates) == 1:
-            _, repo_path, _branch, _ahead = _candidates[0]
-            print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
-        else:
-            # Multiple candidates — prefer most commits ahead, then most recent ticket dir name
-            _candidates.sort(key=lambda x: x[3], reverse=True)
-            _, repo_path, _branch, _ahead = _candidates[0]
-            _others = [str(c[1]) for c in _candidates[1:]]
-            print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
-            print(f"Other candidates (use --path to select): {_others}")
+            if len(_candidates) == 1:
+                repo_path, _branch, _ahead = _candidates[0]
+                print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
+            else:
+                # Prefer most commits ahead
+                _candidates.sort(key=lambda x: x[2], reverse=True)
+                repo_path, _branch, _ahead = _candidates[0]
+                _others = [str(c[0]) for c in _candidates[1:]]
+                print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
+                print(f"Other candidates (use --path to select): {_others}")
+
+    except Exception:
+        pass  # Not a git repo or git unavailable — proceed with CWD
 
 # Helper: git command with optional -C path
 def git_cmd(args_list):
