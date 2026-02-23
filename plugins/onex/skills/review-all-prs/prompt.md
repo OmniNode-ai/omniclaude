@@ -19,6 +19,7 @@ When `/review-all-prs [args]` is invoked:
    - `--large-repo-file-threshold <n>` — default: 5000
    - `--cleanup-orphans` — default: false
    - `--orphan-age-hours <n>` — default: 4
+   - `--max-parallel-repos <n>` — default: 3
    - `--authors <list>` — default: all
 
 3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-c9f`)
@@ -311,10 +312,10 @@ cleanup_failures        = list of {repo, pr, path} entries from Step 6
 
 Status selection:
 - `work_queue` was empty → `nothing_to_review`
-- All reviewed PRs have `result: clean` → `all_clean`
-- Some clean or fixed_and_pushed, some failed or timed_out → `partial`
-- Zero clean or fixed_and_pushed (all failed/timed_out) → `partial` (still partial, work was attempted)
 - All repos failed to scan → `error`
+- All reviewed PRs have `result: clean` OR `result: fixed_and_pushed` → `all_clean`
+- Some PRs succeeded (clean or fixed_and_pushed), some failed or timed_out → `partial`
+- Zero PRs succeeded (all failed or timed_out) → `partial` (work was attempted; still partial, not error)
 
 Build and emit `ModelSkillResult`:
 

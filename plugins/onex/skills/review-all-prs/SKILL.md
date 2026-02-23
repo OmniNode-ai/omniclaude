@@ -42,6 +42,9 @@ args:
   - name: --orphan-age-hours
     description: Marker age threshold for orphan detection (default: 4)
     required: false
+  - name: --max-parallel-repos
+    description: Repos scanned in parallel during scan phase (default: 3)
+    required: false
   - name: --authors
     description: Limit to PRs by these GitHub usernames (comma-separated; default: all)
     required: false
@@ -164,6 +167,7 @@ at this commit). Re-review if head_sha changed (new commits pushed) or last resu
 | `--large-repo-file-threshold` | 5000 | File count threshold for large repo detection |
 | `--cleanup-orphans` | false | Sweeper-only mode: remove orphaned worktrees, then exit |
 | `--orphan-age-hours` | 4 | Marker age threshold for orphan detection (hours) |
+| `--max-parallel-repos` | 3 | Repos scanned in parallel during scan phase |
 | `--authors` | all | Limit to PRs by these GitHub usernames |
 
 ## ModelSkillResult
@@ -200,8 +204,8 @@ Written to `~/.claude/pr-queue/<date>/review-all-prs_<run_id>.json`:
 ```
 
 Status values:
-- `all_clean` — every reviewed PR reached the required clean passes
-- `partial` — some PRs reached clean passes, some failed or timed out
+- `all_clean` — every reviewed PR is `clean` or `fixed_and_pushed` (all succeeded)
+- `partial` — some PRs succeeded (clean or fixed_and_pushed), some failed or timed out
 - `nothing_to_review` — no PRs matched the scan criteria (or all skipped by ledger)
 - `error` — scan failed entirely (no repos scanned successfully)
 
