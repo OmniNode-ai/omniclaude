@@ -657,6 +657,33 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
+    # Update hooks in settings.json to point at new version's hook scripts.
+    # Strips any existing onex hook entries (matched by cache path) then writes
+    # fresh entries for each event type. Other plugins' hooks are preserved.
+    if [[ -f "$SETTINGS_JSON" ]]; then
+        HOOKS_BASE="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts"
+        PRETOOL_MATCHER='^(Edit|Write)$'
+        POSTTOOL_MATCHER='^(Read|Write|Edit|Bash|Glob|Grep|Task|Skill|WebFetch|WebSearch|NotebookEdit|NotebookRead)$'
+
+        cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
+        jq --arg base "$HOOKS_BASE" \
+           --arg ptum "$PRETOOL_MATCHER" \
+           --arg ptoom "$POSTTOOL_MATCHER" '
+          def is_onex: .hooks | map(.command // "") | any(test("plugins/cache/omninode-tools/onex/"));
+          def rm_onex: if . == null then [] else map(select(is_onex | not)) end;
+          def add_cmd(cmd): . + [{"hooks": [{"type": "command", "command": cmd}]}];
+          def add_m(m; cmd): . + [{"matcher": m, "hooks": [{"type": "command", "command": cmd}]}];
+          .hooks |= (. // {}) |
+          .hooks.SessionStart     = ((.hooks.SessionStart     // []) | rm_onex | add_cmd("\($base)/session-start.sh")) |
+          .hooks.SessionEnd       = ((.hooks.SessionEnd       // []) | rm_onex | add_cmd("\($base)/session-end.sh")) |
+          .hooks.UserPromptSubmit = ((.hooks.UserPromptSubmit // []) | rm_onex | add_cmd("\($base)/user-prompt-submit.sh")) |
+          .hooks.PreToolUse       = ((.hooks.PreToolUse       // []) | rm_onex | add_m($ptum;  "\($base)/pre_tool_use_authorization_shim.sh")) |
+          .hooks.PostToolUse      = ((.hooks.PostToolUse      // []) | rm_onex | add_m($ptoom; "\($base)/post-tool-use-quality.sh"))
+        ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+
+        echo -e "${GREEN}  Updated settings.json hooks (5 entries) -> ${HOOKS_BASE}${NC}"
+    fi
+
     # Install register-tab.sh to ~/.claude/ — required by statusline.sh for tab bar.
     # This file is not inside the plugin cache; it must live at ~/.claude/register-tab.sh.
     REGISTER_TAB_SRC="${SOURCE_ROOT}/hooks/scripts/register-tab.sh"
