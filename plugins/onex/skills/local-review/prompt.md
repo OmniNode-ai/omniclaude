@@ -31,7 +31,7 @@ Parse arguments from `$ARGUMENTS`:
 /local-review --no-fix                           # Report only mode
 /local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
 /local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
-/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-2607/omniclaude  # Review a specific worktree
+/local-review --path /path/to/worktrees/OMN-1234/myrepo    # Review a specific worktree
 ```
 
 ---
@@ -1033,23 +1033,30 @@ else:
         _current = {}
         for _line in _wt_output.splitlines():
             if _line.startswith("worktree "):
-                if _current:
+                if _current.get("path"):
                     _worktrees.append(_current)
                 _current = {"path": Path(_line[9:]), "branch": None, "bare": False}
             elif _line.startswith("branch "):
                 _current["branch"] = _line[7:]
             elif _line == "bare":
                 _current["bare"] = True
-        if _current:
+        if _current.get("path"):
             _worktrees.append(_current)
 
         _cwd = Path(os.getcwd())
         _main_wt = _worktrees[0]["path"] if _worktrees else None
 
         # Are we in the main worktree?
-        _in_main = _main_wt is not None and (
-            _cwd == _main_wt or _cwd.is_relative_to(_main_wt)
-        )
+        # Use git rev-parse --show-toplevel for accuracy: for a linked worktree,
+        # --show-toplevel returns the linked path, not the main worktree path.
+        try:
+            _git_root = Path(subprocess.check_output(
+                ["git", "rev-parse", "--show-toplevel"],
+                text=True, stderr=subprocess.DEVNULL, cwd=str(_cwd)
+            ).strip())
+            _in_main = _git_root == _main_wt
+        except Exception:
+            _in_main = False
 
         if _in_main:
             # Collect linked worktrees (all except the main one)
