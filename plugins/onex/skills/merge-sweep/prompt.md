@@ -51,6 +51,7 @@ IF --no-gate is set AND --gate-token is absent:
 IF --since is set:
   → Parse date using parse_since() (see below)
   → IF parse fails: print "ERROR: Cannot parse --since date: <value>. Use YYYY-MM-DD or ISO 8601."
+  → Emit ModelSkillResult(status=error, error="--since parse error: <value>")
   → EXIT immediately
 
 IF --label is set:
