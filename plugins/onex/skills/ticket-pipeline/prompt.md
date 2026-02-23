@@ -393,6 +393,11 @@ if skip_to:
 ### 4. Save State and Announce
 
 ```python
+# Capture whether the state file already existed BEFORE save_state() creates/overwrites it.
+# This is used by the auto-detection block below: after save_state() the file always exists,
+# so the check must happen here to correctly distinguish fresh start vs. resume.
+_state_file_existed = state_path.exists() and not force_run
+
 save_state(state, state_path)
 
 # Write ticket-run ledger entry (prevents duplicate pipeline runs)
@@ -435,12 +440,13 @@ print(f"""
 
 Run ONLY when: no existing pipeline state file AND `--skip-to` was not manually specified AND
 `--force-run` is not set. The detection reads live GitHub state for the ticket's branch and
-infers the correct phase to start from, then sets `skip_to` to that phase so the existing
-`--skip-to` validation/checkpoint logic handles the rest without duplication.
+infers the correct phase to start from. Auto-detection sets `skip_to` and marks prior phases
+complete inline. Section 3 (--skip-to checkpoint validation) has already run at this point
+and will not re-execute.
 
 ```python
 # Auto-detection guard: only run when starting fresh with no manual override
-_state_file_existed = state_path.exists() and not force_run
+# NOTE: _state_file_existed is set in Section 4 (before save_state()) — do not re-assign here.
 if not _state_file_existed and skip_to is None and not force_run:
 
     # Step 1: Determine expected branch name
@@ -453,15 +459,15 @@ if not _state_file_existed and skip_to is None and not force_run:
         _branch = None
 
     if not _branch:
-        # Derive branch name: jonah/omn-{ticket_id_lower}-{slug}
-        # slug = lowercase ticket id without prefix digits, hyphens → underscores removed
-        _tid_lower = ticket_id.lower().replace("-", "")  # e.g. "omn2614"
-        # Best-effort: use just the ticket id as the slug when no title is available
-        _slug = ticket_id.lower().replace("-", "-")
-        _branch = f"jonah/omn-{_tid_lower}-{_slug}"
+        # Derive a fallback branch name when Linear doesn't provide gitBranchName.
+        # Use the lowercased ticket ID directly (e.g., "omn-2614") — keeping the hyphen
+        # so the branch is identifiable. The primary path (gitBranchName from Linear)
+        # is preferred; this fallback only fires when that field is absent.
+        _slug = ticket_id.lower()  # e.g., omn-2614
+        _branch = f"jonah/{_slug}"
 
     # Step 2: Check for an open PR on that branch
-    import subprocess as _sp
+    import subprocess
     try:
         _repo = subprocess.check_output(
             ["git", "remote", "get-url", "origin"], text=True
@@ -505,10 +511,13 @@ if not _state_file_existed and skip_to is None and not force_run:
                 # PR already merged — nothing to do
                 print(f"Auto-detected: Ticket {ticket_id} PR already merged "
                       f"(merged at {_merged_prs[0].get('mergedAt', '?')}). Skipping ticket.")
-                try:
-                    mcp__linear-server__update_issue(id=ticket_id, state="Done")
-                except Exception:
-                    pass
+                if not dry_run:
+                    try:
+                        mcp__linear-server__update_issue(id=ticket_id, state="Done")
+                    except Exception:
+                        pass
+                else:
+                    print(f"[DRY RUN] Would mark {ticket_id} as Done (PR already merged)")
                 release_lock(lock_path)
                 exit(0)
             else:
@@ -615,7 +624,7 @@ if not _state_file_existed and skip_to is None and not force_run:
                   f"(CI: {_ci_status_label}, reviews: {_review_status_label}). "
                   f"Starting at {_auto_start_phase}.")
 
-    # Step 7: Apply auto-detected phase as skip_to (reuses existing --skip-to logic)
+    # Step 6: Apply auto-detected phase as skip_to and mark prior phases complete inline
     if _auto_start_phase is not None:
         skip_to = _auto_start_phase
         # Re-run --skip-to validation now that skip_to is set
