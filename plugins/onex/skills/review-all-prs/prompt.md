@@ -246,6 +246,15 @@ IF work_queue is empty:
   → EXIT
 ```
 
+**Dry-run exit** (if `--dry-run`):
+```
+IF dry_run:
+  → Print: "[DRY RUN] Would review <N> PR(s): <pr_list>"
+  → Print: "Dry run complete. No worktrees created, no commits pushed, no claim files written."
+  → Emit ModelSkillResult(status=nothing_to_review, dry_run=True)
+  → EXIT
+```
+
 ---
 
 ## Step 4: Create Worktrees (Before Dispatch)

@@ -116,7 +116,7 @@ Scan up to `--max-parallel-repos` repos concurrently. For each repo:
 gh pr list \
   --repo <repo> \
   --state open \
-  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,headRepository,headRefOid,author,labels,updatedAt \
+  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt \
   --limit 100
 ```
 
@@ -186,8 +186,9 @@ candidates = []
 hard_failed_claims = []
 
 for pr in candidates_pre_claim:
-    org, repo_name = pr["headRepository"]["nameWithOwner"].split("/")
-    pr_key = canonical_pr_key(org=org, repo=repo_name, number=pr["number"])
+    # Use the base repo (not head repo) so the claim key is consistent for forked PRs.
+    base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
 
     claim = registry.get_claim(pr_key)
     if claim and registry.has_active_claim(pr_key):
@@ -382,8 +383,9 @@ from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr
 registry = ClaimRegistry()
 
 for pr in approved_candidates:
-    org, repo_name = pr["headRepository"]["nameWithOwner"].split("/")
-    pr_key = canonical_pr_key(org=org, repo=repo_name, number=pr["number"])
+    # Use the base repo (not head repo) so the claim key is consistent for forked PRs.
+    base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
 
     acquired = registry.acquire(pr_key, run_id=run_id, action="merge", dry_run=dry_run)
     if not acquired:
@@ -431,7 +433,7 @@ Build `details[]` from merge agent results:
 ```python
 merged_count = sum(1 for d in details if d["result"] == "merged")
 failed_count = sum(1 for d in details if d["result"] == "failed")
-skipped_count = len(skipped_unknown) + len(skipped_filtered) + len(excluded_prs)
+skipped_count = len(skipped_unknown) + len(skipped_filtered) + len(excluded_prs) + len(hard_failed_claims)
 
 if merged_count == len(approved_candidates) and failed_count == 0:
     status = "merged"

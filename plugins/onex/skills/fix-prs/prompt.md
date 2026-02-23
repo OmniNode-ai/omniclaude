@@ -23,7 +23,7 @@ When `/fix-prs [args]` is invoked:
 
 3. **Generate or restore run_id**:
    - If `--run-id` provided AND ledger for that run_id exists: **resume mode** (log "Resuming run <run_id>")
-   - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-b7e`)
+   - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-b7e4f9`)
 
 3a. **Startup resume — clean stale own claims**:
 
@@ -40,7 +40,8 @@ This ensures any interrupted prior execution doesn't leave orphaned claims.
 
 4. **Load ledger**: `~/.claude/pr-queue/<date>/run_<run_id>.json`
    - If `--ignore-ledger`: treat as empty ledger
-   - Date = today's date in YYYY-MM-DD format
+   - If resuming (`--run-id` provided): derive `<date>` from the `run_id` prefix (parse `YYYYMMDD` from `run_id`); if that path doesn't exist, fall back to searching recent `~/.claude/pr-queue/` date dirs for `run_<run_id>.json`.
+   - Otherwise: `<date>` = today's date in YYYY-MM-DD format
 
 ---
 

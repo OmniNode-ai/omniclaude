@@ -57,6 +57,7 @@ Dry-run mode:
 from __future__ import annotations
 
 import json
+import os
 import socket
 import uuid
 from datetime import UTC, datetime
@@ -305,11 +306,41 @@ class ClaimRegistry:
             "action": action,
         }
 
-        tmp_path = claim_file.with_suffix(".tmp")
+        # Write claim using atomic create-if-absent (os.link prevents races).
+        # Generate a unique temp path to avoid collisions between concurrent runs.
+        import uuid as _uuid
+
+        tmp_path = self._claims_dir / f".tmp-{_uuid.uuid4().hex}.json"
         try:
             tmp_path.write_text(json.dumps(claim_data, indent=2))
-            tmp_path.rename(claim_file)
+            try:
+                os.link(tmp_path, claim_file)
+            except FileExistsError:
+                # Another run created the claim between our check and write.
+                # Re-read to see if it's still active and not ours.
+                tmp_path.unlink(missing_ok=True)
+                try:
+                    concurrent = json.loads(claim_file.read_text())
+                    if is_active(concurrent):
+                        concurrent_run = concurrent.get("claimed_by_run", "unknown")
+                        if concurrent_run == run_id:
+                            # We already own it (concurrent acquire from same run) — idempotent.
+                            return True
+                        print(
+                            f"[claim-registry] PR {pr_key} claimed concurrently by run "
+                            f"{concurrent_run} (action: {concurrent.get('action', 'unknown')}). "
+                            f"Skipping.",
+                            flush=True,
+                        )
+                    # Active claim from another run or malformed — do not proceed.
+                    return False
+                except (json.JSONDecodeError, OSError):
+                    return False
+            else:
+                # Link succeeded — we own the claim. Remove temp.
+                tmp_path.unlink(missing_ok=True)
         except OSError as e:
+            tmp_path.unlink(missing_ok=True)
             print(
                 f"[claim-registry] Warning: could not write claim for {pr_key}: {e}",
                 flush=True,
@@ -519,46 +550,5 @@ def get_registry() -> ClaimRegistry:
 
 
 # ---------------------------------------------------------------------------
-# CLI for diagnostics
+# (CLI entrypoint moved to scripts/pr_claim_registry_cli.py)
 # ---------------------------------------------------------------------------
-
-
-def _cli_main() -> None:
-    """Simple CLI for diagnostics: list active claims."""
-    import sys
-
-    registry = ClaimRegistry()
-
-    if len(sys.argv) > 1 and sys.argv[1] == "list":
-        active = registry.list_active_claims()
-        if not active:
-            print("No active claims.")
-        else:
-            print(f"{len(active)} active claim(s):")
-            for claim in active:
-                print(
-                    f"  {claim['pr_key']}"
-                    f" | run: {claim['claimed_by_run']}"
-                    f" | host: {claim['claimed_by_host']}"
-                    f" | action: {claim['action']}"
-                    f" | heartbeat: {claim['last_heartbeat_at']}"
-                )
-    elif len(sys.argv) > 2 and sys.argv[1] == "release":
-        pr_key = sys.argv[2]
-        if len(sys.argv) < 4:
-            print(
-                "Error: release requires <run_id>. "
-                "Use 'list' to find the run_id of the claim to release.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        run_id = sys.argv[3]
-        registry.release(pr_key, run_id)
-        print(f"Released claim for {pr_key} (run: {run_id})")
-    else:
-        print("Usage: pr_claim_registry.py list")
-        print("       pr_claim_registry.py release <pr_key> <run_id>")
-
-
-if __name__ == "__main__":
-    _cli_main()

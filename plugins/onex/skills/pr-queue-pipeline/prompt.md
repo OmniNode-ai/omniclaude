@@ -47,7 +47,10 @@ registry = ClaimRegistry()
 # On explicit resume (same run_id), it cleans stale own claims before doing any work.
 deleted = registry.cleanup_stale_own_claims(run_id, dry_run=dry_run)
 if deleted:
-    print(f"[pr-queue-pipeline] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
+    if dry_run:
+        print(f"[pr-queue-pipeline] Would clean up {len(deleted)} stale claim(s) from prior run: {deleted}")
+    else:
+        print(f"[pr-queue-pipeline] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
 ```
 
 4. **Print header**:

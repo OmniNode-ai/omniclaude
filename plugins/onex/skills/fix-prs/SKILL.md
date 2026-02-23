@@ -118,6 +118,8 @@ def pr_state_unknown(pr) -> bool:
 | `--authors` | all | Limit to PRs by these GitHub usernames (comma-separated) |
 | `--allow-force-push` | false | Permit force-push after rebase; always leaves PR comment |
 | `--ignore-ledger` | false | Bypass idempotency ledger |
+| `--run-id` | generated | Pipeline run ID for claim registry ownership + ledger namespacing |
+| `--dry-run` | false | Zero filesystem writes — no claim files, no ledger updates, no PR mutations |
 
 ## Idempotency Ledger
 

@@ -277,6 +277,8 @@ def is_green(pr):
 | `--gate-attestation` | — | Gate token required with --all-authors (`<slack_ts>:<run_id>`) |
 | `--omn-2613-merged` | false | Confirms OMN-2613 dedup is merged (required with --all-authors) |
 | `--accept-duplicate-ticket-risk` | false | Explicit risk acceptance for duplicate tickets |
+| `--run-id` | generated | Pipeline run ID for claim registry ownership. Generated if not provided. |
+| `--dry-run` | false | Zero filesystem writes — no claim files, no worktree creation, no PR mutations |
 
 ## ModelSkillResult
 

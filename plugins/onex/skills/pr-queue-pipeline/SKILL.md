@@ -25,7 +25,7 @@ args:
     description: Skip Phase 2 (fix-prs); sweep-only mode (default: false)
     required: false
   - name: --dry-run
-    description: Phase 0 only — print plan without executing any phase; includes re-run block with run_id and would-write paths (default: false)
+    description: Phase 0 only — print plan without executing any phase; zero filesystem writes including claims (default: false)
     required: false
   - name: --run-id
     description: Resume a previous run by run_id; skips phases already in phase_completed (default: none — starts fresh run)
