@@ -52,6 +52,14 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      - id: check-local-paths
+        name: check for local path references
+        entry: uv run python -m omnibase_core.validation.validator_local_paths
+        language: system
+        types: [text]
+        pass_filenames: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'
