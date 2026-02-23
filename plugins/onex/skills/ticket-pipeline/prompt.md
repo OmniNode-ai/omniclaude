@@ -651,7 +651,6 @@ if not _state_file_existed and skip_to is None and not force_run:
                 if _review_raw.returncode != 0:
                     print(f"Warning: gh pr view failed (rc={_review_raw.returncode}): {_review_raw.stderr.strip()}")
                     _review_data = {}
-                    _review_decision = ""
                 else:
                     _review_data = json.loads(_review_raw.stdout) if _review_raw.stdout.strip() else {}
             except Exception:

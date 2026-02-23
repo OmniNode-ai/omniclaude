@@ -38,11 +38,6 @@ from omniclaude.hooks.event_registry import (
 from omniclaude.hooks.event_registry import (
     validate_payload as registry_validate_payload,
 )
-
-if TYPE_CHECKING:
-    from omnibase_core.types.type_json import JsonType
-    from omnibase_infra.protocols import ProtocolEventBusLike
-
 from omniclaude.publisher.event_queue import BoundedEventQueue, ModelQueuedEvent
 from omniclaude.publisher.publisher_config import PublisherConfig
 from omniclaude.publisher.publisher_models import (
@@ -53,6 +48,10 @@ from omniclaude.publisher.publisher_models import (
     ModelDaemonQueuedResponse,
     parse_daemon_request,
 )
+
+if TYPE_CHECKING:
+    from omnibase_core.types.type_json import JsonType
+    from omnibase_infra.protocols import ProtocolEventBusLike
 
 logger = logging.getLogger(__name__)
 
