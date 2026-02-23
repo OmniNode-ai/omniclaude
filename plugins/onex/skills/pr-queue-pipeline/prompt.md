@@ -1,6 +1,7 @@
-# PR Queue Pipeline v0 Orchestration
+# PR Queue Pipeline v1 Orchestration
 
-You are the pr-queue-pipeline orchestrator. This prompt defines the complete v0 execution logic.
+You are the pr-queue-pipeline orchestrator. This prompt defines the complete v1 execution logic.
+v1 adds Phase 1 (`review-all-prs`) before the fix phase. Use `--skip-review` for v0 behavior.
 
 ## Initialization
 
@@ -10,6 +11,7 @@ When `/pr-queue-pipeline [args]` is invoked:
 
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: all repos in omni_home
+   - `--skip-review` — default: false
    - `--skip-fix` — default: false
    - `--dry-run` — default: false
    - `--authors <list>` — default: all
@@ -20,14 +22,16 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--allow-force-push` — default: false
    - `--slack-report` — default: false
    - `--max-parallel-repos <n>` — default: 3
-   - `--skip-review` — ignored in v0 (Phase 1 always skipped)
+   - `--clean-runs <n>` — default: 2
+   - `--max-review-minutes <n>` — default: 30
 
 3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
 
 4. **Print header**:
    ```
-   PR Queue Pipeline v0 — run <run_id>
+   PR Queue Pipeline v1 — run <run_id>
    Scope: <repos or "all"> | Authors: <authors or "all">
+   Review phase: <enabled | --skip-review>
    ```
 
 ---
@@ -106,9 +110,48 @@ If both lists are empty (nothing to merge or fix):
 
 ---
 
-## Phase 1: Reserved (Skipped in v0)
+## Phase 1: Review (review-all-prs)
 
-Phase 1 is reserved for `review-all-prs` in v1 (OMN-2620). Skip entirely in v0.
+**INVARIANT**: Phase 1 must complete before Phase 2 begins. Never run review and fix concurrently.
+
+Skip entirely if `--skip-review` is set. Log: "Phase 1 skipped (--skip-review)."
+
+```
+Invoke: Skill(skill="review-all-prs", args={
+  repos: <scope>,
+  max_total_prs: <max_total_prs>,
+  max_parallel_prs: <max_parallel_prs>,
+  max_parallel_repos: <max_parallel_repos>,
+  clean_runs: <clean_runs>,
+  max_review_minutes: <max_review_minutes>,
+  skip_clean: true,    # Pipeline scans merge-ready PRs separately in Phase 0
+  authors: <authors>
+})
+```
+
+Wait for review-all-prs to complete. Capture result:
+- `review_result.prs_reviewed` — total PRs reviewed
+- `review_result.prs_fixed_and_pushed` — PRs that had commits pushed
+- `review_result.status` — for ModelSkillResult phases
+
+If review-all-prs returns `status: error`:
+- Log warning: "Phase 1 review-all-prs returned error: <status>"
+- Continue to Phase 1 re-scan (Phase 0 scan results remain valid)
+
+### Phase 1 Re-Scan
+
+After Phase 1 completes (whether success, partial, or error), **re-run the Phase 0 scan** to
+pick up PRs that became merge-ready as a result of review commits:
+
+```bash
+# Re-run Phase 0 scan for all repos in scope
+# Rebuild merge_ready[] and needs_fix[] with fresh data
+# PRs that got review commits pushed may now be clean/mergeable
+```
+
+Update `merge_ready[]` and `needs_fix[]` with fresh data before Phase 2.
+
+Log: "Phase 1 re-scan complete: <N> merge-ready (was <N_before>), <M> needs fix (was <M_before>)"
 
 ---
 
@@ -134,18 +177,18 @@ Wait for fix-prs to complete. Capture result:
 
 If fix-prs returns `status: error`:
 - Log warning: "Phase 2 fix-prs returned error: <status>"
-- Continue to Phase 3 with pre-Phase-2 `merge_ready[]` list
+- Continue to Phase 3 with post-Phase-1 `merge_ready[]` list
 
 ---
 
 ## Phase 3: Gate + Merge (First Pass)
 
-**Re-query PR state** after Phase 2 to pick up newly fixed PRs:
+**Re-query PR state** after Phases 1+2 to pick up newly fixed or reviewed PRs:
 
 ```bash
 # Re-run Phase 0 scan for all repos in scope
 # Rebuild merge_ready[] with fresh data
-# Newly fixed PRs that are now merge-ready will appear here
+# PRs fixed in Phase 2 or reviewed in Phase 1 that are now merge-ready appear here
 ```
 
 Post single HIGH_RISK Slack gate using `slack-gate`:
@@ -161,6 +204,11 @@ Scope: <repos> | Authors: <authors or "all">
 READY TO MERGE (<N> PRs):
 <for each merge_ready PR:>
   • <repo>#<pr_number> — <title> (<check_count> ✓, <review_status>) SHA: <sha8>
+
+<if review_result.prs_fixed_and_pushed > 0 (and not --skip-review):>
+REVIEWED THIS RUN (Phase 1 applied local-review fixes):
+<for each PR with fixed_and_pushed result:>
+  • <repo>#<pr_number> — <local_review_iterations> iterations, fix pushed
 
 <if phase2 prs_fixed > 0:>
 REPAIRED THIS RUN (Phase 4 sweep picks these up if CI settles):
@@ -254,10 +302,11 @@ Write to `~/.claude/pr-queue/<date>/report_<run_id>.md`:
 
 ```markdown
 # PR Queue Pipeline Report — <run_id>
-Date: <date> | v0 | Scope: <repos> | Authors: <authors>
+Date: <date> | v1 | Scope: <repos> | Authors: <authors>
 
 ## Summary
 - Total PRs merged: <total_merged>
+- Total PRs reviewed: <total_reviewed>
 - Total PRs fixed: <total_fixed>
 - Gate token: <gate_token>
 - Duration: <elapsed>
@@ -266,7 +315,11 @@ Date: <date> | v0 | Scope: <repos> | Authors: <authors>
 <for each merged PR:>
 - <repo>#<pr_number> — <title> | <merge_method> | SHA: <sha8>
 
-## Fixed This Run (<N> PRs — Phase 4 will pick up on next run if CI not yet settled)
+## Reviewed This Run (<N> PRs — Phase 1)
+<for each PR reviewed in Phase 1:>
+- <repo>#<pr_number> — <title> | <local_review_iterations> iterations | <result>
+
+## Fixed This Run (<N> PRs — Phase 2)
 <for each fix-prs fixed PR:>
 - <repo>#<pr_number> — <title> | <phases_fixed>
 
@@ -284,14 +337,14 @@ Date: <date> | v0 | Scope: <repos> | Authors: <authors>
 ```
 
 If `--slack-report`:
-- Post summary to Slack: "PR Queue Pipeline run <run_id> complete: <N> merged, <M> fixed, <K> still blocked"
+- Post summary to Slack: "PR Queue Pipeline run <run_id> complete: <N> merged, <R> reviewed, <M> fixed, <K> still blocked"
 
 ### ModelSkillResult
 
 ```json
 {
   "skill": "pr-queue-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "status": "<status>",
   "run_id": "<run_id>",
   "gate_token": "<gate_token>",
@@ -300,6 +353,12 @@ If `--slack-report`:
       "repos_scanned": <N>,
       "merge_ready": <N>,
       "needs_fix": <N>
+    },
+    "review_all_prs": {
+      "status": "<review_result.status or 'skipped'>",
+      "prs_reviewed": <review_result.prs_reviewed or 0>,
+      "prs_fixed_and_pushed": <review_result.prs_fixed_and_pushed or 0>,
+      "skipped": <bool>
     },
     "fix_prs": {
       "status": "<fix_result.status>",
@@ -316,6 +375,7 @@ If `--slack-report`:
     }
   },
   "total_prs_merged": <phase3_merged + phase4_merged>,
+  "total_prs_reviewed": <review_result.prs_reviewed or 0>,
   "total_prs_fixed": <fix_result.prs_fixed>,
   "total_prs_still_blocked": <still_blocked_count>,
   "total_prs_needs_human": <needs_human_count>,
@@ -331,7 +391,7 @@ nothing_to_do   — Phase 0 found no merge-ready or fixable PRs
 gate_rejected   — Phase 3 gate was rejected
 error           — Phase 0 scan failed or Phase 3 merge-sweep failed
 complete        — At least one PR merged and no errors
-partial         — Some phases completed, some had failures (Phase 2 or Phase 4 errors)
+partial         — Some phases completed, some had failures (Phase 1, 2, or 4 errors)
 ```
 
 Print final summary:
@@ -339,6 +399,7 @@ Print final summary:
 ```
 PR Queue Pipeline Complete — run <run_id>
   Merged:           <total_merged> PRs
+  Reviewed:         <total_reviewed> PRs
   Fixed:            <total_fixed> PRs
   Still blocked:    <still_blocked> PRs
   Needs human:      <needs_human> PRs
@@ -355,6 +416,7 @@ PR Queue Pipeline Complete — run <run_id>
 | Situation | Action |
 |-----------|--------|
 | Phase 0 scan fails entirely | Emit `status: error`, exit |
+| Phase 1 review-all-prs returns error | Log warning, continue to Phase 1 re-scan + Phase 2 |
 | Phase 2 fix-prs returns error | Log warning, continue to Phase 3 |
 | Phase 3 gate rejected | Emit `status: gate_rejected`, write report, exit |
 | Phase 3 merge-sweep fails | Emit `status: error`, write partial report, exit |
@@ -371,7 +433,11 @@ The orchestrator MUST wait for each phase to complete before starting the next:
 ```
 Phase 0 complete
   ↓ (wait)
-Phase 2 complete (or skipped)
+Phase 1 complete (or skipped via --skip-review)
+  ↓ (wait)
+Phase 1 re-scan complete
+  ↓ (wait)
+Phase 2 complete (or skipped via --skip-fix)
   ↓ (wait)
 Phase 3 complete
   ↓ (wait)
@@ -380,4 +446,5 @@ Phase 4 complete (or skipped)
 Phase 5 complete
 ```
 
-Never dispatch fix and merge agents at the same time. Fix must complete before merge begins.
+Never dispatch review, fix, and merge agents at the same time. Each phase must complete before
+the next begins.

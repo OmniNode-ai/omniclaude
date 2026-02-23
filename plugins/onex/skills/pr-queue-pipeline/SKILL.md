@@ -1,7 +1,7 @@
 ---
 name: pr-queue-pipeline
-description: Daily org-wide PR queue drain — fix broken PRs then merge all ready PRs with a single Slack gate (v0; v1 adds review phase)
-version: 0.1.0
+description: Daily org-wide PR queue drain — review all PRs, fix broken PRs, then merge all ready PRs with a single Slack gate (v1 adds review-all-prs as Phase 1; use --skip-review for v0 behavior)
+version: 0.2.0
 category: workflow
 tags:
   - pr
@@ -9,6 +9,7 @@ tags:
   - pipeline
   - merge
   - repair
+  - review
   - org-wide
   - high-risk
 author: OmniClaude Team
@@ -17,11 +18,14 @@ args:
   - name: --repos
     description: Comma-separated repo names to scan (default: all repos in omni_home)
     required: false
+  - name: --skip-review
+    description: Skip Phase 1 (review-all-prs); restores v0 behavior (default: false)
+    required: false
   - name: --skip-fix
-    description: Skip Phase 2 (fix-prs); sweep-only mode
+    description: Skip Phase 2 (fix-prs); sweep-only mode (default: false)
     required: false
   - name: --dry-run
-    description: Phase 0 only — print plan without executing any phase
+    description: Phase 0 only — print plan without executing any phase (default: false)
     required: false
   - name: --authors
     description: "Forwarded to all sub-skills. Use 'me' for first production run to limit blast radius"
@@ -47,43 +51,52 @@ args:
   - name: --max-parallel-repos
     description: Repos scanned in parallel during Phase 0 and re-query; forwarded to sub-skills (default: 3)
     required: false
-  - name: --skip-review
-    description: "Reserved for v1: skip Phase 1 (review-all-prs). Ignored in v0 (Phase 1 always skipped)"
+  - name: --clean-runs
+    description: Required consecutive clean passes per PR forwarded to review-all-prs (default: 2)
+    required: false
+  - name: --max-review-minutes
+    description: Per-PR wall-clock timeout forwarded to review-all-prs (default: 30)
     required: false
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: complete | partial | nothing_to_do | gate_rejected | error"
 ---
 
-# PR Queue Pipeline (v0)
+# PR Queue Pipeline (v1)
 
 ## Overview
 
-The daily "drain the queue" command. Orchestrates `fix-prs` and `merge-sweep` in sequence
-with one HIGH_RISK Slack gate before the merge wave. v0 ships without the review phase
-(v1 adds `review-all-prs` as Phase 1 once it's proven stable).
+The daily "drain the queue" command. v1 adds `review-all-prs` as Phase 1, so the pipeline
+applies code quality fixes before repairing CI/conflicts and merging. Use `--skip-review` to
+restore v0 behavior (Phase 1 skipped).
 
 **Announce at start:** "I'm using the pr-queue-pipeline skill."
 
 **Recommended first run**: `/pr-queue-pipeline --authors me --dry-run` to preview scope.
 
-## v0 Phase Sequence
+**First v1 run**: Add `--skip-review` until `review-all-prs` has been validated standalone.
+
+## v1 Phase Sequence
 
 ```
 Phase 0: SCAN + CLASSIFY + BUILD PLAN
   - Consolidated scan of all repos in scope
   - Build: merge_ready[], needs_fix[]
-  - Apply blast radius caps and ledger checks
+  - Apply blast radius caps
   - Print plan. If --dry-run: stop here.
 
-Phase 1: (reserved for review-all-prs in v1 — SKIPPED in v0)
+Phase 1: REVIEW (sequential — review-all-prs completes before Phase 2 begins)
+  - Invoke: review-all-prs (runs local-review on all open PRs, pushes fix commits)
+  - If --skip-review: Phase 1 skipped entirely
+  - Re-scan after Phase 1 to re-classify PRs that got new commits
 
 Phase 2: FIX (sequential — fix-prs completes before Phase 3 begins)
   - Invoke: fix-prs
+  - If --skip-fix: Phase 2 skipped
   - Wait for completion before proceeding
 
 Phase 3: GATE + MERGE (first pass)
-  - Re-query merge_ready PRs (Phase 2 may have unblocked new ones)
+  - Re-query merge_ready PRs (Phases 1+2 may have unblocked new ones)
   - Post single HIGH_RISK Slack gate
   - On approval: invoke merge-sweep --no-gate --gate-token <gate_token>
 
@@ -101,6 +114,7 @@ Phase 5: REPORT
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--repos` | all | Comma-separated repo names to scan |
+| `--skip-review` | false | Skip Phase 1 (review-all-prs); restores v0 behavior |
 | `--skip-fix` | false | Skip Phase 2 (sweep-only mode) |
 | `--dry-run` | false | Phase 0 only — print plan, no execution |
 | `--authors` | all | Forwarded to all sub-skills. Recommended: `me` for first production run |
@@ -111,9 +125,11 @@ Phase 5: REPORT
 | `--allow-force-push` | false | Forwarded to fix-prs |
 | `--slack-report` | false | Post report summary to Slack after completion |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel (forwarded to sub-skills) |
-| `--skip-review` | — | Reserved for v1; ignored in v0 |
+| `--clean-runs` | 2 | Required consecutive clean passes; forwarded to review-all-prs |
+| `--max-review-minutes` | 30 | Per-PR timeout; forwarded to review-all-prs |
 
-**First production run recommendation**: use `--authors me` to limit blast radius to your own PRs.
+**First production run recommendation**: use `--authors me --skip-review` to limit blast
+radius and skip the review phase until it has been validated standalone.
 
 ## Gate Token Contract
 
@@ -128,7 +144,7 @@ merge-sweep errors if --no-gate is passed without --gate-token (enforced by merg
 All merge results include gate_token for audit trail
 ```
 
-## Slack Gate Message Format
+## Slack Gate Message Format (v1)
 
 ```
 PR Queue Pipeline — run <run_id>
@@ -138,9 +154,11 @@ READY TO MERGE (N PRs):
   • OmniNode-ai/omniclaude#247 — feat: auto-detect (5 ✓, approved) SHA: cbca770e
   • OmniNode-ai/omnibase_core#88 — fix: validator (3 ✓, no review required) SHA: ff3ab12c
 
-REPAIRED THIS RUN (Phase 4 sweep will pick these up if CI settles):
+REVIEWED THIS RUN (Phase 1 applied local-review fixes):
+  • OmniNode-ai/omnidash#19 — 2 iterations, 1 fix committed
+
+REPAIRED THIS RUN (Phase 4 sweep picks these up if CI settles):
   • OmniNode-ai/omniintelligence#34 — fixed merge conflict + CI
-  • OmniNode-ai/omnidash#19 — addressed 3 review comments
 
 Commands:
   approve all                    — merge all N ready PRs
@@ -158,17 +176,23 @@ Written to `~/.claude/pr-queue/<date>/pipeline_<run_id>.json`:
 ```json
 {
   "skill": "pr-queue-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "status": "complete | partial | nothing_to_do | gate_rejected | error",
   "run_id": "<run_id>",
   "gate_token": "<slack_ts>:<run_id>",
   "phases": {
     "scan": {"repos_scanned": 5, "merge_ready": 3, "needs_fix": 4},
+    "review_all_prs": {
+      "status": "all_clean | partial | nothing_to_review | skipped",
+      "prs_reviewed": 8,
+      "prs_fixed_and_pushed": 2
+    },
     "fix_prs": {"status": "partial", "prs_fixed": 3, "prs_failed": 1},
     "merge_sweep_phase3": {"status": "merged", "merged": 3},
     "merge_sweep_phase4": {"status": "merged", "merged": 2}
   },
   "total_prs_merged": 5,
+  "total_prs_reviewed": 8,
   "total_prs_fixed": 3,
   "total_prs_still_blocked": 2,
   "total_prs_needs_human": 1,
@@ -186,9 +210,10 @@ Status values:
 
 ## Phase Sequencing Invariant
 
-**CRITICAL**: Fix and merge phases NEVER run concurrently.
+**CRITICAL**: Phases run strictly sequentially. No phase starts until the previous completes.
 
 ```
+Phase 1 (review-all-prs) → MUST COMPLETE → Phase 0 re-scan → Phase 2 (fix-prs)
 Phase 2 (fix-prs) → MUST COMPLETE → Phase 3 (gate+merge)
 Phase 3 (merge) → MUST COMPLETE → Phase 4 (conditional merge)
 Phase 4 (merge) → MUST COMPLETE → Phase 5 (report)
@@ -199,7 +224,8 @@ Phase 4 (merge) → MUST COMPLETE → Phase 5 (report)
 | Error | Behavior |
 |-------|----------|
 | Phase 0 scan fails | Return `status: error` |
-| Phase 2 fix-prs returns `error` | Log, skip to Phase 3 with pre-fix merge_ready list |
+| Phase 1 review-all-prs returns `error` | Log warning, continue to Phase 2 with pre-Phase-1 state |
+| Phase 2 fix-prs returns `error` | Log warning, continue to Phase 3 with pre-Phase-2 merge_ready list |
 | Phase 3 gate rejected | Return `status: gate_rejected`; write partial report |
 | Phase 3 merge-sweep fails | Return `status: error` |
 | Phase 4 condition not met | Skip Phase 4 silently |
@@ -208,7 +234,8 @@ Phase 4 (merge) → MUST COMPLETE → Phase 5 (report)
 
 ## Sub-skills Used
 
-- `fix-prs` (Phase 2) — autonomously repairs broken PRs
+- `review-all-prs` (Phase 1) — runs local-review on all open PRs, pushes fix commits
+- `fix-prs` (Phase 2) — autonomously repairs broken PRs (conflicts + CI + reviews)
 - `merge-sweep` (Phase 3 + Phase 4) — merges approved PRs with gate bypass
 - `slack-gate` (Phase 3, via merge-sweep) — HIGH_RISK gate for merge approval
 
@@ -218,12 +245,15 @@ Written to `~/.claude/pr-queue/<date>/report_<run_id>.md`:
 
 ```markdown
 # PR Queue Pipeline Report — <run_id>
-Date: <date> | Scope: <repos> | Authors: <authors>
+Date: <date> | v1 | Scope: <repos> | Authors: <authors>
 
 ## Merged (<N> PRs)
 - OmniNode-ai/omniclaude#247 — feat: auto-detect | squash | SHA: cbca770e
 
-## Fixed This Run (<N> PRs)
+## Reviewed This Run (<N> PRs — Phase 1)
+- OmniNode-ai/omnidash#19 — 2 iterations, fixed_and_pushed
+
+## Fixed This Run (<N> PRs — Phase 2)
 - OmniNode-ai/omniintelligence#34 — fixed merge conflict
 
 ## Still Blocked (<N> PRs)
@@ -238,7 +268,7 @@ Date: <date> | Scope: <repos> | Authors: <authors>
 
 ## See Also
 
+- `review-all-prs` skill — Phase 1 sub-skill (local-review on all open PRs)
 - `fix-prs` skill — Phase 2 sub-skill (conflict + CI + review repair)
 - `merge-sweep` skill — Phase 3/4 sub-skill (merge execution with gate bypass)
-- `review-all-prs` skill — Phase 1 in v1 (planned, see OMN-2619)
-- `pr-queue-pipeline` v1 — extends this with `review-all-prs` as Phase 1 (see OMN-2620)
+- `pr-queue-pipeline` v0 (OMN-2618) — predecessor; use `--skip-review` for v0 behavior
