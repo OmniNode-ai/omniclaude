@@ -652,27 +652,31 @@ if not _state_file_existed and skip_to is None and not force_run:
                   f"(CI: {_ci_status_label}, reviews: {_review_status_label}). "
                   f"Starting at {_auto_start_phase}.")
 
-        else:
-            # _repo_slug is None (auth failure or not a git repo) — skip detection entirely
-            print("  Auto-detection skipped (could not query GitHub). Starting from 'implement'.")
-            _auto_start_phase = None
-
     # Step 6: Apply auto-detected phase as skip_to and mark prior phases complete inline
     if _auto_start_phase is not None:
         skip_to = _auto_start_phase
-        # Re-run --skip-to validation now that skip_to is set
-        skip_idx = PHASE_ORDER.index(skip_to)
-        for _phase_name in PHASE_ORDER[:skip_idx]:
-            _phase_data = state["phases"][_phase_name]
-            if _phase_data.get("completed_at"):
-                print(f"Phase '{_phase_name}': already completed at {_phase_data['completed_at']}. OK.")
-                continue
-            # For auto-detected skip, mark prior phases as completed via timestamp
-            # (no checkpoint exists yet — this is a fresh state file)
-            _now_ts = datetime.now(timezone.utc).isoformat()
-            _phase_data["completed_at"] = _now_ts
-            print(f"Auto-detection: marking phase '{_phase_name}' complete (inferred from GitHub state).")
-        save_state(state, state_path)
+        # Inline phase marking — Section 3 has already run and will not re-execute.
+        # We mark prior phases complete directly here without checkpoint validation,
+        # since no checkpoint files exist for auto-detected phases.
+        try:
+            skip_idx = PHASE_ORDER.index(skip_to)
+        except ValueError:
+            print(f"Warning: auto-detected phase '{skip_to}' not in PHASE_ORDER. Starting from 'implement'.")
+            skip_to = None
+            _auto_start_phase = None
+            # fall through to normal phase loop with no skip
+        else:
+            for _phase_name in PHASE_ORDER[:skip_idx]:
+                _phase_data = state["phases"][_phase_name]
+                if _phase_data.get("completed_at"):
+                    print(f"Phase '{_phase_name}': already completed at {_phase_data['completed_at']}. OK.")
+                    continue
+                # For auto-detected skip, mark prior phases as completed via timestamp
+                # (no checkpoint exists yet — this is a fresh state file)
+                _now_ts = datetime.now(timezone.utc).isoformat()
+                _phase_data["completed_at"] = _now_ts
+                print(f"Auto-detection: marking phase '{_phase_name}' complete (inferred from GitHub state).")
+            save_state(state, state_path)
 ```
 
 ---

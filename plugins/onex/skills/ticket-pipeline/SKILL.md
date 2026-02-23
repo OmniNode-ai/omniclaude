@@ -75,7 +75,7 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 
 - **No checkpoint artifacts for skipped phases**: When auto-detection skips to (e.g.) `ci_watch`,
   prior phases are marked complete with timestamps but no checkpoint files are written.
-  A subsequent `--skip-to implement` on the same ticket will fail checkpoint validation.
+  A subsequent `--skip-to <earlier-phase>` on the same ticket will fail checkpoint validation for those phases.
   Use `--force-run` to restart from scratch if needed.
 - **Detection skipped when GitHub is unreachable**: If the repo slug cannot be determined
   or `gh` returns an auth error, detection is skipped entirely and the pipeline starts
