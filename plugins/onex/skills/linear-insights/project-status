@@ -1146,6 +1146,9 @@ PYEOF
     echo "[project-status] Emitting snapshot to onex.evt.linear.snapshot.v1 ..."
     if command -v onex-linear-relay &>/dev/null; then
         onex-linear-relay emit --snapshot-file "$snapshot_file"
+        # Clean up tmp file after successful relay invocation (relay is non-blocking,
+        # exit 0 regardless of Kafka reachability — file no longer needed after this point).
+        rm -f "$snapshot_file"
     else
         echo "[project-status] WARNING: onex-linear-relay not found in PATH." >&2
         echo "[project-status] Install omnibase_infra package or add its .venv/bin to PATH." >&2
