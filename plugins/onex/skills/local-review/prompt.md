@@ -936,6 +936,7 @@ Extract from `$ARGUMENTS` string:
 ```python
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 args = "$ARGUMENTS".split()
