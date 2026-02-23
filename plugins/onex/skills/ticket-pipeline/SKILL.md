@@ -20,13 +20,13 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge)
+    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge). Overrides auto-detection when provided.
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
     required: false
   - name: --force-run
-    description: Break stale lock and start fresh run
+    description: Break stale lock and start fresh run. Bypasses auto-detection entirely.
     required: false
   - name: --auto-merge
     description: Pass auto_merge=true to auto-merge sub-skill (skip HIGH_RISK gate)
@@ -42,6 +42,44 @@ Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> impl
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
+
+## Auto-Detection (OMN-2614)
+
+When no pipeline state file exists and neither `--skip-to` nor `--force-run` is specified, the
+pipeline probes GitHub before the phase loop and infers the correct starting phase automatically.
+
+**Phase inference table:**
+
+| GitHub State | Starting Phase |
+|---|---|
+| Branch exists on remote, no PR | `local_review` |
+| PR open, CI pending / in-progress / failing | `ci_watch` |
+| PR open, CI passing, not yet approved | `pr_review_loop` |
+| PR open, CI passing, approved | `auto_merge` |
+| PR already merged | skip ticket (mark Done, exit) |
+| No branch, no PR | `implement` (normal fresh start) |
+
+**Behavior notes:**
+- Detection runs only once on a fresh state file (no existing `state.yaml`).
+- When an open PR is found, `pr_number` and `pr_url` are pre-populated into
+  `phases.create_pr.artifacts` so Phase 3 detects the existing PR and skips creation.
+- All phases prior to the detected start phase are marked complete with the current timestamp
+  (inferred from GitHub state — no checkpoint files are created for them).
+- `--skip-to PHASE` overrides auto-detection when provided explicitly.
+- `--force-run` bypasses auto-detection entirely and starts from `implement`.
+- If the GitHub repo slug cannot be determined, detection is skipped entirely. If individual
+  queries (PR list, CI checks) fail, detection degrades gracefully — a failed CI query defaults
+  to `ci_watch` (the safe choice for any open PR).
+
+### Limitations
+
+- **No checkpoint artifacts for skipped phases**: When auto-detection skips to (e.g.) `ci_watch`,
+  prior phases are marked complete with timestamps but no checkpoint files are written.
+  A subsequent `--skip-to <earlier-phase>` on the same ticket will fail checkpoint validation for those phases.
+  Use `--force-run` to restart from scratch if needed.
+- **Detection skipped when GitHub is unreachable**: If the repo slug cannot be determined
+  or `gh` returns an auth error, detection is skipped entirely and the pipeline starts
+  from `implement` (normal fresh-run behavior).
 
 ## Quick Start
 

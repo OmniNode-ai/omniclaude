@@ -41,6 +41,7 @@ sys.path.insert(
 )
 from omniclaude.hooks.topics import TopicBase
 
+
 def parse_boolean(value: str) -> bool:
     """Parse boolean value from string."""
     if isinstance(value, bool):

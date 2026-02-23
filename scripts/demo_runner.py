@@ -78,7 +78,7 @@ def _import_emit_client() -> object | None:
     if _EMIT_LIB_DIR.is_dir():
         sys.path.insert(0, str(_EMIT_LIB_DIR))
     try:
-        import emit_client_wrapper  # type: ignore[import-untyped]
+        import emit_client_wrapper
 
         return emit_client_wrapper
     except ImportError:
@@ -161,7 +161,7 @@ def _get_bootstrap() -> str:
 def _get_admin_client() -> object | None:
     """Create a KafkaAdminClient with a short timeout. Returns None on failure."""
     try:
-        from kafka.admin import KafkaAdminClient  # type: ignore[import-untyped]
+        from kafka.admin import KafkaAdminClient
 
         return KafkaAdminClient(
             bootstrap_servers=_get_bootstrap(),
@@ -176,7 +176,7 @@ def _check_kafka_connectivity() -> tuple[bool, str]:
     """Verify Kafka is reachable by listing cluster metadata."""
     bootstrap = _get_bootstrap()
     try:
-        from kafka.admin import KafkaAdminClient  # type: ignore[import-untyped]
+        from kafka.admin import KafkaAdminClient
 
         admin = KafkaAdminClient(
             bootstrap_servers=bootstrap,
@@ -195,7 +195,7 @@ def _check_kafka_connectivity() -> tuple[bool, str]:
 def _check_onex_topics() -> tuple[bool, str]:
     """Verify ONEX event topics exist in Kafka."""
     try:
-        from kafka.admin import KafkaAdminClient  # type: ignore[import-untyped]
+        from kafka.admin import KafkaAdminClient
 
         admin = KafkaAdminClient(
             bootstrap_servers=_get_bootstrap(),
@@ -223,7 +223,7 @@ def _check_onex_topics() -> tuple[bool, str]:
 def _check_intelligence_topics() -> tuple[bool, str]:
     """Verify intelligence command topics exist in Kafka."""
     try:
-        from kafka.admin import KafkaAdminClient  # type: ignore[import-untyped]
+        from kafka.admin import KafkaAdminClient
 
         admin = KafkaAdminClient(
             bootstrap_servers=_get_bootstrap(),
@@ -337,7 +337,7 @@ def cmd_verify(lookback_minutes: int = 10) -> int:
     print(_header("OmniClaude Demo Event Verification"))
 
     try:
-        from kafka import KafkaConsumer, TopicPartition  # type: ignore[import-untyped]
+        from kafka import KafkaConsumer, TopicPartition
     except ImportError:
         print(_fail("kafka-python not installed (run: uv sync --group dev)"))
         return 1
@@ -441,7 +441,7 @@ def cmd_topics() -> int:
     print(_header("OmniClaude Kafka Topics Overview"))
 
     try:
-        from kafka.admin import KafkaAdminClient  # type: ignore[import-untyped]
+        from kafka.admin import KafkaAdminClient
     except ImportError:
         print(_fail("kafka-python not installed (run: uv sync --group dev)"))
         return 1

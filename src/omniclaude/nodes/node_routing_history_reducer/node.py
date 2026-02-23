@@ -18,7 +18,7 @@ implements this protocol.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from omnibase_core.nodes.node_reducer import NodeReducer
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeRoutingHistoryReducer(NodeReducer):
+class NodeRoutingHistoryReducer(NodeReducer[Any, Any]):
     """Reducer node for routing history operations.
 
     Capability: routing.history

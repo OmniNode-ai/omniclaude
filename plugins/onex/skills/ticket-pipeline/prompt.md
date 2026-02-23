@@ -393,6 +393,13 @@ if skip_to:
 ### 4. Save State and Announce
 
 ```python
+# Capture whether a state file already existed before our save_state() call below.
+# NOTE: Section 3 (--skip-to validation) may have already called save_state() if a
+# checkpoint was restored. However, if skip_to is set, auto-detection will not run
+# anyway (guarded by `skip_to is None`), so this value is only meaningful and correct
+# when skip_to is None (the fresh-run case).
+_state_file_existed = state_path.exists() and not force_run
+
 save_state(state, state_path)
 
 # Write ticket-run ledger entry (prevents duplicate pipeline runs)
@@ -427,6 +434,275 @@ print(f"""
 **Current Phase**: {current_phase}
 **Policy**: auto_advance={state['policy']['auto_advance']}, max_review_iterations={state['policy']['max_review_iterations']}
 """)
+```
+
+---
+
+## Step: Auto-Detect Starting Phase (OMN-2614)
+
+Run ONLY when: no existing pipeline state file AND `--skip-to` was not manually specified AND
+`--force-run` is not set. The detection reads live GitHub state for the ticket's branch and
+infers the correct phase to start from. Auto-detection sets `skip_to` and marks prior phases
+complete inline. Section 3 (--skip-to checkpoint validation) has already run at this point
+and will not re-execute.
+
+```python
+# Auto-detection guard: only run when starting fresh with no manual override
+# NOTE: _state_file_existed is set in Section 4 (before save_state()) — do not re-assign here.
+if not _state_file_existed and skip_to is None and not force_run:
+
+    # Step 1: Determine expected branch name
+    # Prefer gitBranchName from Linear ticket fetch; fall back to derived slug.
+    # The ticket fetch in pre_flight hasn't run yet, so attempt a lightweight fetch here.
+    try:
+        _issue = mcp__linear-server__get_issue(id=ticket_id)
+        _branch = (_issue or {}).get("branchName") or (_issue or {}).get("gitBranchName")
+    except Exception:
+        _branch = None
+
+    if not _branch:
+        # Linear did not provide gitBranchName — do not guess a user-specific branch
+        # name (e.g. "jonah/omn-2614" would break for any other user).  Instead, leave
+        # _branch as None so the PR search falls back to searching by ticket ID in the
+        # PR title/body, which is user-agnostic.
+        pass
+
+    # Step 2: Check for an open PR on that branch (or by ticket ID if branch unknown)
+    import subprocess
+    try:
+        _repo = subprocess.check_output(
+            ["git", "remote", "get-url", "origin"], text=True
+        ).strip()
+        # Extract "owner/repo" from remote URL (https or ssh)
+        import re as _re
+        _repo_match = _re.search(r'[:/]([\w.-]+/[\w.-]+?)(?:\.git)?$', _repo)
+        _repo_slug = _repo_match.group(1) if _repo_match else None
+    except Exception:
+        _repo_slug = None
+
+    _auto_start_phase = None  # None means: no auto-detection result, run normally
+
+    if _repo_slug:
+        try:
+            if _branch:
+                _gh_args = ["gh", "pr", "list", "--repo", _repo_slug,
+                            "--head", _branch, "--state", "open",
+                            "--json", "number,url,title,headRefName"]
+            else:
+                # No branch name available — search by ticket ID in PR title/body
+                _gh_args = ["gh", "pr", "list", "--repo", _repo_slug,
+                            "--state", "open", "--search", ticket_id,
+                            "--json", "number,url,title,headRefName"]
+            _open_pr_raw = subprocess.run(
+                _gh_args,
+                capture_output=True, text=True, timeout=20,
+            )
+            if _open_pr_raw.returncode != 0:
+                print(f"Warning: gh pr list failed (auth issue?): {_open_pr_raw.stderr.strip()}")
+                print("Auto-detection skipped — cannot query GitHub. Starting from 'implement'.")
+                _open_prs = []
+                _repo_slug = None  # Prevent further gh queries below
+            else:
+                _open_prs = json.loads(_open_pr_raw.stdout) if _open_pr_raw.stdout.strip() else []
+                if not _branch:
+                    # Filter to PRs whose title or headRefName contains the ticket ID to avoid false positives
+                    _open_prs = [p for p in _open_prs
+                                 if ticket_id.upper() in (p.get("title") or "").upper()
+                                 or ticket_id.upper() in (p.get("headRefName") or "").upper()]
+        except Exception as _e:
+            print(f"Warning: Auto-detection GitHub query failed: {_e}. Starting from beginning.")
+            _open_prs = []
+
+        if _repo_slug and not _open_prs:
+            # Step 3a: No open PR — check for a merged PR (only possible if branch name is known)
+            if _branch:
+                try:
+                    _merged_pr_raw = subprocess.run(
+                        ["gh", "pr", "list", "--repo", _repo_slug,
+                         "--head", _branch, "--state", "merged",
+                         "--json", "number,url,mergedAt"],
+                        capture_output=True, text=True, timeout=20,
+                    )
+                    if _merged_pr_raw.returncode != 0:
+                        print(f"[auto-detect] merged-PR query failed (rc={_merged_pr_raw.returncode})")
+                        _merged_prs = []
+                    else:
+                        _merged_prs = json.loads(_merged_pr_raw.stdout) if _merged_pr_raw.stdout.strip() else []
+                except Exception:
+                    _merged_prs = []
+            else:
+                # No branch name — fall back to ticket ID search for merged PRs
+                try:
+                    _merged_fallback = subprocess.run(
+                        ["gh", "pr", "list", "--repo", _repo_slug, "--state", "merged",
+                         "--search", ticket_id, "--json", "number,url,mergedAt,title,headRefName"],
+                        capture_output=True, text=True, timeout=20,
+                    )
+                    if _merged_fallback.returncode == 0 and _merged_fallback.stdout.strip():
+                        _all_merged = json.loads(_merged_fallback.stdout)
+                        # Filter to PRs whose title or headRefName contains the ticket ID
+                        _merged_prs = [p for p in _all_merged
+                                       if ticket_id.upper() in (p.get("title") or "").upper()
+                                       or ticket_id.upper() in (p.get("headRefName") or "").upper()]
+                    else:
+                        _merged_prs = []
+                except Exception:
+                    _merged_prs = []
+
+            if _merged_prs:
+                # PR already merged — nothing to do
+                print(f"Auto-detected: Ticket {ticket_id} PR already merged "
+                      f"(merged at {_merged_prs[0].get('mergedAt', '?')}). Skipping ticket.")
+                if not dry_run:
+                    try:
+                        mcp__linear-server__update_issue(id=ticket_id, state="Done")
+                    except Exception as e:
+                        print(f"[auto-detect] Linear update failed: {e}")
+                else:
+                    print(f"[DRY RUN] Would mark {ticket_id} as Done (PR already merged)")
+                # Clear ledger entry so future pipeline runs are not blocked by a stale lock
+                try:
+                    _ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+                    _ledger.pop(ticket_id, None)
+                    ledger_path.write_text(json.dumps(_ledger, indent=2))
+                except Exception as _e:
+                    print(f"Warning: Could not clear ledger for {ticket_id}: {_e}")
+                # Remove state file so future runs start clean (not as a stale resume)
+                state_path.unlink(missing_ok=True)
+                release_lock(lock_path)
+                exit(0)
+            else:
+                # No PR exists at all — also check if the branch exists on remote
+                if _branch:
+                    try:
+                        _branch_check = subprocess.run(
+                            ["git", "ls-remote", "--heads", "origin", _branch],
+                            capture_output=True, text=True, timeout=20,
+                        )
+                        _branch_exists = bool(_branch_check.stdout.strip())
+                    except Exception:
+                        _branch_exists = False
+                else:
+                    _branch_exists = False  # _branch unknown — cannot query remote
+
+                if _branch_exists:
+                    # Branch pushed but no PR yet — start at local_review
+                    _auto_start_phase = "local_review"
+                    print(f"Auto-detected: Branch '{_branch}' exists but no PR found. "
+                          f"Starting at local_review.")
+                else:
+                    # Branch doesn't exist either — normal fresh start
+                    _auto_start_phase = None  # run from beginning (implement)
+
+        elif _repo_slug and _open_prs:
+            # Step 4: Open PR found — probe CI and review status
+            _pr = _open_prs[0]
+            _pr_number = _pr["number"]
+            _pr_url = _pr["url"]
+
+            # Record PR info into pipeline state so create_pr phase can skip creation
+            state["phases"]["create_pr"]["artifacts"]["pr_number"] = _pr_number
+            state["phases"]["create_pr"]["artifacts"]["pr_url"] = _pr_url
+            state["phases"]["create_pr"]["artifacts"]["branch_name"] = _pr.get("headRefName") or _branch or ""
+
+            # Check CI status
+            try:
+                _ci_raw = subprocess.run(
+                    ["gh", "pr", "checks", str(_pr_number), "--repo", _repo_slug,
+                     "--json", "name,status,conclusion"],
+                    capture_output=True, text=True, timeout=20,
+                )
+                _ci_checks = json.loads(_ci_raw.stdout) if _ci_raw.stdout.strip() else []
+            except Exception:
+                _ci_checks = []
+
+            # CI is "passing" when every check has conclusion "success", "skipped", or "neutral"
+            _ci_pending = any(
+                c.get("status") in ("in_progress", "queued", "pending")
+                for c in _ci_checks
+            )
+            _ci_failing = bool(_ci_checks) and any(
+                c.get("conclusion") in ("failure", "timed_out", "cancelled")
+                for c in _ci_checks
+            )
+            _ci_passing = bool(_ci_checks) and not _ci_pending and not _ci_failing and all(
+                c.get("conclusion") in ("success", "skipped", "neutral")
+                for c in _ci_checks
+            )
+
+            if not _ci_checks:
+                _ci_status_label = "unknown"
+            elif _ci_pending:
+                _ci_status_label = "pending"
+            elif _ci_failing:
+                _ci_status_label = "failing"
+            elif _ci_passing:
+                _ci_status_label = "passing"
+            else:
+                _ci_status_label = "pending"
+
+            # Check review status
+            try:
+                _review_raw = subprocess.run(
+                    ["gh", "pr", "view", str(_pr_number), "--repo", _repo_slug,
+                     "--json", "reviewDecision,reviews"],
+                    capture_output=True, text=True, timeout=20,
+                )
+                if _review_raw.returncode != 0:
+                    print(f"Warning: gh pr view failed (rc={_review_raw.returncode}): {_review_raw.stderr.strip()}")
+                    _review_data = {}
+                else:
+                    _review_data = json.loads(_review_raw.stdout) if _review_raw.stdout.strip() else {}
+            except Exception:
+                _review_data = {}
+
+            _review_decision = (_review_data.get("reviewDecision") or "").upper()
+            _approved = _review_decision == "APPROVED"
+            _review_status_label = _review_decision.lower() if _review_decision else "none"
+
+            # Step 5: Infer phase from state
+            # | GitHub State                              | auto_start_phase   |
+            # |-------------------------------------------|--------------------|
+            # | Branch exists, no PR                      | local_review       |
+            # | PR open, CI pending/in_progress/failing   | ci_watch           |
+            # | PR open, CI passing, not approved         | pr_review_loop     |
+            # | PR open, CI passing, approved             | auto_merge         |
+            if not _ci_passing:
+                _auto_start_phase = "ci_watch"
+            elif not _approved:
+                _auto_start_phase = "pr_review_loop"
+            else:
+                _auto_start_phase = "auto_merge"
+
+            print(f"Auto-detected: PR #{_pr_number} exists "
+                  f"(CI: {_ci_status_label}, reviews: {_review_status_label}). "
+                  f"Starting at {_auto_start_phase}.")
+
+    # Step 6: Apply auto-detected phase as skip_to and mark prior phases complete inline
+    if _auto_start_phase is not None:
+        skip_to = _auto_start_phase
+        # Inline phase marking — Section 3 has already run and will not re-execute.
+        # We mark prior phases complete directly here without checkpoint validation,
+        # since no checkpoint files exist for auto-detected phases.
+        try:
+            skip_idx = PHASE_ORDER.index(skip_to)
+        except ValueError:
+            print(f"Warning: auto-detected phase '{skip_to}' not in PHASE_ORDER. Starting from the beginning (phase: pre_flight).")
+            skip_to = None
+            _auto_start_phase = None
+            # fall through to normal phase loop with no skip
+        else:
+            for _phase_name in PHASE_ORDER[:skip_idx]:
+                _phase_data = state["phases"][_phase_name]
+                if _phase_data.get("completed_at"):
+                    print(f"Phase '{_phase_name}': already completed at {_phase_data['completed_at']}. OK.")
+                    continue
+                # For auto-detected skip, mark prior phases as completed via timestamp
+                # (no checkpoint exists yet — this is a fresh state file)
+                _now_ts = datetime.now(timezone.utc).isoformat()
+                _phase_data["completed_at"] = _now_ts
+                print(f"Auto-detection: marking phase '{_phase_name}' complete (inferred from GitHub state).")
+            save_state(state, state_path)
 ```
 
 ---
