@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.lib.pattern_quality_scorer import PatternQualityScore, PatternQualityScorer
+
 from config import settings
 
 
@@ -34,7 +35,7 @@ async def test_upsert():
     )
 
     # Database connection string from Pydantic settings
-    database_url = settings.get_postgres_dsn()
+    database_url = settings.get_postgres_dsn()  # noqa: secrets
     print(f"Using database URL: {database_url}")
 
     # Store the score
