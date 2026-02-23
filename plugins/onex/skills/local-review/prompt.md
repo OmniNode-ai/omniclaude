@@ -31,7 +31,7 @@ Parse arguments from `$ARGUMENTS`:
 /local-review --no-fix                           # Report only mode
 /local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
 /local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
-/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-2607/omniclaude  # Review a specific worktree
+/local-review --path /path/to/worktrees/OMN-1234/myrepo    # Review a specific worktree
 ```
 
 ---
@@ -934,6 +934,11 @@ def _write_suppression_entry(file_context, description, status, reason):
 
 Extract from `$ARGUMENTS` string:
 ```python
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 args = "$ARGUMENTS".split()
 uncommitted = "--uncommitted" in args
 no_fix = "--no-fix" in args
@@ -1002,21 +1007,9 @@ if "--checkpoint" in args:
             checkpoint_arg = None
 
 # Extract --path value (OMN-2608)
+# When running from the main (canonical) worktree of a repo, auto-detect the active
+# feature worktree using `git worktree list` — no hardcoded paths required.
 repo_path = None  # None means use CWD
-if "--path" in args:
-    idx = args.index("--path")
-    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --path requires a directory argument")
-        exit(1)
-    from pathlib import Path
-    repo_path = Path(args[idx + 1]).resolve()
-    if not repo_path.is_dir():
-        print(f"Error: --path directory does not exist: {repo_path}")
-        exit(1)
-    if not (repo_path / ".git").exists():
-        # Could be a worktree (has .git file, not dir) — check for .git file too
-        if not (repo_path / ".git").exists():
-            print(f"Warning: --path directory may not be a git repo: {repo_path}")
 
 # Helper: git command with optional -C path
 def git_cmd(args_list):
@@ -1024,6 +1017,104 @@ def git_cmd(args_list):
     if repo_path is not None:
         return ["git", "-C", str(repo_path)] + args_list
     return ["git"] + args_list
+
+if "--path" in args:
+    idx = args.index("--path")
+    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
+        print("Error: --path requires a directory argument")
+        exit(1)
+    repo_path = Path(args[idx + 1]).resolve()
+    if not repo_path.is_dir():
+        print(f"Error: --path directory does not exist: {repo_path}")
+        exit(1)
+    if not (repo_path / ".git").exists():
+        print(f"Warning: --path directory may not be a git repo: {repo_path}")
+else:
+    # Auto-detect: check if CWD is the main worktree (not a linked worktree).
+    # If so, list all linked worktrees and offer them as candidates.
+    # This uses `git worktree list --porcelain` which works for any repo layout —
+    # no hardcoded paths needed.
+    try:
+        _wt_output = subprocess.check_output(
+            ["git", "worktree", "list", "--porcelain"],
+            text=True, stderr=subprocess.DEVNULL
+        ).strip()
+
+        # Parse porcelain output into list of {path, head, branch, bare}
+        _worktrees = []
+        _current = {}
+        for _line in _wt_output.splitlines():
+            if _line.startswith("worktree "):
+                if _current.get("path"):
+                    _worktrees.append(_current)
+                _current = {"path": Path(_line[9:]), "branch": None, "bare": False}
+            elif _line.startswith("branch "):
+                _current["branch"] = _line[7:]
+            elif _line == "bare":
+                _current["bare"] = True
+        if _current.get("path"):
+            _worktrees.append(_current)
+
+        _cwd = Path(os.getcwd())
+        _main_wt = _worktrees[0]["path"] if _worktrees else None
+
+        # Are we in the main worktree?
+        # Use git rev-parse --show-toplevel for accuracy: for a linked worktree,
+        # --show-toplevel returns the linked path, not the main worktree path.
+        if _main_wt is None:
+            _in_main = False
+        else:
+            try:
+                _git_root = Path(subprocess.check_output(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    text=True, stderr=subprocess.DEVNULL, cwd=str(_cwd)
+                ).strip())
+                _in_main = _git_root.resolve() == _main_wt.resolve()
+            except Exception:
+                _in_main = False
+
+    except Exception as _e:
+        print(f"Warning: local-review: worktree auto-detection failed ({_e}), using CWD", file=sys.stderr)
+    else:
+        if _in_main:
+            try:
+                # Collect linked worktrees (all except the main one)
+                _linked = [wt for wt in _worktrees[1:] if not wt.get("bare")]
+
+                if not _linked:
+                    print(f"Error: Running from the main worktree ({_main_wt}) with no linked worktrees.")
+                    print("Create a worktree first:")
+                    print(f"  git worktree add <path> -b <branch>")
+                    print("Or use --path to specify an existing worktree.")
+                    exit(1)
+
+                # Score candidates by commits ahead of origin/main
+                _candidates = []
+                for _wt in _linked:
+                    try:
+                        _ahead = subprocess.check_output(
+                            ["git", "-C", str(_wt["path"]), "rev-list", "--count", "origin/main..HEAD"],
+                            text=True, stderr=subprocess.DEVNULL
+                        ).strip()
+                        _candidates.append((_wt["path"], _wt.get("branch", ""), int(_ahead or 0)))
+                    except Exception:
+                        _candidates.append((_wt["path"], _wt.get("branch", ""), 0))
+
+                if len(_candidates) == 1:
+                    repo_path, _branch, _ahead = _candidates[0]
+                    print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
+                else:
+                    # Prefer most commits ahead
+                    _candidates.sort(key=lambda x: x[2], reverse=True)
+                    repo_path, _branch, _ahead = _candidates[0]
+                    _others = [str(c[0]) for c in _candidates[1:]]
+                    print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
+                    print(f"Other candidates (use --path to select): {_others}")
+
+            except Exception as _e2:
+                print(f"Error: local-review: worktree candidate selection failed ({_e2})", file=sys.stderr)
+                print("Cannot determine which worktree to review. Use --path to specify explicitly.")
+                exit(1)
 
 # Extract --flag-false-positive value (OMN-2514)
 # This flag causes an immediate write to the registry and exits (does not start the review loop)
