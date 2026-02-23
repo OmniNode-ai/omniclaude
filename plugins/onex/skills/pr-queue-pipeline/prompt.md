@@ -1,0 +1,383 @@
+# PR Queue Pipeline v0 Orchestration
+
+You are the pr-queue-pipeline orchestrator. This prompt defines the complete v0 execution logic.
+
+## Initialization
+
+When `/pr-queue-pipeline [args]` is invoked:
+
+1. **Announce**: "I'm using the pr-queue-pipeline skill."
+
+2. **Parse arguments** from `$ARGUMENTS`:
+   - `--repos <list>` — default: all repos in omni_home
+   - `--skip-fix` — default: false
+   - `--dry-run` — default: false
+   - `--authors <list>` — default: all
+   - `--max-total-prs <n>` — default: 20
+   - `--max-total-merges <n>` — default: 10
+   - `--max-parallel-prs <n>` — default: 5
+   - `--merge-method <method>` — default: squash
+   - `--allow-force-push` — default: false
+   - `--slack-report` — default: false
+   - `--max-parallel-repos <n>` — default: 3
+   - `--skip-review` — ignored in v0 (Phase 1 always skipped)
+
+3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
+
+4. **Print header**:
+   ```
+   PR Queue Pipeline v0 — run <run_id>
+   Scope: <repos or "all"> | Authors: <authors or "all">
+   ```
+
+---
+
+## Phase 0: Scan + Classify + Build Plan
+
+Scan all repos in scope. For each repo (up to `--max-parallel-repos` concurrently):
+
+```bash
+gh pr list \
+  --repo <repo> \
+  --state open \
+  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,headRefOid,author \
+  --limit 100
+```
+
+Apply predicates to classify each PR:
+
+```python
+def is_merge_ready(pr):
+    return (
+        pr["mergeable"] == "MERGEABLE"
+        and is_green(pr)
+        and pr.get("reviewDecision") in ("APPROVED", None)
+    )
+
+def needs_work(pr):
+    return (
+        pr["mergeable"] == "CONFLICTING"
+        or not is_green(pr)
+        or pr.get("reviewDecision") == "CHANGES_REQUESTED"
+    )
+
+def is_green(pr):
+    required = [c for c in pr["statusCheckRollup"] if c.get("isRequired", False)]
+    if not required:
+        return True
+    return all(c.get("conclusion") == "SUCCESS" for c in required)
+```
+
+Apply `--authors` filter if set.
+
+Build:
+- `merge_ready[]` — PRs ready to merge immediately
+- `needs_fix[]` — PRs needing repair (conflicts/CI/reviews)
+- `skipped_unknown[]` — PRs with UNKNOWN mergeable state
+
+Apply blast radius caps:
+- `needs_fix[]`: truncate to `--max-total-prs`
+- `merge_ready[]`: truncate to `--max-total-merges`
+
+### Phase 0 Output
+
+```
+Phase 0 Complete — Plan:
+  READY TO MERGE:   <N> PRs (capped at <max_total_merges>)
+  NEEDS FIX:        <M> PRs (capped at <max_total_prs>)
+  UNKNOWN STATE:    <K> PRs (skipped)
+  SKIPPED LEDGER:   <J> PRs (already processed, no change)
+```
+
+If `--dry-run`:
+```
+  → Print full plan (PR titles, repos, reasons)
+  → Print: "Dry run complete. No phases executed."
+  → Emit ModelSkillResult(status=nothing_to_do, phases={scan: {...}})
+  → EXIT
+```
+
+If both lists are empty (nothing to merge or fix):
+```
+  → Print: "Nothing to do — all PRs are merge-ready, UNKNOWN, or already done."
+  → Emit ModelSkillResult(status=nothing_to_do)
+  → EXIT
+```
+
+---
+
+## Phase 1: Reserved (Skipped in v0)
+
+Phase 1 is reserved for `review-all-prs` in v1 (OMN-2620). Skip entirely in v0.
+
+---
+
+## Phase 2: Fix Phase (Sequential)
+
+**INVARIANT**: Phase 2 must complete before Phase 3 begins. Never run fix and merge concurrently.
+
+Skip if `--skip-fix` is set.
+
+```
+Invoke: Skill(skill="fix-prs", args={
+  repos: <scope>,
+  max_total_prs: <max_total_prs>,
+  max_parallel_prs: <max_parallel_prs>,
+  allow_force_push: <allow_force_push>,
+  authors: <authors>
+})
+```
+
+Wait for fix-prs to complete. Capture result:
+- `fix_result.prs_fixed` — how many PRs were repaired
+- `fix_result.status` — for ModelSkillResult phases
+
+If fix-prs returns `status: error`:
+- Log warning: "Phase 2 fix-prs returned error: <status>"
+- Continue to Phase 3 with pre-Phase-2 `merge_ready[]` list
+
+---
+
+## Phase 3: Gate + Merge (First Pass)
+
+**Re-query PR state** after Phase 2 to pick up newly fixed PRs:
+
+```bash
+# Re-run Phase 0 scan for all repos in scope
+# Rebuild merge_ready[] with fresh data
+# Newly fixed PRs that are now merge-ready will appear here
+```
+
+Post single HIGH_RISK Slack gate using `slack-gate`:
+
+```
+Skill(skill="slack-gate", args={
+  gate_id: sha256("<run_id>:pipeline-phase3")[:12],
+  risk: "HIGH_RISK",
+  message: """
+PR Queue Pipeline — run <run_id>
+Scope: <repos> | Authors: <authors or "all">
+
+READY TO MERGE (<N> PRs):
+<for each merge_ready PR:>
+  • <repo>#<pr_number> — <title> (<check_count> ✓, <review_status>) SHA: <sha8>
+
+<if phase2 prs_fixed > 0:>
+REPAIRED THIS RUN (Phase 4 sweep picks these up if CI settles):
+<for each fixed PR:>
+  • <repo>#<pr_number> — <repair_summary>
+
+Commands:
+  approve all                    — merge all <N> ready PRs
+  approve except <repo>#<pr>     — merge all except listed
+  skip <repo>#<pr>               — exclude specific PR, merge rest
+  reject                         — cancel merge phase
+
+This is HIGH_RISK — silence will NOT auto-advance.
+  """
+})
+```
+
+Store: `gate_token = "<slack_message_ts>:<run_id>"`
+
+On gate rejection (`explicit_reject` or `gate_rejected`):
+```
+→ Record gate_token in result
+→ Write partial report (Phase 5)
+→ Emit ModelSkillResult(status=gate_rejected)
+→ EXIT
+```
+
+On approval, parse approved candidates (support `approve except`, `skip`).
+
+Invoke merge-sweep in bypass mode:
+
+```
+Invoke: Skill(skill="merge-sweep", args={
+  repos: <scope>,
+  no_gate: true,
+  gate_token: <gate_token>,
+  max_total_merges: <max_total_merges>,
+  max_parallel_prs: <max_parallel_prs>,
+  merge_method: <merge_method>,
+  authors: <authors>
+})
+```
+
+Wait for merge-sweep to complete. Capture `merge_phase3_result`.
+
+---
+
+## Phase 4: Conditional Second Merge Pass
+
+**Condition to run Phase 4** (ALL must be true):
+1. Phase 2 `prs_fixed > 0` (fix-prs repaired at least one PR)
+2. At least one of those repaired PRs is now `merge_ready` after Phase 3
+
+Check condition:
+```python
+newly_ready = [pr for pr in phase2_fixed_prs if is_merge_ready(re_query(pr))]
+run_phase4 = len(newly_ready) > 0
+```
+
+If condition is not met:
+- Skip Phase 4 silently
+- Log: "Phase 4 skipped — no newly-fixed PRs are merge-ready"
+
+If condition is met:
+```
+Invoke: Skill(skill="merge-sweep", args={
+  repos: <scope>,
+  no_gate: true,
+  gate_token: <gate_token>,  # Reuse Phase 3 gate_token
+  max_total_merges: <remaining_merge_budget>,  # max_total_merges - phase3_merged
+  max_parallel_prs: <max_parallel_prs>,
+  merge_method: <merge_method>
+})
+```
+
+`remaining_merge_budget = max_total_merges - merge_phase3_result.merged`
+
+If remaining_merge_budget <= 0: skip Phase 4 (global cap reached).
+
+Wait for merge-sweep to complete. Capture `merge_phase4_result`.
+
+---
+
+## Phase 5: Report
+
+Build org queue report and ModelSkillResult.
+
+### Report File
+
+Write to `~/.claude/pr-queue/<date>/report_<run_id>.md`:
+
+```markdown
+# PR Queue Pipeline Report — <run_id>
+Date: <date> | v0 | Scope: <repos> | Authors: <authors>
+
+## Summary
+- Total PRs merged: <total_merged>
+- Total PRs fixed: <total_fixed>
+- Gate token: <gate_token>
+- Duration: <elapsed>
+
+## Merged (<N> PRs)
+<for each merged PR:>
+- <repo>#<pr_number> — <title> | <merge_method> | SHA: <sha8>
+
+## Fixed This Run (<N> PRs — Phase 4 will pick up on next run if CI not yet settled)
+<for each fix-prs fixed PR:>
+- <repo>#<pr_number> — <title> | <phases_fixed>
+
+## Still Blocked (<N> PRs)
+<for each PR still not merge-ready:>
+- <repo>#<pr_number> — <title> | reason: <reason>
+
+## Needs Human Review (<N> PRs)
+<for each needs_human PR:>
+- <repo>#<pr_number> — retry_count: <N>, no progress
+
+## Blocked External (<N> PRs)
+<for each blocked_external PR:>
+- <repo>#<pr_number> — blocked_check: <check_name>
+```
+
+If `--slack-report`:
+- Post summary to Slack: "PR Queue Pipeline run <run_id> complete: <N> merged, <M> fixed, <K> still blocked"
+
+### ModelSkillResult
+
+```json
+{
+  "skill": "pr-queue-pipeline",
+  "version": "0.1.0",
+  "status": "<status>",
+  "run_id": "<run_id>",
+  "gate_token": "<gate_token>",
+  "phases": {
+    "scan": {
+      "repos_scanned": <N>,
+      "merge_ready": <N>,
+      "needs_fix": <N>
+    },
+    "fix_prs": {
+      "status": "<fix_result.status>",
+      "prs_fixed": <fix_result.prs_fixed>,
+      "skipped": false
+    },
+    "merge_sweep_phase3": {
+      "status": "<merge_phase3_result.status>",
+      "merged": <merge_phase3_result.merged>
+    },
+    "merge_sweep_phase4": {
+      "status": "<merge_phase4_result.status or 'skipped'>",
+      "merged": <merge_phase4_result.merged or 0>
+    }
+  },
+  "total_prs_merged": <phase3_merged + phase4_merged>,
+  "total_prs_fixed": <fix_result.prs_fixed>,
+  "total_prs_still_blocked": <still_blocked_count>,
+  "total_prs_needs_human": <needs_human_count>,
+  "total_prs_blocked_external": <blocked_external_count>,
+  "report_path": "~/.claude/pr-queue/<date>/report_<run_id>.md"
+}
+```
+
+### Status Selection
+
+```
+nothing_to_do   — Phase 0 found no merge-ready or fixable PRs
+gate_rejected   — Phase 3 gate was rejected
+error           — Phase 0 scan failed or Phase 3 merge-sweep failed
+complete        — At least one PR merged and no errors
+partial         — Some phases completed, some had failures (Phase 2 or Phase 4 errors)
+```
+
+Print final summary:
+
+```
+PR Queue Pipeline Complete — run <run_id>
+  Merged:           <total_merged> PRs
+  Fixed:            <total_fixed> PRs
+  Still blocked:    <still_blocked> PRs
+  Needs human:      <needs_human> PRs
+  Blocked external: <blocked_external> PRs
+  Status:           <status>
+  Gate:             <gate_token>
+  Report:           ~/.claude/pr-queue/<date>/report_<run_id>.md
+```
+
+---
+
+## Error Handling
+
+| Situation | Action |
+|-----------|--------|
+| Phase 0 scan fails entirely | Emit `status: error`, exit |
+| Phase 2 fix-prs returns error | Log warning, continue to Phase 3 |
+| Phase 3 gate rejected | Emit `status: gate_rejected`, write report, exit |
+| Phase 3 merge-sweep fails | Emit `status: error`, write partial report, exit |
+| Phase 4 condition not met | Skip Phase 4 silently |
+| Phase 4 merge-sweep fails | Emit `status: partial` (Phase 3 succeeded) |
+| Report write fails | Log warning; return result (non-blocking) |
+
+---
+
+## Sequencing Invariant (Critical)
+
+The orchestrator MUST wait for each phase to complete before starting the next:
+
+```
+Phase 0 complete
+  ↓ (wait)
+Phase 2 complete (or skipped)
+  ↓ (wait)
+Phase 3 complete
+  ↓ (wait)
+Phase 4 complete (or skipped)
+  ↓ (wait)
+Phase 5 complete
+```
+
+Never dispatch fix and merge agents at the same time. Fix must complete before merge begins.
