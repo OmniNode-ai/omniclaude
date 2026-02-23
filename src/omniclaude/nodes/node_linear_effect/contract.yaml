@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeLinearEffect
+#
+# Capability-oriented effect node for Linear ticketing operations.
+# Named by capability ("linear.ticketing"), not by vendor.
+# Principle: "I'm interested in what you do, not what you are"
+#
+# INVARIANT: No direct Linear API calls (LinearClient, linear_client) are
+# permitted outside this effect node.
+
+# Contract identifiers
+name: node_linear_effect
+contract_name: node_linear_effect
+node_name: node_linear_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for Linear ticketing operations.
+  Handles ticket fetch, status update, and comment operations.
+  This is the only node permitted to call the Linear API.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelLinearRequest
+  module: omniclaude.nodes.node_linear_effect.models
+
+output_model:
+  name: ModelLinearResult
+  module: omniclaude.nodes.node_linear_effect.models
+
+# Capabilities
+capabilities:
+  - name: linear.ticketing
+    description: Linear ticket operations
+    version: 1.0.0
+
+  - name: linear.ticketing.ticket_get
+    description: Fetch a Linear ticket by ID
+
+  - name: linear.ticketing.ticket_update_status
+    description: Update the workflow status of a ticket
+
+  - name: linear.ticketing.ticket_add_comment
+    description: Add a comment to a ticket
+
+  - name: linear.ticketing.ticket_create
+    description: Create a new Linear ticket
+
+# IO operations
+io_operations:
+  - operation: ticket_get
+    description: Fetch a Linear ticket by identifier
+    protocol_method: ticket_get
+    input_fields:
+      - ticket_id: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLinearResult
+    idempotent: true
+
+  - operation: ticket_update_status
+    description: Update the workflow status of a ticket
+    protocol_method: ticket_update_status
+    input_fields:
+      - ticket_id: str
+      - status: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLinearResult
+    idempotent: true
+
+  - operation: ticket_add_comment
+    description: Add a comment to a Linear ticket
+    protocol_method: ticket_add_comment
+    input_fields:
+      - ticket_id: str
+      - body: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLinearResult
+    idempotent: false
+
+  - operation: ticket_create
+    description: Create a new Linear ticket
+    protocol_method: ticket_create
+    input_fields:
+      - title: str
+      - description: str
+      - team_id: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLinearResult
+    idempotent: false
+
+# Dependencies
+dependencies:
+  - name: protocol_linear_ticketing
+    type: protocol
+    class_name: ProtocolLinearTicketing
+    module: omniclaude.nodes.node_linear_effect.protocols
+    pluggable: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: linear_api
+  backends:
+    - backend: linear_api
+      handler_key: linear_api
+
+# Invariants
+invariants:
+  - no_linear_client_outside_handler: true
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 500
+    max_delay_ms: 10000
+    exponential_base: 2
+    retry_on:
+      - LinearApiRateLimitError
+      - LinearApiNetworkError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2593
+  maturity: stub
+  tags:
+    - effect
+    - linear
+    - ticketing

@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeLocalCodingOrchestrator
+#
+# Orchestrator for the local coding workflow. Reacts only to structured
+# results from downstream effect nodes.
+#
+# INVARIANT: This node must never contain subprocess calls or API client imports.
+# All external I/O is delegated to effect nodes:
+#   - NodeGitEffect: git operations
+#   - NodeClaudeCodeSessionEffect: Claude Code session management
+#   - NodeLocalLlmInferenceEffect: local LLM inference
+#   - NodeLinearEffect: Linear ticket operations
+
+# Contract identifiers
+name: node_local_coding_orchestrator
+contract_name: node_local_coding_orchestrator
+node_name: node_local_coding_orchestrator
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: ORCHESTRATOR
+
+# Description
+description: >
+  Orchestrator for local coding workflow coordination.
+  Reacts only to structured results from downstream effect nodes.
+  Has zero subprocess calls and zero direct API client imports.
+
+# Capabilities
+capabilities:
+  - name: local_coding.orchestration
+    description: Coordinate local coding workflow across effect nodes
+    version: 1.0.0
+
+# Downstream effect nodes this orchestrator coordinates
+downstream_effects:
+  - node: NodeGitEffect
+    capability: git.operations
+    description: All git/gh operations (branch, commit, push, PR lifecycle)
+
+  - node: NodeClaudeCodeSessionEffect
+    capability: claude_code.session
+    description: Claude Code session management, emits ModelSkillResult
+
+  - node: NodeLocalLlmInferenceEffect
+    capability: local_llm.inference
+    description: Local LLM inference, emits ModelSkillResult
+
+  - node: NodeLinearEffect
+    capability: linear.ticketing
+    description: Linear ticket operations
+
+# Orchestration invariants
+invariants:
+  - no_subprocess_calls: true
+  - no_api_client_imports: true
+  - react_to_structured_results_only: true
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2593
+  maturity: stub
+  tags:
+    - orchestrator
+    - local-coding
+    - workflow

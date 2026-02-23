@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeTicketingEffect
+#
+# Abstract base effect node for ticketing system operations.
+# Named by capability ("ticketing.base").
+#
+# Concrete implementations:
+#   - NodeLinearEffect: Linear-specific ticketing via ProtocolLinearTicketing
+#
+# Use this node when the caller is vendor-agnostic (e.g., an orchestrator
+# that should work with any ticketing backend).
+
+# Contract identifiers
+name: node_ticketing_effect
+contract_name: node_ticketing_effect
+node_name: node_ticketing_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Abstract base effect node for ticketing system operations.
+  Provides a vendor-agnostic interface for ticket fetch, status update,
+  and comment operations. Concrete subclasses implement vendor-specific behavior.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelTicketingRequest
+  module: omniclaude.nodes.node_ticketing_effect.models
+
+output_model:
+  name: ModelTicketingResult
+  module: omniclaude.nodes.node_ticketing_effect.models
+
+# Capabilities
+capabilities:
+  - name: ticketing.base
+    description: Abstract ticketing system operations
+    version: 1.0.0
+
+  - name: ticketing.base.ticket_get
+    description: Fetch a ticket by vendor-native identifier
+
+  - name: ticketing.base.ticket_update_status
+    description: Update ticket workflow status
+
+  - name: ticketing.base.ticket_add_comment
+    description: Append a comment to a ticket
+
+# IO operations
+io_operations:
+  - operation: ticket_get
+    description: Fetch a ticket by identifier
+    protocol_method: ticket_get
+    input_fields:
+      - ticket_id: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelTicketingResult
+    idempotent: true
+
+  - operation: ticket_update_status
+    description: Update the workflow status of a ticket
+    protocol_method: ticket_update_status
+    input_fields:
+      - ticket_id: str
+      - status: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelTicketingResult
+    idempotent: true
+
+  - operation: ticket_add_comment
+    description: Append a comment to a ticket
+    protocol_method: ticket_add_comment
+    input_fields:
+      - ticket_id: str
+      - body: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelTicketingResult
+    idempotent: false
+
+# Dependencies
+dependencies:
+  - name: protocol_ticketing_base
+    type: protocol
+    class_name: ProtocolTicketingBase
+    module: omniclaude.nodes.node_ticketing_effect.protocols
+    pluggable: true
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: linear
+  backends:
+    - backend: linear
+      handler_key: linear
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 500
+    max_delay_ms: 10000
+    exponential_base: 2
+    retry_on:
+      - TicketingApiError
+      - TicketingNetworkError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2593
+  maturity: stub
+  tags:
+    - effect
+    - ticketing
+    - abstract-base
