@@ -1048,7 +1048,7 @@ else:
 
         # Are we in the main worktree?
         _in_main = _main_wt is not None and (
-            _cwd == _main_wt or str(_cwd).startswith(str(_main_wt) + "/")
+            _cwd == _main_wt or _cwd.is_relative_to(_main_wt)
         )
 
         if _in_main:
@@ -1085,8 +1085,8 @@ else:
                 print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
                 print(f"Other candidates (use --path to select): {_others}")
 
-    except Exception:
-        pass  # Not a git repo or git unavailable — proceed with CWD
+    except Exception as _e:
+        print(f"Warning: local-review: worktree auto-detection failed ({_e}), using CWD", file=sys.stderr)
 
 # Helper: git command with optional -C path
 def git_cmd(args_list):

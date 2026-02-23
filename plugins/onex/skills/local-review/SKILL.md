@@ -61,7 +61,7 @@ args:
     description: "Number of consecutive clean runs required before passing (default 2, min 1)"
     required: false
   - name: --path
-    description: "Path to the git worktree to review. Auto-detected from linked worktrees (via git worktree list) when running from the main worktree."
+    description: "Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via git worktree list. When running from a linked worktree, defaults to CWD."
     required: false
 ---
 
@@ -107,7 +107,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
-| `--path <dir>` | auto-detect | Path to the git worktree to review. Auto-detected via `git worktree list` when running from the main worktree. |
+| `--path <dir>` | auto-detect | Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via `git worktree list`. When running from a linked worktree, defaults to CWD. |
 
 ## Dispatch Contracts (Execution-Critical)
 
