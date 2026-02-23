@@ -187,6 +187,11 @@ class TopicBase(StrEnum):
     DECISION_RECORDED_CMD = "onex.cmd.omniintelligence.decision-recorded.v1"
 
     # ==========================================================================
+    # ChangeFrame emission topics (OMN-2651)
+    # ==========================================================================
+    CHANGE_FRAME_EMITTED = "onex.evt.omniclaude.change-frame.v1"
+
+    # ==========================================================================
     # Agent trace topics (OMN-2412)
     # ==========================================================================
     AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.fix-transition.v1"

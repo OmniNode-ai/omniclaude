@@ -18,11 +18,14 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
+
+logger = logging.getLogger(__name__)
 
 #: Type alias for JSON-serializable tool input/output dicts.
 type ToolInputDict = dict[str, object]
@@ -600,3 +603,38 @@ def persist_frame_to_jsonl(frame: ChangeFrame, session_id: str) -> Path:
             fcntl.flock(f, fcntl.LOCK_UN)
 
     return jsonl_path
+
+
+# ---------------------------------------------------------------------------
+# Kafka emission (OMN-2651)
+# ---------------------------------------------------------------------------
+
+
+def emit_change_frame(frame: ChangeFrame, session_id: str) -> bool:
+    """Emit a ChangeFrame to Kafka via the emit daemon.
+
+    Uses the same daemon/producer path as all other hook events
+    (emit_client_wrapper.emit_event). Fire-and-forget: never blocks
+    the hook, returns False on any failure.
+
+    Args:
+        frame: The assembled ChangeFrame to emit
+        session_id: Session identifier (included in the payload for partitioning)
+
+    Returns:
+        True if the event was successfully queued by the daemon, False otherwise
+    """
+    try:
+        from emit_client_wrapper import emit_event  # noqa: I001, PLC0415
+    except ImportError:
+        logger.debug("emit_client_wrapper not available, skipping ChangeFrame emission")
+        return False
+
+    payload: dict[str, object] = frame.model_dump(mode="json")
+    payload["session_id"] = session_id
+
+    try:
+        return bool(emit_event("change.frame.emitted", payload))
+    except Exception:
+        logger.debug("ChangeFrame emission failed (fire-and-forget)", exc_info=True)
+        return False
