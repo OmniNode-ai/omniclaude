@@ -27,7 +27,6 @@ from pathlib import Path
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
-from env_loader import load_env_file
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> claude/ -> omniclaude/
@@ -37,7 +36,6 @@ sys.path.insert(
 from kafka_publisher import get_kafka_producer
 
 # Add src to path for omniclaude.hooks.topics
-# Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> onex/ -> plugins/ -> omniclaude2/ -> src/
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
 )
@@ -48,10 +46,6 @@ agents_lib_path = Path(__file__).parent.parent.parent.parent.parent / "agents" /
 if agents_lib_path.exists():
     sys.path.insert(0, str(agents_lib_path))
     from transformation_validator import validate_transformation
-
-
-# Load .env on import
-load_env_file()
 
 
 def parse_boolean(value: str) -> bool:

@@ -1,198 +1,189 @@
 ---
 name: auto-merge
-description: Merge a PR when CI is green, approved, and policy allows — HIGH_RISK gate requires explicit "merge" reply by default; auto_merge:true skips gate
+description: Merge a GitHub PR when all gates pass; uses Slack HIGH_RISK gate by default
 version: 1.0.0
 category: workflow
-tags:
-  - pr
-  - github
-  - merge
-  - autonomous
-  - pipeline
-  - high-risk
+tags: [pr, github, merge, automation, slack-gate]
 author: OmniClaude Team
 composable: true
-args:
-  - name: --pr
-    description: PR number to merge
-    required: true
-  - name: --ticket-id
-    description: Ticket ID context for Slack messages and Linear updates
-    required: false
-  - name: --auto-merge
-    description: "Set auto_merge: true in policy — merge immediately without Slack gate (use with caution)"
-    required: false
-  - name: --strategy
-    description: "Merge strategy: squash | merge | rebase (default: squash)"
-    required: false
-  - name: --no-delete-branch
-    description: Keep branch after merge (default: delete)
-    required: false
 inputs:
   - name: pr_number
-    description: int — PR number to merge
-  - name: ticket_id
-    description: str — context ticket ID
-  - name: policy
-    description: AutoMergePolicy — auto_merge, merge_strategy, delete_branch_on_merge, merge_gate_timeout_hours
+    type: int
+    description: GitHub PR number to merge
+    required: true
+  - name: repo
+    type: str
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: strategy
+    type: str
+    description: "Merge strategy: squash | merge | rebase (default: squash)"
+    required: false
+  - name: gate_timeout_hours
+    type: float
+    description: Hours to wait for Slack gate approval (default 24)
+    required: false
+  - name: delete_branch
+    type: bool
+    description: Delete branch after merge (default true)
+    required: false
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: merged | held | failed"
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/auto-merge.json"
+    fields:
+      - status: merged | held | timeout | error
+      - pr_number: int
+      - repo: str
+      - merge_commit: str | null
+      - strategy: str
+args:
+  - name: pr_number
+    description: GitHub PR number to merge
+    required: true
+  - name: repo
+    description: "GitHub repo slug (org/repo)"
+    required: true
+  - name: --strategy
+    description: "Merge strategy: squash|merge|rebase (default squash)"
+    required: false
+  - name: --gate-timeout-hours
+    description: Hours to wait for Slack approval (default 24)
+    required: false
+  - name: --no-delete-branch
+    description: Don't delete branch after merge
+    required: false
 ---
 
 # Auto Merge
 
 ## Overview
 
-Composable sub-skill that merges a PR when all conditions are met. Default policy requires
-an explicit Slack "merge" reply (HIGH_RISK gate). When `auto_merge: true` is set in policy,
-merges immediately without human input.
+Merge a GitHub PR after posting a Slack HIGH_RISK gate. A human must reply "merge" to proceed.
+Silence does NOT consent — this gate requires explicit approval. Exit when PR is merged, held,
+or timed out.
 
-**Announce at start:** "I'm using the auto-merge skill for PR #{pr_number}."
+**Announce at start:** "I'm using the auto-merge skill to merge PR #{pr_number}."
 
-**SAFETY INVARIANT**: PR merge is a HIGH_RISK action. Silence is NEVER consent for
-merge. Explicit "merge" reply required unless `auto_merge: true` is explicitly set.
+**Implements**: OMN-2525
 
 ## Quick Start
 
 ```
-/auto-merge --pr 142 --ticket-id OMN-2356         # HIGH_RISK gate (default)
-/auto-merge --pr 142 --auto-merge                  # Merge immediately (no gate)
-/auto-merge --pr 142 --strategy merge              # Use merge commit (not squash)
-/auto-merge --pr 142 --no-delete-branch            # Keep branch after merge
+/auto-merge 123 org/repo
+/auto-merge 123 org/repo --strategy merge
+/auto-merge 123 org/repo --gate-timeout-hours 48
+/auto-merge 123 org/repo --no-delete-branch
 ```
 
-## Policy Defaults
+## Merge Flow
 
-```yaml
-auto_merge: false             # Require explicit Slack "merge" reply
-merge_strategy: squash        # squash | merge | rebase
-delete_branch_on_merge: true  # Delete branch after successful merge
-slack_on_merge: true          # Post Slack notification on successful merge
-merge_gate_timeout_hours: 48  # Max hours waiting for merge approval
-reminder_at_hours: 24         # Post reminder Slack at halfway mark
-```
+1. Verify PR is mergeable: `gh pr view {pr_number} --repo {repo} --json mergeable,reviews`
+2. Post HIGH_RISK Slack gate (see message format below)
+3. Poll for reply (check every 5 minutes):
+   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is ` --delete-branch` if `delete_branch=true`, else empty
+   - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
+   - On timeout: exit with `status: timeout`
+4. Post Slack notification on merge completion
 
-## Merge Conditions
-
-All three must be true before proceeding:
-
-1. **CI passing**: All required checks have `conclusion: success`
-2. **Approved**: At least 1 approved review; no current `CHANGES_REQUESTED` reviews
-3. **No unresolved comments**: All review threads resolved
-
-**If any condition fails**: abort with `status: failed`, describe which condition failed.
-
-## Execution Flow
-
-### Default Mode (`auto_merge: false`)
+## Slack Gate Message Format
 
 ```
-1. Verify merge conditions
-2. Post HIGH_RISK Slack gate:
-   "PR #{pr_number} is ready to merge.
-    Ticket: {ticket_id}
-    Strategy: {merge_strategy}
-    Branch delete: {delete_branch_on_merge}
-    Reply 'merge' to proceed. Silence = hold (HIGH_RISK)."
-3. Wait for explicit 'merge' reply (no timeout auto-advance)
-4. At reminder_at_hours: post reminder to Slack
-5. At merge_gate_timeout_hours: post reminder + hold (still require explicit reply)
-6. On 'merge' / 'go' / 'yes' / 'approve' reply:
-   → gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
-   → Post Slack: "Merged PR #{pr_number} for {ticket_id}"
-   → Update Linear ticket status: Done
-   → Return status: merged
-7. On 'no' / 'cancel' / 'hold' / 'stop' / 'reject' reply:
-   → Return status: held
+[HIGH_RISK] auto-merge: Ready to merge PR #{pr_number}
+
+Repo: {repo}
+PR: {pr_title}
+Strategy: {strategy}
+Branch: {branch_name}
+
+All gates passed:
+  CI: passed
+  PR Review: approved (or changes resolved)
+
+Reply "merge" to proceed. Silence = HOLD (this gate requires explicit approval).
+Gate expires in {gate_timeout_hours}h.
 ```
 
-### Auto-Merge Mode (`auto_merge: true`)
+## Skill Result Output
 
-```
-1. Verify merge conditions
-2. Execute immediately:
-   gh pr merge {pr_number} --{merge_strategy} {--delete-branch if delete_branch_on_merge}
-3. Post Slack: "Auto-merged PR #{pr_number} for {ticket_id} — {PR URL}"
-4. Update Linear ticket status: Done
-5. Return status: merged
-```
-
-## Slack Gate (HIGH_RISK)
-
-```
-[HIGH_RISK] auto-merge: PR #{pr_number} ready to merge
-
-Ticket: {ticket_id}
-PR: {PR URL}
-CI: all green
-Reviews: {N} approvals, 0 changes-requested
-Merge strategy: {merge_strategy}{", delete branch" if delete_branch_on_merge else ""}
-
-Reply 'merge' to merge this PR.
-This is HIGH_RISK — silence will NOT auto-advance.
-```
-
-**Keyword matching**: `merge`, `go`, `yes`, `approve` → approve merge;
-`no`, `cancel`, `hold`, `stop`, `reject` → hold.
-
-## Reminder (at `reminder_at_hours`)
-
-At `reminder_at_hours` elapsed without response:
-
-```
-[HIGH_RISK] Reminder: PR #{pr_number} still waiting for merge approval
-
-{ticket_id} has been waiting {hours}h for explicit 'merge' reply.
-Reply 'merge' to proceed or 'cancel' to stop.
-```
-
-## Ticket-Run Ledger
-
-After a successful merge, append to the ticket-run ledger:
-
-```
-~/.claude/pipelines/{ticket_id}/ticket-run-ledger.yaml
-```
-
-```yaml
-- ticket_id: OMN-2356
-  pr_number: 142
-  merged_at: "2026-02-21T15:30:00Z"
-  merge_strategy: squash
-  branch_deleted: true
-  pipeline_run_id: f084b6c3
-```
-
-This ledger supports cross-session resume and audit.
-
-## ModelSkillResult Output
-
-Written to `~/.claude/skill-results/{context_id}/auto-merge.json`:
+Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.json` on exit.
 
 ```json
 {
-  "status": "merged | held | failed",
-  "pr_number": 142,
-  "ticket_id": "OMN-2356",
-  "merge_strategy": "squash",
-  "branch_deleted": true,
-  "merged_at": "2026-02-21T15:30:00Z | null",
-  "held_reason": "null | explicit_reject | condition_failed: {condition}"
+  "skill": "auto-merge",
+  "status": "merged",
+  "pr_number": 123,
+  "repo": "org/repo",
+  "merge_commit": "abc1234",
+  "strategy": "squash",
+  "context_id": "{context_id}"
 }
 ```
 
-## Failure Handling
+**Status values**: `merged` | `held` | `timeout` | `error`
 
-| Error | Behavior |
-|-------|----------|
-| Merge conditions not met | `status: failed`, list which conditions failed |
-| `gh pr merge` fails | `status: failed`, include error message |
-| Slack unavailable for gate | If `auto_merge: false`: `status: held` (safe default — don't merge without gate) |
-| Linear status update fails | Log warning, merge still proceeds |
-| Ledger write fails | Log warning, merge still proceeds |
+- `merged`: PR successfully merged
+- `held`: Human explicitly replied with a hold/reject word
+- `timeout`: gate_timeout_hours elapsed with no "merge" reply
+- `error`: Merge failed (conflicts, permissions, etc.)
+
+## Executable Scripts
+
+### `auto-merge.sh`
+
+Bash wrapper for programmatic invocation of this skill.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# auto-merge.sh — wrapper for the auto-merge skill
+# Usage: auto-merge.sh <PR_NUMBER> <REPO> [--strategy squash|merge|rebase] [--gate-timeout-hours N] [--no-delete-branch]
+
+PR_NUMBER=""
+REPO=""
+STRATEGY="squash"
+GATE_TIMEOUT_HOURS="24"
+DELETE_BRANCH="true"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --strategy)            STRATEGY="$2";            shift 2 ;;
+    --gate-timeout-hours)  GATE_TIMEOUT_HOURS="$2";  shift 2 ;;
+    --no-delete-branch)    DELETE_BRANCH="false";     shift   ;;
+    -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
+    *)
+      if [[ -z "$PR_NUMBER" ]]; then PR_NUMBER="$1"; shift
+      elif [[ -z "$REPO" ]];     then REPO="$1";      shift
+      else echo "Unexpected argument: $1" >&2; exit 1
+      fi
+      ;;
+  esac
+done
+
+if [[ -z "$PR_NUMBER" || -z "$REPO" ]]; then
+  echo "Usage: auto-merge.sh <PR_NUMBER> <REPO> [options]" >&2
+  exit 1
+fi
+
+exec claude --skill onex:auto-merge \
+  --arg "pr_number=${PR_NUMBER}" \
+  --arg "repo=${REPO}" \
+  --arg "strategy=${STRATEGY}" \
+  --arg "gate_timeout_hours=${GATE_TIMEOUT_HOURS}" \
+  --arg "delete_branch=${DELETE_BRANCH}"
+```
+
+| Invocation | Description |
+|------------|-------------|
+| `/auto-merge 123 org/repo` | Interactive: merge PR 123 with default HIGH_RISK gate (24h timeout) |
+| `/auto-merge 123 org/repo --strategy merge` | Interactive: use merge commit strategy |
+| `Skill(skill="onex:auto-merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
+| `auto-merge.sh 123 org/repo --no-delete-branch` | Shell: direct invocation, keep branch after merge |
 
 ## See Also
 
-- `ticket-pipeline` skill — composable pipeline; auto-merge can be composed after the ready_for_merge phase
-- `~/.claude/pipelines/{ticket_id}/ticket-run-ledger.yaml` — merge audit log
+- `ticket-pipeline` skill (planned: invokes auto-merge after pr-watch passes)
+- `pr-watch` skill (planned: runs before auto-merge)
+- `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
+- OMN-2525 — implementation ticket

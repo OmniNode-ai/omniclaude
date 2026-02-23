@@ -396,19 +396,22 @@ jobs:
             --exclude-files 'bandit-report\.json$' \
             --exclude-files '^tests/' \
             --exclude-files 'security-report\.json$'
-          # Compare: if baseline changed, new secrets were found
+          # Compare: detect genuinely new secrets (content-addressed, ignores line shifts).
+          # Using only (file, hashed_secret) as the key prevents false positives when
+          # new CI jobs shift line numbers of existing baseline entries (OMN-2625).
           NEW_SECRETS=$(python3 -c "
           import json
           old = json.load(open('.secrets.baseline.bak'))
           new = json.load(open('.secrets.baseline'))
-          old_set = {(f, s['line_number'], s['hashed_secret'])
+          old_set = {(f, s['hashed_secret'])
                      for f, secrets in old.get('results', {}).items()
                      for s in secrets}
-          new_set = {(f, s['line_number'], s['hashed_secret'])
+          new_set = {(f, s['hashed_secret'], s['line_number'])
                      for f, secrets in new.get('results', {}).items()
                      for s in secrets}
-          diff = new_set - old_set
-          for f, line, _ in sorted(diff):
+          diff = [(f, line) for f, h, line in sorted(new_set)
+                  if (f, h) not in old_set]
+          for f, line in diff:
               print(f'  {f}:{line}')
           print(f'COUNT:{len(diff)}')
           ")

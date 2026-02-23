@@ -19,6 +19,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 | `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to ~/.claude/review-suppressions.yml (exits immediately after writing) |
+| `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home against any worktree. |
 
 **Examples**:
 ```bash
@@ -30,6 +31,7 @@ Parse arguments from `$ARGUMENTS`:
 /local-review --no-fix                           # Report only mode
 /local-review --required-clean-runs 1            # Fast iteration (skip confirmation pass)
 /local-review --flag-false-positive "asyncio_mode"  # Flag a false positive for suppression
+/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-2607/omniclaude  # Review a specific worktree
 ```
 
 ---
@@ -46,9 +48,9 @@ NEVER mix pre-existing fixes with the feature branch changes.
 
 ```
 Phase 0: Pre-existing issue scan
-  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
-     fixes are applied; do NOT stash or alter the working tree to run this step)
-  2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
+  1. Run pre-commit run --all-files from {repo_path or CWD} against the current HEAD state
+     (i.e. before any uncommitted fixes are applied; do NOT stash or alter the working tree)
+  2. Run mypy src/ --strict from {repo_path or CWD} (or repo-equivalent detected from pyproject.toml)
   3. Classify each failure:
        - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
        - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
@@ -95,13 +97,13 @@ Phase 0: Pre-existing issue scan
 **2. Detect base reference** (if `--since` not provided):
 ```bash
 # Try to find the merge-base with remote main/master
-git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || {
+git -C {repo_path} merge-base HEAD origin/main 2>/dev/null || git -C {repo_path} merge-base HEAD origin/master 2>/dev/null || {
     if git rev-parse --verify HEAD~10 >/dev/null 2>&1; then
         echo "Warning: Could not find merge-base, using HEAD~10" >&2
         echo "HEAD~10"
     else
         echo "Warning: Could not find merge-base, using initial commit" >&2
-        git rev-list --max-parents=0 HEAD 2>/dev/null || echo "HEAD"
+        git -C {repo_path} rev-list --max-parents=0 HEAD 2>/dev/null || echo "HEAD"
     fi
 }
 ```
@@ -149,7 +151,7 @@ if _registry_path.exists():
 import glob
 from pathlib import Path
 
-branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True).strip()
+branch = subprocess.check_output(git_cmd(["rev-parse", "--abbrev-ref", "HEAD"]), text=True).strip()
 branch_slug = branch.replace("/", "-")
 notes_dir = Path.home() / ".claude" / "review-notes"
 pattern = str(notes_dir / f"*-{branch_slug}.md")
@@ -186,7 +188,7 @@ def compute_run_signature(base_ref, files):
     """Deterministic signature of review inputs."""
     import hashlib
     head_sha = subprocess.check_output(
-        ["git", "rev-parse", "--short=7", "HEAD"], text=True
+        git_cmd(["rev-parse", "--short=7", "HEAD"]), text=True
     ).strip()
     content = f"{head_sha}|{base_ref}|{'|'.join(sorted(files))}"
     return hashlib.sha256(content.encode()).hexdigest()[:12]
@@ -208,15 +210,15 @@ This step uses a two-step diff approach to capture all relevant changes:
 # Get changed files
 if --uncommitted:
     # Capture both unstaged and staged (but uncommitted) changes
-    unstaged=$(git diff --name-only)
-    staged=$(git diff --cached --name-only)
+    unstaged=$(git -C {repo_path} diff --name-only)
+    staged=$(git -C {repo_path} diff --cached --name-only)
     files=$(echo -e "$unstaged\n$staged" | sort -u | grep -v '^$')
 else:
     # Combine committed and uncommitted changes, then deduplicate
-    committed=$(git diff --name-only {base_ref}..HEAD)
+    committed=$(git -C {repo_path} diff --name-only {base_ref}..HEAD)
     # Capture both unstaged and staged (but uncommitted) changes
-    unstaged=$(git diff --name-only)
-    staged=$(git diff --cached --name-only)
+    unstaged=$(git -C {repo_path} diff --name-only)
+    staged=$(git -C {repo_path} diff --cached --name-only)
     uncommitted=$(echo -e "$unstaged\n$staged" | sort -u | grep -v '^$')
     files=$(echo -e "$committed\n$uncommitted" | sort -u | grep -v '^$')
 fi
@@ -588,7 +590,7 @@ Fix the following {severity} issues:
 
 **Note**: For multi-line commit messages, use heredoc format:
 ```bash
-git commit -m "$(cat <<'EOF'
+git -C {repo_path} commit -m "$(cat <<'EOF'
 fix(review): [{severity}] {summary}
 
 - Fixed: {file}:{line} - {description}
@@ -601,7 +603,7 @@ EOF
 
 ```bash
 # Stage fixed files and check for errors
-git add {fixed_files}
+git -C {repo_path} add {fixed_files}
 if [ $? -ne 0 ]; then
     # Stage failed - some files may be partially staged
     # Do NOT unstage partial changes (preserve user's ability to inspect)
@@ -621,7 +623,7 @@ total_issues_fixed += count
 
 ```bash
 # Commit with descriptive message using heredoc (include failed fixes if any)
-git commit -m "$(cat <<'EOF'
+git -C {repo_path} commit -m "$(cat <<'EOF'
 fix(review): [{severity}] {summary}
 
 - Fixed: {file}:{line} - {description}
@@ -637,7 +639,7 @@ EOF
 ```
 # count = number of successfully fixed issues (excludes items in failed_fixes)
 commits_made.append({
-  "hash": git rev-parse --short HEAD,
+  "hash": git -C {repo_path} rev-parse --short HEAD,
   "severity": severity,
   "summary": summary,
   "issues_fixed": count  # Excludes failed fixes
@@ -945,7 +947,7 @@ if "--since" in args:
         exit(1)
     since_ref = args[idx + 1]
     # Validate the ref exists using bash: git rev-parse --verify {since_ref} >/dev/null 2>&1
-    if subprocess.run(["git", "rev-parse", "--verify", since_ref], capture_output=True).returncode != 0:
+    if subprocess.run(git_cmd(["rev-parse", "--verify", since_ref]), capture_output=True).returncode != 0:
         print(f"Error: Invalid ref '{since_ref}'. Use branch name or commit SHA.")
         exit(1)
 
@@ -998,6 +1000,30 @@ if "--checkpoint" in args:
         else:
             print(f"Warning: --checkpoint requires format 'ticket_id:run_id', got '{checkpoint_arg}'. Ignoring.")
             checkpoint_arg = None
+
+# Extract --path value (OMN-2608)
+repo_path = None  # None means use CWD
+if "--path" in args:
+    idx = args.index("--path")
+    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
+        print("Error: --path requires a directory argument")
+        exit(1)
+    from pathlib import Path
+    repo_path = Path(args[idx + 1]).resolve()
+    if not repo_path.is_dir():
+        print(f"Error: --path directory does not exist: {repo_path}")
+        exit(1)
+    if not (repo_path / ".git").exists():
+        # Could be a worktree (has .git file, not dir) — check for .git file too
+        if not (repo_path / ".git").exists():
+            print(f"Warning: --path directory may not be a git repo: {repo_path}")
+
+# Helper: git command with optional -C path
+def git_cmd(args_list):
+    """Build git command with -C {repo_path} if --path was provided."""
+    if repo_path is not None:
+        return ["git", "-C", str(repo_path)] + args_list
+    return ["git"] + args_list
 
 # Extract --flag-false-positive value (OMN-2514)
 # This flag causes an immediate write to the registry and exits (does not start the review loop)

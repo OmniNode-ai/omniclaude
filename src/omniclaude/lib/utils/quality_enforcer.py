@@ -107,6 +107,42 @@ from .consensus.quorum import AIQuorum
 from .correction.generator import CorrectionGenerator
 from .naming_validator import NamingValidator, Violation
 
+# =============================================================================
+# Pattern Enforcement Kafka Emission (OMN-2378)
+# =============================================================================
+
+
+def _emit_enforcement_event(event_type: str, payload: dict[str, Any]) -> bool:
+    """Emit a pattern enforcement observability event via the emit daemon.
+
+    Sends one ``pattern.enforcement`` event per detected naming violation so that
+    omniintelligence's ``node_enforcement_feedback_effect`` can adjust pattern
+    confidence scores based on real enforcement outcomes.
+
+    Uses a lazy import of ``emit_client_wrapper.emit_event`` (lives in
+    ``plugins/onex/hooks/lib/``, added to ``sys.path`` by the hook shell script).
+    Falls back silently to a no-op when the module is unavailable or the daemon
+    is down — enforcement never blocks due to an emission failure.
+
+    Args:
+        event_type: Semantic event type; must be ``"pattern.enforcement"``.
+        payload: Event payload dict.  Must satisfy the ``pattern.enforcement``
+            EventRegistry required fields:
+            ``session_id``, ``correlation_id``, ``timestamp``, ``language``,
+            ``domain``, ``pattern_name``, ``outcome``.
+
+    Returns:
+        ``True`` if the event was successfully queued by the daemon, ``False``
+        otherwise.  Callers must treat ``False`` as non-fatal.
+    """
+    try:
+        from emit_client_wrapper import emit_event  # noqa: PLC0415
+
+        return bool(emit_event(event_type, payload))
+    except Exception:
+        # Daemon down, import failure, or any other error — never block enforcement.
+        return False
+
 
 def load_config() -> dict[str, Any]:
     """Load configuration from config.yaml with environment variable overrides."""
@@ -509,6 +545,11 @@ class QualityEnforcer:
 
             # Log violations to dedicated log files
             self.violations_logger.log_violations(file_path, violations)
+
+            # Emit to onex.evt.omniclaude.pattern-enforcement.v1 (OMN-2378)
+            # Feed violations into omniintelligence confidence adjustment loop.
+            # One event per violation; failures are silent (fail-open).
+            self._emit_violations_to_kafka(violations, file_path, language)
 
             # Check performance budget before continuing
             if self._elapsed() > self.performance_budget * 0.5:
@@ -1094,6 +1135,64 @@ class QualityEnforcer:
             Combined tool selection and quality check metadata
         """
         return self.tool_selection_metadata or {}
+
+    def _emit_violations_to_kafka(
+        self,
+        violations: list[Violation],
+        file_path: str,
+        language: str,
+    ) -> None:
+        """Emit one ``pattern.enforcement`` event per violation (OMN-2378).
+
+        Feeds detected naming violations into the omniintelligence confidence
+        adjustment loop via ``node_enforcement_feedback_effect``.  Each event
+        uses ``outcome='violation'`` to distinguish these from the PostToolUse
+        advisory ``outcome='hit'`` events emitted by ``pattern_enforcement.py``.
+
+        Emission is fire-and-forget and fail-open: any exception is swallowed
+        so that the enforcement pipeline is never blocked by a Kafka failure.
+
+        Args:
+            violations: Non-empty list of violations found during Phase 1.
+            file_path: Path of the file being written/edited.
+            language: Detected programming language (e.g. "python").
+        """
+        if not violations:
+            return
+
+        try:
+            import uuid as _uuid  # noqa: PLC0415
+            from datetime import UTC  # noqa: PLC0415
+            from datetime import datetime as _datetime
+
+            session_id = os.environ.get("SESSION_ID", "")
+            correlation_id = os.environ.get("CORRELATION_ID", str(_uuid.uuid4()))
+            timestamp = _datetime.now(UTC).isoformat()
+
+            for violation in violations:
+                payload: dict[str, Any] = {
+                    "session_id": session_id,
+                    "correlation_id": correlation_id,
+                    "timestamp": timestamp,
+                    "language": language,
+                    "domain": getattr(violation, "violation_type", "naming"),
+                    "pattern_name": getattr(violation, "rule", violation.name),
+                    "outcome": "violation",
+                    "repo": Path(file_path).parts[-2]
+                    if len(Path(file_path).parts) >= 2
+                    else "unknown",
+                    "file_path": file_path,
+                    "pattern_id": "",  # No pattern_id for naming violations (rule-based, not RAG-based)
+                    "confidence": 1.0,  # Naming violations are deterministic (100% confidence)
+                }
+                try:
+                    _emit_enforcement_event("pattern.enforcement", payload)
+                except Exception:
+                    # Per-violation fail-open: continue emitting remaining violations.
+                    pass
+        except Exception:
+            # Outer fail-open: do not break enforcement if timestamp/uuid import fails.
+            pass
 
     def print_stats(self) -> None:
         """Print performance statistics."""

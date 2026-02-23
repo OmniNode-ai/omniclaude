@@ -1,7 +1,7 @@
 ---
 name: ticket-work
 description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
-version: 1.0.0
+version: 2.0.0
 category: workflow
 tags:
   - linear
@@ -10,12 +10,32 @@ tags:
   - workflow
   - contract-driven
 author: OmniClaude Team
+composable: true
+inputs:
+  - name: ticket_id
+    type: str
+    description: Linear ticket ID (e.g., OMN-1807)
+    required: true
+  - name: autonomous
+    type: bool
+    description: Skip human gates; proceed through all phases unattended
+    required: false
+outputs:
+  - name: skill_result
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/ticket-work.json"
+    fields:
+      - status: done | blocked | error | questions_pending
+      - ticket_id: str
+      - pr_url: str | null
+      - phase_reached: str (intake|research|questions|spec|implementation|review|done)
+      - commits: list[str]
 args:
   - name: ticket_id
     description: Linear ticket ID (e.g., OMN-1807)
     required: true
   - name: --autonomous
-    description: Collapse 5 hard keyboard gates to at most 2 async Slack soft-gates (silence=consent for LOW_RISK); enables headless operation
+    description: Skip human gates; proceed through all phases unattended
     required: false
 ---
 
@@ -25,15 +45,14 @@ args:
 
 Orchestrate ticket execution through structured phases with Linear as the single source of truth. The contract YAML block in the ticket description tracks all state.
 
-**Critical Principle:** In interactive mode (default), this skill requires explicit human confirmation for meaningful phase transitions. The intake→research transition is automatic (nothing to review), but all other transitions require human approval. In autonomous mode (`--autonomous`), gates are replaced by Slack soft-gates or auto-advance — see [Autonomous Mode](#autonomous-mode---autonomous).
+**Critical Principle:** This skill requires explicit human confirmation for meaningful phase transitions. The intake→research transition is automatic (nothing to review), but all other transitions require human approval.
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
 ## Quick Start
 
 ```
-/ticket-work OMN-1234                   # Interactive mode (default)
-/ticket-work OMN-1234 --autonomous      # Autonomous mode (headless; Slack gates)
+/ticket-work OMN-1234
 ```
 
 This will:
@@ -43,8 +62,6 @@ This will:
 4. Guide you through the workflow
 
 ## Phase Flow
-
-> **Note**: Diagram reflects interactive mode (default). In autonomous mode, hard gates are replaced by Slack soft-gates or auto-advance. See [Autonomous Mode](#autonomous-mode---autonomous) for details.
 
 ```mermaid
 stateDiagram-v2
@@ -85,54 +102,6 @@ pr_url: null
 
 The skill preserves all existing ticket description content above the contract section.
 
-## Autonomous Mode (`--autonomous`)
-
-When `--autonomous` is passed (or invoked from ticket-pipeline), the 5 hard keyboard gates
-collapse to at most 2 async Slack soft-gates. Enables headless operation from ticket-assigned
-to implementation-complete without requiring keyboard input.
-
-**Critical Principle:** Interactive mode is unchanged. Autonomous mode ONLY affects gate behavior.
-
-### Gate Behavior in Autonomous Mode
-
-| Phase Transition | Interactive (default) | Autonomous Mode |
-|------------------|-----------------------|-----------------|
-| intake → research | Auto | Auto |
-| research → questions | Hard keyboard gate | Auto-generate questions; if >0, post to Slack LOW_RISK gate (30 min timeout; silence = no questions needed) |
-| questions → spec | Hard keyboard gate | Auto-advance (spec generated automatically) |
-| spec → implementation | Hard keyboard gate | Post spec summary to Slack LOW_RISK gate (10 min timeout; silence = approved) |
-| implementation → review | Hard keyboard gate | Auto-advance |
-| review → done | Hard keyboard gate | Auto-advance (merge gate moved to ticket-pipeline Phase 6) |
-
-### Autonomous Policy (stored in state.yaml)
-
-```yaml
-autonomous:
-  enabled: true
-  question_timeout_minutes: 30
-  spec_timeout_minutes: 10
-  silence_is_consent: true     # LOW_RISK gates only
-  slack_channel: "#dev-pipeline"
-```
-
-### Slack Message Format (Spec Approval Gate)
-
-```
-🔧 [{ticket_id}] Spec ready for review
-
-**Plan**: {spec_summary}
-**Files to change**: {file_list} ({N} files)
-**Estimated scope**: {Small|Medium|Large}
-
-Reply "reject: {reason}" within 10 minutes to cancel. Silence = proceed.
-```
-
-### Invocation Sources
-
-- **Interactive** (default): `/ticket-work OMN-1234` — unchanged keyboard gate behavior
-- **From ticket-pipeline**: `--autonomous` flag passed automatically
-- **From Linear webhook (future)**: always autonomous
-
 ## Human Gates
 
 | Transition | Trigger Keywords |
@@ -143,9 +112,6 @@ Reply "reject: {reason}" within 10 minutes to cancel. Silence = proceed.
 | spec → implementation | "approve spec", "build it" |
 | implementation → review | "create PR", "ready for review" |
 | review → done | "approve merge", "ship it" |
-
-> **Note**: Human gates above apply to interactive mode only. In autonomous mode, gates are
-> replaced by Slack soft-gates as described in the Autonomous Mode section above.
 
 ## Slack Notifications
 
@@ -313,8 +279,59 @@ checks, or edge case handling.
 
 ---
 
+## Skill Result Output
+
+When invoked as a composable sub-skill (from ticket-pipeline, epic-team, or other orchestrators),
+write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ticket-work.json` on exit.
+
+```json
+{
+  "skill": "ticket-work",
+  "status": "done",
+  "ticket_id": "{ticket_id}",
+  "pr_url": "https://github.com/org/repo/pull/123",
+  "phase_reached": "done",
+  "commits": ["abc1234", "def5678"],
+  "context_id": "{context_id}"
+}
+```
+
+**Status values**: `done` | `blocked` | `questions_pending` | `error`
+
+- `done`: All phases complete; PR created or changes committed
+- `blocked`: Waiting for human input (human gate triggered in non-autonomous mode)
+- `questions_pending`: Stopped at questions phase awaiting answers
+- `error`: Unrecoverable failure (agent error, verification failure, etc.)
+
+When invoked directly by a human (`/ticket-work OMN-XXXX`), skip writing the result file.
+
+## Error Recovery (Executable)
+
+When the implementation agent returns an error or verification fails repeatedly:
+
+**Auto-dispatch root-cause-tracing:**
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-work: root-cause-tracing on implementation failure",
+  prompt="The implementation agent for {ticket_id} failed or verification failed.
+    Error: {error_details}
+    Files touched: {files_list}
+
+    Invoke: Skill(skill=\"onex:root-cause-tracing\")
+
+    Trace the root cause of the implementation failure. Report: root cause, fix recommendation,
+    whether retry is safe, files involved."
+)
+```
+
+This replaces the former advisory annotation `REQUIRED SUB-SKILL: root-cause-tracing`.
+
 ## See Also
 
 - Linear MCP tools (`mcp__linear-server__*`)
 - Related: OMN-1807 (ModelTicketContract in omnibase_core) - contract schema mirrors this model
 - Related: OMN-1831 (Slack notifications) - notification implementation
+- `root-cause-tracing` skill (auto-dispatched on implementation failure)
+- `systematic-debugging` skill (dispatched when root-cause-tracing identifies deep error)

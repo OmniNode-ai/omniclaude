@@ -118,7 +118,7 @@ hardening_tickets: []
 2. Set identity fields:
    - `ticket_id`: From Linear ticket identifier
    - `title`: From Linear ticket title
-   - `repo`: From current working directory basename (e.g., `/Volumes/PRO-G40/Code/omniclaude3` → `omniclaude3`)
+   - `repo`: From current working directory basename (e.g., `/Volumes/PRO-G40/Code/omni_worktrees/OMN-2068/omniclaude` → `omniclaude`)
 3. Save contract to ticket description
 4. **Auto-advance to research phase** (no human gate needed)
 
@@ -493,7 +493,7 @@ except AutomationError as e:
 def get_current_repo() -> str:
     """Extract repo name from current working directory.
 
-    Example: /Volumes/PRO-G40/Code/omniclaude3 -> omniclaude3
+    Example: /Volumes/PRO-G40/Code/omni_worktrees/OMN-2068/omniclaude -> omniclaude
     """
     import os
     return os.path.basename(os.getcwd())
