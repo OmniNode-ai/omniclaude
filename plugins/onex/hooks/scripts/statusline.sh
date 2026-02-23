@@ -154,11 +154,20 @@ APPLESCRIPT
       _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" {print $5}' | sort)
       [ -n "$_paths" ] && DUPE_PATHS=$(echo "$_paths" | uniq -d)
 
-      # Pre-scan: detect tabs sharing the same ticket number
-      # Any ticket appearing 2+ times means multiple sessions on the same ticket
-      DUPE_TICKETS=""
-      _tickets=$(echo "$FORMATTED" | awk -F'|' '$3 != "" && $3 != "-" {print $3}' | sort)
-      [ -n "$_tickets" ] && DUPE_TICKETS=$(echo "$_tickets" | uniq -d)
+      # Pre-scan: detect same (ticket + mode) pair across multiple tabs — true collision.
+      # Same ticket in different modes (e.g. planning vs pr-review) is intentional, not a dupe.
+      DUPE_TICKET_MODES=""
+      _ticket_mode_pairs=""
+      while IFS='|' read -r _p _r _tkt _guid _path; do
+        [ -z "$_p" ] && continue
+        [ "$_tkt" = "-" ] && continue; [ -z "$_tkt" ] && continue
+        _eg="${_guid#*:}"
+        _mf="${TAB_REGISTRY_DIR}/${_eg}.mode"
+        _m=""; [ -f "$_mf" ] && _m=$(cat "$_mf" 2>/dev/null | tr -d '[:space:]')
+        [ -z "$_m" ] && continue
+        _ticket_mode_pairs="${_ticket_mode_pairs}${_tkt}|${_m}"$'\n'
+      done <<< "$FORMATTED"
+      [ -n "$_ticket_mode_pairs" ] && DUPE_TICKET_MODES=$(printf '%s' "$_ticket_mode_pairs" | sort | uniq -d)
 
       TAB_NUM=0
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
@@ -181,6 +190,17 @@ APPLESCRIPT
           fi
         fi
 
+        # Read .mode file (written by post-tool-use hook on Skill calls)
+        mode=""
+        mode_file="${TAB_REGISTRY_DIR}/${entry_guid}.mode"
+        [ -f "$mode_file" ] && mode=$(cat "$mode_file" 2>/dev/null | tr -d '[:space:]')
+
+        # Read .ticket file (written by session-start for omni_home tabs without a git branch)
+        if [ -z "$ticket" ] && [ -n "$entry_guid" ]; then
+          ticket_file="${TAB_REGISTRY_DIR}/${entry_guid}.ticket"
+          [ -f "$ticket_file" ] && ticket=$(cat "$ticket_file" 2>/dev/null | tr -d '[:space:]')
+        fi
+
         # Read tab activity color (ANSI 256-color code written by hooks)
         activity_color=""
         activity_file="${TAB_REGISTRY_DIR}/${entry_guid}.activity"
@@ -190,18 +210,28 @@ APPLESCRIPT
           [[ "$activity_color" =~ ^[0-9]+$ ]] || activity_color=""
         fi
 
-        # Build label: T{n}·{repo}[·{ticket}]
-        # Sequential numbering (sorted by iTerm position for spatial consistency)
-        label="T${TAB_NUM}·${repo}"
-        [ -n "$ticket" ] && label="${label}·${ticket}"
+        # Build label: T{n}·{ticket|repo}[·{mode}]
+        # mode present  → show ticket (or repo fallback) + mode; branch is dropped (mode is more useful)
+        # no mode        → fall back to repo[·ticket] (legacy behavior for tabs with no skill history)
+        if [ -n "$mode" ]; then
+          if [ -n "$ticket" ]; then
+            label="T${TAB_NUM}·${ticket}·${mode}"
+          else
+            label="T${TAB_NUM}·${repo}·${mode}"
+          fi
+        else
+          label="T${TAB_NUM}·${repo}"
+          [ -n "$ticket" ] && label="${label}·${ticket}"
+        fi
 
-        # Check if this tab's folder or ticket is shared with another tab
+        # Collision detection: same project_path OR same (ticket + mode) pair.
+        # Same ticket in different modes = intentional parallel work, no warning.
         is_dupe=0
         if [ -n "$DUPE_PATHS" ] && [ -n "$project_path" ] && [ "$project_path" != "-" ]; then
           echo "$DUPE_PATHS" | grep -qxF "$project_path" && is_dupe=1
         fi
-        if [ "$is_dupe" -eq 0 ] && [ -n "$DUPE_TICKETS" ] && [ -n "$ticket" ]; then
-          echo "$DUPE_TICKETS" | grep -qxF "$ticket" && is_dupe=1
+        if [ "$is_dupe" -eq 0 ] && [ -n "$DUPE_TICKET_MODES" ] && [ -n "$ticket" ] && [ -n "$mode" ]; then
+          echo "$DUPE_TICKET_MODES" | grep -qxF "${ticket}|${mode}" && is_dupe=1
         fi
 
         # Activity indicator: colored dot per-skill (color from activity file)

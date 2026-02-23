@@ -807,6 +807,12 @@ if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_c
         if [[ -n "$ACTIVE_TICKET" ]] && [[ -n "$TICKET_CONTEXT" ]]; then
             log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms)"
             log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+            # Write .ticket file for statusline tab label (omni_home tabs have no git branch)
+            if [[ -n "${ITERM_SESSION_ID:-}" ]]; then
+                _ticket_guid="${ITERM_SESSION_ID#*:}"
+                mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
+                printf '%s' "$ACTIVE_TICKET" > "/tmp/omniclaude-tabs/${_ticket_guid}.ticket" 2>/dev/null || true
+            fi
         else
             log "No active ticket found"
         fi
