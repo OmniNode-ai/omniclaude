@@ -60,6 +60,12 @@ args:
   - name: --accept-duplicate-ticket-risk
     description: Explicit acknowledgement that OMN-2613 is NOT merged and duplicate Linear sub-tickets may be created. Required with --all-authors when --omn-2613-merged is absent.
     required: false
+  - name: --run-id
+    description: "Pipeline run ID for claim registry ownership. Generated if not provided."
+    required: false
+  - name: --dry-run
+    description: Zero filesystem writes — no claim files, no worktree creation, no PR mutations (default: false)
+    required: false
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: all_clean | partial | nothing_to_review | error"

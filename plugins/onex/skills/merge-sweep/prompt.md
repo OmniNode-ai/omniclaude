@@ -10,8 +10,9 @@ When `/merge-sweep [args]` is invoked:
 
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: all repos in omni_home
-   - `--dry-run` — default: false
-   - `--gate-attestation=<token>` — pre-issued gate token (skips Slack gate; token validated before proceeding)
+   - `--dry-run` — default: false (zero filesystem writes including claims)
+   - `--no-gate` — default: false
+   - `--gate-token <token>` — required with `--no-gate`
    - `--merge-method <method>` — default: squash
    - `--require-approval <bool>` — default: true
    - `--require-up-to-date <policy>` — default: repo
@@ -22,8 +23,22 @@ When `/merge-sweep [args]` is invoked:
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
    - `--gate-timeout-minutes <n>` — default: 1440 (24 hours)
+   - `--run-id <id>` — default: generate new; provided by pr-queue-pipeline for claim ownership
 
-3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
+3. **Generate or restore run_id**:
+   - If `--run-id` provided: use it (resume mode — no ledger for merge-sweep, but claim registry uses it)
+   - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
+
+3a. **Startup resume — clean stale own claims**:
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry
+
+registry = ClaimRegistry()
+deleted = registry.cleanup_stale_own_claims(run_id, dry_run=dry_run)
+if deleted:
+    print(f"[merge-sweep] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
+```
 
 4. **Record filters** for `ModelSkillResult`:
    ```python
@@ -152,10 +167,56 @@ def passes_label_filter(pr, filter_labels):
 
 Classification results:
 - `is_merge_ready()` is True → candidate for further filtering
-  - passes `passes_since_filter()` AND `passes_label_filter()` → add to `candidates[]`
+  - passes `passes_since_filter()` AND `passes_label_filter()` → add to `candidates_pre_claim[]`
   - else → add to `skipped_filtered[]`
 - `pr_state_unknown()` → add to `skipped_unknown[]` with warning
 - Otherwise → ignore (fix-prs handles these)
+
+### Claim Registry Check (after filter classification)
+
+For each PR in `candidates_pre_claim[]`, check the global claim registry:
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import (
+    ClaimRegistry, canonical_pr_key
+)
+
+registry = ClaimRegistry()
+candidates = []
+hard_failed_claims = []
+
+for pr in candidates_pre_claim:
+    org, repo_name = pr["headRepository"]["nameWithOwner"].split("/")
+    pr_key = canonical_pr_key(org=org, repo=repo_name, number=pr["number"])
+
+    claim = registry.get_claim(pr_key)
+    if claim and registry.has_active_claim(pr_key):
+        # HARD FAIL — do not merge a PR with an active claim from another run
+        hard_failed_claims.append({
+            "pr_key": pr_key,
+            "claimed_by_run": claim.get("claimed_by_run"),
+            "action": claim.get("action"),
+            "last_heartbeat_at": claim.get("last_heartbeat_at"),
+        })
+        print(
+            f"[merge-sweep] HARD FAIL: {pr_key} has active claim "
+            f"(run: {claim.get('claimed_by_run')}, action: {claim.get('action')}). "
+            f"Excluding from merge candidates.",
+            flush=True,
+        )
+    else:
+        candidates.append(pr)
+
+if hard_failed_claims:
+    print(
+        f"[merge-sweep] {len(hard_failed_claims)} PR(s) excluded due to active claims: "
+        + ", ".join(h["pr_key"] for h in hard_failed_claims)
+    )
+```
+
+`hard_failed_claims` are included in the `ModelSkillResult.details[]` with
+`skip_reason: "active_claim"` and `result: "skipped"`. They are NOT treated as merge failures
+(the merge never attempted) but are prominently logged.
 
 Apply `--authors` filter: if set, only include PRs where `pr["author"]["login"]` is in the authors list.
 
@@ -312,6 +373,31 @@ approved_candidates = [c for c in candidates if c["number"] not in excluded_prs]
 
 ## Step 7: Merge Phase (Parallel)
 
+Before dispatching each merge agent, **acquire a claim** from the global claim registry.
+Release the claim after the merge agent completes (success or failure).
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr_key
+
+registry = ClaimRegistry()
+
+for pr in approved_candidates:
+    org, repo_name = pr["headRepository"]["nameWithOwner"].split("/")
+    pr_key = canonical_pr_key(org=org, repo=repo_name, number=pr["number"])
+
+    acquired = registry.acquire(pr_key, run_id=run_id, action="merge", dry_run=dry_run)
+    if not acquired:
+        # Race: another run claimed between classification and merge dispatch
+        record result: failed, error: "claim_race_condition"
+        continue
+
+    try:
+        # dispatch merge agent (see Task() block below)
+        ...
+    finally:
+        registry.release(pr_key, run_id=run_id, dry_run=dry_run)
+```
+
 Dispatch up to `--max-parallel-prs` merge agents concurrently. For each approved_candidate:
 
 ```
@@ -431,7 +517,7 @@ except Exception as e:
       "head_sha": "<sha>",
       "result": "merged | skipped | failed",
       "merge_method": "<method>",
-      "skip_reason": null | "UNKNOWN_state" | "gate_excluded" | "since_filter" | "label_filter"
+      "skip_reason": null | "UNKNOWN_state" | "gate_excluded" | "since_filter" | "label_filter" | "active_claim"
     }
   ]
 }
@@ -480,8 +566,10 @@ Skill(skill="onex:merge-sweep", args={
   max_total_merges: <cap>,
   max_parallel_prs: <cap>,
   merge_method: <method>,
-  since: <date>,         # optional date filter
-  label: <label>         # optional label filter
+  since: <date>,                  # optional date filter
+  label: <label>,                 # optional label filter
+  run_id: <pipeline_run_id>,      # claim registry ownership
+  dry_run: <dry_run>              # propagates to claim registry (zero writes)
 })
 ```
 

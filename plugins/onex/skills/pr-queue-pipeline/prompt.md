@@ -25,6 +25,7 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--max-parallel-repos <n>` — default: 3
    - `--clean-runs <n>` — default: 2
    - `--max-review-minutes <n>` — default: 30
+   - `--dry-run` — default: false (zero filesystem writes; propagated to all sub-skills and claim registry)
 
 3. **Generate or resume run_id** (path constants `RUNS_DIR`, `CLAIMS_DIR` from `_lib/pr-safety/helpers.md`):
    - If `--run-id` provided: load ledger from `<RUNS_DIR>/<run_id>/ledger.json`
@@ -34,6 +35,20 @@ When `/pr-queue-pipeline [args]` is invoked:
      update ledger mtime, do NOT emit heartbeat, zero mutations.
    - Otherwise: generate new run_id `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
      and create ledger at `<RUNS_DIR>/<run_id>/ledger.json`.
+
+3a. **Startup — clean stale own claims for this pipeline run**:
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry
+
+registry = ClaimRegistry()
+# On startup, clean up any stale claims this pipeline run may have left from a prior crash.
+# The pipeline's run_id is generated fresh each invocation, so this is a no-op on first run.
+# On explicit resume (same run_id), it cleans stale own claims before doing any work.
+deleted = registry.cleanup_stale_own_claims(run_id, dry_run=dry_run)
+if deleted:
+    print(f"[pr-queue-pipeline] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
+```
 
 4. **Print header**:
    ```
@@ -195,7 +210,9 @@ Invoke: Skill(skill="onex:review-all-prs", args={
   clean_runs: <clean_runs>,
   max_review_minutes: <max_review_minutes>,
   skip_clean: true,    # Pipeline scans merge-ready PRs separately in Phase 0
-  authors: <authors>
+  authors: <authors>,
+  run_id: <run_id>,    # claim registry ownership (shared across all phases)
+  dry_run: <dry_run>   # propagates to claim registry
 })
 ```
 
@@ -237,7 +254,9 @@ Invoke: Skill(skill="onex:fix-prs", args={
   max_total_prs: <max_total_prs>,
   max_parallel_prs: <max_parallel_prs>,
   allow_force_push: <allow_force_push>,
-  authors: <authors>
+  authors: <authors>,
+  run_id: <run_id>,    # claim registry ownership (shared across all phases)
+  dry_run: <dry_run>   # propagates to claim registry
 })
 ```
 
@@ -318,7 +337,9 @@ Invoke: Skill(skill="onex:merge-sweep", args={
   max_total_merges: <max_total_merges>,
   max_parallel_prs: <max_parallel_prs>,
   merge_method: <merge_method>,
-  authors: <authors>
+  authors: <authors>,
+  run_id: <run_id>,    # claim registry ownership (shared across all phases)
+  dry_run: <dry_run>   # propagates to claim registry
 })
 ```
 
@@ -350,7 +371,9 @@ Invoke: Skill(skill="onex:merge-sweep", args={
   gate_token: <gate_token>,  # Reuse Phase 3 gate_token
   max_total_merges: <remaining_merge_budget>,  # max_total_merges - phase3_merged
   max_parallel_prs: <max_parallel_prs>,
-  merge_method: <merge_method>
+  merge_method: <merge_method>,
+  run_id: <run_id>,    # claim registry ownership
+  dry_run: <dry_run>
 })
 ```
 

@@ -40,11 +40,17 @@ args:
   - name: --ignore-ledger
     description: Bypass idempotency ledger and retry all PRs regardless of prior results (default: false)
     required: false
+  - name: --run-id
+    description: "Pipeline run ID for claim registry ownership + ledger namespacing. Generated if not provided."
+    required: false
+  - name: --dry-run
+    description: Zero filesystem writes — no claim files, no ledger updates, no PR mutations (default: false)
+    required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to scan; empty list means all"
   - name: run_id
-    description: "str | None — parent pipeline run_id for ledger namespacing"
+    description: "str | None — parent pipeline run_id for claim registry + ledger namespacing"
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: all_fixed | partial | nothing_to_fix | error"
