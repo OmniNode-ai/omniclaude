@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Node Git Effect - 100% contract-driven.
+
+This module provides the NodeGitEffect class, a minimal shell
+that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
+
+Capability: git.operations
+
+The node exposes git operations:
+- branch_create: Create a new git branch
+- commit: Stage and commit changes
+- push: Push branch to remote
+- pr_create: Create a pull request (includes mandatory ticket stamp block)
+- pr_update: Update an existing pull request
+- pr_close: Close a pull request
+
+Handler resolution is performed via ServiceRegistry by protocol type
+(ProtocolGitOperations). The actual git backend implements this protocol.
+
+INVARIANT: No subprocess 'git' or 'gh' calls outside this effect node.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from omnibase_core.nodes.node_effect import NodeEffect
+
+if TYPE_CHECKING:
+    from omnibase_core.models.container.model_onex_container import ModelONEXContainer
+
+
+class NodeGitEffect(NodeEffect):
+    """Effect node for git operations.
+
+    Capability: git.operations
+
+    All behavior defined in contract.yaml.
+    Handler resolved via ServiceRegistry by protocol type.
+
+    INVARIANT: This node is the only place subprocess git/gh calls are permitted.
+    All PRs created via this node include a mandatory ticket stamp block.
+    """
+
+    def __init__(self, container: ModelONEXContainer) -> None:
+        """Initialize the git effect node.
+
+        Args:
+            container: ONEX container for dependency injection
+        """
+        super().__init__(container)
+
+
+__all__ = ["NodeGitEffect"]

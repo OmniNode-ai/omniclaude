@@ -32,7 +32,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-import cachetools  # type: ignore[import-untyped]
+import cachetools
 import httpx
 import psutil
 import yaml

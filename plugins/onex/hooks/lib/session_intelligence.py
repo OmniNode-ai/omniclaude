@@ -45,8 +45,14 @@ except ImportError:
         _OnexError = OnexError
         _EnumCoreErrorCode = EnumCoreErrorCode
     except ImportError:
-        # Minimal fallback if neither import works
-        pass
+        try:
+            from omnibase_core.errors import EnumCoreErrorCode, OnexError
+
+            _OnexError = OnexError
+            _EnumCoreErrorCode = EnumCoreErrorCode
+        except ImportError:
+            # Minimal fallback if no import works (deployed cache without omnibase_core)
+            pass
 
 
 # Reserved payload fields that metadata cannot overwrite

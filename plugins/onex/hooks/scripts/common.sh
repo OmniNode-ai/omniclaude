@@ -61,9 +61,13 @@ PYTHON_CMD="$(find_python)"
 if [[ -z "${PYTHON_CMD}" ]]; then
     echo "ERROR: No valid Python found for ONEX hooks." 1>&2
     echo "  Expected one of:" 1>&2
-    echo "    - PLUGIN_PYTHON_BIN=/path/to/python3" 1>&2
+    echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2
     echo "    - ${PLUGIN_ROOT}/lib/.venv/bin/python3 (deploy the plugin)" 1>&2
     echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
+    echo "" 1>&2
+    echo "  Quick fix: run the deploy skill with --repair-venv to build lib/.venv" 1>&2
+    echo "  in the active cache version without a full redeploy:" 1>&2
+    echo "    \${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv" 1>&2
     exit 1
 fi
 export PYTHON_CMD

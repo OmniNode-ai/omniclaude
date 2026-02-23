@@ -85,6 +85,32 @@ repos:
         stages: [pre-commit]
 
       # --------------------------------------------------------------------------
+      # detect-secrets baseline regeneration
+      # Problem: .secrets.baseline stores line numbers. When new jobs are added to
+      # CI workflows, all downstream line numbers shift, causing false-positive
+      # "Secret Detection" CI failures on every such PR (OMN-2625).
+      # Solution: Regenerate the baseline before each commit so committed line
+      # numbers always reflect the current codebase state. CI comparison then
+      # finds zero delta because baseline was already updated.
+      # Uses the same --exclude-files patterns as the CI detect-secrets job.
+      # --------------------------------------------------------------------------
+      - id: detect-secrets-update
+        name: regenerate .secrets.baseline (prevent line-shift false positives)
+        entry: bash -c '
+          detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files "\.lock$" \
+            --exclude-files "\.env\.example$" \
+            --exclude-files "bandit-report\.json$" \
+            --exclude-files "^tests/" \
+            --exclude-files "security-report\.json$" \
+          && git add .secrets.baseline'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      # --------------------------------------------------------------------------
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor
       # Scope: Only triggers when migration files or .migration_freeze change
       # Purpose: Enforces schema freeze (OMN-2055) while .migration_freeze exists

@@ -15,7 +15,6 @@ import sys
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 # psycopg2 imports - these are required, fail early if missing
@@ -40,19 +39,13 @@ except ImportError as e:
 Connection = Any  # psycopg2.extensions.connection when available
 
 
-# Add project root to path for config import
-project_root = (
-    Path(__file__).resolve().parents[3]
-)  # lib → hooks → claude → omniclaude root
-sys.path.insert(0, str(project_root))
-
 # Lazy config import - defer to avoid import-time failures
 _settings = None
 _settings_error: str | None = None
 
 
 def _get_settings():
-    """Lazily load settings, returning None if unavailable."""
+    """Lazily load settings from config module, returning None if unavailable."""
     global _settings, _settings_error
 
     if _settings is not None:
@@ -63,17 +56,15 @@ def _get_settings():
         return None
 
     try:
-        from config import settings
+        from config import settings  # type: ignore[import]
 
         _settings = settings
         return _settings
     except ImportError as e:
         _settings_error = f"config module not available: {e}"
-        print(f"Warning: {_settings_error}", file=sys.stderr)
         return None
     except Exception as e:
         _settings_error = f"failed to load config.settings: {e}"
-        print(f"Warning: {_settings_error}", file=sys.stderr)
         return None
 
 
@@ -129,51 +120,48 @@ class HookEventLogger:
             return
 
         if connection_string is None:
-            # Use Pydantic Settings to generate connection string
-            # This provides type-safe configuration with validation
+            # Primary: use Pydantic Settings to generate connection string
             settings = _get_settings()
-            if settings is None:
-                print(
-                    "Warning: HookEventLogger unavailable (config.settings not loaded)",
-                    file=sys.stderr,
-                )
+            if settings is not None:
+                try:
+                    connection_string = settings.get_postgres_dsn()
+                except Exception as e:
+                    print(
+                        f"Warning: HookEventLogger: failed to get DSN from settings ({e}), falling back to env vars",
+                        file=sys.stderr,
+                    )
+                    connection_string = None
+
+                if connection_string is not None:
+                    # Convert SQLAlchemy-style DSN to psycopg2 format
+                    # psycopg2 uses: host=... port=... dbname=... user=... password=...
+                    connection_string = connection_string.replace("postgresql://", "")
+
+                    # Parse DSN: user:password@host:port/database
+                    if "@" in connection_string:
+                        user_pass, host_db = connection_string.split("@", 1)
+                        if ":" in user_pass:
+                            user, password = user_pass.split(":", 1)
+                        else:
+                            user = user_pass
+                            password = ""
+
+                        if "/" in host_db:
+                            host_port, db = host_db.split("/", 1)
+                            if ":" in host_port:
+                                host, port = host_port.split(":", 1)
+                            else:
+                                host = host_port
+                                port = "5432"
+                        else:
+                            host = host_db
+                            port = "5432"
+                            db = "postgres"
+
+                        connection_string = f"host={host} port={port} dbname={db} user={user} password={password}"  # secret-ok: password var loaded from env
+
+            if connection_string is None:
                 return
-
-            try:
-                connection_string = settings.get_postgres_dsn()
-            except Exception as e:
-                print(
-                    f"Warning: HookEventLogger unavailable (failed to get DSN: {e})",
-                    file=sys.stderr,
-                )
-                return
-
-            # Convert SQLAlchemy-style DSN to psycopg2 format
-            # psycopg2 uses: host=... port=... dbname=... user=... password=...
-            connection_string = connection_string.replace("postgresql://", "")
-
-            # Parse DSN: user:password@host:port/database
-            if "@" in connection_string:
-                user_pass, host_db = connection_string.split("@", 1)
-                if ":" in user_pass:
-                    user, password = user_pass.split(":", 1)
-                else:
-                    user = user_pass
-                    password = ""
-
-                if "/" in host_db:
-                    host_port, db = host_db.split("/", 1)
-                    if ":" in host_port:
-                        host, port = host_port.split(":", 1)
-                    else:
-                        host = host_port
-                        port = "5432"
-                else:
-                    host = host_db
-                    port = "5432"
-                    db = "postgres"
-
-                connection_string = f"host={host} port={port} dbname={db} user={user} password={password}"  # secret-ok: password var loaded from env
 
         self.connection_string = connection_string
         self._available = True

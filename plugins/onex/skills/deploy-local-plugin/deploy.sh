@@ -2,22 +2,34 @@
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:
-#   ./deploy.sh [--execute] [--no-version-bump]
+#   ./deploy.sh [--execute] [--bump-version]
+#   ./deploy.sh --repair-venv
 #
-# Default: Dry run (preview only)
-# --execute: Actually perform deployment
-# --no-version-bump: Skip patch version increment
+# Default: Dry run, deploys to same version (no bump)
+# --execute: Actually perform deployment (sync files + build venv)
+# --bump-version: Increment patch version before deploying
+# --repair-venv: Build lib/.venv in the currently-active deployed version (no file sync, no version bump)
+#                Use this when hooks fail with "No valid Python found" after a deploy.
 # Deploys to plugin cache ONLY. Skills/commands/agents discovered via plugin installPath.
 
 set -euo pipefail
 
 # Check required dependencies
-for cmd in jq rsync; do
+# rsync is only required for full deploys, not for --repair-venv
+_NEED_RSYNC=true
+for arg in "$@"; do [[ "$arg" == "--repair-venv" ]] && { _NEED_RSYNC=false; break; }; done
+
+for cmd in jq; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "Error: Required command '$cmd' not found"
         exit 1
     fi
 done
+if [[ "$_NEED_RSYNC" == "true" ]] && ! command -v rsync &>/dev/null; then
+    echo "Error: Required command 'rsync' not found"
+    exit 1
+fi
+unset _NEED_RSYNC
 
 # Colors for output
 RED='\033[0;31m'
@@ -28,7 +40,9 @@ NC='\033[0m' # No Color
 
 # Parse arguments
 EXECUTE=false
-NO_VERSION_BUMP=false
+NO_VERSION_BUMP=true
+BUMP_VERSION=false
+REPAIR_VENV=false
 
 for arg in "$@"; do
     case $arg in
@@ -36,14 +50,25 @@ for arg in "$@"; do
             EXECUTE=true
             ;;
         --no-version-bump)
+            echo -e "${YELLOW}Warning: --no-version-bump is deprecated; no-bump is now the default. Use --bump-version to increment.${NC}" >&2
             NO_VERSION_BUMP=true
             ;;
+        --bump-version)
+            NO_VERSION_BUMP=false
+            BUMP_VERSION=true
+            ;;
+        --repair-venv)
+            REPAIR_VENV=true
+            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--no-version-bump]"
+            echo "Usage: deploy.sh [--execute] [--bump-version]"
+            echo "       deploy.sh --repair-venv"
             echo ""
             echo "Options:"
             echo "  --execute         Actually perform deployment (default: dry run)"
-            echo "  --no-version-bump Skip auto-incrementing patch version"
+            echo "  --bump-version    Increment patch version (default: deploy to same version)"
+            echo "  --repair-venv     Build lib/.venv in the active deployed version without a full redeploy."
+            echo "                    Use when hooks fail with 'No valid Python found' after a deploy."
             echo "  --help            Show this help message"
             exit 0
             ;;
@@ -54,6 +79,15 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Guard: --no-version-bump and --bump-version are mutually exclusive.
+# Since --no-version-bump sets NO_VERSION_BUMP=true and --bump-version sets
+# BUMP_VERSION=true, detect the conflict explicitly rather than relying on
+# argument order (last-writer-wins is confusing and unpredictable).
+if [[ "$NO_VERSION_BUMP" == "true" && "$BUMP_VERSION" == "true" ]]; then
+    echo -e "${RED}Error: --no-version-bump and --bump-version are mutually exclusive.${NC}" >&2
+    exit 1
+fi
 
 # Determine source directory
 # Try CLAUDE_PLUGIN_ROOT first, then fall back to script location
@@ -67,6 +101,191 @@ fi
 PLUGIN_JSON="${SOURCE_ROOT}/.claude-plugin/plugin.json"
 CACHE_BASE="$HOME/.claude/plugins/cache/omninode-tools/onex"
 REGISTRY="$HOME/.claude/plugins/installed_plugins.json"
+
+# =============================================================================
+# --repair-venv: Provision lib/.venv in the active deployed version.
+# =============================================================================
+# This mode is used when hooks fail with "No valid Python found" because lib/.venv
+# was not built — for example, if the cache dir was populated by rsync/git-clone
+# instead of a full deploy.sh --execute run, or if the venv build was interrupted.
+#
+# Steps:
+#   1. Read installPath from installed_plugins.json (the live cache version)
+#   2. Resolve PROJECT_ROOT from this repo (for pip install source)
+#   3. Build lib/.venv in-place under installPath/lib/
+#   4. Run smoke test; exit non-zero on failure (no registry mutation)
+# =============================================================================
+if [[ "$REPAIR_VENV" == "true" ]]; then
+    echo ""
+    echo -e "${GREEN}=== Repair Venv ===${NC}"
+    echo ""
+
+    # --- Find the active installed version ---
+    if [[ ! -f "$REGISTRY" ]]; then
+        echo -e "${RED}Error: Registry not found at ${REGISTRY}${NC}"
+        echo -e "${RED}Cannot determine active install path. Run a full deploy first.${NC}"
+        exit 1
+    fi
+    if ! ACTIVE_INSTALL_PATH=$(jq -re '.plugins["onex@omninode-tools"][0].installPath' "$REGISTRY" 2>/dev/null) \
+        || [[ -z "$ACTIVE_INSTALL_PATH" ]]; then
+        echo -e "${RED}Error: Could not read installPath from registry${NC}"
+        echo -e "${RED}Run a full deploy first: ./deploy.sh --execute${NC}"
+        exit 1
+    fi
+    ACTIVE_VERSION=$(jq -re '.plugins["onex@omninode-tools"][0].version' "$REGISTRY" 2>/dev/null || echo "unknown")
+
+    echo "Active install: ${ACTIVE_INSTALL_PATH} (version ${ACTIVE_VERSION})"
+    echo ""
+
+    if [[ ! -d "$ACTIVE_INSTALL_PATH" ]]; then
+        echo -e "${RED}Error: Active install path does not exist: ${ACTIVE_INSTALL_PATH}${NC}"
+        echo -e "${RED}Run a full deploy first: ./deploy.sh --execute${NC}"
+        exit 1
+    fi
+
+    REPAIR_VENV_DIR="${ACTIVE_INSTALL_PATH}/lib/.venv"
+    if [[ -d "$REPAIR_VENV_DIR" && -x "${REPAIR_VENV_DIR}/bin/python3" ]]; then
+        echo -e "${YELLOW}lib/.venv already exists at ${REPAIR_VENV_DIR}${NC}"
+        echo ""
+        echo "Running smoke test to verify..."
+        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+            echo -e "${GREEN}Venv is healthy. No repair needed.${NC}"
+            echo ""
+            exit 0
+        else
+            echo -e "${YELLOW}Venv exists but smoke test failed. Rebuilding...${NC}"
+            rm -rf "$REPAIR_VENV_DIR"
+        fi
+    fi
+
+    # Rebuild venv if still missing (either wasn't there or was just removed above)
+    if [[ ! -d "$REPAIR_VENV_DIR" || ! -x "${REPAIR_VENV_DIR}/bin/python3" ]]; then
+        # --- Resolve PROJECT_ROOT (same logic as full deploy) ---
+        if ! REPAIR_PROJECT_ROOT="$(git -C "${SOURCE_ROOT}" rev-parse --show-toplevel 2>/dev/null)"; then
+            echo -e "${RED}Error: Could not determine repo root via git rev-parse.${NC}"
+            echo -e "${RED}Ensure SOURCE_ROOT (${SOURCE_ROOT}) is inside the omniclaude git repo.${NC}"
+            exit 1
+        fi
+        if [[ ! -f "${REPAIR_PROJECT_ROOT}/pyproject.toml" ]]; then
+            echo -e "${RED}Error: pyproject.toml not found at ${REPAIR_PROJECT_ROOT}${NC}"
+            exit 1
+        fi
+        echo "Project root: ${REPAIR_PROJECT_ROOT}"
+
+        # --- Validate Python >= 3.12 ---
+        REPAIR_PYTHON_BIN="python3"
+        if ! command -v "$REPAIR_PYTHON_BIN" &>/dev/null; then
+            echo -e "${RED}Error: python3 not found in PATH. Python 3.12+ required.${NC}"
+            exit 1
+        fi
+        PY_MAJOR=$("$REPAIR_PYTHON_BIN" -c "import sys; print(sys.version_info.major)")
+        PY_MINOR=$("$REPAIR_PYTHON_BIN" -c "import sys; print(sys.version_info.minor)")
+        if [[ "${PY_MAJOR}" -lt 3 ]] || { [[ "${PY_MAJOR}" -eq 3 ]] && [[ "${PY_MINOR}" -lt 12 ]]; }; then
+            echo -e "${RED}Error: Python ${PY_MAJOR}.${PY_MINOR} found, but >= 3.12 required.${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}Python ${PY_MAJOR}.${PY_MINOR} validated${NC}"
+        echo ""
+
+        echo "Building lib/.venv at ${REPAIR_VENV_DIR}..."
+        REPAIR_LOCKED_REQS=$(mktemp /tmp/omniclaude-repair-reqs.XXXXXX)
+        REPAIR_UV_STDERR="$(mktemp /tmp/omniclaude-repair-uv-err.XXXXXX)"
+        _REPAIR_TRAP_REMOVE=false
+        trap '[[ "${_REPAIR_TRAP_REMOVE:-false}" == "true" ]] && rm -rf "${REPAIR_VENV_DIR:-}"; rm -f "${REPAIR_LOCKED_REQS:-}" "${REPAIR_UV_STDERR:-}"' EXIT
+
+        mkdir -p "${ACTIVE_INSTALL_PATH}/lib"
+        "$REPAIR_PYTHON_BIN" -m venv "$REPAIR_VENV_DIR"
+        _REPAIR_TRAP_REMOVE=true
+        echo -e "${GREEN}  Venv created${NC}"
+
+        if ! "${REPAIR_VENV_DIR}/bin/python3" -m ensurepip --upgrade 2>&1; then
+            echo -e "${RED}Error: ensurepip failed.${NC}"
+            rm -rf "$REPAIR_VENV_DIR"
+            exit 1
+        fi
+        "${REPAIR_VENV_DIR}/bin/pip" install --upgrade pip wheel --quiet
+        echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
+
+        echo "  Installing project from ${REPAIR_PROJECT_ROOT} (locked versions)..."
+        _REPAIR_USE_LOCKED=false
+        if command -v uv &>/dev/null && [[ -f "${REPAIR_PROJECT_ROOT}/uv.lock" ]]; then
+            if (cd "${REPAIR_PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$REPAIR_LOCKED_REQS" 2>"$REPAIR_UV_STDERR"); then
+                if [ ! -s "$REPAIR_LOCKED_REQS" ]; then
+                    echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install${NC}"
+                    rm -f "$REPAIR_LOCKED_REQS"
+                else
+                    _REPAIR_USE_LOCKED=true
+                fi
+            else
+                if [ -s "$REPAIR_UV_STDERR" ]; then
+                    echo -e "${YELLOW}  WARNING: uv export failed: $(head -3 "$REPAIR_UV_STDERR")${NC}"
+                fi
+                rm -f "$REPAIR_LOCKED_REQS"
+            fi
+        fi
+        rm -f "$REPAIR_UV_STDERR"
+
+        if [[ "$_REPAIR_USE_LOCKED" == "true" ]]; then
+            if ! (cd "${REPAIR_PROJECT_ROOT}" && "${REPAIR_VENV_DIR}/bin/pip" install --no-cache-dir -r "$REPAIR_LOCKED_REQS" --quiet); then
+                echo -e "${RED}Error: pip install from locked requirements failed.${NC}"
+                rm -f "$REPAIR_LOCKED_REQS"
+                rm -rf "$REPAIR_VENV_DIR"
+                exit 1
+            fi
+            rm -f "$REPAIR_LOCKED_REQS"
+            echo -e "${GREEN}  Project installed (locked versions from uv.lock)${NC}"
+        else
+            echo -e "${YELLOW}  uv not found or uv.lock missing — falling back to pip install (versions may drift)${NC}"
+            rm -f "$REPAIR_LOCKED_REQS"
+            if ! "${REPAIR_VENV_DIR}/bin/pip" install --no-cache-dir "${REPAIR_PROJECT_ROOT}" --quiet; then
+                echo -e "${RED}Error: pip install failed.${NC}"
+                rm -rf "$REPAIR_VENV_DIR"
+                exit 1
+            fi
+            echo -e "${GREEN}  Project installed${NC}"
+        fi
+
+        # --- Write venv manifest ---
+        REPAIR_MANIFEST="${ACTIVE_INSTALL_PATH}/lib/venv_manifest.txt"
+        {
+            echo "# Plugin Venv Manifest"
+            echo "# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "# Repair version: ${ACTIVE_VERSION} (repaired, not redeployed)"
+            echo ""
+            echo "python_version: $("${REPAIR_VENV_DIR}/bin/python3" --version 2>&1)"
+            echo "pip_version: $("${REPAIR_VENV_DIR}/bin/pip" --version 2>&1)"
+            echo "source_root: ${REPAIR_PROJECT_ROOT}"
+            echo "git_sha: $(cd "${REPAIR_PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+            echo ""
+            echo "# Installed packages:"
+            "${REPAIR_VENV_DIR}/bin/pip" freeze 2>/dev/null
+        } > "$REPAIR_MANIFEST"
+        echo -e "${GREEN}  Manifest written to ${REPAIR_MANIFEST}${NC}"
+
+        # --- Smoke test ---
+        echo ""
+        echo "Running smoke test..."
+        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+            _REPAIR_TRAP_REMOVE=false  # Venv is good; retain on exit
+            echo ""
+            echo -e "${GREEN}Venv repair complete!${NC}"
+            echo ""
+            echo "Restart Claude Code to activate the repaired venv."
+        else
+            echo -e "${RED}Error: Smoke test FAILED. Venv was removed.${NC}"
+            echo "  The following imports must work:"
+            echo "    import omnibase_spi"
+            echo "    import omniclaude"
+            echo "    from omniclaude.hooks.topics import TopicBase"
+            rm -rf "$REPAIR_VENV_DIR"
+            rm -f "$REPAIR_MANIFEST"
+            exit 1
+        fi
+    fi
+
+    echo ""
+    exit 0
+fi
 
 # Verify source exists
 if [[ ! -f "$PLUGIN_JSON" ]]; then
@@ -428,12 +647,16 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Update statusLine in settings.json to point at new version's statusline.sh
     SETTINGS_JSON="$HOME/.claude/settings.json"
     if [[ -f "$SETTINGS_JSON" ]]; then
+        # Single backup before ANY modification to settings.json.
+        # Placed here so it covers both the statusLine block and the hooks block
+        # below regardless of which branches execute. The hooks block previously
+        # had its own cp that would overwrite this backup; that duplicate was removed.
+        cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
+
         # Use ~ prefix: Claude Code's settings parser expands ~ to $HOME
         STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
 
         if jq -e '.statusLine.command' "$SETTINGS_JSON" >/dev/null 2>&1; then
-            # Backup before modification (recoverable if jq fails mid-write)
-            cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
             jq --arg cmd "$STATUSLINE_PATH_SHORT" '
                 .statusLine.command = $cmd
             ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
@@ -448,6 +671,32 @@ if [[ "$EXECUTE" == "true" ]]; then
 
             echo -e "${GREEN}  Updated settings.json statusLine -> ${STATUSLINE_PATH_SHORT}${NC}"
         fi
+    fi
+
+    # Update hooks in settings.json to point at new version's hook scripts.
+    # Strips any existing onex hook entries (matched by cache path) then writes
+    # fresh entries for each event type. Other plugins' hooks are preserved.
+    if [[ -f "$SETTINGS_JSON" ]]; then
+        HOOKS_BASE="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts"
+        PRETOOL_MATCHER='^(Edit|Write)$'
+        POSTTOOL_MATCHER='^(Read|Write|Edit|Bash|Glob|Grep|Task|Skill|WebFetch|WebSearch|NotebookEdit|NotebookRead)$'
+
+        jq --arg base "$HOOKS_BASE" \
+           --arg ptum "$PRETOOL_MATCHER" \
+           --arg ptoom "$POSTTOOL_MATCHER" '
+          def is_onex: .hooks | map(.command // "") | any(test("plugins/cache/omninode-tools/onex/"));
+          def rm_onex: if . == null then [] else map(select(is_onex | not)) end;
+          def add_cmd(cmd): . + [{"hooks": [{"type": "command", "command": cmd}]}];
+          def add_m(m; cmd): . + [{"matcher": m, "hooks": [{"type": "command", "command": cmd}]}];
+          .hooks |= (. // {}) |
+          .hooks.SessionStart     = ((.hooks.SessionStart     // []) | rm_onex | add_cmd("\($base)/session-start.sh")) |
+          .hooks.SessionEnd       = ((.hooks.SessionEnd       // []) | rm_onex | add_cmd("\($base)/session-end.sh")) |
+          .hooks.UserPromptSubmit = ((.hooks.UserPromptSubmit // []) | rm_onex | add_cmd("\($base)/user-prompt-submit.sh")) |
+          .hooks.PreToolUse       = ((.hooks.PreToolUse       // []) | rm_onex | add_m($ptum;  "\($base)/pre_tool_use_authorization_shim.sh")) |
+          .hooks.PostToolUse      = ((.hooks.PostToolUse      // []) | rm_onex | add_m($ptoom; "\($base)/post-tool-use-quality.sh"))
+        ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+
+        echo -e "${GREEN}  Updated settings.json hooks (5 entries) -> ${HOOKS_BASE}${NC}"
     fi
 
     # Install register-tab.sh to ~/.claude/ — required by statusline.sh for tab bar.

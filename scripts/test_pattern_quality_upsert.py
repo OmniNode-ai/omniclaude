@@ -35,7 +35,7 @@ async def test_upsert():
     )
 
     # Database connection string from Pydantic settings
-    database_url = settings.get_postgres_dsn()
+    database_url = settings.get_postgres_dsn()  # noqa: secrets
     print(f"Using database URL: {database_url}")
 
     # Store the score

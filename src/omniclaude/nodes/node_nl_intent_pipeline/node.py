@@ -11,7 +11,7 @@ delegation shell.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from omnibase_core.nodes.node_compute import NodeCompute
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeNlIntentPipelineCompute(NodeCompute):
+class NodeNlIntentPipelineCompute(NodeCompute[Any, Any]):
     """Compute node for NL → Intent Object parsing.
 
     Capability: nl.intent.pipeline.compute

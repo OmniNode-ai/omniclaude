@@ -22,7 +22,7 @@ Configure your Claude Code status line to show folder name, git branch, and PR n
 [folder_name] branch_name #PR_number
 ```
 
-- **Folder**: Cyan - Shows which worktree you're in (e.g., `omniclaude4`)
+- **Folder**: Cyan - Shows which worktree you're in (e.g., `omniclaude`)
 - **Branch**: Green - Current git branch
 - **PR**: Magenta - PR number if one exists for the branch (cached, background refresh)
 
