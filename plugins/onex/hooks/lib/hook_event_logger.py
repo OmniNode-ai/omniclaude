@@ -11,7 +11,6 @@ Graceful Degradation:
 - Never blocks hook execution
 """
 
-import os
 import sys
 import uuid
 from dataclasses import dataclass
@@ -38,34 +37,6 @@ except ImportError as e:
 
 # Type alias for connection - use Any to avoid strict type checking on psycopg2 internals
 Connection = Any  # psycopg2.extensions.connection when available
-
-
-def _get_dsn_from_env() -> str | None:
-    """Build a psycopg2 DSN from environment variables.
-
-    POSTGRES_DATABASE takes priority: if set, individual vars are used to build
-    the DSN (guaranteeing the per-repo database is used rather than the shared
-    POSTGRES_DSN which points at the platform database).  Falls back to
-    POSTGRES_DSN when POSTGRES_DATABASE is absent.
-    """
-    host = os.environ.get("POSTGRES_HOST")
-    port = os.environ.get("POSTGRES_PORT", "5432")
-    user = os.environ.get("POSTGRES_USER")
-    password = os.environ.get("POSTGRES_PASSWORD", "")
-    database = os.environ.get("POSTGRES_DATABASE")
-
-    # If POSTGRES_DATABASE is explicitly set, always use individual vars so
-    # that per-repo database isolation is respected even when the shared
-    # POSTGRES_DSN (pointing at the platform database) is also in the env.
-    if database and host and user:
-        return f"host={host} port={port} dbname={database} user={user} password={password}"  # secret-ok: password var loaded from env
-
-    # Fall back to full DSN URL (e.g. from ~/.omnibase/.env via POSTGRES_DSN)
-    dsn_url = os.environ.get("POSTGRES_DSN")
-    if dsn_url:
-        return dsn_url
-
-    return None
 
 
 # Lazy config import - defer to avoid import-time failures
@@ -189,15 +160,8 @@ class HookEventLogger:
 
                         connection_string = f"host={host} port={port} dbname={db} user={user} password={password}"  # secret-ok: password var loaded from env
 
-            # Fallback: read connection details directly from environment variables
             if connection_string is None:
-                connection_string = _get_dsn_from_env()
-                if connection_string is None:
-                    print(
-                        "Warning: HookEventLogger unavailable (no config.settings and POSTGRES_HOST/USER/DATABASE env vars not set)",
-                        file=sys.stderr,
-                    )
-                    return
+                return
 
         self.connection_string = connection_string
         self._available = True
