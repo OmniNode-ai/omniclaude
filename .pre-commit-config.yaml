@@ -57,6 +57,7 @@ repos:
         entry: uv run python -m omnibase_core.validation.validator_local_paths
         language: system
         types: [text]
+        exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*'
         pass_filenames: true
         stages: [pre-commit]
 
