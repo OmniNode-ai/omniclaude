@@ -1002,21 +1002,69 @@ if "--checkpoint" in args:
             checkpoint_arg = None
 
 # Extract --path value (OMN-2608)
+# When running from omni_home (canonical clone registry), auto-detect the active worktree
+# so that /local-review works without requiring an explicit --path every time.
 repo_path = None  # None means use CWD
+_OMNI_HOME = Path("/Volumes/PRO-G40/Code/omni_home")
+_WORKTREES_BASE = Path("/Volumes/PRO-G40/Code/omni_worktrees")
+
 if "--path" in args:
     idx = args.index("--path")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
         print("Error: --path requires a directory argument")
         exit(1)
-    from pathlib import Path
     repo_path = Path(args[idx + 1]).resolve()
     if not repo_path.is_dir():
         print(f"Error: --path directory does not exist: {repo_path}")
         exit(1)
     if not (repo_path / ".git").exists():
-        # Could be a worktree (has .git file, not dir) — check for .git file too
-        if not (repo_path / ".git").exists():
-            print(f"Warning: --path directory may not be a git repo: {repo_path}")
+        print(f"Warning: --path directory may not be a git repo: {repo_path}")
+else:
+    # Auto-detect: if CWD is inside omni_home, find the matching worktree
+    _cwd = Path(os.getcwd())
+    try:
+        _rel = _cwd.relative_to(_OMNI_HOME)
+        _repo_name = _rel.parts[0] if _rel.parts else None
+    except ValueError:
+        _repo_name = None  # Not in omni_home
+
+    if _repo_name and _WORKTREES_BASE.exists():
+        # Scan worktrees dir for candidates matching this repo
+        _candidates = []
+        for _ticket_dir in sorted(_WORKTREES_BASE.iterdir()):
+            if not _ticket_dir.is_dir():
+                continue
+            _candidate = _ticket_dir / _repo_name
+            if _candidate.is_dir() and (_candidate / ".git").exists():
+                try:
+                    _branch = subprocess.check_output(
+                        ["git", "-C", str(_candidate), "rev-parse", "--abbrev-ref", "HEAD"],
+                        text=True, stderr=subprocess.DEVNULL
+                    ).strip()
+                    _ahead = subprocess.check_output(
+                        ["git", "-C", str(_candidate), "rev-list", "--count", "origin/main..HEAD"],
+                        text=True, stderr=subprocess.DEVNULL
+                    ).strip()
+                    _candidates.append((_ticket_dir.name, _candidate, _branch, int(_ahead or 0)))
+                except Exception:
+                    pass
+
+        if not _candidates:
+            print(f"Error: Running from omni_home/{_repo_name} (canonical clone) but no worktrees found.")
+            print(f"Create a worktree first:")
+            print(f"  git -C {_OMNI_HOME}/{_repo_name} worktree add {_WORKTREES_BASE}/<TICKET>/{_repo_name} -b <BRANCH>")
+            print("Or use --path to specify an existing worktree.")
+            exit(1)
+        elif len(_candidates) == 1:
+            _, repo_path, _branch, _ahead = _candidates[0]
+            print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead of main)")
+        else:
+            # Multiple candidates — prefer most commits ahead, then most recent ticket dir name
+            _candidates.sort(key=lambda x: x[3], reverse=True)
+            _, repo_path, _branch, _ahead = _candidates[0]
+            _others = [str(c[1]) for c in _candidates[1:]]
+            print(f"Auto-detected worktree: {repo_path} (branch: {_branch}, {_ahead} commits ahead)")
+            print(f"Other candidates (use --path to select): {_others}")
 
 # Helper: git command with optional -C path
 def git_cmd(args_list):

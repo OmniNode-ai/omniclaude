@@ -60,6 +60,9 @@ args:
   - name: --required-clean-runs
     description: "Number of consecutive clean runs required before passing (default 2, min 1)"
     required: false
+  - name: --path
+    description: "Path to the git worktree to review. Required when running from omni_home; auto-detected from worktrees dir if only one candidate exists."
+    required: false
 ---
 
 # Local Review
@@ -87,6 +90,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 /local-review --no-fix                  # Report only mode
 /local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
 /local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
+/local-review --path /Volumes/PRO-G40/Code/omni_worktrees/OMN-1234/omniclaude  # Explicit worktree
 ```
 
 ## Arguments
@@ -103,6 +107,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
+| `--path <dir>` | auto-detect | Path to the git worktree to review. Auto-detected from `/Volumes/PRO-G40/Code/omni_worktrees/` when running from `omni_home`. |
 
 ## Dispatch Contracts (Execution-Critical)
 
