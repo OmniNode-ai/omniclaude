@@ -870,8 +870,8 @@ def execute_ticket(task):
             # Triage tickets: analyze and create sub-tickets, no implementation
             result = Skill("onex:triage-ticket", args=ticket_id, cwd=worktree_path)
         else:
-            # Normal ticket: invoke ticket-work skill
-            result = Skill("onex:ticket-work", args=ticket_id, cwd=worktree_path)
+            # Normal ticket: invoke full pipeline (implement → local-review → PR → CI → merge)
+            result = Skill("onex:ticket-pipeline", args=ticket_id, cwd=worktree_path)
 
         # Extract PR URL if present in result
         pr_url = extract_pr_url(result)
