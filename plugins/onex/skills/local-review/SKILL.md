@@ -109,6 +109,113 @@ Parse arguments from `$ARGUMENTS`:
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 | `--path <dir>` | auto-detect | Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via `git worktree list`. When running from a linked worktree, defaults to CWD. |
 
+## Phase 0: Pre-Existing Issue Scan
+
+Phase 0 runs BEFORE the diff review loop. It detects and handles pre-existing lint/mypy
+failures so they don't surface as CI surprises after the feature work is merged.
+
+**Key invariant**: Pre-existing fixes are committed separately from the feature work.
+NEVER mix pre-existing fixes with the feature branch changes.
+
+### Phase 0 Procedure
+
+```
+Phase 0: Pre-existing issue scan
+  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
+     fixes are applied; do NOT stash or alter the working tree to run this step)
+  2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
+  3. Classify each failure:
+       - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
+       - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
+  4. For AUTO-FIX:
+       - Apply fixes
+       - Commit as: chore(pre-existing): fix pre-existing lint/type errors
+       - This commit is separate from all feature commits
+  5. For DEFER:
+       - For each deferred failure, compute fingerprint (SHA-256 of pipe-delimited
+         `tool_name|check_name|failure_kind|rule_id|repo_relative_path|symbol`)
+       - Search Linear: `mcp__linear-server__list_issues(query="gap:{fingerprint[:8]}")`
+       - Apply dedup state table (see below) — create ticket OR comment on existing
+       - Note in session: "Pre-existing issues deferred: {N} created, {M} commented"
+       - Add deferred issues to PR description note section
+  6. Write Phase 0 results to session notes (session notes = the structured context block
+     injected into the Claude session via the context-injection subsystem)
+  7. Proceed to normal diff review
+```
+
+### Auto-Fix Criteria (ALL must be true)
+
+| Criterion | Value |
+|-----------|-------|
+| Files touched | ≤ 10 |
+| Subsystem | Same as the feature work (determine by inspecting `git diff {base}..HEAD --name-only`; the top-level directory prefix of the majority of changed files identifies the subsystem — e.g. `src/omniclaude/hooks/` or `plugins/onex/skills/`) |
+| Risk level | Low (formatting, import ordering, type annotation style) |
+
+### Fingerprint Spec
+
+SHA-256 of pipe-delimited:
+
+```
+tool_name | check_name | failure_kind | rule_id | repo_relative_path | symbol
+```
+
+| Field | Value |
+|-------|-------|
+| `tool_name` | `mypy`, `ruff`, `pre-commit` |
+| `check_name` | specific check (e.g. `no-return-annotation`, `E501`) |
+| `failure_kind` | `lint`, `type`, `test`, `runtime` |
+| `rule_id` | rule code if available (e.g. `E501`), else empty string |
+| `repo_relative_path` | path from repo root (NOT absolute) |
+| `symbol` | function/class name if applicable, else empty string |
+
+Empty fields use the empty string (not `null` or `None`). Example:
+```
+mypy|no-return-annotation|type||src/omniclaude/hooks/handler.py|handle_event
+```
+
+### Dedup State Table
+
+| Existing ticket state | Last closed | Action |
+|-----------------------|-------------|--------|
+| In Progress / Backlog / Todo | — | Comment on existing ticket, skip creation |
+| Done / Duplicate / Cancelled | ≤ 7 days ago | Comment on existing ticket, skip creation |
+| Done / Duplicate / Cancelled | > 7 days ago | Create new ticket |
+| None found | — | Create new ticket |
+
+### Required Ticket Format (Phase 0 Sub-Tickets)
+
+**Title**: `[gap:<fingerprint[:8]>] <failure_kind>: <check_name> in <repo_relative_path>`
+
+**Stable marker block** in description (required, not optional):
+
+```
+<!-- gap-analysis-marker
+fingerprint: <sha256>
+gap_category: MISSING_TEST
+boundary_kind: pre_existing_failure
+rule_name: <check_name>
+tool: <tool_name>
+failure_kind: <lint|type|test|runtime>
+repos: [<repo>]
+confidence: DETERMINISTIC
+detected_at: <ISO timestamp>
+-->
+```
+
+### Phase 0 Output in Session Notes
+
+```markdown
+## Phase 0 — Pre-existing Issues — 2026-02-21 14:32
+
+### Auto-Fixed (committed separately)
+- src/api.py: missing type annotation on `user_id` param
+- src/utils.py: ruff E501 line too long
+
+### Deferred to follow-up
+- src/legacy/handler.py: no-return-annotation (type) — created OMN-XXXX [gap:a1b2c3d4]
+- src/legacy/utils.py: E501 (lint) — commented on OMN-YYYY (existing, In Progress)
+```
+
 ## Dispatch Contracts (Execution-Critical)
 
 **This section governs how you execute the review loop. Follow it exactly.**
