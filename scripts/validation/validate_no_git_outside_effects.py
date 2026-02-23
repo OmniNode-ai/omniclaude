@@ -9,8 +9,13 @@ Task 2 from OMN-2592:
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
+
+# Matches "git" or "gh" as a standalone word (not "github", "lightweight", etc.)
+# at the start of a string (after optional whitespace), using a word boundary.
+_GIT_COMMAND_RE = re.compile(r"^\s*(git|gh)\b", re.IGNORECASE)
 
 
 def is_effect_file(path: Path) -> bool:
@@ -31,6 +36,7 @@ def is_node_module(path: Path) -> bool:
 class GitCallVisitor(ast.NodeVisitor):
     """AST visitor that detects git/gh subprocess calls."""
 
+    # Kept for reference; actual matching uses _GIT_COMMAND_RE word-boundary regex
     GIT_STRINGS: tuple[str, ...] = ("git ", "git\t", "gh ", "gh\t")
     SUBPROCESS_MODULES: tuple[str, ...] = ("subprocess",)
     SUBPROCESS_FUNCS: tuple[str, ...] = (
@@ -64,10 +70,13 @@ class GitCallVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _is_git_string(self, node: ast.expr) -> bool:
-        """Return True if the node is a string constant that starts with a git/gh command."""
+        """Return True if the node is a string constant that starts with a git/gh command.
+
+        Uses a word-boundary regex so bare ``"git"`` and ``"gh"`` (common with
+        ``shell=True``) are caught, while ``"github"`` or ``"lightweight"`` are not.
+        """
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            lower = node.value.strip().lower()
-            return any(lower.startswith(g) for g in self.GIT_STRINGS)
+            return bool(_GIT_COMMAND_RE.match(node.value))
         return False
 
     def _check_args_for_git(self, args: list[ast.expr], lineno: int) -> None:

@@ -5,6 +5,9 @@ Each script in scripts/validation/ has a corresponding section here.
 Tests verify that:
   - Compliant code returns exit 0 (no violations)
   - Violating code returns exit 1 (violations detected)
+
+Test data is provided via pytest fixtures and parametrize markers rather than
+hardcoded inline strings, so new cases can be added in one place.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ def load_validator(name: str):  # type: ignore[return]
     """Load a validation script module by filename stem."""
     script_path = SCRIPTS_DIR / f"{name}.py"
     if not script_path.exists():
-        pytest.skip(f"Validation script not found: {script_path}")
+        pytest.fail(f"Validation script not found: {script_path}")
     spec = importlib.util.spec_from_file_location(name, script_path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -51,6 +54,71 @@ def _check_source(
     return checker_fn(py_file)
 
 
+# -----------------------------------------------------------------------
+# Test data fixtures: violation sources for parametrized tests
+# -----------------------------------------------------------------------
+
+# (description, source_snippet) pairs — each must produce >= 1 violation
+NO_DB_VIOLATION_SOURCES = [
+    (
+        "sqlalchemy_import",
+        """
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        class NodeMyOrchestrator:
+            async def execute_orchestration(self, session: AsyncSession):
+                result = await session.execute("SELECT 1")
+        """,
+    ),
+    (
+        "select_sql_string",
+        """
+        class NodeMyOrchestrator:
+            async def execute_orchestration(self):
+                sql = "SELECT * FROM runs WHERE id = $1"
+                return sql
+        """,
+    ),
+    (
+        "fetchall_method_call",
+        """
+        class NodeMyOrchestrator:
+            async def execute_orchestration(self, conn):
+                rows = await conn.fetchall()
+                return rows
+        """,
+    ),
+]
+
+KAFKA_VIOLATION_SOURCES = [
+    (
+        "aiokafka_import",
+        """
+        from aiokafka import AIOKafkaProducer
+
+        async def send_msg():
+            producer = AIOKafkaProducer(bootstrap_servers="localhost:9092")
+            await producer.start()
+        """,
+    ),
+    (
+        "confluent_kafka_import",
+        """
+        from confluent_kafka import Producer
+        """,
+    ),
+    (
+        "kafka_attribute_access",
+        """
+        import kafka
+
+        def get_producer():
+            return kafka.KafkaProducer(bootstrap_servers="localhost:9092")
+        """,
+    ),
+]
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 1. validate_no_db_in_orchestrator
 # ═══════════════════════════════════════════════════════════════════════
@@ -73,36 +141,14 @@ class TestNoDbInOrchestrator:
         violations = _check_source(self.mod.check_file, source, tmp_path)
         assert violations == []
 
-    def test_sqlalchemy_import_caught(self, tmp_path: Path) -> None:
-        source = """
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        class NodeMyOrchestrator:
-            async def execute_orchestration(self, session: AsyncSession):
-                result = await session.execute("SELECT 1")
-        """
+    @pytest.mark.parametrize(("description", "source"), NO_DB_VIOLATION_SOURCES)
+    def test_violation_detected(
+        self, description: str, source: str, tmp_path: Path
+    ) -> None:
         violations = _check_source(self.mod.check_file, source, tmp_path)
-        assert len(violations) >= 1
-
-    def test_select_string_caught(self, tmp_path: Path) -> None:
-        source = """
-        class NodeMyOrchestrator:
-            async def execute_orchestration(self):
-                sql = "SELECT * FROM runs WHERE id = $1"
-                return sql
-        """
-        violations = _check_source(self.mod.check_file, source, tmp_path)
-        assert len(violations) >= 1
-
-    def test_execute_method_call_caught(self, tmp_path: Path) -> None:
-        source = """
-        class NodeMyOrchestrator:
-            async def execute_orchestration(self, conn):
-                rows = await conn.execute("SELECT 1")
-                return rows
-        """
-        violations = _check_source(self.mod.check_file, source, tmp_path)
-        assert len(violations) >= 1
+        assert len(violations) >= 1, (
+            f"Expected violation for case '{description}' but got none"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -248,7 +294,11 @@ class TestCostLedgerIsolation:
         assert len(violations) >= 1
 
     def test_effect_file_is_allowed(self, tmp_path: Path) -> None:
-        assert self.mod.is_effect_module(tmp_path / "node_budget_effect.py") is True
+        # Effect files must be inside a node_* ancestor directory to be whitelisted.
+        # A bare *_effect.py in an arbitrary directory is NOT an effect module.
+        node_dir = tmp_path / "node_budget_evaluator"
+        assert self.mod.is_effect_module(node_dir / "node_budget_effect.py") is True
+        assert self.mod.is_effect_module(tmp_path / "node_budget_effect.py") is False
         assert self.mod.is_effect_module(tmp_path / "node_budget_compute.py") is False
 
 
@@ -359,23 +409,14 @@ class TestNoDirectKafkaProducer:
         violations = _check_source(self.mod.check_file, source, tmp_path)
         assert violations == []
 
-    def test_aiokafka_producer_caught(self, tmp_path: Path) -> None:
-        source = """
-        from aiokafka import AIOKafkaProducer
-
-        async def send_msg():
-            producer = AIOKafkaProducer(bootstrap_servers="localhost:9092")
-            await producer.start()
-        """
+    @pytest.mark.parametrize(("description", "source"), KAFKA_VIOLATION_SOURCES)
+    def test_violation_detected(
+        self, description: str, source: str, tmp_path: Path
+    ) -> None:
         violations = _check_source(self.mod.check_file, source, tmp_path)
-        assert len(violations) >= 1
-
-    def test_confluent_kafka_caught(self, tmp_path: Path) -> None:
-        source = """
-        from confluent_kafka import Producer
-        """
-        violations = _check_source(self.mod.check_file, source, tmp_path)
-        assert len(violations) >= 1
+        assert len(violations) >= 1, (
+            f"Expected violation for case '{description}' but got none"
+        )
 
     def test_publisher_path_is_allowed(self, tmp_path: Path) -> None:
         assert (

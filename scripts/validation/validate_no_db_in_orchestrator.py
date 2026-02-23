@@ -8,9 +8,8 @@ Checks 1 & 8 from OMN-2592:
 - Check 8: Negative orchestrator import test -- imports every orchestrator, asserts no
   db-client paths in sys.modules or class-level imports
 
-This script runs two passes:
+This script runs one static pass:
   Pass A: grep/AST static check for DB-related symbols in orchestrator/compute files
-  Pass B: (optional) runtime import test when --runtime flag is passed
 """
 
 from __future__ import annotations
@@ -23,11 +22,10 @@ from pathlib import Path
 # Patterns that are forbidden in orchestrator / compute modules
 # -----------------------------------------------------------------------
 FORBIDDEN_IMPORT_PATTERNS: list[str] = [
-    # SQLAlchemy sync/async session objects
+    # SQLAlchemy sync/async session objects — scoped to sqlalchemy module imports
     "sqlalchemy",
     "AsyncSession",
-    "Session",
-    # Common ORM client patterns
+    # Common ORM client patterns (explicit, not partial substring)
     "db_client",
     "database_client",
     "DatabaseClient",
@@ -36,9 +34,10 @@ FORBIDDEN_IMPORT_PATTERNS: list[str] = [
     "psycopg",
     # Alembic
     "alembic",
-    # Repository adapters (checked separately too)
-    "repository",
+    # Repository adapters (checked separately too) — require db_ prefix to avoid
+    # false positives on unrelated modules that happen to contain "repository"
     "db_adapter",
+    "db_repository",
 ]
 
 FORBIDDEN_ATTR_ACCESS: list[str] = [
@@ -49,18 +48,17 @@ FORBIDDEN_ATTR_ACCESS: list[str] = [
     "DELETE",
     "MERGE",
     "UPSERT",
-    # execute() calls that hint at DB I/O
 ]
 
+# DB-specific call names: only flag these when called on a known DB-like receiver.
+# Avoid broad names like "execute" or "commit" that appear in non-DB contexts
+# (e.g., HTTP clients, async executors, transaction managers).
 FORBIDDEN_CALL_NAMES: list[str] = [
-    "execute",
     "fetchall",
     "fetchone",
     "fetchmany",
     "scalar",
     "scalars",
-    "commit",
-    "rollback",
 ]
 
 

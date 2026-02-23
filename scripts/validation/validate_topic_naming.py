@@ -25,8 +25,20 @@ import sys
 from pathlib import Path
 
 # Regex for valid onex topic names
+# Known producer identifiers in the OmniNode platform.
+# Add new producers here when a new service is onboarded.
+_KNOWN_PRODUCERS = (
+    "omniclaude",
+    "omninode",
+    "omniintelligence",
+    "omniarchon",
+    "omnimemory",
+    "omnibase",
+)
+_PRODUCER_SEGMENT = "|".join(_KNOWN_PRODUCERS)
+
 VALID_TOPIC_RE = re.compile(
-    r"^onex\.(evt|cmd)\.[a-z][a-z0-9_-]+\.[a-z][a-z0-9-]+\.v[0-9]+$"
+    rf"^onex\.(evt|cmd)\.({_PRODUCER_SEGMENT})\.[a-z][a-z0-9-]+\.v[0-9]+$"
 )
 
 # Pattern that suggests a string is meant to be a topic name

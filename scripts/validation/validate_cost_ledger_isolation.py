@@ -32,26 +32,33 @@ FORBIDDEN_MODULE_PATTERNS: tuple[str, ...] = (
 )
 
 
+def _has_node_ancestor(parts: tuple[str, ...], up_to_index: int) -> bool:
+    """Return True if any directory component before *up_to_index* starts with 'node_'."""
+    return any(parts[j].startswith("node_") for j in range(up_to_index))
+
+
 def is_effect_module(path: Path) -> bool:
-    """Return True if path is an *effect* file (name ends with _effect.py) or is inside
-    an effects/ directory within a node directory."""
-    # Allow files named *_effect.py
-    if path.name.endswith("_effect.py"):
-        return True
-    # Allow files inside an effects/ subdirectory beneath a node_* folder
+    """Return True if path is an *effect* file inside a node_* tree, or inside an
+    effects/ subdirectory within a node_* tree.
+
+    A bare ``*_effect.py`` outside a ``node_*`` ancestor is NOT whitelisted, to
+    prevent non-node modules from bypassing the ledger isolation check by
+    naming themselves ``*_effect.py``.
+    """
     parts = path.parts
+    # Allow files named *_effect.py only when a node_* ancestor exists
+    if path.name.endswith("_effect.py"):
+        if _has_node_ancestor(parts, len(parts) - 1):
+            return True
+    # Allow files inside an effects/ subdirectory beneath a node_* folder
     for i, part in enumerate(parts):
-        if part == "effects" and i > 0:
-            for j in range(i):
-                if parts[j].startswith("node_"):
-                    return True
+        if part == "effects" and i > 0 and _has_node_ancestor(parts, i):
+            return True
     # Allow files inside a directory named *effects* that is under a node_* folder
     for i, part in enumerate(parts):
         if "effect" in part.lower() and part != path.name and i > 0:
-            # Only match directory components (not the filename)
-            for j in range(i):
-                if parts[j].startswith("node_"):
-                    return True
+            if _has_node_ancestor(parts, i):
+                return True
     return False
 
 

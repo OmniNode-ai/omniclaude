@@ -62,32 +62,36 @@ class CostLedgerStructureVisitor(ast.NodeVisitor):
             return True
         return False
 
+    def _is_run_id_target(self, target: ast.expr) -> bool:
+        """Return True if the assignment target is the run_id field."""
+        if isinstance(target, ast.Name) and target.id == "run_id":
+            return True
+        if isinstance(target, ast.Attribute) and target.attr == "run_id":
+            return True
+        return False
+
     def visit_Assign(self, node: ast.Assign) -> None:  # noqa: N802
         if not self._in_cost_ledger:
             self.generic_visit(node)
             return
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "run_id":
-                self._found_run_id_field = True
-            if isinstance(target, ast.Attribute) and target.attr == "run_id":
-                self._found_run_id_field = True
-        # Check for index= kwarg in Column(index=True)
-        if isinstance(node.value, ast.Call):
-            self._check_column_call(node.value)
+        is_run_id = any(self._is_run_id_target(t) for t in node.targets)
+        if is_run_id:
+            self._found_run_id_field = True
+            # Only check for index= kwarg when the target is the run_id field
+            if isinstance(node.value, ast.Call):
+                self._check_column_call(node.value)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:  # noqa: N802
         if not self._in_cost_ledger:
             self.generic_visit(node)
             return
-        target = node.target
-        if isinstance(target, ast.Name) and target.id == "run_id":
+        is_run_id = self._is_run_id_target(node.target)
+        if is_run_id:
             self._found_run_id_field = True
-        if isinstance(target, ast.Attribute) and target.attr == "run_id":
-            self._found_run_id_field = True
-        # Check for mapped_column(index=True)
-        if node.value and isinstance(node.value, ast.Call):
-            self._check_column_call(node.value)
+            # Only check for mapped_column(index=True) when target is the run_id field
+            if node.value and isinstance(node.value, ast.Call):
+                self._check_column_call(node.value)
         self.generic_visit(node)
 
     def _check_column_call(self, call_node: ast.Call) -> None:

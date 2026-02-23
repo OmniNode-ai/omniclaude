@@ -85,6 +85,16 @@ class DirectKafkaVisitor(ast.NodeVisitor):
                 )
         self.generic_visit(node)
 
+    def visit_Attribute(self, node: ast.Attribute) -> None:  # noqa: N802
+        # Catch attribute access like `kafka.KafkaProducer` where the module
+        # is imported as a bare name (e.g., `import kafka; kafka.KafkaProducer(...)`)
+        if node.attr in FORBIDDEN_SYMBOLS:
+            self.violations.append(
+                f"{self.filepath}:{node.lineno}: "
+                f"direct usage of Kafka producer symbol '{node.attr}' via attribute access"
+            )
+        self.generic_visit(node)
+
 
 def check_file(filepath: Path) -> list[str]:
     try:

@@ -128,7 +128,7 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Agent status topics (OMN-1848 - agent lifecycle reporting)
     # ==========================================================================
-    AGENT_STATUS = "onex.evt.agent.status.v1"
+    AGENT_STATUS = "onex.evt.omniclaude.agent-status.v1"
 
     # ==========================================================================
     # Transformation topics (agent transformation observability)
