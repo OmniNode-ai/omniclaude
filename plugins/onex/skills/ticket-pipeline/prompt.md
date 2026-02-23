@@ -506,7 +506,7 @@ if not _state_file_existed and skip_to is None and not force_run:
             print(f"Warning: Auto-detection GitHub query failed: {_e}. Starting from beginning.")
             _open_prs = []
 
-        if not _open_prs:
+        if _repo_slug and not _open_prs:
             # Step 3a: No open PR — check for a merged PR (only possible if branch name is known)
             if _branch:
                 try:
@@ -575,7 +575,7 @@ if not _state_file_existed and skip_to is None and not force_run:
             # Record PR info into pipeline state so create_pr phase can skip creation
             state["phases"]["create_pr"]["artifacts"]["pr_number"] = _pr_number
             state["phases"]["create_pr"]["artifacts"]["pr_url"] = _pr_url
-            state["phases"]["create_pr"]["artifacts"]["branch_name"] = _pr.get("headRefName") or _branch
+            state["phases"]["create_pr"]["artifacts"]["branch_name"] = _pr.get("headRefName") or _branch or ""
 
             # Check CI status
             try:
