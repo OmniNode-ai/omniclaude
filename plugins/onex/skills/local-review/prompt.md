@@ -934,6 +934,10 @@ def _write_suppression_entry(file_context, description, status, reason):
 
 Extract from `$ARGUMENTS` string:
 ```python
+import os
+import subprocess
+from pathlib import Path
+
 args = "$ARGUMENTS".split()
 uncommitted = "--uncommitted" in args
 no_fix = "--no-fix" in args
@@ -1006,6 +1010,13 @@ if "--checkpoint" in args:
 # feature worktree using `git worktree list` — no hardcoded paths required.
 repo_path = None  # None means use CWD
 
+# Helper: git command with optional -C path
+def git_cmd(args_list):
+    """Build git command with -C {repo_path} if --path was provided."""
+    if repo_path is not None:
+        return ["git", "-C", str(repo_path)] + args_list
+    return ["git"] + args_list
+
 if "--path" in args:
     idx = args.index("--path")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
@@ -1049,14 +1060,17 @@ else:
         # Are we in the main worktree?
         # Use git rev-parse --show-toplevel for accuracy: for a linked worktree,
         # --show-toplevel returns the linked path, not the main worktree path.
-        try:
-            _git_root = Path(subprocess.check_output(
-                ["git", "rev-parse", "--show-toplevel"],
-                text=True, stderr=subprocess.DEVNULL, cwd=str(_cwd)
-            ).strip())
-            _in_main = _git_root.resolve() == _main_wt.resolve()
-        except Exception:
+        if _main_wt is None:
             _in_main = False
+        else:
+            try:
+                _git_root = Path(subprocess.check_output(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    text=True, stderr=subprocess.DEVNULL, cwd=str(_cwd)
+                ).strip())
+                _in_main = _git_root.resolve() == _main_wt.resolve()
+            except Exception:
+                _in_main = False
 
     except Exception as _e:
         print(f"Warning: local-review: worktree auto-detection failed ({_e}), using CWD", file=sys.stderr)
@@ -1100,13 +1114,6 @@ else:
                 print(f"Error: local-review: worktree candidate selection failed ({_e2})", file=sys.stderr)
                 print("Cannot determine which worktree to review. Use --path to specify explicitly.")
                 exit(1)
-
-# Helper: git command with optional -C path
-def git_cmd(args_list):
-    """Build git command with -C {repo_path} if --path was provided."""
-    if repo_path is not None:
-        return ["git", "-C", str(repo_path)] + args_list
-    return ["git"] + args_list
 
 # Extract --flag-false-positive value (OMN-2514)
 # This flag causes an immediate write to the registry and exits (does not start the review loop)
