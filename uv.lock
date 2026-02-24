@@ -1556,7 +1556,7 @@ wheels = [
 ]
 
 [[package]]
-name = "omniclaude"
+name = "omninode-claude"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
