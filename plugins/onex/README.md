@@ -323,14 +323,14 @@ OMNICLAUDE_PATH="${HOME}/Code/omniclaude"  # If different from PROJECT_ROOT
 
 ```bash
 # PostgreSQL (source .env before use)
-POSTGRES_HOST=192.168.86.200           # Or your PostgreSQL host
+POSTGRES_HOST=<postgres-host>           # Or your PostgreSQL host
 POSTGRES_PORT=5436                     # Or your PostgreSQL port
 POSTGRES_DATABASE=omniclaude           # Or your database name
 POSTGRES_PASSWORD=<set_in_env>         # Required - never commit
 
 # Kafka/Redpanda
 KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # Docker services
-# KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092         # Host scripts
+# KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092         # Host scripts
 
 # Qdrant Vector Database
 QDRANT_URL=http://localhost:6333       # Or your Qdrant URL
@@ -354,24 +354,24 @@ ARCHON_INTELLIGENCE_URL=http://localhost:8053  # Intelligence coordinator
 ```bash
 PROJECT_ROOT=/Users/jonah/Code/omniclaude
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omniarchon**:
 ```bash
 PROJECT_ROOT=/Users/jonah/Code/omniarchon
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omnibase_core**:
 ```bash
 PROJECT_ROOT=/Users/jonah/Code/omnibase_core
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **Critical**: Always `source .env` before running database or Kafka operations.

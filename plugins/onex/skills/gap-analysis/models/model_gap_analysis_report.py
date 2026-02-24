@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """ModelGapAnalysisReport — aggregated output of a gap-analysis run."""
 
 from __future__ import annotations

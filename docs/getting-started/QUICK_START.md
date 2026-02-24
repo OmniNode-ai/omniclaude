@@ -32,13 +32,13 @@ cp .env.example .env
 Open `.env` and set at minimum:
 
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 For full observability, also set the Postgres variables:
 
 ```bash
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
@@ -52,7 +52,7 @@ To enable Kafka-based agent routing:
 USE_EVENT_ROUTING=true
 ```
 
-> **Infrastructure note**: Kafka (Redpanda) and PostgreSQL run on `192.168.86.200`.
+> **Infrastructure note**: Kafka (Redpanda) and PostgreSQL run on `<your-infrastructure-host>`.
 > Port 29092 is the externally published Kafka port for host scripts. See
 > `~/.claude/CLAUDE.md` for the full infrastructure topology.
 
@@ -146,7 +146,7 @@ Lines look like:
 
 ### Verify events in Redpanda Console
 
-Open `http://192.168.86.200:8080` in a browser and navigate to the Topics view.
+Open `http://<redpanda-console-host>:8080` in a browser and navigate to the Topics view.
 Look for messages on:
 
 - `onex.evt.omniclaude.session-started.v1` — session start events

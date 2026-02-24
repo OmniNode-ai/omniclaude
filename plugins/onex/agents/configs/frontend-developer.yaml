@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Frontend Developer Agent - Dynamic Role Definition
 # React/TypeScript UI component development specialist
 # Distinguished from ui-testing agent: builds UIs (not tests)

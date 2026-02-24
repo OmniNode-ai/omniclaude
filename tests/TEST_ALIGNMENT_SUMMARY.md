@@ -146,11 +146,11 @@ The following test modules cannot be imported due to missing `omnibase_core` dep
 
 Several tests require running infrastructure services:
 
-1. **Kafka/Redpanda** (192.168.86.200:29092)
+1. **Kafka/Redpanda** (<kafka-bootstrap-servers>:9092)
    - Required for: Kafka consumer tests, action logging, routing tests
    - Status: Connection timeouts suggest service may be unavailable or unreachable
 
-2. **PostgreSQL** (192.168.86.200:5436)
+2. **PostgreSQL** (<postgres-host>:5436)
    - Required for: Database event tests, agent execution logging
    - Status: Some tests passing, suggests intermittent connectivity
 
@@ -189,10 +189,10 @@ Several tests require running infrastructure services:
 3. **Verify Infrastructure Services**
    ```bash
    # Check Kafka connectivity
-   curl http://192.168.86.200:8080  # Redpanda Admin UI
+   curl http://<redpanda-console-host>:8080  # Redpanda Admin UI
 
    # Check PostgreSQL connectivity
-   psql -h 192.168.86.200 -p 5436 -U postgres -d omniclaude
+   psql -h <your-infrastructure-host> -p 5436 -U postgres -d omniclaude
 
    # Check Qdrant
    curl http://localhost:6333/collections

@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+
+jobs:
+  release:
+    uses: OmniNode-ai/omnibase_infra/.github/workflows/release-python-reusable.yml@release-workflow-v1
+    secrets: inherit
+
+  plugin-artifact:
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert clean working tree
+        run: git diff --exit-code
+
+      - name: Package plugin artifact
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TMPDIR=$(mktemp -d)
+          cp -r plugins/onex "$TMPDIR/"
+
+          # Hard-fail if plugin.json is missing (adjust path based on actual location)
+          PLUGIN_JSON=$(find "$TMPDIR/onex" -name "plugin.json" | head -1)
+          test -n "$PLUGIN_JSON" || {
+            echo "ERROR: plugin.json not found in staged plugin artifact"
+            exit 1
+          }
+
+          # Patch version in temp copy only — working tree stays clean
+          python3 -c "
+          import json, pathlib
+          p = pathlib.Path('$PLUGIN_JSON')
+          d = json.loads(p.read_text())
+          d['version'] = '$VERSION'
+          p.write_text(json.dumps(d, indent=2) + '\n')
+          "
+
+          cd "$TMPDIR" && zip -r "$GITHUB_WORKSPACE/omniclaude-plugin-${VERSION}.zip" onex/
+          rm -rf "$TMPDIR"
+          echo "Plugin artifact: omniclaude-plugin-${VERSION}.zip"
+          ls -la "$GITHUB_WORKSPACE/omniclaude-plugin-${VERSION}.zip"
+
+      - name: Attach plugin artifact to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: omniclaude-plugin-*.zip

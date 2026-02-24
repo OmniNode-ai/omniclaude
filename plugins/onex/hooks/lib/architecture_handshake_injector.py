@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Architecture handshake injector - Inject repo-specific architecture constraints.
 
 This module enables SessionStart hooks to inject architecture handshake content

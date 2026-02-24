@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """PostToolUse pattern enforcement — advisory compliance checking.
 
 Queries the OmniIntelligence pattern store API for applicable patterns,

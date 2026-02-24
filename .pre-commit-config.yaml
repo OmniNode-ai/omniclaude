@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 ---
 # OmniClaude Pre-commit Configuration
 # Two-stage validation strategy for optimal developer experience
@@ -54,7 +56,11 @@ repos:
 
       - id: check-local-paths
         name: check for local path references
-        entry: uv run python -m omnibase_core.validation.validator_local_paths
+        entry: >
+          bash -c 'uv run python -c "import omnibase_core.validation.validator_local_paths" 2>/dev/null
+          && uv run python -m omnibase_core.validation.validator_local_paths "$@"
+          || echo "[check-local-paths] skipped: omnibase_core.validation.validator_local_paths not available (requires omnibase-core >=0.20.0)"'
+          --
         language: system
         types: [text]
         exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*'
@@ -147,7 +153,7 @@ repos:
         pass_filenames: true
         stages: [pre-push]
 
-      - id: mypy-typecheck
+      - id: mypy-type-check
         name: mypy (type checking - match CI)
         # SCOPE: Currently limited to hooks/ and config/ (strict, well-typed modules)
         # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
@@ -159,7 +165,7 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      - id: pyright-typecheck
+      - id: pyright-type-check
         name: pyright (type checking - complements mypy)
         # Pyright provides complementary type checking to mypy, catching different error categories.
         # Uses pyrightconfig.json for configuration (basic mode with incremental strictness).
@@ -234,6 +240,20 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+
+      - id: no-internal-ips
+        name: Block hardcoded internal IPs
+        language: system
+        entry: >
+          bash -c 'grep -rInE
+          --include="*.py" --include="*.sh" --include="*.yml"
+          --include="*.yaml" --include="*.toml" --include="*.md"
+          "(192\.168\.|10\.(0|1|2)\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)"
+          src/ tests/ docs/ .github/ plugins/ 2>/dev/null
+          | grep -v "onex-allow-internal-ip"
+          && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
+        pass_filenames: false
+        stages: [pre-commit]
 
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]

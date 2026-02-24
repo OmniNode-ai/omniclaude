@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Enrichment observability event emitter (OMN-2274, OMN-2441).
 
 Builds and emits ``onex.evt.omniclaude.context-enrichment.v1`` events per

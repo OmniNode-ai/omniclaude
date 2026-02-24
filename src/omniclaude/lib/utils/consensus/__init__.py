@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 AI Consensus and Quorum System
 Provides multi-model validation and scoring for pre-commit corrections.

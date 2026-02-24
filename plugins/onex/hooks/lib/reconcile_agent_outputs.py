@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Reconcile parallel agent outputs using geometric conflict classification.
 
 Provides a standalone helper for merging overlapping outputs from multiple

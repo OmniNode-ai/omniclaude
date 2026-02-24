@@ -246,14 +246,14 @@ When regenerating nodes without README.md files, the skill uses **Z.ai LLM API**
 
 ## Prerequisites
 
-**Required Infrastructure** (running on 192.168.86.200):
+**Required Infrastructure** (running on your configured host):
 - PostgreSQL (port 5436) - For workflow state persistence
 - Kafka/Redpanda (port 9092/29092) - For event-driven orchestration
 - Consul (port 28500) - For service discovery
 
 **Environment Variables** (in omninode_bridge/.env):
 ```bash
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
@@ -261,7 +261,7 @@ POSTGRES_PASSWORD=<set_in_env>
 
 KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # Docker services
 # OR
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092           # Host scripts
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092           # Host scripts
 
 ZAI_API_KEY=<your_key>     # For LLM-powered generation and code analysis
 ZAI_ENDPOINT=https://api.z.ai/api/anthropic  # Optional, defaults to Z.ai
@@ -354,13 +354,13 @@ If generation fails or produces unexpected results:
 
 ```bash
 # Check Kafka connection
-curl http://192.168.86.200:8080  # Redpanda Console
+curl http://<redpanda-console-host>:8080  # Redpanda Console
 
 # Check PostgreSQL connection
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge
 
 # View generation events in Kafka
-kcat -C -b 192.168.86.200:29092 -t node.generation.requested
+kcat -C -b <kafka-bootstrap-servers>:9092 -t node.generation.requested
 
 # Check correlation ID in logs
 grep "<correlation_id>" /path/to/logs

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Session State Effect Node - Declarative filesystem I/O for session state.
 
 G1 node: All filesystem operations on ~/.claude/state/.

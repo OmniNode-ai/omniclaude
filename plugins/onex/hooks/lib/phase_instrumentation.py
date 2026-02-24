@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Phase Instrumentation Protocol -- mandatory metrics for every pipeline phase.
 
 Every pipeline phase MUST emit metrics via this instrumentation layer.

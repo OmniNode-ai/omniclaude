@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """RRH Hook Adapter -- the WHEN layer for RRH validation.
 
 Maps pipeline phases to RRH profiles, builds governance from

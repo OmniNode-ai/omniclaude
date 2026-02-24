@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for reconcile_agent_outputs module (OMN-1855).
 
 All tests run WITHOUT omnibase_core installed -- they exercise the fallback

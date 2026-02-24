@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Functional Test: PostgreSQL Database
 # Tests actual database operations, not just container status
 set -e

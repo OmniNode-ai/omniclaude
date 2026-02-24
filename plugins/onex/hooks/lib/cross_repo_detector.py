@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Cross-Repo Change Detector - Detects changes spanning multiple repository roots.
 
 Used by the ticket-pipeline to enforce the stop_on_cross_repo policy switch.

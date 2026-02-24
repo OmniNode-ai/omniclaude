@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """CLI wrapper for emitting agent status events from the ticket-work skill.
 
 Thin CLI around emit_agent_status() that enables markdown-based skills

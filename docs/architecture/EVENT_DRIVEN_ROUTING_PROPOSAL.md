@@ -21,8 +21,8 @@
 | **Database Event-Driven** | ✅ COMPLETE | DatabaseEventClient + adapter working |
 | **Agent Routing Event-Driven** | ❌ NOT STARTED | Still using synchronous Python exec |
 | **Container Registry** | ✅ COMPLETE | Container-based solution (no BaseOnexRegistry) |
-| **Kafka Infrastructure** | ✅ OPERATIONAL | 192.168.86.200:29092 |
-| **PostgreSQL** | ✅ OPERATIONAL | 192.168.86.200:5436 |
+| **Kafka Infrastructure** | ✅ OPERATIONAL | <kafka-bootstrap-servers>:9092 |
+| **PostgreSQL** | ✅ OPERATIONAL | <postgres-host>:5436 |
 
 **Key Achievement**: The database adapter event-driven implementation has been completed and validated, proving the viability of this architectural pattern. See `docs/EVENT_DRIVEN_DATABASE_IMPLEMENTATION_STATUS.md` for details.
 
@@ -369,7 +369,7 @@ Proposed (Service-Level Persistent):
 │    │   (correlation_id, operation_type, options)               │
 │    │                                                            │
 │    ▼                                                            │
-│  Kafka Event Bus (192.168.86.200:9092)                         │
+│  Kafka Event Bus (<kafka-bootstrap-servers>:9092)                         │
 │    │                                                            │
 │    ├─► agent-router-service (NEW)                              │
 │    │   - Consumes: agent.routing.requested.v1                  │

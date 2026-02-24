@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """ModelGapFinding — a single integration drift finding from gap analysis."""
 
 from __future__ import annotations

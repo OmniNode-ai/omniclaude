@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """OmniClaude Investor Demo Runner - Pre-flight checks and event verification.
 
 This script provides three modes for the investor demo:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Prometheus Configuration for OmniClaude
 # Scrapes metrics from application, PostgreSQL, Redis, and OpenTelemetry Collector
 

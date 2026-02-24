@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """PreToolUse Authorization Gate Adapter.
 
 Reads tool invocation JSON from stdin, checks authorization state,

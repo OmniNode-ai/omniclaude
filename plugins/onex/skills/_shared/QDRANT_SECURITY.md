@@ -68,8 +68,8 @@ QDRANT_PORT=6333
 - `127.0.0.1` - IPv4 loopback
 - `::1` - IPv6 loopback
 - `qdrant.internal` - Internal DNS name
-- `192.168.86.101` - Archon server IP
-- `192.168.86.200` - OmniNode bridge IP (fallback)
+- `<qdrant-host>` - Archon server IP
+- `<kafka-bootstrap-servers>` - OmniNode bridge IP (fallback)
 
 **Blocked by Default**:
 - Cloud metadata endpoints (AWS: 169.254.169.254, GCP: metadata.google.internal)
@@ -80,7 +80,7 @@ QDRANT_PORT=6333
 **Custom Hosts**:
 ```bash
 # .env file
-QDRANT_ALLOWED_HOSTS=custom-qdrant.example.com,10.0.0.50
+QDRANT_ALLOWED_HOSTS=custom-qdrant.example.com,10.0.0.50  # onex-allow-internal-ip
 ```
 
 ### 4. Dangerous Port Blocking
@@ -156,7 +156,7 @@ validate_qdrant_url("http://qdrant.internal:6333")
 # ✅ ALLOWED (development)
 os.environ["ENVIRONMENT"] = "development"
 validate_qdrant_url("http://localhost:6333")
-validate_qdrant_url("http://192.168.86.101:6333")
+validate_qdrant_url("http://<qdrant-host>:6333")
 ```
 
 ### Production
@@ -164,7 +164,7 @@ validate_qdrant_url("http://192.168.86.101:6333")
 # ✅ ALLOWED (production)
 os.environ["ENVIRONMENT"] = "production"
 validate_qdrant_url("https://qdrant.internal:6333")
-validate_qdrant_url("https://192.168.86.101:6333")
+validate_qdrant_url("https://<qdrant-host>:6333")
 ```
 
 ### Custom Hosts
@@ -198,7 +198,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/_shared/test_qdrant_ssrf_protection.py
 
 ```bash
 # Required
-QDRANT_HOST=localhost           # or 192.168.86.101
+QDRANT_HOST=localhost           # or <qdrant-host>
 QDRANT_PORT=6333
 
 # Optional
@@ -308,7 +308,7 @@ Set QDRANT_URL to use https:// in production environment.
 ### Host Not in Whitelist
 ```
 ValueError: Qdrant host not in whitelist: evil.com.
-Allowed hosts: localhost, 127.0.0.1, ::1, qdrant.internal, 192.168.86.101, 192.168.86.200.
+Allowed hosts: localhost, 127.0.0.1, ::1, qdrant.internal, <qdrant-host>, <kafka-bootstrap-servers>.
 Add to QDRANT_ALLOWED_HOSTS environment variable if needed.
 ```
 

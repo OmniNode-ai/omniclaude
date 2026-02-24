@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """PREnvelope model and frame-to-PR association logic.
 
 A PR is not an event — it is a container of frames. The PR is the

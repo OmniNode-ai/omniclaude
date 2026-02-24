@@ -82,14 +82,14 @@ await logger.log_success(
 pip install kafka-python aiokafka
 ```
 
-**Infrastructure** (192.168.86.200):
+**Infrastructure** (<your-infrastructure-host>):
 - Kafka/Redpanda: Port 29092
 - PostgreSQL: Port 5436
 
 **Environment Variables**:
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
-POSTGRES_HOST=192.168.86.200
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omniclaude
 ```
@@ -101,7 +101,7 @@ POSTGRES_DATABASE=omniclaude
 python3 agents/lib/action_logging_example.py
 
 # Verify in Kafka
-kcat -C -b 192.168.86.200:29092 -t agent-actions
+kcat -C -b <kafka-bootstrap-servers>:9092 -t agent-actions
 
 # Verify in database
 source .env && psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} \

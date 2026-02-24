@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Intelligence Configuration Management.
 
 Provides centralized configuration for event-based intelligence gathering with

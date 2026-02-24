@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Intelligence Event Client - Thin wrapper over RequestResponseWiring (OMN-1744)."""
 
 from __future__ import annotations

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """In-memory pattern projection cache for context injection (OMN-2425).
 
@@ -327,7 +329,7 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                 # the broker after the process exits. Over time, zombie groups accumulate.
                 # To clean up stale groups:
                 #   rpk group list | grep omniclaude-pattern-cache | xargs rpk group delete
-                # Or use Redpanda Console at http://192.168.86.200:8080
+                # Or use Redpanda Console at your configured admin URL
                 group_id=f"omniclaude-pattern-cache-{os.getpid()}",
                 value_deserializer=lambda v: v,  # raw bytes; we decode ourselves
                 consumer_timeout_ms=5000,  # poll loop timeout
@@ -414,7 +416,7 @@ def _start_projection_consumer(kafka_bootstrap_servers: str) -> None:
 
     Args:
         kafka_bootstrap_servers: Kafka bootstrap server address(es), e.g.
-            "192.168.86.200:29092".
+            "<kafka-bootstrap-servers>:9092".
     """
     thread = threading.Thread(
         target=_run_projection_consumer,

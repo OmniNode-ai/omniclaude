@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Synchronous Unix socket client for the embedded event publisher.
 
 Replaces omnibase_infra.runtime.emit_daemon.client.EmitClient which was

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Functional Test: Agent Routing System
 # Tests event-based routing via Kafka with performance validation
 set -e

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Tab Registry - Register this Claude Code session for statusline tab bar
 # Called from SessionStart hooks across all plugin versions.
 # Runs in background (caller should invoke with &).

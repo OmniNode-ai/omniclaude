@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Secret redaction for hook event payloads.
 
 Uses re.search() (not match) for pattern detection to find secrets

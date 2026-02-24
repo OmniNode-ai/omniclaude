@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Extraction pipeline event emitter (OMN-2344).
 
 Emits the three extraction pipeline events required by the omnidash consumer:

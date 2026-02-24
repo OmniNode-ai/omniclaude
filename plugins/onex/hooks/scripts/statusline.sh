@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # ONEX Status Line - Shows folder, git branch, dirty state, unpushed commits,
 # and a tab bar of all active Claude Code sessions.
 # Part of the onex plugin for Claude Code

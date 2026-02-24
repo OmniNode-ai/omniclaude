@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Delegation Orchestrator — task-type routing with quality gate (OMN-2281).
 
 Routes delegation to the appropriate handler based on TaskIntent:

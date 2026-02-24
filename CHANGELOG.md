@@ -3,6 +3,24 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.2.0] - 2026-02-24
+
+### Added
+- MIT LICENSE and SPDX copyright headers
+- CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+- GitHub issue templates and PR template
+- `.github/dependabot.yml`
+- `no-internal-ips` pre-commit hook
+
+### Changed
+- Bumped `omnibase-core` to 0.19.0, `omnibase-spi` to 0.12.0, `omnibase-infra` to 0.10.0
+- Replaced hardcoded internal IPs with generic placeholders in plugin configs and docs
+- Standardized pre-commit hook IDs (`mypy-typecheck` → `mypy-type-check`, `pyright-typecheck` → `pyright-type-check`)
+- Documentation cleanup: removed internal references, added Quick Start with `git clone`
+
+### Fixed
+- Default `OMNICLAUDE_CONTEXT_DB_HOST` changed from internal IP to `localhost`
+
 ## [Unreleased]
 
 ### Delegation & Local LLM

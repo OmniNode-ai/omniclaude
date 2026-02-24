@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # check_migration_freeze.sh — Block new migrations while .migration_freeze exists.
 #
 # Usage:

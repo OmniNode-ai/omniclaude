@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Correction Generator for AI Quality Enforcement System
 Generates correction suggestions using RAG intelligence from ONEX Intelligence.

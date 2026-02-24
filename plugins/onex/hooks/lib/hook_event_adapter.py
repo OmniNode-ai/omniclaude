@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Hook Event Adapter - Unified Event Publishing for Hooks
 
@@ -232,7 +235,7 @@ class HookEventAdapter:
         Args:
             bootstrap_servers: Kafka bootstrap servers
                 - Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
-                - Remote broker: "192.168.86.200:9092" (primary)
+                - Remote broker: "<kafka-bootstrap-servers>:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
         """

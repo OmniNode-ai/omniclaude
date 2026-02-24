@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # SessionStart Hook - Portable Plugin Version
 # Captures session initialization intelligence
 # Performance target: <50ms execution time
@@ -185,7 +188,7 @@ start_emit_daemon_if_needed() {
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
         log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"
-        log "INFO: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+        log "INFO: Example: KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092"
         write_daemon_status "kafka_not_configured"
         return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
     fi

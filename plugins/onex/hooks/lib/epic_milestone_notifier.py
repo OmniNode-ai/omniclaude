@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Epic Milestone Notifier - Slack notifications for epic lifecycle events.
 
 Wraps PipelineSlackNotifier to emit Slack notifications at the four

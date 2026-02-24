@@ -38,7 +38,7 @@ Fixed three security test files to properly test parameterized queries, SQL inje
 **Changes Made**:
 1. ✅ Updated `test_internal_ip_blocked` → `test_non_whitelisted_hosts_blocked`
    - Now correctly tests that non-whitelisted hosts are blocked
-   - Whitelisted hosts (localhost, 192.168.86.101, 192.168.86.200) ARE allowed
+   - Whitelisted hosts (localhost and configured QDRANT_ALLOWED_HOSTS) ARE allowed
 
 2. ✅ Added `@pytest.mark.skip` to `test_file_protocol_blocked`
    - Current implementation only validates hostname against whitelist

@@ -21,7 +21,7 @@ Each event is a frozen Pydantic model with correlation IDs, causation chains, an
 
 ## Prerequisites
 
-1. **Kafka/Redpanda** running at `192.168.86.200:29092` (or as configured in `.env`)
+1. **Kafka/Redpanda** running at `<kafka-bootstrap-servers>:9092` (or as configured in `.env`)
 2. **`KAFKA_BOOTSTRAP_SERVERS`** set in the repository `.env` file
 3. **Python environment** ready:
    ```bash
@@ -58,7 +58,7 @@ Expected output:
 
 [PASS] Emit daemon socket exists at /tmp/omniclaude-emit.sock
 [PASS] Emit daemon responds to ping
-[PASS] Kafka reachable at 192.168.86.200:29092
+[PASS] Kafka reachable at <kafka-bootstrap-servers>:9092
 [PASS] ONEX topics found: onex.evt.omniclaude.session-started.v1, ...
 [PASS] Intelligence topics found: onex.cmd.omniintelligence.claude-hook-event.v1, ...
 
@@ -236,9 +236,9 @@ Every event carries explicit `emitted_at` timestamps (never `datetime.now()` def
 **Symptom**: `--check` reports Kafka connectivity failure.
 
 **Fix**:
-1. Verify the Kafka/Redpanda server is running on `192.168.86.200`:
+1. Verify the Kafka/Redpanda server is running on `<your-infrastructure-host>`:
    ```bash
-   kcat -L -b 192.168.86.200:29092
+   kcat -L -b <kafka-bootstrap-servers>:9092
    ```
 2. Check `KAFKA_BOOTSTRAP_SERVERS` in `.env`:
    ```bash
@@ -307,7 +307,7 @@ Then start a new Claude Code session to restart the daemon.
    ```bash
    source .env && echo "$KAFKA_ENVIRONMENT"
    ```
-4. Check Redpanda Console at `http://192.168.86.200:8080` for topic activity.
+4. Check Redpanda Console at `http://<redpanda-console-host>:8080` for topic activity.
 
 ### Hook logs location
 
@@ -341,7 +341,7 @@ Unix Domain Socket (/tmp/omniclaude-emit.sock)
 Publisher Daemon (src/omniclaude/publisher/)
     |
     v
-Kafka / Redpanda (192.168.86.200:29092)
+Kafka / Redpanda (<kafka-bootstrap-servers>:9092)
     |
     +-- onex.evt.omniclaude.*          (public observability)
     +-- onex.cmd.omniintelligence.*    (restricted intelligence)

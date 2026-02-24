@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Tests for IntelligenceConfig fail-fast behavior.
 
@@ -86,7 +88,7 @@ class TestIntelligenceConfigFromEnv:
         """Test that from_env() succeeds when KAFKA_BOOTSTRAP_SERVERS is properly set."""
         mock_settings = MagicMock()
         mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
-            "192.168.86.200:29092"
+            "localhost:9092"
         )
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
@@ -100,7 +102,7 @@ class TestIntelligenceConfigFromEnv:
             config = IntelligenceConfig.from_env()
 
             # Verify config was created with correct values
-            assert config.kafka_bootstrap_servers == "192.168.86.200:29092"
+            assert config.kafka_bootstrap_servers == "localhost:9092"
             assert config.kafka_enable_intelligence is True
             assert config.kafka_request_timeout_ms == 5000
 
@@ -119,7 +121,7 @@ class TestIntelligenceConfigFromEnv:
             # Error should mention .env file as the source of truth
             assert ".env" in error_message
             # Error should provide an example value
-            assert "Example" in error_message or "192.168.86.200:29092" in error_message
+            assert "Example" in error_message or "localhost:9092" in error_message
 
 
 class TestIntelligenceConfigValidation:
@@ -263,8 +265,13 @@ class TestIntelligenceConfigValidation:
         """Test that IPv4 addresses are accepted."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
-        config = IntelligenceConfig(kafka_bootstrap_servers="192.168.1.100:9092")
-        assert config.kafka_bootstrap_servers == "192.168.1.100:9092"
+        config = IntelligenceConfig(
+            kafka_bootstrap_servers="192.168.1.100:9092"  # onex-allow-internal-ip
+        )
+        assert (
+            config.kafka_bootstrap_servers
+            == "192.168.1.100:9092"  # onex-allow-internal-ip
+        )
 
     def test_bootstrap_servers_one_invalid_in_list_fails(self) -> None:
         """Test that validation fails if any broker in list is invalid."""

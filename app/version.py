@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Version information for OmniClaude."""
 
 from importlib.metadata import PackageNotFoundError, version

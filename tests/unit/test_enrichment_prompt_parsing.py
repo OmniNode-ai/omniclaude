@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2026 OmniNode Team
 """Enrichment prompt regression tests (OMN-2268).
 
@@ -860,7 +862,7 @@ class TestSummarizationMarkdownParsing:
         #
         # Production endpoints follow the pattern
         # `http://<host>:<port>/v1/chat/completions` where host and port come
-        # from `LLM_QWEN_72B_URL` (default: http://192.168.86.200:8100) for
+        # from `LLM_QWEN_72B_URL` (default: http://llm-embedding-host:8100) for
         # the summarization adapter.  If a future test needs to validate URL
         # parsing, replace this placeholder with a parametrized fixture that
         # covers both localhost and production-style host/port combinations.

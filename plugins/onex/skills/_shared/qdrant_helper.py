@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Qdrant Helper - Shared utilities for Qdrant operations
 
@@ -135,8 +138,8 @@ def validate_qdrant_url(url: str) -> str:
         "127.0.0.1",
         "::1",  # IPv6 localhost
         "qdrant.internal",  # Internal DNS name
-        "192.168.86.101",  # Archon server IP
-        "192.168.86.200",  # OmniNode bridge IP (fallback)
+        "<qdrant-host>",  # Archon server IP
+        "<kafka-bootstrap-servers>",  # OmniNode bridge IP (fallback)
     ]
 
     # Additional allowed hosts from environment (comma-separated)

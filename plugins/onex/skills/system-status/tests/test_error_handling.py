@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Error handling tests for all skills.
 
@@ -118,7 +121,7 @@ class TestNetworkErrorHandling:
         with patch.object(execute, "check_kafka_connection") as mock_conn:
             mock_conn.return_value = {
                 "status": "error",
-                "broker": "192.168.86.200:29092",
+                "broker": "localhost:9092",
                 "reachable": False,
                 "error": "Connection refused",
             }
@@ -136,7 +139,7 @@ class TestNetworkErrorHandling:
         with patch.object(execute, "check_qdrant_connection") as mock_conn:
             mock_conn.return_value = {
                 "status": "error",
-                "url": "http://192.168.86.101:6333",
+                "url": "http://localhost:6333",
                 "reachable": False,
                 "error": "Request timeout after 5 seconds",
             }
@@ -154,7 +157,7 @@ class TestNetworkErrorHandling:
         with patch.object(execute, "check_kafka_connection") as mock_conn:
             mock_conn.return_value = {
                 "status": "error",
-                "broker": "192.168.86.200:29092",
+                "broker": "localhost:9092",
                 "reachable": False,
                 "error": "Network is unreachable",
             }

@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Tests for delegation_orchestrator.py (OMN-2281).
 
@@ -327,7 +329,7 @@ class TestSelectHandlerEndpoint:
     def test_document_routes_to_reasoning(self) -> None:
         """'document' intent routes to REASONING endpoint (doc_gen handler)."""
         mock_endpoint = MagicMock()
-        mock_endpoint.url = "http://192.168.86.200:8101"
+        mock_endpoint.url = "http://llm-reasoning-host:8101"
         mock_endpoint.model_name = "Qwen2.5-72B"
 
         mock_registry_instance = MagicMock()
@@ -349,7 +351,7 @@ class TestSelectHandlerEndpoint:
     def test_test_routes_to_code_analysis(self) -> None:
         """'test' intent routes to CODE_ANALYSIS endpoint (test_boilerplate handler)."""
         mock_endpoint = MagicMock()
-        mock_endpoint.url = "http://192.168.86.201:8000"
+        mock_endpoint.url = "http://llm-coder-host:8000"
         mock_endpoint.model_name = "Qwen3-Coder-30B"
 
         mock_registry_instance = MagicMock()
@@ -370,7 +372,7 @@ class TestSelectHandlerEndpoint:
     def test_research_routes_to_code_analysis(self) -> None:
         """'research' intent routes to CODE_ANALYSIS endpoint (code_review handler)."""
         mock_endpoint = MagicMock()
-        mock_endpoint.url = "http://192.168.86.201:8000"
+        mock_endpoint.url = "http://llm-coder-host:8000"
         mock_endpoint.model_name = "Qwen3-Coder-30B"
 
         mock_registry_instance = MagicMock()
@@ -1139,7 +1141,7 @@ class TestOrchestratedDelegationSuccess:
         llm_response: str | None = None,
         handler_name: str = "doc_gen",
         model_name: str = "Qwen2.5-72B",
-        endpoint_url: str = "http://192.168.86.200:8100",
+        endpoint_url: str = "http://llm-embedding-host:8100",
     ) -> tuple[Any, Any, tuple[str, str, str, str], str]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
@@ -1360,7 +1362,7 @@ class TestOrchestratedDelegationSuccess:
             llm_response=_GOOD_TEST_RESPONSE,
             handler_name="test_boilerplate",
             model_name="Qwen3-Coder-30B",
-            endpoint_url="http://192.168.86.201:8000",
+            endpoint_url="http://llm-coder-host:8000",
         )
         # Override the reasons to reflect test intent
         classifier_mock.is_delegatable.return_value.reasons = [
@@ -1397,7 +1399,7 @@ class TestOrchestratedDelegationSuccess:
             llm_response=_GOOD_RESEARCH_RESPONSE,
             handler_name="code_review",
             model_name="Qwen3-Coder-30B",
-            endpoint_url="http://192.168.86.201:8000",
+            endpoint_url="http://llm-coder-host:8000",
         )
         classifier_mock.is_delegatable.return_value.reasons = [
             "intent 'research' is in the delegation allow-list"

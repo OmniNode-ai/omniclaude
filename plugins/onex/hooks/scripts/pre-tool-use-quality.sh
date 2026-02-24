@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # PreToolUse Quality Enforcement Hook - Portable Plugin Version
 # Intercepts Write/Edit/MultiEdit operations for quality validation
 

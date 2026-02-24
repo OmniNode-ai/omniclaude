@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Bounded Event Queue with Disk Spool for Embedded Event Publisher.
 
 Ported from omnibase_infra.runtime.emit_daemon.queue (OMN-1944).

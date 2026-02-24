@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Synchronous Pattern Tracker for Claude Code Hooks.
 
 This is a simplified synchronous version for use in hook scripts

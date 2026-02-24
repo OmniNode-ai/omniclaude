@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # required-checks.yaml v2
 # Location: .github/required-checks.yaml
 # Upgraded: OMN-2228 (Phase 5 CI Consolidation)

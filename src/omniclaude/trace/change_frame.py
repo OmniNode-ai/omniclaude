@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Core Pydantic models for the Agent Trace and PR Debugging System.
 
 All models are frozen (immutable) after construction per ONEX invariants.

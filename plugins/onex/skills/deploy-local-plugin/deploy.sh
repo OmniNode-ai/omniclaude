@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:

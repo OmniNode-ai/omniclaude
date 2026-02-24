@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for the compliance result subscriber (OMN-2340).
 
 Tests the full pipeline from raw Kafka payload → PatternAdvisory persistence:

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Demo script: Emit test hook event to Kafka.
 
 Part of VERTICAL-001 (OMN-1802): Validates the emit phase of the pattern pipeline.
@@ -18,7 +21,7 @@ Usage:
     python plugins/onex/scripts/demo_emit_hook.py --prompt "My test prompt"
 
 Environment Variables (REQUIRED - no defaults):
-    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (e.g., 192.168.86.200:29092)
+    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (e.g., <kafka-bootstrap-servers>:9092)
 """
 
 from __future__ import annotations

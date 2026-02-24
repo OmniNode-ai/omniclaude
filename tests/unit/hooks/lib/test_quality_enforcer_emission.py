@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for quality_enforcer.py pattern enforcement Kafka emission.
 
 Verifies that QualityEnforcer emits to onex.evt.omniclaude.pattern-enforcement.v1

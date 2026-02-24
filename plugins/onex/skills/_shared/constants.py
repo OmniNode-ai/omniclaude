@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Shared constants for system-status skills.
 
 This module centralizes all magic numbers to improve maintainability.

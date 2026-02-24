@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Embedded Event Publisher - Unix socket server with async Kafka publishing.
 
 Ported from omnibase_infra.runtime.emit_daemon.daemon (OMN-1944).

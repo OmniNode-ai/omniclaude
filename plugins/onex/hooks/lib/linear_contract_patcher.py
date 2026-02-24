@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Linear Contract Patcher - Safe, marker-based patching of Linear ticket descriptions.
 
 Provides safe operations for reading and updating the YAML contract block

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Commit Intent Binder -- M1 (OMN-2492).
 
 Detects git commits in PostToolUse Bash tool output, reads the active

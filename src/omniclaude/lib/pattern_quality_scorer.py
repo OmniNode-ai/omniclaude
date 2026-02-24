@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Pattern Quality Scorer - Evaluates and stores pattern quality metrics.
 
 Scoring Dimensions:

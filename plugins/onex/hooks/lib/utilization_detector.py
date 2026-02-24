@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Utilization detection for context injection effectiveness.
 
 Measures whether injected context was actually used by comparing identifiers

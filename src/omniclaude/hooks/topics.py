@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Topic base names and helper for OmniClaude events.
 
 Per OMN-1972, TopicBase values ARE the canonical wire topic names. No environment

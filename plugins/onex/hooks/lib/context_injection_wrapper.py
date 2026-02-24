@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """CLI wrapper for context injection - backward compatible JSON interface.
 
 This wrapper provides a CLI interface for shell scripts to invoke the
@@ -29,7 +32,7 @@ Output JSON:
         "success": true,
         "patterns_context": "## Learned Patterns...",
         "pattern_count": 3,
-        "source": "database:contract:192.168.86.200:5436/omniclaude",
+        "source": "database:contract:<postgres-host>:5436/omniclaude",
         "retrieval_ms": 42,
         "injection_id": "abc12345-...",
         "cohort": "treatment"

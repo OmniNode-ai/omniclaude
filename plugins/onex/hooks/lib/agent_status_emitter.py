@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Agent status emitter — adapter layer for agent lifecycle status emission.
 
 Wraps ModelAgentStatusPayload and emits via the emit daemon.

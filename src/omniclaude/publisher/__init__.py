@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """OmniClaude Embedded Event Publisher.
 
 Provides a Unix socket server that accepts events from Claude Code hooks

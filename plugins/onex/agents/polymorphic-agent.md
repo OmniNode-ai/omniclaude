@@ -469,7 +469,7 @@ Required functions:
 ## Notes
 
 - Agent configs: `${CLAUDE_PLUGIN_ROOT}/onex/agents/configs/*.yaml`
-- Intelligence Services: Event-based via Kafka (192.168.86.200:29092)
+- Intelligence Services: Event-based via Kafka (<kafka-bootstrap-servers>:9092)
 - See `@MANDATORY_FUNCTIONS.md`, `@COMMON_TEMPLATES.md`, `@COMMON_AGENT_PATTERNS.md` for details
 - Observability: All routing logged to database automatically via hook
 - All services communicate via Kafka event bus (intelligence, routing, observability)

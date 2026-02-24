@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Integration test for comprehensive logging infrastructure
 # Tests tool call logging, error logging, success logging, and decision logging
 

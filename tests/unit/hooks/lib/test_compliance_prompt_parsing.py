@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Compliance prompt regression tests (OMN-2258).
 
 Snapshot-tests the JSON schema of compliance output (EnforcementResult,

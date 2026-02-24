@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Prometheus Alerting Rules for OmniClaude
 # Defines alerts for application health, performance, and resource utilization
 

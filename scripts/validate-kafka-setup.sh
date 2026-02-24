@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Kafka Setup Validation Script
 # Verifies Kafka/Redpanda and PostgreSQL connectivity for agent logging
 

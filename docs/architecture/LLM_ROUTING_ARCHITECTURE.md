@@ -17,10 +17,10 @@ This document describes the registry itself, how each feature selects endpoints,
 
 ```
 Environment Variables
-    LLM_CODER_URL=http://192.168.86.201:8000
-    LLM_CODER_FAST_URL=http://192.168.86.201:8001
-    LLM_EMBEDDING_URL=http://192.168.86.200:8100
-    LLM_DEEPSEEK_R1_URL=http://192.168.86.200:8101
+    LLM_CODER_URL=http://<llm-coder-host>:8000
+    LLM_CODER_FAST_URL=http://<llm-fast-host>:8001
+    LLM_EMBEDDING_URL=http://<llm-embedding-host>:8100
+    LLM_DEEPSEEK_R1_URL=http://<llm-reasoning-host>:8101
     LLM_QWEN_72B_URL=...
     ...
          │

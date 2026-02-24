@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """ChangeFrame assembler for the PostToolUse hook.
 
 This module implements the core frame assembly logic that runs after

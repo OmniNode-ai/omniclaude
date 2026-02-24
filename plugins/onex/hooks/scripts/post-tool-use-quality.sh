@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # PostToolUse Quality Enforcement Hook - Portable Plugin Version
 # Auto-fixes naming convention violations after files are written
 

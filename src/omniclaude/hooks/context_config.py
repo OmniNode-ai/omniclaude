@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Configuration for context injection in Claude Code hooks.
 
 Provides configurable settings for the context injection system that enriches
@@ -13,7 +16,7 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
 
     Database configuration (primary source):
     OMNICLAUDE_CONTEXT_DB_ENABLED: Enable database as pattern source (default: true)
-    OMNICLAUDE_CONTEXT_DB_HOST: PostgreSQL host (default: 192.168.86.200)
+    OMNICLAUDE_CONTEXT_DB_HOST: PostgreSQL host (default: localhost)
     OMNICLAUDE_CONTEXT_DB_PORT: PostgreSQL port (default: 5436)
     OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omniclaude)
     OMNICLAUDE_CONTEXT_DB_USER: Database user (default: postgres)
@@ -289,7 +292,7 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     db_host: str = Field(
-        default="192.168.86.200",
+        default="localhost",
         description="PostgreSQL host for pattern storage",
     )
 

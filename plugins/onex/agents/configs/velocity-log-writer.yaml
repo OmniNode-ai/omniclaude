@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Velocity Log Writer Agent Definition
 # Direct-to-database velocity tracking writer for instant productivity metrics
 

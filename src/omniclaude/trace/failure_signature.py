@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """FailureSignature model and SHA-256 fingerprint computation pipeline.
 
 This module provides:

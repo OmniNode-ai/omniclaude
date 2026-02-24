@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Local Model Delegation Handler.
 
 Implements the delegation dispatch path introduced in OMN-2271.

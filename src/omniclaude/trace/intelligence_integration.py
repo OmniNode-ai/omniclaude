@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """FixTransition integration with OmniIntelligence and ContextScoring.
 
 This module provides the omniclaude-side wiring that converts FixTransitions

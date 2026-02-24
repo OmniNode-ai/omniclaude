@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Agent: Epic Worker
 # Pattern: Autonomous multi-ticket repo worker for epic execution
 # Spawned by epic-team team lead via Task(); not auto-triggered by routing

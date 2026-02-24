@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Metrics Emitter -- adapter layer for phase metrics emission.
 
 Wraps ContractPhaseMetrics in ContractMeasurementEvent and emits via

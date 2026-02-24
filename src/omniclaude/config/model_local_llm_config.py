@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Local LLM endpoint configuration registry.
 
 Provides a centralized configuration source for all local LLM endpoints used
@@ -179,7 +182,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
     Example:
         >>> import os
-        >>> os.environ["LLM_CODER_URL"] = "http://192.168.86.201:8000"
+        >>> os.environ["LLM_CODER_URL"] = "http://llm-server:8000"
         >>> registry = LocalLlmEndpointRegistry()
         >>> endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         >>> endpoint is not None

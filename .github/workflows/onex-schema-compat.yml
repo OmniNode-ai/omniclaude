@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 name: ONEX Schema Compatibility
 
 # Verifies omniclaude compatibility with the current ONEX Change Control schema.

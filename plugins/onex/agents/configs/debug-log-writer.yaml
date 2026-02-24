@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Debug Log Writer Agent - YAML Definition
 # Version: 1.0.0
 # Purpose: Direct-to-database debug log writer with intelligence integration

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Request Agent Routing Skill - Kafka Version
 
@@ -105,7 +108,7 @@ class RoutingEventClient:
                 "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
                 "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
                 "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092"
+                "Example: KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092"
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = f"omniclaude-routing-{uuid4().hex[:8]}"

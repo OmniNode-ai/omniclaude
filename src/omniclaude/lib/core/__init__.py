@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Core functionality for Claude artifacts.
 
 This package contains core components for the OmniClaude agent system:

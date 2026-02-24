@@ -29,7 +29,7 @@ When invoked:
    - `--failures-only` - Show only failed checks
    - `-v` / `--verbose` - Include sample payloads for failed checks
    - `--skip-daemon` - Skip emit daemon health check
-   - `--broker <host:port>` - Override Kafka broker address (default: reads `$KAFKA_BOOTSTRAP_SERVERS`, falls back to `192.168.86.200:29092`)
+   - `--broker <host:port>` - Override Kafka broker address (default: reads `$KAFKA_BOOTSTRAP_SERVERS`, falls back to `<kafka-bootstrap-servers>:9092`)
    - `--sample-count <n>` - Number of messages to sample per topic (default: 20)
 
 3. Display the audit results to the user, including:

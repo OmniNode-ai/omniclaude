@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Metrics aggregation reducer -- M3.
 
 Rolls up per-phase ContractPhaseMetrics into ContractAggregatedRun,

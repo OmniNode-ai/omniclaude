@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Epic decomposer: maps Linear tickets to repos using label overrides + keyword scoring.
 
 Priority order:

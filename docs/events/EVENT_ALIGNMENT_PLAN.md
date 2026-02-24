@@ -656,8 +656,8 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 ## Dependencies
 
 ### External Dependencies
-- ✅ Kafka/Redpanda infrastructure (192.168.86.200:9092)
-- ✅ PostgreSQL (192.168.86.200:5436)
+- ✅ Kafka/Redpanda infrastructure (<kafka-bootstrap-servers>:9092)
+- ✅ PostgreSQL (<postgres-host>:5436)
 - ✅ EVENT_BUS_INTEGRATION_GUIDE (stable)
 - ✅ MVP_EVENT_CATALOG (stable)
 

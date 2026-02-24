@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Test SSRF Protection in Qdrant Helper
 
@@ -37,7 +40,7 @@ def test_valid_urls() -> list[tuple[str, bool, str]]:
         ("http://localhost:6333", "Localhost HTTP (dev)"),
         ("http://127.0.0.1:6333", "Loopback IPv4"),
         ("http://[::1]:6333", "Loopback IPv6"),
-        ("http://192.168.86.101:6333", "Archon server IP"),
+        ("http://<qdrant-host>:6333", "Archon server IP"),
         ("http://qdrant.internal:6333", "Internal DNS name"),
     ]
 
@@ -105,6 +108,7 @@ def test_malicious_urls() -> list[tuple[str, bool, str]]:
     original_env = os.getenv("ENVIRONMENT")
     os.environ["ENVIRONMENT"] = "development"
 
+    private_ip_url = "http://10.0.0.1:6333"  # onex-allow-internal-ip
     test_cases = [
         ("http://internal-admin:80", "Non-whitelisted host (internal admin)"),
         ("http://169.254.169.254:80", "AWS metadata endpoint"),
@@ -116,7 +120,7 @@ def test_malicious_urls() -> list[tuple[str, bool, str]]:
         ("http://localhost:9092", "Kafka port (dangerous)"),
         ("http://localhost:3306", "MySQL port (dangerous)"),
         ("http://evil.com:6333", "External domain not in whitelist"),
-        ("http://10.0.0.1:6333", "Private IP not in whitelist"),
+        (private_ip_url, "Private IP not in whitelist"),
     ]
 
     for url, description in test_cases:
@@ -187,11 +191,13 @@ def test_additional_allowed_hosts() -> list[tuple[str, bool, str]]:
     original_hosts = os.getenv("QDRANT_ALLOWED_HOSTS")
 
     os.environ["ENVIRONMENT"] = "development"
-    os.environ["QDRANT_ALLOWED_HOSTS"] = "custom-qdrant.example.com,10.0.0.50"
+    os.environ["QDRANT_ALLOWED_HOSTS"] = (
+        "custom-qdrant.example.com,10.0.0.50"  # onex-allow-internal-ip
+    )
 
     test_cases = [
         ("http://custom-qdrant.example.com:6333", True, "Custom allowed host"),
-        ("http://10.0.0.50:6333", True, "Custom allowed IP"),
+        ("http://10.0.0.50:6333", True, "Custom allowed IP"),  # onex-allow-internal-ip
         ("http://not-allowed.com:6333", False, "Host not in whitelist"),
     ]
 

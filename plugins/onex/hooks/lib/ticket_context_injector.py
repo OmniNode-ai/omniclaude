@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Ticket context injector - Inject active ticket context into Claude sessions.
 
 This module enables SessionStart hooks to inject active ticket context from

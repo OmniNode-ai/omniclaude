@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Graded accuracy scoring for agent selection.
 
 Evaluates how well the selected agent matches the session's actual signals

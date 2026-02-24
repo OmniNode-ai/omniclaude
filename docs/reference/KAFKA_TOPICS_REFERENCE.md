@@ -132,7 +132,7 @@ onex.cmd.omniclaude.*        — Only OmniClaude internal services
 **Current state**: Access control is enforced by convention (honor system). No Kafka ACLs
 are configured in Redpanda.
 
-**Intended enforcement**: Redpanda Console at `http://192.168.86.200:8080`.
+**Intended enforcement**: Redpanda Console at `http://<redpanda-console-host>:8080`.
 
 ---
 
@@ -153,7 +153,7 @@ before any data reaches `evt.*` topics.
 
 ## Infrastructure
 
-- **Bootstrap servers (host scripts)**: `192.168.86.200:29092`
+- **Bootstrap servers (host scripts)**: `<kafka-bootstrap-servers>:9092`
 - **Bootstrap servers (Docker services)**: `omninode-bridge-redpanda:9092`
-- **Admin UI**: `http://192.168.86.200:8080`
+- **Admin UI**: `http://<redpanda-console-host>:8080`
 - **Topic definition source**: `src/omniclaude/hooks/topics.py` (`TopicBase` enum)

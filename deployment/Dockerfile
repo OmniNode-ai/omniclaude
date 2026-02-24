@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Minimal Dockerfile for CI validation
 # Full deployment Dockerfile pending codebase restructure
 FROM python:3.12-slim

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """RRH Skill Adapter -- orchestrates A1 -> A2 -> A3 pipeline.
 
 This module is the HOW of RRH: it runs the three-stage pipeline

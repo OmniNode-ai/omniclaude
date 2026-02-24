@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for phase instrumentation protocol (OMN-2027).
 
 Covers:
@@ -1409,7 +1412,8 @@ class TestSanitization:
     def test_rejects_unc_path(self):
         """UNC paths like \\\\server\\share are rejected."""
         assert _validate_artifact_uri("\\\\fileserver\\builds\\report.html") is False
-        assert _validate_artifact_uri("\\\\192.168.1.1\\share\\artifact.json") is False
+        unc_ip_path = "\\\\192.168.1.1\\share\\artifact.json"  # onex-allow-internal-ip
+        assert not _validate_artifact_uri(unc_ip_path)
 
     def test_rejects_case_insensitive_prefix_at_start(self):
         """Absolute path prefixes are matched case-insensitively at URI start."""
