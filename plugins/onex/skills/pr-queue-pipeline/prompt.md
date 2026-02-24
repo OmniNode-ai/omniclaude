@@ -14,6 +14,7 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--skip-review` — default: false
    - `--skip-fix` — default: false
    - `--dry-run` — default: false
+   - `--run-id <id>` — default: none (resume mode when provided)
    - `--authors <list>` — default: all
    - `--max-total-prs <n>` — default: 20
    - `--max-total-merges <n>` — default: 10
@@ -25,7 +26,14 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--clean-runs <n>` — default: 2
    - `--max-review-minutes <n>` — default: 30
 
-3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
+3. **Generate or resume run_id**:
+   - If `--run-id` provided: load ledger from `~/.claude/pr-queue/runs/<run_id>/ledger.json`
+     and log: "Resuming from phase: <next_phase>" where next_phase is the first phase
+     NOT in `phase_completed`. Skip all phases listed in `phase_completed`.
+   - If `--dry-run` AND `--run-id` provided: read-only mode — print plan only, do NOT
+     update ledger mtime, do NOT emit heartbeat, zero mutations.
+   - Otherwise: generate new run_id `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
+     and create ledger at `~/.claude/pr-queue/runs/<run_id>/ledger.json`.
 
 4. **Print header**:
    ```
@@ -96,7 +104,17 @@ Phase 0 Complete — Plan:
 If `--dry-run`:
 ```
   → Print full plan (PR titles, repos, reasons)
-  → Print: "Dry run complete. No phases executed."
+  → Print re-run block:
+      "Dry run complete. No phases executed.
+
+      Re-run command:
+        /pr-queue-pipeline --run-id <run_id> [original-args]
+
+      Would write:
+        ~/.claude/pr-queue/runs/<run_id>/ledger.json
+        ~/.claude/pr-queue/runs/<run_id>/inventory.json
+        ~/.claude/pr-queue/<date>/report_<run_id>.md
+        ~/.claude/pr-queue/<date>/pipeline_<run_id>.json"
   → Emit ModelSkillResult(status=nothing_to_do, phases={scan: {...}})
   → EXIT
 ```
@@ -107,6 +125,56 @@ If both lists are empty (nothing to merge or fix):
   → Emit ModelSkillResult(status=nothing_to_do)
   → EXIT
 ```
+
+### Phase 0 Ledger and Inventory Write
+
+After Phase 0 scan completes (and before any sub-skill dispatch):
+
+1. **Write ledger** to `~/.claude/pr-queue/runs/<run_id>/ledger.json`:
+   ```json
+   {
+     "run_id": "<run_id>",
+     "started_at": "<ISO timestamp>",
+     "phase_completed": ["scan"],
+     "stop_reason": null,
+     "inventory_path": "~/.claude/pr-queue/runs/<run_id>/inventory.json"
+   }
+   ```
+
+2. **Write inventory** to `~/.claude/pr-queue/runs/<run_id>/inventory.json`:
+   ```json
+   {
+     "run_id": "<run_id>",
+     "generated_at": "<ISO timestamp>",
+     "merge_ready": [...],
+     "needs_fix": [...]
+   }
+   ```
+
+**CRITICAL**: inventory.json MUST be written before fix-prs, merge-sweep, or review-all-prs is
+invoked. Sub-skills receive `--inventory ~/.claude/pr-queue/runs/<run_id>/inventory.json`.
+
+After each phase completes, append the phase name to `phase_completed` in the ledger. Phase names:
+`scan` | `review` | `fix` | `merge` | `report`
+
+**phase_completed never regresses** — only append, never remove or reorder.
+
+### Claims Lifecycle
+
+Before processing each PR, create a claim file at:
+`~/.claude/pr-queue/claims/<run_id>/<repo_slug>-<pr_number>.json`
+
+On terminal run completion (`completed`, `gate_rejected`, `nothing_to_do`, `error`):
+Remove all claim files under `~/.claude/pr-queue/claims/<run_id>/`.
+
+### stop_reason
+
+Set `stop_reason` in the ledger when the pipeline reaches a terminal state:
+- `completed` — all eligible phases ran, all PRs processed
+- `partial_completed` — pipeline stopped after processing some (not all) eligible PRs
+- `gate_rejected` — Phase 3 gate rejected by human
+- `nothing_to_do` — Phase 0 found no work
+- `error` — unrecoverable error
 
 ---
 
