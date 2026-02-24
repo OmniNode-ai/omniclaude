@@ -15,7 +15,7 @@ import sys
 def main() -> None:
     try:
         from omnibase_core.validation.validator_local_paths import (  # type: ignore[import-not-found]
-            main as validator_main,
+            main as validatorMain,
         )
     except ModuleNotFoundError:
         print(
@@ -27,7 +27,7 @@ def main() -> None:
         sys.exit(0)
 
     # Module is available — delegate to it with all arguments
-    sys.exit(validator_main(sys.argv[1:]))
+    sys.exit(validatorMain(sys.argv[1:]))
 
 
 if __name__ == "__main__":
