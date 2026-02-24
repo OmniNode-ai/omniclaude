@@ -318,7 +318,9 @@ class PluginClaude:
             # ProtocolEventBus.  When the publisher has not yet started,
             # event_bus is None and publish_all() will be a silent no-op.
             introspection_proxy = SkillNodeIntrospectionProxy(
-                event_bus=self._publisher.event_bus if self._publisher is not None else None,
+                event_bus=self._publisher.event_bus
+                if self._publisher is not None
+                else None,
             )
             published_count = await introspection_proxy.publish_all(reason="startup")
             if published_count > 0:
