@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 SSRF (Server-Side Request Forgery) protection tests.
 
@@ -77,12 +80,12 @@ class TestSSRFProtection:
 
     def test_non_whitelisted_hosts_blocked(self, qdrant_helper):
         """Test that non-whitelisted hosts are blocked."""
-        # These IPs are NOT in the whitelist (localhost, 192.168.86.101, 192.168.86.200 ARE allowed)
+        # These IPs are NOT in the whitelist (localhost and configured QDRANT_ALLOWED_HOSTS ARE allowed)
         malicious_urls = [
             "http://0.0.0.0:6333",  # Not whitelisted
-            "http://10.0.0.1:6333",  # Private Class A
-            "http://172.16.0.1:6333",  # Private Class B
-            "http://192.168.1.1:6333",  # Different subnet
+            "http://10.0.0.1:6333",  # Private Class A  # onex-allow-internal-ip
+            "http://172.16.0.1:6333",  # Private Class B  # onex-allow-internal-ip
+            "http://192.168.1.1:6333",  # Different subnet  # onex-allow-internal-ip
             "http://169.254.169.254",  # AWS metadata service
             "http://internal-admin:6333",  # Internal hostname
             "http://evil.com:6333",  # External malicious
@@ -188,8 +191,6 @@ class TestSSRFProtection:
         """Test that whitelisted URLs are allowed."""
         # Only whitelisted hosts should be allowed (per whitelist in validate_qdrant_url)
         valid_urls = [
-            "http://192.168.86.101:6333",  # Archon server (whitelisted)
-            "http://192.168.86.200:6333",  # OmniNode bridge (whitelisted)
             "http://localhost:6333",  # localhost (whitelisted)
             "http://127.0.0.1:6333",  # 127.0.0.1 (whitelisted)
             "http://qdrant.internal:6333",  # Internal DNS (whitelisted)
@@ -247,7 +248,7 @@ class TestSSRFProtection:
 
         # Test that validation properly checks whitelisted hosts
         # (this prevents initial DNS rebinding setup)
-        test_url = "http://192.168.86.101:6333"
+        test_url = "http://localhost:6333"
         if hasattr(qdrant_helper, "validate_qdrant_url"):
             # Should pass validation for whitelisted host
             result = qdrant_helper.validate_qdrant_url(test_url)
@@ -263,12 +264,12 @@ class TestQdrantURLParsing:
         """Test that URL components are properly extracted."""
         from urllib.parse import urlparse
 
-        test_url = "http://192.168.86.101:6333/collections"
+        test_url = "http://localhost:6333/collections"
 
         parsed = urlparse(test_url)
 
         assert parsed.scheme == "http"
-        assert parsed.hostname == "192.168.86.101"
+        assert parsed.hostname == "localhost"
         assert parsed.port == 6333
         assert parsed.path == "/collections"
 

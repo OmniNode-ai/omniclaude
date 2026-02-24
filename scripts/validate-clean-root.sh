@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # scripts/validate-clean-root.sh
 # Validates root directory cleanliness for omniclaude
 # Based on omnibase_core pattern

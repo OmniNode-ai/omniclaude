@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # OpenTelemetry Collector Configuration for OmniClaude
 # Receives, processes, and exports telemetry data (traces, metrics, logs)
 

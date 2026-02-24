@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for local LLM endpoint configuration registry.
 
 Tests cover:
@@ -63,13 +66,13 @@ class TestLlmEndpointConfig:
     def test_valid_construction(self) -> None:
         """Config can be constructed with valid parameters."""
         config = LlmEndpointConfig(
-            url="http://192.168.86.201:8000",
+            url="http://llm-coder-host:8000",
             model_name="Qwen2.5-Coder-14B",
             purpose=LlmEndpointPurpose.CODE_ANALYSIS,
             max_latency_ms=2000,
             priority=9,
         )
-        assert str(config.url) == "http://192.168.86.201:8000/"
+        assert str(config.url) == "http://llm-coder-host:8000/"
         assert config.model_name == "Qwen2.5-Coder-14B"
         assert config.purpose == LlmEndpointPurpose.CODE_ANALYSIS
         assert config.max_latency_ms == 2000
@@ -211,23 +214,23 @@ class TestLocalLlmEndpointRegistry:
     @pytest.fixture
     def full_env(self, monkeypatch: pytest.MonkeyPatch, _clean_env: None) -> None:
         """Set all LLM endpoint env vars to known values."""
-        monkeypatch.setenv("LLM_CODER_URL", "http://192.168.86.201:8000")
-        monkeypatch.setenv("LLM_EMBEDDING_URL", "http://192.168.86.201:8002")
-        monkeypatch.setenv("LLM_FUNCTION_URL", "http://192.168.86.201:8001")
-        monkeypatch.setenv("LLM_DEEPSEEK_LITE_URL", "http://192.168.86.201:8003")
-        monkeypatch.setenv("LLM_QWEN_72B_URL", "http://192.168.86.200:8100")
-        monkeypatch.setenv("LLM_VISION_URL", "http://192.168.86.200:8102")
-        monkeypatch.setenv("LLM_DEEPSEEK_R1_URL", "http://192.168.86.200:8101")
-        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://192.168.86.100:8200")
+        monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+        monkeypatch.setenv("LLM_EMBEDDING_URL", "http://llm-embedding-host:8002")
+        monkeypatch.setenv("LLM_FUNCTION_URL", "http://llm-fast-host:8001")
+        monkeypatch.setenv("LLM_DEEPSEEK_LITE_URL", "http://llm-lite-host:8003")
+        monkeypatch.setenv("LLM_QWEN_72B_URL", "http://llm-embedding-host:8100")
+        monkeypatch.setenv("LLM_VISION_URL", "http://llm-vision-host:8102")
+        monkeypatch.setenv("LLM_DEEPSEEK_R1_URL", "http://llm-reasoning-host:8101")
+        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://llm-mid-host:8200")
 
     @pytest.fixture
     def partial_env(self, monkeypatch: pytest.MonkeyPatch, _clean_env: None) -> None:
         """Set only always-running endpoints (no hot-swap)."""
-        monkeypatch.setenv("LLM_CODER_URL", "http://192.168.86.201:8000")
-        monkeypatch.setenv("LLM_EMBEDDING_URL", "http://192.168.86.201:8002")
-        monkeypatch.setenv("LLM_QWEN_72B_URL", "http://192.168.86.200:8100")
-        monkeypatch.setenv("LLM_VISION_URL", "http://192.168.86.200:8102")
-        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://192.168.86.100:8200")
+        monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
+        monkeypatch.setenv("LLM_EMBEDDING_URL", "http://llm-embedding-host:8002")
+        monkeypatch.setenv("LLM_QWEN_72B_URL", "http://llm-embedding-host:8100")
+        monkeypatch.setenv("LLM_VISION_URL", "http://llm-vision-host:8102")
+        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://llm-mid-host:8200")
 
     @pytest.fixture
     def make_registry(self) -> Callable[..., LocalLlmEndpointRegistry]:
@@ -371,7 +374,7 @@ class TestLocalLlmEndpointRegistry:
         make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
         """Latency budgets can be overridden via environment variables."""
-        monkeypatch.setenv("LLM_CODER_URL", "http://192.168.86.201:8000")
+        monkeypatch.setenv("LLM_CODER_URL", "http://llm-coder-host:8000")
         monkeypatch.setenv("LLM_CODER_MAX_LATENCY_MS", "500")
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
@@ -386,7 +389,7 @@ class TestLocalLlmEndpointRegistry:
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.EMBEDDING)
         assert endpoint is not None
-        assert "192.168.86.201" in str(endpoint.url)
+        assert "llm-embedding-host" in str(endpoint.url)
         assert "8002" in str(endpoint.url)
 
     @pytest.mark.unit

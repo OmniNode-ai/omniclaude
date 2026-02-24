@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Tests for local_delegation_handler.py (OMN-2271).
 
@@ -538,7 +540,7 @@ class TestHandleDelegationHappyPath:
             with patch.object(
                 ldh,
                 "_get_delegate_endpoint_url",
-                return_value="http://192.168.86.100:8200",
+                return_value="http://llm-mid-host:8200",
             ):
                 with patch.object(
                     ldh,

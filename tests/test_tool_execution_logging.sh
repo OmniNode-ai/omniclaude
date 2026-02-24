@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 
 # Test script for tool execution logging
 # Verifies PostToolUse hook publishes events to Kafka and persists to agent_actions table
@@ -92,7 +94,7 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     source "$PROJECT_ROOT/.env"
 fi
 
-QUERY_RESULT=$(PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -t -c "
+QUERY_RESULT=$(PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -t -c "
 SELECT
     action_id,
     agent_name,
@@ -115,7 +117,7 @@ else
     echo "$QUERY_RESULT"
     echo ""
     echo "  Recent agent_actions entries:"
-    PGPASSWORD="${POSTGRES_PASSWORD}" psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -c "
     SELECT
         action_id,
         agent_name,
@@ -140,5 +142,5 @@ echo "  4. Database persistence: Check query above"
 echo ""
 echo "To verify manually:"
 echo "  1. Check logs: tail -f $LOG_FILE"
-echo "  2. Check Kafka topic: kcat -C -b 192.168.86.200:29102 -t agent-actions -o end"
-echo "  3. Check database: psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c \"SELECT * FROM agent_actions WHERE correlation_id = '$CORRELATION_ID';\""
+echo "  2. Check Kafka topic: kcat -C -b <kafka-bootstrap-servers>:29102 -t agent-actions -o end"
+echo "  3. Check database: psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -c \"SELECT * FROM agent_actions WHERE correlation_id = '$CORRELATION_ID';\""

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Switch the onex plugin to pull from a specific GitHub branch
 # Usage: ./switch-plugin-branch.sh [branch-name]
 # Default: main

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Attribution binder -- M4.
 
 Composes ContractAttributionRecord with ContractAggregatedRun and

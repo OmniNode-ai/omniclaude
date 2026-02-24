@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # OmniClaude Docker Compose - CI Validation
 # ==============================================================================
 # Minimal compose file for CI validation and local development testing.

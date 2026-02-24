@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 View the complete manifest that agents receive.
 Shows all sections with pattern discovery, infrastructure, models, etc.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for pattern enforcement hook module.
 
 Tests the pattern enforcement advisory system (OMN-2263):

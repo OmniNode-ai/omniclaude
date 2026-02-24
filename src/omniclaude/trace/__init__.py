@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Agent Trace and PR Debugging System — trace package.
 
 This package provides schema definitions and ORM-compatible table definitions

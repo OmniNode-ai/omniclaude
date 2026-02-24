@@ -795,4 +795,4 @@ Indexes ensure fast queries:
 
 **Last Updated**: 2025-10-29
 **Schema Version**: 1.0.0 (Migration 008_agent_manifest_traceability.sql)
-**Database**: omninode_bridge @ 192.168.86.200:5436
+**Database**: omninode_bridge @ <postgres-host>:5436

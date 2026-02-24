@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Integration tests for check-infrastructure skill.
 
@@ -43,7 +46,7 @@ class TestCheckInfrastructure:
         ):
             mock_conn.return_value = {
                 "status": "connected",
-                "broker": "192.168.86.200:29092",
+                "broker": "localhost:9092",
                 "reachable": True,
                 "error": None,
             }
@@ -61,7 +64,7 @@ class TestCheckInfrastructure:
         with patch.object(execute, "check_kafka_connection") as mock_conn:
             mock_conn.return_value = {
                 "status": "error",
-                "broker": "192.168.86.200:29092",
+                "broker": "localhost:9092",
                 "reachable": False,
                 "error": "Connection timeout",
             }
@@ -79,7 +82,7 @@ class TestCheckInfrastructure:
                 {
                     "success": True,
                     "rows": [{"count": 34}],
-                    "host": "192.168.86.200",
+                    "host": "localhost",
                     "port": "5436",
                     "database": "omniclaude",
                 },
@@ -118,7 +121,7 @@ class TestCheckInfrastructure:
         ):
             mock_conn.return_value = {
                 "status": "connected",
-                "url": "http://192.168.86.101:6333",
+                "url": "http://localhost:6333",
                 "reachable": True,
                 "error": None,
             }
@@ -145,7 +148,7 @@ class TestCheckInfrastructure:
         with patch.object(execute, "check_qdrant_connection") as mock_conn:
             mock_conn.return_value = {
                 "status": "error",
-                "url": "http://192.168.86.101:6333",
+                "url": "http://localhost:6333",
                 "reachable": False,
                 "error": "Connection timeout",
             }

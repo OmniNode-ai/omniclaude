@@ -470,17 +470,17 @@ Events are persisted to PostgreSQL table `agent_actions`:
 pip install kafka-python aiokafka
 ```
 
-**Infrastructure** (on 192.168.86.200):
+**Infrastructure** (on <your-infrastructure-host>):
 - Kafka/Redpanda: Port 29092 (external) / 9092 (internal)
 - PostgreSQL: Port 5436 (omniclaude database)
 
 **Environment Variables**:
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092  # For host scripts
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092  # For host scripts
 # OR
 KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # For Docker services
 
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omniclaude
 POSTGRES_USER=postgres
@@ -516,10 +516,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/action-logging/skill.md
 **Check Kafka Connection**:
 ```bash
 # Test Kafka connectivity
-kcat -L -b 192.168.86.200:29092
+kcat -L -b <kafka-bootstrap-servers>:9092
 
 # Check topic exists
-kcat -L -b 192.168.86.200:29092 -t agent-actions
+kcat -L -b <kafka-bootstrap-servers>:9092 -t agent-actions
 ```
 
 **Check Environment Variables**:
@@ -683,7 +683,7 @@ python3 agents/lib/action_logging_example.py
 
 ```bash
 # Consume agent-actions topic
-kcat -C -b 192.168.86.200:29092 -t agent-actions
+kcat -C -b <kafka-bootstrap-servers>:9092 -t agent-actions
 ```
 
 ### Verify in Database

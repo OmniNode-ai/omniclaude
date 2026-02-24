@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for cross_repo_detector module.
 
 Tests the cross-repo change detection logic used by ticket-pipeline's

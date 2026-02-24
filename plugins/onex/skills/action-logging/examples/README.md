@@ -36,7 +36,7 @@ All examples log to:
 ### Verify in Kafka
 
 ```bash
-kcat -C -b 192.168.86.200:29092 -t agent-actions
+kcat -C -b <kafka-bootstrap-servers>:9092 -t agent-actions
 ```
 
 ### Verify in Database

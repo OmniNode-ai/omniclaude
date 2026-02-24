@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for the RRH hook adapter (rrh_hook_adapter.py).
 
 Validates phase-to-profile mapping, seam-ticket override, skip-to resume

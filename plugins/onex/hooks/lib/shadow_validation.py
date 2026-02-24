@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Shadow Validation — async quality comparison for delegated tasks (OMN-2283).
 
 Samples 5-10% of delegated tasks and calls Claude (shadow model) asynchronously

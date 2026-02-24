@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Shared types for pattern injection - used by both CLI and handler.
 
 This module contains the canonical definitions for pattern-related data types,

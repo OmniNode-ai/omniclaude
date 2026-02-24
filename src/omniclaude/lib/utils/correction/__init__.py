@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Correction module for AI Quality Enforcement System.
 Generates intelligent corrections for code violations using RAG intelligence.

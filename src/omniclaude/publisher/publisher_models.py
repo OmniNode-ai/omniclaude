@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Socket protocol request/response models for the embedded publisher.
 
 Ported from omnibase_infra.runtime.emit_daemon.model_daemon_request

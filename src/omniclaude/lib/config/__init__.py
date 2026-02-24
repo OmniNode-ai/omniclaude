@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Configuration modules for omniclaude.lib.
 
 This package contains configuration classes for various subsystems:

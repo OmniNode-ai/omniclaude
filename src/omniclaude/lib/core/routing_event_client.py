@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Routing Event Client - Kafka-based Agent Routing via RequestResponseWiring.
 
 Thin wrapper around omnibase_infra.runtime.RequestResponseWiring for event-based

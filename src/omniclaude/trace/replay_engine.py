@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Deterministic replay engine for ChangeFrames.
 
 Given a frame_id, the replay engine:

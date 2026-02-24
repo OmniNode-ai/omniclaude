@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Guardrail logic for routing feedback reinforcement.
 
 Gates whether a session's routing decision should be used to reinforce

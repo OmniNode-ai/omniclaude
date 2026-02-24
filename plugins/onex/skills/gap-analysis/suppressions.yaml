@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # gap-analysis suppressions
 # Suppress known false positives or accepted integration gaps.
 #

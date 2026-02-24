@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Session marker utilities for injection coordination.
 
 Prevents duplicate pattern injection between SessionStart and UserPromptSubmit

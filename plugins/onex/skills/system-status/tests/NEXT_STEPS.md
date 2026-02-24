@@ -83,13 +83,13 @@ The test suite has successfully identified three categories of issues:
 **Tasks**:
 1. Create `validate_qdrant_url()` in `helpers/qdrant_helper.py`
 2. Define `ALLOWED_QDRANT_HOSTS` whitelist
-3. Add IP pattern blocking (127.x, 10.x, 192.168.x, etc.)
+3. Add IP pattern blocking (127.x, 10.x, 192.168.x, etc.)  <!-- onex-allow-internal-ip -->
 4. Add protocol filtering (allow only http/https)
 5. Add DNS resolution and IP validation
 6. Run SSRF tests: `pytest test_ssrf_protection.py -v`
 
 **Success Criteria**:
-- [ ] Internal IPs blocked (127.x, 10.x, 192.168.x, 169.254.x)
+- [ ] Internal IPs blocked (127.x, 10.x, 192.168.x, 169.254.x)  <!-- onex-allow-internal-ip -->
 - [ ] File protocol blocked (file://)
 - [ ] DNS rebinding protection implemented
 - [ ] 9/9 SSRF tests passing

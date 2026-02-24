@@ -105,11 +105,11 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `POSTGRES_HOST` | PostgreSQL host | `192.168.86.200` |
+| `POSTGRES_HOST` | PostgreSQL host | `<your-infrastructure-host>` |
 | `POSTGRES_PORT` | PostgreSQL port | `5436` |
 | `POSTGRES_DATABASE` | Database name | `omniclaude` |
 | `POSTGRES_PASSWORD` | Database password | Required |
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers | `192.168.86.200:29092` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka brokers | `<kafka-bootstrap-servers>:9092` |
 | `QDRANT_URL` | Qdrant vector DB URL | `http://localhost:6333` |
 
 ### Optional Variables
@@ -127,8 +127,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 # .env
 PROJECT_ROOT=/Users/jonah/Code/omniclaude
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 ### OmniArchon
@@ -137,8 +137,8 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 # .env
 PROJECT_ROOT=/Users/jonah/Code/omniarchon
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 ### OmniBase Core
@@ -147,8 +147,8 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 # .env
 PROJECT_ROOT=/Users/jonah/Code/omnibase_core
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 ### OmniDash
@@ -157,8 +157,8 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 # .env
 PROJECT_ROOT=/Users/jonah/Code/omnidash
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
-POSTGRES_HOST=192.168.86.200
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+POSTGRES_HOST=<postgres-host>
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 ## Migration Checklist

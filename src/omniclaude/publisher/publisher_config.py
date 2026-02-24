@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Publisher Configuration Model.
 
 Simplified from omnibase_infra.runtime.emit_daemon.config (OMN-1944).

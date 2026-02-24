@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """ONEX-compliant event schemas for Claude Code hooks.
 
@@ -2196,7 +2198,7 @@ class ModelLlmRoutingFallbackPayload(BaseModel):
         ...     correlation_id=uuid4(),
         ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
         ...     fallback_reason="LLM endpoint unhealthy",
-        ...     llm_url="http://192.168.86.100:8200",
+        ...     llm_url="http://llm-server:8200",
         ...     routing_prompt_version="1.0.0",
         ... )
     """

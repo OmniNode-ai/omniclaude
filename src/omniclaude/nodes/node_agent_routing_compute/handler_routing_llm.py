@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """LLM-based routing handler - uses Qwen-14B for agent selection.
 
@@ -160,7 +162,7 @@ class HandlerRoutingLlm:
 
         Args:
             llm_url: Base URL for the OpenAI-compatible chat completions
-                endpoint (e.g. "http://192.168.86.100:8200").
+                endpoint (e.g. "http://llm-server:8200").
             model_name: Model identifier sent in the API request.
             timeout: HTTP request timeout in seconds.
         """

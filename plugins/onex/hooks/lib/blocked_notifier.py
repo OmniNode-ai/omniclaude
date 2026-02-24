@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Blocked agent Slack notifier — sends a Slack message when an agent reports blocked state.
 
 Called by emit_agent_status() after successful event emission when state=blocked.

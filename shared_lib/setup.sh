@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Install shared library from version control to user directory
 #
 # This script copies the shared library code from the omniclaude repository

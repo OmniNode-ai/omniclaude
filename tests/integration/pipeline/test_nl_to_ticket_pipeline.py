@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """End-to-end integration tests for the NL Intent-Plan-Ticket Compiler (OMN-2507).
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Grafana Datasource Provisioning - Jaeger
 # Automatically configures Jaeger as a datasource for distributed tracing
 

@@ -57,7 +57,7 @@ The emit daemon decouples event emission from hook execution. Hooks call `emit_e
 └─────────────────────────────────────────────────────────────────┘
                          │
                          ▼
-              Kafka/Redpanda (192.168.86.200:29092)
+              Kafka/Redpanda (<kafka-bootstrap-servers>:9092)
 ```
 
 ---

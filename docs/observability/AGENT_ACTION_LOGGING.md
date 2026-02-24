@@ -296,7 +296,7 @@ python agents/lib/action_logging_example.py
 ### 2. Publishing Test
 
 ```bash
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092 \
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092 \
 python tests/test_action_publishing.py
 ```
 
@@ -405,10 +405,10 @@ To add action logging to an agent:
 
 ```bash
 # Kafka configuration
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092  # Kafka broker address
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092  # Kafka broker address
 
 # PostgreSQL configuration (for consumer)
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
@@ -480,7 +480,7 @@ curl http://localhost:8080/metrics
 
 ```bash
 # Check topic messages
-kcat -C -b 192.168.86.200:29092 -t agent-actions -o beginning
+kcat -C -b <kafka-bootstrap-servers>:9092 -t agent-actions -o beginning
 
 # Check consumer lag
 docker exec omninode-bridge-redpanda rpk group describe agent-observability-postgres
@@ -529,7 +529,7 @@ GROUP BY action_type;
 
 ### Kafka Connection Issues
 
-**Issue**: When connecting to remote Kafka (192.168.86.200:29092), the broker may return an internal address (192.168.86.200:9092) that's not accessible.
+**Issue**: When connecting to remote Kafka (<kafka-bootstrap-servers>:9092), the broker may return an internal address (<kafka-bootstrap-servers>:9092) that's not accessible.
 
 **Workaround**: Ensure Kafka advertised listeners are properly configured, or use Docker network for cross-container communication.
 

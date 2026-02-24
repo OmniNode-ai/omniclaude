@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # PR Workflow Orchestration Specialist Agent Definition
 # Multi-step PR workflow orchestration with commit prerequisites and quality gates
 # Version: 1.0.0

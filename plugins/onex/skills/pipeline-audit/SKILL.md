@@ -535,7 +535,7 @@ AUDIT INTEGRITY CHECKLIST:
 
 2. **Wire format is the contract.** The producer and consumer can be written in different languages, different frameworks, different repos. The ONLY thing that matters is whether the bytes on the wire match what both sides expect.
 
-3. **DSN sameness is non-negotiable.** If the writer points at `192.168.86.200:5436/omninode_bridge` and the reader points at `localhost:5432/omninode`, there is no pipeline. It does not matter that both repos "have database configuration."
+3. **DSN sameness is non-negotiable.** If the writer points at `<postgres-host>:5436/omninode_bridge` and the reader points at `localhost:5432/omninode`, there is no pipeline. It does not matter that both repos "have database configuration."
 
 4. **Dashboards are downstream.** A beautiful dashboard displaying mock data or reading from the wrong table is worse than no dashboard. Fix the pipeline first, then verify the dashboard reads from the right place.
 

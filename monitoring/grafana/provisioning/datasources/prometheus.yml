@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Grafana Datasource Provisioning - Prometheus
 # Automatically configures Prometheus as a datasource on Grafana startup
 

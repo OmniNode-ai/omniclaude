@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for the RRH skill adapter (rrh_adapter.py).
 
 Validates the A1 -> A2 -> A3 pipeline orchestration, fallback behavior,

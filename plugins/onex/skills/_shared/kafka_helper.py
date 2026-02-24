@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Kafka Helper - Shared utilities for Kafka operations
 
@@ -105,7 +108,7 @@ def get_kafka_bootstrap_servers() -> str:
     Raises OnexError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
 
     Returns:
-        Bootstrap server address (e.g., "192.168.86.200:29092" for host scripts
+        Bootstrap server address (e.g., "<kafka-bootstrap-servers>:29092" for host scripts
         or "omninode-bridge-redpanda:9092" for Docker services)
 
     Raises:
@@ -115,7 +118,7 @@ def get_kafka_bootstrap_servers() -> str:
     Note:
         Configuration context matters:
         - Docker services: Use "omninode-bridge-redpanda:9092"
-        - Host scripts: Use "192.168.86.200:29092"
+        - Host scripts: Use "<kafka-bootstrap-servers>:29092"
         Set via KAFKA_BOOTSTRAP_SERVERS in .env file
     """
     bootstrap = settings.get_effective_kafka_bootstrap_servers()
@@ -127,13 +130,13 @@ def get_kafka_bootstrap_servers() -> str:
                 "KAFKA_BOOTSTRAP_SERVERS not configured. "
                 "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
                 "Use 'omninode-bridge-redpanda:9092' for Docker services "
-                "or '192.168.86.200:29092' for host scripts. "
+                "or '<kafka-bootstrap-servers>:29092' for host scripts. "
                 "See CLAUDE.md for deployment context details."
             ),
             details={
                 "setting": "KAFKA_BOOTSTRAP_SERVERS",
                 "docker_value": "omninode-bridge-redpanda:9092",
-                "host_value": "192.168.86.200:29092",
+                "host_value": "<kafka-bootstrap-servers>:29092",
             },
         )
 

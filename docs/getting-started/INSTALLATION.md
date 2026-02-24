@@ -24,10 +24,10 @@ Edit `.env` with your values. Minimum required for event emission:
 
 ```bash
 # Kafka — use host port for scripts running outside Docker
-KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
+KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 # PostgreSQL (optional — enables database logging)
-POSTGRES_HOST=192.168.86.200
+POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omninode_bridge
 POSTGRES_USER=postgres
@@ -148,7 +148,7 @@ routing falls back to the `polymorphic-agent` (exit 0, no blocking).
 
 | Variable | Purpose |
 |----------|---------|
-| `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string (e.g. `192.168.86.200:29092` for host scripts) |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string (e.g. `<kafka-bootstrap-servers>:9092` for host scripts) |
 
 ### Optional
 

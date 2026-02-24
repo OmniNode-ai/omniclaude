@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Main quality enforcement orchestrator.
 Coordinates validation, RAG, AI consensus, and substitution.

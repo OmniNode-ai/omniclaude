@@ -57,12 +57,12 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-system-health/execute.p
   "infrastructure": {
     "kafka": {
       "status": "connected",
-      "broker": "192.168.86.200:29092",
+      "broker": "<kafka-bootstrap-servers>:9092",
       "topics": 15
     },
     "postgres": {
       "status": "connected",
-      "host": "192.168.86.200:5436",
+      "host": "<postgres-host>:5436",
       "tables": 34
     },
     "qdrant": {

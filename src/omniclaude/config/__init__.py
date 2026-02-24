@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """OmniClaude configuration - Pydantic Settings for environment configuration."""
 
 from __future__ import annotations

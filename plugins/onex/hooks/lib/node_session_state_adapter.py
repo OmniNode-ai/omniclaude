@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Session State Adapter - CLI interface orchestrating effect + reducer nodes.
 
 G3 node: Declarative command registry. Fail-open on all errors.

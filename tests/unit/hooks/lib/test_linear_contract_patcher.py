@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for linear_contract_patcher module.
 
 Tests the safe marker-based patching of Linear ticket descriptions

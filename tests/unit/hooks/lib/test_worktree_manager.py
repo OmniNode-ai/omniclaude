@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for worktree_manager module.
 
 All subprocess calls are mocked — no real git operations occur.

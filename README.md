@@ -57,15 +57,16 @@ OmniClaude is a Claude Code plugin that instruments every Claude Code session wi
 - **LLM-based agent routing** — prompt-to-agent matching with fuzzy fallback to `polymorphic-agent`
 - **Multi-channel context enrichment** — learned patterns from Qdrant injected into the system prompt
 - **Pattern compliance enforcement** — post-tool architectural advisories from the ONEX intelligence layer
-- **Local LLM delegation orchestrator** — quality-gated task delegation to on-premises models (OMN-2281)
+- **Local LLM delegation orchestrator** — quality-gated task delegation to on-premises models
 - **Typed ONEX event schemas** — frozen Pydantic models for all hook events with automatic secret redaction
 
 ## Quick Start
 
-Install dependencies:
-
 ```bash
+git clone https://github.com/OmniNode-ai/omniclaude.git
+cd omniclaude
 uv sync
+uv run pytest tests/ -m unit
 ```
 
 Copy and configure environment:
@@ -184,3 +185,5 @@ KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 
 - [CLAUDE.md](CLAUDE.md) — Architecture, invariants, failure modes, performance budgets, and where to change things
 - [docs/](docs/) — Architecture decision records and design proposals
+
+Open an issue or email contact@omninode.ai.

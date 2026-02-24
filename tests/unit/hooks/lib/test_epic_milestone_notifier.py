@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for epic_milestone_notifier module.
 
 Covers the four public functions, correlation prefix format, thread_ts

@@ -55,14 +55,14 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
 {
   "kafka": {
     "status": "connected",
-    "broker": "192.168.86.200:29092",
+    "broker": "<kafka-bootstrap-servers>:9092",
     "reachable": true,
     "topics": null,
     "error": null
   },
   "postgres": {
     "status": "connected",
-    "host": "192.168.86.200:5436",
+    "host": "<postgres-host>:5436",
     "database": "omniclaude",
     "tables": 34,
     "error": null
@@ -81,14 +81,14 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
 {
   "kafka": {
     "status": "connected",
-    "broker": "192.168.86.200:29092",
+    "broker": "<kafka-bootstrap-servers>:9092",
     "reachable": true,
     "topics": 15,
     "error": null
   },
   "postgres": {
     "status": "connected",
-    "host": "192.168.86.200:5436",
+    "host": "<postgres-host>:5436",
     "database": "omniclaude",
     "tables": 34,
     "connections": 8,
@@ -152,7 +152,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
 **Connection failures**:
 - Verify environment variables are loaded: `source .env`
 - Check Docker containers are running: `docker ps | grep -E "(kafka|postgres|qdrant)"`
-- Verify network connectivity: `ping 192.168.86.200`
+- Verify network connectivity: `ping <kafka-bootstrap-servers>`
 
 **Missing collections/tables**:
 - Run migrations: `alembic upgrade head`
@@ -160,4 +160,4 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
 
 **Permission errors (PostgreSQL)**:
 - Verify `POSTGRES_PASSWORD` is set: `echo ${POSTGRES_PASSWORD:+SET}`
-- Test connection: `psql -h 192.168.86.200 -p 5436 -U postgres -d omniclaude -c "SELECT 1"`
+- Test connection: `psql -h <kafka-bootstrap-servers> -p 5436 -U postgres -d omniclaude -c "SELECT 1"`

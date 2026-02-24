@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """OmniClaude - Claude Code hooks and learning loop integration.
 
 This package provides ONEX-compatible event schemas for Claude Code hooks,

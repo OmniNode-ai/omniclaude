@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 Generate the actual formatted manifest that gets injected into agent prompts.
 This shows exactly what agents see when manifest intelligence is injected.

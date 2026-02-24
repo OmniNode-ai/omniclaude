@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """CLI wrapper for local enrichment pipeline (OMN-2267).
 
 Runs three enrichments in parallel (code analysis, similarity, summarization)

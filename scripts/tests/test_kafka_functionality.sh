@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Functional Test: Kafka Message Bus
 # Tests actual Kafka functionality including publishing, consuming, and topic verification
 set -e

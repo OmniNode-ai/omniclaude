@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for enrichment_observability_emitter.py (OMN-2274, OMN-2441).
 
 Tests cover:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 name: CI
 
 # Consolidated CI pipeline for OmniClaude (OMN-2228)

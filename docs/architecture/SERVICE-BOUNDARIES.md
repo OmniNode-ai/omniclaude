@@ -438,10 +438,10 @@ When running scripts/commands on the host machine (outside Docker), add these en
 <your_remote_server_ip> omninode-bridge-consul
 <your_remote_server_ip> omninode-bridge-postgres
 
-# Example (if remote server is 192.168.86.200):
-# 192.168.86.200 omninode-bridge-redpanda
-# 192.168.86.200 omninode-bridge-consul
-# 192.168.86.200 omninode-bridge-postgres
+# Example (if remote server is <your-infrastructure-host>):
+# <your-infrastructure-host> omninode-bridge-redpanda
+# <your-infrastructure-host> omninode-bridge-consul
+# <your-infrastructure-host> omninode-bridge-postgres
 ```
 
 **Why the difference?**
@@ -603,14 +603,14 @@ await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
 **DO NOT**:
 ```python
 # BAD: Hardcoded URL
-response = requests.get("http://192.168.86.101:8053/health")
+response = requests.get("http://<intelligence-api-host>:8053/health")
 
 # BAD: Hardcoded Kafka bootstrap
 producer = KafkaProducer(bootstrap_servers="omninode-bridge-redpanda:9092")
 
 # BAD: Hardcoded database credentials
 conn = psycopg2.connect(
-    host="192.168.86.200",
+    host="<your-infrastructure-host>",
     port=5436,
     user="postgres",
     password="mypassword123"  # SECURITY VIOLATION

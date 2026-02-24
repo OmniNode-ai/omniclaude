@@ -59,7 +59,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Without `--topics`** (default):
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15
 }
@@ -68,7 +68,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **With `--topics`** (exact match):
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15,
   "topics": {
@@ -85,7 +85,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **With `--topics` and `--include-partitions`**:
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15,
   "topics": {
@@ -104,7 +104,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **With wildcard pattern** (`--topics "agent.*"`):
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15,
   "topics": {
@@ -124,7 +124,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Unmatched wildcard pattern**:
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15,
   "topics": {
@@ -140,7 +140,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Stats query failure** (e.g., permission denied):
 ```json
 {
-  "broker": "192.168.86.200:29092",
+  "broker": "<kafka-bootstrap-servers>:9092",
   "status": "healthy",
   "total_topics": 15,
   "topics": {
@@ -199,15 +199,15 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Connection failures** (`"status": "unreachable"`):
 - Verify Kafka is running: `docker ps | grep kafka`
 - Check bootstrap servers: `echo $KAFKA_BOOTSTRAP_SERVERS`
-- Test connectivity: `nc -zv 192.168.86.200 29092`
+- Test connectivity: `nc -zv <kafka-bootstrap-servers> 29092`
 
 **Stats query failures** (`"error": "Stats query failed"`):
 - Verify `kafkacat`/`kcat` is installed: `which kcat`
 - Check permissions: Ensure user has topic describe permissions
-- Try manual query: `kcat -L -b 192.168.86.200:29092 -t onex.evt.omniclaude.agent-actions.v1`
+- Try manual query: `kcat -L -b <kafka-bootstrap-servers>:9092 -t onex.evt.omniclaude.agent-actions.v1`
 
 **Wildcard not matching expected topics**:
-- List all topics manually: `kcat -L -b 192.168.86.200:29092`
+- List all topics manually: `kcat -L -b <kafka-bootstrap-servers>:9092`
 - Verify pattern syntax: Use shell glob patterns (`*`, `?`, `[]`)
 - Check topic naming: Topics might use different delimiter (e.g., `-` vs `.`)
 

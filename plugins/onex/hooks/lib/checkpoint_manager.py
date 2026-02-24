@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Checkpoint Manager - CLI wrapper for pipeline checkpoint operations.
 
 Provides a command-line interface for writing, reading, validating, and listing

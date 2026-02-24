@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """
 AI Quorum System for Pre-commit Hook Validation
 Provides multi-model consensus scoring for correction validation.

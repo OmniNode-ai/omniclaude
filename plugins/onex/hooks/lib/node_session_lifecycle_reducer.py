@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Session Lifecycle Reducer - Pure declarative FSM for session state transitions.
 
 G2 node: Zero I/O, pure state machine logic.

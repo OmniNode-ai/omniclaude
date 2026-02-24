@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Functional Test: Intelligence Integration
 # Tests actual Qdrant queries, pattern retrieval, and manifest injection
 # Author: OmniClaude Intelligence Testing Suite

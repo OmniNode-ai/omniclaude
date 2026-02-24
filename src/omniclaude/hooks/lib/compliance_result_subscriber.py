@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Compliance result subscriber — transform violations to PatternAdvisory (OMN-2340).
 
 Subscribes to `onex.evt.omniintelligence.compliance-evaluated.v1`, deserializes

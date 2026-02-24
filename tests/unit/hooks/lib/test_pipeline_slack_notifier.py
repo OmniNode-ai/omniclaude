@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Tests for pipeline_slack_notifier module.
 
 Tests the pipeline Slack notifier with mocked Slack handler (DI).

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Polymorphic Agent Definition (formerly ONEX Coordinator / Workflow Coordinator)
 # Dynamic Role System Configuration
 # Focus: ONEX system coordination, four-node architecture orchestration, operational excellence
@@ -525,7 +528,7 @@ action_logging_integration:
 
   infrastructure_requirements:
     kafka_topic: "onex.evt.omniclaude.agent-actions.v1"
-    kafka_bootstrap_servers: "192.168.86.200:29092"
+    kafka_bootstrap_servers: "<kafka-bootstrap-servers>:29092"
     consumer_service: "agent_actions_consumer.py"
     database_table: "agent_actions (PostgreSQL)"
     correlation_tracking: "Links to agent_routing_decisions and agent_manifest_injections"

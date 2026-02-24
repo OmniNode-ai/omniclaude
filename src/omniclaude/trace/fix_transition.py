@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """FixTransition detection and Kafka emission for the Agent Trace system.
 
 A FixTransition is detected when a new ChangeFrame (with outcome=pass) resolves

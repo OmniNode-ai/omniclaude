@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Deterministic session outcome derivation from observable signals.
 
 Derives a session outcome classification (success, failed, abandoned, unknown)

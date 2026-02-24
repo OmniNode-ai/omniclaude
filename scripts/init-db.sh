@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # PostgreSQL Database Initialization Script for OmniClaude
 # Runs automatically when the database container starts for the first time
 #

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Golden Path Integration Test Harness (OMN-2168).
 
 Proves the full omniclaude emission side of the feedback loop:

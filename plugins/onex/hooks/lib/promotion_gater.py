@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Promotion gater -- M5.
 
 Evaluates whether a pattern should be promoted based on measurement evidence.

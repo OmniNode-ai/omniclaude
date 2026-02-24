@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Acceptance tests for OMN-2355: context injection API-based pattern read.
 
@@ -571,11 +573,11 @@ class TestContextInjectionConfigAPIUrl:
 
         with patch.dict(
             os.environ,
-            {"INTELLIGENCE_SERVICE_URL": "http://192.168.86.200:8053"},
+            {"INTELLIGENCE_SERVICE_URL": "http://localhost:8053"},
             clear=False,
         ):
             cfg = ContextInjectionConfig()
-            assert cfg.api_url == "http://192.168.86.200:8053"
+            assert cfg.api_url == "http://localhost:8053"
 
     def test_api_enabled_default_true(self) -> None:
         """api_enabled defaults to True."""

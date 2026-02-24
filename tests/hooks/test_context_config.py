@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Unit tests for ContextInjectionConfig.
 
@@ -250,7 +252,7 @@ class TestContextInjectionConfigDatabaseDsn:
         config = ContextInjectionConfig(db_password=SecretStr("mypassword"))
         dsn = config.get_db_dsn()
 
-        assert "192.168.86.200" in dsn  # Default host
+        assert "localhost" in dsn  # Default host
         assert "5436" in dsn  # Default port
         assert "omniclaude" in dsn  # Default db name
         assert "postgres" in dsn  # Default user
