@@ -102,7 +102,8 @@ Phase 5: Report — append fix section to .md artifact; update decisions ledger
 - `pr-queue-pipeline` always called with `--prs` (not `--repos`) — only touches created PRs
 - `--dry-run` produces zero side effects: no ledger writes, no Linear writes, no PR mutations
 - `decisions.json` is write-once per finding; `--force-decide` to re-open
-- Blocked-external CI guard propagated from pr-queue-pipeline — do not loop on infra failures
+- `blocked_external` guard: if `pr-queue-pipeline` returns `blocked_external > 0`, log a warning
+  and do NOT retry — these are external infra failures (deploy locks, CI secrets), not skill bugs
 
 ## Modes
 
@@ -171,6 +172,27 @@ Status values:
 - `ticket-pipeline` (existing) — creates PR from finding (default mode)
 - `pr-queue-pipeline` (OMN-2618) — merges the created PRs (called with `--prs`, not `--repos`)
 - `gap-analysis` (existing) — source of findings
+
+## Integration Test
+
+Test suite: `tests/integration/skills/gap_fix/test_gap_fix_integration.py` (OMN-2639)
+
+All tests use `@pytest.mark.unit` — static analysis of skill files, no external services required.
+
+| Test Case | Class | What it verifies |
+|---|---|---|
+| 1 | `TestDryRunContract` | `--dry-run` produces zero side effects (no `~/.claude/` writes, no ticket-pipeline, no pr-queue-pipeline dispatch) |
+| 2 | `TestFixedRequiresProof` | `fixed` status requires probe block with all 5 fields (`command`, `exit_code=0`, `stdout_sha256`, `repo_head_sha`, `ran_at`); absent probe → `implemented_not_verified` |
+| 3 | `TestInfraBoundaryGate` | DB import in UI repo classified as `GATE` (not `AUTO`); DECISION REQUIRED block emitted |
+| 4 | `TestPositiveRouting` | pr-queue-pipeline called with `--prs` (not `--repos`); `finding.repos[]` used to determine dispatch target |
+| 5 | `TestDecisionsJsonAppendOnly` | `decisions.json` is write-once per fingerprint; existing entry not overwritten without `--force-decide` |
+| 6 | `TestForcedDecideVersioning` | `--force-decide` re-opens prior decisions (treats them as absent); `dry-run` skips `decisions.json` write |
+| 7 | `TestPrQueuePipelineInvocation` | `pr-queue-pipeline` always invoked with `--prs` (never `--repos`); `blocked_external > 0` → log warning, do not retry |
+
+Run with:
+```bash
+uv run pytest tests/integration/skills/gap_fix/test_gap_fix_integration.py -v
+```
 
 ## See Also
 
