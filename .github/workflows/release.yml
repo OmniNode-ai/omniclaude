@@ -75,7 +75,7 @@ jobs:
         run: |
           uv publish --token "$UV_PUBLISH_TOKEN" dist/*.whl dist/*.tar.gz
         env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_PRIVATE_TOKEN }}
 
       - name: Generate checksums
         run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS.txt
