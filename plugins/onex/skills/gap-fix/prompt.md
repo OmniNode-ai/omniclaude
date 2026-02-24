@@ -246,6 +246,35 @@ Task(
 
 Before marking any finding `fixed`, run a minimal re-probe to verify the fix.
 
+### Probe Block Schema
+
+Each re-probe execution produces a probe block that must be recorded. All five fields are
+**required** before a finding may be marked `fixed`:
+
+```json
+{
+  "command": "<shell command run to verify the fix>",
+  "exit_code": 0,
+  "stdout_sha256": "<sha256 of stdout output, for auditability>",
+  "repo_head_sha": "<git HEAD SHA of the repo at probe time>",
+  "ran_at": "<ISO-8601 timestamp>"
+}
+```
+
+**`exit_code=0` is required** to mark a finding `fixed`. If `exit_code != 0` or if the probe
+block is absent, the finding must be classified as `implemented_not_verified` (not `fixed`).
+
+**`repo_head_sha` is required** to link the proof to a specific commit. This makes the proof
+auditable — if the commit is later reverted, the proof is invalidated.
+
+### Marking Rules
+
+| Probe result | Finding status |
+|---|---|
+| Probe block present, `exit_code=0`, `repo_head_sha` non-empty | `fixed` |
+| Probe block absent OR `exit_code != 0` | `implemented_not_verified` |
+| Re-probe command runs but finds legacy pattern still present | `still_open` |
+
 ### Re-probe by boundary_kind
 
 | `boundary_kind` | Re-probe method |
