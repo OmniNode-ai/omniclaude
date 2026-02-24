@@ -20,7 +20,11 @@ When `/review-all-prs [args]` is invoked:
    - `--cleanup-orphans` — default: false
    - `--orphan-age-hours <n>` — default: 4
    - `--max-parallel-repos <n>` — default: 3
-   - `--authors <list>` — default: all
+   - `--authors <list>` — default: me (invoking user)
+   - `--all-authors` — default: false (requires gate flags; see Scope Guard below)
+   - `--gate-attestation <token>` — required with --all-authors; format: `<slack_ts>:<run_id>`
+   - `--omn-2613-merged` — default: false (required with --all-authors unless --accept-duplicate-ticket-risk)
+   - `--accept-duplicate-ticket-risk` — default: false (required with --all-authors when --omn-2613-merged absent)
 
 3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-c9f`)
 
@@ -29,6 +33,84 @@ When `/review-all-prs [args]` is invoked:
    Review All PRs v0 — run <run_id>
    Scope: <repos or "all"> | Authors: <authors or "all"> | Clean runs: <clean_runs>
    ```
+
+---
+
+## Scope Guard (Evaluated Immediately After Argument Parse)
+
+**Default scope**: `authors = [me]` (the invoking user). This is the safe default.
+
+**If `--all-authors` is set**:
+
+**Step 1** — Verify `--gate-attestation` is present:
+```
+IF --gate-attestation is absent:
+  → hard_error: "--all-authors requires --gate-attestation=<slack_ts>:<run_id>.
+      Obtain a gate token from the Slack review-all-prs gate before running org-wide."
+  → EXIT immediately
+```
+
+**Step 2** — Verify OMN-2613 flag:
+```
+IF neither --omn-2613-merged NOR --accept-duplicate-ticket-risk is set:
+  → hard_error: "--all-authors requires either:
+      --omn-2613-merged  (if OMN-2613 fingerprinted dedup is merged), or
+      --accept-duplicate-ticket-risk  (explicit risk acceptance for duplicate tickets).
+      See OMN-2613 for context."
+  → EXIT immediately
+```
+
+**Step 3** — Set effective author scope to `all`:
+```
+IF both conditions pass:
+  → effective_authors = ALL (no author filter applied)
+  → Print: "Scope: all authors (gate-attested; run_id=<run_id>)"
+```
+
+**If `--all-authors` is NOT set**:
+```
+→ effective_authors = args.authors if --authors provided, else [me]
+→ All-authors expansion is NOT possible without the full guard flag set
+```
+
+---
+
+## Dry-Run Mode
+
+When `--dry-run` is set:
+
+1. **No claim files written** — `acquire_claim()` is skipped; no `~/.claude/pr-queue/claims/` writes
+2. **No worktrees created** — `git worktree add` is NOT called
+3. **No ledger writes** — `atomic_write()` raises `DryRunWriteError`; ledger is not updated
+4. **No marker files** — `.onex_worktree.json` not written
+5. **All output to stdout** — preview of what would be reviewed
+
+The `--dry-run` flag propagates to all sub-calls using `atomic_write()` from
+`_lib/pr-safety/helpers.md`. Caught `DryRunWriteError` exceptions are logged as
+`[DRY RUN] skipped write: <path>` without aborting.
+
+---
+
+## Preflight Tripwire
+
+Before dispatching any agent in Step 5, verify claim integrity for all PRs in `work_queue`:
+
+```python
+for pr in work_queue:
+    pr_key = f"{pr['repo'].lower()}#{pr['number']}"
+    cpath = claim_path(pr_key)
+    wt_path = worktree_path_for(pr)
+
+    if wt_path.exists() and not cpath.exists():
+        hard_error(
+            f"worktree exists for {pr_key} but no active claim held. "
+            f"This indicates a claim-worktree ordering violation. "
+            f"Manual cleanup required: git worktree remove --force {wt_path}"
+        )
+```
+
+This tripwire fires if the orchestrator created a worktree without first acquiring a claim —
+which should never happen but catches bugs in the worktree-creation flow.
 
 ---
 
@@ -155,14 +237,25 @@ IF work_queue is empty:
 
 For each PR in `work_queue[]`:
 
-```bash
+```python
 # Worktree path
-WORKTREE_PATH=~/.claude/worktrees/pr-queue/<run_id>/<repo_name>/<pr_number>
+pr_key = f"{repo.lower()}#{pr_number}"
+WORKTREE_PATH = f"~/.claude/worktrees/pr-queue/{run_id}/{repo_name}/{pr_number}"
 
-# Create the worktree (repo must be cloned locally at ~/Code/<repo_name>)
-mkdir -p ~/.claude/worktrees/pr-queue/<run_id>/<repo_name>/
-git -C ~/Code/<repo_name> worktree add <WORKTREE_PATH> <headRefName>
+# Step 4a: ACQUIRE CLAIM FIRST (before any worktree creation)
+claim_result = acquire_claim(pr_key, run_id, "review")  # from _lib/pr-safety/helpers.md
+if claim_result == "skip":
+    # Another run holds this claim — skip this PR
+    record(pr_key, result="skipped_claim")
+    continue  # do NOT create worktree
+
+# Step 4b: CREATE WORKTREE (only after claim acquired)
+mkdir -p ~/.claude/worktrees/pr-queue/{run_id}/{repo_name}/
+git -C ~/Code/{repo_name} worktree add {WORKTREE_PATH} {headRefName}
 ```
+
+The `claim_path(pr_key)` file MUST exist (written by `acquire_claim()`) before
+`git worktree add` is called. This ordering is invariant.
 
 If worktree creation fails:
 - Log: "Warning: could not create worktree for <repo>#<pr_number>: <error>"
@@ -255,16 +348,25 @@ Wait for all agents to complete (with timeout enforcement). Collect results.
 
 ## Step 6: Cleanup Worktrees
 
-For each PR (whether the agent succeeded, failed, or timed out):
+For each PR (whether the agent succeeded, failed, or timed out), in a `finally` block:
 
-```bash
-git -C ~/Code/<repo_name> worktree remove --force <WORKTREE_PATH>
+```python
+# Step 6a: Remove worktree
+git -C ~/Code/{repo_name} worktree remove --force {WORKTREE_PATH}
+
+# Step 6b: Release claim (always, after worktree removal attempt)
+release_claim(pr_key, run_id)  # from _lib/pr-safety/helpers.md
 ```
 
+Release order: worktree removal first, then `release_claim()`. The claim is held until
+the worktree is gone (or removal fails) to prevent another run acquiring the claim while
+the old worktree still exists.
+
 Record per PR:
-- If succeeds: `worktree_cleaned: true`
-- If fails: `worktree_cleaned: false`, add to `cleanup_failures[]`
+- If worktree removal succeeds: `worktree_cleaned: true`
+- If worktree removal fails: `worktree_cleaned: false`, add to `cleanup_failures[]`
   - Include path and repo/PR in the cleanup failure entry
+- Claim is released regardless of worktree removal success/failure
 
 Log any cleanup failures prominently:
 ```
