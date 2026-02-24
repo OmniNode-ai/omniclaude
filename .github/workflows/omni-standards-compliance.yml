@@ -216,6 +216,175 @@ jobs:
 
           echo "Legacy compatibility check passed."
 
+  pr-safety-enforcement:
+    name: PR Safety Mutation Surface Enforcement
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Enforces that only skills/_lib/pr-safety/ may reference PR mutation paths
+    # and commands. Added in OMN-2632.
+    #
+    # Migration window: pre-existing skills (listed below) are excluded during
+    # migration. Once migrated (separate tickets), remove from each allowlist.
+    #
+    # Skills awaiting migration to _lib/pr-safety/:
+    #   - fix-prs (OMN-2615 sub-ticket)
+    #   - review-all-prs (OMN-2615 sub-ticket)
+    #   - auto-merge (OMN-2615 sub-ticket)
+    #   - merge-sweep (OMN-2615 sub-ticket)
+    #   - pr-queue-pipeline (OMN-2615 sub-ticket)
+    #   - ticket-pipeline (OMN-2615 sub-ticket)
+    #   - ticket-work (OMN-2615 sub-ticket)
+    #   - pr-polish (OMN-2615 sub-ticket)
+    #   - parallel-solve (OMN-2615 sub-ticket, documentation only)
+    #
+    # Reference/tutorial skills (never migrate — documentation only):
+    #   - using-git-worktrees, sharing-skills, review-cycle, local-review (doc refs only)
+    #   - ci-failures, pr-review (CI YAML snippets embedded as examples)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enforce pr-queue claims/ and runs/ path bans
+        run: |
+          ERRORS=0
+
+          # Only _lib/pr-safety/ may reference the claims/ and runs/ subdirectories.
+          # These are the new global registry paths introduced in OMN-2631.
+          # The broader ~/.claude/pr-queue path (dated run dirs) is NOT banned here —
+          # it is managed per-skill and does not use the global registry.
+          for pattern in "pr-queue/claims/" "pr-queue/runs/"; do
+            MATCHES=$(grep -r "$pattern" plugins/onex/skills/ --include="*.md" \
+              | grep -v "_lib/pr-safety" || true)
+            if [ -n "$MATCHES" ]; then
+              echo "ERROR: '$pattern' referenced outside _lib/pr-safety/:"
+              echo "$MATCHES"
+              ERRORS=1
+            else
+              echo "OK: '$pattern' — no references outside _lib/pr-safety/"
+            fi
+          done
+
+          if [ $ERRORS -ne 0 ]; then
+            echo ""
+            echo "pr-queue path ban failed. Move claims/ and runs/ references into _lib/pr-safety/helpers.md."
+            exit 1
+          fi
+          echo "All pr-queue path bans passed."
+
+      - name: Enforce PR mutation command bans (new skills only)
+        run: |
+          ERRORS=0
+
+          # Migration allowlist: pre-existing skills awaiting migration to _lib/pr-safety/.
+          # Remove a skill from this list once it has been migrated (separate PR per skill).
+          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve"
+          # Reference/tutorial skills: documentation only, never migrate.
+          REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
+
+          ALL_EXCLUSIONS="${MIGRATION_ALLOWLIST}|${REFERENCE_SKILLS}|_lib/pr-safety"
+
+          # Only _lib/pr-safety/ may call these mutation commands directly in NEW skills.
+          for pattern in \
+            "gh pr merge" \
+            "gh pr comment" \
+            "gh pr edit" \
+            "gh pr checkout"; do
+            MATCHES=$(grep -r "$pattern" plugins/onex/skills/ --include="*.md" \
+              | grep -vE "$ALL_EXCLUSIONS" || true)
+            if [ -n "$MATCHES" ]; then
+              echo "ERROR: '$pattern' called outside _lib/pr-safety/ in a non-allowlisted skill:"
+              echo "$MATCHES"
+              ERRORS=1
+            else
+              echo "OK: '$pattern' — no violations in new skills"
+            fi
+          done
+
+          # git push in PR-mutating context (exclude reference and migration skills)
+          MATCHES=$(grep -r "git push" plugins/onex/skills/ --include="*.md" \
+            | grep -vE "$ALL_EXCLUSIONS" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: 'git push' called outside _lib/pr-safety/ in a non-allowlisted skill:"
+            echo "$MATCHES"
+            ERRORS=1
+          else
+            echo "OK: 'git push' — no violations in new skills"
+          fi
+
+          # gh api merge patterns (full enforcement — no migration allowlist for these)
+          for pattern in "gh api.*merge" "gh api.*pulls"; do
+            MATCHES=$(grep -rE "$pattern" plugins/onex/skills/ --include="*.md" \
+              | grep -v "_lib/pr-safety" || true)
+            if [ -n "$MATCHES" ]; then
+              echo "ERROR: '$pattern' called outside _lib/pr-safety/:"
+              echo "$MATCHES"
+              ERRORS=1
+            else
+              echo "OK: '$pattern' — no violations"
+            fi
+          done
+
+          if [ $ERRORS -ne 0 ]; then
+            echo ""
+            echo "PR mutation command ban failed. New skills must use _lib/pr-safety/helpers.md."
+            echo "Pre-existing skills in migration allowlist are tracked for migration in OMN-2615."
+            exit 1
+          fi
+          echo "All PR mutation command bans passed."
+
+      - name: Enforce git worktree add ban (new skills only)
+        run: |
+          ERRORS=0
+
+          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve"
+          REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
+          ALL_EXCLUSIONS="${MIGRATION_ALLOWLIST}|${REFERENCE_SKILLS}|_lib/pr-safety"
+
+          MATCHES=$(grep -r "git worktree add" plugins/onex/skills/ --include="*.md" \
+            | grep -vE "$ALL_EXCLUSIONS" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: 'git worktree add' called outside allowlist:"
+            echo "$MATCHES"
+            ERRORS=1
+          else
+            echo "OK: 'git worktree add' — no violations in new skills"
+          fi
+
+          if [ $ERRORS -ne 0 ]; then
+            echo ""
+            echo "git worktree ban failed. New skills must use get_worktree() from _lib/pr-safety/helpers.md."
+            exit 1
+          fi
+
+      - name: Enforce --no-gate allowlist
+        run: |
+          ERRORS=0
+
+          # --no-gate is only allowed during migration window in the merge-sweep and
+          # pr-queue-pipeline skills. All others must use --gate-attestation=<slack_ts>:<run_id>.
+          MATCHES=$(grep -r 'no-gate' plugins/onex/skills/ --include="*.md" \
+            | grep -v "merge-sweep" \
+            | grep -v "pr-queue-pipeline" \
+            | grep -v "_lib/pr-safety" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: '--no-gate' used outside allowlist:"
+            echo "$MATCHES"
+            echo ""
+            echo "Only merge-sweep and pr-queue-pipeline skills may use --no-gate"
+            echo "during the migration window. Use --gate-attestation=<slack_ts>:<run_id> instead."
+            ERRORS=1
+          else
+            echo "OK: '--no-gate' — no violations outside allowlist"
+          fi
+
+          if [ $ERRORS -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Run validate_ledger_stop_reasons.py
+        run: |
+          python3 tests/validate_ledger_stop_reasons.py
+
   # ============================================================================
   # GATE AGGREGATOR
   # Gate name is API-stable per CI/CD Standards (Invariant 1).
@@ -232,6 +401,7 @@ jobs:
       - agent-yaml-compliance
       - ecosystem-validation
       - legacy-compatibility-check
+      - pr-safety-enforcement
     if: always()
     steps:
       - name: Check standards results
@@ -243,7 +413,8 @@ jobs:
             "structure-validation=${{ needs.structure-validation.result }}" \
             "agent-yaml-compliance=${{ needs.agent-yaml-compliance.result }}" \
             "ecosystem-validation=${{ needs.ecosystem-validation.result }}" \
-            "legacy-compatibility-check=${{ needs.legacy-compatibility-check.result }}"; do
+            "legacy-compatibility-check=${{ needs.legacy-compatibility-check.result }}" \
+            "pr-safety-enforcement=${{ needs.pr-safety-enforcement.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
