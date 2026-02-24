@@ -239,7 +239,7 @@ def _send_slack_alert(
                 f"```{command[:500]}```\n\n"
                 f"*Action*: {action}\n"
                 f"*Session*: `{session_id[:16]}...`\n"
-                f"*Time*: {datetime.datetime.now(datetime.timezone.utc).isoformat()}"
+                f"*Time*: {datetime.datetime.now(datetime.UTC).isoformat()}"
             )
         }
         data = json.dumps(payload).encode("utf-8")

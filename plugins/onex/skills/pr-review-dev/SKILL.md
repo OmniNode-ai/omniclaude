@@ -63,10 +63,8 @@ Filter nitpicks by default.
 ### Fix Phase -- dispatch via parallel-solve
 
 ```
-Skill(skill="onex:parallel-solve")
+Skill(skill="parallel-solve")
 ```
-
-> **Note**: The `onex:` prefix is required for both `Skill(skill=...)` calls AND `subagent_type=` in Task() calls.
 
 Pass collated issues as context.
 

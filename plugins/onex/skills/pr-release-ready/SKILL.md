@@ -35,7 +35,7 @@ Fetch all PR review comments including nitpicks. No dispatch needed.
 ### Fix Phase -- dispatch via parallel-solve
 
 ```
-Skill(skill="onex:parallel-solve")
+Skill(skill="parallel-solve")
 ```
 
 Pass ALL collated issues (including nitpicks) as context.

@@ -91,8 +91,9 @@ when CI reaches a terminal state: `passed`, `capped` (fix cycles exhausted), `ti
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ci-watch: fix CI failure (cycle {cycle}/{max_cycles})",
-  prompt="CI check '{check_name}' failed for PR #{pr_number} in {repo}.
+  description="ci-watch: auto-fix CI failures on PR #{pr_number} (cycle {N})",
+  prompt="Invoke: Skill(skill=\"ci-fix-pipeline\",
+    args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
     Failure details:
     {failure_log}
@@ -122,10 +123,62 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ci-watch.json`
 
 **Status values**: `passed` | `capped` | `timeout` | `error`
 
-- `passed`: All CI checks green
-- `capped`: Reached max_fix_cycles without CI passing
-- `timeout`: CI still running after timeout_minutes
-- `error`: Unexpected error (API failure, auth issue)
+| Error | Behavior |
+|-------|----------|
+| `gh pr checks` unavailable | Retry 3x, then `status: failed` with error |
+| ci-fix-pipeline hard-fails | Log error, continue watching (don't retry fix) |
+| Slack unavailable for gate | Skip gate, apply default behavior for risk level |
+| Linear sub-ticket creation fails | Log warning, continue |
+
+## Executable Scripts
+
+### `ci-watch.sh`
+
+Bash wrapper for programmatic and CI invocation of this skill.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ci-watch.sh — wrapper for the ci-watch skill
+# Usage: ci-watch.sh --pr <PR> [--ticket-id <ID>] [--timeout-minutes <N>] [--max-fix-cycles <N>] [--no-auto-fix]
+
+PR=""
+TICKET_ID=""
+TIMEOUT_MINUTES="60"
+MAX_FIX_CYCLES="3"
+AUTO_FIX_CI="true"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr)             PR="$2";             shift 2 ;;
+    --ticket-id)      TICKET_ID="$2";      shift 2 ;;
+    --timeout-minutes) TIMEOUT_MINUTES="$2"; shift 2 ;;
+    --max-fix-cycles) MAX_FIX_CYCLES="$2"; shift 2 ;;
+    --no-auto-fix)    AUTO_FIX_CI="false"; shift   ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -z "$PR" ]]; then
+  echo "Error: --pr is required" >&2
+  exit 1
+fi
+
+exec claude --skill ci-watch \
+  --arg "pr_number=${PR}" \
+  --arg "ticket_id=${TICKET_ID}" \
+  --arg "policy.timeout_minutes=${TIMEOUT_MINUTES}" \
+  --arg "policy.max_fix_cycles=${MAX_FIX_CYCLES}" \
+  --arg "policy.auto_fix_ci=${AUTO_FIX_CI}"
+```
+
+| Invocation | Description |
+|------------|-------------|
+| `/ci-watch --pr {N}` | Interactive: poll CI on PR N, auto-fix on failure |
+| `/ci-watch --pr {N} --no-auto-fix` | Interactive: poll CI on PR N, gate on failure |
+| `Skill(skill="ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
+| `ci-watch.sh --pr {N} --ticket-id {T} --timeout-minutes 90` | Shell: direct invocation with all parameters |
 
 ## See Also
 
