@@ -75,16 +75,33 @@ when CI reaches a terminal state: `passed`, `capped` (fix cycles exhausted), `ti
 /ci-watch 123 org/repo --no-auto-fix
 ```
 
-## Poll Loop
+## Watch Loop
 
-1. Fetch CI status via `gh pr checks {pr_number} --repo {repo} --json name,state,conclusion`
-2. If all checks pass: exit with `status: passed`
-3. If any check failed and `auto_fix=true` and cycles remaining:
+Use `gh run watch` to block until CI completes. Reacts immediately when the run finishes —
+no fixed polling interval.
+
+1. Get PR head branch and latest run ID:
+   ```bash
+   BRANCH=$(gh pr view {pr_number} --repo {repo} --json headRefName -q '.headRefName')
+   RUN_ID=$(gh run list --branch "$BRANCH" --repo {repo} -L 1 --json databaseId -q '.[0].databaseId')
+   ```
+   If no run found yet: wait 30s and retry (up to 5 attempts).
+
+2. Block until run completes:
+   ```bash
+   gh run watch "$RUN_ID" --repo {repo} --exit-status
+   EXIT_CODE=$?
+   ```
+
+3. If exit code 0: all checks passed → exit with `status: passed`
+
+4. If exit code non-zero and `auto_fix=true` and cycles remaining:
+   - Fetch failure log: `gh run view "$RUN_ID" --repo {repo} --log-failed`
    - Dispatch fix agent (polymorphic-agent) with failure details
    - Increment fix cycle count
-   - Wait 30s, then re-poll
-4. If fix cycles exhausted: exit with `status: capped`
-5. If elapsed > timeout_minutes: exit with `status: timeout`
+   - Wait up to 60s for a new CI run to appear on the branch, then go to step 1
+5. If fix cycles exhausted: exit with `status: capped`
+6. If elapsed > timeout_minutes: exit with `status: timeout`
 
 ## Fix Dispatch Contract
 
