@@ -4,7 +4,7 @@
 kafka-python==2.0.2
 
 # PostgreSQL adapter
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.11
 
 # Optional: Confluent Kafka (fallback)
 # confluent-kafka==2.3.0
