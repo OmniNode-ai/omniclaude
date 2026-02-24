@@ -377,31 +377,30 @@ class TestNoDirectMutationCalls:
         """prompt.md must not contain direct 'gh pr merge' calls."""
         matches = _grep_file(_FIX_PRS_PROMPT, r"\bgh pr merge\b")
         assert matches == [], (
-            f"Direct 'gh pr merge' found in fix-prs/prompt.md. "
-            f"fix-prs repairs PRs, not merges them:\n" + "\n".join(matches)
+            "Direct 'gh pr merge' found in fix-prs/prompt.md. "
+            "fix-prs repairs PRs, not merges them:\n" + "\n".join(matches)
         )
 
     def test_no_gh_pr_checkout_in_prompt(self) -> None:
         """prompt.md must not contain direct 'gh pr checkout' calls."""
         matches = _grep_file(_FIX_PRS_PROMPT, r"\bgh pr checkout\b")
         assert matches == [], (
-            f"Direct 'gh pr checkout' found in fix-prs/prompt.md:\n"
-            + "\n".join(matches)
+            "Direct 'gh pr checkout' found in fix-prs/prompt.md:\n" + "\n".join(matches)
         )
 
     def test_no_git_worktree_add_in_prompt(self) -> None:
         """prompt.md must not contain direct 'git worktree add' calls."""
         matches = _grep_file(_FIX_PRS_PROMPT, r"\bgit worktree add\b")
         assert matches == [], (
-            f"Direct 'git worktree add' found in fix-prs/prompt.md. "
-            f"Use get_worktree() from _lib/pr-safety/helpers.md:\n" + "\n".join(matches)
+            "Direct 'git worktree add' found in fix-prs/prompt.md. "
+            "Use get_worktree() from _lib/pr-safety/helpers.md:\n" + "\n".join(matches)
         )
 
     def test_no_gh_api_merge_in_prompt(self) -> None:
         """prompt.md must not contain direct gh api merge calls."""
         matches = _grep_file(_FIX_PRS_PROMPT, r"gh api.*merge|api.*pulls.*merge")
         assert matches == [], (
-            f"Direct gh api merge found in fix-prs/prompt.md:\n" + "\n".join(matches)
+            "Direct gh api merge found in fix-prs/prompt.md:\n" + "\n".join(matches)
         )
 
     def test_fix_prs_delegates_to_ci_failures(self) -> None:
@@ -537,8 +536,8 @@ class TestCIEnforcementGrep:
             if "gh pr merge" in line and not line.strip().startswith("#")
         ]
         assert lines == [], (
-            f"fix-prs/prompt.md contains 'gh pr merge' — fix-prs repairs PRs, "
-            f"merge-sweep merges them:\n" + "\n".join(lines)
+            "fix-prs/prompt.md contains 'gh pr merge' — fix-prs repairs PRs, "
+            "merge-sweep merges them:\n" + "\n".join(lines)
         )
 
     def test_fix_prs_references_base_ref_for_rebase(self) -> None:
