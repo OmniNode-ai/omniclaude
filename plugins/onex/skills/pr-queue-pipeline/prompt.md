@@ -26,14 +26,14 @@ When `/pr-queue-pipeline [args]` is invoked:
    - `--clean-runs <n>` — default: 2
    - `--max-review-minutes <n>` — default: 30
 
-3. **Generate or resume run_id**:
-   - If `--run-id` provided: load ledger from `~/.claude/pr-queue/runs/<run_id>/ledger.json`
+3. **Generate or resume run_id** (path constants `RUNS_DIR`, `CLAIMS_DIR` from `_lib/pr-safety/helpers.md`):
+   - If `--run-id` provided: load ledger from `<RUNS_DIR>/<run_id>/ledger.json`
      and log: "Resuming from phase: <next_phase>" where next_phase is the first phase
      NOT in `phase_completed`. Skip all phases listed in `phase_completed`.
    - If `--dry-run` AND `--run-id` provided: read-only mode — print plan only, do NOT
      update ledger mtime, do NOT emit heartbeat, zero mutations.
    - Otherwise: generate new run_id `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
-     and create ledger at `~/.claude/pr-queue/runs/<run_id>/ledger.json`.
+     and create ledger at `<RUNS_DIR>/<run_id>/ledger.json`.
 
 4. **Print header**:
    ```
@@ -111,10 +111,12 @@ If `--dry-run`:
         /pr-queue-pipeline --run-id <run_id> [original-args]
 
       Would write:
-        ~/.claude/pr-queue/runs/<run_id>/ledger.json
-        ~/.claude/pr-queue/runs/<run_id>/inventory.json
+        <RUNS_DIR>/<run_id>/ledger.json
+        <RUNS_DIR>/<run_id>/inventory.json
         ~/.claude/pr-queue/<date>/report_<run_id>.md
         ~/.claude/pr-queue/<date>/pipeline_<run_id>.json"
+
+      (RUNS_DIR defined in _lib/pr-safety/helpers.md)
   → Emit ModelSkillResult(status=nothing_to_do, phases={scan: {...}})
   → EXIT
 ```
@@ -130,18 +132,18 @@ If both lists are empty (nothing to merge or fix):
 
 After Phase 0 scan completes (and before any sub-skill dispatch):
 
-1. **Write ledger** to `~/.claude/pr-queue/runs/<run_id>/ledger.json`:
+1. **Write ledger** to `<RUNS_DIR>/<run_id>/ledger.json` (`RUNS_DIR` from `_lib/pr-safety/helpers.md`):
    ```json
    {
      "run_id": "<run_id>",
      "started_at": "<ISO timestamp>",
      "phase_completed": ["scan"],
      "stop_reason": null,
-     "inventory_path": "~/.claude/pr-queue/runs/<run_id>/inventory.json"
+     "inventory_path": "<RUNS_DIR>/<run_id>/inventory.json"
    }
    ```
 
-2. **Write inventory** to `~/.claude/pr-queue/runs/<run_id>/inventory.json`:
+2. **Write inventory** to `<RUNS_DIR>/<run_id>/inventory.json`:
    ```json
    {
      "run_id": "<run_id>",
@@ -152,7 +154,7 @@ After Phase 0 scan completes (and before any sub-skill dispatch):
    ```
 
 **CRITICAL**: inventory.json MUST be written before fix-prs, merge-sweep, or review-all-prs is
-invoked. Sub-skills receive `--inventory ~/.claude/pr-queue/runs/<run_id>/inventory.json`.
+invoked. Sub-skills receive `--inventory <RUNS_DIR>/<run_id>/inventory.json`.
 
 After each phase completes, append the phase name to `phase_completed` in the ledger. Phase names:
 `scan` | `review` | `fix` | `merge` | `report`
@@ -162,10 +164,10 @@ After each phase completes, append the phase name to `phase_completed` in the le
 ### Claims Lifecycle
 
 Before processing each PR, create a claim file at:
-`~/.claude/pr-queue/claims/<run_id>/<repo_slug>-<pr_number>.json`
+`<CLAIMS_DIR>/<run_id>/<repo_slug>-<pr_number>.json` (`CLAIMS_DIR` from `_lib/pr-safety/helpers.md`)
 
 On terminal run completion (`completed`, `gate_rejected`, `nothing_to_do`, `error`):
-Remove all claim files under `~/.claude/pr-queue/claims/<run_id>/`.
+Remove all claim files for this `run_id` under `CLAIMS_DIR`.
 
 ### stop_reason
 

@@ -136,7 +136,8 @@ radius and skip the review phase until it has been validated standalone.
 
 ## Run Ledger and Resume Semantics
 
-The pipeline tracks per-run state in a ledger at `~/.claude/pr-queue/runs/<run_id>/ledger.json`:
+Path constants are defined in `_lib/pr-safety/helpers.md`: `RUNS_DIR`, `CLAIMS_DIR`.
+The pipeline tracks per-run state in a ledger at `<RUNS_DIR>/<run_id>/ledger.json`:
 
 ```json
 {
@@ -144,7 +145,7 @@ The pipeline tracks per-run state in a ledger at `~/.claude/pr-queue/runs/<run_i
   "started_at": "2026-02-23T14:30:12Z",
   "phase_completed": ["scan", "fix", "merge", "report"],
   "stop_reason": "completed",
-  "inventory_path": "~/.claude/pr-queue/runs/<run_id>/inventory.json"
+  "inventory_path": "<RUNS_DIR>/<run_id>/inventory.json"
 }
 ```
 
@@ -174,7 +175,7 @@ Terminal stop reasons written to the ledger:
 ```
 
 When `--run-id` is provided:
-1. Load ledger from `~/.claude/pr-queue/runs/<run_id>/ledger.json`
+1. Load ledger from `<RUNS_DIR>/<run_id>/ledger.json` (see `_lib/pr-safety/helpers.md` for `RUNS_DIR`)
 2. Log: "Resuming from phase: <next_phase>" where next_phase is the first phase not in `phase_completed`
 3. Skip all phases already listed in `phase_completed` — do NOT re-execute them
 4. Resume from the first phase NOT in `phase_completed`
@@ -198,16 +199,20 @@ Re-run command:
   /pr-queue-pipeline --run-id <run_id> [original-args]
 
 Would write:
-  ~/.claude/pr-queue/runs/<run_id>/ledger.json
-  ~/.claude/pr-queue/runs/<run_id>/inventory.json
+  <RUNS_DIR>/<run_id>/ledger.json
+  <RUNS_DIR>/<run_id>/inventory.json
   ~/.claude/pr-queue/<date>/report_<run_id>.md
   ~/.claude/pr-queue/<date>/pipeline_<run_id>.json
 ```
 
+(See `_lib/pr-safety/helpers.md` for `RUNS_DIR` constant.)
+
 ## Inventory Plumbing
 
+Path constants `RUNS_DIR` and `CLAIMS_DIR` are defined in `_lib/pr-safety/helpers.md`.
+
 Before any sub-skill (fix-prs, merge-sweep, review-all-prs) is invoked, the pipeline writes
-an inventory file at `~/.claude/pr-queue/runs/<run_id>/inventory.json`:
+an inventory file at `<RUNS_DIR>/<run_id>/inventory.json`:
 
 ```json
 {
@@ -230,16 +235,15 @@ MUST receive `--inventory <path>` to consume the pre-built PR list.
 
 ## Claims Cleanup
 
-During execution, the pipeline creates per-PR claim files at `~/.claude/pr-queue/claims/<run_id>/<repo>-<pr_number>.json`
+Claims path management uses `CLAIMS_DIR` from `_lib/pr-safety/helpers.md`.
+
+During execution, the pipeline creates per-PR claim files at `<CLAIMS_DIR>/<run_id>/<repo>-<pr_number>.json`
 to prevent concurrent pipeline runs from processing the same PR.
 
 **Terminal run cleanup invariant**: When a run reaches a terminal state (`completed`, `gate_rejected`,
-`nothing_to_do`, `error`), all claim files under `~/.claude/pr-queue/claims/<run_id>/` are removed.
+`nothing_to_do`, `error`), all claim files for this `run_id` under `CLAIMS_DIR` are removed.
 
-After a terminal run:
-```bash
-ls ~/.claude/pr-queue/claims/ | grep <run_id>  # must be empty
-```
+After a terminal run, no claim files remain for the completed `run_id`.
 
 `partial_completed` runs may leave claims if interrupted; use `--run-id` to resume and trigger cleanup.
 
@@ -417,7 +421,7 @@ live PRs required. Safe for CI.
 
 # 7. No leftover claims after terminal run
 #    → SKILL.md documents claims cleanup invariant for terminal runs
-#    → ls ~/.claude/pr-queue/claims/ | grep <run_id> → empty after terminal run
+#    → no claim files remain for <run_id> under CLAIMS_DIR (see _lib/pr-safety/helpers.md)
 ```
 
 ## See Also
