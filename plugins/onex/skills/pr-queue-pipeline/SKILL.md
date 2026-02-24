@@ -25,7 +25,7 @@ args:
     description: Skip Phase 2 (fix-prs); sweep-only mode (default: false)
     required: false
   - name: --dry-run
-    description: Phase 0 only — print plan without executing any phase; includes re-run block with run_id and would-write paths (default: false)
+    description: Phase 0 only — print plan without executing any phase; zero filesystem writes including claims (default: false)
     required: false
   - name: --run-id
     description: Resume a previous run by run_id; skips phases already in phase_completed (default: none — starts fresh run)
@@ -119,7 +119,8 @@ Phase 5: REPORT
 | `--repos` | all | Comma-separated repo names to scan |
 | `--skip-review` | false | Skip Phase 1 (review-all-prs); restores v0 behavior |
 | `--skip-fix` | false | Skip Phase 2 (sweep-only mode) |
-| `--dry-run` | false | Phase 0 only — print plan, no execution |
+| `--dry-run` | false | Phase 0 only — print plan without executing any phase; includes re-run block with run_id and would-write paths |
+| `--run-id` | none | Resume a previous run by run_id; skips phases already in phase_completed |
 | `--authors` | all | Forwarded to all sub-skills. Recommended: `me` for first production run |
 | `--max-total-prs` | 20 | Hard cap on PRs processed across all phases |
 | `--max-total-merges` | 10 | Hard cap on merges across Phase 3 + Phase 4 |

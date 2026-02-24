@@ -18,7 +18,7 @@ args:
     description: Comma-separated repo names to scan (default: all repos in omni_home)
     required: false
   - name: --dry-run
-    description: Print merge candidates without posting Slack gate or merging
+    description: Print merge candidates without posting Slack gate or merging; zero filesystem writes including claim files
     required: false
   - name: --gate-attestation
     description: "Pre-issued gate token to bypass Slack gate (format: <slack_ts>:<run_id>); token validated before proceeding"
@@ -52,6 +52,9 @@ args:
     required: false
   - name: --gate-timeout-minutes
     description: "Override Slack gate timeout (default: 1440 = 24h for HIGH_RISK)"
+    required: false
+  - name: --run-id
+    description: "Pipeline run ID for claim registry ownership. Generated if not provided."
     required: false
 inputs:
   - name: repos
@@ -122,8 +125,9 @@ def is_green(pr) -> bool:
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--repos` | all | Comma-separated repo names to scan |
-| `--dry-run` | false | Print candidates without posting Slack gate or merging |
-| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>`; token validated before proceeding |
+| `--dry-run` | false | Print candidates without posting Slack gate or merging; zero filesystem writes including claim files |
+| `--run-id` | generated | Identifier for this run; used to correlate logs and claim registry ownership |
+| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>` (token validated before proceeding) |
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |

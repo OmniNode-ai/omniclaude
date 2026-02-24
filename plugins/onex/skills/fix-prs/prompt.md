@@ -18,12 +18,30 @@ When `/fix-prs [args]` is invoked:
    - `--authors <list>` — default: all
    - `--allow-force-push` — default: false
    - `--ignore-ledger` — default: false
+   - `--run-id <id>` — default: generate new (resume mode if provided + ledger exists)
+   - `--dry-run` — default: false (zero filesystem writes including claims and ledger)
 
-3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-b7e`)
+3. **Generate or restore run_id**:
+   - If `--run-id` provided AND ledger for that run_id exists: **resume mode** (log "Resuming run <run_id>")
+   - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-b7e4f9`)
+
+3a. **Startup resume — clean stale own claims**:
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry
+
+registry = ClaimRegistry()
+deleted = registry.cleanup_stale_own_claims(run_id, dry_run=dry_run)
+if deleted:
+    print(f"[fix-prs] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
+```
+
+This ensures any interrupted prior execution doesn't leave orphaned claims.
 
 4. **Load ledger**: `~/.claude/pr-queue/<date>/run_<run_id>.json`
    - If `--ignore-ledger`: treat as empty ledger
-   - Date = today's date in YYYY-MM-DD format
+   - If resuming (`--run-id` provided): derive `<date>` from the `run_id` prefix (parse `YYYYMMDD` from `run_id`); if that path doesn't exist, fall back to searching recent `~/.claude/pr-queue/` date dirs for `run_<run_id>.json`.
+   - Otherwise: `<date>` = today's date in YYYY-MM-DD format
 
 ---
 
@@ -105,6 +123,32 @@ IF work_queue is empty:
 ---
 
 ## Step 4: Dispatch Fix Agents (Parallel)
+
+Before dispatching each PR agent, **acquire a claim** from the global registry.
+Skip PRs where another active claim exists (from a different run). Release claims in
+a `finally` block regardless of agent outcome.
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr_key
+
+registry = ClaimRegistry()
+
+for pr in work_queue:
+    pr_key = canonical_pr_key(org=pr["repo"].split("/")[0],
+                               repo=pr["repo"].split("/")[1],
+                               number=pr["number"])
+    acquired = registry.acquire(pr_key, run_id=run_id, action="fix_pr", dry_run=dry_run)
+    if not acquired:
+        # Another active run holds this claim — skip (not a hard failure for fix-prs)
+        record result: skipped, reason: claim_collision
+        continue
+
+    try:
+        # dispatch agent (see Task() block below)
+        ...
+    finally:
+        registry.release(pr_key, run_id=run_id, dry_run=dry_run)
+```
 
 Dispatch up to `--max-parallel-prs` agents concurrently. For each PR in work_queue:
 
@@ -319,9 +363,12 @@ Skill(skill="onex:fix-prs", args={
   max_total_prs: <cap>,
   max_parallel_prs: <cap>,
   allow_force_push: false,
-  ignore_ledger: false
+  ignore_ledger: false,
+  run_id: <pipeline_run_id>,   # for claim registry + ledger namespacing
+  dry_run: <dry_run>           # propagates to claim registry (zero writes)
 })
 ```
 
-The parent pipeline provides its own `run_id` which is passed through for ledger namespacing.
+The parent pipeline provides its own `run_id` which is passed through for ledger namespacing
+and claim registry ownership. `--dry-run` propagates to all claim registry writes (zero I/O).
 After fix-prs completes, the pipeline re-queries PR state before posting the merge gate.

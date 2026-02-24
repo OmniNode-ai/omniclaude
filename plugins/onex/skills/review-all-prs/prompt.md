@@ -25,8 +25,23 @@ When `/review-all-prs [args]` is invoked:
    - `--gate-attestation <token>` — required with --all-authors; format: `<slack_ts>:<run_id>`
    - `--omn-2613-merged` — default: false (required with --all-authors unless --accept-duplicate-ticket-risk)
    - `--accept-duplicate-ticket-risk` — default: false (required with --all-authors when --omn-2613-merged absent)
+   - `--run-id <id>` — default: generate new; provided by pr-queue-pipeline for claim ownership
+   - `--dry-run` — default: false (zero filesystem writes including claims)
 
-3. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-c9f`)
+3. **Generate or restore run_id**:
+   - If `--run-id` provided: use it
+   - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-150812-c9f`)
+
+3a. **Startup resume — clean stale own claims**:
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry
+
+registry = ClaimRegistry()
+deleted = registry.cleanup_stale_own_claims(run_id, dry_run=dry_run)
+if deleted:
+    print(f"[review-all-prs] Cleaned up {len(deleted)} stale claim(s) from prior run: {deleted}")
+```
 
 4. **Print header**:
    ```
@@ -231,11 +246,44 @@ IF work_queue is empty:
   → EXIT
 ```
 
+**Dry-run exit** (if `--dry-run`):
+```
+IF dry_run:
+  → Print: "[DRY RUN] Would review <N> PR(s): <pr_list>"
+  → Print: "Dry run complete. No worktrees created, no commits pushed, no claim files written."
+  → Emit ModelSkillResult(status=nothing_to_review, dry_run=True)
+  → EXIT
+```
+
 ---
 
 ## Step 4: Create Worktrees (Before Dispatch)
 
-For each PR in `work_queue[]`:
+Before creating each worktree, **acquire a claim** from the global claim registry.
+A worktree creation is a PR mutation commitment — the claim must be held before any
+filesystem or git work for that PR begins.
+
+```python
+from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr_key
+
+registry = ClaimRegistry()
+claimed_prs = {}  # pr_key → bool, for release in Step 6
+
+for pr in work_queue:
+    org, repo_name = pr["repo"].split("/")
+    pr_key = canonical_pr_key(org=org, repo=repo_name, number=pr["number"])
+
+    acquired = registry.acquire(pr_key, run_id=run_id, action="review", dry_run=dry_run)
+    if not acquired:
+        # Another active run holds this claim — skip (not a hard failure for review-all-prs)
+        record result: skipped, reason: claim_collision
+        claimed_prs[pr_key] = False
+        continue
+    claimed_prs[pr_key] = True
+    # proceed with worktree creation for this PR
+```
+
+For each PR in `work_queue[]` where the claim was acquired:
 
 ```python
 # Worktree path
