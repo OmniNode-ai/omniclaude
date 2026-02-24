@@ -162,15 +162,15 @@ Step 5: UPDATE DEDUP LEDGER + EMIT ModelSkillResult
 Path:    ~/.claude/worktrees/pr-queue/<run_id>/<repo_name>/<pr_number>/
 Marker:  <path>/.onex_worktree.json
          {run_id, repo, pr, branch, base_ref, created_at, skill: "review-all-prs"}
-Claim:   ~/.claude/pr-queue/claims/<pr_key_sanitized>.json  (acquired BEFORE worktree add)
+Claim:   claim_path(pr_key)  (see _lib/pr-safety/helpers.md; acquired BEFORE worktree add)
 Cleanup: release_claim(pr_key, run_id) + git worktree remove --force <path>
 Failure: record cleanup_failed; include path in ModelSkillResult for manual cleanup
 Sweeper: on startup (and --cleanup-orphans mode), remove markers older than --orphan-age-hours
 ```
 
 **Claim-before-worktree invariant**: `acquire_claim()` from `_lib/pr-safety/helpers.md`
-MUST be called before `git worktree add`. The claim file at `claim_path(pr_key)` must exist
-before any worktree creation is attempted. If `acquire_claim()` returns `"skip"`, do NOT
+MUST be called before `get_worktree()`. The claim file at `claim_path(pr_key)` must exist
+before any worktree directory is created. If `acquire_claim()` returns `"skip"`, do NOT
 create the worktree.
 
 **Preflight tripwire**: Before dispatching any agent, the orchestrator verifies that for every
@@ -222,7 +222,7 @@ Re-review if `head_sha` changed (new commits pushed) or `last_result` was not cl
 When `--dry-run` is passed, review-all-prs produces **zero writes to `~/.claude/`**:
 
 - No claim files created (`acquire_claim()` is skipped in dry-run)
-- No worktrees created (`git worktree add` is not called)
+- No worktrees created (`get_worktree()` is not called; no worktree directories written)
 - No ledger writes (`atomic_write()` raises `DryRunWriteError`)
 - No marker files written (`.onex_worktree.json` not created)
 - All output to stdout only
@@ -359,7 +359,7 @@ GitHub access, or live PRs. Safe for CI.
 |---|------|-----------------|
 | 1 | `--all-authors` without `--gate-attestation` | `hard_error: "missing --gate-attestation"` documented in SKILL.md |
 | 2 | `--all-authors` + `--gate-attestation` without OMN-2613 flag | `hard_error: "missing --omn-2613-merged or --accept-duplicate-ticket-risk"` documented |
-| 3 | Worktree creation claims PR first | `claim_path(pr_key)` exists before `git worktree add` (documented in SKILL.md) |
+| 3 | Worktree creation claims PR first | `claim_path(pr_key)` exists before `get_worktree()` is called (documented in SKILL.md) |
 | 4 | Claim released after worktree deleted | `release_claim()` called in cleanup; `claim_path(pr_key)` absent after cleanup |
 | 5 | Dedup ledger prevents re-processing same fingerprint | `thread_fingerprint` + `last_result: ticket_created` → skip documented |
 | 6 | Preflight tripwire: worktree without claim → hard error | `hard_error` documented if worktree exists without claim |

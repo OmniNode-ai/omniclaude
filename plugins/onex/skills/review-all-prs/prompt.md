@@ -79,8 +79,8 @@ IF both conditions pass:
 
 When `--dry-run` is set:
 
-1. **No claim files written** — `acquire_claim()` is skipped; no `~/.claude/pr-queue/claims/` writes
-2. **No worktrees created** — `git worktree add` is NOT called
+1. **No claim files written** — `acquire_claim()` is skipped; `claim_path(pr_key)` is never written
+2. **No worktrees created** — `get_worktree()` is NOT called; no worktree directories created
 3. **No ledger writes** — `atomic_write()` raises `DryRunWriteError`; ledger is not updated
 4. **No marker files** — `.onex_worktree.json` not written
 5. **All output to stdout** — preview of what would be reviewed
