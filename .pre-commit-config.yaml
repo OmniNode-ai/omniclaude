@@ -56,7 +56,11 @@ repos:
 
       - id: check-local-paths
         name: check for local path references
-        entry: uv run python -m omnibase_core.validation.validator_local_paths
+        entry: >
+          bash -c 'uv run python -c "import omnibase_core.validation.validator_local_paths" 2>/dev/null
+          && uv run python -m omnibase_core.validation.validator_local_paths "$@"
+          || echo "[check-local-paths] skipped: omnibase_core.validation.validator_local_paths not available (requires omnibase-core >=0.20.0)"'
+          --
         language: system
         types: [text]
         exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*'

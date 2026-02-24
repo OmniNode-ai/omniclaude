@@ -265,8 +265,13 @@ class TestIntelligenceConfigValidation:
         """Test that IPv4 addresses are accepted."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
-        config = IntelligenceConfig(kafka_bootstrap_servers="192.168.1.100:9092")  # onex-allow-internal-ip
-        assert config.kafka_bootstrap_servers == "192.168.1.100:9092"  # onex-allow-internal-ip
+        config = IntelligenceConfig(
+            kafka_bootstrap_servers="192.168.1.100:9092"  # onex-allow-internal-ip
+        )
+        assert (
+            config.kafka_bootstrap_servers
+            == "192.168.1.100:9092"  # onex-allow-internal-ip
+        )
 
     def test_bootstrap_servers_one_invalid_in_list_fails(self) -> None:
         """Test that validation fails if any broker in list is invalid."""
