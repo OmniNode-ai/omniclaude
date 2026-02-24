@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate omniclaude directory structure
         run: |
@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate agent YAML schema_version fields
         run: |
@@ -112,7 +112,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate CLAUDE.md exists
         run: |
@@ -179,7 +179,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check for forbidden legacy patterns
         run: |
@@ -242,7 +242,7 @@ jobs:
     #   - ci-failures, pr-review (CI YAML snippets embedded as examples)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Enforce pr-queue claims/ and runs/ path bans
         run: |
