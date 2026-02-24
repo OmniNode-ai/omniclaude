@@ -40,6 +40,12 @@ _plugin_lib_path = str(
 if _plugin_lib_path not in sys.path:
     sys.path.insert(0, _plugin_lib_path)
 
+# Repo root path — needed for ``from scripts.<module> import`` style imports
+# in script unit tests (e.g. tests/unit/scripts/test_generate_skill_node.py).
+_repo_root_path = str(Path(__file__).parent.parent)
+if _repo_root_path not in sys.path:
+    sys.path.insert(0, _repo_root_path)
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
