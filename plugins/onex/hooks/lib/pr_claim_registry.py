@@ -231,7 +231,7 @@ class ClaimRegistry:
     ) -> bool:
         """Attempt to acquire a claim on the given PR.
 
-        Uses atomic write (write to .tmp, then rename) to prevent races.
+        Uses atomic create-if-absent (write to unique .tmp, then os.link) to prevent races.
 
         Args:
             pr_key: Canonical PR key (e.g. "omninode-ai/omniclaude#247")
