@@ -125,16 +125,13 @@ async def publish_handler_contracts(
         >>> if result.contract_errors:
         ...     print(f"Errors: {len(result.contract_errors)}")
     """
-    # Resolve environment if provided (override config setting)
-    resolved_env: str | None = None
+    # Resolve environment if provided (store in config; from_container does not accept it)
     if environment is not None:
         resolved_env = environment.strip() or "dev"
         config = config.model_copy(update={"environment": resolved_env})
 
-    # Delegate to infra service, passing environment if explicitly provided
-    publisher = await ServiceContractPublisher.from_container(
-        container, config, environment=resolved_env
-    )
+    # Delegate to infra service — environment is embedded in config, not a kwarg
+    publisher = await ServiceContractPublisher.from_container(container, config)
     return await publisher.publish_all()
 
 
@@ -186,8 +183,8 @@ async def wire_omniclaude_services(
         contracts_root = os.getenv("OMNICLAUDE_CONTRACTS_ROOT")
         if contracts_root is None:
             raise ContractSourceNotConfiguredError(
-                "No contract source configured. Either pass ModelContractPublisherConfig "
-                "or set OMNICLAUDE_CONTRACTS_ROOT environment variable."
+                mode="env_var",
+                missing_field="OMNICLAUDE_CONTRACTS_ROOT",
             )
         config = ModelContractPublisherConfig(
             mode="filesystem",

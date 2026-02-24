@@ -302,6 +302,32 @@ class PluginClaude:
                 error_message="All subscriber starts failed",
             )
 
+        # ----------------------------------------------------------------
+        # Publish skill node introspection events (OMN-2403)
+        # ----------------------------------------------------------------
+        # Best-effort: failures are caught by SkillNodeIntrospectionProxy
+        # and logged, never propagated. Introspection is published with the
+        # event bus from the publisher, or None if not yet started.
+        try:
+            from omniclaude.runtime.introspection import (  # noqa: PLC0415
+                SkillNodeIntrospectionProxy,
+            )
+
+            # Pass the underlying event bus (ProtocolEventBusLike), not the
+            # EmbeddedEventPublisher wrapper itself, which does not implement
+            # ProtocolEventBus.  When the publisher has not yet started,
+            # event_bus is None and publish_all() will be a silent no-op.
+            introspection_proxy = SkillNodeIntrospectionProxy(
+                event_bus=self._publisher.event_bus
+                if self._publisher is not None
+                else None,
+            )
+            published_count = await introspection_proxy.publish_all(reason="startup")
+            if published_count > 0:
+                resources_created.append("skill-node-introspection")
+        except Exception as exc:
+            logger.warning("Skill node introspection proxy failed to start: %s", exc)
+
         return ModelDomainPluginResult(
             plugin_id=_PLUGIN_ID,
             success=True,
