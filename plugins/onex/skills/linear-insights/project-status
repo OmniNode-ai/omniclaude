@@ -37,6 +37,7 @@ Options:
   --risks           Highlight risks (high priority backlog, velocity drops)
   --confidence      Show detailed confidence breakdown
   --json            Output as JSON instead of markdown
+  --emit            After outputting status, serialize snapshot and emit to Kafka via onex-linear-relay
   -h, --help        Show this help
 
 Projects Available:
@@ -68,6 +69,15 @@ Examples:
 
   # JSON output
   $(basename "$0") MVP --json
+
+  # Emit snapshot to Kafka via onex-linear-relay (produces to onex.evt.linear.snapshot.v1)
+  $(basename "$0") MVP --emit
+
+  # Combine: JSON output + emit
+  $(basename "$0") MVP --json --emit
+
+NOTE: Do NOT call POST /api/linear/snapshot directly. That endpoint is debug-only ingress.
+      Use --emit to produce Linear snapshot data to Kafka via onex-linear-relay.
 
 Health Indicators:
   The health check evaluates:
@@ -205,6 +215,7 @@ SHOW_BLOCKERS=false
 SHOW_RISKS=false
 SHOW_CONFIDENCE=false
 JSON_OUTPUT=false
+EMIT=false
 
 # ============================================================================
 # Parse Arguments
@@ -230,6 +241,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --json)
             JSON_OUTPUT=true
+            shift
+            ;;
+        --emit)
+            EMIT=true
             shift
             ;;
         -h|--help)
@@ -1081,6 +1096,68 @@ PYTHON_EOF
 }
 
 # ============================================================================
+# Kafka Emission (--emit flag)
+# ============================================================================
+#
+# Serializes a workstream snapshot JSON and calls onex-linear-relay to produce
+# it to onex.evt.linear.snapshot.v1.
+#
+# IMPORTANT: Do NOT call POST /api/linear/snapshot directly.
+#            That endpoint is debug-only ingress.
+#            This function is the only correct production path.
+# ============================================================================
+
+emit_snapshot() {
+    local project="$1"
+    local project_name="$2"
+    local timestamp
+    timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+    local snapshot_file="/tmp/linear-snapshot-${timestamp}.json"
+
+    # Build minimal workstream snapshot JSON.
+    # The agent executing this skill is expected to have already fetched
+    # Linear data via MCP and can pass richer workstream data.
+    # This baseline snapshot includes project identity and generation metadata.
+    python3 - <<PYEOF
+import json, sys
+from datetime import datetime, timezone
+
+# Collect all project shortcuts for the snapshot's workstreams list.
+# In single-project mode, emit the one project; in --all mode, emit all.
+projects_raw = """$( [[ "$SHOW_ALL" == "true" ]] && get_all_projects || echo "$project" )"""
+workstreams = [p.strip() for p in projects_raw.strip().splitlines() if p.strip()]
+
+snapshot = {
+    "workstreams": workstreams,
+    "project": "$project_name",
+    "project_shortcut": "$project",
+    "source": "project-status",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+}
+with open("$snapshot_file", "w", encoding="utf-8") as f:
+    json.dump(snapshot, f)
+PYEOF
+
+    if [[ ! -f "$snapshot_file" ]]; then
+        echo "[project-status] ERROR: Failed to create snapshot file at $snapshot_file" >&2
+        return 1
+    fi
+
+    echo "[project-status] Emitting snapshot to onex.evt.linear.snapshot.v1 ..."
+    if command -v onex-linear-relay &>/dev/null; then
+        onex-linear-relay emit --snapshot-file "$snapshot_file"
+        # Clean up tmp file after successful relay invocation (relay is non-blocking,
+        # exit 0 regardless of Kafka reachability — file no longer needed after this point).
+        rm -f "$snapshot_file"
+    else
+        echo "[project-status] WARNING: onex-linear-relay not found in PATH." >&2
+        echo "[project-status] Install omnibase_infra package or add its .venv/bin to PATH." >&2
+        echo "[project-status] Snapshot file retained at: $snapshot_file" >&2
+        return 1
+    fi
+}
+
+# ============================================================================
 # Main Execution
 # ============================================================================
 
@@ -1088,4 +1165,13 @@ if [[ "$SHOW_ALL" == "true" ]]; then
     output_all_projects_status
 else
     output_single_project_status "$PROJECT" "$PROJECT_ID" "$PROJECT_NAME"
+fi
+
+# Emit snapshot to Kafka if --emit flag was set.
+if [[ "$EMIT" == "true" ]]; then
+    if [[ "$SHOW_ALL" == "true" ]]; then
+        emit_snapshot "all" "All Projects"
+    else
+        emit_snapshot "$PROJECT" "$PROJECT_NAME"
+    fi
 fi
