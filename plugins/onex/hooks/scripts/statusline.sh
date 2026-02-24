@@ -151,10 +151,10 @@ APPLESCRIPT
         FORMATTED=$(echo "$RESOLVED" | sort -t'|' -k1 -n)
       fi
 
-      # Pre-scan: detect tabs sharing the same project directory (collision warning)
-      # Any project_path appearing 2+ times means multiple sessions in the same folder
+      # Pre-scan: detect tabs sharing the same WORKTREE (collision warning)
+      # Only flag paths under omni_worktrees — multiple tabs in omni_home is expected.
       DUPE_PATHS=""
-      _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" {print $5}' | sort)
+      _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" && $5 ~ /omni_worktrees/ {print $5}' | sort)
       [ -n "$_paths" ] && DUPE_PATHS=$(echo "$_paths" | uniq -d)
 
       # Pre-scan: detect same (ticket + mode) pair across multiple tabs — true collision.
