@@ -616,8 +616,8 @@ class TestToolContentCommand:
         assert "tool-content" in result.output
 
     def test_accepts_all_file_tools(self, runner: CliRunner) -> None:
-        """Command accepts Read, Write, and Edit tool names."""
-        for tool in ["Read", "Write", "Edit"]:
+        """Command accepts Read, Write, Edit, and Bash tool names."""
+        for tool in ["Read", "Write", "Edit", "Bash"]:
             result = runner.invoke(
                 cli,
                 [
@@ -840,6 +840,159 @@ class TestToolContentCommand:
             # Verify required fields are present
             assert "timestamp" in payload
             assert "correlation_id" in payload
+
+
+# =============================================================================
+# Bash Tool Content Capture Tests (OMN-1714)
+# =============================================================================
+
+
+class TestBashToolContentCapture:
+    """Tests for Bash tool content capture via tool-content CLI command.
+
+    Verifies that:
+    - Bash tool name is accepted by the tool-content command
+    - Shell language is set for Bash content captures
+    - The CLI infrastructure supports Bash content emission
+    - Privacy decision: command-only capture, no output, always redacted
+
+    Note: The sanitization logic itself lives in post-tool-use-quality.sh
+    (shell layer). These tests verify the CLI layer correctly handles Bash
+    tool-content events with the expected fields.
+    """
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_bash_tool_accepted_by_tool_content(self, runner: CliRunner) -> None:
+        """Bash tool name is accepted by the tool-content command."""
+        result = runner.invoke(
+            cli,
+            [
+                "tool-content",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Bash",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_bash_with_shell_language(self, runner: CliRunner) -> None:
+        """Bash captures use shell language classification."""
+        result = runner.invoke(
+            cli,
+            [
+                "tool-content",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Bash",
+                "--language",
+                "shell",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_bash_with_command_content_preview(self, runner: CliRunner) -> None:
+        """Bash captures accept command text as content preview."""
+        command_preview = "git log --oneline -20 | head -10"
+        result = runner.invoke(
+            cli,
+            [
+                "tool-content",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Bash",
+                "--content-preview",
+                command_preview,
+                "--content-length",
+                str(len(command_preview)),
+                "--language",
+                "shell",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_bash_dry_run_shows_payload(self, runner: CliRunner) -> None:
+        """Dry run shows Bash payload with expected fields."""
+        session_id = str(uuid4())
+        result = runner.invoke(
+            cli,
+            [
+                "tool-content",
+                "--session-id",
+                session_id,
+                "--tool-name",
+                "Bash",
+                "--content-preview",
+                "docker ps -a",
+                "--content-length",
+                "12",
+                "--language",
+                "shell",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+        # Payload should contain tool name
+        assert "Bash" in result.output
+
+    def test_bash_enum_classifies_correctly(self) -> None:
+        """EnumClaudeCodeToolName correctly classifies 'Bash' as BASH.
+
+        Validates the enum infrastructure used by ModelToolExecutionContent
+        when processing Bash tool-content events.
+        """
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeToolName
+
+        tool = EnumClaudeCodeToolName.from_string("Bash")
+        assert tool == EnumClaudeCodeToolName.BASH
+        assert EnumClaudeCodeToolName.is_execution_tool(tool)
+        assert not EnumClaudeCodeToolName.is_file_operation(tool)
+
+    def test_bash_model_creation_from_tool_name(self) -> None:
+        """ModelToolExecutionContent can be created for Bash with shell language.
+
+        Validates that the model layer correctly handles Bash content events
+        with command-only content and shell language classification.
+        """
+        from datetime import UTC, datetime
+
+        from omnibase_core.models.intelligence import ModelToolExecutionContent
+
+        content = ModelToolExecutionContent.from_tool_name(
+            tool_name_raw="Bash",
+            language="shell",
+            content_preview="git status && git diff --stat",
+            content_length=29,
+            content_hash="sha256:abc123",
+            is_content_redacted=True,
+            redaction_policy_version="bash-sanitize-v1",
+            success=True,
+            session_id="test-session-123",
+            correlation_id=str(uuid4()),
+            timestamp=datetime.now(UTC),
+        )
+
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeToolName
+
+        assert content.tool_name_raw == "Bash"
+        assert content.tool_name == EnumClaudeCodeToolName.BASH
+        assert content.language == "shell"
+        assert content.is_content_redacted is True
+        assert content.redaction_policy_version == "bash-sanitize-v1"
+        assert content.content_preview == "git status && git diff --stat"
+        assert content.file_path is None  # Bash has no file path
 
 
 # =============================================================================

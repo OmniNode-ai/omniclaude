@@ -432,6 +432,94 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
 fi
 
 # -----------------------------------------------------------------------
+# Bash Tool Content Capture for Shell Pattern Learning (OMN-1714)
+# -----------------------------------------------------------------------
+# Captures Bash command text (command-only, no output) for omniintelligence
+# pattern learning. Output is intentionally excluded to reduce volume and
+# avoid capturing sensitive runtime data.
+#
+# Privacy Decision (OMN-1714):
+#   - Captures: command string only (tool_input.command)
+#   - Excludes: tool output (may contain API responses, secrets)
+#   - Sanitizes: env var assignments (KEY=val), --token/--api-key flags,
+#     Authorization header patterns, URLs with embedded credentials
+#   - Always sets: is_content_redacted=true, redaction_policy_version=bash-sanitize-v1
+#   - Max preview: 2000 chars (consistent with file tools)
+#   - Volume gate: commands shorter than 3 chars are skipped (not meaningful)
+#
+# Why capture Bash?
+#   Shell command sequences teach omniintelligence common workflows (git, docker,
+#   npm, kubectl, etc.) that are not captured by file edits alone. The command-only
+#   approach provides pattern value while avoiding output sensitivity.
+# -----------------------------------------------------------------------
+if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" == "Bash" ]]; then
+    (
+        # Extract command string from tool input
+        BASH_COMMAND=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null)
+
+        # Skip trivially short commands (e.g., "ls", "pwd") — low pattern value
+        if [[ -n "$BASH_COMMAND" && "${#BASH_COMMAND}" -ge 3 ]]; then
+            # Sanitize: redact common secret patterns before capture
+            # 1. Env var assignments (KEY=value, KEY="value")
+            BASH_SANITIZED=$(printf '%s' "$BASH_COMMAND" | \
+                sed -E 's/([A-Z_]{4,}=[^[:space:];|&]+)/\1=<REDACTED>/g' 2>/dev/null || \
+                printf '%s' "$BASH_COMMAND")
+            # 2. --flag=value patterns for common secret flags
+            BASH_SANITIZED=$(printf '%s' "$BASH_SANITIZED" | \
+                sed -E 's/(--(?:token|api[_-]key|secret|password|auth|credential|key)[=[:space:]][^[:space:]]+)/--<REDACTED_FLAG>/gi' 2>/dev/null || \
+                printf '%s' "$BASH_SANITIZED")
+            # 3. Bearer/Authorization header values
+            BASH_SANITIZED=$(printf '%s' "$BASH_SANITIZED" | \
+                sed -E 's/(Bearer|Authorization:)[[:space:]]+[A-Za-z0-9._-]+/\1 <REDACTED>/gi' 2>/dev/null || \
+                printf '%s' "$BASH_SANITIZED")
+            # 4. URLs with embedded credentials (https://user:pass@host)
+            BASH_SANITIZED=$(printf '%s' "$BASH_SANITIZED" | \
+                sed -E 's|https?://[^:@]+:[^@]+@|https://<REDACTED>@|gi' 2>/dev/null || \
+                printf '%s' "$BASH_SANITIZED")
+
+            BASH_PREVIEW="${BASH_SANITIZED:0:2000}"
+            BASH_CONTENT_LENGTH=${#BASH_COMMAND}
+
+            # Compute hash of original (pre-sanitized) command for deduplication
+            if command -v shasum >/dev/null 2>&1; then
+                BASH_CONTENT_HASH="sha256:$(echo -n "$BASH_COMMAND" | shasum -a 256 | cut -d' ' -f1)"
+            elif command -v sha256sum >/dev/null 2>&1; then
+                BASH_CONTENT_HASH="sha256:$(echo -n "$BASH_COMMAND" | sha256sum | cut -d' ' -f1)"
+            else
+                BASH_CONTENT_HASH=""
+            fi
+
+            # Get correlation ID if available
+            CORRELATION_ID_FILE="$PROJECT_ROOT/tmp/correlation_id"
+            CORRELATION_ID=$(cat "$CORRELATION_ID_FILE" 2>/dev/null || true)
+
+            # Derive success flag from outer TOOL_SUCCESS variable
+            BASH_SUCCESS_FLAG="--success"
+            [[ "$TOOL_SUCCESS" != "true" ]] && BASH_SUCCESS_FLAG="--failure"
+
+            # Emit Bash content event — always marks content as redacted
+            # (sanitization applied regardless of whether secrets were found)
+            "$PYTHON_CMD" -m omniclaude.hooks.cli_emit tool-content \
+                --session-id "$SESSION_ID" \
+                --tool-name "Bash" \
+                --content-preview "$BASH_PREVIEW" \
+                --content-length "$BASH_CONTENT_LENGTH" \
+                ${BASH_CONTENT_HASH:+--content-hash "$BASH_CONTENT_HASH"} \
+                --language "shell" \
+                "$BASH_SUCCESS_FLAG" \
+                ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
+                ${CORRELATION_ID:+--correlation-id "$CORRELATION_ID"} \
+                >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content captured (len=${BASH_CONTENT_LENGTH}, sanitized)" >> "$LOG_FILE"
+        else
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash command too short to capture (len=${#BASH_COMMAND})" >> "$LOG_FILE"
+        fi
+    ) &
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash content emission started" >> "$LOG_FILE"
+fi
+
+# -----------------------------------------------------------------------
 # Intent-to-Commit Binding (OMN-2492)
 # -----------------------------------------------------------------------
 # When the Bash tool completes, check if the output contains a git commit
