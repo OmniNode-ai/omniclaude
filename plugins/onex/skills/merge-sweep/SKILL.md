@@ -385,8 +385,44 @@ Status values:
 - `slack_gate_poll.py` — reply polling helper (part of `slack-gate` skill, OMN-2627)
 - `auto-merge` (existing) — per-PR merge execution with `auto_merge: true`
 
+## Integration Test
+
+Integration tests are in `tests/integration/skills/merge_sweep/test_merge_sweep_integration.py` (OMN-2635).
+All tests are static analysis / structural tests — no live GitHub access or external credentials required.
+
+Run with: `uv run pytest tests/integration/skills/merge_sweep/ -m unit -v`
+
+### Test Coverage
+
+| Test Case | Description | Marker |
+|-----------|-------------|--------|
+| Dry-run no mutation | `--dry-run` exits before gate (Step 5 < Step 6) | unit |
+| `--dry-run` documented | SKILL.md lists `--dry-run` argument | unit |
+| Gate-attestation ban | Legacy bypass flag absent from prompt.md and SKILL.md (OMN-2633) | unit |
+| `--gate-attestation` present | Replacement API documented in both files | unit |
+| Gate token format | `<slack_ts>:<run_id>` format documented without `=` prefix | unit |
+| No direct `gh pr merge` | prompt.md dispatches to auto-merge sub-skill | unit |
+| No direct `gh pr checkout` | prompt.md does not call checkout directly | unit |
+| No direct `git push` instruction | Mutations through sub-skill, not raw git | unit |
+| auto-merge sub-skill referenced | prompt.md and SKILL.md reference auto-merge | unit |
+| `gh pr list` in scan phase only | All `gh pr list` occurrences in Step 2/3 | unit |
+| gate_token audit trail | prompt.md documents gate_token in merge dispatch | unit |
+| ClaimNotHeldError documented | `_lib/pr-safety/helpers.md` defines the error | unit |
+| mutate_pr claim check | `mutate_pr()` asserts claim held before mutation | unit |
+| ModelSkillResult statuses | All 5 status values documented in SKILL.md | unit |
+| ModelSkillResult emitted | prompt.md calls `emit ModelSkillResult` at Step 10 | unit |
+| Result file path documented | SKILL.md shows where result is written | unit |
+| Filters in result | ModelSkillResult includes filters field | unit |
+| Merge policy args | `--require-approval` and `--require-up-to-date` documented | unit |
+| Repo scope documented | At least one repo or manifest referenced | unit |
+| CI enforcement grep | Zero legacy bypass flags in all skills (excl. `_lib/pr-safety`) | unit |
+| No direct merge call (CI) | grep confirms no `gh pr merge` in prompt.md | unit |
+
 ## Changelog
 
+- **v2.1.0** (OMN-2633 + OMN-2635): Migrate legacy bypass flags to `--gate-attestation=<token>`.
+  Add integration test suite (27 tests, all static analysis, CI-safe). Remove migration-window
+  allowlist from CI — gate bypass is now `--gate-attestation` only.
 - **v2.0.0** (OMN-2629): Add `--since` date filter, `--label` filter, wire reply polling
   via OMN-2627's `slack_gate_poll.py`, add `--gate-timeout-minutes` override, add post-sweep
   Slack summary report. Add `filters` field to `ModelSkillResult`. Require `updatedAt` and
@@ -401,4 +437,6 @@ Status values:
 - `slack-gate` skill — HIGH_RISK gate implementation (v2.0.0 with reply polling)
 - OMN-2616 — initial merge-sweep implementation
 - OMN-2627 — slack-gate reply polling (required for gate)
-- OMN-2629 — this ticket (date filters, reply polling, summary)
+- OMN-2629 — date filters, reply polling, summary (v2.0.0)
+- OMN-2633 — gate semantics migration to --gate-attestation
+- OMN-2635 — integration test suite (v2.1.0)
