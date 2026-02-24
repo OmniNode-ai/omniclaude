@@ -73,9 +73,7 @@ class TestScopeGuardAllAuthorsRequiresAttestation:
     def test_skill_documents_all_authors_flag(self) -> None:
         """SKILL.md must document --all-authors flag."""
         content = _read_skill_file(_REVIEW_ALL_PRS_SKILL)
-        assert "--all-authors" in content, (
-            "SKILL.md must document --all-authors flag"
-        )
+        assert "--all-authors" in content, "SKILL.md must document --all-authors flag"
 
     def test_skill_documents_gate_attestation_required_for_all_authors(self) -> None:
         """SKILL.md must document --gate-attestation as required with --all-authors."""
@@ -87,9 +85,7 @@ class TestScopeGuardAllAuthorsRequiresAttestation:
     def test_skill_documents_hard_error_on_missing_attestation(self) -> None:
         """SKILL.md must document hard_error when --all-authors used without --gate-attestation."""
         content = _read_skill_file(_REVIEW_ALL_PRS_SKILL)
-        assert "hard_error" in content, (
-            "SKILL.md must document hard_error behavior"
-        )
+        assert "hard_error" in content, "SKILL.md must document hard_error behavior"
         assert "gate-attestation" in content, (
             "SKILL.md must reference gate-attestation in hard_error context"
         )
@@ -151,7 +147,10 @@ class TestScopeGuardOmn2613FlagRequired:
         """SKILL.md must document hard_error when neither OMN-2613 flag is present."""
         content = _read_skill_file(_REVIEW_ALL_PRS_SKILL)
         # Both flags must be mentioned in a hard_error context
-        assert "--omn-2613-merged" in content and "--accept-duplicate-ticket-risk" in content, (
+        assert (
+            "--omn-2613-merged" in content
+            and "--accept-duplicate-ticket-risk" in content
+        ), (
             "SKILL.md must document both --omn-2613-merged and --accept-duplicate-ticket-risk "
             "in the hard_error context for --all-authors"
         )
@@ -209,7 +208,11 @@ class TestWorktreeClaimBeforeCreation:
         )
         # Verify ordering: acquire_claim appears before git worktree add in the doc
         acquire_pos = content.find("acquire_claim")
-        worktree_pos = content.find("git worktree add") if "git worktree add" not in content else content.find("git worktree add", acquire_pos)
+        worktree_pos = (
+            content.find("git worktree add")
+            if "git worktree add" not in content
+            else content.find("git worktree add", acquire_pos)
+        )
         # If git worktree add is referenced, acquire_claim must precede it
         if "git worktree add" in content:
             assert acquire_pos < content.find("git worktree add"), (
@@ -219,9 +222,9 @@ class TestWorktreeClaimBeforeCreation:
     def test_prompt_documents_skip_claim_active(self) -> None:
         """prompt.md must document skipping PR when acquire_claim returns 'skip'."""
         content = _read_skill_file(_REVIEW_ALL_PRS_PROMPT)
-        assert "skip" in content and ("claim" in content or "acquire_claim" in content), (
-            "prompt.md must document skipping PR when acquire_claim() returns 'skip'"
-        )
+        assert "skip" in content and (
+            "claim" in content or "acquire_claim" in content
+        ), "prompt.md must document skipping PR when acquire_claim() returns 'skip'"
 
     def test_helpers_documents_acquire_claim(self) -> None:
         """_lib/pr-safety/helpers.md must define acquire_claim()."""
@@ -269,7 +272,9 @@ class TestClaimReleasedAfterWorktreeDeleted:
             "prompt.md must document release_claim() in cleanup step"
         )
 
-    def test_prompt_documents_claim_released_regardless_of_worktree_result(self) -> None:
+    def test_prompt_documents_claim_released_regardless_of_worktree_result(
+        self,
+    ) -> None:
         """prompt.md must document claim released even when worktree removal fails."""
         content = _read_skill_file(_REVIEW_ALL_PRS_PROMPT)
         # release_claim must be documented as always running (finally/regardless)
@@ -352,7 +357,11 @@ class TestDedupLedgerPreventsReprocessing:
     def test_skill_documents_per_run_dedup_protection(self) -> None:
         """SKILL.md must document that dedup protects within a single run."""
         content = _read_skill_file(_REVIEW_ALL_PRS_SKILL)
-        assert "per-run" in content.lower() or "single run" in content.lower() or "within a run" in content.lower(), (
+        assert (
+            "per-run" in content.lower()
+            or "single run" in content.lower()
+            or "within a run" in content.lower()
+        ), (
             "SKILL.md must document that dedup ledger protects against duplicates within a single run"
         )
 
@@ -377,9 +386,7 @@ class TestPreflightTripwire:
             "tripwire" in content.lower()
             or "Preflight" in content
             or "preflight" in content.lower()
-        ), (
-            "SKILL.md must document the preflight tripwire"
-        )
+        ), "SKILL.md must document the preflight tripwire"
 
     def test_skill_documents_hard_error_on_worktree_without_claim(self) -> None:
         """SKILL.md must document hard_error when worktree exists without claim."""
@@ -397,9 +404,7 @@ class TestPreflightTripwire:
             "tripwire" in content.lower()
             or "Preflight" in content
             or "preflight" in content.lower()
-        ), (
-            "prompt.md must document preflight tripwire check"
-        )
+        ), "prompt.md must document preflight tripwire check"
 
     def test_prompt_documents_tripwire_hard_error(self) -> None:
         """prompt.md must document hard_error exit in tripwire check."""
@@ -415,14 +420,19 @@ class TestPreflightTripwire:
                 tripwire_section = "\n".join(lines[i : i + 20])
                 break
         if tripwire_section:
-            assert "claim" in tripwire_section.lower() or "worktree" in tripwire_section.lower(), (
+            assert (
+                "claim" in tripwire_section.lower()
+                or "worktree" in tripwire_section.lower()
+            ), (
                 "prompt.md tripwire section must reference claim/worktree in hard_error context"
             )
 
     def test_prompt_documents_manual_cleanup_instruction(self) -> None:
         """prompt.md preflight tripwire must include manual cleanup instruction."""
         content = _read_skill_file(_REVIEW_ALL_PRS_PROMPT)
-        assert "git worktree remove" in content or "manual cleanup" in content.lower(), (
+        assert (
+            "git worktree remove" in content or "manual cleanup" in content.lower()
+        ), (
             "prompt.md tripwire must include manual cleanup instruction for orphaned worktree"
         )
 
@@ -444,12 +454,12 @@ class TestDryRunZeroWrites:
     def test_skill_documents_dry_run_zero_writes(self) -> None:
         """SKILL.md must document dry-run zero-write contract."""
         content = _read_skill_file(_REVIEW_ALL_PRS_SKILL)
-        assert "--dry-run" in content, (
-            "SKILL.md must document --dry-run flag"
-        )
-        assert "zero" in content.lower() or "no writes" in content.lower() or "DryRunWriteError" in content, (
-            "SKILL.md must document zero-write contract for --dry-run"
-        )
+        assert "--dry-run" in content, "SKILL.md must document --dry-run flag"
+        assert (
+            "zero" in content.lower()
+            or "no writes" in content.lower()
+            or "DryRunWriteError" in content
+        ), "SKILL.md must document zero-write contract for --dry-run"
 
     def test_skill_documents_dry_run_no_claim_files(self) -> None:
         """SKILL.md must document that dry-run skips claim file creation."""
@@ -482,18 +492,14 @@ class TestDryRunZeroWrites:
     def test_prompt_documents_dry_run_mode(self) -> None:
         """prompt.md must document --dry-run mode behavior."""
         content = _read_skill_file(_REVIEW_ALL_PRS_PROMPT)
-        assert "--dry-run" in content, (
-            "prompt.md must document --dry-run mode"
-        )
+        assert "--dry-run" in content, "prompt.md must document --dry-run mode"
 
     def test_prompt_documents_dry_run_no_claim_writes(self) -> None:
         """prompt.md must document that --dry-run skips acquire_claim()."""
         content = _read_skill_file(_REVIEW_ALL_PRS_PROMPT)
         assert "--dry-run" in content and (
             "acquire_claim" in content or "claim" in content.lower()
-        ), (
-            "prompt.md must document that --dry-run skips acquire_claim() calls"
-        )
+        ), "prompt.md must document that --dry-run skips acquire_claim() calls"
 
     def test_helpers_documents_dry_run_write_error(self) -> None:
         """_lib/pr-safety/helpers.md must define DryRunWriteError."""
