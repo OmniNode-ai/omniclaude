@@ -8,7 +8,7 @@ set -euo pipefail
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/bash-guard.log"
+LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -37,7 +37,11 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 # Read stdin
 TOOL_INFO=$(cat)
-TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"')
+if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>>"$LOG_FILE"); then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"
+    echo "$TOOL_INFO"
+    exit 0
+fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash guard hook invoked for tool: $TOOL_NAME" >> "$LOG_FILE"
 

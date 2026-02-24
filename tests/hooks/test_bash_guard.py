@@ -58,7 +58,9 @@ import pytest
 import importlib
 import pathlib
 
-_LIB_DIR = pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+_LIB_DIR = (
+    pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+)
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
@@ -333,10 +335,7 @@ class TestAllowPatterns(unittest.TestCase):
         soft = bash_guard.matches_any(command, bash_guard.SOFT_ALERT_PATTERNS)
         self.assertFalse(
             hard or soft,
-            msg=(
-                f"Expected ALLOW for: {command!r} "
-                f"(hard={hard}, soft={soft})"
-            ),
+            msg=(f"Expected ALLOW for: {command!r} (hard={hard}, soft={soft})"),
         )
 
     def test_ls(self) -> None:
@@ -577,7 +576,9 @@ class TestMainIntegration(unittest.TestCase):
     def test_hard_block_fires_slack_when_webhook_set(self) -> None:
         """When SLACK_WEBHOOK_URL is set, _send_slack_alert is called for HARD_BLOCK."""
         with (
-            patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}),
+            patch.dict(
+                "os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}
+            ),
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
             # Patch threading.Thread so we can capture the call without network I/O
@@ -586,7 +587,9 @@ class TestMainIntegration(unittest.TestCase):
             calls: list[tuple[Any, ...]] = []
 
             class _FakeThread:
-                def __init__(self, target: Any, args: tuple[Any, ...], daemon: bool) -> None:
+                def __init__(
+                    self, target: Any, args: tuple[Any, ...], daemon: bool
+                ) -> None:
                     calls.append(args)
                     self._target = target
                     self._args = args
@@ -611,7 +614,9 @@ class TestMainIntegration(unittest.TestCase):
     def test_soft_alert_fires_slack_when_webhook_set(self) -> None:
         """When SLACK_WEBHOOK_URL is set, _send_slack_alert is called for SOFT_ALERT."""
         with (
-            patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}),
+            patch.dict(
+                "os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}
+            ),
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
             import threading
@@ -619,7 +624,9 @@ class TestMainIntegration(unittest.TestCase):
             calls: list[tuple[Any, ...]] = []
 
             class _FakeThread:
-                def __init__(self, target: Any, args: tuple[Any, ...], daemon: bool) -> None:
+                def __init__(
+                    self, target: Any, args: tuple[Any, ...], daemon: bool
+                ) -> None:
                     calls.append(args)
                     self._target = target
                     self._args = args
