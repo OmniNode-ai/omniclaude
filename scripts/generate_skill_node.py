@@ -41,9 +41,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -126,9 +125,9 @@ def read_skill_frontmatter(skill_dir: Path) -> tuple[str, str]:
     description = ""
     for line in fm_lines:
         if line.startswith("name:"):
-            name = line[len("name:"):].strip().strip('"').strip("'")
+            name = line[len("name:") :].strip().strip('"').strip("'")
         elif line.startswith("description:"):
-            description = line[len("description:"):].strip().strip('"').strip("'")
+            description = line[len("description:") :].strip().strip('"').strip("'")
 
     return name, description
 
@@ -290,20 +289,25 @@ def generate_node_for_skill(
     try:
         _name, description = read_skill_frontmatter(skill_dir)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"[ERROR] Could not read SKILL.md for {skill_name_kebab!r}: {exc}", file=sys.stderr)
+        print(
+            f"[ERROR] Could not read SKILL.md for {skill_name_kebab!r}: {exc}",
+            file=sys.stderr,
+        )
         return False
 
     # Use frontmatter name if present, otherwise fall back to kebab name.
     if not _name:
         _name = skill_name_kebab
 
-    template_path = repo_root / "docs" / "templates" / "skill_node_contract.yaml.template"
+    template_path = (
+        repo_root / "docs" / "templates" / "skill_node_contract.yaml.template"
+    )
     if not template_path.exists():
         print(f"[ERROR] Template not found: {template_path}", file=sys.stderr)
         return False
 
     template_text = template_path.read_text(encoding="utf-8")
-    today = date.today().isoformat()
+    today = datetime.now(tz=UTC).date().isoformat()
     contract_content = render_template(
         template_text,
         {
@@ -428,19 +432,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.all_skills:
         skills = discover_all_skills(repo_root)
         if not skills:
-            print("[ERROR] No skills discovered. Check plugins/onex/skills/ directory.", file=sys.stderr)
+            print(
+                "[ERROR] No skills discovered. Check plugins/onex/skills/ directory.",
+                file=sys.stderr,
+            )
             return 1
         generated = 0
         skipped = 0
         for skill_name in skills:
-            result = generate_node_for_skill(skill_name, repo_root=repo_root, dry_run=args.dry_run)
+            result = generate_node_for_skill(
+                skill_name, repo_root=repo_root, dry_run=args.dry_run
+            )
             if result:
                 generated += 1
             else:
                 skipped += 1
         print(f"\nDone. Generated: {generated}, Skipped (already exist): {skipped}")
     else:
-        result = generate_node_for_skill(args.skill, repo_root=repo_root, dry_run=args.dry_run)
+        result = generate_node_for_skill(
+            args.skill, repo_root=repo_root, dry_run=args.dry_run
+        )
         if not result and not args.dry_run:
             return 1
 
