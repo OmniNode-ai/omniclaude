@@ -11,8 +11,7 @@ When `/merge-sweep [args]` is invoked:
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: all repos in omni_home
    - `--dry-run` — default: false
-   - `--no-gate` — default: false
-   - `--gate-token <token>` — required with `--no-gate`
+   - `--gate-attestation=<token>` — pre-issued gate token (skips Slack gate; token validated before proceeding)
    - `--merge-method <method>` — default: squash
    - `--require-approval <bool>` — default: true
    - `--require-up-to-date <policy>` — default: repo
@@ -43,9 +42,9 @@ When `/merge-sweep [args]` is invoked:
 **CRITICAL**: Before any scanning or I/O, validate arguments:
 
 ```
-IF --no-gate is set AND --gate-token is absent:
-  → Print: "ERROR: --no-gate requires --gate-token. Provide a gate token from a prior gate run."
-  → Emit ModelSkillResult(status=error, error="--no-gate requires --gate-token")
+IF --gate-attestation is set AND token does not match format `<slack_ts>:<run_id>`:
+  → Print: "ERROR: --gate-attestation token is invalid. Expected format: <slack_ts>:<run_id>"
+  → Emit ModelSkillResult(status=error, error="--gate-attestation token invalid")
   → EXIT immediately (do not scan, do not merge)
 
 IF --since is set:
@@ -225,10 +224,10 @@ if [[ -z "${SLACK_BOT_TOKEN:-}" || -z "${SLACK_CHANNEL_ID:-}" ]]; then
 fi
 ```
 
-### If `--no-gate` (bypass mode):
+### If `--gate-attestation=<token>` (bypass mode):
 
 ```
-gate_token = <value of --gate-token argument>
+gate_token = <value of --gate-attestation argument>
 approved_candidates = candidates  # all candidates approved
 Print: "Gate bypassed. Using provided gate_token: <gate_token>"
 ```
@@ -457,7 +456,7 @@ Merge Sweep Complete — run <run_id>
 
 | Situation | Action |
 |-----------|--------|
-| `--no-gate` without `--gate-token` | Immediate error in Step 1, do not proceed |
+| `--gate-attestation` with invalid token format | Immediate error in Step 1, do not proceed |
 | `--since` parse failure | Immediate error in Step 1, show format hint |
 | `gh pr list` network failure for a repo | Log warning, skip repo, continue others |
 | All repos fail to scan | Return `status: error` |
@@ -477,15 +476,14 @@ This skill is designed to be called from `pr-queue-pipeline` in bypass mode:
 # From pr-queue-pipeline Phase 3:
 Skill(skill="merge-sweep", args={
   repos: <scope>,
-  no_gate: true,
-  gate_token: <pipeline_gate_token>,
+  gate_attestation: <pipeline_gate_token>,
   max_total_merges: <cap>,
   max_parallel_prs: <cap>,
   merge_method: <method>,
-  since: <date>,         # NEW: optional date filter
-  label: <label>         # NEW: optional label filter
+  since: <date>,         # optional date filter
+  label: <label>         # optional label filter
 })
 ```
 
-When called with `--no-gate --gate-token`, the skill skips Step 6 entirely and proceeds
+When called with `--gate-attestation=<token>`, the skill skips Step 6 entirely and proceeds
 directly to Step 7. The provided `gate_token` appears in the `ModelSkillResult` for audit.
