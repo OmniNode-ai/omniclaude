@@ -54,13 +54,13 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # TODO: Simplify back to `uv run python -m omnibase_core.validation.validator_local_paths`
+      # once validator_local_paths is included in a released omnibase_core package.
+      # The module exists in omnibase_core source (PR #530) but is not yet on PyPI.
+      # Wrapper script gracefully skips if the module is unavailable.
       - id: check-local-paths
         name: check for local path references
-        entry: >
-          bash -c 'uv run python -c "import omnibase_core.validation.validator_local_paths" 2>/dev/null
-          && uv run python -m omnibase_core.validation.validator_local_paths "$@"
-          || echo "[check-local-paths] skipped: omnibase_core.validation.validator_local_paths not available (requires omnibase-core >=0.20.0)"'
-          --
+        entry: bash scripts/check_local_paths_wrapper.sh
         language: system
         types: [text]
         exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*'

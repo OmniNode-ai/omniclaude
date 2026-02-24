@@ -31,7 +31,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge)")
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -1839,7 +1839,15 @@ EOF
 )"
    ```
 
-4. **Update Linear:**
+4. **Enable GitHub auto-merge** (immediately after PR creation):
+   ```bash
+   # Idempotent — safe to run even if already enabled
+   gh pr merge --auto --squash {pr_number} --repo {repo}
+   ```
+   If this fails (e.g. repo doesn't have auto-merge enabled): log a warning and continue.
+   Do NOT block the pipeline on this failure.
+
+5. **Update Linear:**
    ```python
    try:
        mcp__linear-server__update_issue(id=ticket_id, state="In Review")
@@ -1848,7 +1856,7 @@ EOF
        # Non-blocking: Linear update failure is logged but does not stop pipeline
    ```
 
-5. **Record artifacts:**
+6. **Record artifacts:**
    ```python
    pr_info = json.loads(subprocess.check_output(["gh", "pr", "view", "--json", "url,number"]))
    result["artifacts"] = {
@@ -1858,7 +1866,7 @@ EOF
    }
    ```
 
-6. **Dry-run behavior:** All pre-checks execute normally. Push, PR creation, and Linear update are skipped. State records what _would_ have happened.
+7. **Dry-run behavior:** All pre-checks execute normally. Push, PR creation, auto-merge enable, and Linear update are skipped. State records what _would_ have happened.
 
 **Mutations:**
 - `phases.create_pr.started_at`
@@ -2063,39 +2071,55 @@ EOF
 
 ### Phase 4: CI_WATCH
 
+**Purpose:** Verify GitHub auto-merge is active and check for immediate CI failures. This phase
+completes in seconds — it does NOT block waiting for CI to finish. GitHub handles CI gating
+and auto-merge asynchronously.
+
 **Invariants:**
 - Phase 3 (create_pr) is completed
 - PR exists and is open
 
 **Actions:**
 
-1. **Dispatch ci-watch to a separate agent:**
+1. **Confirm auto-merge is enabled** (idempotent re-enable in case Phase 3 skipped it):
+   ```bash
+   gh pr merge --auto --squash {pr_number} --repo {repo} 2>/dev/null || true
+   ```
+
+2. **Quick CI status snapshot** (single call, no waiting):
+   ```bash
+   CHECKS=$(gh pr checks {pr_number} --repo {repo} --json name,state,conclusion 2>/dev/null || echo "[]")
+   ```
+   Classify:
+   - All conclusions `success` or `skipped`, or all states `pending`/`queued`/`in_progress`: → `status: auto_merge_pending`
+   - Any conclusion `failure` or `cancelled`: → `status: fixing`
+
+3. **If `status: fixing` and `auto_fix_ci == true`:**
+   Dispatch ci-watch as a **non-blocking background agent** to fix CI failures:
    ```
    Task(
      subagent_type="onex:polymorphic-agent",
-     description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
-     prompt="You are executing ci-watch for {ticket_id}.
+     run_in_background=True,
+     description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
+     prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
        Invoke: Skill(skill=\"onex:ci-watch\",
-         args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
-
-       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/ci-watch.json
-       Report back with: status (completed|capped|timeout|failed), ci_fix_cycles_used, watch_duration_minutes."
+         args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
+       Fix any failures, push fixes. GitHub will auto-merge once CI is green."
    )
    ```
+   Advance immediately — do NOT await the task result.
 
-2. **Handle result:**
-   - `completed`: AUTO-ADVANCE to Phase 5
-   - `capped` or `timeout`: log warning, continue to Phase 5 with warning note
-   - `failed`: Slack MEDIUM_RISK gate, stop pipeline
+4. **Advance to Phase 5 immediately** regardless of CI state. Record snapshot:
 
 **Mutations:**
 - `phases.ci_watch.started_at`
 - `phases.ci_watch.completed_at`
-- `phases.ci_watch.artifacts` (status, ci_fix_cycles_used, watch_duration_minutes)
+- `phases.ci_watch.artifacts.status` (`auto_merge_pending` | `fixing`)
+- `phases.ci_watch.artifacts.checks_snapshot` (raw CHECKS JSON)
 
 **Exit conditions:**
-- **Completed:** CI passed (or capped/timeout with warning)
-- **Failed:** CI permanently failed after fix cycles
+- **Completed:** Always — phase takes seconds, not minutes
+- **Failed:** Only if `gh pr merge --auto` hard-errors AND `gh pr checks` is also unreachable
 
 ---
 
