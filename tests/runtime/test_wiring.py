@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Self
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -44,7 +45,7 @@ class MockModelSemVer(BaseModel):
     patch: int = 0
 
     @classmethod
-    def parse(cls, version_str: str) -> "MockModelSemVer":
+    def parse(cls, version_str: str) -> Self:
         """Parse a semver string like '1.2.3'."""
         parts = version_str.split(".")
         return cls(
