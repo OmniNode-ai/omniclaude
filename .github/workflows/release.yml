@@ -5,11 +5,108 @@ name: Release
 on:
   push:
     tags: ['v[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to release (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
-    uses: OmniNode-ai/omnibase_infra/.github/workflows/release-python-reusable.yml@release-workflow-v1
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Assert clean working tree
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+          test -z "$(git ls-files --others --exclude-standard)"
+
+      - name: Validate tag matches pyproject.toml version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          TAG="${TAG#v}"
+          PKG_VERSION=$(python3 -c "
+          import tomllib, sys
+          with open('pyproject.toml', 'rb') as f:
+              d = tomllib.load(f)
+          v = d.get('project', {}).get('version')
+          if not v:
+              raise SystemExit('ERROR: missing [project].version in pyproject.toml')
+          print(v)
+          ")
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "ERROR: tag v${TAG} does not match pyproject.toml version $PKG_VERSION"
+            exit 1
+          fi
+          echo "Version validated: $PKG_VERSION"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build wheel + sdist
+        run: uv build
+
+      - name: Verify dist artifacts exist
+        run: |
+          ls -la dist/
+          ls dist/*.whl dist/*.tar.gz >/dev/null 2>&1 || {
+            echo "ERROR: expected wheel + sdist in dist/"
+            exit 1
+          }
+
+      - name: Publish to private PyPI
+        run: |
+          if [ -z "$UV_PUBLISH_URL" ] || [ -z "$UV_PUBLISH_TOKEN" ]; then
+            echo "ERROR: PYPI_PRIVATE_UPLOAD_URL and PYPI_PRIVATE_TOKEN secrets are required"
+            exit 1
+          fi
+          uv publish \
+            --publish-url "$UV_PUBLISH_URL" \
+            --token "$UV_PUBLISH_TOKEN" \
+            dist/*.whl dist/*.tar.gz
+        env:
+          UV_PUBLISH_URL: ${{ secrets.PYPI_PRIVATE_UPLOAD_URL }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_PRIVATE_TOKEN }}
+
+      - name: Generate checksums
+        run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS.txt
+
+      - name: Set release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, 'rc') }}
 
   plugin-artifact:
     runs-on: ubuntu-latest
@@ -18,24 +115,33 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Assert clean working tree
         run: git diff --exit-code
 
+      - name: Set version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.tag }}" | sed 's/version=v/version=/' >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Package plugin artifact
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.ver.outputs.version }}"
           TMPDIR=$(mktemp -d)
           cp -r plugins/onex "$TMPDIR/"
 
-          # Hard-fail if plugin.json is missing (adjust path based on actual location)
           PLUGIN_JSON=$(find "$TMPDIR/onex" -name "plugin.json" | head -1)
           test -n "$PLUGIN_JSON" || {
             echo "ERROR: plugin.json not found in staged plugin artifact"
             exit 1
           }
 
-          # Patch version in temp copy only — working tree stays clean
           python3 -c "
           import json, pathlib
           p = pathlib.Path('$PLUGIN_JSON')
@@ -52,4 +158,5 @@ jobs:
       - name: Attach plugin artifact to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           files: omniclaude-plugin-*.zip
