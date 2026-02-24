@@ -42,14 +42,18 @@ _PIPELINE_SKILL = _PIPELINE_DIR / "SKILL.md"
 
 
 def _read_skill_file(path: Path) -> str:
-    """Read a skill file, skipping if not present."""
+    """Read a required skill file; fails fast if the file is missing."""
     if not path.exists():
-        pytest.skip(f"Skill file not found: {path}")
+        pytest.fail(f"Required skill file not found: {path}")
     return path.read_text(encoding="utf-8")
 
 
 def _grep_file(path: Path, pattern: str) -> list[str]:
-    """Return lines in file matching the pattern (regex)."""
+    """Return lines in file matching the pattern (regex).
+
+    Used to anchor multi-term assertions to co-located content rather than
+    relying on independent substring presence across the full document.
+    """
     content = _read_skill_file(path)
     compiled = re.compile(pattern)
     return [line for line in content.splitlines() if compiled.search(line)]
@@ -127,12 +131,15 @@ class TestInventoryPlumbing:
 
     def test_skill_documents_inventory_written_before_subskills(self) -> None:
         """SKILL.md must document inventory.json written before sub-skill dispatch."""
-        content = _read_skill_file(_PIPELINE_SKILL)
-        assert "inventory" in content.lower(), (
-            "SKILL.md must document inventory file concept"
+        # Use _grep_file to anchor the co-location of "inventory" and "before" and "sub-skill"
+        # on nearby lines, not just anywhere in the document.
+        matching_lines = _grep_file(
+            _PIPELINE_SKILL,
+            r"(?i)inventory.*before.*sub.?skill|before.*sub.?skill.*inventory",
         )
-        assert "before" in content.lower() and "sub-skill" in content.lower(), (
-            "SKILL.md must document that inventory is written before sub-skill dispatch"
+        assert matching_lines, (
+            "SKILL.md must contain a line documenting that inventory is written "
+            "before sub-skill dispatch (pattern: inventory...before...sub-skill)"
         )
 
     def test_skill_documents_inventory_path_in_ledger(self) -> None:
@@ -177,7 +184,7 @@ class TestPhaseCompletedAdvancement:
     """Test case 3: phase_completed advances correctly.
 
     run pipeline to completion (mock sub-skills, no real PRs)
-    → ledger.json phase_completed = ["scan", "fix", "merge", "report"] in that order
+    → ledger.json phase_completed = ["scan", "review", "fix", "merge", "report"] in that order
     """
 
     def test_skill_documents_phase_completed_field(self) -> None:

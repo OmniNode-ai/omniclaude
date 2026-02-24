@@ -143,7 +143,7 @@ The pipeline tracks per-run state in a ledger at `<RUNS_DIR>/<run_id>/ledger.jso
 {
   "run_id": "20260223-143012-a3f",
   "started_at": "2026-02-23T14:30:12Z",
-  "phase_completed": ["scan", "fix", "merge", "report"],
+  "phase_completed": ["scan", "review", "fix", "merge", "report"],
   "stop_reason": "completed",
   "inventory_path": "<RUNS_DIR>/<run_id>/inventory.json"
 }
@@ -156,7 +156,12 @@ The pipeline tracks per-run state in a ledger at `<RUNS_DIR>/<run_id>/ledger.jso
 
 ### stop_reason Values
 
-Terminal stop reasons written to the ledger:
+> **Disambiguation**: `stop_reason` (in `ledger.json`) and `status` (in `ModelSkillResult`) are
+> **separate fields with different value sets**. `stop_reason` uses `completed`/`partial_completed`;
+> `ModelSkillResult.status` uses `complete`/`partial`. Do not conflate them.
+> Mapping: `status: "complete"` ↔ `stop_reason: "completed"` | `status: "partial"` ↔ `stop_reason: "partial_completed"`
+
+Terminal stop reasons written to the ledger (`ledger.json.stop_reason`):
 
 | stop_reason | Meaning |
 |------------|---------|

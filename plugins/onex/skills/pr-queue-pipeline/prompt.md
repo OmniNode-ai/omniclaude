@@ -456,6 +456,10 @@ If `--slack-report`:
 
 ### Status Selection
 
+> **Disambiguation**: These are `ModelSkillResult.status` values — **not** `ledger.json.stop_reason`.
+> `status` uses `complete`/`partial`; `stop_reason` uses `completed`/`partial_completed`.
+> Mapping: `status: "complete"` ↔ `stop_reason: "completed"` | `status: "partial"` ↔ `stop_reason: "partial_completed"`
+
 ```
 nothing_to_do   — Phase 0 found no merge-ready or fixable PRs
 gate_rejected   — Phase 3 gate was rejected
