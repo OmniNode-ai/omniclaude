@@ -127,8 +127,7 @@ def is_green(pr) -> bool:
 | `--repos` | all | Comma-separated repo names to scan |
 | `--dry-run` | false | Print candidates without posting Slack gate or merging; zero filesystem writes including claim files |
 | `--run-id` | generated | Identifier for this run; used to correlate logs and claim registry ownership |
-| `--no-gate` | false | Skip Slack gate; requires `--gate-token` (immediate error if absent) |
-| `--gate-token` | — | Required with `--no-gate`; format: `<slack_ts>:<run_id>` |
+| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>` (token validated before proceeding) |
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |

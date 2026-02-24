@@ -11,8 +11,7 @@ When `/merge-sweep [args]` is invoked:
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: all repos in omni_home
    - `--dry-run` — default: false (zero filesystem writes including claims)
-   - `--no-gate` — default: false
-   - `--gate-token <token>` — required with `--no-gate`
+   - `--gate-attestation <token>` — pre-issued gate token (format: `<slack_ts>:<run_id>`); bypass Slack gate
    - `--merge-method <method>` — default: squash
    - `--require-approval <bool>` — default: true
    - `--require-up-to-date <policy>` — default: repo
