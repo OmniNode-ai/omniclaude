@@ -25,7 +25,10 @@ args:
     description: Skip Phase 2 (fix-prs); sweep-only mode (default: false)
     required: false
   - name: --dry-run
-    description: Phase 0 only — print plan without executing any phase (default: false)
+    description: Phase 0 only — print plan without executing any phase; includes re-run block with run_id and would-write paths (default: false)
+    required: false
+  - name: --run-id
+    description: Resume a previous run by run_id; skips phases already in phase_completed (default: none — starts fresh run)
     required: false
   - name: --authors
     description: "Forwarded to all sub-skills. Use 'me' for first production run to limit blast radius"
@@ -59,7 +62,7 @@ args:
     required: false
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: complete | partial | nothing_to_do | gate_rejected | error"
+    description: "ModelSkillResult with status: complete | partial | nothing_to_do | gate_rejected | error (note: these differ from ledger stop_reason values — see stop_reason Values section)"
 ---
 
 # PR Queue Pipeline (v1)
@@ -130,6 +133,124 @@ Phase 5: REPORT
 
 **First production run recommendation**: use `--authors me --skip-review` to limit blast
 radius and skip the review phase until it has been validated standalone.
+
+## Run Ledger and Resume Semantics
+
+Path constants are defined in `_lib/pr-safety/helpers.md`: `RUNS_DIR`, `CLAIMS_DIR`.
+The pipeline tracks per-run state in a ledger at `<RUNS_DIR>/<run_id>/ledger.json`:
+
+```json
+{
+  "run_id": "20260223-143012-a3f",
+  "started_at": "2026-02-23T14:30:12Z",
+  "phase_completed": ["scan", "review", "fix", "merge", "report"],
+  "stop_reason": "completed",
+  "inventory_path": "<RUNS_DIR>/<run_id>/inventory.json"
+}
+```
+
+### phase_completed Invariant
+
+`phase_completed` is an ordered list that ONLY appends — it never regresses. Phases are appended in sequence:
+`["scan"]` → `["scan", "review"]` → `["scan", "review", "fix"]` → `["scan", "review", "fix", "merge", "report"]`
+
+### stop_reason Values
+
+> **Disambiguation**: `stop_reason` (in `ledger.json`) and `status` (in `ModelSkillResult`) are
+> **separate fields with different value sets**. `stop_reason` uses `completed`/`partial_completed`;
+> `ModelSkillResult.status` uses `complete`/`partial`. Do not conflate them.
+> Mapping: `status: "complete"` ↔ `stop_reason: "completed"` | `status: "partial"` ↔ `stop_reason: "partial_completed"`
+
+Terminal stop reasons written to the ledger (`ledger.json.stop_reason`):
+
+| stop_reason | Meaning |
+|------------|---------|
+| `completed` | All eligible phases ran successfully; at least one phase produced output |
+| `partial_completed` | Pipeline stopped mid-run (e.g., 1 of 2 PRs processed); not all work done |
+| `gate_rejected` | Human rejected the Phase 3 Slack gate |
+| `nothing_to_do` | Phase 0 found no merge-ready or fixable PRs |
+| `error` | Unrecoverable error prevented phase completion |
+
+`partial_completed` is used when the pipeline completed some — but not all — eligible PRs before stopping. It is distinct from `completed`, which requires all eligible work to have been processed.
+
+### Resume with --run-id
+
+```bash
+/pr-queue-pipeline --run-id 20260223-143012-a3f
+```
+
+When `--run-id` is provided:
+1. Load ledger from `<RUNS_DIR>/<run_id>/ledger.json` (see `_lib/pr-safety/helpers.md` for `RUNS_DIR`)
+2. Log: "Resuming from phase: <next_phase>" where next_phase is the first phase not in `phase_completed`
+3. Skip all phases already listed in `phase_completed` — do NOT re-execute them
+4. Resume from the first phase NOT in `phase_completed`
+
+### --dry-run + --run-id is Read-Only
+
+When both `--dry-run` and `--run-id` are provided:
+- Print plan only (stdout)
+- Do NOT update ledger mtime or any state files
+- Do NOT emit heartbeat
+- Zero mutations: no GitHub calls, no file writes
+
+### Dry-Run Re-Run Block
+
+`--dry-run` output always includes a re-run block:
+
+```
+Dry run complete. No phases executed.
+
+Re-run command:
+  /pr-queue-pipeline --run-id <run_id> [original-args]
+
+Would write:
+  <RUNS_DIR>/<run_id>/ledger.json
+  <RUNS_DIR>/<run_id>/inventory.json
+  ~/.claude/pr-queue/<date>/report_<run_id>.md
+  ~/.claude/pr-queue/<date>/pipeline_<run_id>.json
+```
+
+(See `_lib/pr-safety/helpers.md` for `RUNS_DIR` constant.)
+
+## Inventory Plumbing
+
+Path constants `RUNS_DIR` and `CLAIMS_DIR` are defined in `_lib/pr-safety/helpers.md`.
+
+Before any sub-skill (fix-prs, merge-sweep, review-all-prs) is invoked, the pipeline writes
+an inventory file at `<RUNS_DIR>/<run_id>/inventory.json`:
+
+```json
+{
+  "run_id": "<run_id>",
+  "generated_at": "<ISO timestamp>",
+  "merge_ready": [
+    {"repo": "OmniNode-ai/omniclaude", "pr_number": 247, "head_sha": "cbca770e", "title": "..."}
+  ],
+  "needs_fix": [
+    {"repo": "OmniNode-ai/omniintelligence", "pr_number": 34, "head_sha": "ff3ab12c", "reason": "conflict"}
+  ]
+}
+```
+
+Sub-skills receive the inventory path via `--inventory <path>`. This ensures sub-skills operate
+on a consistent snapshot and do not re-scan independently.
+
+**Invariant**: inventory.json is written BEFORE the first sub-skill is dispatched. Sub-skills
+MUST receive `--inventory <path>` to consume the pre-built PR list.
+
+## Claims Cleanup
+
+Claims path management uses `CLAIMS_DIR` from `_lib/pr-safety/helpers.md`.
+
+During execution, the pipeline creates per-PR claim files at `<CLAIMS_DIR>/<run_id>/<repo>-<pr_number>.json`
+to prevent concurrent pipeline runs from processing the same PR.
+
+**Terminal run cleanup invariant**: When a run reaches a terminal state (`completed`, `gate_rejected`,
+`nothing_to_do`, `error`), all claim files for this `run_id` under `CLAIMS_DIR` are removed.
+
+After a terminal run, no claim files remain for the completed `run_id`.
+
+`partial_completed` runs may leave claims if interrupted; use `--run-id` to resume and trigger cleanup.
 
 ## Gate Token Contract
 
@@ -267,6 +388,45 @@ Date: <date> | v1 | Scope: <repos> | Authors: <authors>
 
 ## Blocked External (<N> PRs)
 - OmniNode-ai/omnibase_core#55 — blocked_check: deploy-staging
+```
+
+## Integration Test
+
+Test suite: `tests/integration/skills/pr_queue_pipeline/test_pr_queue_pipeline_integration.py`
+
+All tests are static analysis / structural tests. No external credentials, live GitHub access, or
+live PRs required. Safe for CI.
+
+```bash
+# 1. Dry-run output includes re-run block
+#    → SKILL.md documents --dry-run emits run_id, would-write file paths, re-run command
+#    → prompt.md documents dry-run prints re-run block before exit
+
+# 2. Pipeline always writes inventory before calling sub-skills
+#    → SKILL.md documents inventory.json written before sub-skill dispatch
+#    → SKILL.md documents sub-skills receive --inventory <path> flag
+
+# 3. phase_completed advances correctly
+#    → SKILL.md documents phase_completed ordered list in ledger.json
+#    → Expected sequence: ["scan", "review", "fix", "merge", "report"]
+
+# 4. Resume skips completed phases
+#    → SKILL.md documents --run-id flag for resume
+#    → prompt.md documents "Resuming from phase: <next>" log message
+#    → Skips phases already in phase_completed
+
+# 5. stop_reason "partial_completed" vs "completed"
+#    → SKILL.md documents both stop_reason values in terminal stop reason table
+#    → partial_completed: some PRs processed, not all
+#    → completed: all eligible work done
+
+# 6. --dry-run + --run-id = read-only (no mutations, no heartbeat)
+#    → SKILL.md documents --dry-run + --run-id combination is read-only
+#    → No ledger mtime change, no heartbeat
+
+# 7. No leftover claims after terminal run
+#    → SKILL.md documents claims cleanup invariant for terminal runs
+#    → no claim files remain for <run_id> under CLAIMS_DIR (see _lib/pr-safety/helpers.md)
 ```
 
 ## See Also
