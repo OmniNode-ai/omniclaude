@@ -21,7 +21,7 @@ args:
     description: Print merge candidates without posting Slack gate or merging
     required: false
   - name: --gate-attestation
-    description: "Pre-issued gate token to bypass Slack gate (format: =<slack_ts>:<run_id>); token validated before proceeding"
+    description: "Pre-issued gate token to bypass Slack gate (format: <slack_ts>:<run_id>); token validated before proceeding"
     required: false
   - name: --merge-method
     description: "Merge strategy: squash | merge | rebase (default: squash)"
@@ -123,7 +123,7 @@ def is_green(pr) -> bool:
 |----------|---------|-------------|
 | `--repos` | all | Comma-separated repo names to scan |
 | `--dry-run` | false | Print candidates without posting Slack gate or merging |
-| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `=<slack_ts>:<run_id>`; token validated before proceeding |
+| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>`; token validated before proceeding |
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |
