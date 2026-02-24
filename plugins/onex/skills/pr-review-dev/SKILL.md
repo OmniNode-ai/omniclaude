@@ -66,7 +66,7 @@ Filter nitpicks by default.
 Skill(skill="onex:parallel-solve")
 ```
 
-> **Note**: The `onex:` prefix is required for `Skill(skill=...)` calls (plugin namespace) but is NOT used for `subagent_type=` (direct agent name). This is intentional.
+> **Note**: The `onex:` prefix is required for both `Skill(skill=...)` calls AND `subagent_type=` in Task() calls.
 
 Pass collated issues as context.
 

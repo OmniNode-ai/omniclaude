@@ -117,7 +117,7 @@ If both lists are empty (nothing to merge or fix):
 Skip entirely if `--skip-review` is set. Log: "Phase 1 skipped (--skip-review)."
 
 ```
-Invoke: Skill(skill="review-all-prs", args={
+Invoke: Skill(skill="onex:review-all-prs", args={
   repos: <scope>,
   max_total_prs: <max_total_prs>,
   max_parallel_prs: <max_parallel_prs>,
@@ -162,7 +162,7 @@ Log: "Phase 1 re-scan complete: <N> merge-ready (was <N_before>), <M> needs fix 
 Skip if `--skip-fix` is set.
 
 ```
-Invoke: Skill(skill="fix-prs", args={
+Invoke: Skill(skill="onex:fix-prs", args={
   repos: <scope>,
   max_total_prs: <max_total_prs>,
   max_parallel_prs: <max_parallel_prs>,
@@ -194,7 +194,7 @@ If fix-prs returns `status: error`:
 Post single HIGH_RISK Slack gate using `slack-gate`:
 
 ```
-Skill(skill="slack-gate", args={
+Skill(skill="onex:slack-gate", args={
   gate_id: sha256("<run_id>:pipeline-phase3")[:12],
   risk: "HIGH_RISK",
   message: """
@@ -241,7 +241,7 @@ On approval, parse approved candidates (support `approve except`, `skip`).
 Invoke merge-sweep in bypass mode:
 
 ```
-Invoke: Skill(skill="merge-sweep", args={
+Invoke: Skill(skill="onex:merge-sweep", args={
   repos: <scope>,
   no_gate: true,
   gate_token: <gate_token>,
@@ -274,7 +274,7 @@ If condition is not met:
 
 If condition is met:
 ```
-Invoke: Skill(skill="merge-sweep", args={
+Invoke: Skill(skill="onex:merge-sweep", args={
   repos: <scope>,
   no_gate: true,
   gate_token: <gate_token>,  # Reuse Phase 3 gate_token

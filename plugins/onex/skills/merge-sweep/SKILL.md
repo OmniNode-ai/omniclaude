@@ -176,7 +176,7 @@ def is_green(pr) -> bool:
 
 7. MERGE (parallel, up to --max-parallel-prs):
    For each approved_candidate in approved_candidates:
-     Skill(skill="auto-merge", args=...)
+     Skill(skill="onex:auto-merge", args=...)
 
 8. COLLECT results
 

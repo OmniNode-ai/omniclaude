@@ -178,14 +178,14 @@ Task(
     - If all failing checks are blocked_external: record result=blocked_external, STOP (skip D)
 
     For non-external checks: invoke ci-failures sub-skill:
-    Skill(skill='ci-failures', args={max_fix_iterations: <max_fix_iterations>})
+    Skill(skill='onex:ci-failures', args={max_fix_iterations: <max_fix_iterations>})
 
     Record CI fix result.
 
     ### Step D: Review Comments (if needs_review_work AND CI now green AND category includes reviews)
 
     Invoke pr-review-dev sub-skill:
-    Skill(skill='pr-review-dev')
+    Skill(skill='onex:pr-review-dev')
 
     GUARDRAILS:
     - Never auto-dismiss reviews (do not use gh api to dismiss)
@@ -314,7 +314,7 @@ This skill is designed to be called from `pr-queue-pipeline` as Phase 2:
 
 ```
 # From pr-queue-pipeline Phase 2:
-Skill(skill="fix-prs", args={
+Skill(skill="onex:fix-prs", args={
   repos: <scope>,
   max_total_prs: <cap>,
   max_parallel_prs: <cap>,

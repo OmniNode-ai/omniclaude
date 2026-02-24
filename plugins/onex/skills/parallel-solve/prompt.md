@@ -315,7 +315,7 @@ After all fixes are complete, **ASK the user** if they want to:
 
 **DO**:
 - **ALWAYS use subagent_type="onex:polymorphic-agent"** for EVERY Task dispatch
-- Dispatch multiple independent pollys in parallel
+- Dispatch multiple independent polymorphic agents in parallel
 - Provide detailed context in each Task prompt
 - Include Intelligence Context from hooks
 - Track refactor attempts per task (use internal state tracking)

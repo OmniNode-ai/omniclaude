@@ -91,7 +91,7 @@ Step 2: CREATE WORKTREES — before dispatch, one per PR
   Write: <path>/.onex_worktree.json
 
 Step 3: DISPATCH parallel agents (--max-parallel-prs), one per PR
-  Skill(skill="local-review", args="--required-clean-runs <clean_runs>")
+  Skill(skill="onex:local-review", args="--required-clean-runs <clean_runs>")
   with --max-review-minutes wall-clock timeout
 
 Step 4: CLEANUP — worktree removal always attempted per PR
@@ -228,7 +228,7 @@ This skill is designed to be called from `pr-queue-pipeline` as Phase 1 (v1):
 
 ```
 # From pr-queue-pipeline v1 Phase 1:
-Skill(skill="review-all-prs", args={
+Skill(skill="onex:review-all-prs", args={
   repos: <scope>,
   max_total_prs: <cap>,
   max_parallel_prs: <cap>,
