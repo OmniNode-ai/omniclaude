@@ -1568,7 +1568,7 @@ def execute_phase(phase_name, state):
 
    # --- Step 0.1: Fetch branchName from Linear ---
    issue = mcp__linear-server__get_issue(id=ticket_id)
-   branch_name = (issue.get("gitBranchName") or "").strip()
+   branch_name = (issue.get("branchName") or issue.get("gitBranchName") or "").strip()
    if not branch_name:
        result = {
            "status": "blocked",
