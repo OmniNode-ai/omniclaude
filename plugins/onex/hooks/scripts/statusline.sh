@@ -176,6 +176,7 @@ APPLESCRIPT
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
         TAB_NUM=$((TAB_NUM + 1))
+        [ "$TAB_NUM" -gt 1 ] && LINE2="${LINE2}\033[90m|  \033[0m"
         # Convert placeholders back to empty
         [ "$ticket" = "-" ] && ticket=""
         [ "$iterm_guid" = "-" ] && iterm_guid=""
