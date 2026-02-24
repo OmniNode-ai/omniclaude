@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 [project]
-name = "omniclaude"
+name = "omninode-claude"
 version = "0.2.0"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
