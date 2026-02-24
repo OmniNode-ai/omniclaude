@@ -207,7 +207,7 @@ start_emit_daemon_if_needed() {
     local max_wait=10
     while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
         sleep 0.02
-        ((wait_count++))
+        ((wait_count++)) || true  # || true: post-increment returns old value (0) when starting from 0; prevents set -e from triggering
     done
 
     # Retry-based socket verification after file appears.
@@ -227,7 +227,7 @@ start_emit_daemon_if_needed() {
                 rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
                 return 0
             fi
-            ((verify_attempt++))
+            ((verify_attempt++)) || true  # || true: post-increment from 0 returns exit code 1 under set -e
             sleep 0.01
         done
 
@@ -266,7 +266,7 @@ _start_legacy_emit_daemon() {
     local max_wait=10
     while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
         sleep 0.02
-        ((wait_count++))
+        ((wait_count++)) || true  # || true: post-increment from 0 returns exit code 1 under set -e
     done
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         write_daemon_status "running"

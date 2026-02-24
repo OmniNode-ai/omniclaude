@@ -93,9 +93,24 @@ if [[ "$NO_VERSION_BUMP" == "true" && "$BUMP_VERSION" == "true" ]]; then
 fi
 
 # Determine source directory
-# Try CLAUDE_PLUGIN_ROOT first, then fall back to script location
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
+# Priority:
+#   1. CLAUDE_PLUGIN_ROOT, but only when it's NOT the plugin cache (i.e. a real dev checkout)
+#   2. installLocation from known_marketplaces.json (set when plugin was registered from a local path)
+#   3. BASH_SOURCE fallback (script location → ../../ = plugin root)
+#
+# When invoked as a Claude Code skill, CLAUDE_PLUGIN_ROOT points to the installed cache
+# (e.g. ~/.claude/plugins/cache/omninode-tools/onex/2.2.4), NOT the dev repo.
+# Using the cache as source would deploy the old cached version, ignoring any local changes.
+CACHE_PAT="$HOME/.claude/plugins/cache"
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && "$CLAUDE_PLUGIN_ROOT" != "$CACHE_PAT"* ]]; then
+    # CLAUDE_PLUGIN_ROOT points to a real dev checkout, not the installed cache
     SOURCE_ROOT="$CLAUDE_PLUGIN_ROOT"
+elif MARKETPLACE_INSTALL_LOCATION="$(jq -r '.["omninode-tools"].installLocation // empty' \
+        "$HOME/.claude/plugins/known_marketplaces.json" 2>/dev/null)" \
+    && [[ -n "$MARKETPLACE_INSTALL_LOCATION" ]] \
+    && [[ -f "${MARKETPLACE_INSTALL_LOCATION}/plugins/onex/.claude-plugin/plugin.json" ]]; then
+    # Registered dev-directory marketplace — use the recorded install location
+    SOURCE_ROOT="${MARKETPLACE_INSTALL_LOCATION}/plugins/onex"
 else
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
