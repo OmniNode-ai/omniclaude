@@ -85,7 +85,7 @@ def _resolve_default_emit_fn() -> EmitFn:
         The resolved emit function, or :func:`_noop_emit` on failure.
     """
     try:
-        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
+        from emit_client_wrapper import emit_event
 
         logger.debug("Resolved emit_event from emit_client_wrapper")
         return emit_event  # type: ignore[no-any-return]
