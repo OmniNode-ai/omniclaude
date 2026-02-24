@@ -66,7 +66,7 @@ _NODE_ID_SUBDOMAIN = "skill"
 # ---------------------------------------------------------------------------
 
 
-class _SkillNodeProxy(MixinNodeIntrospection):
+class _SkillNodeProxy(MixinNodeIntrospection):  # type: ignore[misc]
     """Lightweight proxy that publishes introspection on behalf of a skill node.
 
     Each skill node gets its own proxy instance with a deterministic node_id.
@@ -280,7 +280,8 @@ def _default_contracts_dir() -> Path:
 
     Returns the ``nodes/`` subdirectory of the ``omniclaude`` package.
     """
-    return Path(importlib.resources.files("omniclaude").joinpath("nodes"))
+    traversable = importlib.resources.files("omniclaude").joinpath("nodes")
+    return Path(str(traversable))
 
 
 def _parse_reason(reason: str) -> EnumIntrospectionReason:
