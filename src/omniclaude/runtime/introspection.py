@@ -34,6 +34,7 @@ Related:
 
 from __future__ import annotations
 
+import importlib.resources
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -152,7 +153,7 @@ class SkillNodeIntrospectionProxy:
         """Return the number of skill nodes discovered."""
         return len(self._proxies)
 
-    async def publish_all(self, reason: str = "startup") -> None:
+    async def publish_all(self, reason: str = "startup") -> int:
         """Publish an introspection event for every discovered skill node.
 
         Failures per node are caught and logged.  This method never raises.
@@ -160,6 +161,11 @@ class SkillNodeIntrospectionProxy:
         Args:
             reason: Reason string passed to ``publish_introspection()``.
                 Defaults to ``"startup"``.
+
+        Returns:
+            Number of skill nodes for which introspection was successfully
+            published.  Returns 0 when there are no nodes, the event bus is
+            ``None``, or all publish attempts fail.
         """
         if self._event_bus is None:
             logger.debug(
@@ -167,7 +173,7 @@ class SkillNodeIntrospectionProxy:
                 "for %d skill nodes",
                 len(self._proxies),
             )
-            return
+            return 0
 
         introspection_reason = _parse_reason(reason)
         published = 0
@@ -207,6 +213,7 @@ class SkillNodeIntrospectionProxy:
             failed,
             reason,
         )
+        return published
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -266,15 +273,14 @@ class SkillNodeIntrospectionProxy:
 
 
 def _default_contracts_dir() -> Path:
-    """Return the default contracts directory relative to this module.
+    """Return the default contracts directory for the ``omniclaude`` package.
 
-    Assumes the module lives at:
-        src/omniclaude/runtime/introspection.py
+    Uses ``importlib.resources.files`` so that the path is correct whether
+    the package is installed as an editable install, a wheel, or a zip archive.
 
-    and returns:
-        src/omniclaude/nodes/
+    Returns the ``nodes/`` subdirectory of the ``omniclaude`` package.
     """
-    return Path(__file__).parent.parent / "nodes"
+    return Path(importlib.resources.files("omniclaude").joinpath("nodes"))
 
 
 def _parse_reason(reason: str) -> EnumIntrospectionReason:
