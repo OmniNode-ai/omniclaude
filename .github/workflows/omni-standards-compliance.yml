@@ -356,25 +356,21 @@ jobs:
             exit 1
           fi
 
-      - name: Enforce --no-gate allowlist
+      - name: Enforce --no-gate ban (migration complete)
         run: |
           ERRORS=0
 
-          # --no-gate is only allowed during migration window in the merge-sweep and
-          # pr-queue-pipeline skills. All others must use --gate-attestation=<slack_ts>:<run_id>.
+          # --no-gate migration is complete (OMN-2633). All skills must use
+          # --gate-attestation=<slack_ts>:<run_id>. No allowlist entries remain.
+          # _lib/pr-safety/helpers.md may reference --no-gate in explanatory prose — excluded.
           MATCHES=$(grep -r 'no-gate' plugins/onex/skills/ --include="*.md" \
-            | grep -v "merge-sweep" \
-            | grep -v "pr-queue-pipeline" \
             | grep -v "_lib/pr-safety" || true)
           if [ -n "$MATCHES" ]; then
-            echo "ERROR: '--no-gate' used outside allowlist:"
+            echo "ERROR: '--no-gate' found in skills (migration is complete — use --gate-attestation=<token> instead):"
             echo "$MATCHES"
-            echo ""
-            echo "Only merge-sweep and pr-queue-pipeline skills may use --no-gate"
-            echo "during the migration window. Use --gate-attestation=<slack_ts>:<run_id> instead."
             ERRORS=1
           else
-            echo "OK: '--no-gate' — no violations outside allowlist"
+            echo "OK: '--no-gate' — zero occurrences in skills (migration complete)"
           fi
 
           if [ $ERRORS -ne 0 ]; then

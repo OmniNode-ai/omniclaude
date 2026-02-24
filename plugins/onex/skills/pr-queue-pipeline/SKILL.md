@@ -98,11 +98,11 @@ Phase 2: FIX (sequential — fix-prs completes before Phase 3 begins)
 Phase 3: GATE + MERGE (first pass)
   - Re-query merge_ready PRs (Phases 1+2 may have unblocked new ones)
   - Post single HIGH_RISK Slack gate
-  - On approval: invoke merge-sweep --no-gate --gate-token <gate_token>
+  - On approval: invoke merge-sweep --gate-attestation=<gate_token>
 
 Phase 4: MERGE (second pass, conditional)
   - Condition: Phase 2 prs_fixed > 0 AND those PRs are now merge_ready
-  - Invoke: merge-sweep --no-gate --gate-token <gate_token> (reuses Phase 3 token)
+  - Invoke: merge-sweep --gate-attestation=<gate_token> (reuses Phase 3 token)
 
 Phase 5: REPORT
   - Write org queue report to ~/.claude/pr-queue/<date>/report_<run_id>.md
@@ -139,8 +139,8 @@ Pipeline generates at start: run_id = "<YYYYMMDD-HHMMSS>-<random6>"
 Phase 3 Slack gate returns: gate_message_ts (Slack thread timestamp)
 gate_token = "<gate_message_ts>:<run_id>"
 
-merge-sweep called with: --no-gate --gate-token <gate_token>
-merge-sweep errors if --no-gate is passed without --gate-token (enforced by merge-sweep)
+merge-sweep called with: --gate-attestation=<gate_token>
+merge-sweep validates token format before proceeding (enforced by merge-sweep)
 All merge results include gate_token for audit trail
 ```
 

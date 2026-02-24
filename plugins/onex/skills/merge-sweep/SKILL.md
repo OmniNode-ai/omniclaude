@@ -20,11 +20,8 @@ args:
   - name: --dry-run
     description: Print merge candidates without posting Slack gate or merging
     required: false
-  - name: --no-gate
-    description: Skip Slack gate; requires --gate-token (immediate error if absent)
-    required: false
-  - name: --gate-token
-    description: "Gate token from prior gate run (format: <slack_ts>:<run_id>); required with --no-gate"
+  - name: --gate-attestation
+    description: "Pre-issued gate token to bypass Slack gate (format: <slack_ts>:<run_id>); token validated before proceeding"
     required: false
   - name: --merge-method
     description: "Merge strategy: squash | merge | rebase (default: squash)"
@@ -59,8 +56,8 @@ args:
 inputs:
   - name: repos
     description: "list[str] — repo names to scan; empty list means all"
-  - name: gate_token
-    description: "str | None — pre-issued gate token for --no-gate mode"
+  - name: gate_attestation
+    description: "str | None — pre-issued gate token for --gate-attestation mode"
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: merged | nothing_to_merge | gate_rejected | partial | error"
@@ -78,7 +75,7 @@ merge queue.
 **Announce at start:** "I'm using the merge-sweep skill."
 
 **SAFETY INVARIANT**: Merge is a HIGH_RISK action. Silence is NEVER consent for
-this gate. Explicit approval required unless `--no-gate` is passed with a valid `--gate-token`.
+this gate. Explicit approval required unless `--gate-attestation=<token>` is passed with a valid pre-issued token.
 
 ## Quick Start
 
@@ -86,7 +83,7 @@ this gate. Explicit approval required unless `--no-gate` is passed with a valid 
 /merge-sweep                                      # Scan all repos, post gate, merge
 /merge-sweep --dry-run                            # Print candidates only (no gate, no merge)
 /merge-sweep --repos omniclaude,omnibase_core     # Limit to specific repos
-/merge-sweep --no-gate --gate-token 1740312612.000100:20260223-143012-a3f  # Bypass gate
+/merge-sweep --gate-attestation=1740312612.000100:20260223-143012-a3f  # Bypass gate
 /merge-sweep --authors jonahgabriel               # Only PRs by this author
 /merge-sweep --max-total-merges 5                 # Cap at 5 merges
 /merge-sweep --merge-method merge                 # Use merge commit (not squash)
@@ -126,8 +123,7 @@ def is_green(pr) -> bool:
 |----------|---------|-------------|
 | `--repos` | all | Comma-separated repo names to scan |
 | `--dry-run` | false | Print candidates without posting Slack gate or merging |
-| `--no-gate` | false | Skip Slack gate; requires `--gate-token` (immediate error if absent) |
-| `--gate-token` | — | Required with `--no-gate`; format: `<slack_ts>:<run_id>` |
+| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>`; token validated before proceeding |
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |
@@ -142,7 +138,7 @@ def is_green(pr) -> bool:
 ## Execution Algorithm
 
 ```
-1. VALIDATE: if --no-gate and --gate-token is absent → error immediately, do not proceed
+1. VALIDATE: if --gate-attestation is set and token format is invalid → error immediately, do not proceed
 
 2. SCAN (parallel, up to --max-parallel-repos):
    For each repo:
@@ -165,8 +161,8 @@ def is_green(pr) -> bool:
 5. If --dry-run: print candidates table, exit (no gate, no merge)
 
 6. GATE:
-   If --no-gate:
-     gate_token = <value of --gate-token>  # already validated in step 1
+   If --gate-attestation=<token>:
+     gate_token = <value of --gate-attestation>  # already validated in step 1
    Else:
      Post HIGH_RISK Slack gate with candidates summary via chat.postMessage
      Capture thread_ts from response
@@ -322,10 +318,10 @@ If posting fails, log warning but do NOT fail the skill result — summary is be
 run_id is generated at sweep start: "<YYYYMMDD-HHMMSS>-<random6>"
 gate_token = "<slack_message_ts>:<run_id>"
 
-When called with --no-gate --gate-token <token>:
+When called with --gate-attestation=<token>:
   - Skip Slack gate entirely
+  - Validate token format before proceeding (immediate error if invalid)
   - Use provided gate_token for audit trail in ModelSkillResult
-  - If --gate-token is absent: immediate error (do not proceed)
 ```
 
 ## ModelSkillResult
@@ -372,7 +368,7 @@ Status values:
 
 | Error | Behavior |
 |-------|----------|
-| `--no-gate` without `--gate-token` | Immediate error; do not scan or merge |
+| `--gate-attestation` with invalid token | Immediate error; do not scan or merge |
 | PR mergeable state UNKNOWN | Skip with warning; include in `skipped` count |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
 | Individual merge fails | Record in `details[].result = "failed"`; continue other merges |
