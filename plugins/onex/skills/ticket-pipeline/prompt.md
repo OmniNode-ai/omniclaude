@@ -1556,7 +1556,175 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
-1. **Dispatch ticket-work to a separate agent:**
+1. **Step 0: Branch setup (MUST complete before dispatching ticket-work)**
+
+   Step 0 creates and checks out the git branch so that `{branch_name}` is resolved and
+   the working tree is on the correct branch before ticket-work is dispatched.
+   ticket-work MUST NOT be dispatched until Step 0 artifacts exist.
+
+   ```python
+   import subprocess, json
+   from pathlib import Path
+
+   # --- Step 0.1: Fetch branchName from Linear ---
+   issue = mcp__linear-server__get_issue(id=ticket_id)
+   branch_name = (issue.get("branchName") or issue.get("gitBranchName") or "").strip()
+   if not branch_name:
+       result = {
+           "status": "blocked",
+           "block_kind": "blocked_policy",
+           "reason": "Linear ticket has no branchName, cannot proceed",
+           "blocking_issues": 1,
+           "nit_count": 0,
+           "artifacts": {},
+       }
+       return result
+
+   # --- Step 0.2: Validate working directory ---
+   try:
+       repo_root = subprocess.check_output(
+           ["git", "rev-parse", "--show-toplevel"], text=True, timeout=10
+       ).strip()
+   except subprocess.SubprocessError:
+       result = {
+           "status": "blocked",
+           "block_kind": "blocked_policy",
+           "reason": "git rev-parse --show-toplevel failed: not inside a git repo",
+           "blocking_issues": 1,
+           "nit_count": 0,
+           "artifacts": {},
+       }
+       return result
+
+   # --- Step 0.3: Check HEAD state (detect detached HEAD) ---
+   head_ref = subprocess.check_output(
+       ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True, timeout=5
+   ).strip()
+   if head_ref == "HEAD":
+       result = {
+           "status": "blocked",
+           "block_kind": "blocked_policy",
+           "reason": (
+               "Detached HEAD state detected. Recovery: "
+               "git checkout main && git pull origin main"
+           ),
+           "blocking_issues": 1,
+           "nit_count": 0,
+           "artifacts": {},
+       }
+       return result
+
+   # --- Step 0.4: Check working tree is clean ---
+   dirty_output = subprocess.check_output(
+       ["git", "status", "--porcelain"], text=True, timeout=10
+   ).strip()
+   if dirty_output:
+       result = {
+           "status": "blocked",
+           "block_kind": "blocked_policy",
+           "reason": "dirty_worktree",
+           "blocking_issues": 1,
+           "nit_count": 0,
+           "artifacts": {},
+       }
+       return result
+
+   # --- Step 0.5: Branch resolution ---
+   branch_source = None
+
+   # Check local branch
+   local_check = subprocess.run(
+       ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
+       capture_output=True, text=True, timeout=10
+   )
+   if local_check.returncode == 0:
+       subprocess.check_call(["git", "checkout", branch_name], timeout=30)
+       branch_source = "local"
+   else:
+       # Check remote branch
+       remote_check = subprocess.run(
+           ["git", "ls-remote", "--heads", "origin", branch_name],
+           capture_output=True, text=True, timeout=30
+       )
+       if remote_check.stdout.strip():
+           subprocess.check_call(
+               ["git", "fetch", "origin", branch_name, "--prune"], timeout=60
+           )
+           subprocess.check_call(
+               ["git", "checkout", "--track", f"origin/{branch_name}"], timeout=30
+           )
+           branch_source = "remote"
+       else:
+           subprocess.check_call(
+               ["git", "checkout", "-b", branch_name], timeout=30
+           )
+           branch_source = "new"
+
+   # --- Step 0.6: Check for existing PR ---
+   existing_pr_output = subprocess.run(
+       ["gh", "pr", "list", "--head", branch_name, "--json", "url"],
+       capture_output=True, text=True, timeout=30
+   )
+   existing_pr = None
+   if existing_pr_output.returncode == 0 and existing_pr_output.stdout.strip():
+       pr_list = json.loads(existing_pr_output.stdout)
+       if pr_list:
+           existing_pr = pr_list[0].get("url")
+
+   # --- Step 0.7: Stale check for local branches ---
+   if branch_source == "local":
+       subprocess.run(
+           ["git", "fetch", "origin", branch_name], capture_output=True, timeout=60
+       )
+       local_sha = subprocess.run(
+           ["git", "rev-parse", branch_name], capture_output=True, text=True, timeout=5
+       ).stdout.strip()
+       remote_sha = subprocess.run(
+           ["git", "rev-parse", f"origin/{branch_name}"],
+           capture_output=True, text=True, timeout=5
+       ).stdout.strip()
+       if local_sha and remote_sha and local_sha != remote_sha:
+           stale_msg = (
+               f"Local branch '{branch_name}' differs from remote "
+               f"(local={local_sha[:8]}, remote={remote_sha[:8]}). "
+               "This may indicate stale work. Proceeding without force-reset."
+           )
+           print(f"WARNING: {stale_msg}")
+           try:
+               mcp__linear-server__create_comment(
+                   issueId=ticket_id,
+                   body=f"[ticket-pipeline] Stale branch detected: {stale_msg}"
+               )
+           except Exception as e:
+               print(f"Warning: Failed to post stale comment to Linear: {e}")
+
+   # --- Step 0.8: Record artifacts ---
+   state["phases"]["implement"]["artifacts"]["branch_name"] = branch_name
+   state["phases"]["implement"]["artifacts"]["branch_created"] = (branch_source == "new")
+   state["phases"]["implement"]["artifacts"]["branch_source"] = branch_source
+   state["phases"]["implement"]["artifacts"]["existing_pr"] = existing_pr or ""
+   save_state(state, state_path)
+
+   # --- Step 0.9: Update Linear → In Progress (only after successful checkout) ---
+   if not dry_run:
+       try:
+           mcp__linear-server__update_issue(id=ticket_id, state="In Progress")
+       except Exception as e:
+           print(f"Warning: Failed to update Linear state to In Progress: {e}")
+           # Non-blocking: Linear update failure does not stop pipeline
+   ```
+
+   **Step 0 error conditions (each returns immediately):**
+   - `branchName` null or empty → `reason = "Linear ticket has no branchName, cannot proceed"`
+   - `git rev-parse` fails → `reason = "git rev-parse --show-toplevel failed: not inside a git repo"`
+   - Detached HEAD → `reason = "Detached HEAD state detected. Recovery: git checkout main && ..."`
+   - Dirty working tree → `reason = "dirty_worktree"`
+
+   **Step 0 dry-run behavior:** All validation steps run (0.1–0.4). Branch checkout (0.5)
+   runs normally so the working tree is on the correct branch. Linear status update (0.9)
+   is skipped. All artifacts are recorded in state.
+
+2. **Dispatch ticket-work to a separate agent (only after Step 0 artifacts exist):**
    ```
    Task(
      subagent_type="onex:polymorphic-agent",
@@ -1574,11 +1742,15 @@ def execute_phase(phase_name, state):
        Report back with: files changed, tests run, any blockers, cross-repo files detected."
    )
    ```
+
+   Where `{branch_name}` is resolved from `state["phases"]["implement"]["artifacts"]["branch_name"]`
+   set in Step 0.
+
    This spawns a polymorphic agent with its own context window to run the full ticket-work
    workflow including human gates (questions, spec, approval). The pipeline waits for the
    agent to complete and reads its result.
 
-2. **Cross-repo check** (always runs — behavior depends on `policy.stop_on_cross_repo`):
+3. **Cross-repo check** (if `policy.stop_on_cross_repo == true`):
    After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
    ```python
    from cross_repo_detector import detect_cross_repo_changes
@@ -1629,9 +1801,14 @@ def execute_phase(phase_name, state):
 - `phases.implement.started_at`
 - `phases.implement.completed_at`
 - `phases.implement.artifacts`
+- `phases.implement.artifacts.branch_name` (from Step 0)
+- `phases.implement.artifacts.branch_created` (from Step 0)
+- `phases.implement.artifacts.branch_source` (from Step 0)
+- `phases.implement.artifacts.existing_pr` (from Step 0)
 
 **Exit conditions:**
-- **Completed:** ticket-work finishes, cross-repo check passes
+- **Completed:** Step 0 succeeds, ticket-work finishes, cross-repo check passes
+- **Blocked (policy/Step 0):** null branchName, dirty worktree, detached HEAD, git error
 - **Blocked (human gate):** ticket-work waiting for human input
 - **Blocked (policy):** cross-repo violation detected
 - **Failed:** ticket-work errors out
@@ -1710,15 +1887,28 @@ def execute_phase(phase_name, state):
 
 2. **Pre-checks (idempotent):**
 
-   a. **Check for existing PR on current branch:**
-   ```bash
-   gh pr view --json url,number 2>/dev/null
-   ```
-   If PR exists: skip creation, record artifacts, advance.
+   a. **Check for existing PR (use Step 0 artifact first, then re-check):**
+
+   If `state["phases"]["implement"]["artifacts"].get("existing_pr")` is non-empty,
+   a PR was found during Step 0. Use that PR URL directly and skip creation.
+
    ```python
-   # If PR exists: skip creation, record artifacts, advance
-   if pr_exists:
-       pr_info = json.loads(pr_check_output)
+   # Use existing_pr artifact from Step 0 if available
+   existing_pr_url = state["phases"]["implement"]["artifacts"].get("existing_pr", "")
+   if existing_pr_url:
+       result["artifacts"]["pr_url"] = existing_pr_url
+       result["artifacts"]["branch_name"] = state["phases"]["implement"]["artifacts"].get("branch_name", "")
+       result["status"] = "completed"
+       print(f"PR already exists (from Step 0 artifact): {existing_pr_url}. Skipping creation.")
+       return result
+
+   # Fallback: re-check for PR at create_pr time (handles case where PR was created externally)
+   pr_check = subprocess.run(
+       ["gh", "pr", "view", "--json", "url,number"],
+       capture_output=True, text=True, timeout=30
+   )
+   if pr_check.returncode == 0 and pr_check.stdout.strip():
+       pr_info = json.loads(pr_check.stdout)
        result["artifacts"]["pr_url"] = pr_info["url"]
        result["artifacts"]["pr_number"] = pr_info["number"]
        result["artifacts"]["branch_name"] = branch_name
