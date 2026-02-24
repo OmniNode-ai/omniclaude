@@ -71,19 +71,11 @@ jobs:
             exit 1
           }
 
-      - name: Publish to private PyPI
+      - name: Publish to PyPI
         run: |
-          if [ -z "$UV_PUBLISH_URL" ] || [ -z "$UV_PUBLISH_TOKEN" ]; then
-            echo "ERROR: PYPI_PRIVATE_UPLOAD_URL and PYPI_PRIVATE_TOKEN secrets are required"
-            exit 1
-          fi
-          uv publish \
-            --publish-url "$UV_PUBLISH_URL" \
-            --token "$UV_PUBLISH_TOKEN" \
-            dist/*.whl dist/*.tar.gz
+          uv publish --token "$UV_PUBLISH_TOKEN" dist/*.whl dist/*.tar.gz
         env:
-          UV_PUBLISH_URL: ${{ secrets.PYPI_PRIVATE_UPLOAD_URL }}
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_PRIVATE_TOKEN }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
       - name: Generate checksums
         run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS.txt
