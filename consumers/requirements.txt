@@ -1,7 +1,7 @@
 # Agent Actions Kafka Consumer Dependencies
 
 # Kafka client
-kafka-python==2.0.2
+kafka-python==2.3.0
 
 # PostgreSQL adapter
 psycopg2-binary==2.9.11
