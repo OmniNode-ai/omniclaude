@@ -62,7 +62,7 @@ args:
     required: false
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: complete | partial | nothing_to_do | gate_rejected | error"
+    description: "ModelSkillResult with status: complete | partial | nothing_to_do | gate_rejected | error (note: these differ from ledger stop_reason values — see stop_reason Values section)"
 ---
 
 # PR Queue Pipeline (v1)

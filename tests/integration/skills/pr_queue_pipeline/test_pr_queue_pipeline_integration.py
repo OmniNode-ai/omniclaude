@@ -15,7 +15,10 @@ All tests are static analysis / structural tests that run without external
 credentials, live GitHub access, or live PRs. Safe for CI.
 
 Test markers:
-    @pytest.mark.unit  — pure static analysis, no external services required
+    @pytest.mark.unit  — intentional despite living in tests/integration/. These tests are pure
+    static analysis (file reads only) with no Kafka/Postgres/GitHub dependencies. Using
+    @pytest.mark.unit ensures they always run in CI; @pytest.mark.integration would cause
+    conftest.py to auto-skip them when KAFKA_INTEGRATION_TESTS is unset.
 """
 
 from __future__ import annotations
