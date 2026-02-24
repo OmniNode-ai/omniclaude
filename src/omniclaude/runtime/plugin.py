@@ -61,6 +61,8 @@ class PluginClaude:
         self._shutdown_in_progress: bool = False
         self._compliance_stop_event: threading.Event | None = None
         self._compliance_thread: threading.Thread | None = None
+        self._decision_record_stop_event: threading.Event | None = None
+        self._decision_record_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Protocol properties
@@ -192,10 +194,16 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Start the compliance-evaluated subscriber as a daemon background thread.
+        """Start background Kafka subscriber threads.
 
-        Subscribes to ``onex.evt.omniintelligence.compliance-evaluated.v1`` and
-        transforms violations into PatternAdvisory entries for context injection.
+        Starts two daemon subscriber threads:
+        - compliance-evaluated subscriber: subscribes to
+          ``onex.evt.omniintelligence.compliance-evaluated.v1`` and transforms
+          violations into PatternAdvisory entries for context injection.
+        - decision-record subscriber (OMN-2720): subscribes to
+          ``onex.cmd.omniintelligence.decision-recorded.v1`` and appends full
+          DecisionRecord payloads to the local audit log
+          ``~/.claude/decision_audit.jsonl``.
 
         Skips gracefully when ``KAFKA_BOOTSTRAP_SERVERS`` is not set.
         """
@@ -204,66 +212,100 @@ class PluginClaude:
         )
 
         # Shutdown guard: if shutdown() is in progress it has already cleared
-        # _compliance_thread to None but the old thread may still be draining.
-        # Spawning a new thread here would create a second consumer racing the
-        # first one — return early to prevent that.
+        # subscriber threads to None but the old threads may still be draining.
+        # Spawning new threads here would create consumers racing the
+        # old ones — return early to prevent that.
         if self._shutdown_in_progress:
-            logger.debug("Compliance subscriber start skipped — shutdown in progress")
+            logger.debug("Subscribers start skipped — shutdown in progress")
             return ModelDomainPluginResult.skipped(
                 plugin_id=_PLUGIN_ID,
-                reason="shutdown in progress; compliance subscriber not started",
+                reason="shutdown in progress; subscribers not started",
             )
 
         # Idempotency guard: SessionStart may be called multiple times on reconnect.
-        # If the thread is still alive, return early rather than spawning a second
-        # daemon thread and silently leaking the first one.
-        if self._compliance_thread is not None and self._compliance_thread.is_alive():
-            logger.debug(
-                "Compliance subscriber already running — skipping duplicate start"
-            )
+        # If both threads are still alive, return early rather than spawning second
+        # daemon threads and silently leaking the first ones.
+        if (
+            self._compliance_thread is not None
+            and self._compliance_thread.is_alive()
+            and self._decision_record_thread is not None
+            and self._decision_record_thread.is_alive()
+        ):
+            logger.debug("All subscribers already running — skipping duplicate start")
             return ModelDomainPluginResult(
                 plugin_id=_PLUGIN_ID,
                 success=True,
-                message="Compliance subscriber already running (idempotent)",
+                message="Subscribers already running (idempotent)",
                 resources_created=[],
             )
 
         bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
         if not bootstrap_servers:
-            logger.debug(
-                "KAFKA_BOOTSTRAP_SERVERS not set — compliance subscriber not started"
-            )
+            logger.debug("KAFKA_BOOTSTRAP_SERVERS not set — subscribers not started")
             return ModelDomainPluginResult.skipped(
                 plugin_id=_PLUGIN_ID,
-                reason="KAFKA_BOOTSTRAP_SERVERS not set; compliance subscriber skipped",
+                reason="KAFKA_BOOTSTRAP_SERVERS not set; subscribers skipped",
             )
 
-        try:
-            from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
-                run_subscriber_background,
-            )
+        resources_created: list[str] = []
 
-            self._compliance_stop_event = threading.Event()
-            self._compliance_thread = run_subscriber_background(
-                kafka_bootstrap_servers=bootstrap_servers,
-                group_id="omniclaude-compliance-subscriber.v1",
-                stop_event=self._compliance_stop_event,
-            )
+        # ----------------------------------------------------------------
+        # Start compliance-evaluated subscriber
+        # ----------------------------------------------------------------
+        if self._compliance_thread is None or not self._compliance_thread.is_alive():
+            try:
+                from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
+                    run_subscriber_background as _compliance_run_bg,
+                )
 
-            return ModelDomainPluginResult(
-                plugin_id=_PLUGIN_ID,
-                success=True,
-                message="Compliance subscriber daemon thread started",
-                resources_created=["compliance-subscriber-thread"],
-            )
-        except Exception as exc:
-            logger.warning("Failed to start compliance subscriber: %s", exc)
-            self._compliance_stop_event = None
-            self._compliance_thread = None
+                self._compliance_stop_event = threading.Event()
+                self._compliance_thread = _compliance_run_bg(
+                    kafka_bootstrap_servers=bootstrap_servers,
+                    group_id="omniclaude-compliance-subscriber.v1",
+                    stop_event=self._compliance_stop_event,
+                )
+                resources_created.append("compliance-subscriber-thread")
+            except Exception as exc:
+                logger.warning("Failed to start compliance subscriber: %s", exc)
+                self._compliance_stop_event = None
+                self._compliance_thread = None
+
+        # ----------------------------------------------------------------
+        # Start decision-record subscriber (OMN-2720)
+        # ----------------------------------------------------------------
+        if (
+            self._decision_record_thread is None
+            or not self._decision_record_thread.is_alive()
+        ):
+            try:
+                from omniclaude.hooks.lib.decision_record_subscriber import (  # noqa: PLC0415
+                    run_subscriber_background as _decision_run_bg,
+                )
+
+                self._decision_record_stop_event = threading.Event()
+                self._decision_record_thread = _decision_run_bg(
+                    kafka_bootstrap_servers=bootstrap_servers,
+                    group_id="omniclaude-decision-record-subscriber.v1",
+                    stop_event=self._decision_record_stop_event,
+                )
+                resources_created.append("decision-record-subscriber-thread")
+            except Exception as exc:
+                logger.warning("Failed to start decision-record subscriber: %s", exc)
+                self._decision_record_stop_event = None
+                self._decision_record_thread = None
+
+        if not resources_created:
             return ModelDomainPluginResult.failed(
                 plugin_id=_PLUGIN_ID,
-                error_message=str(exc),
+                error_message="All subscriber starts failed",
             )
+
+        return ModelDomainPluginResult(
+            plugin_id=_PLUGIN_ID,
+            success=True,
+            message=f"Subscriber daemon threads started: {', '.join(resources_created)}",
+            resources_created=resources_created,
+        )
 
     async def shutdown(
         self,
@@ -300,6 +342,12 @@ class PluginClaude:
             # _compliance_stop_event is None (e.g. partially initialised state),
             # the thread reference must still be released to avoid a leak.
             self._compliance_thread = None
+
+            # Signal decision-record subscriber to stop (OMN-2720)
+            if self._decision_record_stop_event is not None:
+                self._decision_record_stop_event.set()
+                self._decision_record_stop_event = None
+            self._decision_record_thread = None
 
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(

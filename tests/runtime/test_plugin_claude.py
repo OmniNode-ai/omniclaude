@@ -434,6 +434,8 @@ class TestStartConsumers:
         """With KAFKA_BOOTSTRAP_SERVERS set, compliance subscriber thread is started."""
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
+        mock_decision_thread = MagicMock()
+        mock_decision_thread.is_alive.return_value = True
 
         with (
             patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
@@ -443,13 +445,17 @@ class TestStartConsumers:
                     "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
                         run_subscriber_background=MagicMock(return_value=mock_thread)
                     ),
+                    "omniclaude.hooks.lib.decision_record_subscriber": MagicMock(
+                        run_subscriber_background=MagicMock(
+                            return_value=mock_decision_thread
+                        )
+                    ),
                 },
             ),
         ):
             result = await plugin.start_consumers(config)
 
         assert result.success is True
-        assert "compliance" in result.message.lower()
         assert "compliance-subscriber-thread" in result.resources_created
         assert plugin._compliance_stop_event is not None
         assert plugin._compliance_thread is mock_thread
@@ -459,6 +465,8 @@ class TestStartConsumers:
         """Consumer group ID must encode schema version: omniclaude-compliance-subscriber.v1."""
         mock_thread = MagicMock()
         mock_run = MagicMock(return_value=mock_thread)
+        mock_decision_thread = MagicMock()
+        mock_decision_run = MagicMock(return_value=mock_decision_thread)
 
         with (
             patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
@@ -467,6 +475,9 @@ class TestStartConsumers:
                 {
                     "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
                         run_subscriber_background=mock_run
+                    ),
+                    "omniclaude.hooks.lib.decision_record_subscriber": MagicMock(
+                        run_subscriber_background=mock_decision_run
                     ),
                 },
             ),
@@ -478,7 +489,7 @@ class TestStartConsumers:
 
     @pytest.mark.asyncio
     async def test_failed_result_when_import_raises(self, plugin, config):
-        """If run_subscriber_background raises, start_consumers returns failed."""
+        """If both run_subscriber_background calls raise, start_consumers returns failed."""
         with (
             patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
             patch.dict(
@@ -489,22 +500,32 @@ class TestStartConsumers:
                             side_effect=RuntimeError("thread error")
                         )
                     ),
+                    "omniclaude.hooks.lib.decision_record_subscriber": MagicMock(
+                        run_subscriber_background=MagicMock(
+                            side_effect=RuntimeError("decision thread error")
+                        )
+                    ),
                 },
             ),
         ):
             result = await plugin.start_consumers(config)
 
         assert result.success is False
-        assert "thread error" in (result.error_message or "")
         assert plugin._compliance_stop_event is None
         assert plugin._compliance_thread is None
+        assert plugin._decision_record_stop_event is None
+        assert plugin._decision_record_thread is None
 
     @pytest.mark.asyncio
     async def test_idempotent_when_thread_already_alive(self, plugin, config):
-        """start_consumers returns early without spawning a second thread when thread is alive."""
-        existing_thread = MagicMock()
-        existing_thread.is_alive.return_value = True
-        plugin._compliance_thread = existing_thread
+        """start_consumers returns early without spawning new threads when both threads are alive."""
+        existing_compliance_thread = MagicMock()
+        existing_compliance_thread.is_alive.return_value = True
+        plugin._compliance_thread = existing_compliance_thread
+
+        existing_decision_thread = MagicMock()
+        existing_decision_thread.is_alive.return_value = True
+        plugin._decision_record_thread = existing_decision_thread
 
         mock_run = MagicMock()
 
@@ -516,6 +537,9 @@ class TestStartConsumers:
                     "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
                         run_subscriber_background=mock_run
                     ),
+                    "omniclaude.hooks.lib.decision_record_subscriber": MagicMock(
+                        run_subscriber_background=mock_run
+                    ),
                 },
             ),
         ):
@@ -524,8 +548,9 @@ class TestStartConsumers:
         mock_run.assert_not_called()
         assert result.success is True
         assert "already running" in result.message.lower()
-        # Thread reference unchanged
-        assert plugin._compliance_thread is existing_thread
+        # Thread references unchanged
+        assert plugin._compliance_thread is existing_compliance_thread
+        assert plugin._decision_record_thread is existing_decision_thread
 
 
 # ===================================================================
