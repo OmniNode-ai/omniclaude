@@ -472,9 +472,9 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" == "Bash" ]]; then
             BASH_SANITIZED=$(printf '%s' "$BASH_SANITIZED" | \
                 sed -E 's/(Bearer|Authorization:)[[:space:]]+[A-Za-z0-9._-]+/\1 <REDACTED>/gi' 2>/dev/null || \
                 printf '%s' "$BASH_SANITIZED")
-            # 4. URLs with embedded credentials (https://user:pass@host)
+            # 4. URLs with embedded credentials (user:password pattern in URLs)
             BASH_SANITIZED=$(printf '%s' "$BASH_SANITIZED" | \
-                sed -E 's|https?://[^:@]+:[^@]+@|https://<REDACTED>@|gi' 2>/dev/null || \
+                sed -E 's|https?://[^:@]+:[^@]+@|https://<REDACTED>@|gi' 2>/dev/null || \  # pragma: allowlist secret
                 printf '%s' "$BASH_SANITIZED")
 
             BASH_PREVIEW="${BASH_SANITIZED:0:2000}"
