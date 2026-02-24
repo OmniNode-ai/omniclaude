@@ -58,7 +58,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-schema-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}
