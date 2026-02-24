@@ -40,23 +40,20 @@ with plain ``python -m unittest`` invocation.
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Import the module under test
+# ---------------------------------------------------------------------------
+# Adjust sys.path so the module is importable from both pytest (which adds
+# src/ automatically via conftest) and from plain ``python -m unittest``.
 import io
 import json
+import pathlib
 import sys
 import unittest
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# Import the module under test
-# ---------------------------------------------------------------------------
-# Adjust sys.path so the module is importable from both pytest (which adds
-# src/ automatically via conftest) and from plain ``python -m unittest``.
-
-import importlib
-import pathlib
 
 _LIB_DIR = (
     pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
@@ -65,7 +62,6 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 import bash_guard  # noqa: E402  (after sys.path manipulation)
-
 
 # =============================================================================
 # Helpers
@@ -582,7 +578,6 @@ class TestMainIntegration(unittest.TestCase):
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
             # Patch threading.Thread so we can capture the call without network I/O
-            import threading
 
             calls: list[tuple[Any, ...]] = []
 
@@ -619,8 +614,6 @@ class TestMainIntegration(unittest.TestCase):
             ),
             patch.object(bash_guard, "_send_slack_alert") as mock_alert,
         ):
-            import threading
-
             calls: list[tuple[Any, ...]] = []
 
             class _FakeThread:
