@@ -146,9 +146,11 @@ class TestClaimLifecycle:
         if not _PR_SAFETY_HELPERS.exists():
             pytest.skip("_lib/pr-safety/helpers.md not found")
         content = _PR_SAFETY_HELPERS.read_text(encoding="utf-8")
-        assert "stale" in content.lower() or "expiry" in content.lower() or "CLAIM_AGE_STALE" in content, (
-            "_lib/pr-safety/helpers.md must document claim stale/expiry detection"
-        )
+        assert (
+            "stale" in content.lower()
+            or "expiry" in content.lower()
+            or "CLAIM_AGE_STALE" in content
+        ), "_lib/pr-safety/helpers.md must document claim stale/expiry detection"
 
     def test_helpers_documents_claim_not_held_error(self) -> None:
         """_lib/pr-safety/helpers.md must document ClaimNotHeldError for mutation guard."""
@@ -200,18 +202,22 @@ class TestBoundaryValidation:
         if not _PR_SAFETY_HELPERS.exists():
             pytest.skip("_lib/pr-safety/helpers.md not found")
         content = _PR_SAFETY_HELPERS.read_text(encoding="utf-8")
-        assert "BoundaryViolationError" in content or "boundary_violation" in content.lower(), (
-            "_lib/pr-safety/helpers.md must document BoundaryViolationError"
-        )
+        assert (
+            "BoundaryViolationError" in content
+            or "boundary_violation" in content.lower()
+        ), "_lib/pr-safety/helpers.md must document BoundaryViolationError"
 
     def test_helpers_documents_import_boundary(self) -> None:
         """boundary_validate must cover import boundary violations."""
         if not _PR_SAFETY_HELPERS.exists():
             pytest.skip("_lib/pr-safety/helpers.md not found")
         content = _PR_SAFETY_HELPERS.read_text(encoding="utf-8")
-        assert "import_boundary" in content or "import boundary" in content.lower() or "asyncpg" in content.lower() or "repo_class" in content, (
-            "_lib/pr-safety/helpers.md boundary_validate must cover import boundaries"
-        )
+        assert (
+            "import_boundary" in content
+            or "import boundary" in content.lower()
+            or "asyncpg" in content.lower()
+            or "repo_class" in content
+        ), "_lib/pr-safety/helpers.md boundary_validate must cover import boundaries"
 
     def test_helpers_documents_repo_class_for_boundary(self) -> None:
         """boundary_validate must use repo_class to enforce app/ui/infra boundaries."""
@@ -226,9 +232,9 @@ class TestBoundaryValidation:
         """fix-prs must document CI secrets guard as boundary enforcement."""
         content = _read_skill_file(_FIX_PRS_SKILL)
         # CI secrets guard is fix-prs's practical boundary enforcement
-        assert "external" in content.lower() and ("secret" in content.lower() or "deploy" in content.lower()), (
-            "fix-prs SKILL.md must document CI secrets guard (external infra boundary)"
-        )
+        assert "external" in content.lower() and (
+            "secret" in content.lower() or "deploy" in content.lower()
+        ), "fix-prs SKILL.md must document CI secrets guard (external infra boundary)"
 
 
 # ---------------------------------------------------------------------------
@@ -388,16 +394,14 @@ class TestNoDirectMutationCalls:
         matches = _grep_file(_FIX_PRS_PROMPT, r"\bgit worktree add\b")
         assert matches == [], (
             f"Direct 'git worktree add' found in fix-prs/prompt.md. "
-            f"Use get_worktree() from _lib/pr-safety/helpers.md:\n"
-            + "\n".join(matches)
+            f"Use get_worktree() from _lib/pr-safety/helpers.md:\n" + "\n".join(matches)
         )
 
     def test_no_gh_api_merge_in_prompt(self) -> None:
         """prompt.md must not contain direct gh api merge calls."""
         matches = _grep_file(_FIX_PRS_PROMPT, r"gh api.*merge|api.*pulls.*merge")
         assert matches == [], (
-            f"Direct gh api merge found in fix-prs/prompt.md:\n"
-            + "\n".join(matches)
+            f"Direct gh api merge found in fix-prs/prompt.md:\n" + "\n".join(matches)
         )
 
     def test_fix_prs_delegates_to_ci_failures(self) -> None:
@@ -491,9 +495,11 @@ class TestForcePushGuardrail:
     def test_skill_documents_pr_comment_on_force_push(self) -> None:
         """SKILL.md must require PR comment when force pushing."""
         content = _read_skill_file(_FIX_PRS_SKILL)
-        assert "PR comment" in content or "pr comment" in content.lower() or "comment" in content.lower(), (
-            "SKILL.md must require posting a PR comment when force pushing"
-        )
+        assert (
+            "PR comment" in content
+            or "pr comment" in content.lower()
+            or "comment" in content.lower()
+        ), "SKILL.md must require posting a PR comment when force pushing"
 
     def test_prompt_uses_force_with_lease(self) -> None:
         """prompt.md must use git push --force-with-lease (not --force)."""
@@ -526,7 +532,8 @@ class TestCIEnforcementGrep:
         content = _read_skill_file(_FIX_PRS_PROMPT)
         # Should not have "gh pr merge" — fix-prs repairs, merge-sweep merges
         lines = [
-            line for line in content.splitlines()
+            line
+            for line in content.splitlines()
             if "gh pr merge" in line and not line.strip().startswith("#")
         ]
         assert lines == [], (
@@ -548,9 +555,9 @@ class TestCIEnforcementGrep:
         prompt_content = _read_skill_file(_FIX_PRS_PROMPT)
         skill_content = _read_skill_file(_FIX_PRS_SKILL)
         combined = prompt_content + skill_content
-        assert "external" in combined.lower() and ("secret" in combined.lower() or "deploy" in combined.lower()), (
-            "fix-prs must document skipping external/deployment CI checks"
-        )
+        assert "external" in combined.lower() and (
+            "secret" in combined.lower() or "deploy" in combined.lower()
+        ), "fix-prs must document skipping external/deployment CI checks"
 
     def test_no_git_worktree_add_in_skills(self) -> None:
         """fix-prs skill files must not use direct 'git worktree add'."""
@@ -559,12 +566,11 @@ class TestCIEnforcementGrep:
                 continue
             content = skill_file.read_text(encoding="utf-8")
             violations = [
-                line for line in content.splitlines()
-                if "git worktree add" in line
-                and not line.strip().startswith("#")
+                line
+                for line in content.splitlines()
+                if "git worktree add" in line and not line.strip().startswith("#")
             ]
             assert violations == [], (
                 f"Direct 'git worktree add' found in {skill_file.name}. "
-                f"Use get_worktree() from _lib/pr-safety:\n"
-                + "\n".join(violations)
+                f"Use get_worktree() from _lib/pr-safety:\n" + "\n".join(violations)
             )
