@@ -29,6 +29,14 @@ kafka = [
     "confluent-kafka>=2.12.0,<3.0.0",
 ]
 
+# otel is optional: Phoenix OTEL span exporter (OMN-2734).
+# Hooks degrade gracefully (no-op) when these are not installed.
+otel = [
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
@@ -48,6 +56,10 @@ dev = [
     "types-psycopg2>=2.9.21.20251012",
     "types-docker>=7.1.0.20260109",
     "bandit>=1.9.3",
+    # OTEL SDK for phoenix_otel_exporter tests
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
 ]
 
 [project.scripts]
