@@ -275,9 +275,44 @@ Status values:
 - `ci-failures` (existing) — diagnose and fix CI failures per PR
 - `pr-review-dev` (existing) — address GitHub review comments
 
+## Integration Test
+
+Integration tests are in `tests/integration/skills/fix_prs/test_fix_prs_integration.py` (OMN-2636).
+All tests are static analysis / structural tests — no live GitHub access or external credentials required.
+
+Run with: `uv run pytest tests/integration/skills/fix_prs/ -m unit -v`
+
+### Test Coverage
+
+| Test Case | Description | Marker |
+|-----------|-------------|--------|
+| Dry-run contract | `nothing_to_fix` exit documented; idempotency ledger documented | unit |
+| Claim lifecycle | `acquire_claim` / `release_claim` / heartbeat in `_lib/pr-safety/helpers.md` | unit |
+| Claim expiry | Stale claim detection documented in helpers | unit |
+| ClaimNotHeldError | Error class documented for mutation guard | unit |
+| mutate_pr claim check | `mutate_pr()` asserts claim held before mutation | unit |
+| Boundary validation | `boundary_validate()` + `BoundaryViolationError` in helpers | unit |
+| Import boundary coverage | `repo_class` parameter enforces app/ui/infra separation | unit |
+| CI secrets guard | External infra check skip documented (boundary enforcement) | unit |
+| Inventory/ledger consumption | Per-run ledger structure + retry policy documented | unit |
+| Ledger check before dispatch | prompt.md references ledger before fix dispatch | unit |
+| Max-total-prs cap | Blast radius cap documented | unit |
+| TERMINAL_STOP_REASONS defined | All 14 canonical reasons present in helpers | unit |
+| ledger_set_stop_reason | Function documented and enforces terminal reason set | unit |
+| No direct gh pr merge | fix-prs repairs PRs, does not merge them | unit |
+| No direct gh pr checkout | prompt.md delegates checkout to sub-skills | unit |
+| No direct worktree creation | Use get_worktree() from _lib/pr-safety | unit |
+| Delegates to ci-failures | CI fixing dispatched to ci-failures sub-skill | unit |
+| Delegates to pr-review-dev | Review fixing dispatched to pr-review-dev sub-skill | unit |
+| ModelSkillResult statuses | all_fixed / partial / nothing_to_fix / error documented | unit |
+| Force push guardrail | --allow-force-push + PR comment requirement documented | unit |
+| force-with-lease usage | prompt.md uses --force-with-lease, not bare --force | unit |
+| baseRefName for rebase | Dynamic base ref (not hardcoded 'main') documented | unit |
+
 ## See Also
 
 - `merge-sweep` skill — merges PRs that are already fix-prs clean
 - `pr-queue-pipeline` skill — orchestrates fix-prs → merge-sweep in sequence
 - `ci-failures` skill — per-PR CI failure analysis and repair
 - `pr-review-dev` skill — address code review comments
+- OMN-2636 — integration test suite
