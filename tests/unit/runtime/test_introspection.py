@@ -132,3 +132,6 @@ class TestSkillNodeIntrospectionProxyPublish:
 
         # Must not raise — failures are caught and logged
         await proxy.publish_all(reason="startup")
+
+        # Verify the mock was actually invoked (publish_envelope was awaited)
+        mock_bus.publish_envelope.assert_awaited()

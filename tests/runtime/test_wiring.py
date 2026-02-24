@@ -943,10 +943,9 @@ class TestServiceContractPublisherAPI:
         mock_publisher_instance = MagicMock()
         mock_publisher_instance.publish_all = AsyncMock(return_value=expected_result)
 
-        async def mock_from_container(container, config, environment=None):
+        async def mock_from_container(container, config):
             captured_args["container"] = container
             captured_args["config"] = config
-            captured_args["environment"] = environment
             return mock_publisher_instance
 
         ServiceContractPublisher.from_container = mock_from_container
@@ -963,12 +962,8 @@ class TestServiceContractPublisherAPI:
             "publish_handler_contracts should pass container to from_container"
         )
 
-        # Assert: environment was passed through
-        assert captured_args["environment"] == "staging", (
-            f"Expected environment='staging', got {captured_args['environment']}"
-        )
-
-        # Assert: config was updated with environment via model_copy
+        # Assert: config was updated with environment via model_copy before delegation
+        # (from_container does not accept an environment kwarg; it is stored in config)
         assert captured_args["config"].environment == "staging", (
             f"Expected config.environment='staging', got {captured_args['config'].environment}"
         )
@@ -1015,8 +1010,10 @@ class TestServiceContractPublisherAPI:
 
         captured_envs: list = []
 
-        async def mock_from_container(container, config, environment=None):
-            captured_envs.append(environment)
+        async def mock_from_container(container, config):
+            # Environment is stored in config.environment, not passed as a kwarg
+            # (from_container does not accept an environment parameter)
+            captured_envs.append(config.environment)
             mock_instance = MagicMock()
             mock_instance.publish_all = AsyncMock(
                 return_value=MockModelPublishResult(published=[], duration_ms=1.0)
@@ -1032,7 +1029,7 @@ class TestServiceContractPublisherAPI:
             environment="  production  ",
         )
 
-        # Assert: environment was stripped
+        # Assert: environment was stripped and stored in config.environment
         assert captured_envs[-1] == "production", (
             f"Expected stripped 'production', got '{captured_envs[-1]}'"
         )
@@ -1044,7 +1041,7 @@ class TestServiceContractPublisherAPI:
             environment="   ",
         )
 
-        # Assert: empty string becomes 'dev'
+        # Assert: empty string becomes 'dev' and is stored in config.environment
         assert captured_envs[-1] == "dev", (
             f"Expected 'dev' for empty environment, got '{captured_envs[-1]}'"
         )

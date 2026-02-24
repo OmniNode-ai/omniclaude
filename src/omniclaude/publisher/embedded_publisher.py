@@ -106,6 +106,17 @@ class EmbeddedEventPublisher:
     def queue(self) -> BoundedEventQueue:
         return self._queue
 
+    @property
+    def event_bus(self) -> ProtocolEventBusLike | None:
+        """Return the underlying event bus, or ``None`` if not yet started.
+
+        Callers that require a ``ProtocolEventBus``-compatible object for
+        introspection or publishing should use this property rather than
+        passing the ``EmbeddedEventPublisher`` instance itself, which does
+        not implement ``ProtocolEventBus``.
+        """
+        return self._event_bus
+
     async def start(self) -> None:
         """Start the publisher.
 

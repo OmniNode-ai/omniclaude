@@ -313,11 +313,16 @@ class PluginClaude:
                 SkillNodeIntrospectionProxy,
             )
 
+            # Pass the underlying event bus (ProtocolEventBusLike), not the
+            # EmbeddedEventPublisher wrapper itself, which does not implement
+            # ProtocolEventBus.  When the publisher has not yet started,
+            # event_bus is None and publish_all() will be a silent no-op.
             introspection_proxy = SkillNodeIntrospectionProxy(
-                event_bus=self._publisher,  # type: ignore[arg-type]
+                event_bus=self._publisher.event_bus if self._publisher is not None else None,
             )
-            await introspection_proxy.publish_all(reason="startup")
-            resources_created.append("skill-node-introspection")
+            published_count = await introspection_proxy.publish_all(reason="startup")
+            if published_count > 0:
+                resources_created.append("skill-node-introspection")
         except Exception as exc:
             logger.warning("Skill node introspection proxy failed to start: %s", exc)
 
