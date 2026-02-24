@@ -22,7 +22,6 @@ from scripts.generate_skill_node import (
     snake_to_pascal,
 )
 
-
 # ---------------------------------------------------------------------------
 # snake_to_pascal tests (4 required by ticket)
 # ---------------------------------------------------------------------------
@@ -89,7 +88,10 @@ def test_render_template_substitutes_all_placeholders() -> None:
             "CREATED_DATE": "2026-02-24",
         },
     )
-    assert result == "Name: local-review, Snake: local_review, Desc: Reviews code locally., Date: 2026-02-24"
+    assert (
+        result
+        == "Name: local-review, Snake: local_review, Desc: Reviews code locally., Date: 2026-02-24"
+    )
 
 
 @pytest.mark.unit
@@ -103,7 +105,7 @@ def test_render_template_no_placeholders() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_repo(tmp_path: Path) -> Path:
     """Build a minimal fake repository layout for script testing."""
     # Skills directory with one skill
@@ -167,7 +169,13 @@ def test_dry_run_prints_three_would_create_lines(
 @pytest.mark.unit
 def test_dry_run_does_not_create_files(fake_repo: Path) -> None:
     """Dry run must not write any files to disk."""
-    node_dir = fake_repo / "src" / "omniclaude" / "nodes" / "node_skill_local_review_orchestrator"
+    node_dir = (
+        fake_repo
+        / "src"
+        / "omniclaude"
+        / "nodes"
+        / "node_skill_local_review_orchestrator"
+    )
     assert not node_dir.exists()
 
     generate_node_for_skill("local-review", repo_root=fake_repo, dry_run=True)
@@ -181,7 +189,13 @@ def test_generate_creates_three_files(fake_repo: Path) -> None:
     result = generate_node_for_skill("local-review", repo_root=fake_repo, dry_run=False)
     assert result is True
 
-    node_dir = fake_repo / "src" / "omniclaude" / "nodes" / "node_skill_local_review_orchestrator"
+    node_dir = (
+        fake_repo
+        / "src"
+        / "omniclaude"
+        / "nodes"
+        / "node_skill_local_review_orchestrator"
+    )
     assert (node_dir / "__init__.py").exists()
     assert (node_dir / "node.py").exists()
     assert (node_dir / "contract.yaml").exists()
@@ -204,7 +218,13 @@ def test_generate_skips_existing_node(
 def test_generated_contract_no_requested_suffix(fake_repo: Path) -> None:
     """Generated contract.yaml must not contain '-requested' in any topic name."""
     generate_node_for_skill("local-review", repo_root=fake_repo, dry_run=False)
-    node_dir = fake_repo / "src" / "omniclaude" / "nodes" / "node_skill_local_review_orchestrator"
+    node_dir = (
+        fake_repo
+        / "src"
+        / "omniclaude"
+        / "nodes"
+        / "node_skill_local_review_orchestrator"
+    )
     contract_text = (node_dir / "contract.yaml").read_text(encoding="utf-8")
     assert "-requested" not in contract_text
 
@@ -213,7 +233,13 @@ def test_generated_contract_no_requested_suffix(fake_repo: Path) -> None:
 def test_generated_contract_no_env_prefix(fake_repo: Path) -> None:
     """Generated contract.yaml must not contain an '{env}.' prefix in topic names."""
     generate_node_for_skill("local-review", repo_root=fake_repo, dry_run=False)
-    node_dir = fake_repo / "src" / "omniclaude" / "nodes" / "node_skill_local_review_orchestrator"
+    node_dir = (
+        fake_repo
+        / "src"
+        / "omniclaude"
+        / "nodes"
+        / "node_skill_local_review_orchestrator"
+    )
     contract_text = (node_dir / "contract.yaml").read_text(encoding="utf-8")
     # Topics should not contain {env}. prefix pattern
     assert "{env}." not in contract_text
