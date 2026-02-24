@@ -48,7 +48,7 @@ jobs:
           path: onex_change_control
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
           version: "0.6.1"
 

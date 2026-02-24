@@ -56,7 +56,7 @@ jobs:
           fi
           echo "Version validated: $PKG_VERSION"
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.12'
 
