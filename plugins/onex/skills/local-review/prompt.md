@@ -58,10 +58,65 @@ Phase 0: Pre-existing issue scan
        - Apply fixes
        - Commit as: chore(pre-existing): fix pre-existing lint/type errors
        - This commit is separate from all feature commits
-  5. For DEFER:
-       - Auto-file a follow-up Linear sub-ticket (if Linear MCP available)
-       - Note in session: "Pre-existing issues deferred to {ticket_id}: {count} issues"
-       - Add deferred issues to PR description note section
+  5. For DEFER (if Linear MCP available):
+       a. For each deferred failure, compute fingerprint:
+          ```python
+          import hashlib
+          def compute_fingerprint(tool_name, check_name, failure_kind, rule_id,
+                                  repo_relative_path, symbol):
+              parts = [tool_name, check_name, failure_kind, rule_id or "",
+                       repo_relative_path, symbol or ""]
+              raw = "|".join(parts)
+              return hashlib.sha256(raw.encode()).hexdigest()
+          ```
+          Fields:
+          - `tool_name`: `mypy`, `ruff`, or `pre-commit`
+          - `check_name`: specific check name (e.g. `no-return-annotation`, `E501`)
+          - `failure_kind`: `lint`, `type`, `test`, or `runtime`
+          - `rule_id`: rule code if available (e.g. `E501`), else empty string
+          - `repo_relative_path`: from repo root (NOT absolute path)
+          - `symbol`: function/class name if applicable, else empty string
+
+       b. For each fingerprint, search for an existing ticket:
+          ```
+          existing = mcp__linear-server__list_issues(query="gap:{fingerprint[:8]}")
+          ```
+          Then apply state table:
+
+          | Existing ticket state | Last closed | Action |
+          |-----------------------|-------------|--------|
+          | In Progress / Backlog / Todo | — | Comment on existing ticket, skip creation |
+          | Done / Duplicate / Cancelled | ≤ 7 days ago | Comment on existing ticket, skip creation |
+          | Done / Duplicate / Cancelled | > 7 days ago | Create new ticket |
+          | None found | — | Create new ticket |
+
+       c. When creating a new ticket:
+          **Title**: `[gap:{fingerprint[:8]}] {failure_kind}: {check_name} in {repo_relative_path}`
+
+          **Description must include stable marker block**:
+          ```
+          <!-- gap-analysis-marker
+          fingerprint: {full_sha256}
+          gap_category: MISSING_TEST
+          boundary_kind: pre_existing_failure
+          rule_name: {check_name}
+          tool: {tool_name}
+          failure_kind: {failure_kind}
+          repos: [{repo_name}]
+          confidence: DETERMINISTIC
+          detected_at: {ISO timestamp}
+          -->
+          ```
+
+       d. When commenting on an existing ticket (skip creation):
+          ```
+          mcp__linear-server__create_comment(issueId=existing_ticket_id,
+            body="Re-detected in run {run_id}: {failure_kind} {check_name} in {repo_relative_path}")
+          ```
+
+       e. Track outcomes: `tickets_created = []`, `tickets_commented = []`
+       f. Note in session: "Pre-existing issues deferred: {N} created, {M} commented"
+       g. Add deferred issues to PR description note section
   6. Write Phase 0 results to session notes (session notes = the structured context block
      injected into the Claude session via the context-injection subsystem)
   7. Proceed to Phase 1 (Initialize)
@@ -85,7 +140,8 @@ Phase 0: Pre-existing issue scan
 - src/utils.py: ruff E501 line too long
 
 ### Deferred to follow-up
-- src/legacy/: 23 issues across 15 files (too broad — created OMN-XXXX)
+- src/legacy/handler.py: no-return-annotation (type) — created OMN-XXXX [gap:a1b2c3d4]
+- src/legacy/utils.py: E501 (lint) — commented on OMN-YYYY (existing, In Progress)
 ```
 
 ---
