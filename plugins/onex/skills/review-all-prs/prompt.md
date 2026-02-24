@@ -306,7 +306,7 @@ Task(
 
     Invoke local-review in the worktree:
 
-    Skill(skill='local-review', args='--required-clean-runs <clean_runs>')
+    Skill(skill='onex:local-review', args='--required-clean-runs <clean_runs>')
 
     Run this in the worktree directory: <WORKTREE_PATH>
 

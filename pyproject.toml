@@ -309,6 +309,8 @@ ignore = [
     "S108",      # Probable insecure temp file (test fixtures)
     "S311",      # Non-cryptographic random (OK for tests)
     "S324",      # Insecure hash function (OK for tests)
+    "PT009",     # unittest-style assertEqual (test_bash_guard.py uses hybrid unittest/pytest)
+    "RUF059",    # Unused unpacked variable (test helper _FakeThread captures args by design)
 ]
 "tests/*.py" = ["E402"]
 # Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta

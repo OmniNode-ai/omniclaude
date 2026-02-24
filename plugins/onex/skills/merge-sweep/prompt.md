@@ -321,7 +321,7 @@ Task(
   prompt="Merge PR #<pr_number> in repo <repo>.
 
     Use the auto-merge skill:
-    Skill(skill='auto-merge', args={
+    Skill(skill='onex:auto-merge', args={
       pr: <pr_number>,
       auto_merge: true,
       strategy: '<merge_method>'
@@ -474,7 +474,7 @@ This skill is designed to be called from `pr-queue-pipeline` in bypass mode:
 
 ```
 # From pr-queue-pipeline Phase 3:
-Skill(skill="merge-sweep", args={
+Skill(skill="onex:merge-sweep", args={
   repos: <scope>,
   gate_attestation: <pipeline_gate_token>,
   max_total_merges: <cap>,

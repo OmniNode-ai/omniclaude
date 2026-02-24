@@ -42,6 +42,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_authorization_shim.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_bash_guard.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

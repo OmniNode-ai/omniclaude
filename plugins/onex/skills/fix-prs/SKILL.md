@@ -172,11 +172,11 @@ If `retry_count >= 3` and neither condition is met: skip with `result: needs_hum
           If check name contains external secret indicators (AWS_, DEPLOY_, PROD_, service-account):
             → record result=blocked_external, blocked_check=<name>, skip ci-failures for this check
         If all failing checks are external: record result=blocked_external for PR, skip to d
-      Invoke: Skill(skill="ci-failures") with --max-fix-iterations <max_fix_iterations>
+      Invoke: Skill(skill="onex:ci-failures") with --max-fix-iterations <max_fix_iterations>
       Collect result; record in ledger with new error_fingerprint
 
    d. IF needs_review_work AND CI is now green AND --category includes reviews:
-      Invoke: Skill(skill="pr-review-dev")
+      Invoke: Skill(skill="onex:pr-review-dev")
       Guardrails:
         - No auto-dismiss of reviews (never use gh api to dismiss)
         - No force-push unless --allow-force-push is set
