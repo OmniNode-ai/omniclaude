@@ -42,7 +42,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -87,7 +87,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -133,7 +133,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -162,7 +162,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -192,7 +192,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -325,7 +325,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -355,7 +355,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -385,7 +385,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -415,7 +415,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -445,7 +445,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -475,7 +475,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -616,7 +616,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -646,7 +646,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -676,7 +676,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -709,7 +709,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -866,7 +866,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -957,7 +957,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1021,7 +1021,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
