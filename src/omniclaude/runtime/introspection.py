@@ -275,8 +275,18 @@ class SkillNodeIntrospectionProxy:
 def _default_contracts_dir() -> Path:
     """Return the default contracts directory for the ``omniclaude`` package.
 
-    Uses ``importlib.resources.files`` so that the path is correct whether
-    the package is installed as an editable install, a wheel, or a zip archive.
+    Uses ``importlib.resources.files`` to locate the package root, then
+    converts to a ``Path``.  This works for editable installs and wheel
+    installations where the package is extracted to the filesystem.
+
+    Note:
+        Zip-backed (zipimport) packages are **not** supported.  If the package
+        is installed inside a zip archive, ``Path(str(traversable))`` will
+        produce an invalid filesystem path and subsequent glob calls will
+        silently find nothing.  ``omniclaude`` is distributed as a wheel that
+        is always extracted to the filesystem, so this limitation is
+        acceptable.  If zip support is ever required, switch the caller to use
+        ``importlib.resources.as_file()`` as a context manager.
 
     Returns the ``nodes/`` subdirectory of the ``omniclaude`` package.
     """

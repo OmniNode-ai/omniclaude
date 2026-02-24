@@ -205,11 +205,11 @@ class TestQuirkSignalValidation:
 
 @pytest.mark.unit
 class TestQuirkSignalImmutability:
-    """QuirkSignal is frozen — mutation must raise an error."""
+    """QuirkSignal is frozen — mutation must raise ValidationError."""
 
     def test_mutation_raises(self) -> None:
         sig = _signal()
-        with pytest.raises(Exception):  # ValidationError or TypeError from frozen model
+        with pytest.raises(ValidationError):
             sig.session_id = "mutated"  # type: ignore[misc]
 
 
@@ -312,11 +312,11 @@ class TestQuirkFindingValidation:
 
 @pytest.mark.unit
 class TestQuirkFindingImmutability:
-    """QuirkFinding is frozen — mutation must raise an error."""
+    """QuirkFinding is frozen — mutation must raise ValidationError."""
 
     def test_mutation_raises(self) -> None:
         finding = _finding()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             finding.fix_guidance = "mutated"  # type: ignore[misc]
 
 

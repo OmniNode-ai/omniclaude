@@ -32,18 +32,34 @@ BEGIN;
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS quirk_signals (
     id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    quirk_type         VARCHAR(50) NOT NULL,
+    quirk_type         VARCHAR(50) NOT NULL
+                           CHECK (quirk_type IN (
+                               'SYCOPHANCY', 'STUB_CODE', 'NO_TESTS', 'LOW_EFFORT_PATCH',
+                               'UNSAFE_ASSUMPTION', 'IGNORED_INSTRUCTIONS', 'HALLUCINATED_API'
+                           )),
     session_id         TEXT        NOT NULL,
     confidence         NUMERIC(5, 4) NOT NULL
                            CHECK (confidence >= 0 AND confidence <= 1),
-    evidence           JSONB       NOT NULL DEFAULT '[]'::JSONB,
-    stage              VARCHAR(20) NOT NULL,
+    evidence           JSONB       NOT NULL
+                           CHECK (
+                               jsonb_typeof(evidence) = 'array'
+                               AND jsonb_array_length(evidence) > 0
+                           ),
+    stage              VARCHAR(20) NOT NULL
+                           CHECK (stage IN ('OBSERVE', 'WARN', 'BLOCK')),
     detected_at        TIMESTAMPTZ NOT NULL,
     extraction_method  VARCHAR(20) NOT NULL
                            CHECK (extraction_method IN ('regex', 'AST', 'heuristic', 'model')),
     file_path          TEXT,
     diff_hunk          TEXT,
-    ast_span           JSONB,
+    ast_span           JSONB
+                           CHECK (
+                               ast_span IS NULL OR (
+                                   jsonb_typeof(ast_span) = 'array'
+                                   AND jsonb_array_length(ast_span) = 2
+                                   AND (ast_span ->> 0)::INT <= (ast_span ->> 1)::INT
+                               )
+                           ),
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -63,7 +79,11 @@ CREATE TABLE IF NOT EXISTS quirk_findings (
     id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     signal_id               UUID        NOT NULL
                                 REFERENCES quirk_signals (id) ON DELETE CASCADE,
-    quirk_type              VARCHAR(50) NOT NULL,
+    quirk_type              VARCHAR(50) NOT NULL
+                                CHECK (quirk_type IN (
+                                    'SYCOPHANCY', 'STUB_CODE', 'NO_TESTS', 'LOW_EFFORT_PATCH',
+                                    'UNSAFE_ASSUMPTION', 'IGNORED_INSTRUCTIONS', 'HALLUCINATED_API'
+                                )),
     policy_recommendation   VARCHAR(20) NOT NULL
                                 CHECK (policy_recommendation IN ('observe', 'warn', 'block')),
     validator_blueprint_id  TEXT,

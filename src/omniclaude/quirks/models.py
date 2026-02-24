@@ -54,22 +54,13 @@ class QuirkSignal(BaseModel):
     quirk_type: QuirkType
     session_id: str
     confidence: float = Field(..., ge=0.0, le=1.0)
-    evidence: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(..., min_length=1)
     stage: QuirkStage
     detected_at: datetime
     extraction_method: Literal["regex", "AST", "heuristic", "model"]
     diff_hunk: str | None = None
     file_path: str | None = None
     ast_span: tuple[int, int] | None = None
-
-    @field_validator("evidence")
-    @classmethod
-    def evidence_must_not_be_empty(cls, v: list[str]) -> list[str]:
-        """Require at least one evidence string for a valid signal."""
-        if not v:
-            msg = "evidence must contain at least one entry"
-            raise ValueError(msg)
-        return v
 
     @field_validator("ast_span")
     @classmethod
