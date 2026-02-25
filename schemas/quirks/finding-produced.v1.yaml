@@ -10,7 +10,7 @@
 # Payload fields are documented below.
 
 schema_version: "1"
-topic: "onex.evt.quirks.finding-produced.v1"
+topic: "onex.evt.omniclaude.quirk-finding-produced.v1"
 producer: "omniclaude.quirks.classifier.NodeQuirkClassifierCompute"
 description: >
   Emitted when NodeQuirkClassifierCompute aggregates enough signals for a
@@ -18,8 +18,8 @@ description: >
   (count >= 3, mean_confidence >= 0.7). Persisted to the quirk_findings table.
 
 envelope:
-  event_type: "onex.evt.quirks.finding-produced.v1"
-  schema_ref: "registry://onex/quirks/finding-produced/v1"
+  event_type: "onex.evt.omniclaude.quirk-finding-produced.v1"
+  schema_ref: "registry://onex/omniclaude/quirk-finding-produced/v1"
   source: "omniclaude"
   tenant_id: "default"
   namespace: "onex"

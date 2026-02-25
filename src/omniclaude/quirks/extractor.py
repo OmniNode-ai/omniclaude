@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""QuirkSignalExtractor — ONEX Effect Node for hook integration.
+"""QuirkSignalExtractor -- ONEX Effect Node for hook integration.
 
 Wires omniclaude pre/post tool hook events into the Quirks Detector registry
 and persists every emitted ``QuirkSignal`` to the database and Kafka.
@@ -13,14 +13,14 @@ Design constraints (OMN-2556):
       to DB; a warning is logged but no exception is raised.
     - No thread pool: background tasks use ``asyncio.Queue``, not threads.
 
-Node type: Effect  (external I/O — DB + Kafka)
+Node type: Effect  (external I/O -- DB + Kafka)
 Node name: NodeQuirkSignalExtractorEffect
 
 Related:
     - OMN-2533: QuirkSignal / QuirkFinding models + DB schema
     - OMN-2539: Tier 0 detector registry
     - OMN-2548: Tier 1 AST-based detectors
-    - OMN-2556: This ticket — hook integration and signal aggregation
+    - OMN-2556: This ticket -- hook integration and signal aggregation
     - OMN-2360: Quirks Detector epic
 """
 
@@ -28,14 +28,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.lib.kafka_producer_utils import (
-    KafkaProducerManager,
+from omniclaude.lib.kafka_publisher_base import (
     create_event_envelope,
+    publish_to_kafka,
 )
 from omniclaude.quirks.detectors.context import DetectionContext
 from omniclaude.quirks.detectors.registry import get_all_detectors
@@ -49,6 +50,9 @@ _SIGNAL_TOPIC = TopicBase.QUIRK_SIGNAL_DETECTED
 # Maximum number of pending detection jobs before the queue backpressure kicks
 # in (drops the event and logs a warning rather than growing unbounded).
 _QUEUE_MAX_SIZE = 256
+
+# Type alias for the injectable publish hook used in unit tests.
+_PublishHook = Callable[[dict[str, Any], str, str], Coroutine[Any, Any, bool]]
 
 
 class NodeQuirkSignalExtractorEffect:
@@ -77,7 +81,7 @@ class NodeQuirkSignalExtractorEffect:
     def __init__(
         self,
         db_session_factory: Any | None = None,
-        producer_manager: KafkaProducerManager | None = None,
+        publish_hook: _PublishHook | None = None,
     ) -> None:
         """Initialise the extractor.
 
@@ -85,13 +89,12 @@ class NodeQuirkSignalExtractorEffect:
             db_session_factory: Callable that returns an async SQLAlchemy session
                 context manager (``async_sessionmaker`` or similar).  When
                 ``None``, DB persistence is skipped (useful in unit tests).
-            producer_manager: Kafka producer manager instance.  When ``None``,
-                a default ``KafkaProducerManager`` is created automatically.
+            publish_hook: Async callable ``(envelope, topic, partition_key) -> bool``
+                used to publish events.  Defaults to ``kafka_publisher_base.publish_to_kafka``.
+                Inject a mock in unit tests to verify publishing without Kafka.
         """
         self._db_session_factory = db_session_factory
-        self._producer = producer_manager or KafkaProducerManager(
-            name="quirk-signal-extractor"
-        )
+        self._publish_hook: _PublishHook = publish_hook or _default_publish
         self._queue: asyncio.Queue[DetectionContext] = asyncio.Queue(
             maxsize=_QUEUE_MAX_SIZE
         )
@@ -163,7 +166,7 @@ class NodeQuirkSignalExtractorEffect:
         while True:
             item: DetectionContext | None = await self._queue.get()
             if item is None:
-                # Sentinel received — stop the worker.
+                # Sentinel received -- stop the worker.
                 break
             try:
                 await self._process_context(item)
@@ -269,26 +272,23 @@ class NodeQuirkSignalExtractorEffect:
         try:
             envelope = create_event_envelope(
                 event_type_value=_SIGNAL_TOPIC.value,
-                event_type_name="signal-detected",
                 payload=_signal_to_payload(signal),
                 correlation_id=signal.session_id,
-                schema_domain="quirks",
+                schema_ref="registry://onex/omniclaude/quirk-signal-detected/v1",
             )
-            published = await self._producer.publish(
-                envelope=envelope,
-                topic_base_value=_SIGNAL_TOPIC.value,
-                partition_key=signal.session_id,
+            published = await self._publish_hook(
+                envelope, _SIGNAL_TOPIC.value, signal.session_id
             )
             if not published:
                 logger.warning(
                     "NodeQuirkSignalExtractorEffect: Kafka unavailable, signal "
-                    "not published (quirk_id=%s) — DB write is authoritative",
+                    "not published (quirk_id=%s) -- DB write is authoritative",
                     signal.quirk_id,
                 )
         except Exception:
             logger.warning(
                 "NodeQuirkSignalExtractorEffect: failed to publish signal to Kafka "
-                "(quirk_id=%s) — DB write is authoritative",
+                "(quirk_id=%s) -- DB write is authoritative",
                 signal.quirk_id,
                 exc_info=True,
             )
@@ -313,7 +313,7 @@ class NodeQuirkSignalExtractorEffect:
 # SQL helpers
 # ---------------------------------------------------------------------------
 
-# Raw SQL string — wrapping in sqlalchemy.text() is deferred to _persist_signal
+# Raw SQL string -- wrapping in sqlalchemy.text() is deferred to _persist_signal
 # so that sqlalchemy is not a hard import dependency (it may not be installed).
 _INSERT_QUIRK_SIGNAL_SQL_STR = """
     INSERT INTO quirk_signals
@@ -330,6 +330,13 @@ _INSERT_QUIRK_SIGNAL_SQL_STR = """
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _default_publish(
+    envelope: dict[str, Any], topic: str, partition_key: str
+) -> bool:
+    """Default publish implementation using the shared kafka_publisher_base."""
+    return await publish_to_kafka(topic, envelope, partition_key)
 
 
 def _signal_to_payload(signal: QuirkSignal) -> dict[str, Any]:

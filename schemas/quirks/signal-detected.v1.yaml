@@ -10,7 +10,7 @@
 # Payload fields are documented below.
 
 schema_version: "1"
-topic: "onex.evt.quirks.signal-detected.v1"
+topic: "onex.evt.omniclaude.quirk-signal-detected.v1"
 producer: "omniclaude.quirks.extractor.NodeQuirkSignalExtractorEffect"
 description: >
   Emitted once per QuirkSignal produced by the Quirks Detector registry.
@@ -18,8 +18,8 @@ description: >
   quirk_signals table in omnibase_infra (omninode_bridge).
 
 envelope:
-  event_type: "onex.evt.quirks.signal-detected.v1"
-  schema_ref: "registry://onex/quirks/signal-detected/v1"
+  event_type: "onex.evt.omniclaude.quirk-signal-detected.v1"
+  schema_ref: "registry://onex/omniclaude/quirk-signal-detected/v1"
   source: "omniclaude"
   tenant_id: "default"
   namespace: "onex"

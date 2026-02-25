@@ -202,10 +202,10 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Quirks Detector topics (OMN-2556)
     # ==========================================================================
-    QUIRK_SIGNAL_DETECTED = "onex.evt.quirks.signal-detected.v1"
+    QUIRK_SIGNAL_DETECTED = "onex.evt.omniclaude.quirk-signal-detected.v1"
     """Raw QuirkSignal emitted by NodeQuirkSignalExtractorEffect after detection."""
 
-    QUIRK_FINDING_PRODUCED = "onex.evt.quirks.finding-produced.v1"
+    QUIRK_FINDING_PRODUCED = "onex.evt.omniclaude.quirk-finding-produced.v1"
     """QuirkFinding emitted by NodeQuirkClassifierCompute after threshold is met."""
 
 

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""QuirkClassifier — ONEX Compute Node for signal aggregation.
+"""QuirkClassifier -- ONEX Compute Node for signal aggregation.
 
 Aggregates ``QuirkSignal`` events (consumed from Kafka) into ``QuirkFinding``
 records with policy recommendations.
@@ -29,14 +29,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.lib.kafka_producer_utils import (
-    KafkaProducerManager,
+from omniclaude.lib.kafka_publisher_base import (
     create_event_envelope,
+    publish_to_kafka,
 )
 from omniclaude.quirks.enums import QuirkStage, QuirkType
 from omniclaude.quirks.models import QuirkFinding, QuirkSignal
@@ -44,7 +45,6 @@ from omniclaude.quirks.models import QuirkFinding, QuirkSignal
 logger = logging.getLogger(__name__)
 
 # Kafka topics
-_SIGNAL_TOPIC = TopicBase.QUIRK_SIGNAL_DETECTED
 _FINDING_TOPIC = TopicBase.QUIRK_FINDING_PRODUCED
 
 # Aggregation policy constants
@@ -58,6 +58,9 @@ _BLOCK_THRESHOLD = 30
 
 # Operator approval flag env var key (block requires explicit opt-in)
 _OPERATOR_BLOCK_APPROVED_ENV = "QUIRKS_BLOCK_APPROVED"
+
+# Type alias for the injectable publish hook used in unit tests.
+_PublishHook = Callable[[dict[str, Any], str, str], Coroutine[Any, Any, bool]]
 
 
 def _policy_recommendation(
@@ -152,7 +155,7 @@ class NodeQuirkClassifierCompute:
     def __init__(
         self,
         db_session_factory: Any | None = None,
-        producer_manager: KafkaProducerManager | None = None,
+        publish_hook: _PublishHook | None = None,
         operator_block_approved: bool = False,
         window_hours: int = _WINDOW_HOURS,
     ) -> None:
@@ -161,10 +164,11 @@ class NodeQuirkClassifierCompute:
         Args:
             db_session_factory: Async SQLAlchemy session factory for DB writes.
                 When ``None``, DB persistence is skipped.
-            producer_manager: Kafka producer manager.  When ``None``, a default
-                instance is created automatically.
+            publish_hook: Async callable ``(envelope, topic, partition_key) -> bool``
+                used to publish findings.  Defaults to ``kafka_publisher_base.publish_to_kafka``.
+                Inject a mock in unit tests to verify publishing without Kafka.
             operator_block_approved: Whether BLOCK-level enforcement is enabled.
-                Defaults to ``False`` (safe default — no hard blocks without
+                Defaults to ``False`` (safe default -- no hard blocks without
                 explicit operator opt-in).  Can also be read from the
                 ``QUIRKS_BLOCK_APPROVED`` environment variable at runtime.
             window_hours: Sliding window duration in hours.  Defaults to 24.
@@ -172,9 +176,7 @@ class NodeQuirkClassifierCompute:
         import os
 
         self._db_session_factory = db_session_factory
-        self._producer = producer_manager or KafkaProducerManager(
-            name="quirk-classifier"
-        )
+        self._publish_hook: _PublishHook = publish_hook or _default_publish
         self._operator_block_approved = operator_block_approved or (
             os.getenv(_OPERATOR_BLOCK_APPROVED_ENV, "").lower() in ("1", "true", "yes")
         )
@@ -203,7 +205,7 @@ class NodeQuirkClassifierCompute:
         """Ingest a signal and return a ``QuirkFinding`` if the threshold is met.
 
         This is the primary entry point.  Call it for each signal consumed from
-        ``onex.evt.quirks.signal-detected.v1``.
+        ``onex.evt.omniclaude.quirk-signal-detected.v1``.
 
         Args:
             signal: The incoming ``QuirkSignal`` to aggregate.
@@ -305,18 +307,15 @@ class NodeQuirkClassifierCompute:
     async def _publish_finding(self, finding: QuirkFinding) -> None:
         """Publish a finding to Kafka (best-effort)."""
         try:
-            session_id = str(finding.signal_id)  # partition by signal's session
+            partition_key = str(finding.signal_id)
             envelope = create_event_envelope(
                 event_type_value=_FINDING_TOPIC.value,
-                event_type_name="finding-produced",
                 payload=_finding_to_payload(finding),
-                correlation_id=session_id,
-                schema_domain="quirks",
+                correlation_id=partition_key,
+                schema_ref="registry://onex/omniclaude/quirk-finding-produced/v1",
             )
-            published = await self._producer.publish(
-                envelope=envelope,
-                topic_base_value=_FINDING_TOPIC.value,
-                partition_key=session_id,
+            published = await self._publish_hook(
+                envelope, _FINDING_TOPIC.value, partition_key
             )
             if not published:
                 logger.warning(
@@ -386,7 +385,7 @@ def _fix_guidance(quirk_type: QuirkType, recommendation: str) -> str:
 # SQL helpers
 # ---------------------------------------------------------------------------
 
-# Raw SQL string — sqlalchemy.text() is applied lazily in _persist_finding
+# Raw SQL string -- sqlalchemy.text() is applied lazily in _persist_finding
 # so that sqlalchemy is not a hard import dependency.
 _INSERT_QUIRK_FINDING_SQL_STR = """
     INSERT INTO quirk_findings
@@ -401,8 +400,15 @@ _INSERT_QUIRK_FINDING_SQL_STR = """
 
 
 # ---------------------------------------------------------------------------
-# Payload helpers
+# Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _default_publish(
+    envelope: dict[str, Any], topic: str, partition_key: str
+) -> bool:
+    """Default publish implementation using the shared kafka_publisher_base."""
+    return await publish_to_kafka(topic, envelope, partition_key)
 
 
 def _finding_to_payload(finding: QuirkFinding) -> dict[str, Any]:
