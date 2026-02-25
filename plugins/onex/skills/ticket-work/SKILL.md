@@ -242,7 +242,58 @@ Do NOT call Edit(), Write(), or implement code directly in the orchestrator cont
 ### spec → implementation transition
 
 After user approves spec ("approve spec", "build it"), execute automation steps (branch, Linear
-status, contract update) then dispatch:
+status, contract update) then run the Decision Context Loader and structural conflict gate
+**before** dispatching the implementation agent:
+
+#### Step 1: DecisionContextLoader (inline, no dispatch)
+
+```
+# Run inline before dispatching implementation agent:
+# 1. Call NodeDecisionStoreQueryCompute:
+#      scope_services = [ticket.repo_slug]
+#      scope_services_mode = ANY
+#      epic_id = ticket.epic_id (omit if None)
+#      status = ACTIVE
+# 2. Format result as structured decisions block:
+#
+#    --- ACTIVE DECISIONS ---
+#    [TECH_STACK_CHOICE/architecture] Use Kafka for all cross-service async comms
+#    Rationale: Decouples producers from consumers; fits existing Redpanda infra
+#    Rejected: Direct HTTP → tight coupling | gRPC → overkill
+#    Decision ID: <uuid>
+#    ---
+#
+#    If no decisions match: inject "No active decisions for this scope."
+#    Store block in context for injection into polymorphic agent prompt.
+```
+
+#### Step 2: structural conflict gate (inline, no dispatch)
+
+```
+# Run inline after DecisionContextLoader, before dispatching agent:
+# 1. If spec.decisions is empty: skip, proceed to dispatch
+# 2. For each decision in spec.decisions:
+#      result = check_conflicts(decision, scope=ticket.repo_slug)
+#      → returns: {severity: HIGH|MEDIUM|LOW, conflicts: [...], explanation: str}
+# 3. HIGH severity found:
+#      Post Slack HIGH_RISK gate:
+#        "[HIGH_RISK] Structural conflict in spec for {ticket_id}
+#         Decision: {new_decision_summary}
+#         Conflicts with: {existing_decision_id} — {existing_decision_summary}
+#         Reply 'proceed {ticket_id}' to override, or 'hold {ticket_id}' to pause."
+#      BLOCK: do not dispatch implementation agent until operator replies
+#      "proceed" → continue to dispatch
+#      "hold" → exit ticket-work with status: held_conflict
+# 4. MEDIUM severity found (no HIGH):
+#      Post Slack MEDIUM_RISK notification
+#      Continue to dispatch automatically
+# 5. LOW only:
+#      Log to ticket-work log, continue to dispatch
+```
+
+#### Step 3: dispatch implementation agent
+
+Dispatch only after Steps 1 and 2 complete (including any HIGH_RISK gate resolution):
 
 ```
 Task(
@@ -255,6 +306,11 @@ Task(
 
     Relevant files:
     {relevant_files}
+
+    {decisions_block}
+
+    The decisions block above lists active architectural decisions for this repo scope.
+    If any implementation choice contradicts a listed decision, flag it before proceeding.
 
     Execute the implementation. Do NOT commit changes (the orchestrator handles git).
     Report: files changed, what was implemented, any issues encountered."
@@ -335,3 +391,5 @@ This replaces the former advisory annotation `REQUIRED SUB-SKILL: root-cause-tra
 - Related: OMN-1831 (Slack notifications) - notification implementation
 - `root-cause-tracing` skill (auto-dispatched on implementation failure)
 - `systematic-debugging` skill (dispatched when root-cause-tracing identifies deep error)
+- `decision-store` skill (OMN-2768) — DecisionContextLoader and check-conflicts
+- `NodeDecisionStoreQueryCompute` (OMN-2767) — decision query node used at spec→implementation gate
