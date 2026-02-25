@@ -12,13 +12,7 @@ import pytest
 
 # capability_probe lives in plugins/onex/hooks/lib — not a proper package,
 # so we inject its directory into sys.path before importing.
-_LIB_DIR = str(
-    Path(__file__).parents[4]
-    / "plugins"
-    / "onex"
-    / "hooks"
-    / "lib"
-)
+_LIB_DIR = str(Path(__file__).parents[4] / "plugins" / "onex" / "hooks" / "lib")
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 
@@ -100,9 +94,7 @@ def test_kafka_reachable_single_host_failure() -> None:
 def test_kafka_reachable_multi_host_first_ok() -> None:
     """Returns True if the first of multiple hosts is reachable."""
     call_results = [True, False]
-    with patch.object(
-        capability_probe, "_socket_check", side_effect=call_results
-    ):
+    with patch.object(capability_probe, "_socket_check", side_effect=call_results):
         assert capability_probe._kafka_reachable("a:9092,b:9092") is True
 
 
@@ -110,9 +102,7 @@ def test_kafka_reachable_multi_host_first_ok() -> None:
 def test_kafka_reachable_multi_host_second_ok() -> None:
     """Returns True if the second of multiple hosts is reachable."""
     call_results = [False, True]
-    with patch.object(
-        capability_probe, "_socket_check", side_effect=call_results
-    ):
+    with patch.object(capability_probe, "_socket_check", side_effect=call_results):
         assert capability_probe._kafka_reachable("a:9092,b:9092") is True
 
 
@@ -284,7 +274,10 @@ def test_write_atomic_is_atomic(tmp_path: Path) -> None:
     try:
         target = tmp_path / ".onex_capabilities"
         capability_probe.CAPABILITIES_FILE = target
-        data: dict[str, object] = {"tier": "standalone", "probed_at": datetime.now(tz=UTC).isoformat()}
+        data: dict[str, object] = {
+            "tier": "standalone",
+            "probed_at": datetime.now(tz=UTC).isoformat(),
+        }
         capability_probe.write_atomic(data)
         # .tmp should be gone (renamed to target)
         assert not target.with_suffix(".tmp").exists()
@@ -307,7 +300,9 @@ def test_run_probe_writes_file_and_returns_tier(tmp_path: Path) -> None:
         with (
             patch.object(capability_probe, "_kafka_reachable", return_value=False),
         ):
-            tier = capability_probe.run_probe(kafka_servers="", intelligence_url="http://localhost:8053")
+            tier = capability_probe.run_probe(
+                kafka_servers="", intelligence_url="http://localhost:8053"
+            )
 
         assert tier == "standalone"
         assert capability_probe.CAPABILITIES_FILE.exists()
