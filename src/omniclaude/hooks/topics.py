@@ -190,6 +190,16 @@ class TopicBase(StrEnum):
     DECISION_RECORDED_CMD = "onex.cmd.omniintelligence.decision-recorded.v1"
 
     # ==========================================================================
+    # Decision store event bus topics (OMN-2766)
+    # ==========================================================================
+    DECISION_RECORDED_EVT_OMNICLAUDE = "onex.evt.omniclaude.decision-recorded.v1"
+    DECISION_STATUS_CHANGED_EVT = "onex.evt.omniclaude.decision-status-changed.v1"
+    DECISION_CONFLICT_DETECTED_EVT = "onex.evt.omniclaude.decision-conflict-detected.v1"
+    DECISION_CONFLICT_STATUS_CHANGED = (
+        "onex.evt.omniclaude.decision-conflict-status-changed.v1"
+    )
+
+    # ==========================================================================
     # ChangeFrame emission topics (OMN-2651)
     # ==========================================================================
     CHANGE_FRAME_EMITTED = "onex.evt.omniclaude.change-frame.v1"
