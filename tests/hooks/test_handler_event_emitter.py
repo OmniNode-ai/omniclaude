@@ -73,7 +73,7 @@ def kafka_env(monkeypatch: pytest.MonkeyPatch) -> None:
     create_kafka_config() before EventBusKafka is instantiated.
     """
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "test:9092")
-    monkeypatch.setenv("KAFKA_ENVIRONMENT", "test")
+    monkeypatch.setenv("KAFKA_ENVIRONMENT", "dev")
 
 
 # =============================================================================

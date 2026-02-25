@@ -50,7 +50,7 @@ Behavior:
 6. If structural confidence >= 0.6: fire async `semantic_check_async()` — non-blocking.
 7. Emit `decision-conflict-status-changed.v1` event for each new conflict (status = OPEN).
 8. Emit `decision-conflict-status-changed.v1` on each subsequent status transition
-   (OPEN → RESOLVED or OPEN → DISMISSED) after Slack resolution.
+   (OPEN -> RESOLVED or OPEN -> DISMISSED) after Slack resolution.
 
 ### `query`
 
@@ -116,7 +116,7 @@ Behavior:
 
 1. **Platform-wide scope** (either entry has `scope_services = []`): floor at MEDIUM
 2. **Architecture layer** (either entry has `scope_layer = "architecture"`): floor at HIGH
-3. **Semantic shift** (from DeepSeek-R1): ±1 step, clamped to [LOW, HIGH]
+3. **Semantic shift** (from DeepSeek-R1): +/-1 step, clamped to [LOW, HIGH]
 
 **Hard rules:**
 - `structural_confidence == 0.0` (cross-domain): no conflict, semantic check MUST NOT run
@@ -167,8 +167,8 @@ Actions:
 ```
 
 **`proceed` rules:**
-- `proceed <id>` with no note → `resolution_note = "proceed (no note provided)"`
-- `proceed <id> <note>` → `resolution_note = <note text>`
+- `proceed <id>` with no note -> `resolution_note = "proceed (no note provided)"`
+- `proceed <id> <note>` -> `resolution_note = <note text>`
 
 **`hold` rules:**
 - Pipeline stays paused; no state change; no event emitted
@@ -190,19 +190,19 @@ Actions:
 
 ```
 1. record sub-operation detects HIGH conflict
-2. Invoke slack-gate skill (HIGH_RISK tier) → post conflict message to Slack
+2. Invoke slack-gate skill (HIGH_RISK tier) -> post conflict message to Slack
 3. Pipeline blocks (polling for Slack replies)
 4. Operator replies with: proceed | hold | dismiss
 5. For proceed:
    - Update conflict: status=RESOLVED, resolved_by, resolved_at, resolution_note
-   - Emit decision-conflict-status-changed.v1 (OPEN → RESOLVED)
+   - Emit decision-conflict-status-changed.v1 (OPEN -> RESOLVED)
    - If all conflicts resolved: resume pipeline
 6. For hold:
    - No state change, no event
    - Continue polling
 7. For dismiss:
    - Update conflict: status=DISMISSED
-   - Emit decision-conflict-status-changed.v1 (OPEN → DISMISSED)
+   - Emit decision-conflict-status-changed.v1 (OPEN -> DISMISSED)
    - Mark pair as permanently suppressed
    - If all conflicts resolved/dismissed: resume pipeline
 8. Pipeline resumes after all blocking conflicts are RESOLVED or DISMISSED
@@ -219,9 +219,9 @@ Actions:
 **Source**: `omniclaude/src/omniclaude/hooks/topics.py` (added in OMN-2766)
 
 **Transitions that emit:**
-- `None → OPEN` (conflict first detected during `record`)
-- `OPEN → RESOLVED` (via `proceed` command)
-- `OPEN → DISMISSED` (via `dismiss` command)
+- `None -> OPEN` (conflict first detected during `record`)
+- `OPEN -> RESOLVED` (via `proceed` command)
+- `OPEN -> DISMISSED` (via `dismiss` command)
 
 **Payload:**
 ```json

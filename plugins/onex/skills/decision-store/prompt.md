@@ -262,7 +262,7 @@ Actions:
 - Sets `conflict.resolution_note`:
   - If note provided: `resolution_note = <provided text>`
   - If no note: `resolution_note = "proceed (no note provided)"`
-- Emits `decision-conflict-status-changed.v1` (OPEN → RESOLVED)
+- Emits `decision-conflict-status-changed.v1` (OPEN -> RESOLVED)
 - Resumes the pipeline
 
 **`hold <conflict_id>`**
@@ -274,7 +274,7 @@ Actions:
 **`dismiss <conflict_id>`**
 - Sets `conflict.status = DISMISSED`
 - This pair will NEVER trigger another Slack gate again, even if re-recorded
-- Emits `decision-conflict-status-changed.v1` (OPEN → DISMISSED)
+- Emits `decision-conflict-status-changed.v1` (OPEN -> DISMISSED)
 - Resumes the pipeline (dismissed = acknowledged, not a blocker)
 
 **Unrecognized command:**
@@ -288,8 +288,8 @@ Actions:
 
 Emit `TopicBase.DECISION_CONFLICT_STATUS_CHANGED` on EVERY status transition:
 
-- `OPEN → RESOLVED` (via `proceed`)
-- `OPEN → DISMISSED` (via `dismiss`)
+- `OPEN -> RESOLVED` (via `proceed`)
+- `OPEN -> DISMISSED` (via `dismiss`)
 
 The topic constant is imported from `omniclaude/src/omniclaude/hooks/topics.py`:
 

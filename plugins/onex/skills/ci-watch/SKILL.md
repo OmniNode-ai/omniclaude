@@ -197,8 +197,36 @@ exec claude --skill ci-watch \
 | `Skill(skill="ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
 | `ci-watch.sh --pr {N} --ticket-id {T} --timeout-minutes 90` | Shell: direct invocation with all parameters |
 
+## Invocation from ticket-pipeline
+
+`ticket-pipeline` invokes `ci-watch` from Phase 4 as a **non-blocking background agent**
+(`run_in_background=True`). The pipeline does NOT block on or await the ci-watch result —
+it advances to Phase 5 immediately after dispatching.
+
+The background dispatch only occurs when the initial CI snapshot (taken in Phase 4) shows
+one or more failing checks. If CI is passing or pending, no dispatch happens at all and
+GitHub's auto-merge handles the rest.
+
+**Pass-through policy args** forwarded from ticket-pipeline to ci-watch:
+- `--max-fix-cycles {max_ci_fix_cycles}` — max fix attempts before capping (default 3)
+- `--timeout-minutes {ci_watch_timeout_minutes}` — max wait time (default 60); governs the
+  background ci-watch agent, not the ticket-pipeline itself
+
+```
+# Example background dispatch from ticket-pipeline Phase 4:
+Task(
+  subagent_type="onex:polymorphic-agent",
+  run_in_background=True,
+  description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
+  prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
+    Invoke: Skill(skill=\"onex:ci-watch\",
+      args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
+    Fix any failures, push fixes. GitHub will auto-merge once CI is green."
+)
+```
+
 ## See Also
 
-- `ticket-pipeline` skill (planned: invokes ci-watch after create_pr phase)
-- `pr-watch` skill (planned: runs after ci-watch passes)
+- `ticket-pipeline` skill (Phase 4 dispatches ci-watch as a background agent on CI failure)
+- `pr-watch` skill (runs after Phase 4 in ticket-pipeline)
 - OMN-2523 — implementation ticket

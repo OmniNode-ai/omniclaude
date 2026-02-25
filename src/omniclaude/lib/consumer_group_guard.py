@@ -49,6 +49,8 @@ SKILL_NODE_CONSUMER_GROUPS: dict[str, str] = {
     "NodeLinearEffect": "omniclaude-linear-effect.v1",
     "NodeTicketingEffect": "omniclaude-ticketing-effect.v1",
     "NodeLocalCodingOrchestrator": "omniclaude-local-coding-orchestrator.v1",
+    # OMN-2778: skill-execution-log projection consumer
+    "SkillExecutionLogSubscriber": "omniclaude-skill-execution-log-subscriber.v1",
 }
 
 

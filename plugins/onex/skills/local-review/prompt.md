@@ -1,3 +1,7 @@
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
 # Local Review Orchestration
 
 You are executing the local-review skill. This prompt defines the complete orchestration logic.
