@@ -66,7 +66,7 @@ _NODE_ID_SUBDOMAIN = "skill"
 # ---------------------------------------------------------------------------
 
 
-class _SkillNodeProxy(MixinNodeIntrospection):
+class _SkillNodeProxy(MixinNodeIntrospection):  # type: ignore[misc]
     """Lightweight proxy that publishes introspection on behalf of a skill node.
 
     Each skill node gets its own proxy instance with a deterministic node_id.
@@ -275,12 +275,23 @@ class SkillNodeIntrospectionProxy:
 def _default_contracts_dir() -> Path:
     """Return the default contracts directory for the ``omniclaude`` package.
 
-    Uses ``importlib.resources.files`` so that the path is correct whether
-    the package is installed as an editable install, a wheel, or a zip archive.
+    Uses ``importlib.resources.files`` to locate the package root, then
+    converts to a ``Path``.  This works for editable installs and wheel
+    installations where the package is extracted to the filesystem.
+
+    Note:
+        Zip-backed (zipimport) packages are **not** supported.  If the package
+        is installed inside a zip archive, ``Path(str(traversable))`` will
+        produce an invalid filesystem path and subsequent glob calls will
+        silently find nothing.  ``omniclaude`` is distributed as a wheel that
+        is always extracted to the filesystem, so this limitation is
+        acceptable.  If zip support is ever required, switch the caller to use
+        ``importlib.resources.as_file()`` as a context manager.
 
     Returns the ``nodes/`` subdirectory of the ``omniclaude`` package.
     """
-    return Path(importlib.resources.files("omniclaude").joinpath("nodes"))
+    traversable = importlib.resources.files("omniclaude").joinpath("nodes")
+    return Path(str(traversable))
 
 
 def _parse_reason(reason: str) -> EnumIntrospectionReason:
