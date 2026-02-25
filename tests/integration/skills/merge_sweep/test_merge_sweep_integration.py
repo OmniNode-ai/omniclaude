@@ -119,15 +119,15 @@ class TestGateFreeDesign:
     def test_no_gate_absent_from_prompt(self) -> None:
         """prompt.md must not contain --no-gate."""
         matches = _grep_file(_MERGE_SWEEP_PROMPT, r"--no-gate")
-        assert matches == [], (
-            "--no-gate found in merge-sweep/prompt.md:\n" + "\n".join(matches)
+        assert matches == [], "--no-gate found in merge-sweep/prompt.md:\n" + "\n".join(
+            matches
         )
 
     def test_no_gate_absent_from_skill_md(self) -> None:
         """SKILL.md must not contain --no-gate."""
         matches = _grep_file(_MERGE_SWEEP_SKILL, r"--no-gate")
-        assert matches == [], (
-            "--no-gate found in merge-sweep/SKILL.md:\n" + "\n".join(matches)
+        assert matches == [], "--no-gate found in merge-sweep/SKILL.md:\n" + "\n".join(
+            matches
         )
 
     def test_gate_attestation_not_in_skill_args(self) -> None:
@@ -303,7 +303,11 @@ class TestClaimBeforeMutate:
     def test_prompt_documents_claim_registry(self) -> None:
         """prompt.md must reference ClaimRegistry for claim-before-mutate enforcement."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "ClaimRegistry" in content or "claim_registry" in content or "registry" in content.lower(), (
+        assert (
+            "ClaimRegistry" in content
+            or "claim_registry" in content
+            or "registry" in content.lower()
+        ), (
             "prompt.md must reference claim registry before enabling auto-merge or dispatching polish"
         )
 
@@ -489,7 +493,12 @@ class TestCIEnforcementGrep:
     def test_prompt_contains_gh_pr_merge_auto(self) -> None:
         """prompt.md MUST contain 'gh pr merge' with '--auto' (the v3.0.0 merge mechanism)."""
         result = subprocess.run(
-            ["grep", "-n", "gh pr merge.*--auto\\|--auto.*gh pr merge", str(_MERGE_SWEEP_PROMPT)],
+            [
+                "grep",
+                "-n",
+                "gh pr merge.*--auto\\|--auto.*gh pr merge",
+                str(_MERGE_SWEEP_PROMPT),
+            ],
             capture_output=True,
             text=True,
             check=False,

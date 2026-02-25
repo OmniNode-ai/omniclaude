@@ -363,7 +363,9 @@ for pr in polish_queue:
     branch = pr["headRefName"]
     pr_number = pr["number"]
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr_number)
-    worktree_path = f"/Volumes/PRO-G40/Code/omni_worktrees/merge-sweep-{run_id}/{repo_name}-pr-{pr_number}"
+    omni_home = os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home"))
+    worktree_base = os.environ.get("OMNI_WORKTREES", str(Path(omni_home).parent / "omni_worktrees"))
+    worktree_path = f"{worktree_base}/merge-sweep-{run_id}/{repo_name}-pr-{pr_number}"
 
     acquired = registry.acquire(pr_key, run_id=run_id, action="polish", dry_run=dry_run)
     if not acquired:
@@ -389,8 +391,8 @@ Steps:
 
 1. Fetch the branch and create a worktree:
    ```bash
-   git -C /Volumes/PRO-G40/Code/omni_home/{repo_name} fetch origin {branch}
-   git -C /Volumes/PRO-G40/Code/omni_home/{repo_name} worktree add \
+   git -C {omni_home}/{repo_name} fetch origin {branch}
+   git -C {omni_home}/{repo_name} worktree add \
      {worktree_path} {branch}
    cd {worktree_path}
    ```
@@ -414,7 +416,7 @@ Steps:
 
 5. Clean up the worktree:
    ```bash
-   git -C /Volumes/PRO-G40/Code/omni_home/{repo_name} worktree remove {worktree_path} --force
+   git -C {omni_home}/{repo_name} worktree remove {worktree_path} --force
    ```
 
 Return a JSON result:
@@ -461,7 +463,7 @@ elif total_auto_merge_set > 0 and total_failed > 0:
 elif total_auto_merge_set == 0 and total_failed > 0:
     status = "error"
 else:
-    status = "queued"  # edge case: 0 candidates (all skipped/blocked)
+    status = "nothing_to_merge"  # all candidates were skipped or blocked
 ```
 
 ---

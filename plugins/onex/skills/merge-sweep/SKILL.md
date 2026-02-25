@@ -204,7 +204,7 @@ Draft PRs — skip silently.
    For each PR in polish_queue[]:
      acquire claim
      dispatch polymorphic-agent:
-       - create worktree at /Volumes/PRO-G40/Code/omni_worktrees/merge-sweep-<run_id>/<repo>-pr-<N>/
+       - create worktree at ${OMNI_WORKTREES}/merge-sweep-<run_id>/<repo>-pr-<N>/
        - Skill(skill="onex:pr-polish", args="<N> --required-clean-runs <polish_clean_runs>")
        - re-check mergeable state after polish
        - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
