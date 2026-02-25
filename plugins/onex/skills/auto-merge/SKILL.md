@@ -81,7 +81,7 @@ or timed out.
 1. Fetch PR state: `gh pr view {pr_number} --repo {repo} --json mergeable,mergeStateStatus,reviews`
 2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; max duration: `gate_timeout_hours`):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
-     ```
+     ```text
      [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
      ```
    - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to gate
