@@ -59,7 +59,7 @@ def _make_event(
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def adapter() -> PersonalityAdapter:
     return PersonalityAdapter()
 

@@ -38,13 +38,13 @@ class ModelQuietHours(BaseModel):
         default=22,
         ge=0,
         le=23,
-        description="Hour (0–23, UTC) at which quiet hours begin",
+        description="Hour (0-23, UTC) at which quiet hours begin",
     )
     end: int = Field(
         default=8,
         ge=0,
         le=23,
-        description="Hour (0–23, UTC) at which quiet hours end",
+        description="Hour (0-23, UTC) at which quiet hours end",
     )
 
 

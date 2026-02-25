@@ -35,8 +35,8 @@ class ModelLogMetrics(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    cpu: float | None = Field(default=None, description="CPU utilisation 0.0–1.0")
-    mem: float | None = Field(default=None, description="Memory utilisation 0.0–1.0")
+    cpu: float | None = Field(default=None, description="CPU utilisation 0.0-1.0")
+    mem: float | None = Field(default=None, description="Memory utilisation 0.0-1.0")
     queue_depth: int | None = Field(
         default=None, description="Queue depth at emit time"
     )

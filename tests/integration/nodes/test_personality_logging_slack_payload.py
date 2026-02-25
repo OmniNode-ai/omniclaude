@@ -39,7 +39,6 @@ from omniclaude.nodes.node_personality_logging_effect.node import (
 )
 from omniclaude.nodes.node_personality_logging_effect.sinks.sink_slack import SlackSink
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

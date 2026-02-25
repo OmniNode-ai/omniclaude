@@ -35,7 +35,6 @@ from typing import Any
 import yaml
 
 from omniclaude.nodes.node_personality_logging_effect.models.model_log_event import (
-    EnumLogSeverity,
     ModelLogEvent,
 )
 from omniclaude.nodes.node_personality_logging_effect.models.model_personality_profile import (
