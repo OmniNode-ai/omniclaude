@@ -105,20 +105,40 @@ def _closest_alternative(
 
 def _collect_attribute_refs(
     tree: ast.AST,
-) -> list[tuple[str, str, int]]:
+) -> tuple[list[tuple[str, str, int]], dict[str, str]]:
     """Walk *tree* and collect ``module.attr`` attribute accesses.
+
+    Also builds a mapping of local alias names to their fully-qualified module
+    paths, so that callers can resolve ``from pkg import utils; utils.fn()``
+    patterns against a dotted-module-path symbol index.
 
     Only considers ``ast.Attribute`` nodes whose value is a plain ``ast.Name``
     (i.e. single-level ``module.symbol`` references).
 
     Returns:
-        List of ``(module_name, attr_name, lineno)`` tuples.
+        A 2-tuple of:
+        - ``refs``: list of ``(local_name, attr_name, lineno)`` tuples.
+        - ``alias_to_module``: mapping of local bound name to fully-qualified
+          module path (e.g. ``"utils"`` → ``"pkg.utils"``).
     """
     refs: list[tuple[str, str, int]] = []
+    alias_to_module: dict[str, str] = {}
+
     for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bound = alias.asname if alias.asname else alias.name.split(".")[0]
+                alias_to_module[bound] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                bound = alias.asname if alias.asname else alias.name
+                alias_to_module[bound] = f"{node.module}.{alias.name}"
         if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
             refs.append((node.value.id, node.attr, node.lineno))
-    return refs
+
+    return refs, alias_to_module
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +194,7 @@ class HallucinatedApiDetector:
             )
             return []
 
-        refs = _collect_attribute_refs(tree)
+        refs, alias_to_module = _collect_attribute_refs(tree)
         if not refs:
             return []
 
@@ -182,11 +202,14 @@ class HallucinatedApiDetector:
         signals: list[QuirkSignal] = []
 
         for module_name, attr_name, src_lineno in refs:
-            if module_name not in self._symbol_index:
+            # Resolve local alias (e.g. ``from pkg import utils`` → ``pkg.utils``)
+            # so we can look up the dotted-path key in the symbol index.
+            resolved_module = alias_to_module.get(module_name, module_name)
+            if resolved_module not in self._symbol_index:
                 # Unknown module — we can't validate it, skip.
                 continue
 
-            exported = self._symbol_index[module_name]
+            exported = self._symbol_index[resolved_module]
             if attr_name in exported:
                 # Symbol exists — no hallucination.
                 continue
@@ -196,7 +219,7 @@ class HallucinatedApiDetector:
 
             evidence: list[str] = [
                 f"Line {diff_lineno}: `{module_name}.{attr_name}` not found in "
-                f"symbol index for module `{module_name}`",
+                f"symbol index for module `{resolved_module}`",
                 f"Referenced symbol: {module_name}.{attr_name}",
             ]
             if closest is not None:
