@@ -208,6 +208,16 @@ class TopicBase(StrEnum):
     QUIRK_FINDING_PRODUCED = "onex.evt.omniclaude.quirk-finding-produced.v1"
     """QuirkFinding emitted by NodeQuirkClassifierCompute after threshold is met."""
 
+    # ==========================================================================
+    # Skill lifecycle topics (OMN-2773)
+    # Convention: event_type = dotted form, topic = dashed form.
+    # ==========================================================================
+    SKILL_STARTED = "onex.evt.omniclaude.skill-started.v1"
+    """Emitted before skill dispatch; join key is run_id."""
+
+    SKILL_COMPLETED = "onex.evt.omniclaude.skill-completed.v1"
+    """Emitted after skill dispatch (success or failure); join key is run_id."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

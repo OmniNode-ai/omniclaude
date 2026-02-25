@@ -704,6 +704,35 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["frame_id", "trace_id", "session_id"],
     ),
+    # =========================================================================
+    # Skill Lifecycle Events (OMN-2773)
+    # =========================================================================
+    # Partition key: run_id (guarantees ordered join within a single invocation).
+    # Both started and completed for the same run_id land on the same partition.
+    "skill.started": EventRegistration(
+        event_type="skill.started",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.SKILL_STARTED,
+                transform=None,  # Passthrough — no sensitive data in skill metadata
+                description="Skill invocation started; emitted before task_dispatcher call",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "skill_name", "correlation_id"],
+    ),
+    "skill.completed": EventRegistration(
+        event_type="skill.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.SKILL_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in skill metadata
+                description="Skill invocation completed (success or failure); emitted after task_dispatcher",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "skill_name", "correlation_id", "status"],
+    ),
 }
 
 

@@ -776,6 +776,9 @@ class TestEventRegistryIntegration:
             "intent.commit.bound",
             # ChangeFrame emission (OMN-2651)
             "change.frame.emitted",
+            # Skill lifecycle events (OMN-2773)
+            "skill.started",
+            "skill.completed",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
