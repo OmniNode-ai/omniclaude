@@ -42,6 +42,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=_default_sock,
         help=f"Unix socket path (default: {_default_sock})",
     )
+    start_parser.add_argument(
+        "--secondary-kafka-servers",
+        default=None,
+        help="Secondary Kafka bootstrap servers (e.g. kafka.omninode.ai:9093). "
+        "When set, events are published to both primary and secondary clusters. "
+        "Secondary failures are non-fatal.",
+    )
 
     stop_parser = sub.add_parser("stop", help="Stop the publisher")
     stop_parser.add_argument(
@@ -57,10 +64,17 @@ def _do_start(args: argparse.Namespace) -> int:
     from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
     from omniclaude.publisher.publisher_config import PublisherConfig
 
-    # Build config from args + env vars (pydantic-settings handles env automatically)
+    # Build config from args + env vars (pydantic-settings handles env automatically).
+    # kafka_secondary_bootstrap_servers falls back to KAFKA_SECONDARY_BOOTSTRAP_SERVERS
+    # env var if not provided on CLI.
     config = PublisherConfig(
         kafka_bootstrap_servers=args.kafka_servers,
         socket_path=Path(args.socket_path),
+        **(
+            {"kafka_secondary_bootstrap_servers": args.secondary_kafka_servers}
+            if args.secondary_kafka_servers is not None
+            else {}
+        ),
     )
 
     publisher = EmbeddedEventPublisher(config)
