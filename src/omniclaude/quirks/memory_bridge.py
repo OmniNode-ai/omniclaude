@@ -53,7 +53,7 @@ def _derive_quirk_pattern_key(finding: QuirkFinding) -> str:
 
     Key format: ``QUIRK:{quirk_type}:{policy_recommendation}``
 
-    This yields 21 distinct keys (7 quirk types × 3 recommendations)
+    This yields 21 distinct keys (7 quirk types x 3 recommendations)
     so that OmniMemory consumers can look up the worst-case enforcement
     level ever recorded for a given quirk type.
 
@@ -70,7 +70,9 @@ def _derive_quirk_pattern_key(finding: QuirkFinding) -> str:
     )
 
 
-def _finding_to_pattern(finding: QuirkFinding, existing: ModelPromotedPattern | None) -> ModelPromotedPattern:
+def _finding_to_pattern(
+    finding: QuirkFinding, existing: ModelPromotedPattern | None
+) -> ModelPromotedPattern:
     """Build a ``ModelPromotedPattern`` from a ``QuirkFinding``.
 
     If an existing pattern is supplied the evidence count and version are
@@ -186,7 +188,9 @@ class NodeQuirkMemoryBridgeEffect:
             )
         return pattern
 
-    def get_pattern_for_finding(self, finding: QuirkFinding) -> ModelPromotedPattern | None:
+    def get_pattern_for_finding(
+        self, finding: QuirkFinding
+    ) -> ModelPromotedPattern | None:
         """Look up the current OmniMemory pattern for a finding type.
 
         Args:

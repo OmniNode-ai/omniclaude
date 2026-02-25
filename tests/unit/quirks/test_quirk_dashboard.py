@@ -17,9 +17,8 @@ Related: OMN-2586
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -31,7 +30,6 @@ from omniclaude.quirks.dashboard import (
     _build_summary,
     _empty_summary,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers: fake DB rows
@@ -47,18 +45,18 @@ def _make_signal_row_tuple(
     """Build a fake row tuple matching the SELECT column order for quirk_signals."""
     now = datetime.now(tz=UTC)
     return (
-        str(uuid4()),   # id
-        quirk_type,     # quirk_type
-        session_id,     # session_id
-        confidence,     # confidence
+        str(uuid4()),  # id
+        quirk_type,  # quirk_type
+        session_id,  # session_id
+        confidence,  # confidence
         ["evidence1"],  # evidence (list)
-        stage,          # stage
-        now,            # detected_at (datetime)
-        "regex",        # extraction_method
-        "src/foo.py",   # file_path
-        None,           # diff_hunk
-        None,           # ast_span
-        now,            # created_at (datetime)
+        stage,  # stage
+        now,  # detected_at (datetime)
+        "regex",  # extraction_method
+        "src/foo.py",  # file_path
+        None,  # diff_hunk
+        None,  # ast_span
+        now,  # created_at (datetime)
     )
 
 
@@ -70,15 +68,15 @@ def _make_finding_row_tuple(
     """Build a fake row tuple matching the SELECT column order for quirk_findings."""
     now = datetime.now(tz=UTC)
     return (
-        str(uuid4()),          # id
-        str(uuid4()),          # signal_id
-        quirk_type,            # quirk_type
-        policy_recommendation, # policy_recommendation
-        None,                  # validator_blueprint_id
-        [],                    # suggested_exemptions
+        str(uuid4()),  # id
+        str(uuid4()),  # signal_id
+        quirk_type,  # quirk_type
+        policy_recommendation,  # policy_recommendation
+        None,  # validator_blueprint_id
+        [],  # suggested_exemptions
         "Fix the stub code.",  # fix_guidance
-        confidence,            # confidence
-        now,                   # created_at
+        confidence,  # confidence
+        now,  # created_at
     )
 
 
@@ -93,9 +91,18 @@ def test_quirk_signal_row_to_dict_keys() -> None:
     row = QuirkSignalRow(_make_signal_row_tuple())
     d = row.to_dict()
     expected_keys = {
-        "id", "quirk_type", "session_id", "confidence", "evidence",
-        "stage", "detected_at", "extraction_method", "file_path",
-        "diff_hunk", "ast_span", "created_at",
+        "id",
+        "quirk_type",
+        "session_id",
+        "confidence",
+        "evidence",
+        "stage",
+        "detected_at",
+        "extraction_method",
+        "file_path",
+        "diff_hunk",
+        "ast_span",
+        "created_at",
     }
     assert expected_keys == set(d.keys())
 
@@ -137,9 +144,15 @@ def test_quirk_finding_row_to_dict_keys() -> None:
     row = QuirkFindingRow(_make_finding_row_tuple())
     d = row.to_dict()
     expected_keys = {
-        "id", "signal_id", "quirk_type", "policy_recommendation",
-        "validator_blueprint_id", "suggested_exemptions", "fix_guidance",
-        "confidence", "created_at",
+        "id",
+        "signal_id",
+        "quirk_type",
+        "policy_recommendation",
+        "validator_blueprint_id",
+        "suggested_exemptions",
+        "fix_guidance",
+        "confidence",
+        "created_at",
     }
     assert expected_keys == set(d.keys())
 

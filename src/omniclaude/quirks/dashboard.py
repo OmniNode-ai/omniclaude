@@ -76,12 +76,16 @@ class QuirkSignalRow:
         self.confidence = float(row[3])
         self.evidence = list(row[4]) if row[4] else []
         self.stage = str(row[5])
-        self.detected_at = row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6])
+        self.detected_at = (
+            row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6])
+        )
         self.extraction_method = str(row[7])
         self.file_path = str(row[8]) if row[8] is not None else None
         self.diff_hunk = str(row[9]) if row[9] is not None else None
         self.ast_span = list(row[10]) if row[10] is not None else None
-        self.created_at = row[11].isoformat() if hasattr(row[11], "isoformat") else str(row[11])
+        self.created_at = (
+            row[11].isoformat() if hasattr(row[11], "isoformat") else str(row[11])
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict."""
@@ -137,7 +141,9 @@ class QuirkFindingRow:
         self.suggested_exemptions = list(row[5]) if row[5] else []
         self.fix_guidance = str(row[6])
         self.confidence = float(row[7])
-        self.created_at = row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8])
+        self.created_at = (
+            row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8])
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict."""
@@ -230,9 +236,7 @@ class NodeQuirkDashboardQueryEffect:
 
             async with self._db_session_factory() as session:
                 signal_rows = (
-                    await session.execute(
-                        sa_text(_SIGNALS_BY_TYPE_SQL), {"days": days}
-                    )
+                    await session.execute(sa_text(_SIGNALS_BY_TYPE_SQL), {"days": days})
                 ).fetchall()
 
                 finding_rows = (
@@ -308,7 +312,9 @@ class NodeQuirkDashboardQueryEffect:
                 where_clauses.append("stage = :stage")
                 params["stage"] = stage
 
-            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            where_sql = (
+                ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            )
             sql = f"""
                 SELECT id, quirk_type, session_id, confidence, evidence, stage,
                        detected_at, extraction_method, file_path, diff_hunk,
@@ -371,7 +377,9 @@ class NodeQuirkDashboardQueryEffect:
                 where_clauses.append("policy_recommendation = :policy_recommendation")
                 params["policy_recommendation"] = policy_recommendation
 
-            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            where_sql = (
+                ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+            )
             sql = f"""
                 SELECT id, signal_id, quirk_type, policy_recommendation,
                        validator_blueprint_id, suggested_exemptions,
@@ -387,7 +395,9 @@ class NodeQuirkDashboardQueryEffect:
             return [QuirkFindingRow(r).to_dict() for r in rows]
 
         except Exception:
-            logger.exception("NodeQuirkDashboardQueryEffect: list_findings query failed")
+            logger.exception(
+                "NodeQuirkDashboardQueryEffect: list_findings query failed"
+            )
             return []
 
     # ------------------------------------------------------------------
@@ -414,9 +424,7 @@ class NodeQuirkDashboardQueryEffect:
 
             async with self._db_session_factory() as session:
                 row = (
-                    await session.execute(
-                        sa_text(_GET_SIGNAL_SQL), {"id": signal_id}
-                    )
+                    await session.execute(sa_text(_GET_SIGNAL_SQL), {"id": signal_id})
                 ).fetchone()
 
             return QuirkSignalRow(row).to_dict() if row else None
@@ -447,9 +455,7 @@ class NodeQuirkDashboardQueryEffect:
 
             async with self._db_session_factory() as session:
                 row = (
-                    await session.execute(
-                        sa_text(_GET_FINDING_SQL), {"id": finding_id}
-                    )
+                    await session.execute(sa_text(_GET_FINDING_SQL), {"id": finding_id})
                 ).fetchone()
 
             return QuirkFindingRow(row).to_dict() if row else None
@@ -544,12 +550,16 @@ def _build_summary(
 
     for row in signal_rows:
         qt = str(row[0])
-        by_quirk_type.setdefault(qt, {"signals": 0, "findings": 0, "latest_recommendation": None})
+        by_quirk_type.setdefault(
+            qt, {"signals": 0, "findings": 0, "latest_recommendation": None}
+        )
         by_quirk_type[qt]["signals"] = int(row[1])
 
     for row in finding_rows:
         qt = str(row[0])
-        by_quirk_type.setdefault(qt, {"signals": 0, "findings": 0, "latest_recommendation": None})
+        by_quirk_type.setdefault(
+            qt, {"signals": 0, "findings": 0, "latest_recommendation": None}
+        )
         by_quirk_type[qt]["findings"] = int(row[1])
         by_quirk_type[qt]["latest_recommendation"] = str(row[2]) if row[2] else None
 

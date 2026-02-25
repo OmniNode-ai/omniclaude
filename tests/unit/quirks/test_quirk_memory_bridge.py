@@ -17,7 +17,6 @@ Related: OMN-2586
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -25,13 +24,12 @@ import pytest
 from omniclaude.nodes.node_omnimemory_promotion.store_pattern_in_memory import (
     StorePatternInMemory,
 )
-from omniclaude.quirks.enums import QuirkStage, QuirkType
+from omniclaude.quirks.enums import QuirkType
 from omniclaude.quirks.memory_bridge import (
     NodeQuirkMemoryBridgeEffect,
     _derive_quirk_pattern_key,
 )
 from omniclaude.quirks.models import QuirkFinding
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
