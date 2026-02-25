@@ -186,6 +186,83 @@ ruff check src/
 mypy src/omniclaude/
 ```
 
+### Headless Mode
+
+The plugin is designed to run without an interactive Claude Code session using `claude -p`
+(print mode). This is the primary trigger surface for CLI automation, Slack bots, and webhooks.
+
+#### Basic invocation
+
+```bash
+claude -p "Run ticket-pipeline for OMN-1234" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+#### Required environment variables
+
+| Variable | Purpose | Notes |
+|----------|---------|-------|
+| `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — pipeline will not start without this |
+| `ONEX_UNSAFE_ALLOW_EDITS` | Permit file edits in headless mode | Set to `1` to allow Write/Edit tools |
+| `ANTHROPIC_API_KEY` | Claude API key | Required for `claude -p` |
+| `GITHUB_TOKEN` | GitHub CLI auth | Required for PR creation and CI polling |
+| `SLACK_BOT_TOKEN` | Slack API token | Required for gate notifications |
+| `LINEAR_API_KEY` | Linear API key | Required for ticket updates |
+
+```bash
+export ONEX_RUN_ID="pipeline-$(date +%s)-OMN-1234"
+export ONEX_UNSAFE_ALLOW_EDITS=1
+export ANTHROPIC_API_KEY="..."
+export GITHUB_TOKEN="..."
+export SLACK_BOT_TOKEN="..."
+export LINEAR_API_KEY="..."
+
+claude -p "Run ticket-pipeline for OMN-1234" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+#### How auth works in headless mode
+
+`ONEX_RUN_ID` is mandatory. It is the correlation key written to:
+- `~/.claude/pipelines/ledger.json` (run tracking / duplicate prevention)
+- `~/.claude/pipelines/{ticket_id}/state.yaml` (phase state machine)
+- `~/.claude/rrh-artifacts/{ticket_id}/` (RRH audit artifacts, if RRH is enabled)
+
+Without `ONEX_RUN_ID` the pipeline cannot distinguish runs and will refuse to start.
+
+MCP server credentials are sourced from the environment at startup:
+- **Linear**: `LINEAR_API_KEY` (or `~/.claude/claude_desktop_config.json`)
+- **Slack**: `SLACK_BOT_TOKEN`
+- **GitHub**: `GITHUB_TOKEN` (used by the `gh` CLI)
+
+Hook scripts (`plugins/onex/hooks/scripts/`) run in the same subprocess environment.
+If `KAFKA_BOOTSTRAP_SERVERS` is set, the emit daemon will attempt to connect; if not set,
+events are silently dropped (hooks still exit 0).
+
+#### Resume after rate limits
+
+Checkpoints are written to `~/.claude/pipelines/{ticket_id}/state.yaml` after every phase
+transition. If the `claude -p` process is interrupted (rate limit, network drop, process
+kill), resume from the last completed phase:
+
+```bash
+# Resume from where the pipeline stopped
+claude -p "Run ticket-pipeline for OMN-1234 --skip-to ci_watch" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+Auto-detection (OMN-2614) will also pick up the correct phase automatically when no
+`--skip-to` flag is provided and a state file already exists.
+
+#### Trigger surfaces
+
+| Surface | How |
+|---------|-----|
+| **CLI (direct)** | `claude -p "Run ticket-pipeline for OMN-1234" --allowedTools "..."` |
+| **Slack bot** | Webhook handler constructs the `claude -p` call and spawns it as a subprocess |
+| **Webhook** | HTTP handler receives ticket ID, sets env vars, invokes `claude -p` |
+| **Cron / CI** | Shell script iterates tickets and calls `claude -p` per ticket |
+
 ### Fail-Fast Design
 
 Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is not. See **Failure Modes** for the complete table of degraded behaviors.
