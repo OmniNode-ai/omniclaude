@@ -14,8 +14,17 @@ Usage::
     for detector in detectors:
         signals = detector.detect(context)
 
+Tier ordering:
+    - Tier 0 detectors run first (fast, regex/heuristic).
+    - Tier 1 detectors run second (slower, AST-based).
+    - ``HallucinatedApiDetector`` requires an external symbol index; it is
+      registered here with an empty index (no-op).  Callers that have a
+      symbol index should use ``HallucinatedApiDetector(symbol_index=idx)``
+      directly or use ``get_detectors_for_tier(1)`` and inject the index.
+
 Related:
     - OMN-2539: Tier 0 heuristic detectors
+    - OMN-2548: Tier 1 AST-based detectors
     - OMN-2360: Quirks Detector epic
 """
 
@@ -25,15 +34,22 @@ from omniclaude.quirks.detectors.protocol import QuirkDetector
 from omniclaude.quirks.detectors.tier0.no_tests import NoTestsDetector
 from omniclaude.quirks.detectors.tier0.stub_code import StubCodeDetector
 from omniclaude.quirks.detectors.tier0.sycophancy import SycophancyDetector
+from omniclaude.quirks.detectors.tier1.ast_stub_code import AstStubCodeDetector
+from omniclaude.quirks.detectors.tier1.hallucinated_api import HallucinatedApiDetector
 
 # ---------------------------------------------------------------------------
 # Registry — ordered list of all instantiated detectors.
+# Tier 0 (fast heuristics) before Tier 1 (AST-based).
 # ---------------------------------------------------------------------------
 
 _REGISTRY: list[QuirkDetector] = [
+    # Tier 0
     StubCodeDetector(),
     NoTestsDetector(),
     SycophancyDetector(),
+    # Tier 1
+    AstStubCodeDetector(),
+    HallucinatedApiDetector(),  # no-op without symbol_index; inject at call site
 ]
 
 
