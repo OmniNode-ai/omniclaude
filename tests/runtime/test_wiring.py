@@ -413,7 +413,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -421,7 +421,7 @@ class TestServiceContractPublisherAPI:
         ServiceContractPublisher.from_container.assert_called_once_with(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
 
         # Assert: publish_all was called exactly once (no extra calls)
@@ -490,7 +490,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -557,7 +557,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -609,7 +609,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -816,7 +816,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -881,14 +881,14 @@ class TestServiceContractPublisherAPI:
             ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
-                environment="test",
+                environment="dev",
             )
 
         # Assert: from_container was called with correct args before raising
         assert call_tracker["called"], "from_container should have been called"
         assert call_tracker["args"]["container"] is mock_container
         assert call_tracker["args"]["config"] is config
-        assert call_tracker["args"]["environment"] == "test"
+        assert call_tracker["args"]["environment"] == "dev"
 
         # Assert: the same error was propagated
         assert exc_info.value is expected_error
@@ -1121,7 +1121,7 @@ class TestServiceContractPublisherAPI:
             publisher = ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
-                environment="test",
+                environment="dev",
             )
             await publisher.publish_all()
 
@@ -1177,7 +1177,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -1244,7 +1244,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -1298,7 +1298,7 @@ class TestServiceContractPublisherAPI:
             publisher = ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
-                environment="test",
+                environment="dev",
             )
             await publisher.publish_all()
 
@@ -1325,7 +1325,7 @@ class TestServiceContractPublisherAPI:
         publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config_allow_empty,
-            environment="test",
+            environment="dev",
         )
         result = await publisher.publish_all()
 
@@ -1440,7 +1440,7 @@ class TestIntegrationWithServiceContractPublisher:
         result = await publish_handler_contracts(
             container=integration_mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
 
         # Verify the result contains published handler(s)
@@ -1519,7 +1519,7 @@ class TestIntegrationWithServiceContractPublisher:
         result = await publish_handler_contracts(
             container=integration_mock_container,
             config=config,
-            environment="test",
+            environment="dev",
         )
 
         # Verify result was returned (didn't crash)

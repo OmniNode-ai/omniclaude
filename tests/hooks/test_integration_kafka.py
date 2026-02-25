@@ -668,7 +668,7 @@ class TestKafkaIntegrationResilience:
                 session_id=unique_session_id,
                 working_directory="/workspace",
                 hook_source="startup",
-                environment="test",
+                environment="dev",
             )
 
             # Should fail gracefully, not raise exception
