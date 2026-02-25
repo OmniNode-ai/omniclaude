@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -52,15 +52,13 @@ def _make_context(session_id: str = "test-session") -> DetectionContext:
 
 def _make_extractor(
     mock_signals: list[QuirkSignal] | None = None,
+    publish_result: bool = True,
 ) -> NodeQuirkSignalExtractorEffect:
     """Create an extractor with a mocked detector registry and no-op Kafka."""
-    extractor = NodeQuirkSignalExtractorEffect(
+    return NodeQuirkSignalExtractorEffect(
         db_session_factory=None,  # skip DB
-        producer_manager=MagicMock(),
+        publish_hook=AsyncMock(return_value=publish_result),
     )
-    # Patch producer.publish to always succeed
-    extractor._producer.publish = AsyncMock(return_value=True)  # type: ignore[attr-defined]
-    return extractor
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +96,7 @@ async def test_queue_full_drops_event(caplog: pytest.LogCaptureFixture) -> None:
     """When the queue is full the event is dropped and a warning is logged."""
     extractor = NodeQuirkSignalExtractorEffect(
         db_session_factory=None,
-        producer_manager=MagicMock(),
+        publish_hook=AsyncMock(return_value=True),
     )
     # Manually fill the queue to capacity.
     for _ in range(extractor._queue.maxsize):
@@ -130,7 +128,7 @@ async def test_signals_published_to_kafka() -> None:
         await asyncio.sleep(0.05)
         await extractor.stop()
 
-    extractor._producer.publish.assert_awaited_once()  # type: ignore[attr-defined]
+    extractor._publish_hook.assert_awaited_once()  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -148,7 +146,7 @@ async def test_no_signals_no_kafka_call() -> None:
         await asyncio.sleep(0.05)
         await extractor.stop()
 
-    extractor._producer.publish.assert_not_awaited()  # type: ignore[attr-defined]
+    extractor._publish_hook.assert_not_awaited()  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -156,8 +154,7 @@ async def test_no_signals_no_kafka_call() -> None:
 async def test_kafka_unavailable_does_not_raise() -> None:
     """If Kafka publish fails, the extractor does not raise (graceful degradation)."""
     signal = _make_signal()
-    extractor = _make_extractor()
-    extractor._producer.publish = AsyncMock(return_value=False)  # type: ignore[attr-defined]
+    extractor = _make_extractor(publish_result=False)
 
     with patch(
         "omniclaude.quirks.extractor.get_all_detectors",
@@ -187,7 +184,7 @@ async def test_detector_exception_is_isolated() -> None:
         await extractor.stop()
 
     # Second detector's signal should still have been published.
-    extractor._producer.publish.assert_awaited_once()  # type: ignore[attr-defined]
+    extractor._publish_hook.assert_awaited_once()  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit

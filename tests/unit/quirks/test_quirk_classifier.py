@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -55,14 +55,13 @@ def _make_signal(
 
 def _make_classifier(
     operator_block_approved: bool = False,
+    publish_result: bool = True,
 ) -> NodeQuirkClassifierCompute:
-    classifier = NodeQuirkClassifierCompute(
+    return NodeQuirkClassifierCompute(
         db_session_factory=None,
-        producer_manager=MagicMock(),
+        publish_hook=AsyncMock(return_value=publish_result),
         operator_block_approved=operator_block_approved,
     )
-    classifier._producer.publish = AsyncMock(return_value=True)  # type: ignore[attr-defined]
-    return classifier
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +225,7 @@ async def test_finding_has_fix_guidance() -> None:
 @pytest.mark.asyncio
 async def test_kafka_unavailable_does_not_raise() -> None:
     """Kafka failure during finding emission should not propagate."""
-    classifier = _make_classifier()
-    classifier._producer.publish = AsyncMock(return_value=False)  # type: ignore[attr-defined]
+    classifier = _make_classifier(publish_result=False)
     result = None
     for _ in range(3):
         result = await classifier.process_signal(_make_signal(confidence=0.9))
