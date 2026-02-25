@@ -20,7 +20,7 @@ Tier ordering:
     - ``HallucinatedApiDetector`` requires an external symbol index; it is
       registered here with an empty index (no-op).  Callers that have a
       symbol index should use ``HallucinatedApiDetector(symbol_index=idx)``
-      directly or use ``get_detectors_for_tier(1)`` and inject the index.
+      directly and run it alongside the registry detectors.
 
 Related:
     - OMN-2539: Tier 0 heuristic detectors
