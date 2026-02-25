@@ -1,3 +1,7 @@
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
 # Gap Analysis Orchestration
 
 You are executing the gap-analysis skill. This prompt defines the complete orchestration logic.
