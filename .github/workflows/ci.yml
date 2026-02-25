@@ -68,6 +68,37 @@ jobs:
             echo "MyPy found $ERROR_COUNT type errors (non-blocking for now)"
           fi
 
+  docs-links:
+    name: Markdown Link Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Detect whether any *.md files changed (path filter to avoid noise on code-only PRs)
+      - name: Check for changed markdown files
+        id: md-changed
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            **/*.md
+
+      - name: Check markdown links
+        # On PRs: only run when *.md files changed. On push to main/develop: always run.
+        if: github.event_name == 'push' || steps.md-changed.outputs.any_changed == 'true'
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >
+            --no-progress
+            --exclude 'https://linear\.app'
+            --exclude 'https://github\.com/OmniNode-ai'
+            --exclude 'https://staging\.omniclaude\.example\.com'
+            --exclude 'https://omniclaude\.example\.com'
+            --exclude 'http://localhost'
+            '**/*.md'
+          fail: true
+
   pyright:
     name: Pyright Type Checking
     runs-on: ubuntu-latest
