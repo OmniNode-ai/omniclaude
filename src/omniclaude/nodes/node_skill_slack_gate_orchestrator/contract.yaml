@@ -48,6 +48,7 @@ output_model:
   module: omniclaude.nodes.shared.models
 
 # Execution backend configuration
+# Execution backend configuration
 execution:
   backend: claude_code       # claude_code | local_llm
   model_purpose: null        # null for claude_code; required for local_llm
