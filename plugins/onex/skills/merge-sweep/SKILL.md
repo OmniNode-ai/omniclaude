@@ -1,7 +1,7 @@
 ---
 name: merge-sweep
-description: Org-wide PR merge sweep — scans all repos for merge-ready PRs and merges them in parallel after a single HIGH_RISK Slack gate
-version: 2.0.0
+description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
+version: 3.0.0
 category: workflow
 tags:
   - pr
@@ -9,7 +9,6 @@ tags:
   - merge
   - autonomous
   - pipeline
-  - high-risk
   - org-wide
 author: OmniClaude Team
 composable: true
@@ -18,10 +17,7 @@ args:
     description: Comma-separated repo names to scan (default: all repos in omni_home)
     required: false
   - name: --dry-run
-    description: Print merge candidates without posting Slack gate or merging; zero filesystem writes including claim files
-    required: false
-  - name: --gate-attestation
-    description: "Pre-issued gate token to bypass Slack gate (format: <slack_ts>:<run_id>); token validated before proceeding"
+    description: Print candidates without enabling auto-merge or running pr-polish; zero filesystem writes including claim files
     required: false
   - name: --merge-method
     description: "Merge strategy: squash | merge | rebase (default: squash)"
@@ -33,13 +29,22 @@ args:
     description: "Branch update policy: always | never | repo (default: repo — respect branch protection)"
     required: false
   - name: --max-total-merges
-    description: Hard cap on total merges per run (default: 10)
+    description: Hard cap on auto-merge candidates per run (default: 10)
     required: false
   - name: --max-parallel-prs
-    description: Concurrent merge agents (default: 5)
+    description: Concurrent auto-merge enable operations (default: 5)
     required: false
   - name: --max-parallel-repos
     description: Repos scanned in parallel (default: 3)
+    required: false
+  - name: --max-parallel-polish
+    description: Concurrent pr-polish agents (default: 2; pr-polish is resource-intensive)
+    required: false
+  - name: --skip-polish
+    description: Skip Track B entirely; only process merge-ready PRs
+    required: false
+  - name: --polish-clean-runs
+    description: "Consecutive clean local-review passes required during pr-polish (default: 2)"
     required: false
   - name: --authors
     description: Limit to PRs by these GitHub usernames (comma-separated; default: all)
@@ -50,57 +55,61 @@ args:
   - name: --label
     description: "Filter PRs that have this GitHub label. Use comma-separated for multiple (any match). Default: all labels"
     required: false
-  - name: --gate-timeout-minutes
-    description: "Override Slack gate timeout (default: 1440 = 24h for HIGH_RISK)"
-    required: false
   - name: --run-id
     description: "Pipeline run ID for claim registry ownership. Generated if not provided."
     required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to scan; empty list means all"
-  - name: gate_attestation
-    description: "str | None — pre-issued gate token for --gate-attestation mode"
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: merged | nothing_to_merge | gate_rejected | partial | error"
+    description: "ModelSkillResult with status: queued | nothing_to_merge | partial | error"
 ---
 
 # Merge Sweep
 
 ## Overview
 
-Composable skill that scans all repos in `omni_home` for open PRs that are merge-ready,
-batches them into a single HIGH_RISK Slack gate, and merges all approved candidates in
-parallel. Designed as the daily close-out command — one human approval drains the entire
-merge queue.
+Composable skill that scans all repos in `omni_home` for open PRs and handles them in two tracks:
+
+**Track A — GitHub Auto-Merge**: PRs that are already merge-ready get `gh pr merge --auto` enabled
+immediately. GitHub merges them automatically when all required checks pass — no polling, no
+waiting, no human gate required.
+
+**Track B — Polish**: PRs with fixable blocking issues get dispatched to `pr-polish` in a
+temporary worktree. pr-polish resolves conflicts, fixes CI failures, addresses review comments,
+and runs a local-review loop. If a PR becomes merge-ready after polishing, auto-merge is
+enabled on it too.
+
+Designed as the daily close-out command — one sweep drains both the merge queue and the fix queue.
 
 **Announce at start:** "I'm using the merge-sweep skill."
-
-**SAFETY INVARIANT**: Merge is a HIGH_RISK action. Silence is NEVER consent for
-this gate. Explicit approval required unless `--gate-attestation=<token>` is passed with a valid pre-issued token.
 
 ## Quick Start
 
 ```
-/merge-sweep                                      # Scan all repos, post gate, merge
-/merge-sweep --dry-run                            # Print candidates only (no gate, no merge)
-/merge-sweep --repos omniclaude,omnibase_core     # Limit to specific repos
-/merge-sweep --gate-attestation=1740312612.000100:20260223-143012-a3f  # Bypass gate
-/merge-sweep --authors jonahgabriel               # Only PRs by this author
-/merge-sweep --max-total-merges 5                 # Cap at 5 merges
-/merge-sweep --merge-method merge                 # Use merge commit (not squash)
-/merge-sweep --since 2026-02-01                   # Only PRs updated after Feb 1, 2026
-/merge-sweep --since 2026-02-23T00:00:00Z         # Only PRs updated after midnight UTC
-/merge-sweep --label ready-for-merge              # Only PRs with this label
-/merge-sweep --label ready-for-merge,approved     # PRs with either label
+/merge-sweep                                       # Scan all repos, enable auto-merge + polish
+/merge-sweep --dry-run                             # Print candidates only (no mutations)
+/merge-sweep --repos omniclaude,omnibase_core      # Limit to specific repos
+/merge-sweep --skip-polish                         # Only enable auto-merge on ready PRs
+/merge-sweep --authors jonahgabriel                # Only PRs by this author
+/merge-sweep --max-total-merges 5                  # Cap auto-merge queue at 5
+/merge-sweep --merge-method merge                  # Use merge commit (not squash)
+/merge-sweep --since 2026-02-01                    # Only PRs updated after Feb 1, 2026
+/merge-sweep --since 2026-02-23T00:00:00Z          # Only PRs updated after midnight UTC
+/merge-sweep --label ready-for-merge               # Only PRs with this label
+/merge-sweep --label ready-for-merge,approved      # PRs with either label
 /merge-sweep --since 2026-02-20 --label ready-for-merge  # Combine filters
+/merge-sweep --max-parallel-polish 1               # Throttle pr-polish (lower resource use)
 ```
 
-## PR Readiness Predicate
+## PR Classification Predicates
 
 ```python
 def is_merge_ready(pr, require_approval=True) -> bool:
+    """Track A: PR is safe to auto-merge immediately."""
+    if pr["isDraft"]:
+        return False
     if pr["mergeable"] != "MERGEABLE":
         return False
     if not is_green(pr):
@@ -108,7 +117,24 @@ def is_merge_ready(pr, require_approval=True) -> bool:
     if require_approval:
         # APPROVED = explicit approval; None = no review required by branch policy
         return pr.get("reviewDecision") in ("APPROVED", None)
-    return True  # --require-approval false: skip review check entirely
+    return True
+
+def needs_polish(pr, require_approval=True) -> bool:
+    """Track B: PR has fixable blocking issues."""
+    if pr["isDraft"]:
+        return False  # draft PRs are intentionally incomplete
+    if pr["mergeable"] == "UNKNOWN":
+        return False  # can't determine state — skip
+    if is_merge_ready(pr, require_approval=require_approval):
+        return False  # already ready — goes to Track A
+    # Fixable: conflicts (resolvable), CI failing (fixable), changes requested (addressable)
+    if pr["mergeable"] == "CONFLICTING":
+        return True
+    if not is_green(pr):
+        return True
+    if require_approval and pr.get("reviewDecision") == "CHANGES_REQUESTED":
+        return True
+    return False  # other cases (e.g., REVIEW_REQUIRED — needs human, not automation)
 
 def is_green(pr) -> bool:
     required_checks = [c for c in pr["statusCheckRollup"] if c.get("isRequired")]
@@ -117,134 +143,86 @@ def is_green(pr) -> bool:
     return all(c.get("conclusion") == "SUCCESS" for c in required_checks)
 ```
 
-`mergeable == "UNKNOWN"` — skip with warning (GitHub is computing merge state). Not an error.
-`mergeable == "CONFLICTING"` — skip silently (handled by fix-prs).
+`mergeable == "UNKNOWN"` — skip with warning (GitHub still computing merge state).
+`REVIEW_REQUIRED` — skip (needs human approval; not fixable by automation).
+Draft PRs — skip silently.
 
 ## Arguments
 
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--repos` | all | Comma-separated repo names to scan |
-| `--dry-run` | false | Print candidates without posting Slack gate or merging; zero filesystem writes including claim files |
-| `--run-id` | generated | Identifier for this run; used to correlate logs and claim registry ownership |
-| `--gate-attestation` | — | Pre-issued gate token to bypass Slack gate; format: `<slack_ts>:<run_id>` (token validated before proceeding) |
+| `--dry-run` | false | Print candidates without enabling auto-merge or polishing; zero filesystem writes |
+| `--run-id` | generated | Identifier for this run; correlates logs and claim registry ownership |
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |
-| `--max-total-merges` | 10 | Hard cap on merges per run |
-| `--max-parallel-prs` | 5 | Concurrent merge agents |
+| `--max-total-merges` | 10 | Hard cap on Track A candidates per run |
+| `--max-parallel-prs` | 5 | Concurrent auto-merge enable operations |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel |
+| `--max-parallel-polish` | 2 | Concurrent pr-polish agents (resource-intensive) |
+| `--skip-polish` | false | Skip Track B entirely |
+| `--polish-clean-runs` | 2 | Clean local-review passes required during pr-polish |
 | `--authors` | all | Limit to PRs by these GitHub usernames (comma-separated) |
 | `--since` | — | Filter PRs updated after this date (ISO 8601). Skips ancient PRs. |
 | `--label` | all | Filter PRs with this label. Comma-separated = any match. |
-| `--gate-timeout-minutes` | 1440 | Override gate timeout (default: 24h) |
 
 ## Execution Algorithm
 
 ```
-1. VALIDATE: if --gate-attestation is set and token format is invalid → error immediately, do not proceed
+1. VALIDATE: parse and validate --since date if provided
 
 2. SCAN (parallel, up to --max-parallel-repos):
    For each repo:
      gh pr list --repo <repo> --state open --json \
        number,title,mergeable,statusCheckRollup,reviewDecision, \
-       headRefName,baseRefName,headRepository,headRefOid,author,labels,updatedAt
+       headRefName,baseRefName,baseRepository,headRepository,headRefOid,
+       author,labels,updatedAt,isDraft
 
-3. CLASSIFY:
-   For each PR:
-     - pr_state_unknown: skip with warning (UNKNOWN mergeable state)
-     - is_merge_ready(): candidate for further filtering
-     - else: skip silently
-   Apply --authors filter if set
-   Apply --since filter if set: keep only PRs where updatedAt >= since_date
-   Apply --label filter if set: keep only PRs where labels intersect with filter_labels
-   Apply --max-total-merges cap to filtered candidates[]
+3. CLASSIFY (apply all filters including --authors, --since, --label):
+   - is_merge_ready() + passes filters → candidates[] (Track A)
+   - needs_polish() + passes filters → polish_queue[] (Track B)
+   - mergeable == UNKNOWN → skipped_unknown[] (warn)
+   - draft / REVIEW_REQUIRED / else → ignore silently
+   Check claim registry; exclude PRs with active claims from other runs.
+   Apply --max-total-merges cap to candidates[].
 
-4. If candidates is empty: emit ModelSkillResult(status=nothing_to_merge), exit
+4. If candidates[] and polish_queue[] are both empty:
+   → emit ModelSkillResult(status=nothing_to_merge), exit
 
-5. If --dry-run: print candidates table, exit (no gate, no merge)
+5. If --dry-run:
+   → print both queues (Track A and Track B tables), exit
 
-6. GATE:
-   If --gate-attestation=<token>:
-     gate_token = <value of --gate-attestation>  # already validated in step 1
-   Else:
-     Post HIGH_RISK Slack gate with candidates summary via chat.postMessage
-     Capture thread_ts from response
-     Invoke slack_gate_poll.py to poll for reply (OMN-2627)
-     Parse reply for subset commands (approve all / approve except / skip / reject)
-     If rejected or timeout: emit ModelSkillResult(status=gate_rejected), exit
+6. PHASE A — Enable GitHub auto-merge (parallel, up to --max-parallel-prs):
+   For each candidate in candidates[]:
+     acquire claim
+     gh pr merge <N> --repo <repo> --<merge_method> --auto
+     release claim
 
-7. MERGE (parallel, up to --max-parallel-prs):
-   For each approved_candidate in approved_candidates:
-     Skill(skill="onex:auto-merge", args=...)
+7. PHASE B — pr-polish queue (parallel, up to --max-parallel-polish):
+   Skip if --skip-polish or polish_queue is empty.
+   For each PR in polish_queue[]:
+     acquire claim
+     dispatch polymorphic-agent:
+       - create worktree at /Volumes/PRO-G40/Code/omni_worktrees/merge-sweep-<run_id>/<repo>-pr-<N>/
+       - Skill(skill="onex:pr-polish", args="<N> --required-clean-runs <polish_clean_runs>")
+       - re-check mergeable state after polish
+       - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
+       - remove worktree
+     release claim
 
 8. COLLECT results
 
-9. SUMMARY: Post sweep completion summary to Slack (LOW_RISK, informational)
+9. SUMMARY: Post LOW_RISK informational notification to Slack (best-effort, no polling)
 
 10. EMIT ModelSkillResult
 ```
-
-## Slack Gate Message Format
-
-```
-[HIGH_RISK] merge-sweep — ready to merge N PRs
-
-Run: <run_id>
-Scope: <repos> | <author filter if set> | <since filter if set> | <label filter if set>
-
-MERGE CANDIDATES (N PRs, max <max_total_merges>):
-  • OmniNode-ai/omniclaude#247 — feat: auto-detect (5 ✓, approved) SHA: cbca770e
-  • OmniNode-ai/omnibase_core#88 — fix: validator (3 ✓, no review required) SHA: ff3ab12c
-
-SKIPPED (UNKNOWN state — will retry on next run):
-  • OmniNode-ai/omnidash#19 (mergeable: UNKNOWN)
-
-Commands:
-  approve all                        — merge all N PRs
-  approve except omniclaude#247      — merge all except listed
-  skip omniclaude#247                — exclude specific PR, merge rest
-  reject                             — cancel entire sweep
-
-This is HIGH_RISK — silence will NOT auto-advance.
-```
-
-## Reply Polling (OMN-2627)
-
-After posting the HIGH_RISK gate via `chat.postMessage` (which returns `thread_ts`),
-the gate reply is polled using `slack_gate_poll.py` from the `slack-gate` skill:
-
-```bash
-python3 /path/to/plugins/onex/skills/slack-gate/slack_gate_poll.py \
-  --channel "$SLACK_CHANNEL_ID" \
-  --thread-ts "$THREAD_TS" \
-  --bot-token "$SLACK_BOT_TOKEN" \
-  --timeout-minutes "$GATE_TIMEOUT_MINUTES" \
-  --accept-keywords '["approve", "merge", "yes", "proceed"]' \
-  --reject-keywords '["reject", "cancel", "no", "hold", "deny"]'
-```
-
-The poll script monitors the thread for a qualifying reply. Once received:
-- Reply `"approve all"` or `"merge"` → merge all candidates
-- Reply `"approve except <repo>#<pr>"` → exclude listed PRs, merge rest
-- Reply `"skip <repo>#<pr>"` → same as approve-except
-- Reply `"reject"` or `"cancel"` → exit with `status: gate_rejected`
-
-**Poll exit codes:**
-- 0 (ACCEPTED): parse reply text for subset commands, then merge
-- 1 (REJECTED): exit with `status: gate_rejected`
-- 2 (TIMEOUT): exit with `status: gate_rejected` (silence never advances HIGH_RISK)
-
-**Credential resolution**: `~/.omnibase/.env` (SLACK_BOT_TOKEN, SLACK_CHANNEL_ID).
-See `slack-gate` skill for full credential resolution details.
 
 ## --since Date Filter
 
 The `--since` flag filters PRs to only those updated after the given date:
 
 ```python
-from datetime import datetime, timezone
-
 def parse_since(since_str: str) -> datetime:
     """Parse ISO 8601 date or datetime string."""
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
@@ -256,76 +234,40 @@ def parse_since(since_str: str) -> datetime:
         except ValueError:
             continue
     raise ValueError(f"Cannot parse --since date: {since_str!r}. Use YYYY-MM-DD or ISO 8601.")
-
-def passes_since_filter(pr: dict, since: datetime | None) -> bool:
-    if since is None:
-        return True
-    updated_at = pr.get("updatedAt", "")
-    if not updated_at:
-        return True  # unknown update time: include (conservative)
-    pr_updated = datetime.fromisoformat(updated_at.rstrip("Z")).replace(tzinfo=timezone.utc)
-    return pr_updated >= since
 ```
 
-**Purpose**: Avoids sweeping ancient PRs that may have stale CI or forgotten review state.
-A `--since 2026-02-20` filter skips PRs that haven't been touched in 3+ days.
-
-**`gh pr list` includes `updatedAt` in the JSON fields.** No extra API calls needed.
+**Purpose**: Avoids sweeping ancient PRs with stale CI or forgotten review state.
 
 ## --label Filter
 
-The `--label` filter keeps only PRs that have at least one of the specified labels:
-
 ```python
 def passes_label_filter(pr: dict, filter_labels: list[str]) -> bool:
-    """Return True if PR has any of the filter labels (or filter is empty)."""
     if not filter_labels:
         return True
     pr_labels = {label["name"] for label in pr.get("labels", [])}
     return bool(pr_labels & set(filter_labels))
 ```
 
-The `gh pr list` command must include `labels` in the `--json` fields (already required above).
+## Sweep Summary (Slack Notification)
 
-**Example**: `--label ready-for-merge,approved` merges PRs tagged by teammates as sweep-eligible.
-This is the recommended workflow for large teams: teammates label PRs, sweep picks them up.
-
-## Sweep Summary Report
-
-After the merge phase completes, post a LOW_RISK summary to Slack (informational, no polling):
+After both phases complete, post a LOW_RISK informational message to Slack.
+No polling — notification only. Best-effort: if posting fails, log warning and continue.
 
 ```
 [merge-sweep] run <run_id> complete
 
-Results:
-  Merged:  N PRs
-  Failed:  K PRs
-  Skipped: M PRs (UNKNOWN state or gate-excluded)
+Track A (auto-merge enabled):  N queued | K failed
+Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
 
-Merged:
+Auto-merge enabled:
   • OmniNode-ai/omniclaude#247 — feat: auto-detect
-  • OmniNode-ai/omnibase_core#88 — fix: validator
+  • OmniNode-ai/omnibase_core#88 — fix: validator (after polish)
 
-Failed (manual intervention needed):
-  • OmniNode-ai/omnidash#19 — <error>
+Blocked (manual intervention needed):
+  • OmniNode-ai/omnidash#19 — conflict resolution failed
 
-Status: merged | partial | error
-Gate: <gate_token>
-```
-
-Post via `chat.postMessage` to the same Slack channel. No reply polling needed (informational).
-If posting fails, log warning but do NOT fail the skill result — summary is best-effort.
-
-## Gate Token Contract
-
-```
-run_id is generated at sweep start: "<YYYYMMDD-HHMMSS>-<random6>"
-gate_token = "<slack_message_ts>:<run_id>"
-
-When called with --gate-attestation=<token>:
-  - Skip Slack gate entirely
-  - Validate token format before proceeding (immediate error if invalid)
-  - Use provided gate_token for audit trail in ModelSkillResult
+Status: queued | partial | error
+Run: <run_id>
 ```
 
 ## ModelSkillResult
@@ -335,17 +277,20 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
 ```json
 {
   "skill": "merge-sweep",
-  "status": "merged | nothing_to_merge | gate_rejected | partial | error",
+  "status": "queued | nothing_to_merge | partial | error",
   "run_id": "20260223-143012-a3f",
-  "gate_token": "<slack_ts>:<run_id>",
   "filters": {
     "since": "2026-02-20",
     "labels": ["ready-for-merge"],
     "authors": ["jonahgabriel"],
     "repos": ["OmniNode-ai/omniclaude"]
   },
-  "candidates_found": 5,
-  "merged": 4,
+  "candidates_found": 3,
+  "polish_queue_found": 2,
+  "auto_merge_set": 4,
+  "polished": 1,
+  "polish_partial": 0,
+  "polish_blocked": 1,
   "skipped": 1,
   "failed": 0,
   "details": [
@@ -353,7 +298,17 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
       "repo": "OmniNode-ai/omniclaude",
       "pr": 247,
       "head_sha": "cbca770e",
-      "result": "merged | skipped | failed",
+      "track": "A",
+      "result": "auto_merge_set",
+      "merge_method": "squash",
+      "skip_reason": null
+    },
+    {
+      "repo": "OmniNode-ai/omnidash",
+      "pr": 19,
+      "head_sha": "d3f9a22b",
+      "track": "B",
+      "result": "polished_and_queued",
       "merge_method": "squash",
       "skip_reason": null
     }
@@ -362,85 +317,64 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
 ```
 
 Status values:
-- `merged` — all candidates merged successfully
-- `nothing_to_merge` — no merge-ready PRs found (after all filters)
-- `gate_rejected` — human rejected the gate (or timeout without approval)
-- `partial` — some merged, some failed
-- `error` — unrecoverable error before merge phase
+- `queued` — all candidates had auto-merge enabled (Track A and/or Track B)
+- `nothing_to_merge` — no actionable PRs found (after all filters)
+- `partial` — some queued, some failed or blocked
+- `error` — no PRs successfully queued
+
+Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
 
 ## Failure Handling
 
 | Error | Behavior |
 |-------|----------|
-| `--gate-attestation` with invalid token | Immediate error; do not scan or merge |
 | PR mergeable state UNKNOWN | Skip with warning; include in `skipped` count |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
-| Individual merge fails | Record in `details[].result = "failed"`; continue other merges |
-| Gate Slack unavailable | Hard stop; return `status: error` (never merge without gate) |
-| All merges fail | Return `status: error` |
-| Some merges fail | Return `status: partial` |
-| Gate timeout (no reply) | Return `status: gate_rejected` (silence never advances HIGH_RISK) |
-| `--since` parse error | Immediate error; show format hint |
-| Summary post fails | Log warning; do not fail skill result (summary is best-effort) |
+| `gh pr merge --auto` fails for a PR | Record `result: failed`; continue others |
+| pr-polish BLOCKED (unresolvable conflicts) | Record `result: blocked`; skip auto-merge for that PR |
+| pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`; skip auto-merge |
+| Worktree creation fails | Record `result: failed`; release claim; continue others |
+| Worktree cleanup fails | Log warning; do NOT fail skill result |
+| Claim race condition | Record `result: failed, error: claim_race_condition` |
+| `--since` parse error | Immediate error in Step 1; show format hint |
+| Slack notification fails | Log warning only; do NOT fail skill result |
 
 ## Sub-skills Used
 
-- `slack-gate` (v2.0.0, OMN-2627) — HIGH_RISK gate with `chat.postMessage` + reply polling
-- `slack_gate_poll.py` — reply polling helper (part of `slack-gate` skill, OMN-2627)
-- `auto-merge` (existing) — per-PR merge execution with `auto_merge: true`
+- `pr-polish` — three-phase PR fix workflow (conflict resolution + pr-review-dev + local-review loop)
+- `pr-review-dev` — invoked by pr-polish for CI failures and review comments
+- `local-review` — invoked by pr-polish for iterative clean-pass loop
 
-## Integration Test
+## Integration Tests
 
-Integration tests are in `tests/integration/skills/merge_sweep/test_merge_sweep_integration.py` (OMN-2635).
-All tests are static analysis / structural tests — no live GitHub access or external credentials required.
-
+Integration tests are in `tests/integration/skills/merge_sweep/test_merge_sweep_integration.py`.
 Run with: `uv run pytest tests/integration/skills/merge_sweep/ -m unit -v`
 
-### Test Coverage
-
-| Test Case | Description | Marker |
-|-----------|-------------|--------|
-| Dry-run no mutation | `--dry-run` exits before gate (Step 5 < Step 6) | unit |
-| `--dry-run` documented | SKILL.md lists `--dry-run` argument | unit |
-| Gate-attestation ban | Legacy bypass flag absent from prompt.md and SKILL.md (OMN-2633) | unit |
-| `--gate-attestation` present | Replacement API documented in both files | unit |
-| Gate token format | `<slack_ts>:<run_id>` format documented without `=` prefix | unit |
-| No direct `gh pr merge` | prompt.md dispatches to auto-merge sub-skill | unit |
-| No direct `gh pr checkout` | prompt.md does not call checkout directly | unit |
-| No direct `git push` instruction | Mutations through sub-skill, not raw git | unit |
-| auto-merge sub-skill referenced | prompt.md and SKILL.md reference auto-merge | unit |
-| `gh pr list` in scan phase only | All `gh pr list` occurrences in Step 2/3 | unit |
-| gate_token audit trail | prompt.md documents gate_token in merge dispatch | unit |
-| ClaimNotHeldError documented | `_lib/pr-safety/helpers.md` defines the error | unit |
-| mutate_pr claim check | `mutate_pr()` asserts claim held before mutation | unit |
-| ModelSkillResult statuses | All 5 status values documented in SKILL.md | unit |
-| ModelSkillResult emitted | prompt.md calls `emit ModelSkillResult` at Step 10 | unit |
-| Result file path documented | SKILL.md shows where result is written | unit |
-| Filters in result | ModelSkillResult includes filters field | unit |
-| Merge policy args | `--require-approval` and `--require-up-to-date` documented | unit |
-| Repo scope documented | At least one repo or manifest referenced | unit |
-| CI enforcement grep | Zero legacy bypass flags in all skills (excl. `_lib/pr-safety`) | unit |
-| No direct merge call (CI) | grep confirms no `gh pr merge` in prompt.md | unit |
+**Note**: The test suite from v2.1.0 (OMN-2635) references `--gate-attestation` and `auto-merge`
+sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to verify:
+- `gh pr merge --auto` in prompt.md (not `gh pr merge` directly)
+- `pr-polish` sub-skill dispatch in prompt.md
+- `needs_polish()` predicate documented in SKILL.md
+- No `--gate-attestation` arg in either file
+- `queued` status value in ModelSkillResult
 
 ## Changelog
 
+- **v3.0.0**: Replace HIGH_RISK Slack gate with GitHub native auto-merge (`gh pr merge --auto`).
+  Add Track B: dispatch `pr-polish` on PRs with CI failures, conflicts, or changes-requested.
+  PRs polished to merge-ready also get auto-merge enabled. Remove `--gate-attestation` and
+  `--gate-timeout-minutes` (no longer needed). Add `--skip-polish`, `--max-parallel-polish`,
+  `--polish-clean-runs`. Update ModelSkillResult status values and counters.
 - **v2.1.0** (OMN-2633 + OMN-2635): Migrate legacy bypass flags to `--gate-attestation=<token>`.
-  Add integration test suite (27 tests, all static analysis, CI-safe). Remove migration-window
-  allowlist from CI — gate bypass is now `--gate-attestation` only.
-- **v2.0.0** (OMN-2629): Add `--since` date filter, `--label` filter, wire reply polling
-  via OMN-2627's `slack_gate_poll.py`, add `--gate-timeout-minutes` override, add post-sweep
-  Slack summary report. Add `filters` field to `ModelSkillResult`. Require `updatedAt` and
-  `labels` in `gh pr list` JSON fields.
+  Add integration test suite.
+- **v2.0.0** (OMN-2629): Add `--since` date filter, `--label` filter, reply polling,
+  `--gate-timeout-minutes` override, post-sweep Slack summary.
 - **v1.0.0** (OMN-2616): Initial implementation.
 
 ## See Also
 
-- `fix-prs` skill — repairs conflicting/failing PRs before they can be merge-swept
+- `pr-polish` skill — three-phase PR fix workflow (Track B sub-skill)
+- `pr-review-dev` skill — PR review comments + CI failures
+- `local-review` skill — iterative local review loop
 - `pr-queue-pipeline` skill — orchestrates fix-prs → merge-sweep in sequence
-- `auto-merge` skill — single-PR merge sub-skill
-- `slack-gate` skill — HIGH_RISK gate implementation (v2.0.0 with reply polling)
-- OMN-2616 — initial merge-sweep implementation
-- OMN-2627 — slack-gate reply polling (required for gate)
-- OMN-2629 — date filters, reply polling, summary (v2.0.0)
-- OMN-2633 — gate semantics migration to --gate-attestation
-- OMN-2635 — integration test suite (v2.1.0)
+- `fix-prs` skill — alternative repair skill (merge-sweep now handles this inline via Track B)
