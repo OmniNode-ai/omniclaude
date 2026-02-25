@@ -132,20 +132,26 @@ class LiveConfigLoader:
             self._watcher_task = None
 
     async def _reload(self) -> None:
-        """Reload config from disk."""
+        """Reload config from disk.
+
+        State is committed atomically: ``self._config`` and ``self._adapter`` are
+        only updated after the ``on_reload`` callback (if any) succeeds.
+        If loading or the callback raises, the previous config is preserved.
+        """
         try:
             config = load_config_from_yaml(self._path)
             adapter = build_adapter_from_config(config)
+            if self._on_reload is not None:
+                result = self._on_reload(config, adapter)
+                if asyncio.iscoroutine(result):
+                    await result
+            # Commit only after callback succeeds
             self._config = config
             self._adapter = adapter
             logger.info(
                 "LiveConfigLoader: reloaded config (profile=%s)",
                 config.personality_profile,
             )
-            if self._on_reload is not None:
-                result = self._on_reload(config, adapter)
-                if asyncio.iscoroutine(result):
-                    await result
         except Exception:
             logger.exception("LiveConfigLoader: reload failed, keeping previous config")
 

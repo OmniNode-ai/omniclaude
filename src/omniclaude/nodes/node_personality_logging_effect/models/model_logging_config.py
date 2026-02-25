@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
 class ModelThrottleConfig(BaseModel):
@@ -119,9 +119,9 @@ class ModelLoggingConfig(BaseModel):
         default="onex.evt.omniclaude.log-event-rendered.v1",
         description="Kafka topic to emit rendered events to",
     )
-    slack_webhook_url: str | None = Field(
+    slack_webhook_url: SecretStr | None = Field(
         default=None,
-        description="Slack incoming webhook URL for the Slack sink",
+        description="Slack incoming webhook URL for the Slack sink (masked in repr/logs)",
     )
     json_output_path: str = Field(
         default="-",

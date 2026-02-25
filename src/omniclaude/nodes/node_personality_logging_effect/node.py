@@ -158,7 +158,15 @@ class NodePersonalityLoggingEffect:
             return None
 
         # Step 3: Render
-        rendered = self._adapter.render(event, self._config.personality_profile)
+        try:
+            rendered = self._adapter.render(event, self._config.personality_profile)
+        except KeyError:
+            logger.exception(
+                "NodePersonalityLoggingEffect: unknown personality profile %r, "
+                "falling back to default",
+                self._config.personality_profile,
+            )
+            rendered = self._adapter.render(event, "default")
 
         # Step 4: Dispatch to matched sinks
         for sink_name in sink_names:

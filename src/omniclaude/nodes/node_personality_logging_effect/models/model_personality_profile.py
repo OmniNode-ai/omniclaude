@@ -52,8 +52,8 @@ class ModelPersonalityProfile(BaseModel):
 
     name: str = Field(..., description="Profile identifier")
     description: str = Field(default="", description="Human-readable description")
-    phrases: list[ModelPhrasePackEntry] = Field(
-        default_factory=list,
+    phrases: tuple[ModelPhrasePackEntry, ...] = Field(
+        default_factory=tuple,
         description="Severity-keyed phrase entries",
     )
 

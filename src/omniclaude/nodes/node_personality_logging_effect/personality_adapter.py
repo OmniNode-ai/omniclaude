@@ -132,14 +132,14 @@ def _build_builtin_profile(
     return ModelPersonalityProfile(
         name=name,
         description=f"Built-in profile: {name}",
-        phrases=[
+        phrases=tuple(
             ModelPhrasePackEntry(
                 severity=p["severity"],
                 prefix=p["prefix"],
                 suffix=p["suffix"],
             )
             for p in phrases
-        ],
+        ),
     )
 
 
@@ -209,7 +209,19 @@ def apply_redaction(event: ModelLogEvent) -> ModelLogEvent:
     if not event.policy.redaction_rules:
         return event
 
-    compiled = [re.compile(pattern) for pattern in event.policy.redaction_rules]
+    try:
+        compiled = [re.compile(pattern) for pattern in event.policy.redaction_rules]
+    except re.error:
+        # Invalid regex in redaction rules: log and redact everything as a safe fallback
+        import logging as _logging
+
+        _logging.getLogger(__name__).exception(
+            "apply_redaction: invalid regex in redaction_rules; redacting all attrs"
+        )
+        return event.model_copy(
+            update={"attrs": dict.fromkeys(event.attrs, _REDACTED_PLACEHOLDER)}
+        )
+
     scrubbed: dict[str, Any] = {}
     for key, value in event.attrs.items():
         if any(rx.search(key) for rx in compiled):

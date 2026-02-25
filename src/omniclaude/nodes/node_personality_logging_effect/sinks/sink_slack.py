@@ -103,9 +103,10 @@ class SlackSink:
             if self._is_duplicate(dedup_key):
                 logger.debug("SlackSink: dedup hit for %s", dedup_key)
                 return
-            self._record_dedup(dedup_key)
             payload = self._build_payload(rendered)
-            self._post(payload)
+            if self._post(payload):
+                # Only record dedup after a successful delivery
+                self._record_dedup(dedup_key)
         except Exception:
             logger.exception("SlackSink.emit failed")
 
@@ -200,11 +201,16 @@ class SlackSink:
 
         return {"blocks": blocks}
 
-    def _post(self, payload: dict[str, Any]) -> None:
-        """POST the payload to the configured Slack webhook URL."""
-        url = self._config.slack_webhook_url
-        if not url:
-            return
+    def _post(self, payload: dict[str, Any]) -> bool:
+        """POST the payload to the configured Slack webhook URL.
+
+        Returns:
+            True if the delivery succeeded (HTTP 200/204), False otherwise.
+        """
+        secret = self._config.slack_webhook_url
+        if not secret:
+            return False
+        url = secret.get_secret_value()
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(  # noqa: S310  # nosec B310
             url,
@@ -217,6 +223,8 @@ class SlackSink:
                 logger.warning(
                     "SlackSink: unexpected HTTP %s from webhook", resp.status
                 )
+                return False
+        return True
 
 
 __all__ = ["SlackSink"]
