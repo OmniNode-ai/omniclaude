@@ -536,8 +536,6 @@ ORDER BY time;
 
 **Related Documentation**:
 - [Agent Traceability Guide](../../docs/observability/AGENT_TRACEABILITY.md)
-- [Diagnostic Scripts](../../docs/observability/DIAGNOSTIC_SCRIPTS.md)
-- [Logging Pipeline](../../docs/observability/LOGGING_PIPELINE.md)
 
 **Database Schema**:
 - See `agent_execution_logs` table in `omninode_bridge` database

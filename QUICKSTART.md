@@ -53,8 +53,7 @@ and Kafka-backed observability.
 
 > **Host-only local dev.** For Docker network deployments (where Claude Code runs inside
 > a container) replace `localhost:29092` with the container-accessible address and set
-> `--advertise-kafka-addr` accordingly. See the [Advanced setup](docs/advanced-setup.md)
-> guide.
+> `--advertise-kafka-addr` accordingly. See the project CLAUDE.md for deployment details.
 
 ---
 

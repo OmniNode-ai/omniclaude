@@ -151,7 +151,7 @@ GEMINI_API_KEY = "AIza..."  # NEVER hardcode API keys
 - Set usage quotas to limit damage from leaks
 - Monitor API usage for anomalies
 
-See **[SECURITY_KEY_ROTATION.md](../SECURITY_KEY_ROTATION.md)** for detailed key management procedures.
+<!-- SECURITY_KEY_ROTATION.md was removed; key rotation procedures are covered above. -->
 
 ### 5. Password Security
 
@@ -266,7 +266,7 @@ Before deploying to production:
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [CWE: Common Weakness Enumeration](https://cwe.mitre.org/)
-- [Python Security Best Practices](https://python.readthedocs.io/en/stable/library/security.html)
+- [Python Security Best Practices](https://docs.python.org/3/library/security_warnings.html)
 - [Bandit Documentation](https://bandit.readthedocs.io/)
 - [PostgreSQL Security](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS)
 
