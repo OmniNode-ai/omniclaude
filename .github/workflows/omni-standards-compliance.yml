@@ -236,6 +236,7 @@ jobs:
     #   - ticket-work (OMN-2615 sub-ticket)
     #   - pr-polish (OMN-2615 sub-ticket)
     #   - parallel-solve (OMN-2615 sub-ticket, documentation only)
+    #   - release (OMN-2806, new skill — prompt.md uses inline git push/gh pr merge)
     #
     # Reference/tutorial skills (never migrate — documentation only):
     #   - using-git-worktrees, sharing-skills, review-cycle, local-review (doc refs only)
@@ -277,7 +278,7 @@ jobs:
 
           # Migration allowlist: pre-existing skills awaiting migration to _lib/pr-safety/.
           # Remove a skill from this list once it has been migrated (separate PR per skill).
-          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve"
+          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve|release"
           # Reference/tutorial skills: documentation only, never migrate.
           REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
 
@@ -336,7 +337,7 @@ jobs:
         run: |
           ERRORS=0
 
-          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve"
+          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve|release"
           REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
           ALL_EXCLUSIONS="${MIGRATION_ALLOWLIST}|${REFERENCE_SKILLS}|_lib/pr-safety"
 
