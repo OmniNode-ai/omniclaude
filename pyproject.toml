@@ -71,10 +71,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
 
-[tool.uv.sources]
-# Use local omnibase_infra to get OMN-2793 SASL/OAUTHBEARER fields (merged but not yet published to PyPI)
-omnibase-infra = { path = "/Volumes/PRO-G40/Code/omni_home/omnibase_infra", editable = true }
-
 [tool.ruff]
 target-version = "py312"
 line-length = 88

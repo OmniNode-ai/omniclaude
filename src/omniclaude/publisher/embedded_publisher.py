@@ -169,20 +169,60 @@ class EmbeddedEventPublisher:
                     self._secondary_event_bus is None
                     and self._config.kafka_secondary_bootstrap_servers is not None
                 ):
-                    secondary_kafka_config = ModelKafkaEventBusConfig(
-                        bootstrap_servers=self._config.kafka_secondary_bootstrap_servers,
-                        environment=self._config.environment,
-                        timeout_seconds=int(
+                    # Build kwargs for secondary config. Always include the base fields.
+                    # SASL/SSL fields are only passed when ModelKafkaEventBusConfig
+                    # supports them (OMN-2793, merged to omnibase_infra but version
+                    # bump may lag PyPI). Do NOT call apply_environment_overrides() —
+                    # the KAFKA_* env vars belong to the primary cluster.
+                    _mf = ModelKafkaEventBusConfig.model_fields
+                    secondary_kwargs: dict[str, object] = {
+                        "bootstrap_servers": self._config.kafka_secondary_bootstrap_servers,
+                        "environment": self._config.environment,
+                        "timeout_seconds": int(
                             self._config.kafka_secondary_timeout_seconds
                         ),
-                        security_protocol=self._config.kafka_secondary_security_protocol,
-                        sasl_mechanism=self._config.kafka_secondary_sasl_mechanism,
-                        sasl_oauthbearer_token_endpoint_url=self._config.kafka_secondary_sasl_oauthbearer_token_endpoint_url,
-                        sasl_oauthbearer_client_id=self._config.kafka_secondary_sasl_oauthbearer_client_id,
-                        sasl_oauthbearer_client_secret=self._config.kafka_secondary_sasl_oauthbearer_client_secret,
-                        ssl_ca_file=self._config.kafka_secondary_ssl_ca_file,
-                        # Do NOT call apply_environment_overrides() — those env vars
-                        # (KAFKA_*) belong to the primary cluster.
+                    }
+                    if "security_protocol" in _mf:
+                        secondary_kwargs["security_protocol"] = (
+                            self._config.kafka_secondary_security_protocol
+                        )
+                    if "sasl_mechanism" in _mf:
+                        secondary_kwargs["sasl_mechanism"] = (
+                            self._config.kafka_secondary_sasl_mechanism
+                        )
+                    if (
+                        "sasl_oauthbearer_token_endpoint_url" in _mf
+                        and self._config.kafka_secondary_sasl_oauthbearer_token_endpoint_url
+                        is not None
+                    ):
+                        secondary_kwargs["sasl_oauthbearer_token_endpoint_url"] = (
+                            self._config.kafka_secondary_sasl_oauthbearer_token_endpoint_url
+                        )
+                    if (
+                        "sasl_oauthbearer_client_id" in _mf
+                        and self._config.kafka_secondary_sasl_oauthbearer_client_id
+                        is not None
+                    ):
+                        secondary_kwargs["sasl_oauthbearer_client_id"] = (
+                            self._config.kafka_secondary_sasl_oauthbearer_client_id
+                        )
+                    if (
+                        "sasl_oauthbearer_client_secret" in _mf
+                        and self._config.kafka_secondary_sasl_oauthbearer_client_secret
+                        is not None
+                    ):
+                        secondary_kwargs["sasl_oauthbearer_client_secret"] = (
+                            self._config.kafka_secondary_sasl_oauthbearer_client_secret
+                        )
+                    if (
+                        "ssl_ca_file" in _mf
+                        and self._config.kafka_secondary_ssl_ca_file is not None
+                    ):
+                        secondary_kwargs["ssl_ca_file"] = (
+                            self._config.kafka_secondary_ssl_ca_file
+                        )
+                    secondary_kafka_config = ModelKafkaEventBusConfig(
+                        **secondary_kwargs
                     )
                     self._secondary_event_bus = EventBusKafka(
                         config=secondary_kafka_config
