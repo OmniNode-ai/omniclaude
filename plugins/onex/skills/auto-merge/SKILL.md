@@ -21,7 +21,7 @@ inputs:
     required: false
   - name: gate_timeout_hours
     type: float
-    description: Hours to wait for Slack gate approval (default 24)
+    description: "Shared wall-clock budget in hours for the entire merge flow (CI readiness poll + Slack gate reply poll combined). Default: 24. If either phase exhausts this budget, the skill exits with status: timeout."
     required: false
   - name: delete_branch
     type: bool
@@ -78,8 +78,10 @@ or timed out.
 
 ## Merge Flow
 
+**Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
+
 1. Fetch PR state: `gh pr view {pr_number} --repo {repo} --json mergeable,mergeStateStatus,reviews`
-2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; max duration: `gate_timeout_hours`):
+2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
      ```text
      [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
@@ -89,10 +91,10 @@ or timed out.
    - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
    - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out — mergeStateStatus never reached CLEAN"
 3. Post HIGH_RISK Slack gate (see message format below)
-4. Poll for reply (check every 5 minutes):
+4. Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
    - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is `--delete-branch` (with a leading space) if `delete_branch=true`, else empty
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
-   - On timeout: exit with `status: timeout`
+   - On budget exhausted: exit with `status: timeout`
 5. Post Slack notification on merge completion
 
 ## Slack Gate Message Format
