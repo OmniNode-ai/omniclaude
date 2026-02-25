@@ -66,7 +66,7 @@ conflicts = check_conflicts_batch(candidate, existing)
 
 For each conflict returned by `check_conflicts_batch`:
 
-- If `base_severity == "HIGH"`: **stop and post Slack gate** (see Resolution Gate below)
+- If `base_severity == "HIGH"`: **stop and post Slack gate** (see Conflict Resolution Gate below)
 - If `base_severity == "MEDIUM"` and `needs_semantic == True`: fire async semantic check
 - If `base_severity == "LOW"`: log and continue
 - If `needs_semantic == True`: fire async `semantic_check_async()` — do NOT await in MVP
@@ -91,15 +91,18 @@ entry_id = result.entry_id
 For each conflict detected in Step 2:
 
 ```python
-# Emit decision-conflict-status-changed.v1
-emit_event("decision-conflict-status-changed.v1", {
+from omniclaude.hooks.topics import TopicBase
+
+# Emit decision-conflict-status-changed.v1 for each new (OPEN) conflict
+emit_event(TopicBase.DECISION_CONFLICT_STATUS_CHANGED, {
     "conflict_id": conflict_id,
     "decision_a_id": candidate_id,
     "decision_b_id": conflict.entry.id,
     "old_status": None,
     "new_status": "OPEN",
     "resolution_note": None,
-    "approver": None,
+    "resolved_by": None,
+    "resolved_at": None,
     "emitted_at": now_iso8601(),
 })
 ```
@@ -212,7 +215,15 @@ Summary:
 
 ## Conflict Resolution Gate (Slack)
 
-When `record` detects a HIGH severity conflict, post to Slack and pause:
+When `record` detects a HIGH severity conflict, post to the `slack-gate` skill with
+`HIGH_RISK` tier and pause the pipeline.
+
+### Integration with slack-gate skill
+
+HIGH conflicts trigger the existing `slack-gate` skill using the `HIGH_RISK` tier interface.
+See `omniclaude/plugins/onex/skills/slack-gate/SKILL.md` for the full gate interface.
+
+The gate message format:
 
 ```
 [HIGH CONFLICT] Decision conflict detected — pipeline paused.
@@ -229,27 +240,142 @@ Reply to resolve:
   dismiss <conflict_id>          — mark DISMISSED permanently
 ```
 
-**Resolution rules:**
+### Slack Command Grammar
+
+Operators resolve conflicts by replying to the Slack gate thread. The command grammar is:
 
 ```
-proceed <id> [note]
-  → conflict.status = RESOLVED
-  → conflict.resolution_note = note or "proceed (no note provided)"
-  → conflict.resolved_by = <slack_user>
-  → emit decision-conflict-status-changed.v1 (old: OPEN → new: RESOLVED)
-  → resume pipeline
+Format:  <action> <conflict_id> [note]
 
-hold <id>
-  → pipeline stays paused
-  → no status change, no event
-
-dismiss <id>
-  → conflict.status = DISMISSED
-  → emit decision-conflict-status-changed.v1 (old: OPEN → new: DISMISSED)
-  → resume pipeline (dismissed = acknowledged, not a blocker)
+Actions:
+  proceed <id> [note]  — mark RESOLVED, record approver + note, continue pipeline
+  hold    <id>         — pipeline stays paused (gate remains open, no status change)
+  dismiss <id>         — mark DISMISSED permanently (never resurfaces for this pair)
 ```
 
-Multiple conflicts: each must be resolved in a separate reply before the pipeline resumes.
+**Behavior per action:**
+
+**`proceed <conflict_id> [note]`**
+- Sets `conflict.status = RESOLVED`
+- Sets `conflict.resolved_by = <slack_user_id>`
+- Sets `conflict.resolved_at = <timestamp>`
+- Sets `conflict.resolution_note`:
+  - If note provided: `resolution_note = <provided text>`
+  - If no note: `resolution_note = "proceed (no note provided)"`
+- Emits `decision-conflict-status-changed.v1` (OPEN -> RESOLVED)
+- Resumes the pipeline
+
+**`hold <conflict_id>`**
+- Pipeline stays paused
+- No status change on the conflict record
+- No event emitted
+- Gate remains open waiting for another reply
+
+**`dismiss <conflict_id>`**
+- Sets `conflict.status = DISMISSED`
+- This pair will NEVER trigger another Slack gate again, even if re-recorded
+- Emits `decision-conflict-status-changed.v1` (OPEN -> DISMISSED)
+- Resumes the pipeline (dismissed = acknowledged, not a blocker)
+
+**Unrecognized command:**
+- Re-prompt operator with usage (do not change any state)
+
+**Multiple conflicts:**
+- Each conflict must be resolved separately in its own reply before the pipeline resumes
+- All conflicts with status OPEN block the pipeline; RESOLVED and DISMISSED do not
+
+### Status Change Event Emission
+
+Emit `TopicBase.DECISION_CONFLICT_STATUS_CHANGED` on EVERY status transition:
+
+- `OPEN -> RESOLVED` (via `proceed`)
+- `OPEN -> DISMISSED` (via `dismiss`)
+
+The topic constant is imported from `omniclaude/src/omniclaude/hooks/topics.py`:
+
+```python
+from omniclaude.hooks.topics import TopicBase
+
+# TopicBase.DECISION_CONFLICT_STATUS_CHANGED resolves to:
+# "onex.evt.omniclaude.decision-conflict-status-changed.v1"
+```
+
+**Event payload:**
+
+```python
+emit_event(TopicBase.DECISION_CONFLICT_STATUS_CHANGED, {
+    "conflict_id": conflict_id,           # UUID of the conflict record
+    "old_status": "OPEN",                 # Previous status
+    "new_status": "RESOLVED",            # New status ("RESOLVED" or "DISMISSED")
+    "resolved_by": slack_user_id,        # Slack user ID who sent the command
+    "resolved_at": now_iso8601(),        # ISO8601 timestamp
+    "resolution_note": resolution_note,  # Text note or "proceed (no note provided)"
+})
+```
+
+For `dismiss`, `resolution_note` is `None` (no note is recorded for dismissals).
+
+**Emission is mandatory:** Do not skip event emission on status transitions. The event bus
+is the authoritative record of conflict lifecycle for downstream consumers (omnidash, audit).
+
+### Resolution Processing (Full Flow)
+
+```python
+from omniclaude.hooks.topics import TopicBase
+
+def process_slack_reply(reply_text: str, slack_user_id: str) -> ReplyResult:
+    tokens = reply_text.strip().split(maxsplit=2)
+    if len(tokens) < 2:
+        return ReplyResult(action="reprompt", message=USAGE_TEXT)
+
+    action = tokens[0].lower()
+    conflict_id = tokens[1]
+    note = tokens[2] if len(tokens) > 2 else None
+
+    if action == "proceed":
+        resolution_note = note or "proceed (no note provided)"
+        update_conflict(
+            conflict_id,
+            status="RESOLVED",
+            resolved_by=slack_user_id,
+            resolved_at=now_iso8601(),
+            resolution_note=resolution_note,
+        )
+        emit_event(TopicBase.DECISION_CONFLICT_STATUS_CHANGED, {
+            "conflict_id": conflict_id,
+            "old_status": "OPEN",
+            "new_status": "RESOLVED",
+            "resolved_by": slack_user_id,
+            "resolved_at": now_iso8601(),
+            "resolution_note": resolution_note,
+        })
+        return ReplyResult(action="proceed", conflict_id=conflict_id)
+
+    elif action == "hold":
+        # No state change, no event
+        return ReplyResult(action="hold", conflict_id=conflict_id)
+
+    elif action == "dismiss":
+        update_conflict(
+            conflict_id,
+            status="DISMISSED",
+            resolved_by=slack_user_id,
+            resolved_at=now_iso8601(),
+            resolution_note=None,
+        )
+        emit_event(TopicBase.DECISION_CONFLICT_STATUS_CHANGED, {
+            "conflict_id": conflict_id,
+            "old_status": "OPEN",
+            "new_status": "DISMISSED",
+            "resolved_by": slack_user_id,
+            "resolved_at": now_iso8601(),
+            "resolution_note": None,
+        })
+        return ReplyResult(action="dismiss", conflict_id=conflict_id)
+
+    else:
+        return ReplyResult(action="reprompt", message=USAGE_TEXT)
+```
 
 ---
 
@@ -263,6 +389,8 @@ Multiple conflicts: each must be resolved in a separate reply before the pipelin
 | semantic_check_async HTTP error | Log warning, treat as severity_shift=0, continue |
 | Missing required field | Ask user for the missing field before proceeding |
 | Invalid enum value | Report valid options, ask user to re-specify |
+| Unrecognized Slack command | Re-prompt with usage text, do not change state |
+| emit_event failure | Log error, do not block pipeline (events are best-effort) |
 
 ---
 
@@ -272,6 +400,8 @@ Multiple conflicts: each must be resolved in a separate reply before the pipelin
 - `semantic_check.py` is async — use `asyncio.create_task()` in MVP for non-blocking dispatch.
 - In MVP, semantic results arrive after the pipeline continues; they update the conflict record
   when they arrive but do not re-gate the pipeline.
-- All event emission uses the topic constant from `topics.py` (OMN-2766):
-  `TOPIC_DECISION_CONFLICT_STATUS_CHANGED = "decision-conflict-status-changed.v1"`
-- See `examples/record_decision.md` and `examples/query_decisions.md` for concrete walkthroughs.
+- All event emission uses the topic constant `TopicBase.DECISION_CONFLICT_STATUS_CHANGED`
+  from `omniclaude/src/omniclaude/hooks/topics.py` (added in OMN-2766).
+- Wire topic name: `"onex.evt.omniclaude.decision-conflict-status-changed.v1"`
+- See `examples/record_decision.md`, `examples/query_decisions.md`, and
+  `examples/conflict_resolution.md` for concrete walkthroughs.

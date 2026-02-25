@@ -1,9 +1,9 @@
 # decision-store skill
 
 **Skill ID**: `onex:decision-store`
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Owner**: omniclaude
-**Ticket**: OMN-2768
+**Tickets**: OMN-2768 (base), OMN-2769 (Slack gate + status events)
 
 ---
 
@@ -16,6 +16,9 @@ via `NodeDecisionStoreQueryCompute` (OMN-2767).
 Conflicts are detected in two stages:
 1. **Structural check** (sync, pure function) — always runs
 2. **Semantic check** (async, LLM via DeepSeek-R1) — only if structural confidence >= 0.6
+
+HIGH-severity conflicts trigger the Slack conflict resolution gate (OMN-2769), which blocks
+the pipeline until an operator resolves each conflict via Slack reply.
 
 ---
 
@@ -42,9 +45,12 @@ Behavior:
 2. Call `NodeDecisionStoreEffect` to persist the entry.
 3. Run `structural_confidence()` against all existing entries in the same domain.
 4. For each conflict with confidence > 0.0, call `compute_severity()`.
-5. If any severity is HIGH: post Slack notification and wait for resolution gate.
+5. If any severity is HIGH: post Slack gate via `slack-gate` skill (HIGH_RISK tier) and
+   wait for operator resolution via Slack command grammar.
 6. If structural confidence >= 0.6: fire async `semantic_check_async()` — non-blocking.
-7. Emit `decision-conflict-status-changed.v1` event for each new conflict.
+7. Emit `decision-conflict-status-changed.v1` event for each new conflict (status = OPEN).
+8. Emit `decision-conflict-status-changed.v1` on each subsequent status transition
+   (OPEN -> RESOLVED or OPEN -> DISMISSED) after Slack resolution.
 
 ### `query`
 
@@ -110,7 +116,7 @@ Behavior:
 
 1. **Platform-wide scope** (either entry has `scope_services = []`): floor at MEDIUM
 2. **Architecture layer** (either entry has `scope_layer = "architecture"`): floor at HIGH
-3. **Semantic shift** (from DeepSeek-R1): ±1 step, clamped to [LOW, HIGH]
+3. **Semantic shift** (from DeepSeek-R1): +/-1 step, clamped to [LOW, HIGH]
 
 **Hard rules:**
 - `structural_confidence == 0.0` (cross-domain): no conflict, semantic check MUST NOT run
@@ -135,10 +141,21 @@ Behavior:
 
 ## Conflict Resolution (Slack Gate)
 
-When a HIGH severity conflict is detected after `record`, the pipeline posts a Slack
-gate requiring explicit resolution before continuing.
+When a HIGH severity conflict is detected after `record`, the pipeline invokes the
+`slack-gate` skill with `HIGH_RISK` tier, posting a conflict notification to Slack and
+blocking until an operator resolves the conflict.
 
-**Slack command grammar:**
+### Integration with slack-gate
+
+HIGH conflicts use the existing `slack-gate` HIGH_RISK gate interface:
+- See `omniclaude/plugins/onex/skills/slack-gate/SKILL.md` for gate interface details
+- The conflict notification is posted as a HIGH_RISK gate
+- All other HIGH_RISK gates (e.g. auto-merge) are unaffected; only decision conflicts use
+  this grammar
+
+### Slack Command Grammar
+
+Operators resolve conflicts by replying in the Slack gate thread:
 
 ```
 Format:  <action> <conflict_id> [note]
@@ -149,10 +166,77 @@ Actions:
   dismiss <id>         — mark DISMISSED permanently (no further checks for this pair)
 ```
 
-Notes:
-- `proceed` with no note: `resolution_note = "proceed (no note provided)"`
-- Multiple conflicts: each must be resolved separately in its own reply
-- Each status change emits `decision-conflict-status-changed.v1`
+**`proceed` rules:**
+- `proceed <id>` with no note -> `resolution_note = "proceed (no note provided)"`
+- `proceed <id> <note>` -> `resolution_note = <note text>`
+
+**`hold` rules:**
+- Pipeline stays paused; no state change; no event emitted
+
+**`dismiss` rules:**
+- Conflict marked DISMISSED permanently
+- This decision pair will NEVER trigger a Slack gate again (even if re-recorded)
+- `resolution_note` is `None` for dismissals
+
+**Multiple conflicts:**
+- Each conflict must be resolved separately in its own reply
+- All OPEN conflicts must be resolved before the pipeline resumes
+- RESOLVED and DISMISSED conflicts do not block the pipeline
+
+**Unrecognized commands:**
+- Re-prompt operator with usage text; no state changes
+
+### Conflict Workflow (Full Sequence)
+
+```
+1. record sub-operation detects HIGH conflict
+2. Invoke slack-gate skill (HIGH_RISK tier) -> post conflict message to Slack
+3. Pipeline blocks (polling for Slack replies)
+4. Operator replies with: proceed | hold | dismiss
+5. For proceed:
+   - Update conflict: status=RESOLVED, resolved_by, resolved_at, resolution_note
+   - Emit decision-conflict-status-changed.v1 (OPEN -> RESOLVED)
+   - If all conflicts resolved: resume pipeline
+6. For hold:
+   - No state change, no event
+   - Continue polling
+7. For dismiss:
+   - Update conflict: status=DISMISSED
+   - Emit decision-conflict-status-changed.v1 (OPEN -> DISMISSED)
+   - Mark pair as permanently suppressed
+   - If all conflicts resolved/dismissed: resume pipeline
+8. Pipeline resumes after all blocking conflicts are RESOLVED or DISMISSED
+```
+
+---
+
+## Status Change Events
+
+`decision-conflict-status-changed.v1` is emitted on EVERY conflict status transition.
+
+**Topic constant**: `TopicBase.DECISION_CONFLICT_STATUS_CHANGED`
+**Wire topic**: `onex.evt.omniclaude.decision-conflict-status-changed.v1`
+**Source**: `omniclaude/src/omniclaude/hooks/topics.py` (added in OMN-2766)
+
+**Transitions that emit:**
+- `None -> OPEN` (conflict first detected during `record`)
+- `OPEN -> RESOLVED` (via `proceed` command)
+- `OPEN -> DISMISSED` (via `dismiss` command)
+
+**Payload:**
+```json
+{
+  "conflict_id": "uuid",
+  "old_status": "OPEN | null",
+  "new_status": "OPEN | RESOLVED | DISMISSED",
+  "resolved_by": "slack_user_id | null",
+  "resolved_at": "ISO8601 | null",
+  "resolution_note": "string | null"
+}
+```
+
+Note: `old_status` is `null` for the initial OPEN event (no previous status).
+`resolution_note` is `null` for `dismiss` actions.
 
 ---
 
@@ -160,12 +244,13 @@ Notes:
 
 | File | Purpose |
 |---|---|
-| `SKILL.md` | This document — usage, severity matrix, examples |
+| `SKILL.md` | This document — usage, severity matrix, conflict resolution workflow |
 | `prompt.md` | Operational prompt followed by the agent |
 | `detect_conflicts.py` | `structural_confidence()` and `compute_severity()` pure functions |
 | `semantic_check.py` | Async LLM check via DeepSeek-R1 (only if structural >= 0.6) |
 | `examples/record_decision.md` | Example: recording a tech stack choice |
 | `examples/query_decisions.md` | Example: querying decisions with filters |
+| `examples/conflict_resolution.md` | Example: Slack conflict resolution walkthrough |
 
 ---
 
@@ -176,7 +261,8 @@ Notes:
 | OMN-2763 | `ModelDecisionStoreEntry`, `ModelDecisionConflict` | Data models |
 | OMN-2765 | `NodeDecisionStoreEffect` | Write node |
 | OMN-2767 | `NodeDecisionStoreQueryCompute` | Query node |
-| OMN-2766 | Kafka topic constants in `topics.py` | Event emission |
+| OMN-2766 | `TopicBase.DECISION_CONFLICT_STATUS_CHANGED` in `topics.py` | Event emission |
+| OMN-2769 | Slack command grammar + status change events | This ticket |
 
 ---
 
@@ -187,12 +273,16 @@ Notes:
 ```json
 {
   "conflict_id": "uuid",
-  "decision_a_id": "uuid",
-  "decision_b_id": "uuid",
-  "old_status": "OPEN | RESOLVED | DISMISSED",
+  "old_status": "OPEN | RESOLVED | DISMISSED | null",
   "new_status": "OPEN | RESOLVED | DISMISSED",
-  "resolution_note": "string | null",
-  "approver": "string | null",
-  "emitted_at": "ISO8601"
+  "resolved_by": "string | null",
+  "resolved_at": "ISO8601 | null",
+  "resolution_note": "string | null"
 }
 ```
+
+**Note**: The event schema was simplified in OMN-2769. Fields `decision_a_id`,
+`decision_b_id`, and `approver` were consolidated: `approver` is now `resolved_by`,
+and decision pair IDs are carried by the conflict record (not the status event).
+The status event is intentionally minimal — consumers query the conflict record for
+full decision pair context.
