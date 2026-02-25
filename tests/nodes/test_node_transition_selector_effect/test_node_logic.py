@@ -69,7 +69,9 @@ def make_goal() -> ModelGoalCondition:
     )
 
 
-def make_action(idx: int = 1, category: ActionCategory = ActionCategory.STATE_TRANSITION) -> ModelTypedAction:
+def make_action(
+    idx: int = 1, category: ActionCategory = ActionCategory.STATE_TRANSITION
+) -> ModelTypedAction:
     return ModelTypedAction(
         action_id=f"action-{idx:03d}",
         action_type="transition_to_effect",
@@ -181,9 +183,7 @@ class TestFormatPriorPaths:
         assert "Path 3" in result
 
     def test_caps_at_three_paths(self) -> None:
-        paths = tuple(
-            (f"action-{i:03d}",) for i in range(10)
-        )
+        paths = tuple((f"action-{i:03d}",) for i in range(10))
         result = NodeTransitionSelectorEffect._format_prior_paths(paths)
         # Only first 3 shown
         assert "Path 4" not in result
@@ -255,7 +255,7 @@ class TestBuildPrompt:
         req = make_request()
         prompt = node._build_prompt(req)
         # Should not contain any hardcoded external values
-        assert "192.168.86.201" not in prompt
+        assert "192.168.86.201" not in prompt  # onex-allow-internal-ip
         assert "qwen3-14b" not in prompt
 
 
@@ -335,7 +335,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request(num_actions=3)
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 2}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 2}')
+        ):
             result = await node.select(req)
 
         assert result.success is True
@@ -348,7 +350,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request(num_actions=3)
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')
+        ):
             result = await node.select(req)
 
         assert result.success is True
@@ -360,7 +364,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request(num_actions=3)
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 3}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 3}')
+        ):
             result = await node.select(req)
 
         assert result.success is True
@@ -406,7 +412,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request(num_actions=3)
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 99}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 99}')
+        ):
             result = await node.select(req)
 
         assert result.success is False
@@ -419,7 +427,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request(num_actions=3)
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 0}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 0}')
+        ):
             result = await node.select(req)
 
         assert result.success is False
@@ -444,7 +454,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request()
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')
+        ):
             result = await node.select(req)
 
         assert result.correlation_id == req.correlation_id
@@ -454,7 +466,9 @@ class TestSelectMocked:
         node = make_node()
         req = make_request()
 
-        with patch.object(node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')):
+        with patch.object(
+            node, "_call_model", new=AsyncMock(return_value='{"selected": 1}')
+        ):
             result = await node.select(req)
 
         assert result.duration_ms >= 0.0

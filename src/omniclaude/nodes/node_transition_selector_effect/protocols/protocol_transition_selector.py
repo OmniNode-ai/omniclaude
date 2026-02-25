@@ -22,7 +22,7 @@ class ProtocolTransitionSelector(Protocol):
 
     Implementors call the local model to classify over a bounded action set.
     All methods must be async. The default implementation uses Qwen3-14B
-    at LLM_CODER_FAST_URL (192.168.86.201:8001).
+    at LLM_CODER_FAST_URL (192.168.86.201:8001).  # onex-allow-internal-ip
 
     Operation mapping (from node contract io_operations):
         - select operation -> select()

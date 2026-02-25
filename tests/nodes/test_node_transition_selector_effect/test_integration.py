@@ -8,7 +8,7 @@ Tests against the live local model endpoint (LLM_CODER_FAST_URL).
 These tests are skipped in CI unless the endpoint is available.
 
 Requires:
-    - LLM_CODER_FAST_URL env var or default http://192.168.86.201:8001
+    - LLM_CODER_FAST_URL env var or default http://192.168.86.201:8001  # onex-allow-internal-ip
     - Qwen3-14B model serving the OpenAI-compatible API
 
 Marker: integration (excluded from unit test runs)
@@ -45,7 +45,10 @@ from omniclaude.nodes.node_transition_selector_effect.node import (
 
 pytestmark = pytest.mark.integration
 
-_LLM_ENDPOINT = os.environ.get("LLM_CODER_FAST_URL", "http://192.168.86.201:8001")
+_LLM_ENDPOINT = os.environ.get(
+    "LLM_CODER_FAST_URL",
+    "http://192.168.86.201:8001",  # onex-allow-internal-ip
+)
 
 
 def _is_endpoint_available() -> bool:
@@ -87,14 +90,12 @@ def make_node() -> NodeTransitionSelectorEffect:
 # Expected: model selects a valid transition (any of the 3 is acceptable).
 
 
-def make_three_state_scenario() -> (
-    tuple[
-        ModelContractState,
-        ModelGoalCondition,
-        tuple[ModelTypedAction, ...],
-        ModelNavigationContext,
-    ]
-):
+def make_three_state_scenario() -> tuple[
+    ModelContractState,
+    ModelGoalCondition,
+    tuple[ModelTypedAction, ...],
+    ModelNavigationContext,
+]:
     state_a = ModelContractState(
         state_id="state-a-effect",
         node_type="Effect",
@@ -147,7 +148,9 @@ async def test_three_state_graph_returns_valid_transition() -> None:
     node = make_node()
     state, goal, actions, context = make_three_state_scenario()
 
-    req = NodeTransitionSelectorEffect.build_request(state, goal, list(actions), context)
+    req = NodeTransitionSelectorEffect.build_request(
+        state, goal, list(actions), context
+    )
     result = await node.select(req)
 
     # Either we got a valid action, or we got a structured error (timeout/unavailable).
@@ -195,7 +198,9 @@ async def test_single_action_set_selects_only_option() -> None:
         goal_summary="Reach the compute node",
     )
 
-    req = NodeTransitionSelectorEffect.build_request(state, goal, [only_action], context)
+    req = NodeTransitionSelectorEffect.build_request(
+        state, goal, [only_action], context
+    )
     result = await node.select(req)
 
     if result.success:

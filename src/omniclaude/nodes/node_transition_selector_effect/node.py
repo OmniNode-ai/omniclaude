@@ -60,11 +60,16 @@ _PROMPT_TEMPLATE_VERSION = "1.0.0"
 
 # Default model endpoint from environment, falling back to contract default
 _DEFAULT_LLM_ENDPOINT = os.environ.get(
-    "LLM_CODER_FAST_URL", "http://192.168.86.201:8001"
+    "LLM_CODER_FAST_URL",
+    "http://192.168.86.201:8001",  # onex-allow-internal-ip
 )
 
-# Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds)
+# Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds).
+# asyncio.wait_for is the authoritative timeout; httpx timeout is set slightly higher so that
+# asyncio cancellation fires first and produces a clean SELECTION_TIMEOUT error rather than
+# an httpx.ReadTimeout that would surface as MODEL_UNAVAILABLE.
 _SELECTION_TIMEOUT_SECONDS = 10.0
+_HTTP_TIMEOUT_SECONDS = _SELECTION_TIMEOUT_SECONDS + 2.0
 
 
 class NodeTransitionSelectorEffect(NodeEffect):
@@ -287,7 +292,9 @@ class NodeTransitionSelectorEffect(NodeEffect):
         context = request.context
         action_set = request.action_set
 
-        state_fields_str = json.dumps(dict(state.fields), indent=2) if state.fields else "{}"
+        state_fields_str = (
+            json.dumps(dict(state.fields), indent=2) if state.fields else "{}"
+        )
         prior_paths_str = self._format_prior_paths(context.prior_paths)
         action_list_str = self._build_action_list(action_set)
         target_state_str = goal.target_state_id or "not specified"
@@ -318,7 +325,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
             f"{action_list_str}\n"
             "\n"
             "## Response Format\n"
-            'Respond with a JSON object containing only:\n'
+            "Respond with a JSON object containing only:\n"
             '{"selected": <number>}\n'
             "\n"
             "Where <number> is the integer index of your chosen transition (starting from 1).\n"
@@ -330,8 +337,15 @@ class NodeTransitionSelectorEffect(NodeEffect):
     # Model Call
     # ------------------------------------------------------------------
 
+    # Retry policy (matches contract.yaml error_handling.retry_policy)
+    _MAX_RETRIES = 1
+    _RETRY_DELAY_SECONDS = 0.5  # initial_delay_ms: 500
+
     async def _call_model(self, prompt: str) -> str:
-        """Call the local model via OpenAI-compatible chat completions API.
+        """Call the local model with retry on model_unavailable.
+
+        Implements the retry_policy from contract.yaml:
+          max_retries: 1, initial_delay_ms: 500, retry_on: [model_unavailable]
 
         Uses LLM_CODER_FAST_URL (Qwen3-14B, port 8001). Requests JSON mode
         if available for structured output.
@@ -343,8 +357,38 @@ class NodeTransitionSelectorEffect(NodeEffect):
             Raw model response text.
 
         Raises:
+            Exception: After all retries are exhausted.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(self._MAX_RETRIES + 1):
+            try:
+                return await self._call_model_once(prompt)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < self._MAX_RETRIES:
+                    logger.warning(
+                        "transition_selector.model_retry",
+                        extra={
+                            "attempt": attempt + 1,
+                            "max_retries": self._MAX_RETRIES,
+                            "error": str(exc),
+                        },
+                    )
+                    await asyncio.sleep(self._RETRY_DELAY_SECONDS)
+        raise last_exc  # type: ignore[misc]
+
+    async def _call_model_once(self, prompt: str) -> str:
+        """Single model call via OpenAI-compatible chat completions API.
+
+        Args:
+            prompt: The fully-rendered classification prompt.
+
+        Returns:
+            Raw model response text.
+
+        Raises:
             httpx.HTTPError: On network or HTTP errors.
-            Exception: On unexpected failures.
+            ValueError: If model returns no choices.
         """
         endpoint = self._llm_endpoint.rstrip("/")
         url = f"{endpoint}/v1/chat/completions"
@@ -362,7 +406,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=_SELECTION_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             data = response.json()
@@ -409,6 +453,10 @@ class NodeTransitionSelectorEffect(NodeEffect):
             return None
 
         selected = data.get("selected")
+        # Reject bool explicitly: isinstance(True, int) is True, but bool is not
+        # a valid index — True would map to index 1 silently.
+        if isinstance(selected, bool):
+            return None
         if not isinstance(selected, int):
             # Try coercing string integer
             try:

@@ -88,52 +88,15 @@ dependencies:
     module: omniclaude.nodes.node_transition_selector_effect.protocols
     pluggable: true
 
-# Prompt template artifact (versioned)
-# The prompt template is defined here as a contract artifact so it can be
-# versioned, tested, and replaced without touching node code.
+# Prompt template
+# The prompt template is implemented in NodeTransitionSelectorEffect._build_prompt()
+# (node.py). The template version is tracked via _PROMPT_TEMPLATE_VERSION = "1.0.0"
+# in node.py. The contract records the version for traceability.
 prompt_template:
   version: "1.0.0"
   template_key: transition_selection_v1
-  template: |
-    You are a graph navigation classifier. Your task is to select the single
-    best transition from a bounded set of typed options.
-
-    ## Current State
-    State ID: {state_id}
-    Node Type: {node_type}
-    Fields: {state_fields}
-
-    ## Goal
-    Goal: {goal_summary}
-    Target State: {target_state_id}
-
-    ## Navigation Context
-    Session: {session_id}
-    Step: {step_number}
-    Prior Successful Paths: {prior_paths}
-
-    ## Available Transitions
-    Select exactly ONE of the following transitions by responding with its number.
-    Do NOT invent new transitions or describe actions outside this list.
-
-    {action_list}
-
-    ## Response Format
-    Respond with a JSON object containing only:
-    {{"selected": <number>}}
-
-    Where <number> is the integer index of your chosen transition (starting from 1).
-    Do not include any other text.
-  variables:
-    - state_id
-    - node_type
-    - state_fields
-    - goal_summary
-    - target_state_id
-    - session_id
-    - step_number
-    - prior_paths
-    - action_list
+  # Template body is canonical in node.py:_build_prompt to avoid drift.
+  # See OMN-2569 for rationale.
 
 # Handler routing
 handler_routing:
@@ -143,7 +106,7 @@ handler_routing:
     - backend: qwen3_fast
       handler_key: qwen3_fast
       endpoint_env: LLM_CODER_FAST_URL
-      default_endpoint: "http://192.168.86.201:8001"
+      default_endpoint: "http://192.168.86.201:8001"  # onex-allow-internal-ip
       model: qwen3-14b
 
 # Error handling
