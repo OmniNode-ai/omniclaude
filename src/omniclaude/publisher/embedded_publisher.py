@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import signal
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
@@ -73,9 +74,13 @@ class EmbeddedEventPublisher:
         self,
         config: PublisherConfig,
         event_bus: ProtocolEventBusLike | None = None,
+        secondary_event_bus: EventBusKafka | None = None,
     ) -> None:
         self._config = config
         self._event_bus: ProtocolEventBusLike | None = event_bus
+        # Secondary event bus typed as EventBusKafka (not ProtocolEventBusLike) to get
+        # start()/stop() lifecycle without hasattr checks.
+        self._secondary_event_bus: EventBusKafka | None = secondary_event_bus
         self._queue = BoundedEventQueue(
             max_memory_queue=config.max_memory_queue,
             max_spool_messages=config.max_spool_messages,
@@ -156,6 +161,40 @@ class EmbeddedEventPublisher:
 
                 if hasattr(self._event_bus, "start"):
                     await self._event_bus.start()
+
+                # Initialize secondary Kafka cluster (cloud Redpanda) if configured.
+                # Failures are non-fatal: secondary start failure must not prevent
+                # the primary from publishing.
+                if (
+                    self._secondary_event_bus is None
+                    and self._config.kafka_secondary_bootstrap_servers is not None
+                ):
+                    secondary_kafka_config = ModelKafkaEventBusConfig(
+                        bootstrap_servers=self._config.kafka_secondary_bootstrap_servers,
+                        environment=self._config.environment,
+                        timeout_seconds=int(self._config.kafka_secondary_timeout_seconds),
+                        security_protocol=self._config.kafka_secondary_security_protocol,
+                        sasl_mechanism=self._config.kafka_secondary_sasl_mechanism,
+                        sasl_oauthbearer_token_endpoint_url=self._config.kafka_secondary_sasl_oauthbearer_token_endpoint_url,
+                        sasl_oauthbearer_client_id=self._config.kafka_secondary_sasl_oauthbearer_client_id,
+                        sasl_oauthbearer_client_secret=self._config.kafka_secondary_sasl_oauthbearer_client_secret,
+                        ssl_ca_file=self._config.kafka_secondary_ssl_ca_file,
+                        # Do NOT call apply_environment_overrides() — those env vars
+                        # (KAFKA_*) belong to the primary cluster.
+                    )
+                    self._secondary_event_bus = EventBusKafka(config=secondary_kafka_config)
+                    try:
+                        await self._secondary_event_bus.start()
+                        logger.info(
+                            "Secondary event bus started",
+                            extra={"secondary_servers": self._config.kafka_secondary_bootstrap_servers},
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Secondary event bus failed to start (non-fatal): {e}",
+                            extra={"secondary_servers": self._config.kafka_secondary_bootstrap_servers},
+                        )
+                        self._secondary_event_bus = None
 
                 self._config.socket_path.parent.mkdir(parents=True, exist_ok=True)
                 if self._config.socket_path.exists():
@@ -241,6 +280,14 @@ class EmbeddedEventPublisher:
                 )
                 if self._publisher_task is not None:
                     self._publisher_task = None
+
+            # Stop secondary bus first (non-fatal) so primary stops last.
+            if self._secondary_event_bus is not None:
+                try:
+                    await self._secondary_event_bus.stop()
+                except Exception as e:
+                    logger.warning(f"Secondary event bus stop failed (non-fatal): {e}")
+                self._secondary_event_bus = None
 
             if self._event_bus is not None and hasattr(self._event_bus, "close"):
                 await self._event_bus.close()
@@ -548,16 +595,55 @@ class EmbeddedEventPublisher:
                 correlation_id=correlation_id,
             )
 
-            await self._event_bus.publish(
-                topic=event.topic,
-                key=key,
-                value=value,
-                headers=headers,
-            )
+            # Build publish coroutines: primary always present; secondary added when configured.
+            # asyncio.wait_for bounds secondary publish so a cloud stall cannot delay primary.
+            publish_coros: list[Awaitable[None]] = [
+                self._event_bus.publish(
+                    topic=event.topic,
+                    key=key,
+                    value=value,
+                    headers=headers,
+                )
+            ]
+            if self._secondary_event_bus is not None:
+                publish_coros.append(
+                    asyncio.wait_for(
+                        self._secondary_event_bus.publish(
+                            topic=event.topic,
+                            key=key,
+                            value=value,
+                            headers=headers,
+                        ),
+                        timeout=self._config.kafka_secondary_timeout_seconds,
+                    )
+                )
+
+            results = await asyncio.gather(*publish_coros, return_exceptions=True)
+
+            # Primary (index 0) is authoritative.
+            if isinstance(results[0], BaseException):
+                logger.warning(
+                    f"Primary publish failed for event {event.event_id}: {results[0]}",
+                    extra={"event_type": event.event_type, "topic": event.topic, "cluster": "primary"},
+                )
+                return False
+
+            # Secondary (index 1) is non-fatal.
+            if len(results) > 1 and isinstance(results[1], BaseException):
+                logger.warning(
+                    f"Secondary publish failed (non-fatal) for event {event.event_id}: {results[1]}",
+                    extra={"event_type": event.event_type, "topic": event.topic, "cluster": "secondary"},
+                )
 
             logger.debug(
                 f"Published event {event.event_id}",
-                extra={"event_type": event.event_type, "topic": event.topic},
+                extra={
+                    "event_id": event.event_id,
+                    "event_type": event.event_type,
+                    "topic": event.topic,
+                    "cluster": "primary",
+                    "success": True,
+                },
             )
             return True
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,6 +83,63 @@ class PublisherConfig(BaseSettings):
     max_retry_attempts: int = Field(default=3, ge=1, le=10)
     backoff_base_seconds: float = Field(default=1.0, ge=0.1, le=30.0)
     max_backoff_seconds: float = Field(default=60.0, ge=1.0, le=300.0)
+
+    # Secondary Kafka cluster (cloud Redpanda / kafka.omninode.ai)
+    # All secondary fields use KAFKA_SECONDARY_* prefix so they cannot collide
+    # with primary KAFKA_* env vars processed by apply_environment_overrides().
+    kafka_secondary_bootstrap_servers: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OMNICLAUDE_PUBLISHER_KAFKA_SECONDARY_BOOTSTRAP_SERVERS",
+            "KAFKA_SECONDARY_BOOTSTRAP_SERVERS",
+        ),
+        description=(
+            "Secondary Kafka bootstrap servers (host:port, comma-separated). "
+            "When set, events are published to both primary and secondary clusters. "
+            "Secondary failures are non-fatal and do not affect primary publish."
+        ),
+    )
+    kafka_secondary_security_protocol: str = Field(
+        default="PLAINTEXT",
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SECURITY_PROTOCOL"),
+        pattern=r"^(PLAINTEXT|SSL|SASL_PLAINTEXT|SASL_SSL)$",
+        description="Security protocol for the secondary Kafka cluster.",
+    )
+    kafka_secondary_sasl_mechanism: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SASL_MECHANISM"),
+        description="SASL mechanism for secondary cluster (e.g. OAUTHBEARER, PLAIN, SCRAM-SHA-256).",
+    )
+    kafka_secondary_sasl_oauthbearer_token_endpoint_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL"),
+        description="Token endpoint URL for OAUTHBEARER on secondary cluster.",
+    )
+    kafka_secondary_sasl_oauthbearer_client_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SASL_OAUTHBEARER_CLIENT_ID"),
+        description="OAuth2 client ID for secondary cluster OAUTHBEARER auth.",
+    )
+    kafka_secondary_sasl_oauthbearer_client_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SASL_OAUTHBEARER_CLIENT_SECRET"),
+        description="OAuth2 client secret for secondary cluster OAUTHBEARER auth.",
+    )
+    kafka_secondary_ssl_ca_file: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_SSL_CA_FILE"),
+        description="Path to CA certificate file for secondary cluster TLS (optional; omit for Let's Encrypt certs).",
+    )
+    kafka_secondary_timeout_seconds: float = Field(
+        default=5.0,
+        ge=0.5,
+        le=30.0,
+        validation_alias=AliasChoices("KAFKA_SECONDARY_TIMEOUT_SECONDS"),
+        description=(
+            "Timeout in seconds for secondary cluster publish. "
+            "Smaller than primary's kafka_timeout_seconds — secondary stalls must not block primary."
+        ),
+    )
 
     @field_validator("socket_path", "pid_path", mode="after")
     @classmethod
