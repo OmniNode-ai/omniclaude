@@ -206,13 +206,13 @@ class SlackSink:
         if not url:
             return
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(  # noqa: S310  # nosec B310
             url,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310  # nosec B310
             if resp.status not in (200, 204):
                 logger.warning(
                     "SlackSink: unexpected HTTP %s from webhook", resp.status

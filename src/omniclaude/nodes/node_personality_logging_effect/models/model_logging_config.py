@@ -112,11 +112,11 @@ class ModelLoggingConfig(BaseModel):
         description="User-supplied YAML phrase-pack files",
     )
     kafka_input_topic: str = Field(
-        default="onex.evt.logging.event-emitted.v1",
+        default="onex.evt.omniclaude.log-event-emitted.v1",
         description="Kafka topic to consume LogEvents from",
     )
     kafka_output_topic: str = Field(
-        default="onex.evt.logging.event-rendered.v1",
+        default="onex.evt.omniclaude.log-event-rendered.v1",
         description="Kafka topic to emit rendered events to",
     )
     slack_webhook_url: str | None = Field(

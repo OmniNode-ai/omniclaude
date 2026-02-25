@@ -86,8 +86,8 @@ io_operations:
 
 # Kafka topics
 kafka:
-  input_topic: onex.evt.logging.event-emitted.v1
-  output_topic: onex.evt.logging.event-rendered.v1
+  input_topic: onex.evt.omniclaude.log-event-emitted.v1
+  output_topic: onex.evt.omniclaude.log-event-rendered.v1
 
 # Invariants
 invariants:
