@@ -140,9 +140,7 @@ class SlackSink:
     def _record_dedup(self, key: str) -> None:
         now = time.monotonic()
         # Prune expired entries to avoid unbounded growth
-        self._dedup_cache = {
-            k: v for k, v in self._dedup_cache.items() if now < v
-        }
+        self._dedup_cache = {k: v for k, v in self._dedup_cache.items() if now < v}
         self._dedup_cache[key] = now + _DEDUP_WINDOW_SECONDS
 
     def _build_payload(self, rendered: ModelRenderedLog) -> dict[str, Any]:
@@ -169,20 +167,19 @@ class SlackSink:
         if metrics is not None:
             fields: list[dict[str, str]] = []
             if metrics.cpu is not None:
-                fields.append(
-                    {"type": "mrkdwn", "text": f"*CPU:* {metrics.cpu:.1%}"}
-                )
+                fields.append({"type": "mrkdwn", "text": f"*CPU:* {metrics.cpu:.1%}"})
             if metrics.mem is not None:
-                fields.append(
-                    {"type": "mrkdwn", "text": f"*Mem:* {metrics.mem:.1%}"}
-                )
+                fields.append({"type": "mrkdwn", "text": f"*Mem:* {metrics.mem:.1%}"})
             if metrics.queue_depth is not None:
                 fields.append(
                     {"type": "mrkdwn", "text": f"*Queue:* {metrics.queue_depth}"}
                 )
             if metrics.latency_p95 is not None:
                 fields.append(
-                    {"type": "mrkdwn", "text": f"*p95 latency:* {metrics.latency_p95:.1f}ms"}
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*p95 latency:* {metrics.latency_p95:.1f}ms",
+                    }
                 )
             if fields:
                 blocks.append({"type": "section", "fields": fields})
@@ -197,9 +194,7 @@ class SlackSink:
             blocks.append(
                 {
                     "type": "context",
-                    "elements": [
-                        {"type": "mrkdwn", "text": " | ".join(trace_parts)}
-                    ],
+                    "elements": [{"type": "mrkdwn", "text": " | ".join(trace_parts)}],
                 }
             )
 

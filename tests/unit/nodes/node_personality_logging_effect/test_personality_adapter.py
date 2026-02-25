@@ -70,7 +70,9 @@ def adapter() -> PersonalityAdapter:
 
 
 @pytest.mark.unit
-def test_rendering_is_deterministic_across_100_calls(adapter: PersonalityAdapter) -> None:
+def test_rendering_is_deterministic_across_100_calls(
+    adapter: PersonalityAdapter,
+) -> None:
     """Same (event, profile) must produce identical output across 100 calls."""
     event = _make_event(severity=EnumLogSeverity.ERROR, message="DB connection failed")
     first_render = adapter.render(event, "default")
@@ -130,7 +132,10 @@ def test_deadpan_profile_contains_severity_index(adapter: PersonalityAdapter) ->
 def test_panic_comic_profile_escalates_for_fatal(adapter: PersonalityAdapter) -> None:
     event = _make_event(severity=EnumLogSeverity.FATAL)
     result = adapter.render(event, "panic_comic")
-    assert "panic level: existential" in result.rendered_message.lower() or "existential" in result.rendered_message
+    assert (
+        "panic level: existential" in result.rendered_message.lower()
+        or "existential" in result.rendered_message
+    )
 
 
 @pytest.mark.unit
@@ -151,9 +156,7 @@ def test_rendered_log_personality_name_is_correct(adapter: PersonalityAdapter) -
 
 @pytest.mark.unit
 def test_rendered_log_original_event_is_unchanged(adapter: PersonalityAdapter) -> None:
-    event = _make_event(
-        attrs={"user_id": "abc123", "request_path": "/api/v1/data"}
-    )
+    event = _make_event(attrs={"user_id": "abc123", "request_path": "/api/v1/data"})
     result = adapter.render(event, "deadpan")
     assert result.original_event is event or result.original_event == event
     # attrs must not be modified

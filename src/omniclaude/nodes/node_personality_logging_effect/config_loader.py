@@ -95,7 +95,8 @@ class LiveConfigLoader:
     def __init__(
         self,
         path: Path,
-        on_reload: Callable[[ModelLoggingConfig, PersonalityAdapter], Any] | None = None,
+        on_reload: Callable[[ModelLoggingConfig, PersonalityAdapter], Any]
+        | None = None,
     ) -> None:
         self._path = path
         self._on_reload = on_reload

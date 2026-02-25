@@ -60,25 +60,75 @@ _DEFAULT_PHRASES: list[dict[str, str]] = [
 ]
 
 _DEADPAN_PHRASES: list[dict[str, str]] = [
-    {"severity": "trace", "prefix": "Observation (severity index 0): ", "suffix": ". No action required."},
-    {"severity": "debug", "prefix": "Diagnostic data (severity index 1): ", "suffix": ". Noted."},
-    {"severity": "info", "prefix": "Status update (severity index 2): ", "suffix": ". Acknowledged."},
-    {"severity": "warn", "prefix": "Anomaly detected (severity index 3): ", "suffix": ". Further observation advised."},
-    {"severity": "error", "prefix": "Failure registered (severity index 4): ", "suffix": ". Remediation may be warranted."},
-    {"severity": "fatal", "prefix": "Catastrophic termination event (severity index 5): ", "suffix": ". System integrity uncertain."},
+    {
+        "severity": "trace",
+        "prefix": "Observation (severity index 0): ",
+        "suffix": ". No action required.",
+    },
+    {
+        "severity": "debug",
+        "prefix": "Diagnostic data (severity index 1): ",
+        "suffix": ". Noted.",
+    },
+    {
+        "severity": "info",
+        "prefix": "Status update (severity index 2): ",
+        "suffix": ". Acknowledged.",
+    },
+    {
+        "severity": "warn",
+        "prefix": "Anomaly detected (severity index 3): ",
+        "suffix": ". Further observation advised.",
+    },
+    {
+        "severity": "error",
+        "prefix": "Failure registered (severity index 4): ",
+        "suffix": ". Remediation may be warranted.",
+    },
+    {
+        "severity": "fatal",
+        "prefix": "Catastrophic termination event (severity index 5): ",
+        "suffix": ". System integrity uncertain.",
+    },
 ]
 
 _PANIC_COMIC_PHRASES: list[dict[str, str]] = [
-    {"severity": "trace", "prefix": "Oh, something happened: ", "suffix": " (probably fine)"},
-    {"severity": "debug", "prefix": "A clue! A clue! Debug data incoming: ", "suffix": " (still probably fine)"},
-    {"severity": "info", "prefix": "FOR YOUR INFORMATION AND MILD INTEREST: ", "suffix": " (nothing to panic about yet)"},
-    {"severity": "warn", "prefix": "WARNING WARNING THIS MIGHT BE SOMETHING: ", "suffix": " (panic level: mild)"},
-    {"severity": "error", "prefix": "ERROR! ACTUAL ERROR! SOMEONE LOOK AT THIS: ", "suffix": " (panic level: elevated)"},
-    {"severity": "fatal", "prefix": "EVERYTHING IS ON FIRE (metaphorically): ", "suffix": " (panic level: existential)"},
+    {
+        "severity": "trace",
+        "prefix": "Oh, something happened: ",
+        "suffix": " (probably fine)",
+    },
+    {
+        "severity": "debug",
+        "prefix": "A clue! A clue! Debug data incoming: ",
+        "suffix": " (still probably fine)",
+    },
+    {
+        "severity": "info",
+        "prefix": "FOR YOUR INFORMATION AND MILD INTEREST: ",
+        "suffix": " (nothing to panic about yet)",
+    },
+    {
+        "severity": "warn",
+        "prefix": "WARNING WARNING THIS MIGHT BE SOMETHING: ",
+        "suffix": " (panic level: mild)",
+    },
+    {
+        "severity": "error",
+        "prefix": "ERROR! ACTUAL ERROR! SOMEONE LOOK AT THIS: ",
+        "suffix": " (panic level: elevated)",
+    },
+    {
+        "severity": "fatal",
+        "prefix": "EVERYTHING IS ON FIRE (metaphorically): ",
+        "suffix": " (panic level: existential)",
+    },
 ]
 
 
-def _build_builtin_profile(name: str, phrases: list[dict[str, str]]) -> ModelPersonalityProfile:
+def _build_builtin_profile(
+    name: str, phrases: list[dict[str, str]]
+) -> ModelPersonalityProfile:
     """Build a built-in ModelPersonalityProfile from a raw phrase list."""
     return ModelPersonalityProfile(
         name=name,
@@ -256,7 +306,9 @@ class PersonalityAdapter:
         phrase = self._find_phrase(profile, severity_key)
 
         if phrase is not None:
-            rendered = f"{phrase.prefix}{event.event_name}: {event.message}{phrase.suffix}"
+            rendered = (
+                f"{phrase.prefix}{event.event_name}: {event.message}{phrase.suffix}"
+            )
         else:
             # Fallback: plain text
             rendered = f"[{severity_key.upper()}] {event.event_name}: {event.message}"

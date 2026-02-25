@@ -37,7 +37,9 @@ class ModelLogMetrics(BaseModel):
 
     cpu: float | None = Field(default=None, description="CPU utilisation 0.0–1.0")
     mem: float | None = Field(default=None, description="Memory utilisation 0.0–1.0")
-    queue_depth: int | None = Field(default=None, description="Queue depth at emit time")
+    queue_depth: int | None = Field(
+        default=None, description="Queue depth at emit time"
+    )
     latency_p95: float | None = Field(
         default=None, description="p95 latency in milliseconds"
     )
@@ -51,9 +53,7 @@ class ModelLogTrace(BaseModel):
     correlation_id: UUID | None = Field(
         default=None, description="Cross-service correlation ID"
     )
-    span_id: str | None = Field(
-        default=None, description="Current span identifier"
-    )
+    span_id: str | None = Field(default=None, description="Current span identifier")
 
 
 class ModelLogPolicy(BaseModel):

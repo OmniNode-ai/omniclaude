@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Map LogEvent severity to Python logging levels for filtering
 _SEVERITY_LEVEL: dict[str, int] = {
-    EnumLogSeverity.TRACE: logging.DEBUG - 5,   # custom sub-level
+    EnumLogSeverity.TRACE: logging.DEBUG - 5,  # custom sub-level
     EnumLogSeverity.DEBUG: logging.DEBUG,
     EnumLogSeverity.INFO: logging.INFO,
     EnumLogSeverity.WARN: logging.WARNING,

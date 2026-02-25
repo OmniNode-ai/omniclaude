@@ -85,6 +85,7 @@ def test_slack_sink_builds_valid_block_kit_payload() -> None:
     from omniclaude.nodes.node_personality_logging_effect.personality_adapter import (
         PersonalityAdapter,
     )
+
     adapter = PersonalityAdapter()
     rendered = adapter.render(event, "default")
 
@@ -112,7 +113,10 @@ def test_slack_sink_builds_valid_block_kit_payload() -> None:
     # First block: header
     header_block = blocks[0]
     assert header_block["type"] == "header"
-    assert "ERROR" in header_block["text"]["text"].upper() or "db.query.slow" in header_block["text"]["text"]
+    assert (
+        "ERROR" in header_block["text"]["text"].upper()
+        or "db.query.slow" in header_block["text"]["text"]
+    )
 
     # Second block: section with rendered message
     section_block = blocks[1]
@@ -158,6 +162,7 @@ def test_slack_sink_suppresses_during_quiet_hours() -> None:
             from omniclaude.nodes.node_personality_logging_effect.personality_adapter import (
                 PersonalityAdapter,
             )
+
             adapter = PersonalityAdapter()
             rendered = adapter.render(event, "default")
             sink.emit(rendered)
