@@ -136,7 +136,7 @@ def _check_route_matcher() -> tuple[bool, str]:
 
         route = ModelDispatchRoute(
             route_id="dry-run-check",
-            topic_pattern="onex.cmd.omniclaude.*.v1",
+            topic_pattern="onex.cmd.omniclaude.*.v1",  # noqa: arch-topic-naming — route pattern, not a topic string
             handler_id="dry-run-handler",
             message_category=EnumMessageCategory.COMMAND,
             message_type="dry-run",
