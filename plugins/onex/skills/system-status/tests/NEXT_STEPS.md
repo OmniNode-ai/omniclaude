@@ -10,7 +10,7 @@
 ## Quick Links
 
 - **[TEST_RESULTS_SUMMARY.md](TEST_RESULTS_SUMMARY.md)** - Complete test results and analysis
-- **[SECURITY_CHECKLIST.md](SECURITY_CHECKLIST.md)** - Critical security issues to fix
+- **[SECURITY_TEST_FIXES.md](SECURITY_TEST_FIXES.md)** - Critical security issues to fix
 - **[IMPORT_FIXES_NEEDED.md](IMPORT_FIXES_NEEDED.md)** - Test import path corrections
 
 ---
@@ -449,7 +449,7 @@ grep -A1 "sys.path.insert" test_check_infrastructure.py
 - `test_results.txt` - Initial run (stopped at 20 failures)
 - `test_results_full.txt` - Complete run (138 tests)
 - `TEST_RESULTS_SUMMARY.md` - This file
-- `SECURITY_CHECKLIST.md` - Security issues tracking
+- `SECURITY_TEST_FIXES.md` - Security issues tracking
 - `IMPORT_FIXES_NEEDED.md` - Import path fixes
 - `NEXT_STEPS.md` - Action plan (you are here)
 
@@ -458,7 +458,7 @@ grep -A1 "sys.path.insert" test_check_infrastructure.py
 - [Pytest Documentation](https://docs.pytest.org/)
 - [SQL Injection Prevention (OWASP)](https://owasp.org/www-community/attacks/SQL_Injection)
 - [SSRF Prevention (OWASP)](https://owasp.org/www-community/attacks/Server_Side_Request_Forgery)
-- [Python Input Validation Best Practices](https://realpython.com/python-data-validation/)
+- [Python Input Validation Best Practices](https://docs.python.org/3/library/re.html)
 
 ---
 

@@ -787,9 +787,7 @@ Indexes ensure fast queries:
 
 ## See Also
 
-- [DIAGNOSTIC_SCRIPTS.md](./DIAGNOSTIC_SCRIPTS.md) - Diagnostic tools usage
-- [LOGGING_PIPELINE.md](./LOGGING_PIPELINE.md) - Event flow architecture
-- [../../CLAUDE.md](../../CLAUDE.md#diagnostic-tools) - Main documentation
+- [../../CLAUDE.md](../../CLAUDE.md) - Main documentation
 
 ---
 

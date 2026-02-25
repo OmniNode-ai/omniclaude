@@ -40,7 +40,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -185,7 +185,10 @@ claude -p "Run ticket-pipeline for OMN-1234 --skip-to local_review" ...
 ```mermaid
 stateDiagram-v2
     [*] --> pre_flight
-    pre_flight --> implement : auto (policy)
+    pre_flight --> decision_context_load : auto (policy)
+    decision_context_load --> conflict_gate : auto (policy)
+    conflict_gate --> implement : no conflicts / LOW / MEDIUM / proceed
+    conflict_gate --> [*] : HIGH conflict held (operator "hold" reply)
     implement --> local_review : auto (policy)
     implement --> cross_repo_split : cross-repo detected (MEDIUM_RISK gate)
     cross_repo_split --> [*] : epic-team takes over
@@ -203,7 +206,84 @@ stateDiagram-v2
 - Classifies pre-existing issues as AUTO-FIX or DEFER
 - AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing): fix pre-existing issues [OMN-XXXX]`
 - DEFER: creates Linear sub-ticket, notes in PR description
-- AUTO-ADVANCE to Phase 1
+- AUTO-ADVANCE to Phase 0.5
+
+### Phase 0.5: DecisionContextLoader (after intake)
+
+After ticket intake completes and before implementation begins, the pipeline loads active
+architectural decisions from the Decision Store and injects them into agent context.
+
+**Query parameters:**
+```
+NodeDecisionStoreQueryCompute:
+  domain: (all domains relevant to ticket repo)
+  scope_services: [ticket.repo_slug]
+  scope_services_mode: ANY
+  epic_id: ticket.epic_id  (if set; omit if ticket has no parent epic)
+  status: ACTIVE
+```
+
+**Injection format** — inject as a structured block, not prose:
+
+```
+--- ACTIVE DECISIONS ---
+[TECH_STACK_CHOICE/architecture] Use Kafka for all cross-service async comms
+Rationale: Decouples producers from consumers; fits existing Redpanda infra
+Rejected: Direct HTTP → tight coupling | gRPC → overkill
+Decision ID: <uuid>
+
+[NAMING_CONVENTION/api] All REST endpoints use snake_case path segments
+Rationale: Consistency with existing API surface
+Rejected: camelCase → breaks existing client contracts
+Decision ID: <uuid>
+---
+```
+
+**When no decisions match scope:** inject an empty block — do not skip injection:
+```
+--- ACTIVE DECISIONS ---
+No active decisions for this scope.
+---
+```
+
+**Agent instruction:** The agent is instructed to flag any implementation choice that
+contradicts an injected decision before proceeding. Contradictions trigger a Slack
+`MEDIUM_RISK` notification and require human confirmation to continue.
+
+AUTO-ADVANCE to Phase 0.6
+
+### Phase 0.6: structural conflict gate (before implement)
+
+Before dispatching the implementation agent, the pipeline checks whether any decisions
+declared in the ticket YAML contract conflict with existing active decisions.
+
+**Trigger condition:** ticket YAML contract contains a non-empty `decisions: []` block.
+
+**Conflict check:**
+```
+For each decision in ticket.contract.decisions:
+  Run check-conflicts (NodeDecisionStoreQueryCompute structural check)
+  → synchronous pure function, no I/O side effects
+  → returns: severity (HIGH | MEDIUM | LOW), conflicting_decision_ids, explanation
+```
+
+**Severity routing:**
+- `HIGH` → post Slack `HIGH_RISK` gate (blocks pipeline):
+  ```
+  [HIGH_RISK] Structural conflict detected for {ticket_id}
+  Decision: {new_decision_summary}
+  Conflicts with: {existing_decision_id} — {existing_decision_summary}
+  Explanation: {explanation}
+  Reply "proceed {ticket_id}" to override, or "hold {ticket_id}" to pause.
+  ```
+  Pipeline waits for operator reply before continuing. "proceed" → advance to Phase 1.
+  "hold" → pipeline exits with `status: held_conflict`.
+- `MEDIUM` → post Slack `MEDIUM_RISK` notification, continue automatically to Phase 1
+- `LOW` → log only (no Slack), continue automatically to Phase 1
+
+**When ticket has no `decisions:` block:** skip this phase entirely, advance directly to Phase 1.
+
+AUTO-ADVANCE to Phase 1
 
 ### Phase 1: implement
 
@@ -437,6 +517,51 @@ No dispatch needed. The orchestrator runs pre-commit hooks and mypy directly, cl
 After dispatch: if `auto_fixed` is non-empty, orchestrator commits:
 `git add <changed_files> && git commit -m "chore(pre-existing): fix pre-existing lint/type errors"`
 
+### Phase 0.5: decision_context_load — runs inline (lightweight query)
+
+No dispatch needed. The orchestrator calls `NodeDecisionStoreQueryCompute` directly and
+injects the result into the shared pipeline context before Phase 1 dispatches.
+
+```
+# Inline orchestrator actions for Phase 0.5:
+# 1. Call NodeDecisionStoreQueryCompute:
+#      scope_services = [ticket.repo_slug]
+#      scope_services_mode = ANY
+#      epic_id = ticket.epic_id (omit if None)
+#      status = ACTIVE
+# 2. Format result as structured block (see Phase 0.5 spec above)
+# 3. Store in state["phases"]["decision_context_load"]["artifacts"]["decisions_block"]
+# 4. If result is empty: store "No active decisions for this scope."
+# 5. Update state.yaml: phase=conflict_gate
+# AUTO-ADVANCE to Phase 0.6
+```
+
+### Phase 0.6: conflict_gate — runs inline (synchronous check)
+
+No dispatch needed. The orchestrator runs the structural conflict check synchronously
+and routes based on severity before dispatching the implementation agent.
+
+```
+# Inline orchestrator actions for Phase 0.6:
+# 1. If ticket.contract.decisions is empty: skip, advance to Phase 1
+# 2. For each decision in ticket.contract.decisions:
+#      result = check_conflicts(decision, scope=ticket.repo_slug)
+#      → returns: {severity: HIGH|MEDIUM|LOW, conflicts: [...], explanation: str}
+# 3. HIGH severity found:
+#      Post Slack HIGH_RISK gate with conflict summary
+#      Wait for operator reply: "proceed {ticket_id}" or "hold {ticket_id}"
+#      "proceed" → update state, advance to Phase 1
+#      "hold" → update state: phase=held_conflict, clear ledger, exit pipeline
+# 4. MEDIUM severity found (no HIGH):
+#      Post Slack MEDIUM_RISK notification
+#      Continue automatically to Phase 1
+# 5. LOW only (no HIGH/MEDIUM):
+#      Log conflict summary to pipeline log
+#      Continue automatically to Phase 1
+# 6. Update state.yaml: phase=implement
+# AUTO-ADVANCE to Phase 1
+```
+
 ### Phase 1: implement — Step 0 then dispatch to polymorphic agent
 
 Step 0 runs inline (no dispatch) to create/checkout the git branch before ticket-work.
@@ -557,6 +682,8 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `decompose-epic` skill (cross-repo split, OMN-2522)
 - `epic-team` skill (receives handoff after cross-repo split)
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)
+- `decision-store` skill (OMN-2768) — DecisionContextLoader and check-conflicts
+- `NodeDecisionStoreQueryCompute` (OMN-2767) — decision query node used in Phase 0.5/0.6
 - `~/.claude/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)
 - `~/.claude/pipelines/ledger.json` (ticket-run ledger)
 - Linear MCP tools (`mcp__linear-server__*`)

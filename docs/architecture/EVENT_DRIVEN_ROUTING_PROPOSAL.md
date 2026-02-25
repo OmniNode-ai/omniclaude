@@ -24,7 +24,7 @@
 | **Kafka Infrastructure** | ✅ OPERATIONAL | <kafka-bootstrap-servers>:9092 |
 | **PostgreSQL** | ✅ OPERATIONAL | <postgres-host>:5436 |
 
-**Key Achievement**: The database adapter event-driven implementation has been completed and validated, proving the viability of this architectural pattern. See `docs/EVENT_DRIVEN_DATABASE_IMPLEMENTATION_STATUS.md` for details.
+**Key Achievement**: The database adapter event-driven implementation has been completed and validated, proving the viability of this architectural pattern.
 
 **This Proposal**: Extends the proven event-driven pattern to agent routing, creating a unified event bus architecture.
 
@@ -1303,15 +1303,8 @@ This proposal addresses a critical architectural inconsistency and brings routin
 
 ## Related Documentation
 
-**Implementation Status**:
-- [Event-Driven Database Implementation Status](../EVENT_DRIVEN_DATABASE_IMPLEMENTATION_STATUS.md) - Completed database event-driven work (reference implementation)
-- [Database Adapter Kafka Topics](../database-adapter-kafka-topics.md) - Kafka topic patterns used by database adapter
-- [Database Event Client Usage](../database-event-client-usage.md) - Client usage patterns applicable to routing
-
 **Architecture Comparisons**:
-- [Routing Architecture Comparison](./ROUTING_ARCHITECTURE_COMPARISON.md) - Visual comparison of current vs proposed
-- [Agent Traceability](../observability/AGENT_TRACEABILITY.md) - Observability architecture
-- [Consul Service Registry](../consul-service-registry.md) - Service discovery patterns
+- [Agent Traceability](../observability/AGENT_TRACEABILITY.md) - Observability architecture (deprecated)
 
 **Next Steps**:
 1. ✅ Review database adapter implementation for patterns

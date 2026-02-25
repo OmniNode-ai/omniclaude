@@ -339,7 +339,6 @@ Agent Execution (correlation_id: abc123)
 
 ## Related Documentation
 
-- [Event-Driven Routing Proposal](../../../docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md)
-- [Agent Router](../../../agents/lib/agent_router.py)
-- [Routing Architecture Comparison](../../../docs/architecture/ROUTING_ARCHITECTURE_COMPARISON.md)
-- [Agent Traceability](../../../docs/observability/AGENT_TRACEABILITY.md)
+- [Event-Driven Routing Proposal](../../../../../docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md)
+- [Routing Architecture Comparison](../../../../../docs/architecture/ROUTING_ARCHITECTURE_COMPARISON.md)
+- [Agent Traceability](../../../../../docs/observability/AGENT_TRACEABILITY.md)
