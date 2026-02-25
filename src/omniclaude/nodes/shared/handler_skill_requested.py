@@ -200,7 +200,14 @@ def _emit_completed(
         payload = completed_event.model_dump(mode="json")
         # run_id must be a string for the event registry partition key lookup
         payload["run_id"] = str(run_id)
-        event_emitter("skill.completed", payload)
+        emitted = event_emitter("skill.completed", payload)
+        if not emitted:
+            logger.warning(
+                "skill.completed emission returned False for skill %r (run_id=%s, correlation_id=%s)",
+                request.skill_name,
+                run_id,
+                request.correlation_id,
+            )
     except Exception:
         logger.exception(
             "Failed to emit skill.completed event for skill %r (run_id=%s, correlation_id=%s)",
@@ -286,7 +293,15 @@ async def handle_skill_requested(
         try:
             payload = started_event.model_dump(mode="json")
             payload["run_id"] = str(run_id)
-            event_emitter("skill.started", payload)
+            emitted = event_emitter("skill.started", payload)
+            if not emitted:
+                started_emit_failed = True
+                logger.warning(
+                    "skill.started emission returned False for skill %r (run_id=%s, correlation_id=%s)",
+                    request.skill_name,
+                    run_id,
+                    request.correlation_id,
+                )
         except Exception:
             started_emit_failed = True
             logger.exception(

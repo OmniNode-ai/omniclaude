@@ -400,15 +400,22 @@ def emit_event(
         >>> print(f"Event emitted: {success}")
         Event emitted: True
     """
-    # Validate event type — log structured warning (not silent drop)
+    # Validate event type — log structured warning (not silent drop).
+    # Guard dict access: payload may not be a dict in edge cases; defending here
+    # preserves the "never raises" contract of emit_event().
     if event_type not in SUPPORTED_EVENT_TYPES:
+        run_id = payload.get("run_id") if isinstance(payload, dict) else None
+        correlation_id = (
+            payload.get("correlation_id") if isinstance(payload, dict) else None
+        )
+        skill_name = payload.get("skill_name") if isinstance(payload, dict) else None
         logger.warning(
             "Unsupported event type rejected: event_type=%r run_id=%r "
             "correlation_id=%r skill_name=%r reason=%r",
             event_type,
-            payload.get("run_id"),
-            payload.get("correlation_id"),
-            payload.get("skill_name"),
+            run_id,
+            correlation_id,
+            skill_name,
             "unsupported_event_type",
         )
         return False
