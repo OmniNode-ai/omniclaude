@@ -14,6 +14,7 @@ Related:
 """
 
 from omniclaude.quirks.classifier import NodeQuirkClassifierCompute
+from omniclaude.quirks.controller import NodeValidatorRolloutOrchestratorOrchestrator
 from omniclaude.quirks.enums import QuirkStage, QuirkType
 from omniclaude.quirks.extractor import NodeQuirkSignalExtractorEffect
 from omniclaude.quirks.models import QuirkFinding, QuirkSignal
@@ -21,6 +22,7 @@ from omniclaude.quirks.models import QuirkFinding, QuirkSignal
 __all__ = [
     "NodeQuirkClassifierCompute",
     "NodeQuirkSignalExtractorEffect",
+    "NodeValidatorRolloutOrchestratorOrchestrator",
     "QuirkFinding",
     "QuirkSignal",
     "QuirkStage",
