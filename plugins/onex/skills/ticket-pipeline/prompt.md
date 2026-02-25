@@ -992,6 +992,7 @@ def build_phase_payload(phase_name, state, result):
         return {
             "auto_fixed_count": artifacts.get("auto_fixed_count", 0),
             "deferred_ticket_ids": list(artifacts.get("deferred_ticket_ids", [])),
+            "deferred_fingerprints": list(artifacts.get("deferred_fingerprints", [])),
         }
 
     elif phase_name == "implement":
@@ -1073,6 +1074,7 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     if phase == "pre_flight":
         artifacts["auto_fixed_count"] = payload.get("auto_fixed_count", 0)
         artifacts["deferred_ticket_ids"] = payload.get("deferred_ticket_ids", [])
+        artifacts["deferred_fingerprints"] = payload.get("deferred_fingerprints", [])
     elif phase == "implement":
         artifacts["branch_name"] = payload.get("branch_name", "")
         artifacts["commit_sha"] = payload.get("commit_sha", "")
@@ -1532,14 +1534,112 @@ def execute_phase(phase_name, state):
    ```
    If fix attempt fails: downgrade to DEFER.
 
-5. **DEFER path:** Create Linear sub-ticket via MCP for deferred issues. Note in PR description template.
+5. **DEFER path:** Create Linear sub-ticket via MCP for deferred issues, with fingerprint-based
+   dedup to prevent duplicate tickets across pipeline runs. Note in PR description template.
+
+   ```python
+   from hashlib import sha256
+
+   fp_cache = {}       # per-run in-memory cache: fp_hash -> result dict
+   query_budget = 50   # max Linear search queries this run
+   queries_used = 0
+   deferred_fingerprints = []
+
+   for issue in deferred_issues:
+       # Build fingerprint string: {repo}:{rule_id}:{file_path_relative}:{error_class}[:{line}]
+       fp_parts = [repo, issue['rule'], issue['file'], issue['error_class']]
+       if issue.get('line'):
+           fp_parts.append(str(issue['line']))
+       fp_str = ":".join(fp_parts)
+       fp_hash = sha256(fp_str.encode()).hexdigest()[:12]
+
+       # 1. Check in-memory cache first (zero Linear queries)
+       if fp_hash in fp_cache:
+           deferred_fingerprints.append(fp_cache[fp_hash])
+           continue
+
+       # 2. Budget exhausted: create ticket without dedup, mark dedup_skipped: True
+       if queries_used >= query_budget:
+           new_ticket = mcp__linear-server__create_issue(
+               title=f"[pre-existing] {issue['rule']} in {issue['file']} [fingerprint:{fp_hash}]",
+               description=(
+                   f"Pre-existing issue deferred from pipeline Phase 0.\n\n"
+                   f"fingerprint: `{fp_hash}`\n"
+                   f"fp_str: `{fp_str}`\n\n"
+                   f"Note: dedup_skipped=true (query budget exhausted at {query_budget}). "
+                   f"A duplicate ticket may already exist.\n\n"
+                   f"Rule: {issue['rule']}\nFile: {issue['file']}\n"
+                   + (f"Line: {issue['line']}\n" if issue.get('line') else
+                      "Line: N/A (coarse dedup — no line info available)\n")
+               ),
+               team=team_id,
+               parentId=ticket_id,
+           )
+           result = {
+               "fp_hash": fp_hash,
+               "fp_str": fp_str,
+               "new_ticket": new_ticket["identifier"],
+               "dedup_skipped": True,
+           }
+           fp_cache[fp_hash] = result
+           deferred_fingerprints.append(result)
+           continue
+
+       # 3. Search Linear for existing ticket with this fingerprint
+       search_results = mcp__linear-server__list_issues(
+           query=f"[fingerprint:{fp_hash}]",
+           team=team_id,
+           states=["Backlog", "Todo", "In Progress"],
+       )
+       queries_used += 1
+
+       if search_results:
+           # Existing ticket found: skip creation
+           existing_id = search_results[0]["identifier"]
+           result = {
+               "fp_hash": fp_hash,
+               "fp_str": fp_str,
+               "existing_ticket": existing_id,
+           }
+       else:
+           # No existing ticket: create new one with fingerprint embedded in title
+           no_line_note = "" if issue.get('line') else "\nLine: N/A (coarse dedup — no line info available)"
+           new_ticket = mcp__linear-server__create_issue(
+               title=f"[pre-existing] {issue['rule']} in {issue['file']} [fingerprint:{fp_hash}]",
+               description=(
+                   f"Pre-existing issue deferred from pipeline Phase 0.\n\n"
+                   f"fingerprint: `{fp_hash}`\n"
+                   f"fp_str: `{fp_str}`\n\n"
+                   f"Rule: {issue['rule']}\nFile: {issue['file']}\n"
+                   + (f"Line: {issue['line']}\n" if issue.get('line') else
+                      "Line: N/A (coarse dedup — no line info available)\n")
+               ),
+               team=team_id,
+               parentId=ticket_id,
+           )
+           result = {
+               "fp_hash": fp_hash,
+               "fp_str": fp_str,
+               "new_ticket": new_ticket["identifier"],
+           }
+
+       fp_cache[fp_hash] = result
+       deferred_fingerprints.append(result)
+   ```
+
+   **Fingerprint design:**
+   - Format: `{repo}:{rule_id}:{file_path_relative}:{error_class}[:{line}]`
+   - Hash: `sha256(fp_str.encode()).hexdigest()[:12]`
+   - `line` included when available; omitted otherwise (coarse dedup — document in description)
+   - Full `fp_str` stored in ticket description for human debugging
+   - `[fingerprint:{hash}]` embedded in ticket title for Linear search
 
 6. **AUTO-ADVANCE to Phase 1.**
 
 **Mutations:**
 - `phases.pre_flight.started_at`
 - `phases.pre_flight.completed_at`
-- `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids)
+- `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids, deferred_fingerprints)
 - `~/.claude/pipelines/ledger.json` (entry created)
 
 **Exit conditions:**
