@@ -503,6 +503,21 @@ else
 fi
 
 # -----------------------------
+# Tier Detection Probe (OMN-2782) - ASYNC, NON-BLOCKING
+# -----------------------------
+# Probes Kafka + intelligence service availability and writes tier to
+# ~/.claude/.onex_capabilities for use by context_injection_wrapper.py.
+# Runs in background to keep SessionStart under <50ms budget.
+
+if [[ -f "${HOOKS_LIB}/capability_probe.py" ]]; then
+    ( "$PYTHON_CMD" "${HOOKS_LIB}/capability_probe.py" \
+        --kafka "${KAFKA_BOOTSTRAP_SERVERS:-}" \
+        --intelligence "${INTELLIGENCE_SERVICE_URL:-http://localhost:8053}" \
+        2>>"${LOG_FILE:-/dev/null}" & )
+    log "Tier detection probe started in background"
+fi
+
+# -----------------------------
 # Learned Pattern Injection (OMN-1675) - ASYNC IMPLEMENTATION
 # -----------------------------
 # PERFORMANCE GUARANTEE: Pattern injection runs in a background subshell via `( ... ) &`.

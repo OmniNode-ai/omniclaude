@@ -146,6 +146,45 @@ rrh_hook_adapter.py          rrh_adapter.py               omnibase_infra
    human_summary, idem_key)
 ```
 
+## Headless Usage
+
+RRH runs without an interactive Claude Code session when invoked from CLI automation,
+Slack bots, or webhook handlers. The skill itself is invoked by `ticket-pipeline`; you
+rarely need to call it directly, but the headless setup requirements are the same.
+
+### Required environment variables
+
+| Variable | Purpose | Notes |
+|----------|---------|-------|
+| `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — written to every RRH artifact for audit trail |
+| `ONEX_UNSAFE_ALLOW_EDITS` | Permit file writes for artifact output | Set to `1` when RRH must write JSON artifacts |
+| `ANTHROPIC_API_KEY` | Claude API key | Required for `claude -p` |
+
+```bash
+export ONEX_RUN_ID="rrh-$(date +%s)-OMN-1234"
+export ONEX_UNSAFE_ALLOW_EDITS=1
+
+claude -p "Invoke the rrh skill for OMN-1234" \
+  --allowedTools "Bash,Read,Write,mcp__linear-server__get_issue"
+```
+
+### Authentication in headless mode
+
+`ONEX_RUN_ID` is mandatory and written into every RRH artifact (`ContractRRHResult.run_id`).
+This is the primary correlation key for the audit trail stored under
+`~/.claude/rrh-artifacts/{ticket_id}/`.
+
+The RRH nodes run locally (no network auth required beyond what `omnibase_infra` nodes need).
+When the ONEX runtime nodes are not installed, the adapter falls back to QUARANTINE mode and
+emits a clear message — no credentials are needed for fallback mode.
+
+### Resume after interruption
+
+RRH uses idempotency keys derived from `sha256(ticket_id:phase:head_sha)[:16]`. If the same
+environment is detected on a subsequent run, RRH skips re-validation and returns the cached
+result. This means interrupted `claude -p` sessions that re-invoke RRH will not duplicate
+audit artifacts.
+
 ## See Also
 
 - `ticket-pipeline` skill (primary consumer of RRH)

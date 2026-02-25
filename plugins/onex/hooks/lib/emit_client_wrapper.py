@@ -135,6 +135,8 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation for omnidash dashboard
         "intent.commit.bound",  # OMN-2492 - Intent-to-commit binding record
         "change.frame.emitted",  # OMN-2651 - ChangeFrame emission after JSONL persist
+        "skill.started",  # OMN-2773 - Skill invocation started (before dispatch)
+        "skill.completed",  # OMN-2773 - Skill invocation completed (after dispatch)
     ]
 )
 
@@ -398,11 +400,23 @@ def emit_event(
         >>> print(f"Event emitted: {success}")
         Event emitted: True
     """
-    # Validate event type
+    # Validate event type — log structured warning (not silent drop).
+    # Guard dict access: payload may not be a dict in edge cases; defending here
+    # preserves the "never raises" contract of emit_event().
     if event_type not in SUPPORTED_EVENT_TYPES:
+        run_id = payload.get("run_id") if isinstance(payload, dict) else None
+        correlation_id = (
+            payload.get("correlation_id") if isinstance(payload, dict) else None
+        )
+        skill_name = payload.get("skill_name") if isinstance(payload, dict) else None
         logger.warning(
-            f"Unsupported event type: {event_type}. "
-            f"Supported: {sorted(SUPPORTED_EVENT_TYPES)}"
+            "Unsupported event type rejected: event_type=%r run_id=%r "
+            "correlation_id=%r skill_name=%r reason=%r",
+            event_type,
+            run_id,
+            correlation_id,
+            skill_name,
+            "unsupported_event_type",
         )
         return False
 

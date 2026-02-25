@@ -21,7 +21,7 @@ inputs:
     required: false
   - name: gate_timeout_hours
     type: float
-    description: Hours to wait for Slack gate approval (default 24)
+    description: "Shared wall-clock budget in hours for the entire merge flow (CI readiness poll + Slack gate reply poll combined). Default: 24. If either phase exhausts this budget, the skill exits with status: timeout."
     required: false
   - name: delete_branch
     type: bool
@@ -78,13 +78,24 @@ or timed out.
 
 ## Merge Flow
 
-1. Verify PR is mergeable: `gh pr view {pr_number} --repo {repo} --json mergeable,reviews`
-2. Post HIGH_RISK Slack gate (see message format below)
-3. Poll for reply (check every 5 minutes):
-   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is ` --delete-branch` if `delete_branch=true`, else empty
+**Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
+
+1. Fetch PR state: `gh pr view {pr_number} --repo {repo} --json mergeable,mergeStateStatus,reviews`
+2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
+   - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
+     ```text
+     [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
+     ```
+   - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to gate
+   - `mergeStateStatus == "DIRTY"`: exit immediately with `status: error`, message: "PR has merge conflicts — resolve before retrying"
+   - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
+   - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out — mergeStateStatus never reached CLEAN"
+3. Post HIGH_RISK Slack gate (see message format below)
+4. Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
+   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is `--delete-branch` (with a leading space) if `delete_branch=true`, else empty
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
-   - On timeout: exit with `status: timeout`
-4. Post Slack notification on merge completion
+   - On budget exhausted: exit with `status: timeout`
+5. Post Slack notification on merge completion
 
 ## Slack Gate Message Format
 
@@ -124,8 +135,10 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 
 - `merged`: PR successfully merged
 - `held`: Human explicitly replied with a hold/reject word
-- `timeout`: gate_timeout_hours elapsed with no "merge" reply
-- `error`: Merge failed (conflicts, permissions, etc.)
+- `timeout`: `gate_timeout_hours` elapsed — either CI readiness poll never reached CLEAN, or Slack gate received no "merge" reply
+- `error`: Merge failed — includes:
+  - `mergeStateStatus == "DIRTY"`: message "PR has merge conflicts — resolve before retrying"
+  - Permissions error, API failure, or other terminal failure
 
 ## Executable Scripts
 

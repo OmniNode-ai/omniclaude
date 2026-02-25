@@ -8,6 +8,19 @@
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+## Integration Tiers
+
+Tiers are **auto-detected at every SessionStart** — no configuration required.
+A banner appears in every prompt's context showing the current tier and probe age.
+
+| Tier | Config needed | What you get |
+|------|--------------|--------------|
+| **Standalone** | None | 73 skills, 54 agents, hooks fire (events silently dropped) |
+| **Event Bus** | `KAFKA_BOOTSTRAP_SERVERS` | + routing telemetry, Kafka event emission |
+| **Full ONEX** | Full stack running | + context enrichment, semantic memory, pattern compliance |
+
+See [QUICKSTART.md](QUICKSTART.md) for step-by-step setup instructions for each tier.
+
 ## What is OmniClaude?
 
 OmniClaude is a Claude Code plugin that instruments every Claude Code session with typed ONEX events. On each prompt it routes the request to a specialized agent (from a library of 53), enriches the context with learned patterns retrieved from the ONEX intelligence layer, enforces architectural compliance via pattern advisory, and — when local LLMs are available — optionally delegates tasks to them through a quality-gated orchestrator. All hook activity is emitted asynchronously to Kafka via a Unix socket daemon so the Claude Code UI is never blocked.
@@ -62,12 +75,16 @@ OmniClaude is a Claude Code plugin that instruments every Claude Code session wi
 
 ## Quick Start
 
+For the fastest path (zero config, Standalone tier):
+
 ```bash
 git clone https://github.com/OmniNode-ai/omniclaude.git
 cd omniclaude
 uv sync
-uv run pytest tests/ -m unit
+# In Claude Code: /deploy-local-plugin
 ```
+
+For Event Bus or Full ONEX tier setup, see [QUICKSTART.md](QUICKSTART.md).
 
 Copy and configure environment:
 

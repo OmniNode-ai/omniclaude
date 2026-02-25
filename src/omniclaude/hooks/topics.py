@@ -190,6 +190,16 @@ class TopicBase(StrEnum):
     DECISION_RECORDED_CMD = "onex.cmd.omniintelligence.decision-recorded.v1"
 
     # ==========================================================================
+    # Decision store event bus topics (OMN-2766)
+    # ==========================================================================
+    DECISION_RECORDED_EVT_OMNICLAUDE = "onex.evt.omniclaude.decision-recorded.v1"
+    DECISION_STATUS_CHANGED_EVT = "onex.evt.omniclaude.decision-status-changed.v1"
+    DECISION_CONFLICT_DETECTED_EVT = "onex.evt.omniclaude.decision-conflict-detected.v1"
+    DECISION_CONFLICT_STATUS_CHANGED = (
+        "onex.evt.omniclaude.decision-conflict-status-changed.v1"
+    )
+
+    # ==========================================================================
     # ChangeFrame emission topics (OMN-2651)
     # ==========================================================================
     CHANGE_FRAME_EMITTED = "onex.evt.omniclaude.change-frame.v1"
@@ -198,6 +208,25 @@ class TopicBase(StrEnum):
     # Agent trace topics (OMN-2412)
     # ==========================================================================
     AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.fix-transition.v1"
+
+    # ==========================================================================
+    # Quirks Detector topics (OMN-2556)
+    # ==========================================================================
+    QUIRK_SIGNAL_DETECTED = "onex.evt.omniclaude.quirk-signal-detected.v1"
+    """Raw QuirkSignal emitted by NodeQuirkSignalExtractorEffect after detection."""
+
+    QUIRK_FINDING_PRODUCED = "onex.evt.omniclaude.quirk-finding-produced.v1"
+    """QuirkFinding emitted by NodeQuirkClassifierCompute after threshold is met."""
+
+    # ==========================================================================
+    # Skill lifecycle topics (OMN-2773)
+    # Convention: event_type = dotted form, topic = dashed form.
+    # ==========================================================================
+    SKILL_STARTED = "onex.evt.omniclaude.skill-started.v1"
+    """Emitted before skill dispatch; join key is run_id."""
+
+    SKILL_COMPLETED = "onex.evt.omniclaude.skill-completed.v1"
+    """Emitted after skill dispatch (success or failure); join key is run_id."""
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:

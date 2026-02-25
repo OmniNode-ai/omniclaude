@@ -1,0 +1,99 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Kafka event schema: onex.evt.quirks.signal-detected.v1
+#
+# Produced by: NodeQuirkSignalExtractorEffect (OMN-2556)
+# Consumed by: NodeQuirkClassifierCompute (OMN-2556)
+#
+# Envelope follows OnexEnvelopeV1 standard.
+# Payload fields are documented below.
+
+schema_version: "1"
+topic: "onex.evt.omniclaude.quirk-signal-detected.v1"
+producer: "omniclaude.quirks.extractor.NodeQuirkSignalExtractorEffect"
+description: >
+  Emitted once per QuirkSignal produced by the Quirks Detector registry.
+  Published after every detected behavioural anti-pattern; persisted to the
+  quirk_signals table in omnibase_infra (omninode_bridge).
+
+envelope:
+  event_type: "onex.evt.omniclaude.quirk-signal-detected.v1"
+  schema_ref: "registry://onex/omniclaude/quirk-signal-detected/v1"
+  source: "omniclaude"
+  tenant_id: "default"
+  namespace: "onex"
+
+payload:
+  type: object
+  required:
+    - quirk_id
+    - quirk_type
+    - session_id
+    - confidence
+    - evidence
+    - stage
+    - detected_at
+    - extraction_method
+  properties:
+    quirk_id:
+      type: string
+      format: uuid
+      description: Stable UUID for this signal instance.
+    quirk_type:
+      type: string
+      enum:
+        - SYCOPHANCY
+        - STUB_CODE
+        - NO_TESTS
+        - LOW_EFFORT_PATCH
+        - UNSAFE_ASSUMPTION
+        - IGNORED_INSTRUCTIONS
+        - HALLUCINATED_API
+      description: Behavioural anti-pattern category detected.
+    session_id:
+      type: string
+      description: Claude Code session identifier.
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Detection confidence score.
+    evidence:
+      type: array
+      items:
+        type: string
+      minItems: 1
+      description: Human-readable evidence strings justifying the detection.
+    stage:
+      type: string
+      enum: [OBSERVE, WARN, BLOCK]
+      description: Policy enforcement tier assigned at detection time.
+    detected_at:
+      type: string
+      format: date-time
+      description: ISO 8601 UTC timestamp of detection.
+    extraction_method:
+      type: string
+      enum: [regex, AST, heuristic, model]
+      description: Technique used to extract the signal.
+    diff_hunk:
+      type: string
+      nullable: true
+      description: Optional unified-diff fragment where the quirk was found.
+    file_path:
+      type: string
+      nullable: true
+      description: Optional source file path relative to the repo root.
+    ast_span:
+      type: array
+      nullable: true
+      items:
+        type: integer
+      minItems: 2
+      maxItems: 2
+      description: "[start_line, end_line] AST node range (inclusive)."
+
+partitioning:
+  key_field: session_id
+  strategy: hash

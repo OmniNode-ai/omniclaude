@@ -35,6 +35,9 @@ args:
 
 # Ticket Pipeline
 
+> **Authoritative behavior is defined in `prompt.md`; `SKILL.md` is descriptive. When docs
+> conflict, `prompt.md` wins.**
+
 ## Overview
 
 Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
@@ -90,6 +93,92 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 /ticket-pipeline OMN-1234 --force-run
 /ticket-pipeline OMN-1234 --auto-merge    # Skip HIGH_RISK merge gate
 ```
+
+## Headless Usage
+
+The pipeline runs without an interactive Claude Code session using `claude -p` (print mode).
+This is the primary trigger surface for CLI automation, Slack bots, and webhook handlers.
+
+### Basic invocation
+
+```bash
+claude -p "Run ticket-pipeline for OMN-1234" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+### Required environment variables
+
+| Variable | Purpose | Notes |
+|----------|---------|-------|
+| `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — pipeline will not start without this |
+| `ONEX_UNSAFE_ALLOW_EDITS` | Permit file edits in headless mode | Set to `1` to allow Write/Edit tools |
+| `ANTHROPIC_API_KEY` | Claude API key | Required for `claude -p` |
+| `GITHUB_TOKEN` | GitHub CLI auth | Required for PR creation and CI polling |
+| `SLACK_BOT_TOKEN` | Slack API token | Required for gate notifications |
+| `LINEAR_API_KEY` | Linear API key | Required for ticket updates |
+
+```bash
+export ONEX_RUN_ID="pipeline-$(date +%s)-OMN-1234"
+export ONEX_UNSAFE_ALLOW_EDITS=1
+export ANTHROPIC_API_KEY="..."
+export GITHUB_TOKEN="..."
+export SLACK_BOT_TOKEN="..."
+export LINEAR_API_KEY="..."
+
+claude -p "Run ticket-pipeline for OMN-1234" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+### Authentication in headless mode
+
+`ONEX_RUN_ID` is mandatory. It serves as the correlation key written to the pipeline ledger
+(`~/.claude/pipelines/ledger.json`) and state file (`~/.claude/pipelines/{ticket_id}/state.yaml`).
+Without it the pipeline cannot distinguish runs and will refuse to start.
+
+MCP server auth is sourced from the environment at startup:
+- **Linear**: `LINEAR_API_KEY` (or the credential set in `~/.claude/claude_desktop_config.json`)
+- **Slack**: `SLACK_BOT_TOKEN`
+- **GitHub**: `GITHUB_TOKEN` (used by the `gh` CLI, not an MCP server)
+
+### Resume after rate limits
+
+Checkpoints are written to `~/.claude/pipelines/{ticket_id}/state.yaml` after every phase
+transition. If the `claude -p` process is interrupted (rate limit, network drop, process kill),
+resume from the last completed phase:
+
+```bash
+# Resume from where the pipeline stopped
+claude -p "Run ticket-pipeline for OMN-1234 --skip-to ci_watch" \
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"
+```
+
+Auto-detection (OMN-2614) will also pick up the correct phase automatically when no
+`--skip-to` flag is provided and a state file already exists.
+
+### Full pipeline flags in headless mode
+
+```bash
+# Dry run — log all decisions without committing or creating PRs
+claude -p "Run ticket-pipeline for OMN-1234 --dry-run" ...
+
+# Force restart from implement (ignores existing state and branch)
+claude -p "Run ticket-pipeline for OMN-1234 --force-run" ...
+
+# Skip HIGH_RISK merge gate (auto-merge immediately after approval)
+claude -p "Run ticket-pipeline for OMN-1234 --auto-merge" ...
+
+# Jump to a specific phase
+claude -p "Run ticket-pipeline for OMN-1234 --skip-to local_review" ...
+```
+
+### Trigger surfaces
+
+| Surface | How |
+|---------|-----|
+| **CLI (direct)** | `claude -p "Run ticket-pipeline for OMN-1234" --allowedTools "..."` |
+| **Slack bot** | Webhook handler constructs the `claude -p` call and spawns it as a subprocess |
+| **Webhook** | HTTP handler receives ticket ID, sets env vars, invokes `claude -p` |
+| **Cron / CI** | Shell script iterates tickets and calls `claude -p` per ticket |
 
 ## Pipeline Flow
 
@@ -164,13 +253,14 @@ ticket-pipeline OMN-XXXX
 
 ### Phase 4: ci_watch
 
-- Invokes `ci-watch` sub-skill (OMN-2523) with configured policy
-- `ci-watch` polls `gh pr checks` every 5 minutes
-- Auto-invokes `ci-failures` skill on CI failure to diagnose and fix failing checks (respects `max_ci_fix_cycles` cap)
-- Returns: `status: completed | capped | timeout | failed`
-- On `completed`: AUTO-ADVANCE to Phase 5
-- On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
-- On `failed`: Slack MEDIUM_RISK gate, stop pipeline
+**This phase is non-blocking.** Authoritative behavior is defined in `prompt.md` lines 2362–2414.
+
+- Enables GitHub auto-merge on the PR (idempotent)
+- Takes a single quick snapshot of CI checks (one `gh pr checks` call — no polling)
+- If all checks are passing or pending: records `status: auto_merge_pending` and advances immediately
+- If any checks are already failing: dispatches `ci-watch` as a **background agent** (`run_in_background=True`) to fix failures, then advances immediately without awaiting the result
+- **Always AUTO-ADVANCES to Phase 5** — phase completes in seconds, not minutes
+- `ci_watch_timeout_minutes` and `max_ci_fix_cycles` are pass-through args forwarded to the background `ci-watch` agent; they are not pipeline-blocking timers
 
 ### Phase 5: pr_review_loop
 
@@ -214,9 +304,9 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `stop_on_cross_repo` | `false` | Auto-split via decompose-epic instead of stopping |
 | `cross_repo_gate_timeout_minutes` | `10` | Minutes to wait for Slack reply before handing off to epic-team |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
-| `auto_fix_ci` | `true` | Auto-invoke ci-failures skill on CI failure |
-| `ci_watch_timeout_minutes` | `60` | Max minutes waiting for CI before timeout |
-| `max_ci_fix_cycles` | `3` | Max ci-failures skill invocations before capping |
+| `auto_fix_ci` | `true` | Dispatch background ci-watch agent on CI failure (Phase 4) |
+| `ci_watch_timeout_minutes` | `60` | Pass-through to background ci-watch agent: max minutes it waits for CI (not a pipeline-blocking timer) |
+| `max_ci_fix_cycles` | `3` | Pass-through to background ci-watch agent: max fix attempts before capping |
 | `auto_fix_pr_review` | `true` | Auto-invoke pr-review-dev on CHANGES_REQUESTED reviews |
 | `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
 | `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
@@ -394,17 +484,29 @@ Task(
 
 No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
 
-### Phase 4: ci_watch — dispatch to polymorphic agent
+### Phase 4: ci_watch — runs inline (non-blocking; background dispatch only on failure)
+
+Phase 4 runs inline in the orchestrator. No blocking dispatch is used. See `prompt.md` lines
+2362–2414 for the authoritative implementation.
+
+The orchestrator:
+1. Enables auto-merge: `gh pr merge --auto --squash {pr_number} --repo {repo}`
+2. Takes a CI snapshot: `gh pr checks {pr_number} --repo {repo} --json name,state,conclusion`
+3. If any checks are failing and `auto_fix_ci=true`, dispatches a **background** fix agent:
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
-  prompt="Invoke: Skill(skill=\"onex:ci-watch\",
-    args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
-    Report back with: status, ci_fix_cycles_used, watch_duration_minutes."
+  run_in_background=True,
+  description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
+  prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
+    Invoke: Skill(skill=\"onex:ci-watch\",
+      args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
+    Fix any failures, push fixes. GitHub will auto-merge once CI is green."
 )
 ```
+
+4. Advances immediately to Phase 5 — does NOT await the background task result.
 
 ### Phase 5: pr_review_loop — dispatch to polymorphic agent
 
