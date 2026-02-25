@@ -78,13 +78,21 @@ or timed out.
 
 ## Merge Flow
 
-1. Verify PR is mergeable: `gh pr view {pr_number} --repo {repo} --json mergeable,reviews`
-2. Post HIGH_RISK Slack gate (see message format below)
-3. Poll for reply (check every 5 minutes):
+1. Fetch PR state: `gh pr view {pr_number} --repo {repo} --json mergeable,mergeStateStatus,reviews`
+2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`):
+   - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
+     ```
+     [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
+     ```
+   - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to gate
+   - `mergeStateStatus == "DIRTY"`: exit immediately with `status: error`, message: "PR has merge conflicts — resolve before retrying"
+   - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, or `"UNKNOWN"`: continue polling
+3. Post HIGH_RISK Slack gate (see message format below)
+4. Poll for reply (check every 5 minutes):
    - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is ` --delete-branch` if `delete_branch=true`, else empty
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
    - On timeout: exit with `status: timeout`
-4. Post Slack notification on merge completion
+5. Post Slack notification on merge completion
 
 ## Slack Gate Message Format
 
@@ -125,7 +133,9 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 - `merged`: PR successfully merged
 - `held`: Human explicitly replied with a hold/reject word
 - `timeout`: gate_timeout_hours elapsed with no "merge" reply
-- `error`: Merge failed (conflicts, permissions, etc.)
+- `error`: Merge failed — includes:
+  - `mergeStateStatus == "DIRTY"`: message "PR has merge conflicts — resolve before retrying"
+  - Permissions error, API failure, or other terminal failure
 
 ## Executable Scripts
 
