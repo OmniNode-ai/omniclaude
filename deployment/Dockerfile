@@ -20,5 +20,5 @@ RUN uv sync --no-dev --frozen
 # Verify package imports correctly
 RUN uv run python -c "from omniclaude.hooks import schemas; print('Package validated')"
 
-# Default command
-CMD ["uv", "run", "python", "-c", "print('OmniClaude package ready')"]
+# Runtime service entrypoint (OMN-2801)
+CMD ["uv", "run", "python", "-m", "omniclaude.runtime", "start"]
