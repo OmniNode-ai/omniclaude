@@ -56,6 +56,9 @@ from .plugin import PluginClaude
 # Export wiring functions
 from .wiring import publish_handler_contracts, wire_omniclaude_services
 
+# Export dispatcher wiring (OMN-2802)
+from .wiring_dispatchers import ContractLoadError, wire_skill_dispatchers
+
 __all__ = [
     # Plugin (OMN-2002)
     "PluginClaude",
@@ -69,6 +72,9 @@ __all__ = [
     # Wiring functions
     "publish_handler_contracts",
     "wire_omniclaude_services",
+    # Dispatcher wiring (OMN-2802)
+    "ContractLoadError",
+    "wire_skill_dispatchers",
     # Exceptions (from infra)
     "ContractPublisherError",
     "ContractSourceNotConfiguredError",

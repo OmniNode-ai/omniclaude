@@ -204,15 +204,58 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Dispatcher wiring is not yet contract-driven — skip."""
+        """Wire skill command dispatchers from contracts (OMN-2802).
+
+        Loads all skill node contracts, builds a multiplexed
+        ``SkillCommandDispatcher``, and registers one dispatcher + one route
+        on the ``MessageDispatchEngine``.
+
+        Skips gracefully when the dispatch engine or service registry is not
+        available (non-runtime contexts like dry-run or tests).
+        """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
         )
 
-        return ModelDomainPluginResult.skipped(
-            plugin_id=_PLUGIN_ID,
-            reason="dispatcher wiring not yet contract-driven",
-        )
+        if config.dispatch_engine is None:
+            return ModelDomainPluginResult.skipped(
+                plugin_id=_PLUGIN_ID,
+                reason="dispatch_engine not available",
+            )
+
+        try:
+            from omniclaude.runtime.wiring_dispatchers import wire_skill_dispatchers
+
+            summary = await wire_skill_dispatchers(
+                config.container,
+                config.dispatch_engine,
+                config.correlation_id,
+                vllm_backend=self._vllm_backend,
+            )
+
+            if not summary["dispatchers"]:
+                return ModelDomainPluginResult.skipped(
+                    plugin_id=_PLUGIN_ID,
+                    reason="no skill dispatchers wired (OMNICLAUDE_CONTRACTS_ROOT not set?)",
+                )
+
+            return ModelDomainPluginResult(
+                plugin_id=_PLUGIN_ID,
+                success=True,
+                message=(
+                    f"Skill dispatchers wired: "
+                    f"{summary['contracts_loaded']}/{summary['contracts_total']} contracts, "
+                    f"backends={list(summary['backends'].keys())}"
+                ),
+                resources_created=summary["dispatchers"],
+                services_registered=summary["routes"],
+            )
+        except Exception as exc:
+            logger.exception("wire_dispatchers failed (plugin_id=%s)", _PLUGIN_ID)
+            return ModelDomainPluginResult.failed(
+                plugin_id=_PLUGIN_ID,
+                error_message=str(exc),
+            )
 
     async def start_consumers(
         self,
