@@ -36,6 +36,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["SymbolIndex", "SymbolIndexBuilder"]
+
 # Type alias for the symbol index produced by this builder.
 SymbolIndex = dict[str, set[str]]
 
@@ -64,7 +66,7 @@ def _extract_all_names(tree: ast.Module) -> set[str] | None:
     More complex patterns (augmented assignment, conditional) are skipped and
     ``None`` is returned.
     """
-    for node in ast.walk(tree):
+    for node in tree.body:
         if (
             isinstance(node, ast.Assign)
             and len(node.targets) == 1
@@ -108,7 +110,8 @@ def _extract_top_level_names(tree: ast.Module) -> set[str]:
                 names.add(node.target.id)
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                bound_name = alias.asname if alias.asname else alias.name
+                # For ``import x.y.z``, Python binds only ``x`` unless aliased.
+                bound_name = alias.asname if alias.asname else alias.name.split(".")[0]
                 if not bound_name.startswith("_"):
                     names.add(bound_name)
         elif isinstance(node, ast.ImportFrom):

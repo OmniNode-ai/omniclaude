@@ -27,40 +27,17 @@ from __future__ import annotations
 
 import ast
 import logging
-import re
 import warnings
 from datetime import UTC, datetime
 
 from omniclaude.quirks.detectors.context import DetectionContext
+from omniclaude.quirks.detectors.tier1._diff_utils import extract_added_source
 from omniclaude.quirks.enums import QuirkStage, QuirkType
 from omniclaude.quirks.models import QuirkSignal
 
+__all__ = ["AstStubCodeDetector"]
+
 logger = logging.getLogger(__name__)
-
-# Matches lines added in a unified diff (leading ``+`` but not ``+++``).
-_ADDED_LINE_RE = re.compile(r"^\+(?!\+\+)")
-
-
-def _extract_added_source(diff: str) -> tuple[str, dict[int, int]]:
-    """Extract added lines from a diff and build a line-number mapping.
-
-    Args:
-        diff: Unified diff string.
-
-    Returns:
-        A 2-tuple of:
-        - ``source``: concatenated added lines (without the leading ``+``),
-          suitable for ``ast.parse``.
-        - ``line_map``: mapping from 1-based line number *in the extracted
-          source* to 1-based line number *in the original diff*.
-    """
-    source_lines: list[str] = []
-    line_map: dict[int, int] = {}  # source_lineno (1-based) -> diff_lineno (1-based)
-    for diff_lineno, raw in enumerate(diff.splitlines(), start=1):
-        if _ADDED_LINE_RE.match(raw):
-            source_lines.append(raw[1:])  # strip leading '+'
-            line_map[len(source_lines)] = diff_lineno
-    return "\n".join(source_lines), line_map
 
 
 def _is_stub_body(body: list[ast.stmt]) -> bool:
@@ -146,7 +123,7 @@ class AstStubCodeDetector:
         if not context.diff:
             return []
 
-        source, line_map = _extract_added_source(context.diff)
+        source, line_map = extract_added_source(context.diff)
         if not source.strip():
             return []
 

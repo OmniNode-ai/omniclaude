@@ -34,19 +34,18 @@ from __future__ import annotations
 
 import ast
 import logging
-import re
 import warnings
 from datetime import UTC, datetime
 
 from omniclaude.quirks.detectors.context import DetectionContext
+from omniclaude.quirks.detectors.tier1._diff_utils import extract_added_source
 from omniclaude.quirks.enums import QuirkStage, QuirkType
 from omniclaude.quirks.models import QuirkSignal
 from omniclaude.quirks.tools.build_symbol_index import SymbolIndex
 
-logger = logging.getLogger(__name__)
+__all__ = ["HallucinatedApiDetector"]
 
-# Matches lines added in a unified diff (leading ``+`` but not ``+++``).
-_ADDED_LINE_RE = re.compile(r"^\+(?!\+\+)")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -97,28 +96,6 @@ def _closest_alternative(
             best_dist = dist
             best = candidate
     return best if best_dist <= max_distance else None
-
-
-# ---------------------------------------------------------------------------
-# Diff helpers
-# ---------------------------------------------------------------------------
-
-
-def _extract_added_source(diff: str) -> tuple[str, dict[int, int]]:
-    """Extract added lines from a diff and build a source-to-diff line mapping.
-
-    Returns:
-        ``(source, line_map)`` where ``source`` is the concatenated added
-        lines (without leading ``+``) and ``line_map`` maps 1-based source
-        line number to 1-based diff line number.
-    """
-    source_lines: list[str] = []
-    line_map: dict[int, int] = {}
-    for diff_lineno, raw in enumerate(diff.splitlines(), start=1):
-        if _ADDED_LINE_RE.match(raw):
-            source_lines.append(raw[1:])
-            line_map[len(source_lines)] = diff_lineno
-    return "\n".join(source_lines), line_map
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +157,7 @@ class HallucinatedApiDetector:
         if not self._symbol_index:
             return []
 
-        source, line_map = _extract_added_source(context.diff)
+        source, line_map = extract_added_source(context.diff)
         if not source.strip():
             return []
 
