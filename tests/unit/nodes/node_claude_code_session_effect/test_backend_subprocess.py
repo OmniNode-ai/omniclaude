@@ -281,13 +281,15 @@ async def test_semaphore_concurrency_cap() -> None:
     entered_count = 0
     max_concurrent_observed = 0
     barrier = asyncio.Event()
-
-    original_create = asyncio.create_subprocess_exec
+    # Event set when at least 2 tasks have entered (semaphore cap reached)
+    two_entered = asyncio.Event()
 
     async def _slow_create(*args: Any, **kwargs: Any) -> AsyncMock:
         nonlocal entered_count, max_concurrent_observed
         entered_count += 1
         max_concurrent_observed = max(max_concurrent_observed, entered_count)
+        if entered_count >= 2:
+            two_entered.set()
         # Wait for barrier to be set so all tasks hold the semaphore
         await barrier.wait()
         proc = _make_proc_mock(returncode=0, stdout=b"ok")
@@ -300,8 +302,8 @@ async def test_semaphore_concurrency_cap() -> None:
             asyncio.create_task(backend.session_query(_make_request()))
             for _ in range(3)
         ]
-        # Give the event loop time to start all tasks
-        await asyncio.sleep(0.05)
+        # Wait until 2 tasks have entered the mock (bounded timeout)
+        await asyncio.wait_for(two_entered.wait(), timeout=2.0)
         # Release the barrier so tasks can complete
         barrier.set()
         results = await asyncio.gather(*tasks)

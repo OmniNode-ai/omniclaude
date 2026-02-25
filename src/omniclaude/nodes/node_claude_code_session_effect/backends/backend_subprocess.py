@@ -62,13 +62,24 @@ class SubprocessClaudeCodeSessionBackend:
 
     handler_key: str = "subprocess"
 
-    _MAX_CONCURRENT: int = int(
-        os.getenv("OMNICLAUDE_CLAUDE_MAX_CONCURRENT", "2"),
-    )
+    _MAX_CONCURRENT_DEFAULT: int = 2
     _TIMEOUT_S: float = 300.0
 
     def __init__(self) -> None:
-        self._semaphore: asyncio.Semaphore = asyncio.Semaphore(self._MAX_CONCURRENT)
+        raw_max = os.getenv(
+            "OMNICLAUDE_CLAUDE_MAX_CONCURRENT",
+            str(self._MAX_CONCURRENT_DEFAULT),
+        )
+        try:
+            max_concurrent = max(1, int(raw_max))
+        except (ValueError, TypeError):
+            max_concurrent = self._MAX_CONCURRENT_DEFAULT
+            logger.warning(
+                "Invalid OMNICLAUDE_CLAUDE_MAX_CONCURRENT=%r; using default=%d",
+                raw_max,
+                max_concurrent,
+            )
+        self._semaphore: asyncio.Semaphore = asyncio.Semaphore(max_concurrent)
         self._available: bool = False
 
     # ------------------------------------------------------------------
@@ -104,6 +115,15 @@ class SubprocessClaudeCodeSessionBackend:
                 timeout=5,
                 check=False,
             )
+            if help_result.returncode != 0:
+                logger.error(
+                    "claude --help failed (rc=%d) -- "
+                    "SubprocessClaudeCodeSessionBackend disabled",
+                    help_result.returncode,
+                )
+                self._available = False
+                return
+
             help_text = help_result.stdout.decode(errors="replace")
             if "--print" not in help_text or "--no-markdown" not in help_text:
                 logger.error(
@@ -164,25 +184,34 @@ class SubprocessClaudeCodeSessionBackend:
         correlation_id = request.correlation_id or uuid.uuid4()
 
         async with self._semaphore:
-            proc = await asyncio.create_subprocess_exec(
-                "claude",
-                "--print",
-                "--no-markdown",
-                stdin=PIPE,
-                stdout=PIPE,
-                stderr=PIPE,
-                cwd=request.working_directory,
-            )
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "claude",
+                    "--print",
+                    "--no-markdown",
+                    stdin=PIPE,
+                    stdout=PIPE,
+                    stderr=PIPE,
+                    cwd=request.working_directory,
+                )
+            except OSError as exc:
+                return ModelSkillResult(
+                    skill_name=request.skill_name,
+                    status=SkillResultStatus.FAILED,
+                    error=f"SUBPROCESS_LAUNCH_ERROR: {exc}",
+                    correlation_id=correlation_id,
+                )
             try:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
                     proc.communicate(input=(request.prompt or "").encode()),
                     timeout=self._TIMEOUT_S,
                 )
             except TimeoutError:
-                # Best-effort kill
+                # Best-effort kill and reap
                 try:
                     proc.kill()
-                except ProcessLookupError:
+                    await proc.wait()
+                except (ProcessLookupError, OSError):
                     pass
                 return ModelSkillResult(
                     skill_name=request.skill_name,
