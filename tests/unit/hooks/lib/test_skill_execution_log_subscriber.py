@@ -29,7 +29,6 @@ from omniclaude.hooks.lib.skill_execution_log_subscriber import (
     run_subscriber_background,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -261,7 +260,9 @@ class TestUpsertSkillExecutionLog:
             mock_cursor = MagicMock()
             mock_conn.__enter__ = MagicMock(return_value=mock_conn)
             mock_conn.__exit__ = MagicMock(return_value=False)
-            mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+            mock_conn.cursor.return_value.__enter__ = MagicMock(
+                return_value=mock_cursor
+            )
             mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
             with patch(
@@ -389,7 +390,8 @@ class TestConsumerGroupGuardRegistration:
         from omniclaude.lib.consumer_group_guard import SKILL_NODE_CONSUMER_GROUPS
 
         assert (
-            SKILL_NODE_CONSUMER_GROUPS["SkillExecutionLogSubscriber"] == DEFAULT_GROUP_ID
+            SKILL_NODE_CONSUMER_GROUPS["SkillExecutionLogSubscriber"]
+            == DEFAULT_GROUP_ID
         )
 
     @pytest.mark.unit

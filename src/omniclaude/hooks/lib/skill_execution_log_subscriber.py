@@ -115,9 +115,7 @@ def _parse_skill_completed_event(raw: bytes) -> dict[str, Any] | None:
     try:
         return json.loads(raw.decode("utf-8"))  # type: ignore[no-any-return]
     except Exception as exc:
-        logger.debug(
-            "skill-execution-log-subscriber: failed to parse payload: %s", exc
-        )
+        logger.debug("skill-execution-log-subscriber: failed to parse payload: %s", exc)
         return None
 
 
@@ -268,9 +266,7 @@ def process_skill_completed_event(raw_value: bytes) -> bool:
     try:
         payload = _parse_skill_completed_event(raw_value)
         if payload is None:
-            logger.debug(
-                "skill-execution-log-subscriber: skipping unparseable message"
-            )
+            logger.debug("skill-execution-log-subscriber: skipping unparseable message")
             return False
         return _upsert_skill_execution_log(payload)
     except Exception as exc:
