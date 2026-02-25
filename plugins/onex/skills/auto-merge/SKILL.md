@@ -90,7 +90,7 @@ or timed out.
    - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out — mergeStateStatus never reached CLEAN"
 3. Post HIGH_RISK Slack gate (see message format below)
 4. Poll for reply (check every 5 minutes):
-   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is ` --delete-branch` if `delete_branch=true`, else empty
+   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is `--delete-branch` (with a leading space) if `delete_branch=true`, else empty
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
    - On timeout: exit with `status: timeout`
 5. Post Slack notification on merge completion
