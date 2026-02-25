@@ -42,7 +42,7 @@ class ModelSkillNodeExecution(BaseModel):
     ) = None
 
     @model_validator(mode="after")
-    def _validate_purpose(self) -> "ModelSkillNodeExecution":
+    def _validate_purpose(self) -> ModelSkillNodeExecution:
         """Enforce backend/model_purpose consistency.
 
         Returns:
