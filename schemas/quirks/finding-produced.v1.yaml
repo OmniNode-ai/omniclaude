@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Kafka event schema: onex.evt.quirks.finding-produced.v1
+#
+# Produced by: NodeQuirkClassifierCompute (OMN-2556)
+# Consumed by: omnintelligence, omnidash (future)
+#
+# Envelope follows OnexEnvelopeV1 standard.
+# Payload fields are documented below.
+
+schema_version: "1"
+topic: "onex.evt.quirks.finding-produced.v1"
+producer: "omniclaude.quirks.classifier.NodeQuirkClassifierCompute"
+description: >
+  Emitted when NodeQuirkClassifierCompute aggregates enough signals for a
+  (quirk_type, session_id) pair to cross the promotion threshold
+  (count >= 3, mean_confidence >= 0.7). Persisted to the quirk_findings table.
+
+envelope:
+  event_type: "onex.evt.quirks.finding-produced.v1"
+  schema_ref: "registry://onex/quirks/finding-produced/v1"
+  source: "omniclaude"
+  tenant_id: "default"
+  namespace: "onex"
+
+payload:
+  type: object
+  required:
+    - finding_id
+    - quirk_type
+    - signal_id
+    - policy_recommendation
+    - fix_guidance
+    - confidence
+  properties:
+    finding_id:
+      type: string
+      format: uuid
+      description: Stable UUID for this finding instance.
+    quirk_type:
+      type: string
+      enum:
+        - SYCOPHANCY
+        - STUB_CODE
+        - NO_TESTS
+        - LOW_EFFORT_PATCH
+        - UNSAFE_ASSUMPTION
+        - IGNORED_INSTRUCTIONS
+        - HALLUCINATED_API
+      description: Anti-pattern type mirrored from the triggering signal.
+    signal_id:
+      type: string
+      format: uuid
+      description: UUID of the QuirkSignal that triggered this finding.
+    policy_recommendation:
+      type: string
+      enum: [observe, warn, block]
+      description: >
+        Recommended enforcement action derived from signal count:
+          observe = count 3-9
+          warn    = count 10-29
+          block   = count >= 30 AND operator approval flag set
+    validator_blueprint_id:
+      type: string
+      nullable: true
+      description: ID of the validator blueprint to apply for remediation.
+    suggested_exemptions:
+      type: array
+      items:
+        type: string
+      description: Exemption strings the operator may apply to suppress this finding.
+    fix_guidance:
+      type: string
+      description: Human-readable remediation guidance.
+    confidence:
+      type: number
+      minimum: 0.0
+      maximum: 1.0
+      description: Aggregated mean confidence across signals in the window.
+
+partitioning:
+  key_field: signal_id
+  strategy: hash
+
+aggregation_policy:
+  window_hours: 24
+  min_signal_count: 3
+  min_mean_confidence: 0.7
+  thresholds:
+    observe: "count 3-9"
+    warn: "count 10-29"
+    block: "count >= 30 AND QUIRKS_BLOCK_APPROVED=true"
