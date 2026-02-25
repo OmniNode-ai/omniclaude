@@ -188,7 +188,7 @@ for resume support.
 | 5 | LOCK | Run `uv lock` to regenerate lockfile with new version + pins |
 | 6 | LINT | Run `pre-commit run --all-files`; fail repo on hook failure |
 | 7 | COMMIT | `git commit -am "release: <repo> vX.Y.Z [OMN-XXXX]"` |
-| 8 | PUSH | `git push -u origin release/<run_id>/<repo>` |
+| 8 | PUSH | Push branch via `_lib/pr-safety/safe_push()` to `origin release/<run_id>/<repo>` |
 | 9 | PR | Create PR via `gh pr create` (dedupe check first); reference `pr-safety` helpers |
 | 10 | MERGE | Merge PR via `gh pr merge --squash` (reference `auto-merge` sub-skill) |
 | 11 | TAG | Create and push tag `<repo>/vX.Y.Z` (dedupe check: skip if tag exists) |
