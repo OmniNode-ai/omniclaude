@@ -24,7 +24,7 @@ class ProtocolLocalLlmInference(Protocol):
     All inference backend implementations must implement this protocol.
     All operations emit ModelSkillResult envelopes.
 
-    Supported backends: Ollama, llama.cpp (handler_key: 'ollama', 'llamacpp')
+    Supported backends: vLLM (handler_key: 'vllm')
 
     Operation mapping (from node contract io_operations):
         - infer operation -> infer()

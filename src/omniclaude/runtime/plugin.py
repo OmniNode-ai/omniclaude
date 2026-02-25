@@ -33,6 +33,9 @@ if TYPE_CHECKING:
         ModelDomainPluginResult,
     )
 
+    from omniclaude.nodes.node_local_llm_inference_effect.backends import (
+        VllmInferenceBackend,
+    )
     from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,7 @@ class PluginClaude:
         self._compliance_thread: threading.Thread | None = None
         self._decision_record_stop_event: threading.Event | None = None
         self._decision_record_thread: threading.Thread | None = None
+        self._vllm_backend: VllmInferenceBackend | None = None
 
     # ------------------------------------------------------------------
     # Protocol properties
@@ -127,6 +131,24 @@ class PluginClaude:
 
             self._publisher_config = publisher_config
             self._publisher = publisher
+
+            # ---------------------------------------------------------------
+            # Instantiate VllmInferenceBackend (OMN-2799)
+            # ---------------------------------------------------------------
+            try:
+                from omniclaude.config.model_local_llm_config import (
+                    LocalLlmEndpointRegistry,
+                )
+                from omniclaude.nodes.node_local_llm_inference_effect.backends import (
+                    VllmInferenceBackend,
+                )
+
+                registry = LocalLlmEndpointRegistry()
+                self._vllm_backend = VllmInferenceBackend(registry=registry)
+                logger.info("VllmInferenceBackend initialised")
+            except Exception as exc:
+                logger.warning("VllmInferenceBackend init failed: %s", exc)
+                self._vllm_backend = None
 
             return ModelDomainPluginResult(
                 plugin_id=_PLUGIN_ID,
@@ -376,6 +398,14 @@ class PluginClaude:
                 self._decision_record_stop_event.set()
                 self._decision_record_stop_event = None
             self._decision_record_thread = None
+
+            # Close VllmInferenceBackend httpx client (OMN-2799)
+            if self._vllm_backend is not None:
+                try:
+                    await self._vllm_backend.aclose()
+                except Exception as exc:
+                    logger.debug("VllmInferenceBackend close failed: %s", exc)
+                self._vllm_backend = None
 
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(
