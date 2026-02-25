@@ -243,11 +243,90 @@ __all__ = ["{class_name}"]
 # ---------------------------------------------------------------------------
 
 
+_EXECUTION_BLOCK = """\
+# Execution backend configuration
+execution:
+  backend: claude_code       # claude_code | local_llm
+  model_purpose: null        # null for claude_code; required for local_llm
+                             # valid: CODE_ANALYSIS | REASONING | ROUTING | GENERAL
+"""
+
+_EXECUTION_BLOCK_ANCHOR = "# Event bus configuration"
+
+
+def patch_execution_block(contract_path: Path, *, dry_run: bool = False) -> bool:
+    """Inject or replace the ``execution`` block in an existing ``contract.yaml``.
+
+    Inserts the canonical ``execution`` block immediately before the
+    ``# Event bus configuration`` comment.  If an ``execution:`` key is
+    already present the entire block (up to the next top-level comment or
+    key) is replaced so the operation is idempotent.
+
+    Args:
+        contract_path: Absolute path to the ``contract.yaml`` to patch.
+        dry_run: If ``True``, print what would change without writing.
+
+    Returns:
+        ``True`` if the file was (or would be) modified, ``False`` if it was
+        already up-to-date or the anchor comment was not found.
+    """
+    text = contract_path.read_text(encoding="utf-8")
+
+    # Remove any existing execution block before inserting the canonical one.
+    # An execution block starts with "execution:" and ends at the next
+    # top-level comment or non-indented key.
+    if "execution:" in text:
+        lines = text.splitlines(keepends=True)
+        new_lines: list[str] = []
+        in_execution = False
+        for line in lines:
+            if line.startswith("execution:"):
+                in_execution = True
+                continue
+            if in_execution:
+                # End of block: blank line followed by non-indented content
+                # or a top-level comment.
+                stripped = line.lstrip()
+                if stripped and not line[0].isspace():
+                    in_execution = False
+                    new_lines.append(line)
+                # else: skip indented continuation lines and blank lines
+                # inside the block
+                continue
+            new_lines.append(line)
+        text = "".join(new_lines)
+
+    if _EXECUTION_BLOCK_ANCHOR not in text:
+        print(
+            f"[WARN] Anchor '{_EXECUTION_BLOCK_ANCHOR}' not found in {contract_path} "
+            "— skipping execution block patch",
+        )
+        return False
+
+    new_text = text.replace(
+        _EXECUTION_BLOCK_ANCHOR,
+        _EXECUTION_BLOCK + _EXECUTION_BLOCK_ANCHOR,
+        1,
+    )
+
+    if new_text == text:
+        return False
+
+    if dry_run:
+        print(f"[DRY RUN] Would patch execution block in: {contract_path}")
+        return True
+
+    contract_path.write_text(new_text, encoding="utf-8")
+    print(f"[PATCH] execution block added to: {contract_path}")
+    return True
+
+
 def generate_node_for_skill(
     skill_name_kebab: str,
     *,
     repo_root: Path,
     dry_run: bool = False,
+    overwrite_execution_block: bool = False,
 ) -> bool:
     """Generate node directory files for a single skill.
 
@@ -257,12 +336,17 @@ def generate_node_for_skill(
         - ``node.py``
         - ``contract.yaml``
 
-    Skips if the node directory already exists.
+    Skips if the node directory already exists, unless
+    ``overwrite_execution_block=True`` is set — in that case the existing
+    ``contract.yaml`` is patched to include the canonical ``execution`` block
+    while all other fields are left intact.
 
     Args:
         skill_name_kebab: The kebab-case skill name (e.g. ``"local-review"``).
         repo_root: Absolute path to the repository root.
         dry_run: If ``True``, print what would be created without writing files.
+        overwrite_execution_block: If ``True``, patch the ``execution`` block
+            in an already-existing ``contract.yaml`` instead of skipping.
 
     Returns:
         ``True`` if generation happened (or would happen in dry-run),
@@ -273,6 +357,14 @@ def generate_node_for_skill(
     node_dir = repo_root / "src" / "omniclaude" / "nodes" / node_dir_name
 
     if node_dir.exists():
+        if overwrite_execution_block:
+            contract_path = node_dir / "contract.yaml"
+            if contract_path.exists():
+                return patch_execution_block(contract_path, dry_run=dry_run)
+            print(
+                f"[WARN] {node_dir_name} exists but contract.yaml not found — skipping",
+            )
+            return False
         print(f"[SKIP] {node_dir_name} already exists — skipping {skill_name_kebab!r}")
         return False
 
@@ -402,6 +494,16 @@ def build_parser() -> argparse.ArgumentParser:
             "Defaults to the parent of the scripts/ directory."
         ),
     )
+    parser.add_argument(
+        "--overwrite-execution-block",
+        action="store_true",
+        dest="overwrite_execution_block",
+        help=(
+            "Patch the 'execution' block in existing contract.yaml files instead "
+            "of skipping already-generated nodes. Idempotent — safe to re-run. "
+            "Leaves all other contract fields intact."
+        ),
+    )
     return parser
 
 
@@ -441,16 +543,27 @@ def main(argv: list[str] | None = None) -> int:
         skipped = 0
         for skill_name in skills:
             result = generate_node_for_skill(
-                skill_name, repo_root=repo_root, dry_run=args.dry_run
+                skill_name,
+                repo_root=repo_root,
+                dry_run=args.dry_run,
+                overwrite_execution_block=args.overwrite_execution_block,
             )
             if result:
                 generated += 1
             else:
                 skipped += 1
-        print(f"\nDone. Generated: {generated}, Skipped (already exist): {skipped}")
+        if args.overwrite_execution_block:
+            print(
+                f"\nDone. Patched: {generated}, Skipped (already up-to-date or missing contract): {skipped}"
+            )
+        else:
+            print(f"\nDone. Generated: {generated}, Skipped (already exist): {skipped}")
     else:
         result = generate_node_for_skill(
-            args.skill, repo_root=repo_root, dry_run=args.dry_run
+            args.skill,
+            repo_root=repo_root,
+            dry_run=args.dry_run,
+            overwrite_execution_block=args.overwrite_execution_block,
         )
         if not result and not args.dry_run:
             return 1
