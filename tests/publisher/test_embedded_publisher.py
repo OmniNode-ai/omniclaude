@@ -621,7 +621,9 @@ class TestDualEmit:
         elapsed = time.monotonic() - start
 
         assert result is True  # primary succeeded despite secondary hang
-        assert elapsed < 0.5, f"_publish_event took {elapsed:.3f}s; wait_for() may be missing"
+        assert elapsed < 0.5, (
+            f"_publish_event took {elapsed:.3f}s; wait_for() may be missing"
+        )
 
     @pytest.mark.unit
     @pytest.mark.asyncio

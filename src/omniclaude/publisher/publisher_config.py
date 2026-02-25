@@ -112,7 +112,9 @@ class PublisherConfig(BaseSettings):
     )
     kafka_secondary_sasl_oauthbearer_token_endpoint_url: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("KAFKA_SECONDARY_SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL"),
+        validation_alias=AliasChoices(
+            "KAFKA_SECONDARY_SASL_OAUTHBEARER_TOKEN_ENDPOINT_URL"
+        ),
         description="Token endpoint URL for OAUTHBEARER on secondary cluster.",
     )
     kafka_secondary_sasl_oauthbearer_client_id: str | None = Field(

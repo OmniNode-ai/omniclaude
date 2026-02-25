@@ -172,7 +172,9 @@ class EmbeddedEventPublisher:
                     secondary_kafka_config = ModelKafkaEventBusConfig(
                         bootstrap_servers=self._config.kafka_secondary_bootstrap_servers,
                         environment=self._config.environment,
-                        timeout_seconds=int(self._config.kafka_secondary_timeout_seconds),
+                        timeout_seconds=int(
+                            self._config.kafka_secondary_timeout_seconds
+                        ),
                         security_protocol=self._config.kafka_secondary_security_protocol,
                         sasl_mechanism=self._config.kafka_secondary_sasl_mechanism,
                         sasl_oauthbearer_token_endpoint_url=self._config.kafka_secondary_sasl_oauthbearer_token_endpoint_url,
@@ -182,17 +184,23 @@ class EmbeddedEventPublisher:
                         # Do NOT call apply_environment_overrides() — those env vars
                         # (KAFKA_*) belong to the primary cluster.
                     )
-                    self._secondary_event_bus = EventBusKafka(config=secondary_kafka_config)
+                    self._secondary_event_bus = EventBusKafka(
+                        config=secondary_kafka_config
+                    )
                     try:
                         await self._secondary_event_bus.start()
                         logger.info(
                             "Secondary event bus started",
-                            extra={"secondary_servers": self._config.kafka_secondary_bootstrap_servers},
+                            extra={
+                                "secondary_servers": self._config.kafka_secondary_bootstrap_servers
+                            },
                         )
                     except Exception as e:
                         logger.warning(
                             f"Secondary event bus failed to start (non-fatal): {e}",
-                            extra={"secondary_servers": self._config.kafka_secondary_bootstrap_servers},
+                            extra={
+                                "secondary_servers": self._config.kafka_secondary_bootstrap_servers
+                            },
                         )
                         self._secondary_event_bus = None
 
@@ -624,7 +632,11 @@ class EmbeddedEventPublisher:
             if isinstance(results[0], BaseException):
                 logger.warning(
                     f"Primary publish failed for event {event.event_id}: {results[0]}",
-                    extra={"event_type": event.event_type, "topic": event.topic, "cluster": "primary"},
+                    extra={
+                        "event_type": event.event_type,
+                        "topic": event.topic,
+                        "cluster": "primary",
+                    },
                 )
                 return False
 
@@ -632,7 +644,11 @@ class EmbeddedEventPublisher:
             if len(results) > 1 and isinstance(results[1], BaseException):
                 logger.warning(
                     f"Secondary publish failed (non-fatal) for event {event.event_id}: {results[1]}",
-                    extra={"event_type": event.event_type, "topic": event.topic, "cluster": "secondary"},
+                    extra={
+                        "event_type": event.event_type,
+                        "topic": event.topic,
+                        "cluster": "secondary",
+                    },
                 )
 
             logger.debug(
