@@ -1,3 +1,7 @@
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
 # pipeline-metrics — Execution Prompt
 
 ## Overview

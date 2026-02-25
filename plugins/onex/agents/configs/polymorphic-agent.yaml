@@ -66,6 +66,9 @@ agent_philosophy:
 
   approach: "Enhanced clean agent principles with comprehensive Archon MCP integration and polymorphic transformation"
 
+  persona_profile: "plugins/onex/skills/_lib/assistant-profile/persona.md"
+  persona_scope: "outermost_layer"
+
   core_principles:
     - "Intelligent Task Analysis: Complexity assessment with RAG-enhanced context"
     - "Dynamic Agent Selection: Risk-based routing with knowledge integration"
