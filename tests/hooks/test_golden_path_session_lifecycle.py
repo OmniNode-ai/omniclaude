@@ -53,7 +53,7 @@ pytestmark = pytest.mark.unit
 def make_session_lifecycle_context(
     *,
     emitted_at: datetime | None = None,
-    environment: str = "test",
+    environment: str = "dev",
 ):
     """Create a session lifecycle context with correlated identifiers.
 
@@ -85,7 +85,7 @@ def derive_and_build_outcome_config(
     tool_calls_completed: int = 5,
     duration_seconds: float = 300.0,
     emitted_at: datetime | None = None,
-    environment: str = "test",
+    environment: str = "dev",
 ) -> tuple[ModelSessionOutcomeConfig, str]:
     """Derive session outcome and build emission config in one call.
 
@@ -116,7 +116,7 @@ def derive_and_build_outcome_config(
 
 
 @patch.dict(
-    os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "test"}
+    os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "dev"}
 )
 class TestGoldenPathSessionLifecycle:
     """Golden path: session start → injection → work → end → outcome emission."""
@@ -181,7 +181,7 @@ class TestGoldenPathSessionLifecycle:
             session_output=session_output,
             tool_calls_completed=tool_calls_completed,
             duration_seconds=300.0,
-            environment="test",
+            environment="dev",
         )
         assert outcome_str == OUTCOME_SUCCESS
 
@@ -274,7 +274,7 @@ class TestGoldenPathSessionLifecycle:
 
 
 @patch.dict(
-    os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "test"}
+    os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "dev"}
 )
 class TestEmitSessionOutcome:
     """Tests for emit_session_outcome_from_config function."""
@@ -291,7 +291,7 @@ class TestEmitSessionOutcome:
             outcome="success",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                environment="test",
+                environment="dev",
             ),
         )
 
@@ -316,7 +316,7 @@ class TestEmitSessionOutcome:
             outcome="success",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                environment="test",
+                environment="dev",
             ),
         )
 
@@ -336,7 +336,7 @@ class TestEmitSessionOutcome:
         config = ModelSessionOutcomeConfig(
             session_id="schema-test-session",
             outcome="failed",
-            tracing=ModelEventTracingConfig(emitted_at=ts, environment="test"),
+            tracing=ModelEventTracingConfig(emitted_at=ts, environment="dev"),
         )
 
         await emit_session_outcome_from_config(config)
@@ -363,7 +363,7 @@ class TestEmitSessionOutcome:
                 outcome="invalid_outcome",
                 tracing=ModelEventTracingConfig(
                     emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                    environment="test",
+                    environment="dev",
                 ),
             )
 
@@ -398,7 +398,7 @@ class TestEmitSessionOutcome:
                 outcome=outcome,
                 tracing=ModelEventTracingConfig(
                     emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                    environment="test",
+                    environment="dev",
                 ),
             )
 
@@ -421,7 +421,7 @@ class TestEmitSessionOutcome:
             outcome="success",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                environment="test",
+                environment="dev",
             ),
         )
 
@@ -445,7 +445,7 @@ class TestEmitSessionOutcome:
             outcome="success",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                environment="test",
+                environment="dev",
             ),
         )
 
@@ -507,7 +507,7 @@ class TestHelpers:
         assert ctx["session_id"] is not None
         assert ctx["correlation_id"] == ctx["session_id"]
         assert ctx["emitted_at"] is not None
-        assert ctx["environment"] == "test"
+        assert ctx["environment"] == "dev"
         assert ctx["tracing"] is not None
 
     def test_derive_and_build_outcome_config_success(self) -> None:

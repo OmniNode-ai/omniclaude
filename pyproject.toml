@@ -10,9 +10,9 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core>=0.19.0,<0.20.0",
-    "omnibase-spi>=0.12.0,<0.13.0",
-    "omnibase-infra>=0.10.0,<0.11.0",
+    "omnibase-core>=0.20.0,<0.21.0",
+    "omnibase-spi>=0.13.0,<0.14.0",
+    "omnibase-infra>=0.11.0,<0.12.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",
@@ -27,6 +27,14 @@ dependencies = [
 kafka = [
     "aiokafka>=0.11.0,<0.14.0",
     "confluent-kafka>=2.12.0,<3.0.0",
+]
+
+# otel is optional: Phoenix OTEL span exporter (OMN-2734).
+# Hooks degrade gracefully (no-op) when these are not installed.
+otel = [
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
 ]
 
 [dependency-groups]
@@ -48,6 +56,10 @@ dev = [
     "types-psycopg2>=2.9.21.20251012",
     "types-docker>=7.1.0.20260109",
     "bandit>=1.9.3",
+    # OTEL SDK for phoenix_otel_exporter tests
+    "opentelemetry-api>=1.23.0,<2.0.0",
+    "opentelemetry-sdk>=1.23.0,<2.0.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
 ]
 
 [project.scripts]

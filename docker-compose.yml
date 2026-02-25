@@ -45,6 +45,28 @@ services:
       - redis_data:/data
 
   # ============================================================================
+  # Arize Phoenix - OTEL observability backend (OMN-2734)
+  # UI:           http://localhost:6006
+  # OTLP HTTP:    http://localhost:6006/v1/traces
+  # ============================================================================
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: omniclaude_phoenix
+    ports:
+      - "6006:6006"   # Phoenix UI + OTLP HTTP endpoint
+      - "4317:4317"   # OTLP gRPC (optional, for collector compatibility)
+    environment:
+      PHOENIX_WORKING_DIR: /phoenix
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6006/healthz 2>/dev/null || curl -sf http://localhost:6006/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - phoenix_data:/phoenix
+
+  # ============================================================================
   # App Service (optional - uncomment for local development)
   # ============================================================================
   # app:
@@ -67,4 +89,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  phoenix_data:
     driver: local

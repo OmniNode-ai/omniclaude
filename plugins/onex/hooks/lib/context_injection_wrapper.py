@@ -58,6 +58,12 @@ from pattern_types import (
     create_error_output,
 )
 
+# Phoenix OTEL exporter — graceful degradation when SDK not installed
+try:
+    from phoenix_otel_exporter import emit_injection_span as _emit_injection_span
+except ImportError:
+    _emit_injection_span = None
+
 if TYPE_CHECKING:
     from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
 
@@ -277,6 +283,24 @@ def main() -> None:
 
         # Calculate elapsed time
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Emit Phoenix OTEL span (non-blocking, drop-on-failure per R2)
+        if _emit_injection_span is not None:
+            try:
+                _emit_injection_span(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    manifest_injected=result.success and result.pattern_count > 0,
+                    injected_pattern_count=result.pattern_count,
+                    agent_matched=bool(
+                        input_json.get("agent_name") or input_json.get("agent_matched")
+                    ),
+                    selected_agent=str(input_json.get("agent_name") or ""),
+                    injection_latency_ms=float(result.retrieval_ms or elapsed_ms),
+                    cohort=result.cohort or "treatment",
+                )
+            except Exception:
+                pass  # Never propagate to hook (R2)
 
         # Prepend tier banner (OMN-2782)
         tier_banner = _build_tier_banner()

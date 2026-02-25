@@ -35,6 +35,9 @@ args:
 
 # Ticket Pipeline
 
+> **Authoritative behavior is defined in `prompt.md`; `SKILL.md` is descriptive. When docs
+> conflict, `prompt.md` wins.**
+
 ## Overview
 
 Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
@@ -330,13 +333,14 @@ ticket-pipeline OMN-XXXX
 
 ### Phase 4: ci_watch
 
-- Invokes `ci-watch` sub-skill (OMN-2523) with configured policy
-- `ci-watch` polls `gh pr checks` every 5 minutes
-- Auto-invokes `ci-failures` skill on CI failure to diagnose and fix failing checks (respects `max_ci_fix_cycles` cap)
-- Returns: `status: completed | capped | timeout | failed`
-- On `completed`: AUTO-ADVANCE to Phase 5
-- On `capped` or `timeout`: log warning, continue to Phase 5 with warning note
-- On `failed`: Slack MEDIUM_RISK gate, stop pipeline
+**This phase is non-blocking.** Authoritative behavior is defined in `prompt.md` lines 2362–2414.
+
+- Enables GitHub auto-merge on the PR (idempotent)
+- Takes a single quick snapshot of CI checks (one `gh pr checks` call — no polling)
+- If all checks are passing or pending: records `status: auto_merge_pending` and advances immediately
+- If any checks are already failing: dispatches `ci-watch` as a **background agent** (`run_in_background=True`) to fix failures, then advances immediately without awaiting the result
+- **Always AUTO-ADVANCES to Phase 5** — phase completes in seconds, not minutes
+- `ci_watch_timeout_minutes` and `max_ci_fix_cycles` are pass-through args forwarded to the background `ci-watch` agent; they are not pipeline-blocking timers
 
 ### Phase 5: pr_review_loop
 
@@ -380,9 +384,9 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `stop_on_cross_repo` | `false` | Auto-split via decompose-epic instead of stopping |
 | `cross_repo_gate_timeout_minutes` | `10` | Minutes to wait for Slack reply before handing off to epic-team |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
-| `auto_fix_ci` | `true` | Auto-invoke ci-failures skill on CI failure |
-| `ci_watch_timeout_minutes` | `60` | Max minutes waiting for CI before timeout |
-| `max_ci_fix_cycles` | `3` | Max ci-failures skill invocations before capping |
+| `auto_fix_ci` | `true` | Dispatch background ci-watch agent on CI failure (Phase 4) |
+| `ci_watch_timeout_minutes` | `60` | Pass-through to background ci-watch agent: max minutes it waits for CI (not a pipeline-blocking timer) |
+| `max_ci_fix_cycles` | `3` | Pass-through to background ci-watch agent: max fix attempts before capping |
 | `auto_fix_pr_review` | `true` | Auto-invoke pr-review-dev on CHANGES_REQUESTED reviews |
 | `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
 | `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
@@ -605,17 +609,29 @@ Task(
 
 No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
 
-### Phase 4: ci_watch — dispatch to polymorphic agent
+### Phase 4: ci_watch — runs inline (non-blocking; background dispatch only on failure)
+
+Phase 4 runs inline in the orchestrator. No blocking dispatch is used. See `prompt.md` lines
+2362–2414 for the authoritative implementation.
+
+The orchestrator:
+1. Enables auto-merge: `gh pr merge --auto --squash {pr_number} --repo {repo}`
+2. Takes a CI snapshot: `gh pr checks {pr_number} --repo {repo} --json name,state,conclusion`
+3. If any checks are failing and `auto_fix_ci=true`, dispatches a **background** fix agent:
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
-  prompt="Invoke: Skill(skill=\"onex:ci-watch\",
-    args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
-    Report back with: status, ci_fix_cycles_used, watch_duration_minutes."
+  run_in_background=True,
+  description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
+  prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
+    Invoke: Skill(skill=\"onex:ci-watch\",
+      args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
+    Fix any failures, push fixes. GitHub will auto-merge once CI is green."
 )
 ```
+
+4. Advances immediately to Phase 5 — does NOT await the background task result.
 
 ### Phase 5: pr_review_loop — dispatch to polymorphic agent
 

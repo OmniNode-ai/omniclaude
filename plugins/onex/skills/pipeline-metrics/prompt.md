@@ -1,3 +1,7 @@
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
 # pipeline-metrics — Execution Prompt
 
 ## Overview
@@ -106,9 +110,36 @@ sections "data unavailable".
 
 ## Step 4: Collect skill duration from PostgreSQL
 
-Query `agent_execution_logs`:
+Check whether ``skill_execution_logs`` exists (OMN-2778 projection consumer).
+If it exists, query it directly; otherwise fall back to ``agent_execution_logs``
+and annotate the output header with a proxy note.
 
-```sql
+```python
+# Probe for skill_execution_logs table
+_TABLE_PROBE_SQL = """
+SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name   = 'skill_execution_logs'
+)
+"""
+
+# Primary query — skill_execution_logs (OMN-2778)
+_SKILL_LOG_SQL = """
+SELECT
+    skill_name,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
+    COUNT(*) AS call_count
+FROM skill_execution_logs
+WHERE emitted_at >= %(since)s
+  AND skill_name IS NOT NULL
+GROUP BY skill_name
+ORDER BY call_count DESC
+LIMIT 10;
+"""
+
+# Fallback proxy query — agent_execution_logs
+_AGENT_LOG_SQL = """
 SELECT
     skill_name,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
@@ -119,12 +150,22 @@ WHERE created_at >= %(since)s
 GROUP BY skill_name
 ORDER BY call_count DESC
 LIMIT 10;
+"""
+
+# Execute:
+# 1. Probe for skill_execution_logs
+# 2. If it exists: use _SKILL_LOG_SQL, set source_label = "skill_execution_logs"
+# 3. If not: use _AGENT_LOG_SQL, set source_label = "agent_execution_logs (proxy)"
 ```
 
 Use `OMNIBASE_INFRA_DB_URL` or `POSTGRES_HOST`/`POSTGRES_PORT` env vars.
 
 If connection fails (any exception) → mark skill duration section
 "data unavailable". **Do not raise — degrade silently.**
+
+In the output header, emit one of:
+- (nothing extra) when reading from ``skill_execution_logs``
+- ``  * Skill duration sourced from agent_execution_logs (proxy)`` when falling back
 
 ## Step 5: Collect story point estimates from Linear
 
@@ -241,7 +282,8 @@ The skill MUST degrade cleanly for these scenarios (no exception propagation):
 
 ## Implementation note
 
-v1 reads `agent_execution_logs` for skill duration (proxy metric).
-When the OMN-2773 follow-on consumer ships and `skill_execution_logs` exists,
-update Step 4 to read that table instead. Document this in the output header
-with a note: `  * Skill duration sourced from agent_execution_logs (proxy)`
+Step 4 probes for `skill_execution_logs` at runtime (OMN-2778). When the
+table exists (OMN-2778 projection consumer active), it is used directly.
+When the table does not yet exist, `agent_execution_logs` is used as a proxy
+and the output header carries:
+  `  * Skill duration sourced from agent_execution_logs (proxy)`

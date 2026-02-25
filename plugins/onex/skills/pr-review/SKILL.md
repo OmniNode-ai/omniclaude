@@ -3,6 +3,10 @@ name: pr-review-comprehensive
 description: Comprehensive PR review with strict priority-based organization and merge readiness assessment
 ---
 
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
 # Comprehensive PR Review
 
 Production-ready PR review system that fetches all feedback from GitHub, organizes by priority, and enforces strict merge requirements.

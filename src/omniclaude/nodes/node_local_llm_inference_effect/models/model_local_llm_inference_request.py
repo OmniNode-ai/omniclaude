@@ -23,6 +23,9 @@ class ModelLocalLlmInferenceRequest(BaseModel):
             If None, the backend uses its configured default.
         max_tokens: Maximum tokens to generate. If None, uses backend default.
         temperature: Sampling temperature (0.0-2.0). If None, uses backend default.
+        model_purpose: Purpose tag for endpoint selection (e.g. ``"CODE_ANALYSIS"``).
+            Maps to ``LlmEndpointPurpose`` via the backend's ``_MAP_PURPOSE`` dict.
+            If None, defaults to ``"CODE_ANALYSIS"`` at the backend level.
         skill_name: Human-readable skill name for the ModelSkillResult envelope.
         correlation_id: Correlation ID for tracing.
     """
@@ -48,6 +51,10 @@ class ModelLocalLlmInferenceRequest(BaseModel):
         ge=0.0,
         le=2.0,
         description="Sampling temperature (0.0-2.0)",
+    )
+    model_purpose: str | None = Field(
+        default=None,
+        description="Purpose tag for endpoint selection (e.g. CODE_ANALYSIS, REASONING)",
     )
     skill_name: str = Field(
         default="local_llm.inference",

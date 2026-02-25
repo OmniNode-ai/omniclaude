@@ -20,8 +20,12 @@ Exported Components:
 
     Protocols:
         ProtocolClaudeCodeSession - Interface for session backends
+
+    Backends:
+        SubprocessClaudeCodeSessionBackend - Subprocess-based backend (claude CLI)
 """
 
+from .backends import SubprocessClaudeCodeSessionBackend
 from .models import ModelClaudeCodeSessionRequest
 from .node import NodeClaudeCodeSessionEffect
 from .protocols import ProtocolClaudeCodeSession
@@ -33,4 +37,6 @@ __all__ = [
     "ModelClaudeCodeSessionRequest",
     # Protocols
     "ProtocolClaudeCodeSession",
+    # Backends
+    "SubprocessClaudeCodeSessionBackend",
 ]

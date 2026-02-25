@@ -5,7 +5,7 @@
 """NodeLocalLlmInferenceEffect - Contract-driven effect node for local LLM inference.
 
 This package provides the NodeLocalLlmInferenceEffect node for local LLM
-inference operations with pluggable backends (Ollama, llama.cpp, etc.).
+inference operations with pluggable backends (vLLM, etc.).
 
 Capability: local_llm.inference
 
@@ -20,8 +20,12 @@ Exported Components:
 
     Protocols:
         ProtocolLocalLlmInference - Interface for inference backends
+
+    Backends:
+        VllmInferenceBackend - vLLM/OpenAI-compatible inference backend
 """
 
+from .backends import VllmInferenceBackend
 from .models import ModelLocalLlmInferenceRequest
 from .node import NodeLocalLlmInferenceEffect
 from .protocols import ProtocolLocalLlmInference
@@ -33,4 +37,6 @@ __all__ = [
     "ModelLocalLlmInferenceRequest",
     # Protocols
     "ProtocolLocalLlmInference",
+    # Backends
+    "VllmInferenceBackend",
 ]

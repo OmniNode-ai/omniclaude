@@ -11,17 +11,18 @@ When `/merge-sweep [args]` is invoked:
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: all repos in omni_home
    - `--dry-run` — default: false (zero filesystem writes including claims)
-   - `--gate-attestation <token>` — pre-issued gate token (format: `<slack_ts>:<run_id>`); bypass Slack gate
    - `--merge-method <method>` — default: squash
    - `--require-approval <bool>` — default: true
    - `--require-up-to-date <policy>` — default: repo
    - `--max-total-merges <n>` — default: 10
    - `--max-parallel-prs <n>` — default: 5
    - `--max-parallel-repos <n>` — default: 3
+   - `--max-parallel-polish <n>` — default: 2
+   - `--skip-polish` — default: false; skip the pr-polish phase entirely
+   - `--polish-clean-runs <n>` — default: 2; consecutive clean local-review passes required during polish
    - `--authors <list>` — default: all
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
-   - `--gate-timeout-minutes <n>` — default: 1440 (24 hours)
    - `--run-id <id>` — default: generate new; provided by pr-queue-pipeline for claim ownership
 
 3. **Generate or restore run_id**:
@@ -56,11 +57,6 @@ if deleted:
 **CRITICAL**: Before any scanning or I/O, validate arguments:
 
 ```
-IF --gate-attestation is set AND token does not match format `<slack_ts>:<run_id>`:
-  → Print: "ERROR: --gate-attestation token is invalid. Expected format: <slack_ts>:<run_id>"
-  → Emit ModelSkillResult(status=error, error="--gate-attestation token invalid")
-  → EXIT immediately (do not scan, do not merge)
-
 IF --since is set:
   → Parse date using parse_since() (see below)
   → IF parse fails: print "ERROR: Cannot parse --since date: <value>. Use YYYY-MM-DD or ISO 8601."
@@ -115,11 +111,11 @@ Scan up to `--max-parallel-repos` repos concurrently. For each repo:
 gh pr list \
   --repo <repo> \
   --state open \
-  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt \
+  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
   --limit 100
 ```
 
-**IMPORTANT**: `labels` and `updatedAt` are required JSON fields for filtering (v2.0.0).
+**IMPORTANT**: `labels`, `updatedAt`, and `isDraft` are required JSON fields.
 
 For each PR returned, apply classification:
 
@@ -135,6 +131,8 @@ def is_green(pr):
 
 def is_merge_ready(pr, require_approval=True):
     """PR is safe to merge immediately."""
+    if pr["isDraft"]:
+        return False
     if pr["mergeable"] != "MERGEABLE":
         return False
     if not is_green(pr):
@@ -142,6 +140,23 @@ def is_merge_ready(pr, require_approval=True):
     if require_approval:
         return pr.get("reviewDecision") in ("APPROVED", None)
     return True
+
+def needs_polish(pr, require_approval=True):
+    """PR has fixable blocking issues: CI failures, conflicts, or changes requested."""
+    if pr["isDraft"]:
+        return False  # draft PRs are intentionally incomplete
+    if pr["mergeable"] == "UNKNOWN":
+        return False  # can't determine state — skip
+    if is_merge_ready(pr, require_approval=require_approval):
+        return False  # already ready — goes to auto-merge track
+    # Fixable if: conflicting (resolvable), CI failing (fixable), or changes requested (addressable)
+    if pr["mergeable"] == "CONFLICTING":
+        return True
+    if not is_green(pr):
+        return True
+    if require_approval and pr.get("reviewDecision") == "CHANGES_REQUESTED":
+        return True
+    return False  # other cases (e.g., REVIEW_REQUIRED — needs human, not automation)
 
 def pr_state_unknown(pr):
     return pr["mergeable"] == "UNKNOWN"
@@ -165,15 +180,15 @@ def passes_label_filter(pr, filter_labels):
 ```
 
 Classification results:
-- `is_merge_ready()` is True → candidate for further filtering
-  - passes `passes_since_filter()` AND `passes_label_filter()` → add to `candidates_pre_claim[]`
-  - else → add to `skipped_filtered[]`
+- `is_merge_ready()` AND passes filters → add to `candidates_pre_claim[]` (Track A)
+- `needs_polish()` AND passes filters → add to `polish_queue_pre_claim[]` (Track B)
 - `pr_state_unknown()` → add to `skipped_unknown[]` with warning
-- Otherwise → ignore (fix-prs handles these)
+- Draft PRs → ignore silently
+- Otherwise (e.g., `REVIEW_REQUIRED`) → ignore silently
 
 ### Claim Registry Check (after filter classification)
 
-For each PR in `candidates_pre_claim[]`, check the global claim registry:
+For each PR in `candidates_pre_claim[]` and `polish_queue_pre_claim[]`, check the global claim registry:
 
 ```python
 from plugins.onex.hooks.lib.pr_claim_registry import (
@@ -182,30 +197,30 @@ from plugins.onex.hooks.lib.pr_claim_registry import (
 
 registry = ClaimRegistry()
 candidates = []
+polish_queue = []
 hard_failed_claims = []
 
-for pr in candidates_pre_claim:
-    # Use the base repo (not head repo) so the claim key is consistent for forked PRs.
+for pr in candidates_pre_claim + polish_queue_pre_claim:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
 
     claim = registry.get_claim(pr_key)
     if claim and registry.has_active_claim(pr_key):
-        # HARD FAIL — do not merge a PR with an active claim from another run
         hard_failed_claims.append({
             "pr_key": pr_key,
             "claimed_by_run": claim.get("claimed_by_run"),
             "action": claim.get("action"),
-            "last_heartbeat_at": claim.get("last_heartbeat_at"),
         })
         print(
             f"[merge-sweep] HARD FAIL: {pr_key} has active claim "
             f"(run: {claim.get('claimed_by_run')}, action: {claim.get('action')}). "
-            f"Excluding from merge candidates.",
+            f"Excluding from candidates.",
             flush=True,
         )
-    else:
+    elif pr in candidates_pre_claim:
         candidates.append(pr)
+    else:
+        polish_queue.append(pr)
 
 if hard_failed_claims:
     print(
@@ -214,22 +229,20 @@ if hard_failed_claims:
     )
 ```
 
-`hard_failed_claims` are included in the `ModelSkillResult.details[]` with
-`skip_reason: "active_claim"` and `result: "skipped"`. They are NOT treated as merge failures
-(the merge never attempted) but are prominently logged.
-
 Apply `--authors` filter: if set, only include PRs where `pr["author"]["login"]` is in the authors list.
+(Apply before claim check, as part of `passes_*_filter` calls above.)
 
 Apply `--max-total-merges` cap: truncate `candidates[]` to the cap.
+The polish queue is NOT capped (polishing is best-effort and additive).
 
 ---
 
 ## Step 4: Empty Check
 
 ```
-IF candidates is empty:
-  → Print: "No merge-ready PRs found across <N> repos."
-  → If applicable, explain filters: "Note: --since <date> and/or --label <labels> may have excluded PRs."
+IF candidates is empty AND polish_queue is empty (or --skip-polish):
+  → Print: "No actionable PRs found across <N> repos."
+  → If applicable, explain filters
   → If skipped_unknown is not empty: print warning about UNKNOWN state PRs
   → Emit ModelSkillResult(status=nothing_to_merge, filters=filters)
   → EXIT
@@ -241,16 +254,16 @@ IF candidates is empty:
 
 ```
 IF --dry-run:
-  → Print candidates table (see format below)
-  → Print: "Dry run complete. No gate posted, no merges performed."
-  → Emit ModelSkillResult(status=nothing_to_merge, candidates_found=<N>, merged=0, skipped=0, failed=0, filters=filters)
+  → Print candidates table and polish queue table (see format below)
+  → Print: "Dry run complete. No auto-merge enabled, no pr-polish dispatched."
+  → Emit ModelSkillResult(status=nothing_to_merge, candidates_found=<N>, polished=0, auto_merge_set=0, skipped=0, failed=0, filters=filters)
   → EXIT
 ```
 
 ### Dry Run Output Format
 
 ```
-MERGE-READY PRs (<count> found, max <max_total_merges>):
+MERGE-READY PRs — Track A: Enable GitHub auto-merge (<count>):
 Filters: since=<since_date> | labels=<labels> | authors=<authors>
 
   OmniNode-ai/omniclaude
@@ -260,201 +273,217 @@ Filters: since=<since_date> | labels=<labels> | authors=<authors>
   OmniNode-ai/omnibase_core
     #88   fix: null guard in parser        2 checks ✓  APPROVED       SHA: ff3ab12c  updated: 2026-02-20
 
+BLOCKING ISSUES — Track B: pr-polish queue (<count>):
+
+  OmniNode-ai/omnidash
+    #19   feat: dashboard redesign         CONFLICTING                SHA: d3f9a22b  updated: 2026-02-22
+    #21   fix: chart rendering             CI FAILING (2 required)    SHA: ab12c340  updated: 2026-02-23
+
+  OmniNode-ai/omniclaude
+    #255  refactor: session handler        CHANGES_REQUESTED          SHA: 1a2b3c4d  updated: 2026-02-21
+
 SKIPPED (UNKNOWN merge state — GitHub computing):
-    OmniNode-ai/omnidash#19
+    OmniNode-ai/omnidash#20
 
-SKIPPED (filtered by --since or --label):
-    OmniNode-ai/omnidash#18  (last updated: 2026-02-01, before --since 2026-02-20)
-
-Total: <N> ready to merge, <M> skipped
+Total: <N> ready to auto-merge, <M> need polishing, <K> skipped
 ```
 
 ---
 
-## Step 6: Gate Phase
+## Step 6 — Phase A: Enable GitHub Auto-Merge (Parallel)
 
-### Resolve Slack Credentials
-
-```bash
-source ~/.omnibase/.env 2>/dev/null || true
-
-if [[ -z "${SLACK_BOT_TOKEN:-}" || -z "${SLACK_CHANNEL_ID:-}" ]]; then
-  # Infisical fallback (see slack-gate skill SKILL.md for full snippet)
-  echo "ERROR: SLACK_BOT_TOKEN and SLACK_CHANNEL_ID required" >&2
-  exit 1
-fi
-```
-
-### If `--gate-attestation=<token>` (bypass mode):
-
-```
-gate_token = <value of --gate-attestation argument>
-approved_candidates = candidates  # all candidates approved
-Print: "Gate bypassed. Using provided gate_token: <gate_token>"
-```
-
-### If normal mode (default):
-
-#### 6a: Post HIGH_RISK gate via chat.postMessage
-
-Build gate message (see SKILL.md for format). Include active filters in the Scope line.
-
-Post via `chat.postMessage`:
-```python
-import json, urllib.request
-
-payload = json.dumps({
-    "channel": SLACK_CHANNEL_ID,
-    "text": gate_message,
-}).encode("utf-8")
-
-req = urllib.request.Request(
-    "https://slack.com/api/chat.postMessage",
-    data=payload,
-    headers={
-        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
-        "Content-Type": "application/json; charset=utf-8",
-    },
-)
-with urllib.request.urlopen(req, timeout=30) as resp:
-    data = json.loads(resp.read())
-
-if not data["ok"]:
-    raise RuntimeError(f"chat.postMessage failed: {data.get('error')}")
-
-thread_ts = data["message"]["ts"]
-gate_token = f"{thread_ts}:{run_id}"
-```
-
-#### 6b: Poll for reply via slack_gate_poll.py
-
-```bash
-SKILL_BASE="$(dirname "$(realpath "$0")")"
-POLL_SCRIPT="${SKILL_BASE}/../slack-gate/slack_gate_poll.py"
-
-POLL_OUTPUT=$(python3 "$POLL_SCRIPT" \
-  --channel "$SLACK_CHANNEL_ID" \
-  --thread-ts "$THREAD_TS" \
-  --bot-token "$SLACK_BOT_TOKEN" \
-  --timeout-minutes "$GATE_TIMEOUT_MINUTES" \
-  --accept-keywords '["approve", "merge", "yes", "proceed"]' \
-  --reject-keywords '["reject", "cancel", "no", "hold", "deny"]')
-POLL_EXIT=$?
-```
-
-#### 6c: Parse gate reply
-
-```python
-if poll_exit == 1 or poll_exit == 2:
-    # Rejected or timeout — never merge without explicit approval
-    emit ModelSkillResult(status="gate_rejected", gate_token=gate_token)
-    EXIT
-
-# poll_exit == 0: accepted
-reply_text = poll_output.removeprefix("ACCEPTED:").strip().lower()
-
-if "reject" in reply_text or "cancel" in reply_text:
-    emit ModelSkillResult(status="gate_rejected")
-    EXIT
-
-# Parse subset commands
-excluded_prs = set()
-if "approve except" in reply_text or "skip" in reply_text:
-    # Extract PR references: "approve except omniclaude#247 omnibase_core#88"
-    # Format: <repo>#<pr_number> (short name or full OmniNode-ai/repo#N)
-    import re
-    pr_refs = re.findall(r'[\w/-]+#(\d+)', reply_text)
-    excluded_prs = {int(n) for n in pr_refs}
-
-approved_candidates = [c for c in candidates if c["number"] not in excluded_prs]
-```
-
----
-
-## Step 7: Merge Phase (Parallel)
-
-Before dispatching each merge agent, **acquire a claim** from the global claim registry.
-Release the claim after the merge agent completes (success or failure).
+For each PR in `candidates[]`, acquire a claim and enable GitHub auto-merge.
+Run up to `--max-parallel-prs` concurrently.
 
 ```python
 from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr_key
 
 registry = ClaimRegistry()
+auto_merge_results = []
 
-for pr in approved_candidates:
-    # Use the base repo (not head repo) so the claim key is consistent for forked PRs.
+for pr in candidates:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    repo_full = f"{base_owner}/{base_repo_name}"
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
 
-    acquired = registry.acquire(pr_key, run_id=run_id, action="merge", dry_run=dry_run)
+    acquired = registry.acquire(pr_key, run_id=run_id, action="auto_merge_enable", dry_run=dry_run)
     if not acquired:
-        # Race: another run claimed between classification and merge dispatch
-        record result: failed, error: "claim_race_condition"
+        auto_merge_results.append({
+            "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+            "result": "failed", "error": "claim_race_condition"
+        })
         continue
 
     try:
-        # dispatch merge agent (see Task() block below)
-        ...
+        # Enable GitHub auto-merge — merges automatically when all required checks pass
+        result = run([
+            "gh", "pr", "merge", str(pr["number"]),
+            "--repo", repo_full,
+            f"--{merge_method}",
+            "--auto",
+        ])
+        if result.returncode == 0:
+            auto_merge_results.append({
+                "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
+            })
+            print(f"  ✓ auto-merge enabled: {repo_full}#{pr['number']} — {pr['title'][:60]}")
+        else:
+            auto_merge_results.append({
+                "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                "result": "failed", "error": result.stderr.strip()
+            })
+            print(f"  ✗ failed to enable auto-merge: {repo_full}#{pr['number']} — {result.stderr.strip()}")
     finally:
         registry.release(pr_key, run_id=run_id, dry_run=dry_run)
 ```
 
-Dispatch up to `--max-parallel-prs` merge agents concurrently. For each approved_candidate:
+---
 
+## Step 7 — Phase B: Polish PRs with Blocking Issues (Parallel)
+
+Skip this entire phase if `--skip-polish` is set or `polish_queue` is empty.
+
+For each PR in `polish_queue[]`, dispatch a polymorphic agent that:
+1. Creates a temporary worktree for the PR branch
+2. Runs `pr-polish`
+3. Checks if the PR is now merge-ready
+4. If yes: enables GitHub auto-merge
+5. Cleans up the worktree
+
+Run up to `--max-parallel-polish` concurrently (default 2 — pr-polish is resource-intensive).
+
+```python
+polish_results = []
+
+for pr in polish_queue:
+    base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    repo_full = f"{base_owner}/{base_repo_name}"
+    repo_name = base_repo_name  # short name, e.g. "omniclaude"
+    branch = pr["headRefName"]
+    pr_number = pr["number"]
+    pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr_number)
+    omni_home = os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home"))
+    worktree_base = os.environ.get("OMNI_WORKTREES", str(Path(omni_home).parent / "omni_worktrees"))
+    worktree_path = f"{worktree_base}/merge-sweep-{run_id}/{repo_name}-pr-{pr_number}"
+
+    acquired = registry.acquire(pr_key, run_id=run_id, action="polish", dry_run=dry_run)
+    if not acquired:
+        polish_results.append({
+            "pr_key": pr_key, "repo": repo_full, "pr": pr_number,
+            "result": "skipped", "skip_reason": "active_claim"
+        })
+        continue
+
+    try:
+        Task(
+          subagent_type="onex:polymorphic-agent",
+          description=f"Polish PR {repo_full}#{pr_number}",
+          prompt=f"""Polish PR #{pr_number} in {repo_full} to resolve its blocking issues.
+
+The PR has the following blocking state:
+  Branch: {branch}
+  Mergeable: {pr['mergeable']}
+  CI: {'failing' if not is_green(pr) else 'passing'}
+  Review: {pr.get('reviewDecision', 'none')}
+
+Steps:
+
+1. Fetch the branch and create a worktree:
+   ```bash
+   git -C {omni_home}/{repo_name} fetch origin {branch}
+   git -C {omni_home}/{repo_name} worktree add \
+     {worktree_path} {branch}
+   cd {worktree_path}
+   ```
+
+2. Run pr-polish from inside the worktree:
+   ```
+   Skill(skill="onex:pr-polish", args="{pr_number} --required-clean-runs {polish_clean_runs}")
+   ```
+   pr-polish will resolve conflicts, fix CI failures and review comments, run local-review loop, and push.
+
+3. After pr-polish completes, check if the PR is now merge-ready:
+   ```bash
+   gh pr view {pr_number} --repo {repo_full} --json mergeable,statusCheckRollup,reviewDecision
+   ```
+   Parse the result using is_merge_ready() logic (mergeable=MERGEABLE, all required CI green, reviewDecision in APPROVED/None).
+
+4. If merge-ready: enable GitHub auto-merge:
+   ```bash
+   gh pr merge {pr_number} --repo {repo_full} --{merge_method} --auto
+   ```
+
+5. Clean up the worktree:
+   ```bash
+   git -C {omni_home}/{repo_name} worktree remove {worktree_path} --force
+   ```
+
+Return a JSON result:
+{{
+  "pr": {pr_number},
+  "repo": "{repo_full}",
+  "polish_status": "DONE | PARTIAL | BLOCKED",
+  "auto_merge_set": true | false,
+  "error": null | "<error message>"
+}}"""
+        )
+    finally:
+        registry.release(pr_key, run_id=run_id, dry_run=dry_run)
 ```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="Merge PR <repo>#<pr_number>",
-  prompt="Merge PR #<pr_number> in repo <repo>.
 
-    Use the auto-merge skill:
-    Skill(skill='onex:auto-merge', args={
-      pr: <pr_number>,
-      auto_merge: true,
-      strategy: '<merge_method>'
-    })
-
-    The gate has already been approved. Do NOT post another gate.
-    The gate_token for audit is: <gate_token>
-
-    Return the merge result: merged | failed, and any error message."
-)
-```
-
-Wait for all merge agents to complete. Collect results.
+Wait for all polish agents to complete. Collect results into `polish_results[]`.
 
 ---
 
 ## Step 8: Collect Results
 
-Build `details[]` from merge agent results:
-
 ```python
-merged_count = sum(1 for d in details if d["result"] == "merged")
-failed_count = sum(1 for d in details if d["result"] == "failed")
-skipped_count = len(skipped_unknown) + len(skipped_filtered) + len(excluded_prs) + len(hard_failed_claims)
+auto_merge_set_count = sum(1 for r in auto_merge_results if r["result"] == "auto_merge_set")
+auto_merge_failed_count = sum(1 for r in auto_merge_results if r["result"] == "failed")
 
-if merged_count == len(approved_candidates) and failed_count == 0:
-    status = "merged"
-elif merged_count > 0 and failed_count > 0:
+polish_done_count = sum(1 for r in polish_results if r.get("polish_status") == "DONE")
+polish_partial_count = sum(1 for r in polish_results if r.get("polish_status") == "PARTIAL")
+polish_blocked_count = sum(1 for r in polish_results if r.get("polish_status") == "BLOCKED")
+polish_auto_merged_count = sum(1 for r in polish_results if r.get("auto_merge_set"))
+
+skipped_count = (
+    len(skipped_unknown) + len(skipped_filtered)
+    + sum(1 for r in polish_results if r.get("result") == "skipped")
+    + len(hard_failed_claims)
+)
+
+total_auto_merge_set = auto_merge_set_count + polish_auto_merged_count
+total_failed = auto_merge_failed_count + polish_blocked_count
+
+if total_auto_merge_set > 0 and total_failed == 0:
+    status = "queued"
+elif total_auto_merge_set > 0 and total_failed > 0:
     status = "partial"
-elif merged_count == 0 and failed_count > 0:
+elif total_auto_merge_set == 0 and total_failed > 0:
     status = "error"
 else:
-    status = "merged"  # edge case: 0 approved candidates
+    status = "nothing_to_merge"  # all candidates were skipped or blocked
 ```
 
 ---
 
 ## Step 9: Post Sweep Summary to Slack
 
-After collecting results, post a summary message to the Slack channel.
-This is informational — no polling, no gate. Best-effort: if posting fails, log warning and continue.
+Post a LOW_RISK informational summary. No polling — this is notification only.
+Best-effort: if posting fails, log warning and continue.
+
+```bash
+source ~/.omnibase/.env 2>/dev/null || true
+# If Slack credentials missing, skip notification (not a hard failure)
+```
 
 ```python
 summary_lines = [
     f"*[merge-sweep]* run {run_id} complete\n",
-    f"Results:  Merged {merged_count} | Failed {failed_count} | Skipped {skipped_count}",
+    f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {auto_merge_failed_count} failed",
+    f"Track B (pr-polish):           {polish_done_count} fixed → {polish_auto_merged_count} queued | "
+    f"{polish_partial_count} partial | {polish_blocked_count} blocked",
 ]
 
 if filters.get("since") or filters.get("labels") or filters.get("authors"):
@@ -467,28 +496,34 @@ if filters.get("since") or filters.get("labels") or filters.get("authors"):
         filter_parts.append(f"authors={','.join(filters['authors'])}")
     summary_lines.append(f"Filters: {' | '.join(filter_parts)}")
 
-merged_prs = [d for d in details if d["result"] == "merged"]
-if merged_prs:
-    summary_lines.append("\nMerged:")
-    for d in merged_prs:
-        summary_lines.append(f"  • {d['repo']}#{d['pr']} — {d.get('title', '')}")
+queued_prs = [r for r in auto_merge_results + polish_results if r.get("result") == "auto_merge_set" or r.get("auto_merge_set")]
+if queued_prs:
+    summary_lines.append("\nAuto-merge enabled:")
+    for r in queued_prs:
+        origin = " (after polish)" if r.get("auto_merge_set") and r not in auto_merge_results else ""
+        summary_lines.append(f"  • {r['repo']}#{r['pr']}{origin}")
 
-failed_prs = [d for d in details if d["result"] == "failed"]
-if failed_prs:
-    summary_lines.append("\nFailed (manual intervention needed):")
-    for d in failed_prs:
-        summary_lines.append(f"  • {d['repo']}#{d['pr']} — {d.get('error', 'unknown error')}")
+blocked_prs = [r for r in polish_results if r.get("polish_status") == "BLOCKED"]
+if blocked_prs:
+    summary_lines.append("\nBlocked (manual intervention needed):")
+    for r in blocked_prs:
+        summary_lines.append(f"  • {r['repo']}#{r['pr']} — {r.get('error', 'polish blocked')}")
 
-summary_lines.append(f"\nStatus: {status} | Gate: {gate_token}")
+failed_auto = [r for r in auto_merge_results if r["result"] == "failed"]
+if failed_auto:
+    summary_lines.append("\nFailed to enable auto-merge:")
+    for r in failed_auto:
+        summary_lines.append(f"  • {r['repo']}#{r['pr']} — {r.get('error', 'unknown error')}")
+
+summary_lines.append(f"\nStatus: {status} | Run: {run_id}")
 
 summary_message = "\n".join(summary_lines)
 
-# Post summary (best-effort)
 try:
     post_to_slack(summary_message, channel=SLACK_CHANNEL_ID, bot_token=SLACK_BOT_TOKEN)
 except Exception as e:
     print(f"WARNING: Failed to post summary to Slack: {e}", file=sys.stderr)
-    # Do NOT fail the skill result
+    # Do NOT fail the skill result — summary is best-effort
 ```
 
 ---
@@ -500,7 +535,6 @@ except Exception as e:
   "skill": "merge-sweep",
   "status": "<status>",
   "run_id": "<run_id>",
-  "gate_token": "<gate_token>",
   "filters": {
     "since": "<since_str or null>",
     "labels": ["<label1>"],
@@ -508,7 +542,11 @@ except Exception as e:
     "repos": ["<repo1>"]
   },
   "candidates_found": <N>,
-  "merged": <count>,
+  "polish_queue_found": <M>,
+  "auto_merge_set": <count>,
+  "polished": <polish_done_count>,
+  "polish_partial": <polish_partial_count>,
+  "polish_blocked": <polish_blocked_count>,
   "skipped": <count>,
   "failed": <count>,
   "details": [
@@ -516,9 +554,10 @@ except Exception as e:
       "repo": "<repo>",
       "pr": <pr_number>,
       "head_sha": "<sha>",
-      "result": "merged | skipped | failed",
+      "track": "A | B",
+      "result": "auto_merge_set | polished_and_queued | polished_partial | blocked | failed | skipped",
       "merge_method": "<method>",
-      "skip_reason": null | "UNKNOWN_state" | "gate_excluded" | "since_filter" | "label_filter" | "active_claim"
+      "skip_reason": null | "UNKNOWN_state" | "since_filter" | "label_filter" | "active_claim" | "draft"
     }
   ]
 }
@@ -530,11 +569,13 @@ Print summary:
 
 ```
 Merge Sweep Complete — run <run_id>
-  Merged:   <N> PRs
-  Skipped:  <M> PRs
-  Failed:   <K> PRs
-  Status:   <status>
-  Gate:     <gate_token>
+
+  Track A (auto-merge enabled):  <auto_merge_set_count> queued | <auto_merge_failed_count> failed
+  Track B (pr-polish):           <polish_done_count> fixed → <polish_auto_merged_count> queued
+                                 <polish_partial_count> partial | <polish_blocked_count> blocked
+  Skipped:                       <skipped_count> PRs
+
+  Status: <status>
 ```
 
 ---
@@ -543,36 +584,35 @@ Merge Sweep Complete — run <run_id>
 
 | Situation | Action |
 |-----------|--------|
-| `--gate-attestation` with invalid token format | Immediate error in Step 1, do not proceed |
 | `--since` parse failure | Immediate error in Step 1, show format hint |
 | `gh pr list` network failure for a repo | Log warning, skip repo, continue others |
 | All repos fail to scan | Return `status: error` |
-| Individual PR merge fails | Record `result: failed` in details, continue others |
-| `auto-merge` agent task failure | Record `result: failed`, continue others |
-| Slack unavailable for gate | Return `status: error` — never merge without gate confirmation |
-| Gate timeout (no reply) | Return `status: gate_rejected` — silence never advances HIGH_RISK |
-| Summary post fails | Log warning only; do NOT fail skill result |
+| `gh pr merge --auto` fails for a PR | Record `result: failed` in details, continue others |
+| pr-polish BLOCKED (conflicts unresolvable) | Record `result: blocked`, skip auto-merge for that PR |
+| pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`, skip auto-merge |
+| Worktree creation fails | Record `result: failed`, release claim, continue others |
+| Worktree cleanup fails | Log warning, do NOT fail the skill result |
+| Slack summary post fails | Log warning only; do NOT fail skill result |
+| Claim race condition | Record `result: failed, error: claim_race_condition` |
 
 ---
 
 ## Composability
 
-This skill is designed to be called from `pr-queue-pipeline` in bypass mode:
+This skill is designed to be called from `pr-queue-pipeline`:
 
 ```
 # From pr-queue-pipeline Phase 3:
 Skill(skill="onex:merge-sweep", args={
   repos: <scope>,
-  gate_attestation: <pipeline_gate_token>,
   max_total_merges: <cap>,
   max_parallel_prs: <cap>,
+  max_parallel_polish: <cap>,
   merge_method: <method>,
   since: <date>,                  # optional date filter
   label: <label>,                 # optional label filter
   run_id: <pipeline_run_id>,      # claim registry ownership
-  dry_run: <dry_run>              # propagates to claim registry (zero writes)
+  dry_run: <dry_run>,             # propagates to claim registry (zero writes)
+  skip_polish: false              # set true to skip Track B in pipeline context if fix-prs already ran
 })
 ```
-
-When called with `--gate-attestation=<token>`, the skill skips Step 6 entirely and proceeds
-directly to Step 7. The provided `gate_token` appears in the `ModelSkillResult` for audit.

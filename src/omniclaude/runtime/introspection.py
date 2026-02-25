@@ -66,7 +66,7 @@ _NODE_ID_SUBDOMAIN = "skill"
 # ---------------------------------------------------------------------------
 
 
-class _SkillNodeProxy(MixinNodeIntrospection):  # type: ignore[misc]
+class _SkillNodeProxy(MixinNodeIntrospection):
     """Lightweight proxy that publishes introspection on behalf of a skill node.
 
     Each skill node gets its own proxy instance with a deterministic node_id.

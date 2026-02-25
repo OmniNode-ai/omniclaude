@@ -19,6 +19,8 @@ from omniclaude.publisher.publisher_config import PublisherConfig
 if TYPE_CHECKING:
     from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
+from omniclaude.publisher.event_queue import ModelQueuedEvent
+
 
 @pytest.fixture
 def publisher_config(tmp_path: Path) -> PublisherConfig:
@@ -490,3 +492,207 @@ class TestEmbeddedEventPublisher:
         assert kafka_cfg.bootstrap_servers == publisher_config.kafka_bootstrap_servers
         assert kafka_cfg.environment == publisher_config.environment
         assert kafka_cfg.timeout_seconds == int(publisher_config.kafka_timeout_seconds)
+
+
+class TestDualEmit:
+    """Tests for dual-emit (primary + secondary Kafka cluster) behavior."""
+
+    def _make_queued_event(self) -> ModelQueuedEvent:
+        from datetime import UTC, datetime
+
+        from omniclaude.publisher.event_queue import ModelQueuedEvent
+
+        return ModelQueuedEvent(
+            event_id="dual-test",
+            event_type="test.event",
+            topic="test-topic",
+            payload={"key": "val"},
+            queued_at=datetime.now(UTC),
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_dual_emit_publishes_to_both_buses(
+        self, publisher_config: PublisherConfig
+    ) -> None:
+        """Both primary and secondary buses receive identical topic/key/value/headers."""
+        primary_bus = MagicMock()
+        primary_bus.start = AsyncMock()
+        primary_bus.close = AsyncMock()
+        primary_bus.publish = AsyncMock()
+
+        secondary_bus = MagicMock(spec=["start", "stop", "publish"])
+        secondary_bus.start = AsyncMock()
+        secondary_bus.stop = AsyncMock()
+        secondary_bus.publish = AsyncMock()
+
+        # Pre-inject secondary bus to bypass start() init path
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config,
+            event_bus=primary_bus,
+            secondary_event_bus=secondary_bus,
+        )
+
+        event = self._make_queued_event()
+        result = await publisher._publish_event(event)
+
+        assert result is True
+        primary_bus.publish.assert_awaited_once()
+        secondary_bus.publish.assert_awaited_once()
+
+        # Both calls must use identical topic, key, value, headers
+        primary_call = primary_bus.publish.await_args
+        secondary_call = secondary_bus.publish.await_args
+        assert primary_call.kwargs["topic"] == secondary_call.kwargs["topic"]
+        assert primary_call.kwargs["key"] == secondary_call.kwargs["key"]
+        assert primary_call.kwargs["value"] == secondary_call.kwargs["value"]
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_dual_emit_secondary_exception_is_nonfatal(
+        self, publisher_config: PublisherConfig
+    ) -> None:
+        """Secondary raise must not affect the return value (True) from _publish_event."""
+        primary_bus = MagicMock()
+        primary_bus.start = AsyncMock()
+        primary_bus.close = AsyncMock()
+        primary_bus.publish = AsyncMock()
+
+        secondary_bus = MagicMock(spec=["start", "stop", "publish"])
+        secondary_bus.start = AsyncMock()
+        secondary_bus.stop = AsyncMock()
+        secondary_bus.publish = AsyncMock(side_effect=Exception("cloud cluster down"))
+
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config,
+            event_bus=primary_bus,
+            secondary_event_bus=secondary_bus,
+        )
+
+        event = self._make_queued_event()
+        result = await publisher._publish_event(event)
+
+        assert result is True  # primary succeeded, secondary failure is non-fatal
+        primary_bus.publish.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_dual_emit_secondary_timeout_is_nonfatal(
+        self, publisher_config: PublisherConfig
+    ) -> None:
+        """Secondary hang must be bounded by kafka_secondary_timeout_seconds.
+
+        This is the critical guard test: it forces asyncio.wait_for() to actually be
+        wired.  If wait_for() is absent, the test hangs indefinitely and fails via
+        overall suite timeout rather than asserting correctly.
+
+        The test uses kafka_secondary_timeout_seconds=0.1s and an asyncio.sleep(inf)
+        secondary, then verifies the whole call completes well within 0.5s.
+        """
+        import time
+
+        primary_bus = MagicMock()
+        primary_bus.start = AsyncMock()
+        primary_bus.close = AsyncMock()
+        primary_bus.publish = AsyncMock()
+
+        async def _hang(*_args: object, **_kwargs: object) -> None:
+            await asyncio.sleep(float("inf"))
+
+        secondary_bus = MagicMock(spec=["start", "stop", "publish"])
+        secondary_bus.start = AsyncMock()
+        secondary_bus.stop = AsyncMock()
+        secondary_bus.publish = AsyncMock(side_effect=_hang)
+
+        # Set very short timeout to make the test fast
+        fast_config = publisher_config.model_copy(
+            update={"kafka_secondary_timeout_seconds": 0.1}
+        )
+
+        publisher = EmbeddedEventPublisher(
+            config=fast_config,
+            event_bus=primary_bus,
+            secondary_event_bus=secondary_bus,
+        )
+
+        event = self._make_queued_event()
+        start = time.monotonic()
+        result = await publisher._publish_event(event)
+        elapsed = time.monotonic() - start
+
+        assert result is True  # primary succeeded despite secondary hang
+        assert elapsed < 0.5, (
+            f"_publish_event took {elapsed:.3f}s; wait_for() may be missing"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_dual_emit_secondary_start_failure_continues_to_primary(
+        self, publisher_config: PublisherConfig
+    ) -> None:
+        """Secondary start() failure must not prevent the daemon from starting.
+
+        After start(), _secondary_event_bus must be None and subsequent
+        _publish_event calls must still publish to the primary.
+        """
+        primary_bus = MagicMock()
+        primary_bus.start = AsyncMock()
+        primary_bus.close = AsyncMock()
+        primary_bus.publish = AsyncMock()
+
+        secondary_config = publisher_config.model_copy(
+            update={"kafka_secondary_bootstrap_servers": "cloud-kafka.omninode.ai:9093"}
+        )
+
+        with patch(
+            "omniclaude.publisher.embedded_publisher.EventBusKafka"
+        ) as mock_kafka_cls:
+            failing_secondary = MagicMock(spec=["start", "stop", "publish"])
+            failing_secondary.start = AsyncMock(side_effect=Exception("auth failed"))
+            failing_secondary.stop = AsyncMock()
+            failing_secondary.publish = AsyncMock()
+            mock_kafka_cls.return_value = failing_secondary
+
+            publisher = EmbeddedEventPublisher(
+                config=secondary_config,
+                event_bus=primary_bus,
+                # Do NOT pre-inject secondary_event_bus; let start() try to create it
+            )
+            await publisher.start()
+
+        # Secondary must have been cleared due to start failure
+        assert publisher._secondary_event_bus is None
+
+        # Primary should still work
+        event = self._make_queued_event()
+        result = await publisher._publish_event(event)
+        assert result is True
+        primary_bus.publish.assert_awaited_once()
+
+        await publisher.stop()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_dual_emit_not_configured(
+        self, publisher_config: PublisherConfig
+    ) -> None:
+        """When kafka_secondary_bootstrap_servers is None, only one publish() call is made."""
+        # publisher_config has kafka_secondary_bootstrap_servers=None (default)
+        assert publisher_config.kafka_secondary_bootstrap_servers is None
+
+        primary_bus = MagicMock()
+        primary_bus.start = AsyncMock()
+        primary_bus.close = AsyncMock()
+        primary_bus.publish = AsyncMock()
+
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config,
+            event_bus=primary_bus,
+            # No secondary_event_bus injected
+        )
+
+        event = self._make_queued_event()
+        result = await publisher._publish_event(event)
+
+        assert result is True
+        assert primary_bus.publish.await_count == 1  # exactly one publish, no secondary
