@@ -13,10 +13,14 @@ Related:
     - OMN-2360: Quirks Detector epic
 """
 
+from omniclaude.quirks.classifier import NodeQuirkClassifierCompute
 from omniclaude.quirks.enums import QuirkStage, QuirkType
+from omniclaude.quirks.extractor import NodeQuirkSignalExtractorEffect
 from omniclaude.quirks.models import QuirkFinding, QuirkSignal
 
 __all__ = [
+    "NodeQuirkClassifierCompute",
+    "NodeQuirkSignalExtractorEffect",
     "QuirkFinding",
     "QuirkSignal",
     "QuirkStage",

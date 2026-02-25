@@ -199,6 +199,15 @@ class TopicBase(StrEnum):
     # ==========================================================================
     AGENT_TRACE_FIX_TRANSITION = "onex.evt.omniclaude.fix-transition.v1"
 
+    # ==========================================================================
+    # Quirks Detector topics (OMN-2556)
+    # ==========================================================================
+    QUIRK_SIGNAL_DETECTED = "onex.evt.omniclaude.quirk-signal-detected.v1"
+    """Raw QuirkSignal emitted by NodeQuirkSignalExtractorEffect after detection."""
+
+    QUIRK_FINDING_PRODUCED = "onex.evt.omniclaude.quirk-finding-produced.v1"
+    """QuirkFinding emitted by NodeQuirkClassifierCompute after threshold is met."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
