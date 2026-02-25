@@ -197,11 +197,17 @@ class TestSkillNodeConsumerGroups:
         "NodeLinearEffect",
         "NodeTicketingEffect",
         "NodeLocalCodingOrchestrator",
+        # OMN-2778: skill-execution-log projection consumer
+        "SkillExecutionLogSubscriber",
     }
 
     @pytest.mark.unit
     def test_all_6_skill_nodes_have_group_id(self) -> None:
-        """F5.4: All 6 skill nodes from OMN-2593 must have consumer group IDs."""
+        """F5.4: All known consumer nodes must have consumer group IDs.
+
+        Original set: 6 skill nodes from OMN-2593.
+        OMN-2778 adds SkillExecutionLogSubscriber (7th entry).
+        """
         assert set(SKILL_NODE_CONSUMER_GROUPS.keys()) == self._EXPECTED_NODES
 
     @pytest.mark.unit
