@@ -129,7 +129,7 @@ def _extract_skill_id_from_name(contract_name: str) -> str:
 
 def load_skill_contracts(
     contracts_root: Path,
-) -> dict[str, ModelSkillNodeContract]:
+) -> tuple[dict[str, ModelSkillNodeContract], int]:
     """Load and parse all skill node contract.yaml files.
 
     Scans ``contracts_root`` for directories matching ``node_skill_*`` and
@@ -139,7 +139,7 @@ def load_skill_contracts(
         contracts_root: Root directory containing node directories.
 
     Returns:
-        Mapping of skill_id (topic segment) to parsed contract.
+        Tuple of (mapping of skill_id to parsed contract, total files found).
 
     Raises:
         ContractLoadError: If parse rate falls below 80%.
@@ -148,7 +148,7 @@ def load_skill_contracts(
     total = len(contract_files)
     if total == 0:
         logger.warning("No skill node contracts found in %s", contracts_root)
-        return {}
+        return {}, 0
 
     contracts: dict[str, ModelSkillNodeContract] = {}
     errors: list[str] = []
@@ -179,7 +179,7 @@ def load_skill_contracts(
             len(errors),
         )
 
-    return contracts
+    return contracts, total
 
 
 # ---------------------------------------------------------------------------
@@ -333,14 +333,21 @@ class SkillCommandDispatcher:
                     ModelClaudeCodeSessionRequest,
                 )
 
-                assert self._claude_code_backend is not None
+                # Narrowing: parent scope returns None when backend is None
+                cc_backend = self._claude_code_backend
+                if (
+                    cc_backend is None
+                ):  # pragma: no cover — unreachable after parent guard
+                    raise RuntimeError(
+                        "claude_code backend disappeared after null check"
+                    )
                 cc_request = ModelClaudeCodeSessionRequest(
                     operation=ClaudeCodeSessionOperation.SESSION_QUERY,
                     skill_name=skill_id,
                     prompt=prompt,
                     correlation_id=correlation_id,
                 )
-                result = await self._claude_code_backend.session_query(cc_request)
+                result = await cc_backend.session_query(cc_request)
                 return result.output or ""
 
         elif backend_type == "local_llm":
@@ -367,14 +374,19 @@ class SkillCommandDispatcher:
                     ModelLocalLlmInferenceRequest,
                 )
 
-                assert self._vllm_backend is not None
+                # Narrowing: parent scope returns None when backend is None
+                vllm_backend = self._vllm_backend
+                if (
+                    vllm_backend is None
+                ):  # pragma: no cover — unreachable after parent guard
+                    raise RuntimeError("vllm backend disappeared after null check")
                 llm_request = ModelLocalLlmInferenceRequest(
                     skill_name=skill_id,
                     prompt=prompt,
                     model_purpose=model_purpose,
                     correlation_id=correlation_id,
                 )
-                result = await self._vllm_backend.infer(llm_request)
+                result = await vllm_backend.infer(llm_request)
                 return result.output or ""
 
         # Build skill request from envelope payload
@@ -613,11 +625,12 @@ async def wire_skill_dispatchers(
         )
 
     # Load contracts
-    contracts = load_skill_contracts(root)
+    contracts, contracts_total = load_skill_contracts(root)
 
     logger.info(
-        "Loaded %d skill contracts (correlation_id=%s)",
+        "Loaded %d/%d skill contracts (correlation_id=%s)",
         len(contracts),
+        contracts_total,
         cid,
     )
 
@@ -704,6 +717,6 @@ async def wire_skill_dispatchers(
         dispatchers=[_DISPATCHER_ID],
         routes=[_ROUTE_ID],
         contracts_loaded=len(contracts),
-        contracts_total=len(list(root.glob("node_skill_*/contract.yaml"))),
+        contracts_total=contracts_total,
         backends=backends_available,
     )

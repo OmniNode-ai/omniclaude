@@ -248,9 +248,10 @@ class TestContractLoading:
         }
         (node_dir / "contract.yaml").write_text(yaml.dump(contract_data))
 
-        contracts = load_skill_contracts(tmp_path)
+        contracts, total = load_skill_contracts(tmp_path)
         assert "commit" in contracts
         assert contracts["commit"].execution.backend == "claude_code"
+        assert total == 1
 
     def test_threshold_failure_raises(self, tmp_path: Path) -> None:
         """Parse rate below 80% raises ContractLoadError."""
@@ -278,8 +279,9 @@ class TestContractLoading:
 
     def test_empty_directory_returns_empty(self, tmp_path: Path) -> None:
         """No skill node directories returns empty dict."""
-        contracts = load_skill_contracts(tmp_path)
+        contracts, total = load_skill_contracts(tmp_path)
         assert contracts == {}
+        assert total == 0
 
 
 # ---------------------------------------------------------------------------
@@ -518,5 +520,9 @@ class TestPluginWireDispatchers:
             mp.delenv("OMNICLAUDE_CONTRACTS_ROOT", raising=False)
             result = await plugin.wire_dispatchers(config)
 
-        # Should be skipped because no contracts root
-        assert not result.success or (result.success and result.resources_created == [])
+        # Should be skipped because no contracts root set
+        assert result.resources_created == []
+        assert (
+            "skipped" in (result.message or "").lower()
+            or "no skill dispatchers" in (result.message or "").lower()
+        )
