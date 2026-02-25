@@ -43,8 +43,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
 import sys
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from pattern_types import (
@@ -56,6 +60,80 @@ from pattern_types import (
 
 if TYPE_CHECKING:
     from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+
+# ---------------------------------------------------------------------------
+# Tier banner helpers (OMN-2782)
+# ---------------------------------------------------------------------------
+
+_TIER_LABELS: dict[str, str] = {
+    "standalone": "STANDALONE (73 skills)",
+    "event_bus": "EVENT_BUS (routing + telemetry)",
+    "full_onex": "FULL_ONEX (enrichment + memory)",
+}
+
+
+def _build_tier_banner() -> str:
+    """Read capabilities file and return a tier banner string.
+
+    If the capabilities file is missing or stale, spawns a fresh background
+    probe and returns an UNKNOWN banner.
+
+    Returns:
+        A single-line banner string, e.g.
+        "─── OmniClaude: STANDALONE (73 skills) (probe: 42s ago) ───"
+    """
+    try:
+        from capability_probe import read_capabilities  # type: ignore[import-untyped]
+
+        caps = read_capabilities()
+    except Exception:
+        caps = None
+
+    if caps is None:
+        # Stale or missing: spawn a fresh probe asynchronously
+        _spawn_probe_background()
+        return "─── OmniClaude: UNKNOWN (re-probing...) ───"
+
+    tier = str(caps.get("tier", "unknown"))
+    label = _TIER_LABELS.get(tier, tier.upper())
+    probed_at_str = caps.get("probed_at")
+    if isinstance(probed_at_str, str):
+        try:
+            probed_at = datetime.fromisoformat(probed_at_str)
+            if probed_at.tzinfo is None:
+                probed_at = probed_at.replace(tzinfo=UTC)
+            age_secs = int((datetime.now(tz=UTC) - probed_at).total_seconds())
+            age_str = f"{age_secs}s ago"
+        except Exception:
+            age_str = "?"
+    else:
+        age_str = "?"
+
+    return f"─── OmniClaude: {label} (probe: {age_str}) ───"
+
+
+def _spawn_probe_background() -> None:
+    """Spawn capability_probe.py in the background without blocking."""
+    try:
+        probe_script = Path(__file__).parent / "capability_probe.py"
+        if probe_script.is_file():
+            subprocess.Popen(  # noqa: S603
+                [
+                    sys.executable,
+                    str(probe_script),
+                    "--kafka",
+                    os.getenv("KAFKA_BOOTSTRAP_SERVERS", ""),
+                    "--intelligence",
+                    os.getenv("INTELLIGENCE_SERVICE_URL", "http://localhost:8053"),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+    except Exception:
+        pass  # Never block the hook on probe failures
+
 
 # Module-level cache for context mapping (lazily initialized)
 _CONTEXT_MAPPING: dict[str, EnumInjectionContext] | None = None
@@ -200,10 +278,19 @@ def main() -> None:
         # Calculate elapsed time
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
+        # Prepend tier banner (OMN-2782)
+        tier_banner = _build_tier_banner()
+
         # Prepare patterns_context with optional footer
         patterns_context = result.context_markdown
         if include_footer and result.injection_id and patterns_context:
             patterns_context += f"\n\n<!-- injection_id: {result.injection_id} -->"
+
+        # Prepend tier banner to context
+        if patterns_context:
+            patterns_context = f"{tier_banner}\n\n{patterns_context}"
+        else:
+            patterns_context = tier_banner
 
         # Build output (use handler timing if available)
         output = InjectorOutput(
