@@ -75,5 +75,7 @@ else:
 
 1. **FULL_ONEX**: Always prefer node_git_effect for type safety and structured output
 2. **STANDALONE/EVENT_BUS**: Use `_bin/` scripts -- they provide the same data via `gh` CLI
-3. **Exception**: `gh pr merge` is always called directly (thin mutation, no parsing needed)
+3. **Merge exception**: The PR merge mutation is always a direct thin CLI call (see
+   `_lib/pr-safety/helpers.md` for the canonical merge helper). This is an explicit
+   exception -- merge is a single mutation with no output parsing.
 4. **Never mix**: A single skill invocation uses one tier path throughout, not a mix
