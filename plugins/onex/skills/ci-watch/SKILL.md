@@ -225,8 +225,67 @@ Task(
 )
 ```
 
+## Push-Based Notification Support (OMN-2826)
+
+ci-watch supports two notification modes, selected automatically based on infrastructure
+availability:
+
+### EVENT_BUS+ Mode (preferred)
+
+When Kafka and Valkey are available (`ENABLE_REAL_TIME_EVENTS=true`):
+
+1. Register watch: agent registers interest in `(repo, pr_number)` via Valkey watch registry
+2. Wait for inbox: block until a `pr-status` event arrives in the agent's inbox topic
+   (`onex.evt.omniclaude.agent-inbox.{agent_id}.v1`)
+3. Process result: extract conclusion from event payload, proceed with fix or exit
+
+```python
+from omniclaude.services.inbox_wait import register_watch, wait_for_pr_status
+
+# Register watch for this PR
+await register_watch(agent_id=agent_id, repo=repo, pr_number=pr_number)
+
+# Wait for notification (replaces gh run watch polling)
+result = wait_for_pr_status(
+    repo=repo,
+    pr_number=pr_number,
+    run_id=run_id,
+    agent_id=agent_id,
+    timeout_seconds=timeout_minutes * 60,
+)
+```
+
+### STANDALONE Mode (fallback)
+
+When Kafka/Valkey are unavailable:
+
+1. Spawn `gh run watch {run_id} --exit-status` as background process
+2. Wait for result in file-based inbox (`~/.claude/pr-inbox/`)
+3. Max 5 concurrent watchers (`OMNICLAUDE_MAX_WATCHERS=5`)
+
+```python
+from omniclaude.services.inbox_wait import wait_for_pr_status
+
+# Unified interface -- automatically falls back to STANDALONE
+result = wait_for_pr_status(
+    repo=repo,
+    pr_number=pr_number,
+    run_id=run_id,
+    timeout_seconds=timeout_minutes * 60,
+)
+```
+
+### Migration Notes
+
+The original polling loop (`gh run watch` inline) is preserved as the STANDALONE fallback.
+The `wait_for_pr_status()` function provides a unified interface that works in both modes.
+No changes needed for existing callers -- the function handles mode detection internally.
+
 ## See Also
 
 - `ticket-pipeline` skill (Phase 4 dispatches ci-watch as a background agent on CI failure)
 - `pr-watch` skill (runs after Phase 4 in ticket-pipeline)
-- OMN-2523 — implementation ticket
+- `inbox_wait` module (`omniclaude.services.inbox_wait`) — unified wait interface
+- `node_github_pr_watcher_effect` — ONEX node for EVENT_BUS+ mode routing
+- OMN-2523 — ci-watch implementation ticket
+- OMN-2826 — push-based notifications ticket
