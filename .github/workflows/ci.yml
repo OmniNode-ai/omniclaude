@@ -97,6 +97,7 @@ jobs:
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
             --exclude 'https://www\.gnu\.org'
+            --exclude 'https://www\.contributor-covenant\.org'
             '**/*.md'
           fail: true
 
@@ -943,6 +944,7 @@ jobs:
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v6
         if: always()
+        continue-on-error: true
         with:
           name: coverage-test-group-${{ matrix.group }}
           path: .coverage.${{ matrix.group }}
@@ -951,6 +953,7 @@ jobs:
       - name: Upload test results
         uses: actions/upload-artifact@v6
         if: always()
+        continue-on-error: true
         with:
           name: test-results-${{ matrix.group }}
           path: junit-test-${{ matrix.group }}.xml
