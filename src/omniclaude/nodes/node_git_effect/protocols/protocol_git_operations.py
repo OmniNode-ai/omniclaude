@@ -28,6 +28,11 @@ class ProtocolGitOperations(Protocol):
         - pr_create operation -> pr_create()
         - pr_update operation -> pr_update()
         - pr_close operation -> pr_close()
+        - pr_merge operation -> pr_merge()
+        - pr_list operation -> pr_list()
+        - pr_view operation -> pr_view()
+        - tag_create operation -> tag_create()
+        - label_add operation -> label_add()
     """
 
     @property
@@ -98,6 +103,61 @@ class ProtocolGitOperations(Protocol):
 
         Args:
             request: Git request with pr_number populated.
+
+        Returns:
+            ModelGitResult with operation outcome.
+        """
+        ...
+
+    async def pr_merge(self, request: ModelGitRequest) -> ModelGitResult:
+        """Merge a PR. If request.use_merge_queue=True, adds to MQ instead.
+
+        Args:
+            request: Git request with pr_number populated.
+
+        Returns:
+            ModelGitResult with merge_state populated on success.
+        """
+        ...
+
+    async def pr_list(self, request: ModelGitRequest) -> ModelGitResult:
+        """List PRs. Returns structured JSON in result.pr_list.
+
+        Args:
+            request: Git request with json_fields populated.
+
+        Returns:
+            ModelGitResult with pr_list populated on success.
+        """
+        ...
+
+    async def pr_view(self, request: ModelGitRequest) -> ModelGitResult:
+        """View single PR. Returns structured JSON in result.pr_data.
+
+        Args:
+            request: Git request with pr_number and json_fields populated.
+
+        Returns:
+            ModelGitResult with pr_data populated on success.
+        """
+        ...
+
+    async def tag_create(self, request: ModelGitRequest) -> ModelGitResult:
+        """Create and push a git tag.
+
+        Args:
+            request: Git request with tag_name and optional tag_message populated.
+
+        Returns:
+            ModelGitResult with tag_name populated on success.
+        """
+        ...
+
+    async def label_add(self, request: ModelGitRequest) -> ModelGitResult:
+        """Add labels to a PR.
+
+        Args:
+            request: Git request with pr_number and labels populated.
 
         Returns:
             ModelGitResult with operation outcome.

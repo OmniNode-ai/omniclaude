@@ -16,6 +16,11 @@ The node exposes git operations:
 - pr_create: Create a pull request (includes mandatory ticket stamp block)
 - pr_update: Update an existing pull request
 - pr_close: Close a pull request
+- pr_merge: Merge a pull request (direct or via merge queue)
+- pr_list: List pull requests with structured JSON output
+- pr_view: View a single pull request with structured JSON output
+- tag_create: Create and push a git tag
+- label_add: Add labels to a pull request
 
 Handler resolution is performed via ServiceRegistry by protocol type
 (ProtocolGitOperations). The actual git backend implements this protocol.

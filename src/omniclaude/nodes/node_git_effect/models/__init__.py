@@ -8,18 +8,20 @@ This package contains Pydantic models for git operations:
 
 - ModelGitRequest: Input model for git operation requests
 - ModelGitResult: Output model for git operation results
+- ModelPRListFilters: Typed filter model for pr_list
 
 Model Ownership:
     These models are PRIVATE to omniclaude. If external repos need to
     import them, that is the signal to promote them to omnibase_core.
 """
 
-from .model_git_request import GitOperation, ModelGitRequest
+from .model_git_request import GitOperation, ModelGitRequest, ModelPRListFilters
 from .model_git_result import GitResultStatus, ModelGitResult
 
 __all__ = [
     "GitOperation",
     "ModelGitRequest",
+    "ModelPRListFilters",
     "GitResultStatus",
     "ModelGitResult",
 ]

@@ -19,9 +19,22 @@ _GIT_COMMAND_RE = re.compile(r"^\s*(git|gh)\b", re.IGNORECASE)
 
 
 def is_effect_file(path: Path) -> bool:
-    """Return True if the given file is an *effect* file."""
+    """Return True if the given file is an *effect* file.
+
+    A file is considered an effect file if:
+    - Its filename contains "effect", OR
+    - It resides inside a node directory whose name contains "effect"
+      (e.g., handlers/ inside node_git_effect/)
+    """
     name = path.name.lower()
-    return "effect" in name
+    if "effect" in name:
+        return True
+    # Check if any ancestor directory is a node_*effect* directory
+    for parent in path.parents:
+        parent_name = parent.name.lower()
+        if parent_name.startswith("node_") and "effect" in parent_name:
+            return True
+    return False
 
 
 def is_node_module(path: Path) -> bool:

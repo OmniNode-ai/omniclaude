@@ -20,12 +20,12 @@ node_name: node_git_effect
 
 contract_version:
   major: 1
-  minor: 0
+  minor: 1
   patch: 0
 
 node_version:
   major: 1
-  minor: 0
+  minor: 1
   patch: 0
 
 # Node type
@@ -34,9 +34,10 @@ node_type: EFFECT_GENERIC
 # Description
 description: >
   Capability-oriented effect node for git operations.
-  Handles branch management, commits, pushes, and pull request lifecycle
-  with pluggable backends. Every PR body created via this node contains
-  a mandatory ticket stamp block.
+  Handles branch management, commits, pushes, pull request lifecycle,
+  merge operations (direct and merge-queue), tag management, and label
+  management with pluggable backends. Every PR body created via this node
+  contains a mandatory ticket stamp block.
 
 # Strongly typed I/O models
 input_model:
@@ -51,7 +52,7 @@ output_model:
 capabilities:
   - name: git.operations
     description: All git and GitHub CLI operations
-    version: 1.0.0
+    version: 1.1.0
 
   - name: git.operations.branch_create
     description: Create a new git branch from base
@@ -71,6 +72,21 @@ capabilities:
   - name: git.operations.pr_close
     description: Close a pull request without merging
 
+  - name: git.operations.pr_merge
+    description: Merge a pull request (direct or via merge queue)
+
+  - name: git.operations.pr_list
+    description: List pull requests with structured JSON output
+
+  - name: git.operations.pr_view
+    description: View a single pull request with structured JSON output
+
+  - name: git.operations.tag_create
+    description: Create and push a git tag (lightweight or annotated)
+
+  - name: git.operations.label_add
+    description: Add labels to a pull request
+
 # IO operations
 io_operations:
   - operation: branch_create
@@ -79,6 +95,7 @@ io_operations:
     input_fields:
       - branch_name: str
       - base_ref: str
+      - working_directory: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -89,6 +106,7 @@ io_operations:
     protocol_method: commit
     input_fields:
       - message: str
+      - working_directory: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -100,6 +118,7 @@ io_operations:
     input_fields:
       - branch_name: str
       - force: bool
+      - working_directory: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -113,6 +132,8 @@ io_operations:
       - body: str
       - ticket_id: str
       - base_branch: str
+      - working_directory: str | None
+      - repo: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -125,6 +146,8 @@ io_operations:
       - pr_number: int
       - title: str | None
       - body: str | None
+      - working_directory: str | None
+      - repo: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -135,6 +158,73 @@ io_operations:
     protocol_method: pr_close
     input_fields:
       - pr_number: int
+      - working_directory: str | None
+      - repo: str | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelGitResult
+    idempotent: true
+
+  - operation: pr_merge
+    description: Merge a pull request or add to merge queue
+    protocol_method: pr_merge
+    input_fields:
+      - pr_number: int
+      - merge_method: str | None
+      - use_merge_queue: bool
+      - working_directory: str | None
+      - repo: str | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelGitResult
+    idempotent: false
+
+  - operation: pr_list
+    description: List pull requests with structured JSON output
+    protocol_method: pr_list
+    input_fields:
+      - json_fields: list[str]
+      - list_filters: ModelPRListFilters | None
+      - working_directory: str | None
+      - repo: str | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelGitResult
+    idempotent: true
+
+  - operation: pr_view
+    description: View a single pull request with structured JSON output
+    protocol_method: pr_view
+    input_fields:
+      - pr_number: int
+      - json_fields: list[str]
+      - working_directory: str | None
+      - repo: str | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelGitResult
+    idempotent: true
+
+  - operation: tag_create
+    description: Create and push a git tag
+    protocol_method: tag_create
+    input_fields:
+      - tag_name: str
+      - tag_message: str | None
+      - working_directory: str | None
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelGitResult
+    idempotent: false
+
+  - operation: label_add
+    description: Add labels to a pull request
+    protocol_method: label_add
+    input_fields:
+      - pr_number: int
+      - labels: list[str]
+      - working_directory: str | None
+      - repo: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelGitResult
@@ -155,6 +245,8 @@ handler_routing:
   backends:
     - backend: subprocess
       handler_key: subprocess
+      handler_class: HandlerGitSubprocess
+      handler_module: omniclaude.nodes.node_git_effect.handlers
 
 # Invariants
 invariants:
@@ -178,10 +270,13 @@ error_handling:
 metadata:
   author: OmniNode Team
   license: MIT
-  ticket: OMN-2593
-  maturity: stub
+  ticket: OMN-2817
+  maturity: alpha
   tags:
     - effect
     - git
     - github
     - pull-request
+    - merge-queue
+    - tag
+    - label

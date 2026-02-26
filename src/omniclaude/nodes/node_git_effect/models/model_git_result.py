@@ -10,6 +10,7 @@ Model ownership: PRIVATE to omniclaude.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -32,6 +33,11 @@ class ModelGitResult(BaseModel):
         error: Error detail when status is FAILED.
         pr_url: Pull request URL (populated for pr_create).
         pr_number: Pull request number (populated for pr_create).
+        pr_list: Parsed JSON list from pr_list operation.
+        pr_data: Parsed JSON dict from pr_view operation.
+        tag_name: Created tag name (populated for tag_create).
+        merge_state: After pr_merge: "merged" | "queued".
+        error_code: Machine-readable error classification.
         correlation_id: Correlation ID carried through from the request.
     """
 
@@ -60,6 +66,27 @@ class ModelGitResult(BaseModel):
     pr_number: int | None = Field(
         default=None,
         description="Pull request number (populated for pr_create)",
+    )
+    # New fields (OMN-2817 1c)
+    pr_list: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Parsed JSON list from pr_list operation",
+    )
+    pr_data: dict[str, Any] | None = Field(
+        default=None,
+        description="Parsed JSON dict from pr_view operation",
+    )
+    tag_name: str | None = Field(
+        default=None,
+        description="Created tag name (populated for tag_create)",
+    )
+    merge_state: str | None = Field(
+        default=None,
+        description="After pr_merge: merged | queued",
+    )
+    error_code: str | None = Field(
+        default=None,
+        description="Machine-readable error classification",
     )
     correlation_id: UUID | None = Field(
         default=None,

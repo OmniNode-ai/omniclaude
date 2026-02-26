@@ -16,6 +16,11 @@ Operation Mapping (from node contract io_operations):
     - pr_create operation -> ProtocolGitOperations.pr_create()
     - pr_update operation -> ProtocolGitOperations.pr_update()
     - pr_close operation -> ProtocolGitOperations.pr_close()
+    - pr_merge operation -> ProtocolGitOperations.pr_merge()
+    - pr_list operation -> ProtocolGitOperations.pr_list()
+    - pr_view operation -> ProtocolGitOperations.pr_view()
+    - tag_create operation -> ProtocolGitOperations.tag_create()
+    - label_add operation -> ProtocolGitOperations.label_add()
 
 Backend implementations must:
     1. Provide handler_key property identifying the backend type
