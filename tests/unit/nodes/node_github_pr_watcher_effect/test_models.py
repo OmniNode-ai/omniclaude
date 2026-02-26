@@ -75,7 +75,7 @@ class TestAgentInboxMessage:
         )
         assert msg.agent_id == "agent-001"
         assert msg.event_type == "pr-status"
-        assert msg.source_topic == "onex.evt.github.pr-status.v1"
+        assert msg.source_topic == "onex.evt.omniclaude.github-pr-status.v1"
         assert msg.payload == payload
         assert msg.schema_version == "1.0.0"
         assert msg.message_id  # Auto-generated

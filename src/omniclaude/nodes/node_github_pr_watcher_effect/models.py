@@ -104,7 +104,7 @@ class AgentInboxMessage(BaseModel):
         return cls(
             agent_id=agent_id,
             event_type="pr-status",
-            source_topic="onex.evt.github.pr-status.v1",
+            source_topic="onex.evt.omniclaude.github-pr-status.v1",
             payload=pr_status_payload,
             trace=trace or {},
         )

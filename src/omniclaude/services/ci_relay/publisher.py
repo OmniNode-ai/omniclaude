@@ -31,7 +31,8 @@ def _get_bootstrap_servers() -> str:
     Returns:
         Bootstrap server string. Defaults to localhost:29092 for development.
     """
-    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+    default = "192.168.86.200:29092"  # onex-allow-internal-ip
+    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", default)
 
 
 async def _get_producer() -> object:

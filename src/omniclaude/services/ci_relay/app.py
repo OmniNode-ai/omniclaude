@@ -27,7 +27,7 @@ from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 logger = logging.getLogger(__name__)
 
 # Topic for PR status events
-PR_STATUS_TOPIC = "onex.evt.github.pr-status.v1"
+PR_STATUS_TOPIC = "onex.evt.omniclaude.github-pr-status.v1"
 
 # Module-level rate limiter (single instance per process)
 _rate_limiter = RateLimiter()

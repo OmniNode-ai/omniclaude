@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """NodeGithubPrWatcherEffect -- effect node for PR status event routing.
 
-Subscribes to ``onex.evt.github.pr-status.v1``, looks up the Valkey watch
+Subscribes to ``onex.evt.omniclaude.github-pr-status.v1``, looks up the Valkey watch
 registry for interested agents, and routes matching events to per-agent
 inbox topics.
 
@@ -28,7 +28,7 @@ class NodeGithubPrWatcherEffect(NodeEffect):
 
     Capability: github.pr_watcher
 
-    Subscribes to ``onex.evt.github.pr-status.v1`` and routes matching
+    Subscribes to ``onex.evt.omniclaude.github-pr-status.v1`` and routes matching
     events to per-agent inbox topics via Valkey watch registry lookups.
 
     All behavior defined in contract.yaml.

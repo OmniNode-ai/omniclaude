@@ -5,7 +5,7 @@
 """Pydantic models for the CI relay service.
 
 CICallbackPayload: inbound from GH Actions notify-completion step.
-PRStatusEvent: outbound to Kafka topic ``onex.evt.github.pr-status.v1``.
+PRStatusEvent: outbound to Kafka topic ``onex.evt.omniclaude.github-pr-status.v1``.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class CICallbackPayload(BaseModel):
 
 
 class PRStatusEvent(BaseModel):
-    """Event published to ``onex.evt.github.pr-status.v1``.
+    """Event published to ``onex.evt.omniclaude.github-pr-status.v1``.
 
     Extends CICallbackPayload with envelope fields for the ONEX event bus.
     """

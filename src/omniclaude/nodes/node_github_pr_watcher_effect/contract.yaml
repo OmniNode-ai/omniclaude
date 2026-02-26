@@ -32,7 +32,7 @@ node_type: EFFECT_GENERIC
 # Description
 description: >
   Effect node for GitHub PR status event routing. Subscribes to
-  onex.evt.github.pr-status.v1, looks up the Valkey watch registry
+  onex.evt.omniclaude.github-pr-status.v1, looks up the Valkey watch registry
   for interested agents, and routes matching events to per-agent
   inbox topics (onex.evt.omniclaude.agent-inbox.{agent_id}.v1).
   Uses O(1) key lookups via SMEMBERS, no key pattern scans.
@@ -54,7 +54,7 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.evt.github.pr-status.v1"
+    topic: "onex.evt.omniclaude.github-pr-status.v1"
     consumer_group: "omniclaude.pr_watcher"
   publish:
     # Dynamic: publishes to per-agent inbox topics
