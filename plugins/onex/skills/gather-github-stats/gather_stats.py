@@ -61,7 +61,9 @@ def _cache_path(cache_dir: Path, key: str) -> Path:
     return cache_dir / f"{safe_key}.json"
 
 
-def cache_read(cache_dir: Path, key: str, bypass_ttl: bool = False) -> dict[str, Any] | None:
+def cache_read(
+    cache_dir: Path, key: str, bypass_ttl: bool = False
+) -> dict[str, Any] | None:
     """Read a cached value.
 
     Returns the cached payload dict if valid (not expired), or None.
@@ -96,7 +98,9 @@ def cache_write(cache_dir: Path, key: str, payload: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _gh_api(path: str, *, method: str = "GET") -> tuple[int, dict[str, Any] | list[Any], dict[str, str]]:
+def _gh_api(
+    path: str, *, method: str = "GET"
+) -> tuple[int, dict[str, Any] | list[Any], dict[str, str]]:
     """Call the GitHub REST API via `gh api`.
 
     Returns (status_code, body, headers_dict).
@@ -104,16 +108,20 @@ def _gh_api(path: str, *, method: str = "GET") -> tuple[int, dict[str, Any] | li
     Raises RuntimeError on subprocess failure unrelated to HTTP status.
     """
     cmd = [
-        "gh", "api",
-        "--method", method,
-        "--include",       # print response headers before body
+        "gh",
+        "api",
+        "--method",
+        method,
+        "--include",  # print response headers before body
         path,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode != 0 and result.returncode != 22:
         # returncode 22 = HTTP 4xx/5xx from gh; anything else is a tool failure
-        raise RuntimeError(f"gh api failed (rc={result.returncode}): {result.stderr.strip()}")
+        raise RuntimeError(
+            f"gh api failed (rc={result.returncode}): {result.stderr.strip()}"
+        )
 
     raw = result.stdout
     # Split headers from body at the blank line separating them
@@ -170,7 +178,9 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
 
     # 1. git in PATH (always required for local operations)
     if shutil.which("git") is None:
-        sys.exit("ERROR: 'git' not found in PATH. Install git before running this tool.")
+        sys.exit(
+            "ERROR: 'git' not found in PATH. Install git before running this tool."
+        )
 
     if local_only:
         # GitHub checks are skipped in local-only mode
@@ -186,7 +196,9 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
 
     # 2. gh CLI in PATH
     if shutil.which("gh") is None:
-        sys.exit("ERROR: 'gh' CLI not found in PATH. Install the GitHub CLI (https://cli.github.com).")
+        sys.exit(
+            "ERROR: 'gh' CLI not found in PATH. Install the GitHub CLI (https://cli.github.com)."
+        )
 
     # 3. gh auth status
     auth_result = subprocess.run(
@@ -225,6 +237,7 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
     # 5. Local path checks (when provided and not github-only)
     if local_path is not None:
         import os  # noqa: PLC0415
+
         p = Path(local_path)
         if not p.exists():
             sys.exit(f"ERROR: --local-path '{local_path}' does not exist.")
@@ -319,6 +332,7 @@ def get_open_pr_count(org: str, repo: str, cache_dir: Path, bypass_ttl: bool) ->
 def _url_encode(s: str) -> str:
     """Minimal URL encoding for query strings (spaces → +, special chars → %xx)."""
     from urllib.parse import quote_plus  # noqa: PLC0415
+
     return quote_plus(s)
 
 
@@ -477,7 +491,9 @@ def generate_report(
         else:
             freq_str = "_(unavailable)_"
 
-        lines.append(f"| {repo} | {merged:,} | {open_prs:,} | {commits:,} | {freq_str} |")
+        lines.append(
+            f"| {repo} | {merged:,} | {open_prs:,} | {commits:,} | {freq_str} |"
+        )
 
     lines.append("")
     lines.append("## Totals\n")
@@ -492,6 +508,7 @@ def generate_report(
 
 def _now_iso() -> str:
     from datetime import datetime  # noqa: PLC0415
+
     return datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
