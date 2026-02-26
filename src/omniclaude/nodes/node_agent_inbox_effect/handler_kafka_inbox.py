@@ -11,7 +11,7 @@ Topic Mapping:
     Directed messages:
         onex.evt.omniclaude.agent-inbox.{agent_id}.v1
     Broadcast messages:
-        onex.evt.omniclaude.epic.{epic_id}.status.v1
+        onex.evt.omniclaude.epic-status.v1  (epic_id is a payload field)
 
 Partition key is always agent_id for directed messages and epic_id for
 broadcast messages, ensuring per-agent and per-epic ordering.
@@ -47,10 +47,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 #: Topic template for directed agent inbox messages.
-TOPIC_DIRECTED_TEMPLATE: Final[str] = "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"
+TOPIC_DIRECTED_TEMPLATE: Final[str] = "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"  # noqa: arch-topic-naming
 
-#: Topic template for epic broadcast status messages.
-TOPIC_BROADCAST_TEMPLATE: Final[str] = "onex.evt.omniclaude.epic.{epic_id}.status.v1"
+#: Static topic for epic broadcast status messages (epic_id is a payload field).
+TOPIC_BROADCAST_TEMPLATE: Final[str] = "onex.evt.omniclaude.epic-status.v1"
 
 #: Semantic event type for agent inbox messages.
 EVENT_TYPE_AGENT_INBOX: Final[str] = "agent.inbox"
@@ -246,7 +246,7 @@ class HandlerKafkaInbox:
         if message.target_agent_id is not None:
             return TOPIC_DIRECTED_TEMPLATE.format(agent_id=message.target_agent_id)
         if message.target_epic_id is not None:
-            return TOPIC_BROADCAST_TEMPLATE.format(epic_id=message.target_epic_id)
+            return TOPIC_BROADCAST_TEMPLATE
         raise ValueError("Message must have target_agent_id or target_epic_id")
 
     @staticmethod

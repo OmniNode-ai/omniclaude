@@ -44,7 +44,7 @@ description: >
 event_bus:
   topics:
     directed: "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"
-    broadcast: "onex.evt.omniclaude.epic.{epic_id}.status.v1"
+    broadcast: "onex.evt.omniclaude.epic-status.v1"
   partition_key_field: "agent_id"
   partition_strategy: "hash"
 

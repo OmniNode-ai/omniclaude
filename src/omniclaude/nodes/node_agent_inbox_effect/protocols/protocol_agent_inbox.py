@@ -74,7 +74,7 @@ class ProtocolAgentInbox(Protocol):
             - STANDALONE: Writes to ~/.claude/agent-inboxes/{agent_id}/{ts}_{id}.json
 
         For broadcast messages (target_epic_id set):
-            - EVENT_BUS+: Produces to onex.evt.omniclaude.epic.{epic_id}.status.v1
+            - EVENT_BUS+: Produces to onex.evt.omniclaude.epic-status.v1 (epic_id in payload)
             - STANDALONE: Writes to ~/.claude/agent-inboxes/_broadcast/{epic_id}/{ts}_{id}.json
 
         Args:
