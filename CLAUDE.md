@@ -137,6 +137,15 @@ Three gate aggregators per CI/CD Standards v2 (`required-checks.yaml`):
 
 Gate names are API-stable. Do not rename without following the Branch Protection Migration Safety procedure in `CI_CD_STANDARDS.md`.
 
+### CI/Tooling Safety
+
+- CI uv version: read from `.github/workflows/ci.yml` pinned version before making
+  lock file changes. Do not hardcode the version. Ruff behavior may differ between
+  local and CI.
+- Prefer auto-merge over immediate merge when multiple PRs target the same branch.
+- When modifying branch protection rules, never remove them after adding them.
+  If temporary rules were needed, flag them to the user rather than auto-removing.
+
 ---
 
 ## Code Quality
@@ -266,6 +275,13 @@ Auto-detection (OMN-2614) will also pick up the correct phase automatically when
 ### Fail-Fast Design
 
 Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is not. See **Failure Modes** for the complete table of degraded behaviors.
+
+### Epic Orchestration
+
+- When orchestrating epics with subagents, if a subagent hits a context or rate limit,
+  log the failure clearly and continue with remaining tasks. After all other tasks
+  complete, report failed tasks with enough context for the user to resume them.
+- Ticket routing policy lives in the Decision Store. Query before dispatching.
 
 ---
 
