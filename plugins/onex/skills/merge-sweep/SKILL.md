@@ -371,10 +371,27 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
   `--gate-timeout-minutes` override, post-sweep Slack summary.
 - **v1.0.0** (OMN-2616): Initial implementation.
 
+## Tier Routing (OMN-2828)
+
+PR scanning uses tier-aware backend selection:
+
+| Tier | Backend | Details |
+|------|---------|---------|
+| `FULL_ONEX` | `node_git_effect.pr_list()` | Typed Pydantic models, structured output |
+| `STANDALONE` | `_bin/pr-scan.sh` | Shell script wrapping `gh pr list` with consistent fields |
+| `EVENT_BUS` | `_bin/pr-scan.sh` | Same as STANDALONE (no push-based PR list equivalent) |
+
+Tier detection: see `@_lib/tier-routing/helpers.md`.
+
+The scan output format is identical across all tiers -- downstream classification
+(`is_merge_ready`, `needs_polish`) works unchanged regardless of backend.
+
 ## See Also
 
-- `pr-polish` skill — three-phase PR fix workflow (Track B sub-skill)
-- `pr-review-dev` skill — PR review comments + CI failures
-- `local-review` skill — iterative local review loop
-- `pr-queue-pipeline` skill — orchestrates fix-prs → merge-sweep in sequence
-- `fix-prs` skill — alternative repair skill (merge-sweep now handles this inline via Track B)
+- `pr-polish` skill -- three-phase PR fix workflow (Track B sub-skill)
+- `pr-review-dev` skill -- PR review comments + CI failures
+- `local-review` skill -- iterative local review loop
+- `pr-queue-pipeline` skill -- orchestrates fix-prs -> merge-sweep in sequence
+- `fix-prs` skill -- alternative repair skill (merge-sweep now handles this inline via Track B)
+- `_bin/pr-scan.sh` -- STANDALONE PR scanning backend
+- `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
