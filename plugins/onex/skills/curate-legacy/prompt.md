@@ -16,7 +16,7 @@ Parse from `$ARGUMENTS`:
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--corpus` | all known locations | Comma-separated corpus root paths |
-| `--output` | `/Volumes/PRO-G40/Code/omni_home/docs/registry` | Output directory |
+| `--output` | `/Volumes/PRO-G40/Code/omni_home/docs/registry` | Output directory | <!-- local-path-ok -->
 | `--phase` | all | `index`, `extract`, `cluster`, `specs`, or `all` |
 | `--max-agents` | 10 | Parallel agent cap |
 | `--deep-read` | none | Categories for deep archive code reading |
@@ -28,19 +28,19 @@ If `--corpus` not specified, use all of these:
 
 ```
 CORPUS_ROOTS:
-  doc_archive: /Volumes/PRO-G40/Code/doc_archive
-  features: /Users/jonah/OmniNode/Features and Ideas
-  archive: /Volumes/PRO-G40/Code/Archive
-  design: /Volumes/PRO-G40/Code/omni_home/docs/design
-  plans: /Volumes/PRO-G40/Code/omni_home/docs/plans
-  reference: /Volumes/PRO-G40/Code/omni_home/docs/reference
-  tracking: /Volumes/PRO-G40/Code/omni_home/docs/tracking
+  doc_archive: /Volumes/PRO-G40/Code/doc_archive  # local-path-ok
+  features: /Users/jonah/OmniNode/Features and Ideas  # local-path-ok
+  archive: /Volumes/PRO-G40/Code/Archive  # local-path-ok
+  design: /Volumes/PRO-G40/Code/omni_home/docs/design  # local-path-ok
+  plans: /Volumes/PRO-G40/Code/omni_home/docs/plans  # local-path-ok
+  reference: /Volumes/PRO-G40/Code/omni_home/docs/reference  # local-path-ok
+  tracking: /Volumes/PRO-G40/Code/omni_home/docs/tracking  # local-path-ok
 ```
 
 ### Output Root
 
 ```
-OUTPUT_ROOT: /Volumes/PRO-G40/Code/omni_home/docs/registry
+OUTPUT_ROOT: /Volumes/PRO-G40/Code/omni_home/docs/registry  # local-path-ok
 ```
 
 Generate a `run_id` = first 12 chars of a UUID4.
@@ -110,6 +110,66 @@ Write to `{OUTPUT_ROOT}/_corpus_index.json`:
 
 ### 0.4 Implementation Strategy
 
+---
+
+## Phase 0.5 — Live Repo Status Scan
+
+**Goal**: Classify each design doc's implementation status by scanning the live codebase for substantive evidence. Runs after Phase 0.3 and before Phase 1. Write output to `{OUTPUT_ROOT}/_implementation_status.json`.
+
+**Phase coupling**: `--skip-status-scan` skips this phase entirely. All cards then default to `status: planned`. The INDEX remains valid but has no status badges.
+
+### Signal Extraction
+
+Signal extraction is doc-driven, not title-driven. For each design doc, extract signals in this priority order:
+
+1. Code identifiers in backticks within the document body
+2. Filenames explicitly referenced in the document
+3. Capitalized proper nouns from "Key Components" or "Architecture" headings
+
+Fall back to title tokens only if the above yield nothing.
+
+### Substantive Evidence Definition
+
+A matching file counts as substantive evidence **only if ALL** of the following are true:
+
+- Contains `class ` or `def ` or `pydantic.BaseModel` or `@dataclass`
+- Is NOT under `tests/`, `docs/`, `SKILL.md`, `prompt.md`, or design directories
+- Is NOT a comment-only match
+
+### Misleading Match Suppression List
+
+Never match on these generic tokens (too common to be meaningful signals):
+`Handler`, `Contract`, `Schema`, `Registry`, `Gateway`, `Node`, `Base`, `Config`
+
+### Status Classification
+
+| Evidence | Status |
+|----------|--------|
+| 2+ substantive matching files | `implemented` |
+| 1 substantive matching file | `partial` |
+| Doc contains "blocked by OMN-" | `blocked` |
+| No substantive code, no explicit blocker | `planned` |
+| Doc says "superseded", "deprecated", or "no longer pursued" | `deprecated` |
+| Vision-only doc with no handler contracts, no stepwise plan, no mechanism | `aspirational` |
+
+`aspirational` is reserved for pure vision docs — no handler contracts, no stepwise implementation plan, no concrete mechanism described.
+
+### Output
+
+Write `{OUTPUT_ROOT}/_implementation_status.json`:
+
+```json
+{
+  "run_id": "...",
+  "created_at": "...",
+  "status_by_doc": {
+    "doc_archive/omnibus_event_bus_design.md": "implemented",
+    "features/nl_intent_compiler.md": "partial",
+    "features/context_scoring.md": "planned"
+  }
+}
+```
+
 Use Bash to compute SHA-256 hashes efficiently:
 ```bash
 find "$CORPUS_ROOT" -type f \( -name "*.md" -o -name "*.py" -o -name "*.yaml" -o -name "*.json" -o -name "*.txt" \) -exec sha256sum {} \;
@@ -146,10 +206,10 @@ Group files into slices for parallel agents:
   "category": "infrastructure|intelligence|governance|devex|agent|learning|platform",
   "core_claim": "Production-grade Kafka adapter with batching, circuit breaker, and snappy compression that can be ported directly as a NodeEffect handler.",
   "source_files": [
-    "/Volumes/PRO-G40/Code/doc_archive/omnibus_event_bus_design.md"
+    "/Volumes/PRO-G40/Code/doc_archive/omnibus_event_bus_design.md"  // local-path-ok
   ],
   "source_code_paths": [
-    "/Volumes/PRO-G40/Code/Archive/omnibase_5/src/omnibase/tools/infrastructure/tool_kafka_adapter/"
+    "/Volumes/PRO-G40/Code/Archive/omnibase_5/src/omnibase/tools/infrastructure/tool_kafka_adapter/"  // local-path-ok
   ],
   "what_exists_today": [
     "omnibase_infra has Kafka integration via Redpanda",
@@ -165,16 +225,34 @@ Group files into slices for parallel agents:
       "handler_type": "effect",
       "description": "Kafka publish/subscribe with batching and circuit breaker",
       "candidate_paths": [
-        "/Volumes/PRO-G40/Code/Archive/omnibase_5/src/omnibase/tools/infrastructure/tool_kafka_adapter/"
+        "/Volumes/PRO-G40/Code/Archive/omnibase_5/src/omnibase/tools/infrastructure/tool_kafka_adapter/"  // local-path-ok
       ],
       "port_notes": "Wrap existing producer/consumer classes in NodeEffect contract. Add ONEX error codes."
     }
   ],
-  "dependencies": ["Redpanda running on 192.168.86.200:29092"],
+  "dependencies": ["Redpanda running on 192.168.86.200:29092"],  <!-- onex-allow-internal-ip -->
   "risk_notes": "Archive code uses older omnibase patterns — needs adapter to current NodeEffect base class",
-  "effort_band": "S"
+  "effort_band": "S",
+  "status": "partial",
+  "depends_on": ["omnibus_event_bus_design.md"],
+  "rejected_alternatives": ["Direct HTTP adapter — breaks async contract"],
+  "implementation_gap": "Circuit breaker and batch processing logic not yet ported to NodeEffect contract",
+  "impact_band": "high"
 }
 ```
+
+**New fields (v1.1)**:
+
+- `status`: `implemented|partial|planned|aspirational|blocked|deprecated` — sourced from `_implementation_status.json`, default `planned`
+- `depends_on`: hard prerequisites — **other design docs only** (never runtime systems)
+- `rejected_alternatives`: explicit discarded approaches found in the document
+- `implementation_gap`: non-empty only when `status` is `partial` or `implemented`; describes what the current code cannot yet do
+- `impact_band`: `high|medium|low` — inferred from cross-references, category, handler count, and effort
+
+**`depends_on` vs `dependencies` disambiguation**:
+- `depends_on` = design prerequisites (other spec filenames, e.g. `"omnibus_event_bus_design.md"`)
+- `dependencies` = runtime systems (existing field, unchanged — e.g. `"Redpanda running on ..."`)
+- Never mix them.
 
 ### 1.4 Extraction Rules for Agents
 
@@ -196,6 +274,15 @@ RULES:
 7. For archive code files: focus on extractable functionality, not file structure
 8. effort_band values: XS (<1 day), S (1-2 days), M (3-5 days), L (1-2 weeks)
 9. category MUST be one of: infrastructure, intelligence, governance, devex, agent, learning, platform
+10. `status`: source from `_implementation_status.json` for this doc path. Also scan doc body: "blocked by OMN-" → `blocked`; "superseded" or "deprecated" or "no longer pursued" → `deprecated`. `aspirational` is reserved for vision-only docs with no handler contracts, no stepwise plan, no concrete mechanism.
+11. `depends_on`: scan for explicit filename references (e.g. "see omnibus_event_bus_design.md") and language like "requires X to be defined first". List other DESIGN DOCS only — never runtime systems.
+12. `rejected_alternatives`: scan for any of these patterns: "we considered X but", "previous approach was", "this replaces", "unlike X", "not chosen because", "alternative considered". Extract the alternative and reason.
+13. `implementation_gap`: REQUIRED if status is `partial` or `implemented`. Describe what the current codebase cannot yet do relative to the spec. Leave empty for `planned`/`aspirational`/`deprecated`.
+14. `impact_band`: infer as `high` if: category is intelligence or agent AND multiple cross-references exist, OR handler_map has 3+ entries, OR effort_band is L or M with high cross-reference count. `low` if effort_band is XS or S AND no cross-references. Otherwise `medium`.
+15. `core_claim` QUALITY GATE (enforced at card creation): REJECT the card if ANY of the following are true:
+    - `core_claim` contains banned strings: "Archive package", "Dominant pattern:", "Signals: has", path fragments like "/Volumes/", "type_guess"
+    - `core_claim` is under 40 characters
+    - `core_claim` does not contain at least one verb describing what the feature DOES (not just what it IS)
 
 HANDLER_MAP RULES:
 - handler_type MUST be: effect, compute, reducer, or orchestrator
@@ -265,8 +352,39 @@ Phase 1 Complete
 Cards extracted: {N}
 Cards rejected (no handler_map): {M}
 Cards rejected (no provenance): {P}
+Cards rejected (core_claim quality gate): {Q}
 Files processed: {F}
 Files skipped (trivial): {S}
+```
+
+### 1.6.5 Pre-Dedup Pass
+
+Run immediately after Phase 1.6, before writing `_idea_cards.ndjson`.
+
+**Goal**: Remove near-duplicate cards produced by different agents processing overlapping corpus slices. This is a title-similarity pass only — full clustering happens in Phase 2.
+
+**Algorithm**:
+
+1. Normalize titles: lowercase, strip punctuation, build bigram shingle sets.
+2. Remove hyper-common tokens before comparing (too generic to be signal): `"design"`, `"system"`, `"architecture"`, `"pipeline"`, `"framework"`, `"node"`, `"handler"`
+3. Compute Jaccard similarity on bigram sets for all card pairs.
+
+**Thresholds**:
+
+| Similarity | Action |
+|------------|--------|
+| >= 0.92 | Auto-discard the lower-provenance card (fewer `source_files`). Log as "near-duplicate removed: {title_a} vs {title_b} (score={score:.2f})" |
+| 0.75–0.92 | Flag as "needs merge review". Keep both. Log pair with similarity score. |
+| < 0.75 | No action. |
+
+**Critical rule**: Auto-discard ONLY when similarity >= 0.92. Never silently delete cards in the 0.75–0.92 range.
+
+Log output appended to Phase 1 summary:
+```
+Pre-Dedup Pass
+==============
+Near-duplicates auto-removed: {R}
+Pairs flagged for merge review: {F}
 ```
 
 **If `--phase extract`**: Stop here after writing `_idea_cards.ndjson`.
@@ -420,7 +538,7 @@ For each archive code file with handler_candidacy:
 ```markdown
 # Archive Handler Catalog
 
-> Imperative code in `/Volumes/PRO-G40/Code/Archive/` classified by ONEX handler type.
+> Imperative code in `/Volumes/PRO-G40/Code/Archive/` classified by ONEX handler type. <!-- local-path-ok -->
 > Use this to find port-ready code when implementing handler tickets.
 
 ## Effect Handlers (External I/O)
@@ -576,36 +694,84 @@ For each spec:
 
 ### 3.6 Generate Spec Index
 
+**Invariant 1 — No telemetry in descriptions**: Before writing any entry to the INDEX, check `core_claim` for banned strings: `"Archive package"`, `"Dominant pattern:"`, `"Signals: has"`, path fragments (`"/Volumes/"`, `"/Users/"`), `"type_guess"`. Any entry with a banned string in `core_claim` is OMITTED from the INDEX and logged as "INDEX entry omitted (telemetry in description): {title}".
+
+**Invariant 2 — Document source required**: Entries that exist only from archive code (no `source_files[]` pointing to a document) are OMITTED from the INDEX. Archive-code-only clusters belong in `ARCHIVE_HANDLER_CATALOG.md`, not in the INDEX.
+
+**Invariant 3 — Description length cap**: Truncate `core_claim` to 240 characters before writing to any INDEX entry. Add `…` if truncated.
+
+**Sort order within each category section**: `implemented → partial → planned → blocked → aspirational → deprecated`
+
+**Status badges**:
+- `✅ implemented`
+- `🔶 partial`
+- `🔲 planned`
+- `🚫 blocked`
+- `💡 aspirational`
+- `⛔ deprecated`
+
 Write `{OUTPUT_ROOT}/specs/INDEX.md`:
 
 ```markdown
 # Spec Index
 
 > {N} specs across {M} categories | Generated: {date}
+> Run ID: {run_id} | Status scan: {ran|skipped}
+
+## Implementation Status Summary
+
+> Omit this table if Phase 0.5 was skipped (`--skip-status-scan`).
+
+| Status | Count |
+|--------|-------|
+| ✅ implemented | {N} |
+| 🔶 partial | {N} |
+| 🔲 planned | {N} |
+| 🚫 blocked | {N} |
+| 💡 aspirational | {N} |
+| ⛔ deprecated | {N} |
+
+## Navigation
+
+{Category links, one per line: [Infrastructure](#infrastructure-n-specs), [Intelligence](#intelligence-n-specs), ...}
 
 ## By Category
 
 ### Infrastructure ({N} specs)
-| Spec | Impact | Ease | Effort | Handlers |
-|------|--------|------|--------|----------|
-| [Kafka Adapter Effect](infrastructure/a1b2c3_kafka-adapter-effect.md) | 9 | 8 | S | effect |
+
+| Status | Spec | Impact | Ease | Effort | Handlers |
+|--------|------|--------|------|--------|----------|
+| ✅ | [Kafka Adapter Effect](infrastructure/a1b2c3_kafka-adapter-effect.md) | 9 | 8 | S | effect |
+| 🔶 | [Streaming Aggregator](infrastructure/b2c3d4_streaming-aggregator.md) | 7 | 6 | M | reducer |
 
 ### Intelligence ({N} specs)
 ...
 
+{Repeat for each category, sorted: implemented → partial → planned → blocked → aspirational → deprecated}
+
+---
+
+## All Specs — Flat List
+
+> Copy-paste this section into agent context for full spec discovery.
+
+{One line per spec: `[Title](path/to/spec.md) — {core_claim truncated to 120 chars}` sorted by impact_score descending}
+
+---
+
 ## Impact/Effort Quadrant
 
 ### Q1: High Impact + Easy (Top Priority)
-{list}
+{list with status badge}
 
 ### Q2: High Impact + Hard (Strategic Investment)
-{list}
+{list with status badge}
 
 ### Q3: Low Impact + Easy (Fill-in Work)
-{list}
+{list with status badge}
 
 ### Q4: Low Impact + Hard (Deprioritize)
-{list}
+{list with status badge}
 ```
 
 **If `--phase specs`**: Stop here.
@@ -672,12 +838,31 @@ Corpus roots scanned: {N}
 Files indexed: {total_files}
 IdeaCards extracted: {cards_emitted}
 IdeaCards rejected: {cards_rejected}
+  - No handler_map: {rejected_no_handler}
+  - No provenance: {rejected_no_provenance}
+  - core_claim quality gate: {rejected_quality_gate}
 Clusters formed: {total_clusters}
 Dedup ratio: {cards/clusters:.1f}x
 Specs created: {new}
 Specs updated: {updated}
 Specs unchanged: {unchanged}
 Archive handlers cataloged: {handler_count}
+
+Implementation Status (Phase 0.5):
+  Status scan: {ran|skipped}
+  implemented: {count_implemented}
+  partial:     {count_partial}
+  planned:     {count_planned}
+  blocked:     {count_blocked}
+  aspirational:{count_aspirational}
+  deprecated:  {count_deprecated}
+
+Quality Gate Counts:
+  Cards rejected (core_claim): {rejected_quality_gate}
+  Near-duplicates auto-removed: {dedup_auto_removed}
+  Near-duplicate pairs flagged for review: {dedup_flagged}
+  INDEX entries omitted (telemetry): {index_omitted_telemetry}
+  INDEX entries omitted (missing doc source): {index_omitted_no_doc}
 
 Output: {OUTPUT_ROOT}/
 Registry: {OUTPUT_ROOT}/IDEAS_REGISTRY.md
