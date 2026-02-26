@@ -8,17 +8,27 @@ Phase 2: Core GitHub data collection layer.
   - get_merged_pr_count() / open PR count via Search API
   - get_commit_count() via Link-header parsing
   - get_code_frequency() with bounded exponential backoff (202 handling)
+
+Phase 3: Local archive discovery + deduplication.
+  - discover_git_repos(): recursive walker from --local-path with --max-depth limit
+  - get_local_repo_stats(): commit count + dates via git subprocess
+  - parse_numstat(): parse git log --numstat output, skipping binary file lines
+  - normalize_url(): SSH <-> HTTPS normalisation, strip .git suffix
+  - extract_best_remote(): prefer OmniNode-ai GitHub remote over origin
+  - Deduplication: GitHub repos registered first; local repos matched by normalized URL
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +58,50 @@ GITHUB_API_BASE = "https://api.github.com"
 
 # Exponential backoff delays for 202 responses (seconds)
 BACKOFF_DELAYS = [1, 2, 4, 8, 16, 32]
+
+# Directories to skip during local archive scan
+SKIP_DIRS = frozenset(
+    [
+        "node_modules",
+        ".git",
+        "__pycache__",
+        "venv",
+        ".venv",
+        ".tox",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        "dist",
+        "build",
+        ".eggs",
+        "site-packages",
+    ]
+)
+
+# Timeout for git log --numstat LOC scan (seconds)
+LOC_SCAN_TIMEOUT = 120
+
+
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LocalRepoStats:
+    """Statistics gathered from a local git repository."""
+
+    path: Path
+    is_bare: bool
+    commit_count: int
+    first_commit_date: str | None
+    last_commit_date: str | None
+    remote_url: str | None
+    normalized_url: str | None
+    is_duplicate: bool
+    loc_additions: int | None
+    loc_deletions: int | None
+    non_github_remote: bool
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +244,7 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
                 sys.exit(f"ERROR: --local-path '{local_path}' does not exist.")
             if not p.is_dir():
                 sys.exit(f"ERROR: --local-path '{local_path}' is not a directory.")
-            if not os.access(p, os.R_OK):  # type: ignore[attr-defined]
+            if not os.access(p, os.R_OK):
                 sys.exit(f"ERROR: --local-path '{local_path}' is not readable.")
         return
 
@@ -236,8 +290,6 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
 
     # 5. Local path checks (when provided and not github-only)
     if local_path is not None:
-        import os  # noqa: PLC0415
-
         p = Path(local_path)
         if not p.exists():
             sys.exit(f"ERROR: --local-path '{local_path}' does not exist.")
@@ -248,7 +300,7 @@ def preflight_checks(org: str, local_path: str | None, local_only: bool) -> None
 
 
 # ---------------------------------------------------------------------------
-# Repo discovery
+# Repo discovery (GitHub)
 # ---------------------------------------------------------------------------
 
 
@@ -448,8 +500,381 @@ def get_code_frequency(
 
 
 # ---------------------------------------------------------------------------
+# Phase 3: URL normalisation
+# ---------------------------------------------------------------------------
+
+
+def normalize_url(url: str) -> str:
+    """Normalise a git remote URL to a canonical HTTPS form.
+
+    Transformations applied (in order):
+    1. Strip surrounding whitespace.
+    2. Convert SSH form ``git@github.com:owner/repo`` to
+       ``https://github.com/owner/repo``.
+    3. Strip a trailing ``.git`` suffix (case-insensitive).
+    4. Lowercase the entire result.
+
+    Non-GitHub URLs (no ``github.com`` component) are returned lowercased
+    with only the ``.git`` suffix stripped — no SSH→HTTPS rewrite is
+    attempted.
+    """
+    url = url.strip()
+
+    # SSH form: git@github.com:owner/repo[.git]
+    ssh_match = re.match(r"git@github\.com[:/](.+)", url, re.IGNORECASE)
+    if ssh_match:
+        path_part = ssh_match.group(1)
+        url = f"https://github.com/{path_part}"
+
+    # Strip trailing .git (case-insensitive)
+    url = re.sub(r"\.git$", "", url, flags=re.IGNORECASE)
+
+    return url.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Remote extraction
+# ---------------------------------------------------------------------------
+
+
+def extract_best_remote(repo_path: Path) -> tuple[str | None, bool]:
+    """Return (remote_url, is_non_github) for the best remote of a git repo.
+
+    Selection priority:
+    1. Any remote whose URL contains ``github.com`` and the org ``OmniNode-ai``.
+    2. Any remote whose URL contains ``github.com`` (e.g. a fork origin).
+    3. ``origin`` remote regardless of host.
+    4. The first remote listed.
+
+    Returns:
+        (url, is_non_github) where *is_non_github* is True when the chosen
+        remote's URL does not contain ``github.com``.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo_path), "remote", "-v"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None, False
+
+    # Parse "name\turl (fetch|push)" lines; keep fetch lines only
+    remotes: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or "(fetch)" not in line:
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            name, url = parts[0], parts[1]
+            remotes[name] = url
+
+    if not remotes:
+        return None, False
+
+    # Priority 1: OmniNode-ai GitHub remote
+    for name, url in remotes.items():
+        if "github.com" in url.lower() and "omninode-ai" in url.lower():
+            return url, False
+
+    # Priority 2: any GitHub remote
+    for name, url in remotes.items():
+        if "github.com" in url.lower():
+            return url, False
+
+    # Priority 3: origin
+    if "origin" in remotes:
+        url = remotes["origin"]
+        is_non_github = "github.com" not in url.lower()
+        return url, is_non_github
+
+    # Priority 4: first remote
+    first_url = next(iter(remotes.values()))
+    is_non_github = "github.com" not in first_url.lower()
+    return first_url, is_non_github
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Bare clone detection
+# ---------------------------------------------------------------------------
+
+
+def _is_bare_clone(path: Path) -> bool:
+    """Return True if *path* is a bare git clone.
+
+    A bare clone has ``HEAD`` and ``config`` at the root but no working tree
+    (i.e. no top-level ``.git`` directory or file).
+    """
+    has_head = (path / "HEAD").is_file()
+    has_config = (path / "config").is_file()
+    has_git_dir = (path / ".git").exists()
+    return has_head and has_config and not has_git_dir
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Local repo discovery
+# ---------------------------------------------------------------------------
+
+
+def discover_git_repos(root: Path, max_depth: int) -> list[Path]:
+    """Return all git repository roots found under *root* up to *max_depth*.
+
+    Both regular clones (containing a ``.git`` entry at root) and bare clones
+    (``HEAD`` + ``config`` without a ``.git`` directory) are detected.
+
+    Directories listed in ``SKIP_DIRS`` are never descended into.
+    """
+    found: list[Path] = []
+    _scan(root, current_depth=0, max_depth=max_depth, found=found)
+    return found
+
+
+def _scan(
+    directory: Path, current_depth: int, max_depth: int, found: list[Path]
+) -> None:
+    """Recursive helper for *discover_git_repos*."""
+    if current_depth > max_depth:
+        return
+
+    # Check if this directory itself is a git repo
+    has_dot_git = (directory / ".git").exists()
+    is_bare = _is_bare_clone(directory)
+
+    if has_dot_git or is_bare:
+        found.append(directory)
+        # Do not descend into a repo's own subtree (avoids sub-module confusion
+        # and worktree directories that contain their own .git files)
+        return
+
+    # Descend into subdirectories, skipping excluded names
+    try:
+        entries = list(directory.iterdir())
+    except PermissionError:
+        return
+
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+        if entry.name in SKIP_DIRS:
+            continue
+        # Skip hidden directories (e.g. .cache, .local) except at root depth
+        if entry.name.startswith(".") and current_depth > 0:
+            continue
+        _scan(entry, current_depth + 1, max_depth, found)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: numstat parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_numstat(numstat_output: str) -> tuple[int, int]:
+    """Parse ``git log --numstat`` output and return (total_additions, total_deletions).
+
+    Each line is ``<additions>\\t<deletions>\\t<filename>``.
+    Binary file lines have ``-`` in both numeric columns and must be skipped —
+    they are NOT treated as 0 additions/deletions.
+    """
+    total_add = 0
+    total_del = 0
+    for line in numstat_output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) < 2:
+            continue
+        add_str, del_str = parts[0], parts[1]
+        # Binary files use "-" in both columns — skip them
+        if add_str == "-" or del_str == "-":
+            continue
+        try:
+            total_add += int(add_str)
+            total_del += int(del_str)
+        except ValueError:
+            continue
+    return total_add, total_del
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Local repo stats collection
+# ---------------------------------------------------------------------------
+
+
+def get_local_repo_stats(
+    repo_path: Path,
+    include_loc: bool,
+) -> dict[str, Any]:
+    """Collect statistics from a local git repository.
+
+    Returns a dict with keys:
+      - commit_count (int)
+      - first_commit_date (str | None)   ISO-8601 datetime string
+      - last_commit_date (str | None)    ISO-8601 datetime string
+      - loc_additions (int | None)       None unless include_loc=True
+      - loc_deletions (int | None)       None unless include_loc=True
+    """
+    stats: dict[str, Any] = {
+        "commit_count": 0,
+        "first_commit_date": None,
+        "last_commit_date": None,
+        "loc_additions": None,
+        "loc_deletions": None,
+    }
+
+    git_dir_args = ["-C", str(repo_path)]
+
+    # Commit count
+    count_result = subprocess.run(
+        ["git", *git_dir_args, "rev-list", "--count", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if count_result.returncode == 0:
+        try:
+            stats["commit_count"] = int(count_result.stdout.strip())
+        except ValueError:
+            pass
+
+    # First commit date (oldest commit)
+    first_result = subprocess.run(
+        ["git", *git_dir_args, "log", "--reverse", "--format=%ci", "--", "."],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if first_result.returncode == 0 and first_result.stdout.strip():
+        stats["first_commit_date"] = first_result.stdout.strip().splitlines()[0].strip()
+
+    # Last commit date
+    last_result = subprocess.run(
+        ["git", *git_dir_args, "log", "-1", "--format=%ci"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if last_result.returncode == 0 and last_result.stdout.strip():
+        stats["last_commit_date"] = last_result.stdout.strip()
+
+    # Optional LOC scan
+    if include_loc:
+        try:
+            loc_result = subprocess.run(
+                ["git", *git_dir_args, "log", "--numstat", "--format="],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=LOC_SCAN_TIMEOUT,
+            )
+            if loc_result.returncode == 0:
+                add, del_ = parse_numstat(loc_result.stdout)
+                stats["loc_additions"] = add
+                stats["loc_deletions"] = del_
+        except subprocess.TimeoutExpired:
+            print(
+                f"  [warn] LOC scan timed out for {repo_path} "
+                f"(>{LOC_SCAN_TIMEOUT}s); skipping.",
+                file=sys.stderr,
+            )
+
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Full local scan
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class LocalScanResult:
+    """Aggregated result of a local archive scan."""
+
+    repos: list[LocalRepoStats] = field(default_factory=list)
+    duplicate_count: int = 0
+    non_github_count: int = 0
+    total_local_commits: int = 0
+
+
+def scan_local_archive(
+    local_path: Path,
+    max_depth: int,
+    include_loc: bool,
+    seen_remotes: set[str],
+) -> LocalScanResult:
+    """Walk *local_path* and collect stats for every git repo found.
+
+    *seen_remotes* is pre-populated with normalised URLs of GitHub repos so
+    that local clones of those repos are correctly identified as duplicates and
+    excluded from totals.
+
+    Returns a :class:`LocalScanResult` with per-repo stats and aggregate counts.
+    """
+    result = LocalScanResult()
+
+    print(f"Scanning local archive under '{local_path}' …", file=sys.stderr)
+    repo_paths = discover_git_repos(local_path, max_depth)
+    print(f"  Found {len(repo_paths)} local git repositories.", file=sys.stderr)
+
+    for repo_path in sorted(repo_paths):
+        is_bare = _is_bare_clone(repo_path)
+        remote_url, is_non_github = extract_best_remote(repo_path)
+        normalized = normalize_url(remote_url) if remote_url else None
+
+        # Deduplication: is this a local clone of an already-counted GitHub repo?
+        is_duplicate = bool(normalized and normalized in seen_remotes)
+
+        if is_non_github and remote_url:
+            result.non_github_count += 1
+            print(
+                f"  [info] Non-GitHub remote detected for {repo_path}: {remote_url}",
+                file=sys.stderr,
+            )
+
+        # Collect git stats (always — even for duplicates, for reporting)
+        raw_stats = get_local_repo_stats(repo_path, include_loc=include_loc)
+
+        local_stats = LocalRepoStats(
+            path=repo_path,
+            is_bare=is_bare,
+            commit_count=raw_stats["commit_count"],
+            first_commit_date=raw_stats["first_commit_date"],
+            last_commit_date=raw_stats["last_commit_date"],
+            remote_url=remote_url,
+            normalized_url=normalized,
+            is_duplicate=is_duplicate,
+            loc_additions=raw_stats["loc_additions"],
+            loc_deletions=raw_stats["loc_deletions"],
+            non_github_remote=is_non_github,
+        )
+        result.repos.append(local_stats)
+
+        if is_duplicate:
+            result.duplicate_count += 1
+        else:
+            result.total_local_commits += raw_stats["commit_count"]
+            # Register this local repo's URL so subsequent entries dedupe against it
+            if normalized:
+                seen_remotes.add(normalized)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Report generation
 # ---------------------------------------------------------------------------
+
+
+def _freq_to_str(freq: list[list[int]] | str) -> tuple[str, str]:
+    """Return (additions_str, deletions_str) from a code frequency result."""
+    if isinstance(freq, list) and freq:
+        total_add = sum(w[1] for w in freq if len(w) > 1)
+        total_del = abs(sum(w[2] for w in freq if len(w) > 2))
+        return f"+{total_add:,}", f"-{total_del:,}"
+    if freq == "202_exhausted":
+        return "_(computing)_", "_(computing)_"
+    return "_(unavailable)_", "_(unavailable)_"
 
 
 def generate_report(
@@ -457,6 +882,7 @@ def generate_report(
     repos: list[str],
     cache_dir: Path,
     bypass_ttl: bool,
+    local_result: LocalScanResult | None = None,
 ) -> str:
     """Collect stats for all repos and return a Markdown report string."""
     lines: list[str] = []
@@ -468,7 +894,7 @@ def generate_report(
     total_open = 0
     total_commits = 0
 
-    lines.append("## Per-Repository Summary\n")
+    lines.append("## Per-Repository Summary (GitHub)\n")
     lines.append("| Repo | Merged PRs | Open PRs | Commits | Additions | Deletions |")
     lines.append("|------|-----------|---------|---------|-----------|-----------|")
 
@@ -482,34 +908,85 @@ def generate_report(
         total_open += open_prs
         total_commits += commits
 
-        if isinstance(freq, list) and freq:
-            total_add = sum(w[1] for w in freq if len(w) > 1)
-            total_del = abs(sum(w[2] for w in freq if len(w) > 2))
-            freq_str = f"+{total_add:,} / -{total_del:,}"
-        elif freq == "202_exhausted":
-            freq_str = "_(computing)_"
-        else:
-            freq_str = "_(unavailable)_"
+        add_str, del_str = _freq_to_str(freq)
+        freq_str = f"{add_str} / {del_str}"
 
         lines.append(
             f"| {repo} | {merged:,} | {open_prs:,} | {commits:,} | {freq_str} |"
         )
 
     lines.append("")
-    lines.append("## Totals\n")
+    lines.append("## Totals (GitHub)\n")
     lines.append(f"- **Repos scanned**: {len(repos)}")
     lines.append(f"- **Total merged PRs**: {total_merged:,}")
     lines.append(f"- **Total open PRs**: {total_open:,}")
     lines.append(f"- **Total commits**: {total_commits:,}")
     lines.append("")
 
+    # Local archive section
+    if local_result is not None:
+        lines.append("## Local Archive\n")
+        unique_local = [r for r in local_result.repos if not r.is_duplicate]
+        dup_repos = [r for r in local_result.repos if r.is_duplicate]
+
+        lines.append(f"- **Local repos discovered**: {len(local_result.repos)}")
+        lines.append(f"- **Unique (not in GitHub dataset)**: {len(unique_local)}")
+        lines.append(
+            f"- **Duplicates (skipped in totals)**: {local_result.duplicate_count}"
+        )
+        lines.append(f"- **Non-GitHub remotes**: {local_result.non_github_count}")
+        lines.append(
+            f"- **Total local commits (unique only)**: {local_result.total_local_commits:,}"
+        )
+        lines.append("")
+
+        if unique_local:
+            lines.append("### Unique Local Repositories\n")
+            lines.append(
+                "| Path | Bare | Commits | First Commit | Last Commit | Remote |"
+            )
+            lines.append(
+                "|------|------|---------|-------------|------------|--------|"
+            )
+            for r in sorted(unique_local, key=lambda x: str(x.path)):
+                bare_str = "yes" if r.is_bare else "no"
+                first = r.first_commit_date or "—"
+                last = r.last_commit_date or "—"
+                remote = r.remote_url or "_(no remote)_"
+                # Truncate long paths for readability
+                path_str = str(r.path)
+                lines.append(
+                    f"| `{path_str}` | {bare_str} | {r.commit_count:,} "
+                    f"| {first} | {last} | {remote} |"
+                )
+            lines.append("")
+
+        if dup_repos:
+            lines.append("### Deduplication Report\n")
+            lines.append(
+                "The following local repos were matched to GitHub repos and excluded from totals:\n"
+            )
+            for r in sorted(dup_repos, key=lambda x: str(x.path)):
+                lines.append(f"- `{r.path}` → `{r.normalized_url}`")
+            lines.append("")
+
+        if local_result.non_github_count > 0:
+            non_gh = [r for r in local_result.repos if r.non_github_remote]
+            lines.append("### Non-GitHub Remotes\n")
+            lines.append(
+                "The following repos have non-GitHub remotes and are included in unique totals:\n"
+            )
+            for r in sorted(non_gh, key=lambda x: str(x.path)):
+                lines.append(f"- `{r.path}` → `{r.remote_url}`")
+            lines.append("")
+
     return "\n".join(lines)
 
 
 def _now_iso() -> str:
-    from datetime import datetime  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415
 
-    return datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # ---------------------------------------------------------------------------
@@ -623,27 +1100,54 @@ def main(argv: list[str] | None = None) -> int:
     org: str = args.org
     local_path: str | None = args.local_path if not args.github_only else None
 
-    # Phase 2: preflight checks
+    # Preflight checks
     preflight_checks(org, local_path, local_only=args.local_only)
 
+    # seen_remotes: normalised GitHub repo URLs registered from the GitHub dataset.
+    # Local repos whose normalised remote URL matches an entry here are duplicates.
+    seen_remotes: set[str] = set()
+
+    github_repos: list[str] = []
+    local_result: LocalScanResult | None = None
+
+    if not args.local_only:
+        # GitHub data collection
+        print(f"Discovering repos in org '{org}' …", file=sys.stderr)
+        github_repos = discover_org_repos(
+            org,
+            include_private=args.include_private,
+            cache_dir=cache_dir,
+            bypass_ttl=args.cached,
+        )
+        print(f"  Found {len(github_repos)} repos.", file=sys.stderr)
+
+        # Register GitHub repo URLs into seen_remotes for deduplication
+        for repo_name in github_repos:
+            canonical = normalize_url(f"https://github.com/{org}/{repo_name}")
+            seen_remotes.add(canonical)
+
+    if not args.github_only and local_path is not None:
+        # Local archive scan
+        local_result = scan_local_archive(
+            local_path=Path(local_path),
+            max_depth=args.max_depth,
+            include_loc=args.include_local_loc,
+            seen_remotes=seen_remotes,
+        )
+
     if args.local_only:
-        print("Local-only mode: GitHub stats collection skipped.", file=sys.stderr)
-        print("Phase 3 (local archive scan) not yet implemented.", file=sys.stderr)
-        return 0
-
-    # Discover repos
-    print(f"Discovering repos in org '{org}' …", file=sys.stderr)
-    repos = discover_org_repos(
-        org,
-        include_private=args.include_private,
-        cache_dir=cache_dir,
-        bypass_ttl=args.cached,
-    )
-    print(f"  Found {len(repos)} repos.", file=sys.stderr)
-
-    # Generate report
-    print("Collecting stats …", file=sys.stderr)
-    report = generate_report(org, repos, cache_dir, bypass_ttl=args.cached)
+        # Local-only report: no GitHub API calls, only local archive section
+        report = _generate_local_only_report(org, local_result)
+    else:
+        # Full or GitHub-only report
+        print("Collecting GitHub stats …", file=sys.stderr)
+        report = generate_report(
+            org,
+            github_repos,
+            cache_dir,
+            bypass_ttl=args.cached,
+            local_result=local_result,
+        )
 
     # Write output
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -651,6 +1155,40 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Report written to: {output_path.resolve()}", file=sys.stderr)
 
     return 0
+
+
+def _generate_local_only_report(org: str, local_result: LocalScanResult | None) -> str:
+    """Generate a report containing only local archive stats (no GitHub section)."""
+    lines: list[str] = []
+    lines.append(f"# Local Archive Stats — {org}\n")
+    lines.append(f"_Generated at {_now_iso()}_\n")
+    lines.append("")
+
+    if local_result is None or not local_result.repos:
+        lines.append("_No local git repositories found._")
+        return "\n".join(lines)
+
+    lines.append("## Summary\n")
+    lines.append(f"- **Local repos discovered**: {len(local_result.repos)}")
+    lines.append(f"- **Total commits**: {local_result.total_local_commits:,}")
+    lines.append(f"- **Non-GitHub remotes**: {local_result.non_github_count}")
+    lines.append("")
+
+    lines.append("## Repositories\n")
+    lines.append("| Path | Bare | Commits | First Commit | Last Commit | Remote |")
+    lines.append("|------|------|---------|-------------|------------|--------|")
+    for r in sorted(local_result.repos, key=lambda x: str(x.path)):
+        bare_str = "yes" if r.is_bare else "no"
+        first = r.first_commit_date or "—"
+        last = r.last_commit_date or "—"
+        remote = r.remote_url or "_(no remote)_"
+        lines.append(
+            f"| `{r.path}` | {bare_str} | {r.commit_count:,} "
+            f"| {first} | {last} | {remote} |"
+        )
+    lines.append("")
+
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
