@@ -348,7 +348,7 @@ def get_merged_pr_count(org: str, repo: str, cache_dir: Path, bypass_ttl: bool) 
     cache_key = f"pr_merged__{org}__{repo}"
     cached = cache_read(cache_dir, cache_key, bypass_ttl=bypass_ttl)
     if cached is not None:
-        return int(cached)
+        return int(cached)  # type: ignore[call-overload, no-any-return]
 
     query = f"is:pr is:merged repo:{org}/{repo}"
     try:
@@ -367,13 +367,13 @@ def get_open_pr_count(org: str, repo: str, cache_dir: Path, bypass_ttl: bool) ->
     cache_key = f"pr_open__{org}__{repo}"
     cached = cache_read(cache_dir, cache_key, bypass_ttl=bypass_ttl)
     if cached is not None:
-        return int(cached)
+        return int(cached)  # type: ignore[call-overload, no-any-return]
 
     query = f"is:pr is:open repo:{org}/{repo}"
     try:
         status, body, _ = _gh_api(f"/search/issues?q={_url_encode(query)}&per_page=1")
         if status == 200 and isinstance(body, dict):
-            count = body.get("total_count", 0)
+            count: int = body.get("total_count", 0)
             cache_write(cache_dir, cache_key, count)
             return count
     except RuntimeError:
@@ -402,7 +402,7 @@ def get_commit_count(org: str, repo: str, cache_dir: Path, bypass_ttl: bool) -> 
     cache_key = f"commits__{org}__{repo}"
     cached = cache_read(cache_dir, cache_key, bypass_ttl=bypass_ttl)
     if cached is not None:
-        return int(cached)
+        return int(cached)  # type: ignore[call-overload, no-any-return]
 
     try:
         status, _, headers = _gh_api(f"/repos/{org}/{repo}/commits?per_page=1")
