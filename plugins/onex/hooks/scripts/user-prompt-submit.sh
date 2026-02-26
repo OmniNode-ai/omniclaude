@@ -146,7 +146,7 @@ WORKFLOW_DETECTED="false"
 # "/local-review ...code review..." would incorrectly match code-quality-analyzer).
 if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
-    log "Slash command detected: ${SLASH_CMD} — skipping agent routing (slash commands manage their own dispatch)"
+    log "Slash command detected: ${SLASH_CMD} — routing to polymorphic-agent (skip router to avoid arg keyword false-positives; Task delegation handles dispatch)"
     # Route slash commands through polymorphic-agent so the Skill() loader
     # runs inside the correct agent context. method="slash_command" lets
     # session-end.sh distinguish this from a real router decision.
