@@ -1,7 +1,7 @@
 ---
 name: curate-legacy
 description: Canonicalize legacy docs, archived code, and feature ideas into a handler-first Ideas Registry with provenance, dedup, and executable specs
-version: 1.0.0
+version: 1.1.0
 category: workflow
 tags:
   - curation
@@ -31,6 +31,14 @@ args:
   - name: --dry-run
     description: Run all phases but do not write output files
     required: false
+  - name: --skip-status-scan
+    description: "Skip Phase 0.5 (live repo status scan). All card statuses default to 'planned'. INDEX remains valid but has no status badges."
+    required: false
+    default: false
+  - name: --status-scan-repos
+    description: "Comma-separated repo names to limit Phase 0.5 scanning (default: all repos). Example: --status-scan-repos omnibase_core,omniclaude for fast iteration."
+    required: false
+    default: all
 ---
 
 # Curate Legacy
@@ -83,6 +91,8 @@ no handler mapping, and no extraction plan. This skill produces:
 /curate-legacy --deep-read infra,intelligence
 /curate-legacy --corpus /path/to/custom/docs
 /curate-legacy --dry-run
+/curate-legacy --skip-status-scan
+/curate-legacy --status-scan-repos omnibase_core,omniclaude
 ```
 
 | Arg | Default | Description |
@@ -93,6 +103,8 @@ no handler mapping, and no extraction plan. This skill produces:
 | `--max-agents` | 10 | Parallel agent cap for extraction |
 | `--deep-read` | none | Categories to deep-read archive code |
 | `--dry-run` | false | Preview without writing |
+| `--skip-status-scan` | false | Skip Phase 0.5 (status scan). All cards default to `planned`. INDEX valid but no badges. |
+| `--status-scan-repos` | all | Comma-separated repos to limit Phase 0.5 scan for fast iteration |
 
 ## Non-Negotiable Invariants
 
@@ -113,6 +125,16 @@ no handler mapping, and no extraction plan. This skill produces:
 
 6. **IdeaCards are structured, not prose**: agents output strict schema. Cards
    missing `handler_map` or provenance are rejected.
+
+7. **No telemetry in descriptions**: `core_claim` must be a mechanism + problem statement.
+   Cards with path fragments, archive signals (e.g. "Dominant pattern:", "Signals: has"),
+   or file system facts in `core_claim` are rejected at creation.
+
+8. **Status is always set**: Every card has a `status` field. Default is `planned`.
+   `blocked` requires an identified ticket ID in the document (e.g. "blocked by OMN-1234").
+
+9. **`depends_on` ≠ `dependencies`**: `depends_on` = design prerequisites (other spec
+   filenames). `dependencies` = runtime systems (existing field, unchanged). Never mix them.
 
 ## The Four Phases
 
@@ -166,6 +188,19 @@ After completion, verify:
 - No spec exists without `handler_map` section
 - No cluster exists without `source_files` provenance
 - Rerun produces 0 new files (idempotency check)
+
+### Output Quality Checks (v1.1)
+
+Run these after the skill completes to validate output integrity:
+
+- No INDEX entry description contains `"Archive package"`, `"Dominant pattern:"`, or `"Signals: has"`
+- Every INDEX entry has a status badge if Phase 0.5 ran (no badge only when `--skip-status-scan`)
+- `_implementation_status.json` classifies known features into expected buckets (check these — if wrong, it's a signal-mapping error, not a truth-table error):
+  - `✅ expected implemented`: handler architecture, generic validator, schema versioning
+  - `🔶 expected partial`: NL intent compiler
+  - `❌ expected not found`: context scoring, OmniMemory ingestion, pattern bounty
+- Near-duplicate log shows `CONTEXT_SCORING_DESIGN.md` pair flagged (expected similarity 0.75–0.92 range)
+- Phase 0.5 skip mode: re-run with `--skip-status-scan` and verify INDEX is still valid (no status column, no status badges)
 
 ## See Also
 
