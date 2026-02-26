@@ -1,0 +1,141 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeTransitionSelectorEffect
+#
+# Local model integration as constrained transition selector (OMN-2569).
+# The model classifies over a closed action set — it does NOT generate
+# free-form actions or reason beyond the bounded options presented.
+#
+# All operations emit ModelTransitionSelectorResult as output.
+
+# Contract identifiers
+name: node_transition_selector_effect
+contract_name: node_transition_selector_effect
+node_name: node_transition_selector_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Effect node that wires the local model into the navigation loop as a
+  constrained transition selector. Given current_state, goal, and the
+  bounded typed action_set, the model selects exactly one TypedAction.
+  The model is never asked to generate actions freely — it classifies
+  over a closed set. Invalid selections are returned as structured errors
+  for boundary enforcement, not exceptions.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelTransitionSelectorRequest
+  module: omniclaude.nodes.node_transition_selector_effect.models
+
+output_model:
+  name: ModelTransitionSelectorResult
+  module: omniclaude.nodes.node_transition_selector_effect.models
+
+# Capabilities
+capabilities:
+  - name: navigation.transition_selection
+    description: Constrained transition selection via local model classification
+    version: 1.0.0
+
+  - name: navigation.transition_selection.select
+    description: >
+      Select a single TypedAction from the bounded action_set given
+      current_state and goal condition.
+
+# IO operations
+io_operations:
+  - operation: select
+    description: >
+      Select a typed transition action from the bounded action set.
+      The model receives a structured prompt presenting the action_set
+      as numbered options. Output is parsed to a TypedAction reference.
+      Failures (timeout, malformed output, out-of-set) return structured
+      SelectionErrorKind values.
+    protocol_method: select
+    input_fields:
+      - current_state: ModelContractState
+      - goal: ModelGoalCondition
+      - action_set: tuple[ModelTypedAction, ...]
+      - context: ModelNavigationContext
+      - correlation_id: UUID
+    output_fields:
+      - result: ModelTransitionSelectorResult
+    idempotent: false
+    timeout_seconds: 10
+
+# Dependencies
+dependencies:
+  - name: protocol_transition_selector
+    type: protocol
+    class_name: ProtocolTransitionSelector
+    module: omniclaude.nodes.node_transition_selector_effect.protocols
+    pluggable: true
+
+# Prompt template
+# The prompt template is implemented in NodeTransitionSelectorEffect._build_prompt()
+# (node.py). The template version is tracked via _PROMPT_TEMPLATE_VERSION = "1.0.0"
+# in node.py. The contract records the version for traceability.
+prompt_template:
+  version: "1.0.0"
+  template_key: transition_selection_v1
+  # Template body is canonical in node.py:_build_prompt to avoid drift.
+  # See OMN-2569 for rationale.
+
+# Handler routing
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: qwen3_fast
+  backends:
+    - backend: qwen3_fast
+      handler_key: qwen3_fast
+      endpoint_env: LLM_CODER_FAST_URL
+      default_endpoint: "http://192.168.86.201:8001"  # onex-allow-internal-ip
+      model: qwen3-14b
+
+# Error handling
+error_handling:
+  selection_timeout_seconds: 10
+  on_timeout: return_structured_error
+  on_malformed_output: return_structured_error
+  on_out_of_set: return_structured_error
+  on_model_unavailable: return_structured_error
+  retry_policy:
+    max_retries: 1
+    initial_delay_ms: 500
+    retry_on:
+      - model_unavailable
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2569
+  maturity: alpha
+  depends_on:
+    - OMN-2540  # ContractState, GoalCondition (omnibase_core)
+    - OMN-2546  # TypedAction enumeration (omnibase_core)
+    - OMN-2547  # Boundary enforcer (consumes SelectionErrorKind)
+  tags:
+    - effect
+    - navigation
+    - transition-selector
+    - local-model
+    - classification
+    - constrained
