@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     # Resolve output path
     output_path = Path(args.output)
 
-    print(f"gather-github-stats v1.0.0 (Phase 1 stub)")
+    print("gather-github-stats v1.0.0 (Phase 1 stub)")
     print(f"  --github-only:       {args.github_only}")
     print(f"  --local-only:        {args.local_only}")
     print(f"  --cached:            {args.cached}")
