@@ -1,16 +1,17 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for OMN-2493: intent classification and model hints.
+"""Unit tests for OMN-2493 / OMN-2875: intent correlation state and model hints.
 
 Tests cover:
-- classify_intent: success, HTTP failure, timeout, empty prompt
 - store_intent_in_correlation / get_intent_from_correlation: round-trip
 - format_intent_context: correct field injection
 - get_hint_for_intent: default mapping, env var overrides, unknown class fallback
-- CLI subprocess: exit 0 on timeout / service unavailable
+- CLI subprocess: always exits 0, always returns success=false (event-bus mode)
 
 All tests run without network access or external services.
+The dead HTTP classify call was removed in OMN-2875; classification flows through
+the Kafka event bus (onex.cmd.omniintelligence.claude-hook-event.v1).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -54,118 +55,6 @@ def _make_env(**overrides: str) -> dict[str, str]:
     env = os.environ.copy()
     env.update(overrides)
     return env
-
-
-# ---------------------------------------------------------------------------
-# classify_intent — unit tests (no real HTTP)
-# ---------------------------------------------------------------------------
-
-
-class TestClassifyIntent:
-    """Tests for the classify_intent() function."""
-
-    def test_success(self, tmp_path: Path) -> None:
-        """classify_intent returns parsed fields on a successful HTTP response."""
-        response_body = json.dumps(
-            {
-                "intent_id": "test-id-123",
-                "intent_class": "SECURITY",
-                "confidence": 0.94,
-            }
-        ).encode()
-
-        mock_response = MagicMock()
-        mock_response.read.return_value = response_body
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            result = ic.classify_intent(
-                prompt="Check for SQL injection vulnerabilities",
-                session_id="sess-1",
-                correlation_id="corr-1",
-            )
-
-        assert result["success"] is True
-        assert result["intent_class"] == "SECURITY"
-        assert result["confidence"] == pytest.approx(0.94)
-        assert result["intent_id"] == "test-id-123"
-        assert result["elapsed_ms"] >= 0
-
-    def test_url_error_returns_empty_result(self) -> None:
-        """classify_intent returns success=False when service is unavailable."""
-        import urllib.error
-
-        with patch(
-            "urllib.request.urlopen",
-            side_effect=urllib.error.URLError("connection refused"),
-        ):
-            result = ic.classify_intent(
-                prompt="test", session_id="s", correlation_id="c"
-            )
-
-        assert result["success"] is False
-        assert result["intent_class"] == "GENERAL"
-        assert result["elapsed_ms"] >= 0
-
-    def test_timeout_returns_empty_result(self) -> None:
-        """classify_intent returns success=False on TimeoutError."""
-        with patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
-            result = ic.classify_intent(
-                prompt="test", session_id="s", correlation_id="c"
-            )
-
-        assert result["success"] is False
-        assert result["intent_class"] == "GENERAL"
-
-    def test_empty_prompt_in_cli_path(self) -> None:
-        """classify_intent with empty prompt still returns a valid dict."""
-        # The classify function is called for non-empty prompts in the module's
-        # main(), but classify_intent() itself will attempt the HTTP call.
-        # We test that it does not raise and returns a dict.
-        with patch(
-            "urllib.request.urlopen",
-            side_effect=Exception("unexpected"),
-        ):
-            result = ic.classify_intent(prompt="", session_id="", correlation_id="")
-
-        assert isinstance(result, dict)
-        assert result["success"] is False
-
-    def test_malformed_json_response(self) -> None:
-        """classify_intent handles invalid JSON response gracefully."""
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"not valid json"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            result = ic.classify_intent(
-                prompt="test", session_id="s", correlation_id="c"
-            )
-
-        assert result["success"] is False
-        assert result["intent_class"] == "GENERAL"
-
-    def test_missing_fields_in_response_use_defaults(self) -> None:
-        """classify_intent uses defaults for missing fields in response."""
-        response_body = json.dumps({"intent_class": "CODE"}).encode()
-
-        mock_response = MagicMock()
-        mock_response.read.return_value = response_body
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            result = ic.classify_intent(
-                prompt="write a function", session_id="s", correlation_id="c"
-            )
-
-        assert result["success"] is True
-        assert result["intent_class"] == "CODE"
-        assert result["confidence"] == pytest.approx(0.0)
-        # intent_id should be the caller's generated UUID (not from response)
-        assert result["intent_id"] is not None
 
 
 # ---------------------------------------------------------------------------
@@ -404,12 +293,12 @@ class TestFormatIntentContext:
 
 
 # ---------------------------------------------------------------------------
-# CLI subprocess tests (exit 0 on failure)
+# CLI subprocess tests — event-bus mode (always success=false)
 # ---------------------------------------------------------------------------
 
 
 class TestCLIExitBehavior:
-    """Tests that the CLI always exits 0."""
+    """Tests that the CLI always exits 0 and returns success=false (event-bus mode)."""
 
     def _run_classifier(
         self, env: dict[str, str], extra_args: list[str] | None = None
@@ -426,12 +315,9 @@ class TestCLIExitBehavior:
             check=False,
         )
 
-    def test_exits_0_when_service_unavailable(self) -> None:
-        """CLI exits 0 when omniintelligence is not reachable."""
-        env = _make_env(
-            OMNICLAUDE_INTENT_API_URL="http://127.0.0.1:19999/api/v1/intent/classify",
-            OMNICLAUDE_STATE_DIR="/tmp",
-        )
+    def test_exits_0_and_returns_success_false(self) -> None:
+        """CLI exits 0 and returns success=false (classification is async via event bus)."""
+        env = _make_env(OMNICLAUDE_STATE_DIR="/tmp")
         result = self._run_classifier(
             env,
             extra_args=[
@@ -461,13 +347,11 @@ class TestCLIExitBehavior:
         output = json.loads(result.stdout)
         assert output["success"] is False
 
-    def test_prompt_stdin_decodes_base64(self) -> None:
-        """CLI --prompt-stdin decodes base64 from stdin (not treating it as literal text)."""
+    def test_prompt_stdin_exits_0(self) -> None:
+        """CLI --prompt-stdin exits 0 (stdin is consumed but classification is async)."""
         import base64
 
-        env = _make_env(
-            OMNICLAUDE_INTENT_API_URL="http://127.0.0.1:19999/api/v1/intent/classify",
-        )
+        env = _make_env()
         b64_prompt = base64.b64encode(b"hello world").decode()
         script = Path(_LIB_PATH) / "intent_classifier.py"
         cmd = [sys.executable, str(script), "--prompt-stdin", "--no-store"]
@@ -482,21 +366,38 @@ class TestCLIExitBehavior:
         )
         assert result.returncode == 0
         parsed = json.loads(result.stdout)
-        # Service is unavailable so success=False, but the exit code must be 0
-        # and the output must be valid JSON — confirming the stdin path ran
         assert isinstance(parsed, dict)
         assert "success" in parsed
+        assert parsed["success"] is False
 
     def test_output_is_valid_json(self) -> None:
         """CLI always produces valid JSON on stdout."""
-        env = _make_env(
-            OMNICLAUDE_INTENT_API_URL="http://127.0.0.1:19999/api/v1/intent/classify",
-        )
+        env = _make_env()
         result = self._run_classifier(
             env,
             extra_args=["--prompt-b64", "dGVzdA==", "--no-store"],
         )
         assert result.returncode == 0
-        # Must parse without raising
         parsed = json.loads(result.stdout)
         assert isinstance(parsed, dict)
+
+    def test_no_http_calls_made(self) -> None:
+        """CLI does not make any HTTP calls (event-bus mode only)."""
+        import base64
+
+        env = _make_env()
+        b64_prompt = base64.b64encode(b"check for vulnerabilities").decode()
+        result = self._run_classifier(
+            env,
+            extra_args=[
+                "--prompt-b64",
+                b64_prompt,
+                "--no-store",
+            ],
+        )
+        # If no HTTP calls are made, the process completes quickly without
+        # a connection timeout. The result must be success=false.
+        assert result.returncode == 0
+        parsed = json.loads(result.stdout)
+        assert parsed["success"] is False
+        assert parsed["elapsed_ms"] == 0
