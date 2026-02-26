@@ -19,12 +19,17 @@ Exported Components:
     Models:
         ModelGitRequest - Input model for git operations
         ModelGitResult - Output model for git operations
+        ModelPRListFilters - Typed filter model for pr_list
 
     Protocols:
         ProtocolGitOperations - Interface for git backends
+
+    Handlers:
+        HandlerGitSubprocess - Subprocess-based backend implementation
 """
 
-from .models import ModelGitRequest, ModelGitResult
+from .handlers import HandlerGitSubprocess
+from .models import ModelGitRequest, ModelGitResult, ModelPRListFilters
 from .node import NodeGitEffect
 from .protocols import ProtocolGitOperations
 
@@ -34,6 +39,9 @@ __all__ = [
     # Models
     "ModelGitRequest",
     "ModelGitResult",
+    "ModelPRListFilters",
     # Protocols
     "ProtocolGitOperations",
+    # Handlers
+    "HandlerGitSubprocess",
 ]
