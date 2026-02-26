@@ -6,7 +6,7 @@
 
 NOTE: This is a local definition pending omnibase_core export (OMN-2540).
 Once omnibase_core publishes ContractState, replace this with:
-    from omnibase_core.models.navigation import ContractState
+    from omnibase_core.navigation import ContractState
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ class ModelContractState(BaseModel):
     """Represents the current state of a contract in the navigation graph.
 
     This is a local stub matching the spec from OMN-2540. It will be
-    replaced by the canonical omnibase_core.models.navigation.ContractState
+    replaced by the canonical omnibase_core.navigation.ContractState
     once that PR lands.
 
     Attributes:
