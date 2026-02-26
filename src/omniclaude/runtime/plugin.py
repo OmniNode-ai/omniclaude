@@ -224,7 +224,10 @@ class PluginClaude:
             )
 
         try:
-            from omniclaude.runtime.wiring_dispatchers import wire_skill_dispatchers
+            from omniclaude.runtime.wiring_dispatchers import (
+                wire_quirk_finding_subscription,
+                wire_skill_dispatchers,
+            )
 
             summary = await wire_skill_dispatchers(
                 config.container,
@@ -232,6 +235,15 @@ class PluginClaude:
                 config.correlation_id,
                 vllm_backend=self._vllm_backend,
             )
+
+            # Wire quirk-finding-produced.v1 subscription (OMN-2908)
+            quirk_summary = wire_quirk_finding_subscription(
+                config.container,
+                config.dispatch_engine,
+            )
+
+            all_dispatchers = summary["dispatchers"] + quirk_summary["dispatchers"]
+            all_routes = summary["routes"] + quirk_summary["routes"]
 
             if not summary["dispatchers"]:
                 return ModelDomainPluginResult.skipped(
@@ -247,8 +259,8 @@ class PluginClaude:
                     f"{summary['contracts_loaded']}/{summary['contracts_total']} contracts, "
                     f"backends={list(summary['backends'].keys())}"
                 ),
-                resources_created=summary["dispatchers"],
-                services_registered=summary["routes"],
+                resources_created=all_dispatchers,
+                services_registered=all_routes,
             )
         except Exception as exc:
             logger.exception("wire_dispatchers failed (plugin_id=%s)", _PLUGIN_ID)
