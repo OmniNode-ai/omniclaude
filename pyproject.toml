@@ -338,6 +338,8 @@ ignore = [
     "RUF059",    # Unused unpacked variable (test helper _FakeThread captures args by design)
 ]
 "tests/*.py" = ["E402"]
+# Skill test directories use hyphenated names (matching skill names) — N999 invalid module name is expected
+"tests/skills/gather-github-stats/*.py" = ["N999"]
 # Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 
 [tool.ruff.lint.isort]
