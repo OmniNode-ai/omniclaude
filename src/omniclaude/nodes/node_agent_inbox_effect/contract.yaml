@@ -1,0 +1,152 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeAgentInboxEffect
+#
+# Capability-oriented effect node for inter-agent message delivery.
+# Named by capability ("agent.inbox"), not by vendor (e.g., Kafka).
+# Principle: "I'm interested in what you do, not what you are"
+#
+# This contract defines the interface for sending and receiving inter-agent
+# messages with dual delivery (EVENT_BUS+ and STANDALONE).
+# Handlers implementing ProtocolAgentInbox can be swapped without changing
+# the node interface.
+
+# Contract identifiers
+name: node_agent_inbox_effect
+contract_name: node_agent_inbox_effect
+node_name: node_agent_inbox_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for inter-agent message delivery.
+  Supports dual delivery: EVENT_BUS+ (Kafka topics with partition-ordered
+  delivery) and STANDALONE (file-based inbox with atomic writes and GC).
+  Handles both directed messages (agent-to-agent) and epic broadcast messages.
+
+# Event bus configuration
+event_bus:
+  topics:
+    directed: "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"
+    broadcast: "onex.evt.omniclaude.epic.{epic_id}.status.v1"
+  partition_key_field: "agent_id"
+  partition_strategy: "hash"
+
+# Standalone file-based inbox configuration
+standalone:
+  inbox_root: "~/.claude/agent-inboxes"
+  file_pattern: "{agent_id}/{timestamp}_{message_id}.json"
+  gc_ttl_hours: 24
+  max_inbox_size_mb: 10
+
+# Strongly typed I/O models
+input_model:
+  name: ModelInboxMessage
+  module: omniclaude.nodes.node_agent_inbox_effect.models
+
+output_model:
+  name: ModelInboxDeliveryResult
+  module: omniclaude.nodes.node_agent_inbox_effect.models
+
+# Capability declaration (capability-oriented naming)
+capabilities:
+  - name: agent.inbox.send
+    description: Send a message to a specific agent inbox or broadcast to an epic
+    version: 1.0.0
+  - name: agent.inbox.receive
+    description: Receive pending messages from an agent inbox
+    version: 1.0.0
+  - name: agent.inbox.gc
+    description: Garbage collect expired messages from file-based inboxes
+    version: 1.0.0
+
+# IO operations (EFFECT node specific)
+io_operations:
+  - operation: send_message
+    description: Send a message to a directed agent inbox or epic broadcast topic
+    protocol_method: send_message
+    input_fields:
+      - message: ModelInboxMessage
+    output_fields:
+      - result: ModelInboxDeliveryResult
+    idempotent: false
+
+  - operation: receive_messages
+    description: Receive pending messages from an agent inbox
+    protocol_method: receive_messages
+    input_fields:
+      - agent_id: str
+      - since: datetime | None
+    output_fields:
+      - messages: list[ModelInboxMessage]
+    idempotent: true
+
+  - operation: gc_inbox
+    description: Remove expired messages from file-based agent inboxes
+    protocol_method: gc_inbox
+    input_fields:
+      - ttl_hours: int
+    output_fields:
+      - removed_count: int
+    idempotent: true
+
+# Dependencies (protocols this node requires)
+dependencies:
+  - name: protocol_agent_inbox
+    type: protocol
+    class_name: ProtocolAgentInbox
+    module: omniclaude.nodes.node_agent_inbox_effect.protocols
+    pluggable: true
+
+# Handler routing (for pluggable backends)
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: standalone
+  backends:
+    - backend: standalone
+      handler_key: standalone
+    - backend: kafka
+      handler_key: kafka
+
+# Error handling configuration
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 100
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - InfraConnectionError
+      - InfraTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-2827
+  maturity: mvp
+  tags:
+    - effect
+    - agent-inbox
+    - inter-agent-communication
+    - capability-oriented
