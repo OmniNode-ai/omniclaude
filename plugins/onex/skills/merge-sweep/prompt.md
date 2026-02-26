@@ -103,9 +103,59 @@ hardcoded list above.
 
 ---
 
-## Step 3: Scan Phase (Parallel)
+## Step 3: Scan Phase (Parallel, Tier-Aware)
 
-Scan up to `--max-parallel-repos` repos concurrently. For each repo:
+Scan up to `--max-parallel-repos` repos concurrently. The scan method depends on the
+current ONEX tier (see `@_lib/tier-routing/helpers.md`):
+
+```python
+tier = detect_onex_tier()
+```
+
+### FULL_ONEX Path
+
+Use `node_git_effect.pr_list()` for typed, structured output:
+
+```python
+from omniclaude.nodes.node_git_effect.models import (
+    GitOperation, ModelGitRequest, ModelPRListFilters,
+)
+
+request = ModelGitRequest(
+    operation=GitOperation.PR_LIST,
+    repo=f"{GITHUB_ORG}/{repo}",
+    json_fields=[
+        "number", "title", "mergeable", "statusCheckRollup",
+        "reviewDecision", "headRefName", "baseRefName",
+        "baseRepository", "headRepository", "headRefOid",
+        "author", "labels", "updatedAt", "isDraft",
+    ],
+    list_filters=ModelPRListFilters(state="open", limit=100),
+)
+result = await handler.pr_list(request)
+```
+
+### STANDALONE / EVENT_BUS Path
+
+Use `_bin/pr-scan.sh` for structured JSON output via `gh` CLI:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/_bin/pr-scan.sh \
+  --repo <repo> \
+  --state open \
+  --limit 100 \
+  ${AUTHOR:+--author $AUTHOR} \
+  ${LABEL:+--label $LABEL} \
+  ${SINCE:+--since $SINCE}
+```
+
+The script wraps `gh pr list` with consistent field selection and optional `--since`
+date filtering (applied via `jq` post-filter). Output format is identical to the raw
+`gh pr list` JSON array.
+
+### Fallback (Legacy)
+
+If neither `node_git_effect` nor `_bin/pr-scan.sh` is available, fall back to raw `gh`:
 
 ```bash
 gh pr list \
