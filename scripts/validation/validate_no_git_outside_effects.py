@@ -23,14 +23,18 @@ def is_effect_file(path: Path) -> bool:
 
     A file is considered an effect file if:
     - Its filename contains "effect", OR
-    - It resides inside a directory whose name contains "effect"
+    - It resides inside a node directory whose name contains "effect"
       (e.g., handlers/ inside node_git_effect/)
     """
     name = path.name.lower()
     if "effect" in name:
         return True
-    # Check if any parent directory contains "effect" in its name
-    return any("effect" in part.lower() for part in path.parts)
+    # Check if any ancestor directory is a node_*effect* directory
+    for parent in path.parents:
+        parent_name = parent.name.lower()
+        if parent_name.startswith("node_") and "effect" in parent_name:
+            return True
+    return False
 
 
 def is_node_module(path: Path) -> bool:
