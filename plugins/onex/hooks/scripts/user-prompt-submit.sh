@@ -150,7 +150,7 @@ if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     # Sentinel: selected_agent="" + confidence=1.0 means slash-command bypass,
     # NOT a real routing decision. session-end.sh must interpret this pair as
     # "no agent was selected by the router" (not as a high-confidence match).
-    ROUTING_RESULT='{"selected_agent":"","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"","purpose":"","candidates":[]}'
+    ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.85,"reasoning":"slash_command_delegation","method":"slash_command","domain":"workflow","purpose":"Coordinate skill execution — delegate complex skills to Task tool via Task(subagent_type=onex:polymorphic-agent)","candidates":[{"name":"polymorphic-agent","score":0.85,"description":"Multi-agent workflow coordinator for skills and complex tasks"}]}'
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
 else
