@@ -16,6 +16,16 @@ Phase 3: Local archive discovery + deduplication.
   - normalize_url(): SSH <-> HTTPS normalisation, strip .git suffix
   - extract_best_remote(): prefer OmniNode-ai GitHub remote over origin
   - Deduplication: GitHub repos registered first; local repos matched by normalized URL
+
+Phase 4: Output generation.
+  - generate_report(): 6-section markdown renderer per spec
+    1. Public Repos Summary — table: name, stars, forks, commits, open PRs, merged PRs, last push
+    2. Archived/Local Repos Summary — table: path, commits, first/last commit, optional LOC
+    3. Lines of Code — churn: additions, deletions, net (additions - deletions)
+    4. Deduplication Report — matched/unmatched/non-GitHub remotes
+    5. LOC Scan Issues — timeouts, failures, skipped repos
+    6. Headline Numbers — totals across all data sources
+  - Output written to --output path; final path printed to stdout.
 """
 
 from __future__ import annotations
@@ -500,6 +510,51 @@ def get_code_frequency(
 
 
 # ---------------------------------------------------------------------------
+# Repo metadata (stars, forks, last push)
+# ---------------------------------------------------------------------------
+
+
+def get_repo_metadata(
+    org: str,
+    repo: str,
+    cache_dir: Path,
+    bypass_ttl: bool,
+) -> dict[str, Any]:
+    """Return basic repo metadata: stars, forks, pushed_at.
+
+    Returns a dict with keys:
+      - stargazers_count (int)
+      - forks_count (int)
+      - pushed_at (str | None)  ISO-8601 datetime string
+    """
+    cache_key = f"meta__{org}__{repo}"
+    cached = cache_read(cache_dir, cache_key, bypass_ttl=bypass_ttl)
+    if cached is not None:
+        return cached
+
+    default: dict[str, Any] = {
+        "stargazers_count": 0,
+        "forks_count": 0,
+        "pushed_at": None,
+    }
+    try:
+        status, body, _ = _gh_api(f"/repos/{org}/{repo}")
+    except RuntimeError:
+        return default
+
+    if status not in (200, 201) or not isinstance(body, dict):
+        return default
+
+    meta: dict[str, Any] = {
+        "stargazers_count": body.get("stargazers_count", 0),
+        "forks_count": body.get("forks_count", 0),
+        "pushed_at": body.get("pushed_at"),
+    }
+    cache_write(cache_dir, cache_key, meta)
+    return meta
+
+
+# ---------------------------------------------------------------------------
 # Phase 3: URL normalisation
 # ---------------------------------------------------------------------------
 
@@ -714,6 +769,7 @@ def get_local_repo_stats(
       - last_commit_date (str | None)    ISO-8601 datetime string
       - loc_additions (int | None)       None unless include_loc=True
       - loc_deletions (int | None)       None unless include_loc=True
+      - loc_issue (str | None)           Reason LOC scan was skipped/failed (if applicable)
     """
     stats: dict[str, Any] = {
         "commit_count": 0,
@@ -721,6 +777,7 @@ def get_local_repo_stats(
         "last_commit_date": None,
         "loc_additions": None,
         "loc_deletions": None,
+        "loc_issue": None,
     }
 
     git_dir_args = ["-C", str(repo_path)]
@@ -772,7 +829,16 @@ def get_local_repo_stats(
                 add, del_ = parse_numstat(loc_result.stdout)
                 stats["loc_additions"] = add
                 stats["loc_deletions"] = del_
+            else:
+                stats["loc_issue"] = (
+                    f"git log --numstat failed (rc={loc_result.returncode})"
+                )
+                print(
+                    f"  [warn] LOC scan failed for {repo_path}: {stats['loc_issue']}",
+                    file=sys.stderr,
+                )
         except subprocess.TimeoutExpired:
+            stats["loc_issue"] = f"timed out (>{LOC_SCAN_TIMEOUT}s)"
             print(
                 f"  [warn] LOC scan timed out for {repo_path} "
                 f"(>{LOC_SCAN_TIMEOUT}s); skipping.",
@@ -795,6 +861,9 @@ class LocalScanResult:
     duplicate_count: int = 0
     non_github_count: int = 0
     total_local_commits: int = 0
+    loc_scan_issues: list[str] = field(
+        default_factory=list
+    )  # paths where LOC scan failed/timed out
 
 
 def scan_local_archive(
@@ -850,6 +919,10 @@ def scan_local_archive(
         )
         result.repos.append(local_stats)
 
+        # Track LOC scan issues
+        if raw_stats.get("loc_issue"):
+            result.loc_scan_issues.append(f"`{repo_path}`: {raw_stats['loc_issue']}")
+
         if is_duplicate:
             result.duplicate_count += 1
         else:
@@ -862,16 +935,24 @@ def scan_local_archive(
 
 
 # ---------------------------------------------------------------------------
-# Report generation
+# Report generation (Phase 4 — 6-section markdown renderer)
 # ---------------------------------------------------------------------------
 
 
-def _freq_to_str(freq: list[list[int]] | str) -> tuple[str, str]:
-    """Return (additions_str, deletions_str) from a code frequency result."""
+def _freq_totals(freq: list[list[int]] | str) -> tuple[int, int]:
+    """Return (total_additions, total_deletions) from a code frequency result (raw ints)."""
     if isinstance(freq, list) and freq:
         total_add = sum(w[1] for w in freq if len(w) > 1)
         total_del = abs(sum(w[2] for w in freq if len(w) > 2))
-        return f"+{total_add:,}", f"-{total_del:,}"
+        return total_add, total_del
+    return 0, 0
+
+
+def _freq_to_str(freq: list[list[int]] | str) -> tuple[str, str]:
+    """Return (additions_str, deletions_str) from a code frequency result (formatted)."""
+    if isinstance(freq, list) and freq:
+        add, del_ = _freq_totals(freq)
+        return f"+{add:,}", f"-{del_:,}"
     if freq == "202_exhausted":
         return "_(computing)_", "_(computing)_"
     return "_(unavailable)_", "_(unavailable)_"
@@ -884,21 +965,35 @@ def generate_report(
     bypass_ttl: bool,
     local_result: LocalScanResult | None = None,
 ) -> str:
-    """Collect stats for all repos and return a Markdown report string."""
+    """Collect stats for all repos and return a 6-section Markdown report string.
+
+    Sections:
+      1. Public Repos Summary
+      2. Archived/Local Repos Summary
+      3. Lines of Code (churn accounting)
+      4. Deduplication Report
+      5. LOC Scan Issues
+      6. Headline Numbers
+    """
     lines: list[str] = []
-    lines.append(f"# GitHub Stats — {org}\n")
-    lines.append(f"_Generated at {_now_iso()}_\n")
+    lines.append(f"# GitHub Stats — {org}")
+    lines.append(f"_Generated at {_now_iso()}_")
     lines.append("")
 
+    # -----------------------------------------------------------------------
+    # Collect per-repo GitHub stats
+    # -----------------------------------------------------------------------
     total_merged = 0
     total_open = 0
     total_commits = 0
+    total_gh_additions = 0
+    total_gh_deletions = 0
 
-    lines.append("## Per-Repository Summary (GitHub)\n")
-    lines.append("| Repo | Merged PRs | Open PRs | Commits | Additions | Deletions |")
-    lines.append("|------|-----------|---------|---------|-----------|-----------|")
+    # Per-repo data: list of dicts for table rendering
+    repo_rows: list[dict[str, Any]] = []
 
     for repo in sorted(repos):
+        meta = get_repo_metadata(org, repo, cache_dir, bypass_ttl)
         merged = get_merged_pr_count(org, repo, cache_dir, bypass_ttl)
         open_prs = get_open_pr_count(org, repo, cache_dir, bypass_ttl)
         commits = get_commit_count(org, repo, cache_dir, bypass_ttl)
@@ -908,77 +1003,254 @@ def generate_report(
         total_open += open_prs
         total_commits += commits
 
-        add_str, del_str = _freq_to_str(freq)
-        freq_str = f"{add_str} / {del_str}"
+        add_raw, del_raw = _freq_totals(freq)
+        total_gh_additions += add_raw
+        total_gh_deletions += del_raw
 
-        lines.append(
-            f"| {repo} | {merged:,} | {open_prs:,} | {commits:,} | {freq_str} |"
+        repo_rows.append(
+            {
+                "name": repo,
+                "stars": meta["stargazers_count"],
+                "forks": meta["forks_count"],
+                "commits": commits,
+                "open_prs": open_prs,
+                "merged_prs": merged,
+                "last_push": meta["pushed_at"] or "—",
+                "freq": freq,
+                "add_raw": add_raw,
+                "del_raw": del_raw,
+            }
         )
 
+    # -----------------------------------------------------------------------
+    # Section 1: Public Repos Summary
+    # -----------------------------------------------------------------------
+    lines.append("## 1. Public Repos Summary")
     lines.append("")
-    lines.append("## Totals (GitHub)\n")
-    lines.append(f"- **Repos scanned**: {len(repos)}")
-    lines.append(f"- **Total merged PRs**: {total_merged:,}")
-    lines.append(f"- **Total open PRs**: {total_open:,}")
-    lines.append(f"- **Total commits**: {total_commits:,}")
+    lines.append(
+        "| Repo | Stars | Forks | Commits | Open PRs | Merged PRs | Last Push |"
+    )
+    lines.append(
+        "|------|------:|------:|--------:|---------:|-----------:|-----------|"
+    )
+    for row in repo_rows:
+        lines.append(
+            f"| {row['name']} "
+            f"| {row['stars']:,} "
+            f"| {row['forks']:,} "
+            f"| {row['commits']:,} "
+            f"| {row['open_prs']:,} "
+            f"| {row['merged_prs']:,} "
+            f"| {row['last_push']} |"
+        )
     lines.append("")
 
-    # Local archive section
-    if local_result is not None:
-        lines.append("## Local Archive\n")
+    # -----------------------------------------------------------------------
+    # Section 2: Archived/Local Repos Summary
+    # -----------------------------------------------------------------------
+    lines.append("## 2. Archived/Local Repos Summary")
+    lines.append("")
+    if local_result is not None and local_result.repos:
         unique_local = [r for r in local_result.repos if not r.is_duplicate]
-        dup_repos = [r for r in local_result.repos if r.is_duplicate]
-
-        lines.append(f"- **Local repos discovered**: {len(local_result.repos)}")
-        lines.append(f"- **Unique (not in GitHub dataset)**: {len(unique_local)}")
+        if unique_local:
+            has_loc = any(r.loc_additions is not None for r in unique_local)
+            header = "| Repo | Path | Commits | First Commit | Last Commit |"
+            sep = "|------|------|--------:|-------------|------------|"
+            if has_loc:
+                header += " LOC (net) |"
+                sep += "----------:|"
+            lines.append(header)
+            lines.append(sep)
+            for r in sorted(unique_local, key=lambda x: str(x.path)):
+                name = r.path.name
+                first = r.first_commit_date or "—"
+                last = r.last_commit_date or "—"
+                row_str = (
+                    f"| {name} | `{r.path}` | {r.commit_count:,} | {first} | {last} |"
+                )
+                if has_loc:
+                    if r.loc_additions is not None and r.loc_deletions is not None:
+                        net = r.loc_additions - r.loc_deletions
+                        row_str += f" {net:,} |"
+                    else:
+                        row_str += " _(skipped)_ |"
+                lines.append(row_str)
+            lines.append("")
+        else:
+            lines.append(
+                "_No unique local repositories found (all matched GitHub repos)._"
+            )
+            lines.append("")
+    else:
         lines.append(
-            f"- **Duplicates (skipped in totals)**: {local_result.duplicate_count}"
-        )
-        lines.append(f"- **Non-GitHub remotes**: {local_result.non_github_count}")
-        lines.append(
-            f"- **Total local commits (unique only)**: {local_result.total_local_commits:,}"
+            "_Local archive scan not performed (use `--local-path` to enable)._"
         )
         lines.append("")
 
-        if unique_local:
-            lines.append("### Unique Local Repositories\n")
-            lines.append(
-                "| Path | Bare | Commits | First Commit | Last Commit | Remote |"
-            )
-            lines.append(
-                "|------|------|---------|-------------|------------|--------|"
-            )
-            for r in sorted(unique_local, key=lambda x: str(x.path)):
-                bare_str = "yes" if r.is_bare else "no"
-                first = r.first_commit_date or "—"
-                last = r.last_commit_date or "—"
-                remote = r.remote_url or "_(no remote)_"
-                # Truncate long paths for readability
-                path_str = str(r.path)
+    # -----------------------------------------------------------------------
+    # Section 3: Lines of Code (churn accounting)
+    # -----------------------------------------------------------------------
+    lines.append("## 3. Lines of Code")
+    lines.append("")
+    lines.append(
+        "> LOC is computed as **additions - deletions** (churn accounting), "
+        "not a file-count scan."
+    )
+    lines.append("")
+
+    # GitHub-sourced LOC (from code_frequency stats)
+    lines.append("### GitHub Repos (code_frequency stats)")
+    lines.append("")
+    lines.append("| Repo | Additions | Deletions | Net LOC |")
+    lines.append("|------|----------:|----------:|--------:|")
+    for row in repo_rows:
+        add_str, del_str = _freq_to_str(row["freq"])
+        if isinstance(row["freq"], list) and row["freq"]:
+            net = row["add_raw"] - row["del_raw"]
+            net_str = f"{net:,}"
+        elif row["freq"] == "202_exhausted":
+            net_str = "_(computing)_"
+        else:
+            net_str = "_(unavailable)_"
+        lines.append(f"| {row['name']} | {add_str} | {del_str} | {net_str} |")
+    lines.append("")
+
+    net_gh = total_gh_additions - total_gh_deletions
+    lines.append(
+        f"**GitHub totals**: +{total_gh_additions:,} additions / "
+        f"-{total_gh_deletions:,} deletions / net {net_gh:,}"
+    )
+    lines.append("")
+
+    # Local-sourced LOC (only when LOC scan was requested)
+    if local_result is not None:
+        local_with_loc = [
+            r
+            for r in local_result.repos
+            if not r.is_duplicate
+            and r.loc_additions is not None
+            and r.loc_deletions is not None
+        ]
+        if local_with_loc:
+            lines.append("### Local Archive (git log --numstat)")
+            lines.append("")
+            lines.append("| Repo | Path | Additions | Deletions | Net LOC |")
+            lines.append("|------|------|----------:|----------:|--------:|")
+            total_local_add = 0
+            total_local_del = 0
+            for r in sorted(local_with_loc, key=lambda x: str(x.path)):
+                add = r.loc_additions or 0
+                del_ = r.loc_deletions or 0
+                total_local_add += add
+                total_local_del += del_
+                net = add - del_
                 lines.append(
-                    f"| `{path_str}` | {bare_str} | {r.commit_count:,} "
-                    f"| {first} | {last} | {remote} |"
+                    f"| {r.path.name} | `{r.path}` | +{add:,} | -{del_:,} | {net:,} |"
                 )
             lines.append("")
-
-        if dup_repos:
-            lines.append("### Deduplication Report\n")
+            net_local = total_local_add - total_local_del
             lines.append(
-                "The following local repos were matched to GitHub repos and excluded from totals:\n"
+                f"**Local totals**: +{total_local_add:,} additions / "
+                f"-{total_local_del:,} deletions / net {net_local:,}"
             )
-            for r in sorted(dup_repos, key=lambda x: str(x.path)):
-                lines.append(f"- `{r.path}` → `{r.normalized_url}`")
             lines.append("")
 
-        if local_result.non_github_count > 0:
-            non_gh = [r for r in local_result.repos if r.non_github_remote]
-            lines.append("### Non-GitHub Remotes\n")
-            lines.append(
-                "The following repos have non-GitHub remotes and are included in unique totals:\n"
-            )
+    # -----------------------------------------------------------------------
+    # Section 4: Deduplication Report
+    # -----------------------------------------------------------------------
+    lines.append("## 4. Deduplication Report")
+    lines.append("")
+    if local_result is not None and local_result.repos:
+        dup_repos = [r for r in local_result.repos if r.is_duplicate]
+        no_match = [
+            r
+            for r in local_result.repos
+            if not r.is_duplicate
+            and r.normalized_url
+            and "github.com" in (r.normalized_url or "")
+        ]
+        non_gh = [r for r in local_result.repos if r.non_github_remote]
+
+        if dup_repos:
+            lines.append("### Matched to GitHub repos (excluded from local totals)")
+            lines.append("")
+            for r in sorted(dup_repos, key=lambda x: str(x.path)):
+                lines.append(f"- `{r.path}` → matched `{r.normalized_url}`")
+            lines.append("")
+        else:
+            lines.append("_No local repos matched GitHub repos._")
+            lines.append("")
+
+        if no_match:
+            lines.append("### Local-only repos (no GitHub match)")
+            lines.append("")
+            for r in sorted(no_match, key=lambda x: str(x.path)):
+                lines.append(f"- `{r.path}` (remote: {r.remote_url or '_(none)_'})")
+            lines.append("")
+
+        if non_gh:
+            lines.append("### Non-GitHub remotes")
+            lines.append("")
             for r in sorted(non_gh, key=lambda x: str(x.path)):
                 lines.append(f"- `{r.path}` → `{r.remote_url}`")
             lines.append("")
+    else:
+        lines.append("_Local archive scan not performed — no deduplication data._")
+        lines.append("")
+
+    # -----------------------------------------------------------------------
+    # Section 5: LOC Scan Issues
+    # -----------------------------------------------------------------------
+    lines.append("## 5. LOC Scan Issues")
+    lines.append("")
+    if local_result is not None and local_result.loc_scan_issues:
+        lines.append(
+            "The following repos had LOC scan issues (timeout, failure, or skipped):"
+        )
+        lines.append("")
+        for issue in local_result.loc_scan_issues:
+            lines.append(f"- {issue}")
+        lines.append("")
+    elif local_result is not None:
+        lines.append("_No LOC scan issues._")
+        lines.append("")
+    else:
+        lines.append("_Local archive scan not performed._")
+        lines.append("")
+
+    # -----------------------------------------------------------------------
+    # Section 6: Headline Numbers
+    # -----------------------------------------------------------------------
+    lines.append("## 6. Headline Numbers")
+    lines.append("")
+    total_repos = len(repos)
+    total_local_unique = (
+        len([r for r in local_result.repos if not r.is_duplicate])
+        if local_result
+        else 0
+    )
+    total_all_commits = total_commits + (
+        local_result.total_local_commits if local_result else 0
+    )
+    net_loc_available = total_gh_additions > 0 or total_gh_deletions > 0
+    net_loc = total_gh_additions - total_gh_deletions
+
+    lines.append("| Metric | Value |")
+    lines.append("|--------|------:|")
+    lines.append(f"| Total GitHub repos | {total_repos:,} |")
+    lines.append(f"| Total unique local repos | {total_local_unique:,} |")
+    lines.append(f"| Total commits (GitHub) | {total_commits:,} |")
+    if local_result:
+        lines.append(
+            f"| Total commits (local, unique) | {local_result.total_local_commits:,} |"
+        )
+    lines.append(f"| Total merged PRs | {total_merged:,} |")
+    lines.append(f"| Total open PRs | {total_open:,} |")
+    if net_loc_available:
+        lines.append(f"| Total net LOC (GitHub, churn) | {net_loc:,} |")
+    else:
+        lines.append("| Total net LOC (GitHub, churn) | _(unavailable)_ |")
+    lines.append("")
 
     return "\n".join(lines)
 
@@ -1152,40 +1424,142 @@ def main(argv: list[str] | None = None) -> int:
     # Write output
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(report)
-    print(f"Report written to: {output_path.resolve()}", file=sys.stderr)
+    # Print final path to stdout on success (machine-readable)
+    print(output_path.resolve())
 
     return 0
 
 
 def _generate_local_only_report(org: str, local_result: LocalScanResult | None) -> str:
-    """Generate a report containing only local archive stats (no GitHub section)."""
+    """Generate a report containing only local archive stats (no GitHub section).
+
+    Uses the same 6-section structure as generate_report(), with GitHub sections
+    showing 'not applicable' and local sections fully populated.
+    """
     lines: list[str] = []
-    lines.append(f"# Local Archive Stats — {org}\n")
-    lines.append(f"_Generated at {_now_iso()}_\n")
+    lines.append(f"# Local Archive Stats — {org}")
+    lines.append(f"_Generated at {_now_iso()}_")
+    lines.append("")
+
+    # Section 1: N/A for local-only
+    lines.append("## 1. Public Repos Summary")
+    lines.append("")
+    lines.append("_Not applicable — `--local-only` mode._")
     lines.append("")
 
     if local_result is None or not local_result.repos:
-        lines.append("_No local git repositories found._")
+        for section in (
+            "## 2. Archived/Local Repos Summary",
+            "## 3. Lines of Code",
+            "## 4. Deduplication Report",
+            "## 5. LOC Scan Issues",
+            "## 6. Headline Numbers",
+        ):
+            lines.append(section)
+            lines.append("")
+            lines.append("_No local git repositories found._")
+            lines.append("")
         return "\n".join(lines)
 
-    lines.append("## Summary\n")
-    lines.append(f"- **Local repos discovered**: {len(local_result.repos)}")
-    lines.append(f"- **Total commits**: {local_result.total_local_commits:,}")
-    lines.append(f"- **Non-GitHub remotes**: {local_result.non_github_count}")
+    # Section 2: Archived/Local Repos Summary
+    lines.append("## 2. Archived/Local Repos Summary")
     lines.append("")
-
-    lines.append("## Repositories\n")
-    lines.append("| Path | Bare | Commits | First Commit | Last Commit | Remote |")
-    lines.append("|------|------|---------|-------------|------------|--------|")
+    has_loc = any(r.loc_additions is not None for r in local_result.repos)
+    header = "| Repo | Path | Commits | First Commit | Last Commit |"
+    sep = "|------|------|--------:|-------------|------------|"
+    if has_loc:
+        header += " LOC (net) |"
+        sep += "----------:|"
+    lines.append(header)
+    lines.append(sep)
     for r in sorted(local_result.repos, key=lambda x: str(x.path)):
-        bare_str = "yes" if r.is_bare else "no"
+        name = r.path.name
         first = r.first_commit_date or "—"
         last = r.last_commit_date or "—"
-        remote = r.remote_url or "_(no remote)_"
+        row_str = f"| {name} | `{r.path}` | {r.commit_count:,} | {first} | {last} |"
+        if has_loc:
+            if r.loc_additions is not None and r.loc_deletions is not None:
+                net = r.loc_additions - r.loc_deletions
+                row_str += f" {net:,} |"
+            else:
+                row_str += " _(skipped)_ |"
+        lines.append(row_str)
+    lines.append("")
+
+    # Section 3: Lines of Code
+    lines.append("## 3. Lines of Code")
+    lines.append("")
+    lines.append(
+        "> LOC is computed as **additions - deletions** (churn accounting), "
+        "not a file-count scan."
+    )
+    lines.append("")
+    local_with_loc = [
+        r
+        for r in local_result.repos
+        if r.loc_additions is not None and r.loc_deletions is not None
+    ]
+    if local_with_loc:
+        lines.append("| Repo | Path | Additions | Deletions | Net LOC |")
+        lines.append("|------|------|----------:|----------:|--------:|")
+        total_add = 0
+        total_del = 0
+        for r in sorted(local_with_loc, key=lambda x: str(x.path)):
+            add = r.loc_additions or 0
+            del_ = r.loc_deletions or 0
+            total_add += add
+            total_del += del_
+            lines.append(
+                f"| {r.path.name} | `{r.path}` "
+                f"| +{add:,} | -{del_:,} | {add - del_:,} |"
+            )
+        lines.append("")
         lines.append(
-            f"| `{r.path}` | {bare_str} | {r.commit_count:,} "
-            f"| {first} | {last} | {remote} |"
+            f"**Totals**: +{total_add:,} additions / "
+            f"-{total_del:,} deletions / net {total_add - total_del:,}"
         )
+        lines.append("")
+    else:
+        lines.append("_LOC scan not performed. Use `--include-local-loc` to enable._")
+        lines.append("")
+
+    # Section 4: Deduplication Report
+    lines.append("## 4. Deduplication Report")
+    lines.append("")
+    lines.append(
+        "_Not applicable — `--local-only` mode (no GitHub dataset to match against)._"
+    )
+    lines.append("")
+
+    # Section 5: LOC Scan Issues
+    lines.append("## 5. LOC Scan Issues")
+    lines.append("")
+    if local_result.loc_scan_issues:
+        lines.append(
+            "The following repos had LOC scan issues (timeout, failure, or skipped):"
+        )
+        lines.append("")
+        for issue in local_result.loc_scan_issues:
+            lines.append(f"- {issue}")
+        lines.append("")
+    else:
+        lines.append("_No LOC scan issues._")
+        lines.append("")
+
+    # Section 6: Headline Numbers
+    lines.append("## 6. Headline Numbers")
+    lines.append("")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|------:|")
+    lines.append(f"| Total local repos | {len(local_result.repos):,} |")
+    lines.append(f"| Total commits | {local_result.total_local_commits:,} |")
+    lines.append(f"| Non-GitHub remotes | {local_result.non_github_count:,} |")
+    if local_with_loc:
+        total_add = sum(r.loc_additions or 0 for r in local_with_loc)
+        total_del = sum(r.loc_deletions or 0 for r in local_with_loc)
+        lines.append(f"| Total net LOC (churn) | {total_add - total_del:,} |")
+    else:
+        lines.append("| Total net LOC (churn) | _(not scanned)_ |")
     lines.append("")
 
     return "\n".join(lines)
