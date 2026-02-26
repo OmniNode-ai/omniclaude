@@ -225,13 +225,17 @@ class PipelineSlackNotifier:
             return None
 
         try:
-            from omnibase_infra.handlers.handler_slack_webhook import (
-                HandlerSlackWebhook,
+            import importlib
+
+            mod = importlib.import_module(
+                "omnibase_infra.handlers.handler_slack_webhook"
             )
+            handler_cls = mod.HandlerSlackWebhook
 
             # When OMN-2157 lands, HandlerSlackWebhook will accept bot_token
             # and default_channel params for Web API mode. For now, webhook only.
-            return HandlerSlackWebhook(webhook_url=webhook_url or None)
+            handler: SlackHandlerProtocol = handler_cls(webhook_url=webhook_url or None)
+            return handler
         except ImportError:
             logger.warning(
                 "omnibase_infra not available — Slack notifications disabled"
