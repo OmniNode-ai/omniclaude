@@ -64,7 +64,10 @@ else:
         sys.exit(1)
 
 sys.path.insert(0, str(OMNICLAUDE_PATH))
+sys.path.insert(0, str(OMNICLAUDE_PATH / "src"))
 from config import settings
+
+from omniclaude.hooks.topics import TopicBase
 
 try:
     from omniclaude.lib.core import EnumCoreErrorCode, OnexError
@@ -85,10 +88,10 @@ class RoutingEventClient:
     and IntelligenceEventClient.
     """
 
-    # Kafka topic names
-    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
-    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
-    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
+    # Kafka topic names — canonical TopicBase constants (OMN-2940)
+    TOPIC_REQUEST = TopicBase.ROUTING_REQUESTED
+    TOPIC_COMPLETED = TopicBase.ROUTING_COMPLETED
+    TOPIC_FAILED = TopicBase.ROUTING_FAILED
 
     def __init__(self, bootstrap_servers=None, request_timeout_ms=5000):
         """
