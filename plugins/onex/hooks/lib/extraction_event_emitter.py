@@ -43,10 +43,24 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# Ensure sibling modules (e.g. emit_client_wrapper) are importable.
+#
+# When this script runs in a background subshell (user-prompt-submit.sh
+# lines 715-718), Python's automatic sys.path[0] = script-directory may not
+# resolve correctly if the invocation path contains symlinks or the working
+# directory differs.  Explicitly inserting our own directory guarantees the
+# sibling import succeeds regardless of invocation context.  (OMN-2844)
+# ---------------------------------------------------------------------------
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +69,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 try:
     from emit_client_wrapper import (
-        emit_event as _emit_event,  # type: ignore[import-not-found]
+        emit_event as _emit_event,
     )
 except ImportError:
     _emit_event = None
