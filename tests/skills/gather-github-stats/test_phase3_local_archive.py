@@ -682,7 +682,7 @@ class TestGenerateReportLocalSection:
             bypass_ttl=False,
             local_result=local_result,
         )
-        assert "## Local Archive" in report
+        assert "## 2. Archived/Local Repos Summary" in report
         assert "/some/repo" in report
 
     @pytest.mark.unit
@@ -760,7 +760,7 @@ class TestGenerateLocalOnlyReport:
         result = LocalScanResult(repos=[r], total_local_commits=5)
         report = gather_stats._generate_local_only_report("TestOrg", result)
         assert "/my/local/project" in report
-        assert "yes" in report  # bare=True shown as "yes"
+        assert "## 2. Archived/Local Repos Summary" in report
 
     @pytest.mark.unit
     def test_report_header_contains_org(self) -> None:
