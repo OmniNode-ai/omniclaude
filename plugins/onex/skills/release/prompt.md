@@ -130,16 +130,17 @@ REPO_PATH="${OMNI_HOME}/${repo}"
 # Pull latest main
 git -C "${REPO_PATH}" pull --ff-only
 
-# Find last tag matching the repo's tag pattern
-LAST_TAG=$(git -C "${REPO_PATH}" tag -l "${repo}/v*" --sort=-v:refname | head -1)
+# Find last tag — primary: git describe (handles merges well), fallback: sort by semver
+LAST_TAG=$(git -C "${REPO_PATH}" describe --tags --abbrev=0 --match "v*" 2>/dev/null || \
+           git -C "${REPO_PATH}" tag -l "v*" --sort=-v:refname | head -1)
 
 # If no tag exists, use the initial commit
 if [ -z "$LAST_TAG" ]; then
   LAST_TAG=$(git -C "${REPO_PATH}" rev-list --max-parents=0 HEAD | head -1)
   CURRENT_VERSION="0.0.0"
 else
-  # Extract version from tag: omnibase_core/v1.5.0 -> 1.5.0
-  CURRENT_VERSION=$(echo "$LAST_TAG" | sed 's|.*/v||')
+  # Extract version from tag: v1.5.0 -> 1.5.0
+  CURRENT_VERSION=$(echo "$LAST_TAG" | sed 's|^v||')
 fi
 
 # Count commits since last tag
@@ -594,7 +595,8 @@ compatible release (`~=X.Y`) or range specifiers.
 Generate a CHANGELOG entry from conventional commits since the last tag:
 
 ```bash
-LAST_TAG=$(git -C "${REPO_PATH}" tag -l "${repo}/v*" --sort=-v:refname | head -1)
+LAST_TAG=$(git -C "${REPO_PATH}" describe --tags --abbrev=0 --match "v*" 2>/dev/null || \
+           git -C "${REPO_PATH}" tag -l "v*" --sort=-v:refname | head -1)
 
 # Get categorized commits
 FEATS=$(git -C "${WORKTREE_PATH}" log --format="- %s" "${LAST_TAG}..HEAD" --grep="^feat")
