@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Composite action: notify CI relay of workflow completion.
+# Add as a final job in any CI workflow to enable push-based notifications.
+#
+# Usage in a workflow:
+#   notify:
+#     name: Notify CI Relay
+#     needs: [quality, tests, gate]    # wait for all jobs
+#     if: always()                      # run even if prior jobs fail
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: ./.github/actions/notify-completion
+#         with:
+#           relay_url: ${{ secrets.CI_RELAY_URL }}
+#           callback_token: ${{ secrets.CI_CALLBACK_TOKEN }}
+#
+# See OMN-2826 Phase 2a for specification.
+
+name: Notify CI Completion
+description: Send workflow completion callback to CI relay
+
+inputs:
+  relay_url:
+    description: "CI relay endpoint URL"
+    required: true
+  callback_token:
+    description: "Bearer token for relay authentication (CI_CALLBACK_TOKEN)"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Collect job results and notify
+      shell: bash
+      env:
+        RELAY_URL: ${{ inputs.relay_url }}
+        CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        GH_REPO: ${{ github.repository }}
+        GH_SHA: ${{ github.sha }}
+        GH_RUN_ID: ${{ github.run_id }}
+        GH_REF: ${{ github.ref }}
+        GH_HEAD_REF: ${{ github.head_ref }}
+        GH_BASE_REF: ${{ github.base_ref }}
+        GH_WORKFLOW_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        GH_PR_NUMBER: ${{ github.event.pull_request.number || 0 }}
+      run: |
+        # Determine overall conclusion from workflow context.
+        # The needs context is not available in composite actions,
+        # so we use the GH API to get the workflow run conclusion.
+        CONCLUSION="unknown"
+        if command -v gh &>/dev/null; then
+          RUN_DATA=$(gh api "repos/${GH_REPO}/actions/runs/${GH_RUN_ID}" \
+            --jq '{conclusion: .conclusion, status: .status}' 2>/dev/null || echo '{}')
+          CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion // "unknown"')
+          # If workflow is still in_progress (this job is the last one),
+          # infer from whether previous jobs failed
+          if [ "$CONCLUSION" = "null" ] || [ "$CONCLUSION" = "unknown" ]; then
+            # Fetch all jobs for this run and check conclusions
+            JOBS_JSON=$(gh api "repos/${GH_REPO}/actions/runs/${GH_RUN_ID}/jobs" \
+              --jq '[.jobs[] | select(.name != "Notify CI Relay") | {name: .name, conclusion: .conclusion}]' \
+              2>/dev/null || echo '[]')
+            # If any job failed, overall is failure
+            HAS_FAILURE=$(echo "$JOBS_JSON" | jq 'any(.[]; .conclusion == "failure")' 2>/dev/null || echo "false")
+            if [ "$HAS_FAILURE" = "true" ]; then
+              CONCLUSION="failure"
+            else
+              CONCLUSION="success"
+            fi
+          fi
+        fi
+
+        # Build payload with jq -nc for guaranteed valid JSON
+        PAYLOAD=$(jq -nc \
+          --arg repo "$GH_REPO" \
+          --argjson pr "${GH_PR_NUMBER:-0}" \
+          --arg conclusion "$CONCLUSION" \
+          --arg sha "$GH_SHA" \
+          --argjson run_id "${GH_RUN_ID}" \
+          --arg ref "$GH_REF" \
+          --arg head_ref "${GH_HEAD_REF:-}" \
+          --arg base_ref "${GH_BASE_REF:-}" \
+          --arg workflow_url "$GH_WORKFLOW_URL" \
+          '{
+            repo: $repo,
+            pr: $pr,
+            conclusion: $conclusion,
+            sha: $sha,
+            run_id: $run_id,
+            ref: $ref,
+            head_ref: $head_ref,
+            base_ref: $base_ref,
+            workflow_url: $workflow_url,
+            jobs: []
+          }')
+
+        # Send to relay (best-effort -- don't fail the workflow)
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          -X POST "${RELAY_URL}/callback" \
+          -H "Authorization: Bearer ${CALLBACK_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "$PAYLOAD" \
+          --connect-timeout 10 \
+          --max-time 30 \
+          2>/dev/null || echo "000")
+
+        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
+          echo "CI relay notified successfully (HTTP ${HTTP_CODE})"
+        elif [ "$HTTP_CODE" = "429" ]; then
+          echo "::warning::CI relay rate limited (HTTP 429). Notification skipped."
+        elif [ "$HTTP_CODE" = "000" ]; then
+          echo "::warning::CI relay unreachable. Notification skipped."
+        else
+          echo "::warning::CI relay returned HTTP ${HTTP_CODE}. Notification may have failed."
+        fi

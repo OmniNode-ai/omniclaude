@@ -132,10 +132,70 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/pr-watch.json`
 
 **Status values**: `approved` | `changes_requested_fixed` | `timeout` | `capped` | `error`
 
+## Push-Based Notification Support (OMN-2826)
+
+pr-watch supports two notification modes, selected automatically based on infrastructure
+availability. The push-based mode eliminates polling for CI status checks during the
+review cycle.
+
+### EVENT_BUS+ Mode (preferred)
+
+When Kafka and Valkey are available (`ENABLE_REAL_TIME_EVENTS=true`):
+
+1. Register watch: agent registers interest in `(repo, pr_number)` via Valkey watch registry
+2. Wait for inbox: block until a `pr-status` event arrives in the agent's inbox topic
+   (`onex.evt.omniclaude.agent-inbox.{agent_id}.v1`)
+3. Process result: on CI completion after a fix cycle, check review status and decide next step
+
+```python
+from omniclaude.services.inbox_wait import register_watch, wait_for_pr_status
+
+# Register watch for CI re-runs after pushing fixes
+await register_watch(agent_id=agent_id, repo=repo, pr_number=pr_number)
+
+# After pushing a fix, wait for CI to complete (replaces polling)
+ci_result = wait_for_pr_status(
+    repo=repo,
+    pr_number=pr_number,
+    run_id=latest_run_id,
+    agent_id=agent_id,
+    timeout_seconds=3600,
+)
+```
+
+### STANDALONE Mode (fallback)
+
+When Kafka/Valkey are unavailable:
+
+1. Spawn `gh run watch {run_id} --exit-status` as background process after pushing fixes
+2. Wait for result in file-based inbox (`~/.claude/pr-inbox/`)
+
+```python
+from omniclaude.services.inbox_wait import wait_for_pr_status
+
+# Unified interface -- automatically falls back to STANDALONE
+ci_result = wait_for_pr_status(
+    repo=repo,
+    pr_number=pr_number,
+    run_id=latest_run_id,
+    timeout_seconds=3600,
+)
+```
+
+### Migration Notes
+
+The original review polling loop is unchanged. The inbox-wait pattern replaces only the
+CI status checks that happen between fix cycles (when pr-watch pushes a fix and needs
+to wait for CI before re-requesting review). The `wait_for_pr_status()` function provides
+a unified interface that works in both EVENT_BUS and STANDALONE modes.
+
 ## See Also
 
 - `ticket-pipeline` skill (planned: invokes pr-watch after ci-watch passes)
 - `ci-watch` skill (planned: runs before pr-watch)
 - `auto-merge` skill (planned: runs after pr-watch passes)
 - `pr-review-dev` skill (invoked to fix review comments)
-- OMN-2524 — implementation ticket
+- `inbox_wait` module (`omniclaude.services.inbox_wait`) — unified wait interface
+- `node_github_pr_watcher_effect` — ONEX node for EVENT_BUS+ mode routing
+- OMN-2524 — pr-watch implementation ticket
+- OMN-2826 — push-based notifications ticket
