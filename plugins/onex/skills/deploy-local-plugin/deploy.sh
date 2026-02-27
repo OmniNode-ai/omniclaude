@@ -96,24 +96,52 @@ fi
 # Priority:
 #   1. CLAUDE_PLUGIN_ROOT, but only when it's NOT the plugin cache (i.e. a real dev checkout)
 #   2. installLocation from known_marketplaces.json (set when plugin was registered from a local path)
-#   3. BASH_SOURCE fallback (script location → ../../ = plugin root)
+#   3. source.path from known_marketplaces.json (fallback if installLocation is missing)
+#   4. Error — refuse to deploy cache-to-cache
 #
 # When invoked as a Claude Code skill, CLAUDE_PLUGIN_ROOT points to the installed cache
 # (e.g. ~/.claude/plugins/cache/omninode-tools/onex/2.2.4), NOT the dev repo.
 # Using the cache as source would deploy the old cached version, ignoring any local changes.
 CACHE_PAT="$HOME/.claude/plugins/cache"
+KNOWN_MKT="$HOME/.claude/plugins/known_marketplaces.json"
+
+_resolve_marketplace_source() {
+    # Try installLocation first, then source.path — both may point to the repo root.
+    local loc
+    for key in "installLocation" "source.path"; do
+        loc="$(jq -r ".\"omninode-tools\".${key} // empty" "$KNOWN_MKT" 2>/dev/null)" || continue
+        [[ -n "$loc" ]] || continue
+        # Validate the path has the expected plugin structure
+        if [[ -f "${loc}/plugins/onex/.claude-plugin/plugin.json" ]]; then
+            echo "${loc}/plugins/onex"
+            return 0
+        fi
+    done
+    return 1
+}
+
 if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && "$CLAUDE_PLUGIN_ROOT" != "$CACHE_PAT"* ]]; then
     # CLAUDE_PLUGIN_ROOT points to a real dev checkout, not the installed cache
     SOURCE_ROOT="$CLAUDE_PLUGIN_ROOT"
-elif MARKETPLACE_INSTALL_LOCATION="$(jq -r '.["omninode-tools"].installLocation // empty' \
-        "$HOME/.claude/plugins/known_marketplaces.json" 2>/dev/null)" \
-    && [[ -n "$MARKETPLACE_INSTALL_LOCATION" ]] \
-    && [[ -f "${MARKETPLACE_INSTALL_LOCATION}/plugins/onex/.claude-plugin/plugin.json" ]]; then
-    # Registered dev-directory marketplace — use the recorded install location
-    SOURCE_ROOT="${MARKETPLACE_INSTALL_LOCATION}/plugins/onex"
+elif [[ -f "$KNOWN_MKT" ]] && SOURCE_ROOT="$(_resolve_marketplace_source)"; then
+    # Resolved from known_marketplaces.json (installLocation or source.path)
+    :
 else
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    SOURCE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+    # All resolution tiers failed. Refuse to silently deploy cache-to-cache.
+    echo -e "${RED}Error: Could not find the omniclaude repository.${NC}" >&2
+    echo "" >&2
+    echo "The deploy script needs a source directory (the repo) to sync from." >&2
+    echo "Tried:" >&2
+    echo "  1. CLAUDE_PLUGIN_ROOT env var (not set, or points to cache)" >&2
+    echo "  2. known_marketplaces.json installLocation (missing or invalid)" >&2
+    echo "  3. known_marketplaces.json source.path (missing or invalid)" >&2
+    echo "" >&2
+    echo "Fix: set CLAUDE_PLUGIN_ROOT to the plugin directory in your repo:" >&2
+    echo "  CLAUDE_PLUGIN_ROOT=/path/to/omniclaude/plugins/onex $0 $*" >&2
+    echo "" >&2
+    echo "Or run a deploy once with CLAUDE_PLUGIN_ROOT set — subsequent runs" >&2
+    echo "will auto-resolve via known_marketplaces.json." >&2
+    exit 1
 fi
 
 PLUGIN_JSON="${SOURCE_ROOT}/.claude-plugin/plugin.json"

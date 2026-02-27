@@ -76,26 +76,74 @@ or timed out.
 /auto-merge 123 org/repo --no-delete-branch
 ```
 
-## Merge Flow
+## Merge Flow (Tier-Aware)
 
 **Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
 
-1. Fetch PR state: `gh pr view {pr_number} --repo {repo} --json mergeable,mergeStateStatus,reviews`
-2. Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
+### Step 1: Fetch PR State (Tier-Aware)
+
+The merge readiness check depends on the current ONEX tier (see `@_lib/tier-routing/helpers.md`):
+
+**FULL_ONEX Path**:
+```python
+from omniclaude.nodes.node_git_effect.models import GitOperation, ModelGitRequest
+
+request = ModelGitRequest(
+    operation=GitOperation.PR_VIEW,
+    repo=repo,
+    pr_number=pr_number,
+    json_fields=["mergeable", "mergeStateStatus", "reviewDecision",
+                 "statusCheckRollup", "latestReviews"],
+)
+result = await handler.pr_view(request)
+```
+
+**STANDALONE / EVENT_BUS Path**:
+```bash
+${CLAUDE_PLUGIN_ROOT}/_bin/pr-merge-readiness.sh --pr {pr_number} --repo {repo}
+# Returns: { ready, mergeable, ci_status, review_decision, merge_state_status, blockers }
+```
+
+### Step 2: Poll CI Readiness
+
+Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
      ```text
      [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
      ```
    - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to gate
-   - `mergeStateStatus == "DIRTY"`: exit immediately with `status: error`, message: "PR has merge conflicts — resolve before retrying"
+   - `mergeStateStatus == "DIRTY"`: exit immediately with `status: error`, message: "PR has merge conflicts -- resolve before retrying"
    - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
-   - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out — mergeStateStatus never reached CLEAN"
-3. Post HIGH_RISK Slack gate (see message format below)
-4. Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
-   - On "merge" reply: execute merge via `gh pr merge {pr_number} --repo {repo} --{strategy}{delete_branch_flag}` where `{delete_branch_flag}` is `--delete-branch` (with a leading space) if `delete_branch=true`, else empty
+   - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out -- mergeStateStatus never reached CLEAN"
+
+### Step 3: Post HIGH_RISK Slack Gate
+
+Post HIGH_RISK Slack gate (see message format below).
+
+### Step 4: Poll for Slack Reply
+
+Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
+   - On "merge" reply: execute merge (see Step 5)
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
    - On budget exhausted: exit with `status: timeout`
-5. Post Slack notification on merge completion
+
+### Step 5: Execute Merge (Explicit `gh` Exception)
+
+**The merge mutation always uses `gh pr merge` directly** -- this is an explicit exception
+to the tier routing policy. Rationale: the merge is a thin CLI call (single mutation, no
+parsing of output needed). There is no benefit to routing through `node_git_effect.pr_merge()`
+for this operation.
+
+```bash
+gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_branch}
+```
+
+This exception is documented and intentional. All other PR operations (view, list, checks)
+use tier-aware routing.
+
+### Step 6: Post Merge Notification
+
+Post Slack notification on merge completion.
 
 ## Slack Gate Message Format
 
@@ -194,9 +242,27 @@ exec claude --skill onex:auto-merge \
 | `Skill(skill="onex:auto-merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
 | `auto-merge.sh 123 org/repo --no-delete-branch` | Shell: direct invocation, keep branch after merge |
 
+## Tier Routing (OMN-2828)
+
+PR merge readiness checks use tier-aware backend selection:
+
+| Tier | Readiness Check | Merge Execution |
+|------|----------------|-----------------|
+| `FULL_ONEX` | `node_git_effect.pr_view()` | `gh pr merge` (explicit exception) |
+| `STANDALONE` | `_bin/pr-merge-readiness.sh` | `gh pr merge` (explicit exception) |
+| `EVENT_BUS` | `_bin/pr-merge-readiness.sh` | `gh pr merge` (explicit exception) |
+
+**Merge execution exception**: The actual `gh pr merge` call is always direct -- it is a
+thin mutation (single API call, no output parsing). Routing it through `node_git_effect`
+adds complexity without benefit. This is the only exception to the tier routing policy.
+
+Tier detection: see `@_lib/tier-routing/helpers.md`.
+
 ## See Also
 
-- `ticket-pipeline` skill (planned: invokes auto-merge after pr-watch passes)
-- `pr-watch` skill (planned: runs before auto-merge)
+- `ticket-pipeline` skill (invokes auto-merge after pr-watch passes)
+- `pr-watch` skill (runs before auto-merge)
 - `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
-- OMN-2525 — implementation ticket
+- `_bin/pr-merge-readiness.sh` -- STANDALONE merge readiness backend
+- `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
+- OMN-2525 -- implementation ticket

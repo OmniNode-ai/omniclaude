@@ -97,6 +97,7 @@ jobs:
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
             --exclude 'https://www\.gnu\.org'
+            --exclude 'https://claude\.ai'
             '**/*.md'
           fail: true
 

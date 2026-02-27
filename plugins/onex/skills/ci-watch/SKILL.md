@@ -75,10 +75,58 @@ when CI reaches a terminal state: `passed`, `capped` (fix cycles exhausted), `ti
 /ci-watch 123 org/repo --no-auto-fix
 ```
 
-## Watch Loop
+## Watch Loop (Tier-Aware)
 
-Use `gh run watch` to block until CI completes. Reacts immediately when the run finishes —
-no fixed polling interval.
+The watch strategy depends on the current ONEX tier (see `@_lib/tier-routing/helpers.md`):
+
+### FULL_ONEX Path: Inbox-Wait (Push-Based)
+
+In FULL_ONEX mode, CI completion events are delivered via the event bus. The skill
+subscribes to a file-based inbox and blocks until a CI completion event arrives:
+
+```python
+# Push-based: event bus delivers CI status to file inbox
+inbox_path = Path(f"~/.claude/inboxes/ci-watch/{repo}/{pr_number}.json")
+event = await inbox_wait(
+    inbox_path,
+    timeout_seconds=timeout_minutes * 60,
+    poll_interval_seconds=5,
+)
+# event contains: { status, checks, run_id, conclusion }
+```
+
+The event bus (Kafka/Redpanda) publishes CI completion events from GitHub webhooks.
+`inbox_wait` polls a local file that the event consumer writes to. This avoids repeated
+API calls and reacts within seconds of CI completing.
+
+### STANDALONE / EVENT_BUS Path: _bin/ci-status.sh + File Inbox
+
+In STANDALONE mode, use `_bin/ci-status.sh` for polling:
+
+```bash
+# Option 1: Blocking wait (polls internally every 30s)
+${CLAUDE_PLUGIN_ROOT}/_bin/ci-status.sh \
+  --pr {pr_number} --repo {repo} --wait --timeout {timeout_seconds}
+
+# Option 2: Snapshot (check once, return immediately)
+${CLAUDE_PLUGIN_ROOT}/_bin/ci-status.sh --pr {pr_number} --repo {repo}
+```
+
+The script wraps `gh pr checks` and `gh run view --log-failed` into structured JSON:
+```json
+{
+  "pr": 123,
+  "repo": "org/repo",
+  "status": "passing|failing|pending|timeout",
+  "checks": [...],
+  "failing_checks": [...],
+  "log_excerpt": "..."
+}
+```
+
+### Fallback (Legacy)
+
+If neither inbox-wait nor `_bin/ci-status.sh` is available, use `gh run watch` directly:
 
 1. Get PR head branch and latest run ID:
    ```bash
@@ -93,13 +141,15 @@ no fixed polling interval.
    EXIT_CODE=$?
    ```
 
-3. If exit code 0: all checks passed → exit with `status: passed`
+### Common Logic (All Tiers)
 
-4. If exit code non-zero and `auto_fix=true` and cycles remaining:
-   - Fetch failure log: `gh run view "$RUN_ID" --repo {repo} --log-failed`
+3. If all checks passed: exit with `status: passed`
+
+4. If failures detected and `auto_fix=true` and cycles remaining:
+   - Extract failure details from the CI status response (or `gh run view --log-failed`)
    - Dispatch fix agent (polymorphic-agent) with failure details
    - Increment fix cycle count
-   - Wait up to 60s for a new CI run to appear on the branch, then go to step 1
+   - Wait up to 60s for a new CI run to appear on the branch, then restart watch
 5. If fix cycles exhausted: exit with `status: capped`
 6. If elapsed > timeout_minutes: exit with `status: timeout`
 
@@ -225,8 +275,27 @@ Task(
 )
 ```
 
+## Tier Routing (OMN-2828)
+
+CI status monitoring uses tier-aware backend selection:
+
+| Tier | Backend | Latency | Details |
+|------|---------|---------|---------|
+| `FULL_ONEX` | inbox-wait (push) | ~5s | Event bus delivers CI completion to file inbox |
+| `STANDALONE` | `_bin/ci-status.sh` | ~30s poll | Wraps `gh pr checks` + `gh run view --log-failed` |
+| `EVENT_BUS` | `_bin/ci-status.sh` | ~30s poll | Same as STANDALONE (event bus used for other signals) |
+
+Tier detection: see `@_lib/tier-routing/helpers.md`.
+
+The file inbox pattern (`~/.claude/inboxes/ci-watch/{repo}/{pr}.json`) is shared with
+Phase 2 (OMN-2826) push-based notifications. When the event consumer writes to this path,
+any skill blocking on `inbox_wait()` is unblocked immediately.
+
 ## See Also
 
 - `ticket-pipeline` skill (Phase 4 dispatches ci-watch as a background agent on CI failure)
 - `pr-watch` skill (runs after Phase 4 in ticket-pipeline)
-- OMN-2523 — implementation ticket
+- `_bin/ci-status.sh` -- STANDALONE CI status extraction backend
+- `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
+- OMN-2523 -- implementation ticket
+- OMN-2826 -- push-based notifications (inbox-wait pattern)

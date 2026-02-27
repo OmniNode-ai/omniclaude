@@ -33,6 +33,25 @@ REVOKED_FILE = f"{STATE_DIR}/revoked_runs.yaml"
 
 ---
 
+## Inter-Agent Communication (Inbox Pattern)
+
+Workers communicate task completion and unblock signals via the agent inbox pattern
+(`@_lib/agent-inbox/helpers.md`). This provides dual delivery: file-based STANDALONE
+inboxes for reliability and optional EVENT_BUS+ Kafka topics for real-time streaming.
+
+**Key functions** (from `_lib/agent-inbox/helpers.md`):
+- `notify_task_completed()` — broadcast to epic + directed to team-lead
+- `send_unblock()` — directed unblock signal to a blocked worker
+- `read_inbox()` / `read_epic_broadcast()` — read pending messages
+- `wait_for_message()` — block-wait for a specific message type
+- `gc_inboxes()` — remove expired messages
+
+Workers MUST call `notify_task_completed()` after every task completion (in addition
+to TaskUpdate + SendMessage). The team-lead reads epic broadcasts to augment TaskList
+polling with richer context (PR URLs, commit SHAs, branches).
+
+---
+
 ## Core Invariants
 
 These rules are enforced at every step without exception.
@@ -590,6 +609,22 @@ while True:
     #   - Do NOT update ticket_status_map from messages alone
     # (This block executes when a message arrives between polling turns)
 
+    # --- Read epic broadcast inbox for richer context ---
+    # Augment TaskList polling with inbox messages (PR URLs, commit SHAs)
+    # Inbox messages are supplementary; TaskList remains authoritative for status
+    try:
+        broadcasts = read_epic_broadcast(epic_id)
+        for broadcast in broadcasts:
+            payload = broadcast.get("payload", {})
+            tid = payload.get("ticket_id")
+            pr = payload.get("pr_url")
+            if tid and pr and tid not in state.get("pr_urls", {}):
+                state.setdefault("pr_urls", {})[tid] = pr
+                write_yaml(STATE_FILE, state)
+                print(f"[inbox] PR URL captured from broadcast: {tid} -> {pr}")
+    except Exception as inbox_err:
+        print(f"Warning: Inbox broadcast read failed (non-fatal): {inbox_err}")
+
     # --- Check for finalization ---
     if new_map and all(v in terminal_statuses for v in new_map.values()):
         print("All tasks terminal. Proceeding to Phase 5.")
@@ -696,7 +731,15 @@ print("=== Cleanup ===")
 print(f"To remove the task team (if still present):")
 print(f"  TeamDelete({state['team_name']})")
 
-# 4. TeamDelete — best-effort, non-fatal
+# 4. GC agent inboxes — best-effort, non-fatal
+try:
+    removed = gc_inboxes(ttl_hours=24)
+    if removed > 0:
+        print(f"Inbox GC: removed {removed} expired messages.")
+except Exception as e:
+    print(f"Warning: Inbox GC failed (non-fatal): {e}")
+
+# 5. TeamDelete — best-effort, non-fatal
 try:
     TeamDelete(state["team_name"])
     print(f"Team {state['team_name']} deleted.")
@@ -892,6 +935,25 @@ def execute_ticket(task):
                 "branch": branch,
             }}
         )
+
+        # Inbox notification: broadcast to epic + directed to team-lead
+        # (@_lib/agent-inbox/helpers.md)
+        try:
+            notify_task_completed(
+                source_agent_id=f"worker-{repo}",
+                target_agent_id="team-lead",
+                epic_id="{epic_id}",
+                payload={{
+                    "ticket_id": ticket_id,
+                    "pr_url": pr_url,
+                    "commit_sha": get_head_sha(worktree_path),
+                    "branch": branch,
+                    "repo": "{repo}",
+                }},
+                run_id="{run_id}",
+            )
+        except Exception as inbox_err:
+            print(f"Warning: Inbox notification failed (non-fatal): {{inbox_err}}")
 
     except Exception as e:
         # FAILURE: update task status BEFORE sending message

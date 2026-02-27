@@ -8,12 +8,16 @@
 # and the enhanced ci-fix-pipeline skill.
 #
 # Usage:
-#   ci-status.sh --pr <PR_NUMBER> [--repo <OWNER/REPO>]
-#   ci-status.sh --branch <BRANCH>  [--repo <OWNER/REPO>]
+#   ci-status.sh --pr <PR_NUMBER> [--repo <OWNER/REPO>] [--wait] [--timeout <seconds>]
+#   ci-status.sh --branch <BRANCH>  [--repo <OWNER/REPO>] [--wait] [--timeout <seconds>]
+#
+# Modes:
+#   Default: snapshot -- return current CI status and exit
+#   --wait:  poll until terminal state (all checks pass/fail) or timeout
 #
 # Output JSON:
 #   {
-#     "status": "failing" | "passing" | "pending" | "unknown",
+#     "status": "failing" | "passing" | "pending" | "unknown" | "timeout",
 #     "pr_number": 42,
 #     "repo": "OmniNode-ai/omniclaude",
 #     "branch": "jonah/omn-2829-self-healing-ci",
@@ -42,15 +46,19 @@ set -euo pipefail
 PR=""
 BRANCH=""
 REPO=""
+WAIT=false
+TIMEOUT=3600  # 1 hour default
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --pr)       PR="$2";     shift 2 ;;
-    --branch)   BRANCH="$2"; shift 2 ;;
-    --repo)     REPO="$2";   shift 2 ;;
+    --pr)       PR="$2";       shift 2 ;;
+    --branch)   BRANCH="$2";   shift 2 ;;
+    --repo)     REPO="$2";     shift 2 ;;
+    --wait)     WAIT=true;     shift   ;;
+    --timeout)  TIMEOUT="$2";  shift 2 ;;
     --help|-h)
-      echo "Usage: ci-status.sh --pr <N> [--repo ORG/REPO]"
-      echo "       ci-status.sh --branch <NAME> [--repo ORG/REPO]"
+      echo "Usage: ci-status.sh --pr <N> [--repo ORG/REPO] [--wait] [--timeout <seconds>]"
+      echo "       ci-status.sh --branch <NAME> [--repo ORG/REPO] [--wait] [--timeout <seconds>]"
       exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -95,53 +103,94 @@ if [[ -z "$BRANCH" ]]; then
 fi
 
 # --- Fetch latest CI run ---
-RUN_JSON=$(gh run list \
-  --branch "$BRANCH" \
-  --repo "$REPO" \
-  -L 1 \
-  --json databaseId,status,conclusion,name \
-  2>/dev/null || echo "[]")
+fetch_run() {
+  gh run list \
+    --branch "$BRANCH" \
+    --repo "$REPO" \
+    -L 1 \
+    --json databaseId,status,conclusion,name \
+    2>/dev/null || echo "[]"
+}
 
-if [[ "$RUN_JSON" == "[]" || -z "$RUN_JSON" ]]; then
-  jq -n \
-    --arg status "unknown" \
-    --arg pr "$PR" \
-    --arg repo "$REPO" \
-    --arg branch "$BRANCH" \
-    --arg fetched_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{
-      status: $status,
-      pr_number: (if $pr == "" then null else ($pr | tonumber) end),
-      repo: $repo,
-      branch: $branch,
-      run_id: null,
-      failed_jobs: [],
-      failure_summary: "No CI runs found",
-      fetched_at: $fetched_at
-    }'
-  exit 2
-fi
+# --- Determine overall status from run JSON ---
+compute_status_from_run() {
+  local run_status="$1"
+  local run_conclusion="$2"
+  if [[ "$run_status" == "in_progress" || "$run_status" == "queued" || "$run_status" == "waiting" ]]; then
+    echo "pending"
+  elif [[ "$run_conclusion" == "success" ]]; then
+    echo "passing"
+  elif [[ "$run_conclusion" == "failure" || "$run_conclusion" == "timed_out" ]]; then
+    echo "failing"
+  else
+    echo "unknown"
+  fi
+}
 
-RUN_ID=$(echo "$RUN_JSON" | jq -r '.[0].databaseId')
-RUN_STATUS=$(echo "$RUN_JSON" | jq -r '.[0].status')
-RUN_CONCLUSION=$(echo "$RUN_JSON" | jq -r '.[0].conclusion')
+# --- Main polling / snapshot loop ---
+RUN_JSON=""
+RUN_ID=""
+RUN_STATUS=""
+RUN_CONCLUSION=""
+CI_STATUS=""
 
-# --- Determine overall status ---
-if [[ "$RUN_STATUS" == "in_progress" || "$RUN_STATUS" == "queued" || "$RUN_STATUS" == "waiting" ]]; then
-  CI_STATUS="pending"
-elif [[ "$RUN_CONCLUSION" == "success" ]]; then
-  CI_STATUS="passing"
-elif [[ "$RUN_CONCLUSION" == "failure" || "$RUN_CONCLUSION" == "timed_out" ]]; then
-  CI_STATUS="failing"
+if [[ "$WAIT" == "true" ]]; then
+  START_TIME=$(date +%s)
+  while true; do
+    RUN_JSON=$(fetch_run)
+    if [[ "$RUN_JSON" == "[]" || -z "$RUN_JSON" ]]; then
+      CI_STATUS="unknown"
+    else
+      RUN_ID=$(echo "$RUN_JSON" | jq -r '.[0].databaseId')
+      RUN_STATUS=$(echo "$RUN_JSON" | jq -r '.[0].status')
+      RUN_CONCLUSION=$(echo "$RUN_JSON" | jq -r '.[0].conclusion')
+      CI_STATUS=$(compute_status_from_run "$RUN_STATUS" "$RUN_CONCLUSION")
+    fi
+
+    if [[ "$CI_STATUS" != "pending" ]]; then
+      break
+    fi
+
+    ELAPSED=$(( $(date +%s) - START_TIME ))
+    if [[ "$ELAPSED" -ge "$TIMEOUT" ]]; then
+      CI_STATUS="timeout"
+      break
+    fi
+
+    sleep 30
+  done
 else
-  CI_STATUS="unknown"
+  RUN_JSON=$(fetch_run)
+  if [[ "$RUN_JSON" == "[]" || -z "$RUN_JSON" ]]; then
+    jq -n \
+      --arg status "unknown" \
+      --arg pr "$PR" \
+      --arg repo "$REPO" \
+      --arg branch "$BRANCH" \
+      --arg fetched_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '{
+        status: $status,
+        pr_number: (if $pr == "" then null else ($pr | tonumber) end),
+        repo: $repo,
+        branch: $branch,
+        run_id: null,
+        failed_jobs: [],
+        failure_summary: "No CI runs found",
+        fetched_at: $fetched_at
+      }'
+    exit 2
+  fi
+  RUN_ID=$(echo "$RUN_JSON" | jq -r '.[0].databaseId')
+  RUN_STATUS=$(echo "$RUN_JSON" | jq -r '.[0].status')
+  RUN_CONCLUSION=$(echo "$RUN_JSON" | jq -r '.[0].conclusion')
+  CI_STATUS=$(compute_status_from_run "$RUN_STATUS" "$RUN_CONCLUSION")
 fi
 
 # --- Fetch failed jobs if failing ---
 FAILED_JOBS="[]"
 FAILURE_SUMMARY=""
 
-if [[ "$CI_STATUS" == "failing" ]]; then
+if [[ "$CI_STATUS" == "failing" && -n "$RUN_ID" ]]; then
   # Get all jobs for this run
   JOBS_JSON=$(gh run view "$RUN_ID" \
     --repo "$REPO" \
@@ -168,7 +217,7 @@ if [[ "$CI_STATUS" == "failing" ]]; then
   FAILED_COUNT=$(echo "$FAILED_JOBS" | jq 'length')
   if [[ "$FAILED_COUNT" -gt 0 ]]; then
     # Get failed log output (truncated to avoid huge payloads)
-    LOG_OUTPUT=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | tail -100 || echo "")
+    LOG_OUTPUT=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | tail -200 || echo "")
 
     if [[ -n "$LOG_OUTPUT" ]]; then
       # Escape for JSON embedding
@@ -189,6 +238,8 @@ if [[ -z "$FAILURE_SUMMARY" && "$CI_STATUS" == "passing" ]]; then
   FAILURE_SUMMARY="All checks passing"
 elif [[ -z "$FAILURE_SUMMARY" && "$CI_STATUS" == "pending" ]]; then
   FAILURE_SUMMARY="CI is still running"
+elif [[ -z "$FAILURE_SUMMARY" && "$CI_STATUS" == "timeout" ]]; then
+  FAILURE_SUMMARY="Timed out waiting for CI"
 elif [[ -z "$FAILURE_SUMMARY" ]]; then
   FAILURE_SUMMARY="Status: $CI_STATUS"
 fi
@@ -199,7 +250,7 @@ jq -n \
   --arg pr "$PR" \
   --arg repo "$REPO" \
   --arg branch "$BRANCH" \
-  --arg run_id "$RUN_ID" \
+  --arg run_id "${RUN_ID:-}" \
   --argjson failed_jobs "$FAILED_JOBS" \
   --arg failure_summary "$FAILURE_SUMMARY" \
   --arg fetched_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -208,7 +259,7 @@ jq -n \
     pr_number: (if $pr == "" then null else ($pr | tonumber) end),
     repo: $repo,
     branch: $branch,
-    run_id: $run_id,
+    run_id: (if $run_id == "" then null else $run_id end),
     failed_jobs: $failed_jobs,
     failure_summary: $failure_summary,
     fetched_at: $fetched_at

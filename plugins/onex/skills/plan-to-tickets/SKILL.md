@@ -37,6 +37,39 @@ args:
 
 # Batch Create Tickets from Plan
 
+## Anti-Pattern Preamble (Mandatory)
+
+Before creating any tickets, enforce these five rules. Violations are hard failures --
+the skill MUST refuse to proceed and report which rule was violated.
+
+1. **No cross-repo tickets without `--allow-arch-violation`.**
+   If any entry's description references files in a different repo (detected by path prefix
+   or explicit repo label mismatch), fail fast with:
+   `"Cross-repo dependency detected in entry '{title}'. Use --allow-arch-violation to override."`
+
+2. **No duplicate phase IDs.**
+   If `detect_structure()` finds two entries mapping to the same internal ID (e.g., two
+   `## Phase 1:` headings), fail fast. Do not silently rename or merge them.
+
+3. **No circular dependencies.**
+   After resolving all `P#` and `OMN-####` references, build a dependency graph and check
+   for cycles. If a cycle exists, fail fast with the cycle path:
+   `"Circular dependency detected: P1 -> P3 -> P1. Fix the plan before creating tickets."`
+
+4. **No empty content tickets.**
+   If an entry has an empty or whitespace-only content block, fail fast:
+   `"Entry '{title}' has no content. Every ticket needs a description."`
+
+5. **No unlabeled repo when architecture validation is enabled.**
+   If `--repo` is not provided but the plan contains external `OMN-####` dependencies,
+   warn and skip architecture validation (do not silently create cross-repo tickets).
+   Print: `"Warning: --repo not specified. Architecture validation skipped for external deps."`
+
+These rules are enforced in Step 2 (after structure detection) and Step 7.5 (architecture
+validation). The skill MUST check all five before proceeding to ticket creation.
+
+---
+
 **Usage:** `/plan-to-tickets <plan-file> [options]`
 
 **Arguments:**
