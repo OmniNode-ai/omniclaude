@@ -184,10 +184,12 @@ def _send_via_handler(webhook_url: str, message: str) -> bool:
     Returns True if sent successfully, False otherwise.
     """
     import asyncio
+    import importlib
 
-    from omnibase_infra.handlers.handler_slack_webhook import HandlerSlackWebhook
+    mod = importlib.import_module("omnibase_infra.handlers.handler_slack_webhook")
+    handler_cls = mod.HandlerSlackWebhook
 
-    handler = HandlerSlackWebhook(webhook_url=webhook_url)
+    handler = handler_cls(webhook_url=webhook_url)
 
     # Try to use ModelSlackAlert from omnibase_infra
     try:
