@@ -175,9 +175,80 @@ Full orchestration logic (argument parsing, conflict detection heuristics, phase
 error handling per phase, push behavior, final report format) is documented in `prompt.md`.
 The dispatch contracts above are sufficient to execute all three phases.
 
+## CI Failure Taxonomy
+
+When Phase 1 encounters CI failures (via `pr-review-dev`), they are classified into the
+following categories. Each category has a defined fix strategy and retry budget.
+
+### Categories
+
+| Category | Examples | Fix Strategy | Max Retries |
+|----------|----------|--------------|-------------|
+| **Lint/Format** | ruff, mypy, black, isort | Auto-fix: `ruff check --fix`, `ruff format` | 1 (deterministic) |
+| **Type Check** | mypy strict, pyright | Targeted type annotation fixes | 2 |
+| **Unit Test** | pytest failures, assertion errors | Read failure, fix logic or test | 2 |
+| **Integration Test** | Service connectivity, fixture failures | Check env, retry with backoff | 1 |
+| **Build/Package** | Import errors, missing deps, build failures | Fix imports, update pyproject.toml | 2 |
+| **Security Scan** | Secret detection, dependency audit | Remove secrets, update deps | 1 |
+| **Timeout** | CI job exceeded time limit | Optimize or split test, increase limit | 1 |
+| **Flaky** | Passes on retry without code change | Re-trigger CI run (no code fix) | 2 |
+
+### Fix Strategies
+
+**Lint/Format** (deterministic, highest confidence):
+```
+1. Run: ruff check --fix . && ruff format .
+2. Run: mypy src/ --strict (verify no regressions)
+3. Stage, commit, push
+```
+
+**Unit Test** (requires understanding):
+```
+1. Fetch failure log via: ${CLAUDE_PLUGIN_ROOT}/_bin/ci-status.sh --pr {N} --repo {repo}
+2. Read failing test and source under test
+3. Determine: bug in code or bug in test
+4. Fix and push
+```
+
+**Flaky** (no code change):
+```
+1. Detect: same test passed in previous run on same SHA
+2. Re-trigger: gh run rerun {run_id} --repo {repo} --failed
+3. If fails again on retry: escalate to Unit Test category
+```
+
+### Retry Budget
+
+The total retry budget across all CI fix cycles is controlled by `max_ci_fix_cycles`
+(default: 3 from ticket-pipeline policy). Each category consumes from this shared budget.
+
+**Budget allocation strategy**:
+- Cycle 1: Fix all Lint/Format + Type Check issues (high confidence)
+- Cycle 2: Fix Unit Test + Build failures (medium confidence)
+- Cycle 3: Final attempt on remaining failures or re-trigger flaky tests
+
+If the budget is exhausted with failures remaining, the skill reports `status: capped`
+and the pipeline escalates to a Slack MEDIUM_RISK gate.
+
+### CI Status Extraction
+
+In STANDALONE mode, CI failure details are extracted via `_bin/ci-status.sh`:
+
+```bash
+# Snapshot current CI status
+${CLAUDE_PLUGIN_ROOT}/_bin/ci-status.sh --pr {N} --repo {repo}
+
+# Wait for terminal state (poll mode)
+${CLAUDE_PLUGIN_ROOT}/_bin/ci-status.sh --pr {N} --repo {repo} --wait --timeout 3600
+```
+
+The script returns structured JSON with check names, states, conclusions, and a
+`log_excerpt` field containing the last 200 lines of the failed run log.
+
 ## See Also
 
-- `local-review` skill (Phase 2 — iterative local review loop)
-- `pr-review-dev` skill (Phase 1 — PR review comments + CI failures)
+- `local-review` skill (Phase 2 -- iterative local review loop)
+- `pr-review-dev` skill (Phase 1 -- PR review comments + CI failures)
 - `pr-review` skill (keyword-based priority classification reference)
 - `ticket-pipeline` skill (chains pr-polish as its review + merge phase)
+- `_bin/ci-status.sh` -- STANDALONE CI status extraction backend

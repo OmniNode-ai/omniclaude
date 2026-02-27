@@ -6,7 +6,7 @@
 
 NOTE: This is a local definition pending omnibase_core export (OMN-2546).
 Once omnibase_core publishes TypedAction, replace this with:
-    from omnibase_core.models.navigation import TypedAction
+    from omnibase_core.navigation import TypedAction
 """
 
 from __future__ import annotations

@@ -29,7 +29,7 @@ When `/integration-gate [args]` is invoked:
    - `--dry-run` -- default: false
    - `--run-id <id>` -- default: generated
    - `--gate-attestation <token>` -- default: none
-   - `--max-queue-size <n>` -- default: 10
+   - `--max-queue-size <n>` -- default: 50
    - `--require-approval <bool>` -- default: true
    - `--authors <list>` -- default: all
    - `--since <date>` -- default: none (ISO 8601)
@@ -592,7 +592,7 @@ This skill is designed to be called from pipeline orchestrators:
 Skill(skill="onex:integration-gate", args={
     repos: <scope>,
     lane: "all",
-    max_queue_size: 10,
+    max_queue_size: 50,
     dry_run: false,
     run_id: <pipeline_run_id>,
     gate_attestation: <optional_token>,

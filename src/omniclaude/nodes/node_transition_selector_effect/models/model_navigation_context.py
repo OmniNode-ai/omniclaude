@@ -6,7 +6,7 @@
 
 NOTE: This is a local definition pending omnibase_core export (OMN-2540).
 Once omnibase_core publishes NavigationContext, replace this with:
-    from omnibase_core.models.navigation import NavigationContext
+    from omnibase_core.navigation import NavigationContext
 """
 
 from __future__ import annotations
