@@ -39,6 +39,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # =============================================================================
 
 _DEFAULT_MAX_ATTEMPTS = 3
+_HARD_MAX_ATTEMPTS = 10  # Upper bound — prevents runaway repair loops
 _DEFAULT_CI_STATUS_SCRIPT = "_bin/ci-status.sh"
 _DEFAULT_INBOX_DIR = "~/.claude/inbox"
 _DEFAULT_STATE_DIR = "~/.claude/state/ci-repair"
@@ -47,9 +48,12 @@ _CI_RERUN_MAX_WAIT_SECONDS = 300
 
 
 def _max_attempts() -> int:
-    """Return the configured max repair attempts."""
+    """Return the configured max repair attempts, clamped to a safe upper bound."""
     try:
-        return int(os.environ.get("CI_REPAIR_MAX_ATTEMPTS", str(_DEFAULT_MAX_ATTEMPTS)))
+        configured = int(
+            os.environ.get("CI_REPAIR_MAX_ATTEMPTS", str(_DEFAULT_MAX_ATTEMPTS))
+        )
+        return min(configured, _HARD_MAX_ATTEMPTS)
     except ValueError:
         return _DEFAULT_MAX_ATTEMPTS
 
@@ -489,15 +493,15 @@ def record_attempt_result(
         run_state.status = "repaired"
         run_state.completed_at = _now_iso()
 
-        # Send success notification
+        # Send success notification; only mark sent if write succeeded
         msg = (
             f"CI repaired for PR #{run_state.pr_number} "
             f"on attempt {attempt_number}/{run_state.max_attempts} "
             f"using strategy: {attempt.strategy}. "
             f"Commit: {commit_sha or 'unknown'}"
         )
-        send_inbox_notification(run_state, msg)
-        run_state.inbox_notification_sent = True
+        if send_inbox_notification(run_state, msg):
+            run_state.inbox_notification_sent = True
 
     # Check if all attempts exhausted
     elif attempt_number >= run_state.max_attempts:
@@ -509,8 +513,8 @@ def record_attempt_result(
             f"after {run_state.max_attempts} attempts. "
             f"Manual intervention required."
         )
-        send_inbox_notification(run_state, msg)
-        run_state.inbox_notification_sent = True
+        if send_inbox_notification(run_state, msg):
+            run_state.inbox_notification_sent = True
 
     save_repair_state(run_state)
     return run_state

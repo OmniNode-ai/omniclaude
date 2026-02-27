@@ -74,7 +74,7 @@ policy:
 
 ## Quick Start
 
-```
+```text
 /ci-fix-pipeline                              # Fix all CI failures on current branch
 /ci-fix-pipeline --pr 42                      # Fix failures for PR #42
 /ci-fix-pipeline --ticket-id OMN-1234         # Include ticket context in Slack messages
@@ -104,7 +104,7 @@ policy:
 
 Dispatch to polymorphic agent:
 
-```
+```text
 Task(
   subagent_type="onex:polymorphic-agent",
   description="Fetch CI failures for ci-fix-pipeline",
@@ -133,7 +133,7 @@ phases. Resolve as follows:
 
 If `slack_on_start: true` and Slack is available, notify:
 
-```
+```text
 ci-fix-pipeline starting
   PR/Branch: {context}
   Failures found: {N} ({critical} critical, {major} major, {minor} minor)
@@ -162,7 +162,7 @@ Result: failures split into `skipped`, `capped`, and `to_fix` buckets.
 
 Dispatch one polymorphic agent per severity group (critical first, then major, then minor) for all `to_fix` failures:
 
-```
+```text
 Task(
   subagent_type="onex:polymorphic-agent",
   description="Fix {severity} CI failures",
@@ -239,7 +239,7 @@ mcp__linear-server__create_issue(
 
 If `slack_on_complete: true`, notify with diff summary:
 
-```
+```text
 ci-fix-pipeline complete
   Fixed: {N} failures
   Skipped: {M} failures (patterns: {patterns})
@@ -265,7 +265,7 @@ if the session ID is unavailable:
   "unfixable_count": 0,
   "sub_tickets": ["OMN-XXXX", "OMN-XYYY"],
   "commit": "abc1234",
-  "branch": "feature/my-branch",
+  "branch": "jonah/omn-1234-fix-ci-failures",
   "ticket_id": "OMN-1234"
 }
 ```
@@ -302,7 +302,7 @@ retry loop orchestrated by `node_ci_repair_effect`.
 
 ### Architecture
 
-```
+```text
 CI fails
   -> _bin/ci-status.sh --pr N --repo ORG/REPO
   -> parse failure JSON
@@ -311,7 +311,7 @@ CI fails
        strategy = RepairStrategy.for_attempt(attempt)
        -> dispatch fix agent with strategy-specific prompt
        -> git add + commit + push
-       -> inbox-wait for CI re-run result (not polling)
+       -> poll _bin/ci-status.sh at 30s intervals until terminal state or timeout
        -> if CI passing: inbox notification "repaired" -> exit
        -> if CI failing: rotate strategy, continue loop
   -> if all attempts exhausted: inbox notification "exhausted" -> exit
@@ -359,10 +359,9 @@ Output:
 }
 ```
 
-### Inbox-Wait Pattern
+### CI Polling Pattern
 
-After each fix attempt pushes code, the pipeline waits for CI results using inbox-wait
-rather than fixed-interval polling:
+After each fix attempt pushes code, the pipeline polls for CI results at fixed intervals:
 
 1. Push fix commit to branch
 2. Call `node_ci_repair_effect.wait_for_ci_rerun()` which:
@@ -375,7 +374,7 @@ rather than fixed-interval polling:
 
 ### Self-Healing Fix Dispatch
 
-```
+```text
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: self-heal attempt {N}/{max} for PR #{pr_number}",

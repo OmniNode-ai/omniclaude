@@ -51,11 +51,19 @@ TIMEOUT=3600  # 1 hour default
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --pr)       PR="$2";       shift 2 ;;
-    --branch)   BRANCH="$2";   shift 2 ;;
-    --repo)     REPO="$2";     shift 2 ;;
+    --pr)
+      [[ $# -gt 1 ]] || { echo "Error: --pr requires a value" >&2; exit 1; }
+      PR="$2"; shift 2 ;;
+    --branch)
+      [[ $# -gt 1 ]] || { echo "Error: --branch requires a value" >&2; exit 1; }
+      BRANCH="$2"; shift 2 ;;
+    --repo)
+      [[ $# -gt 1 ]] || { echo "Error: --repo requires a value" >&2; exit 1; }
+      REPO="$2"; shift 2 ;;
     --wait)     WAIT=true;     shift   ;;
-    --timeout)  TIMEOUT="$2";  shift 2 ;;
+    --timeout)
+      [[ $# -gt 1 ]] || { echo "Error: --timeout requires a value" >&2; exit 1; }
+      TIMEOUT="$2"; shift 2 ;;
     --help|-h)
       echo "Usage: ci-status.sh --pr <N> [--repo ORG/REPO] [--wait] [--timeout <seconds>]"
       echo "       ci-status.sh --branch <NAME> [--repo ORG/REPO] [--wait] [--timeout <seconds>]"
@@ -204,7 +212,7 @@ if [[ "$CI_STATUS" == "failing" ]]; then
         job_id: (.databaseId | tostring),
         job_name: .name,
         step: (
-          [.steps[] | select(.conclusion == "failure") | .name]
+          [(.steps // [])[] | select(.conclusion == "failure") | .name]
           | if length > 0 then .[0] else "unknown step" end
         ),
         conclusion: .conclusion,
