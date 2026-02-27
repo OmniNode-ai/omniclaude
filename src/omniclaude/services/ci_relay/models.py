@@ -16,6 +16,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+__all__ = [
+    "CICallbackPayload",
+    "PRStatusEvent",
+]
+
 
 class CICallbackPayload(BaseModel):
     """Payload sent by GH Actions notify-completion step.

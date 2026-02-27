@@ -21,6 +21,11 @@ from omniclaude.services.ci_relay.models import PRStatusEvent
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "close_producer",
+    "publish_event",
+]
+
 # Lazy-initialized producer
 _producer: object | None = None
 
@@ -29,10 +34,20 @@ def _get_bootstrap_servers() -> str:
     """Get Kafka bootstrap servers from environment.
 
     Returns:
-        Bootstrap server string. Defaults to localhost:29092 for development.
+        Bootstrap server string. Falls back to localhost:29092 if
+        ``KAFKA_BOOTSTRAP_SERVERS`` is not set (development only).
+
+    Raises:
+        RuntimeError: If ``KAFKA_BOOTSTRAP_SERVERS`` is not set in production.
     """
-    default = "192.168.86.200:29092"  # onex-allow-internal-ip
-    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", default)
+    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+    if not servers:
+        logger.warning(
+            "KAFKA_BOOTSTRAP_SERVERS not set. Falling back to localhost:29092. "
+            "Set this environment variable in production."
+        )
+        return "localhost:29092"
+    return servers
 
 
 async def _get_producer() -> object:

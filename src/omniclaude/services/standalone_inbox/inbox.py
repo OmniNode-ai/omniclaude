@@ -20,6 +20,10 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "StandaloneInbox",
+]
+
 
 def _inbox_dir() -> Path:
     """Get the inbox directory."""

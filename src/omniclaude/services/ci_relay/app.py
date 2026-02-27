@@ -13,6 +13,8 @@ See OMN-2826 Phase 2a for specification.
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import logging
 import os
 import subprocess
@@ -25,6 +27,10 @@ from omniclaude.services.ci_relay.models import CICallbackPayload, PRStatusEvent
 from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "create_app",
+]
 
 # Topic for PR status events
 PR_STATUS_TOPIC = "onex.evt.omniclaude.github-pr-status.v1"
@@ -69,16 +75,18 @@ async def _verify_bearer(
         HTTPException: If the token is missing or invalid.
     """
     expected = _get_expected_token()
-    if credentials.credentials != expected:
+    if not hmac.compare_digest(credentials.credentials, expected):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
     return credentials.credentials
 
 
-def _resolve_pr_from_sha(repo: str, sha: str) -> int | None:
-    """Resolve PR number from a commit SHA via GitHub API.
+def _resolve_pr_from_sha_sync(repo: str, sha: str) -> int | None:
+    """Resolve PR number from a commit SHA via GitHub API (synchronous).
 
-    Used when the callback has ``pr=0`` (push-triggered workflow).
-    Results are cached by the caller for 5 minutes.
+    This is a synchronous helper intended to be called in a thread executor
+    to avoid blocking the async event loop. Used when the callback has
+    ``pr=0`` (push-triggered workflow). Results are cached by the caller
+    for 5 minutes.
 
     Args:
         repo: Full repo slug (e.g. ``OmniNode-ai/omniclaude``).
@@ -113,8 +121,8 @@ _pr_cache: dict[tuple[str, str], tuple[int | None, float]] = {}
 _PR_CACHE_TTL = 300  # 5 minutes
 
 
-def _resolve_pr_cached(repo: str, sha: str) -> int | None:
-    """Resolve PR number with 5-minute cache."""
+async def _resolve_pr_cached(repo: str, sha: str) -> int | None:
+    """Resolve PR number with 5-minute cache (async, runs gh in thread executor)."""
     import time
 
     cache_key = (repo, sha)
@@ -126,7 +134,8 @@ def _resolve_pr_cached(repo: str, sha: str) -> int | None:
         if now - cached_at < _PR_CACHE_TTL:
             return pr_num
 
-    pr_num = _resolve_pr_from_sha(repo, sha)
+    loop = asyncio.get_running_loop()
+    pr_num = await loop.run_in_executor(None, _resolve_pr_from_sha_sync, repo, sha)
     _pr_cache[cache_key] = (pr_num, now)
     return pr_num
 
@@ -241,7 +250,7 @@ def create_app() -> FastAPI:
         # Resolve PR number if pr=0 (push-triggered workflow)
         resolved_pr: int | None = None
         if payload.pr == 0:
-            resolved_pr = _resolve_pr_cached(payload.repo, payload.sha)
+            resolved_pr = await _resolve_pr_cached(payload.repo, payload.sha)
             if resolved_pr is not None:
                 logger.info(
                     "Resolved PR for push-triggered workflow: repo=%s sha=%s -> PR #%d",

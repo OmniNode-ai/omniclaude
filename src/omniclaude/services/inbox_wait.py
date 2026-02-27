@@ -23,6 +23,12 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "register_watch",
+    "unregister_watch",
+    "wait_for_pr_status",
+]
+
 
 def _is_event_bus_available() -> bool:
     """Check if the ONEX event bus is available.

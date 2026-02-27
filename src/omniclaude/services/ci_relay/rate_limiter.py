@@ -16,6 +16,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+__all__ = [
+    "RateLimiter",
+]
+
 
 @dataclass
 class _TokenBucket:

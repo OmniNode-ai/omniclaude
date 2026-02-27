@@ -23,6 +23,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "InMemoryValkeyClient",
+    "ValkeyClientProtocol",
+    "WatchRegistry",
+    "WATCH_TTL_SECONDS",
+]
+
 # Default TTL for watch registry keys (2 hours)
 WATCH_TTL_SECONDS = 7200
 
@@ -82,9 +89,10 @@ class InMemoryValkeyClient:
             return 0
         before = len(self._store[key])
         self._store[key].difference_update(members)
+        after = len(self._store[key])
         if not self._store[key]:
             del self._store[key]
-        return before - len(self._store.get(key, set()))
+        return before - after
 
     async def smembers(self, key: str) -> set[str]:
         """Get all members of a set."""

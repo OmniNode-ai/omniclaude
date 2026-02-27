@@ -17,6 +17,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+__all__ = [
+    "AgentInboxMessage",
+    "InboxRouteResult",
+    "WatchRegistration",
+]
+
 
 class InboxRouteResult(BaseModel):
     """Result of routing a PR status event to agent inboxes."""

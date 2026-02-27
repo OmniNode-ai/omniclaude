@@ -23,6 +23,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "BackgroundWatcher",
+    "INBOX_TTL_SECONDS",
+    "MAX_WATCHERS",
+]
+
 # Max concurrent background watchers
 MAX_WATCHERS = int(os.environ.get("OMNICLAUDE_MAX_WATCHERS", "5"))
 
@@ -32,7 +38,9 @@ INBOX_TTL_SECONDS = 7200
 
 def _inbox_dir() -> Path:
     """Get the inbox directory, creating it if needed."""
-    d = Path.home() / ".claude" / "pr-inbox"
+    from omniclaude.services.standalone_inbox.inbox import _inbox_dir as _base_inbox_dir
+
+    d = _base_inbox_dir()
     d.mkdir(parents=True, exist_ok=True)
     return d
 
