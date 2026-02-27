@@ -122,11 +122,13 @@ class TestCIFailureEvent:
         assert len(event.failed_jobs) == 1
 
     def test_extra_fields_ignored(self) -> None:
+        # Pydantic model_config extra="ignore" — unknown fields are silently dropped.
+        # The 'unknown_field' kwarg is intentional: it verifies Pydantic ignores extras.
         event = CIFailureEvent(
             pr_number=42,
             repo="org/repo",
             branch="main",
-            unknown_field="should be ignored",  # type: ignore[call-arg]
+            unknown_field="should be ignored",
         )
         assert event.pr_number == 42
 

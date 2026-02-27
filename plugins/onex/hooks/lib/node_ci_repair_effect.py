@@ -215,7 +215,8 @@ def fetch_ci_status(
             check=False,
         )
         if result.returncode in (0, 2):
-            return json.loads(result.stdout)
+            parsed: dict[str, Any] = json.loads(result.stdout)
+            return parsed
         return {
             "status": "unknown",
             "error": result.stderr.strip() or f"Exit code {result.returncode}",
