@@ -713,6 +713,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
         }' 2>/dev/null)
     if [[ -n "$_EXTRACTION_PAYLOAD" ]]; then
         (
+            # Ensure PYTHONPATH includes HOOKS_LIB so sibling imports
+            # (e.g. emit_client_wrapper) resolve in the background subshell.
+            # The foreground path sets this at line 28, but background subshells
+            # may lose it depending on shell inheritance. Belt-and-suspenders
+            # with the sys.path fix in extraction_event_emitter.py. (OMN-2844)
+            export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
             echo "$_EXTRACTION_PAYLOAD" | $PYTHON_CMD "${HOOKS_LIB}/extraction_event_emitter.py" \
                 2>>"$LOG_FILE" || true
         ) &

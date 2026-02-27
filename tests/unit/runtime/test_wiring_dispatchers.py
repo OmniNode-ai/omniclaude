@@ -36,10 +36,13 @@ from omniclaude.nodes.shared.models.model_skill_node_contract import (
 from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
 from omniclaude.runtime.wiring_dispatchers import (
     ContractLoadError,
+    QuirkFindingDispatcher,
     SkillCommandDispatcher,
+    _build_quirk_finding_route,
     _build_skill_route,
     _extract_skill_id_from_name,
     load_skill_contracts,
+    wire_quirk_finding_subscription,
     wire_skill_dispatchers,
 )
 
@@ -526,3 +529,170 @@ class TestPluginWireDispatchers:
             "skipped" in (result.message or "").lower()
             or "no skill dispatchers" in (result.message or "").lower()
         )
+
+
+# ---------------------------------------------------------------------------
+# Quirk finding subscription tests (OMN-2908)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestQuirkFindingRoute:
+    """Tests for _build_quirk_finding_route()."""
+
+    def test_route_matches_quirk_finding_topic(self) -> None:
+        """Route matches onex.evt.omniclaude.quirk-finding-produced.v1."""
+        route = _build_quirk_finding_route()
+        assert route.matches_topic("onex.evt.omniclaude.quirk-finding-produced.v1")
+
+    def test_route_has_correct_handler_id(self) -> None:
+        """Route references the quirk finding dispatcher."""
+        route = _build_quirk_finding_route()
+        assert route.handler_id == "dispatcher.quirk.finding"
+
+    def test_route_has_correct_route_id(self) -> None:
+        """Route has the correct route ID."""
+        route = _build_quirk_finding_route()
+        assert route.route_id == "quirk-finding-router"
+
+    def test_route_has_event_category(self) -> None:
+        """Route is configured for EVENT category."""
+        from omnibase_core.enums import EnumMessageCategory
+
+        route = _build_quirk_finding_route()
+        assert route.message_category == EnumMessageCategory.EVENT
+
+    def test_route_does_not_match_skill_command_topic(self) -> None:
+        """Route does NOT match skill command topics."""
+        route = _build_quirk_finding_route()
+        assert not route.matches_topic("onex.cmd.omniclaude.commit.v1")
+
+
+@pytest.mark.unit
+class TestWireQuirkFindingSubscription:
+    """Tests for wire_quirk_finding_subscription() (OMN-2908)."""
+
+    def test_quirk_finding_subscription_is_registered(self) -> None:
+        """quirk-finding-produced.v1 must have a registered route after wiring."""
+        mock_engine = MagicMock()
+        mock_container = MagicMock()
+        mock_container.service_registry = None
+
+        summary = wire_quirk_finding_subscription(mock_container, mock_engine)
+
+        # Dispatcher and route must be registered
+        assert "dispatcher.quirk.finding" in summary["dispatchers"]
+        assert "quirk-finding-router" in summary["routes"]
+        mock_engine.register_dispatcher.assert_called_once()
+        mock_engine.register_route.assert_called_once()
+
+        # Route registered must match the quirk-finding topic
+        registered_route = mock_engine.register_route.call_args[0][0]
+        assert registered_route.matches_topic(
+            "onex.evt.omniclaude.quirk-finding-produced.v1"
+        )
+
+    def test_wiring_registers_correct_dispatcher_id(self) -> None:
+        """Dispatcher registered under the canonical dispatcher ID."""
+        mock_engine = MagicMock()
+        mock_container = MagicMock()
+        mock_container.service_registry = None
+
+        wire_quirk_finding_subscription(mock_container, mock_engine)
+
+        call_args = mock_engine.register_dispatcher.call_args
+        # First positional arg is the dispatcher_id
+        assert call_args[0][0] == "dispatcher.quirk.finding"
+
+
+@pytest.mark.unit
+class TestQuirkFindingDispatcher:
+    """Tests for QuirkFindingDispatcher.handle() (OMN-2908)."""
+
+    @pytest.mark.asyncio
+    async def test_handle_calls_process_payload_on_bridge(self) -> None:
+        """Dispatcher calls bridge.process_payload() with the envelope payload."""
+        from unittest.mock import MagicMock
+
+        mock_bridge = MagicMock()
+        mock_bridge.process_payload.return_value = MagicMock()  # ModelPromotedPattern
+
+        mock_container = MagicMock()
+        mock_container.service_registry = None
+        mock_container.quirk_memory_bridge = mock_bridge
+
+        dispatcher = QuirkFindingDispatcher(container=mock_container)
+
+        payload = {"finding_id": "test-123", "quirk_type": "STUB_CODE"}
+        envelope = {
+            "payload": payload,
+            "__bindings": {},
+            "__debug_trace": {"topic": "onex.evt.omniclaude.quirk-finding-produced.v1"},
+        }
+
+        result = await dispatcher.handle(envelope)
+
+        assert result == "promoted"
+        mock_bridge.process_payload.assert_called_once_with(payload)
+
+    @pytest.mark.asyncio
+    async def test_handle_returns_none_when_bridge_unavailable(self) -> None:
+        """Dispatcher returns None when bridge cannot be resolved."""
+        mock_container = MagicMock(spec=[])  # Empty spec — no attributes
+        mock_container.service_registry = None
+
+        dispatcher = QuirkFindingDispatcher(container=mock_container)
+
+        envelope = {
+            "payload": {"finding_id": "test-123"},
+            "__bindings": {},
+            "__debug_trace": {"topic": "onex.evt.omniclaude.quirk-finding-produced.v1"},
+        }
+
+        result = await dispatcher.handle(envelope)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_handle_returns_none_when_process_payload_returns_none(self) -> None:
+        """Dispatcher returns None when bridge.process_payload() returns None (parse error)."""
+        mock_bridge = MagicMock()
+        mock_bridge.process_payload.return_value = None  # Malformed payload
+
+        mock_container = MagicMock()
+        mock_container.service_registry = None
+        mock_container.quirk_memory_bridge = mock_bridge
+
+        dispatcher = QuirkFindingDispatcher(container=mock_container)
+
+        envelope = {
+            "payload": {"bad": "data"},
+            "__bindings": {},
+            "__debug_trace": {"topic": "onex.evt.omniclaude.quirk-finding-produced.v1"},
+        }
+
+        result = await dispatcher.handle(envelope)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_handle_is_fail_open_on_exception(self) -> None:
+        """Dispatcher returns None and does not raise on unexpected exceptions."""
+        mock_bridge = MagicMock()
+        mock_bridge.process_payload.side_effect = RuntimeError("unexpected failure")
+
+        mock_container = MagicMock()
+        mock_container.service_registry = None
+        mock_container.quirk_memory_bridge = mock_bridge
+
+        dispatcher = QuirkFindingDispatcher(container=mock_container)
+
+        envelope = {
+            "payload": {"finding_id": "test-456"},
+            "__bindings": {},
+            "__debug_trace": {"topic": "onex.evt.omniclaude.quirk-finding-produced.v1"},
+        }
+
+        # Must not raise
+        result = await dispatcher.handle(envelope)
+        assert result is None

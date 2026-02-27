@@ -1,7 +1,7 @@
 {
   "$schema": "https://claude.ai/schemas/hooks.json",
   "description": "OmniClaude Core Hooks - Agent routing, quality enforcement, session tracking, and Kafka event emission",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "hooks": {
     "SessionStart": [
       {
@@ -60,6 +60,24 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-use-quality.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-ruff.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-ci-reminder.sh"
           }
         ]
       }

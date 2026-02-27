@@ -447,6 +447,56 @@ Required tools (install with `brew install gh jq`):
 - `gh` - GitHub CLI
 - `jq` - JSON processor
 
+## Tier Routing (OMN-2828)
+
+PR data fetching uses tier-aware backend selection:
+
+| Tier | Backend | Details |
+|------|---------|---------|
+| `FULL_ONEX` | `node_git_effect.pr_view()` | Typed Pydantic models, structured PR data |
+| `STANDALONE` | `_bin/pr-merge-readiness.sh` | Shell script wrapping `gh pr view` with merge readiness assessment |
+| `EVENT_BUS` | `_bin/pr-merge-readiness.sh` | Same as STANDALONE |
+
+Tier detection: see `@_lib/tier-routing/helpers.md`.
+
+### FULL_ONEX Path
+
+```python
+from omniclaude.nodes.node_git_effect.models import (
+    GitOperation, ModelGitRequest,
+)
+
+request = ModelGitRequest(
+    operation=GitOperation.PR_VIEW,
+    repo=repo,
+    pr_number=pr_number,
+    json_fields=[
+        "number", "title", "mergeable", "mergeStateStatus",
+        "reviewDecision", "statusCheckRollup", "headRefName",
+        "baseRefName", "isDraft", "reviewRequests", "latestReviews",
+    ],
+)
+result = await handler.pr_view(request)
+```
+
+### STANDALONE Path
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/_bin/pr-merge-readiness.sh --pr {N} --repo {repo}
+# Returns: { ready, mergeable, ci_status, review_decision, merge_state_status, blockers }
+```
+
+The `_bin/pr-merge-readiness.sh` script provides a unified merge readiness assessment
+including CI status, review decision, and blocker list -- reducing the number of separate
+`gh` calls skills need to make.
+
+### Note on Review Comment Fetching
+
+The review **comment** fetching (collate-issues, fetch-pr-data, analyze-pr-comments) is
+always direct `gh` CLI -- these are read-only operations fetching PR feedback from GitHub's
+4 endpoints. The tier routing above applies only to merge readiness state assessment, not
+comment collection.
+
 ## Architecture Notes
 
 ### Why Not Event-Based?
@@ -455,20 +505,20 @@ PR review uses direct GitHub API calls (via `gh` CLI) rather than event-based ar
 - **External Service**: GitHub is a third-party service outside OmniNode infrastructure
 - **Real-Time Data**: PR feedback must be fetched in real-time from GitHub's 4 endpoints
 - **Simplicity**: Direct API calls are simpler for external read-only operations
-- **No State**: Review analysis is stateless - no persistence or coordination needed
+- **No State**: Review analysis is stateless -- no persistence or coordination needed
 
 ### When to Use Events
 
 Use event-based architecture for:
-- ✅ Internal OmniNode services (intelligence, routing, observability)
-- ✅ Services requiring persistence or state management
-- ✅ Multi-service coordination and orchestration
-- ✅ Async operations with retries and DLQ
+- Internal OmniNode services (intelligence, routing, observability)
+- Services requiring persistence or state management
+- Multi-service coordination and orchestration
+- Async operations with retries and DLQ
 
 Use direct API/MCP for:
-- ✅ External third-party services (GitHub, Linear, etc.)
-- ✅ Real-time read-only operations
-- ✅ Simple request-response patterns without state
+- External third-party services (GitHub, Linear, etc.)
+- Real-time read-only operations
+- Simple request-response patterns without state
 
 ## Pydantic-Backed System (v2)
 
@@ -549,4 +599,5 @@ report = generate_markdown_report(analysis)
 
 - GitHub API Docs: https://docs.github.com/en/rest/pulls
 - Linear skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
-- Event alignment plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`
+- `_bin/pr-merge-readiness.sh` -- STANDALONE merge readiness assessment backend
+- `_lib/tier-routing/helpers.md` -- tier detection and routing helpers

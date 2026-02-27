@@ -296,11 +296,28 @@ The two-char git status codes for unmerged paths:
 | `DU` | Deleted by us |
 | `UD` | Deleted by them |
 
+### CI Status Extraction (Tier-Aware)
+
+Phase 1 uses tier-aware CI status extraction:
+
+```python
+# @_lib/tier-routing/helpers.md -- detect_onex_tier()
+tier = detect_onex_tier()
+
+if tier == "FULL_ONEX":
+    # Push-based: inbox-wait for CI completion event
+    pass  # node_git_effect handles this
+else:
+    # STANDALONE: poll via _bin/ci-status.sh
+    ci_json = run(f"${{CLAUDE_PLUGIN_ROOT}}/_bin/ci-status.sh --pr {pr_number} --repo {repo}")
+    # Returns: { status, checks, failing_checks, log_excerpt }
+```
+
 ### When to Re-run Phases
 
 If a phase commits new changes, subsequent phases pick them up automatically because:
 - Phase 1 (`pr-review-dev`) fetches the current state of the PR
-- Phase 2 (`local-review`) diffs against the base branch — picks up all committed changes
+- Phase 2 (`local-review`) diffs against the base branch -- picks up all committed changes
 
 ### PR Number Auto-Detection
 
