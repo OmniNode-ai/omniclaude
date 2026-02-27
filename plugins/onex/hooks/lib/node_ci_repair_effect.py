@@ -538,8 +538,8 @@ def finalize_with_error(
     run_state.completed_at = _now_iso()
 
     msg = f"CI repair error for PR #{run_state.pr_number}: {error}"
-    send_inbox_notification(run_state, msg)
-    run_state.inbox_notification_sent = True
+    if send_inbox_notification(run_state, msg):
+        run_state.inbox_notification_sent = True
 
     save_repair_state(run_state)
     return run_state
