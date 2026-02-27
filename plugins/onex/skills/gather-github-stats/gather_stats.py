@@ -1046,48 +1046,43 @@ def generate_report(
     lines.append("")
 
     # -----------------------------------------------------------------------
-    # Section 2: Archived/Local Repos Summary
+    # Section 2: Local Archive (only when a local scan was performed)
     # -----------------------------------------------------------------------
-    lines.append("## 2. Archived/Local Repos Summary")
-    lines.append("")
-    if local_result is not None and local_result.repos:
-        unique_local = [r for r in local_result.repos if not r.is_duplicate]
-        if unique_local:
-            lines.append("## Local Archive")
-            lines.append("")
-            has_loc = any(r.loc_additions is not None for r in unique_local)
-            header = "| Repo | Path | Commits | First Commit | Last Commit |"
-            sep = "|------|------|--------:|-------------|------------|"
-            if has_loc:
-                header += " LOC (net) |"
-                sep += "----------:|"
-            lines.append(header)
-            lines.append(sep)
-            for r in sorted(unique_local, key=lambda x: str(x.path)):
-                name = r.path.name
-                first = r.first_commit_date or "—"
-                last = r.last_commit_date or "—"
-                row_str = (
-                    f"| {name} | `{r.path}` | {r.commit_count:,} | {first} | {last} |"
-                )
-                if has_loc:
-                    if r.loc_additions is not None and r.loc_deletions is not None:
-                        net = r.loc_additions - r.loc_deletions
-                        row_str += f" {net:,} |"
-                    else:
-                        row_str += " _(skipped)_ |"
-                lines.append(row_str)
-            lines.append("")
-        else:
-            lines.append(
-                "_No unique local repositories found (all matched GitHub repos)._"
-            )
-            lines.append("")
-    else:
-        lines.append(
-            "_Local archive scan not performed (use `--local-path` to enable)._"
-        )
+    if local_result is not None:
+        lines.append("## Local Archive")
         lines.append("")
+        if local_result.repos:
+            unique_local = [r for r in local_result.repos if not r.is_duplicate]
+            if unique_local:
+                has_loc = any(r.loc_additions is not None for r in unique_local)
+                header = "| Repo | Path | Commits | First Commit | Last Commit |"
+                sep = "|------|------|--------:|-------------|------------|"
+                if has_loc:
+                    header += " LOC (net) |"
+                    sep += "----------:|"
+                lines.append(header)
+                lines.append(sep)
+                for r in sorted(unique_local, key=lambda x: str(x.path)):
+                    name = r.path.name
+                    first = r.first_commit_date or "—"
+                    last = r.last_commit_date or "—"
+                    row_str = f"| {name} | `{r.path}` | {r.commit_count:,} | {first} | {last} |"
+                    if has_loc:
+                        if r.loc_additions is not None and r.loc_deletions is not None:
+                            net = r.loc_additions - r.loc_deletions
+                            row_str += f" {net:,} |"
+                        else:
+                            row_str += " _(skipped)_ |"
+                    lines.append(row_str)
+                lines.append("")
+            else:
+                lines.append(
+                    "_No unique local repositories found (all matched GitHub repos)._"
+                )
+                lines.append("")
+        else:
+            lines.append("_No local git repositories found._")
+            lines.append("")
 
     # -----------------------------------------------------------------------
     # Section 3: Lines of Code (churn accounting)
@@ -1476,9 +1471,9 @@ def _generate_local_only_report(org: str, local_result: LocalScanResult | None) 
     lines.append(sep)
     for r in sorted(local_result.repos, key=lambda x: str(x.path)):
         name = r.path.name
+        bare_str = "yes" if r.is_bare else "no"
         first = r.first_commit_date or "—"
         last = r.last_commit_date or "—"
-        bare_str = "yes" if r.is_bare else "no"
         row_str = f"| {name} | `{r.path}` | {bare_str} | {r.commit_count:,} | {first} | {last} |"
         if has_loc:
             if r.loc_additions is not None and r.loc_deletions is not None:
