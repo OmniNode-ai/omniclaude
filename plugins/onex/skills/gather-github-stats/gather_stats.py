@@ -1053,6 +1053,8 @@ def generate_report(
     if local_result is not None and local_result.repos:
         unique_local = [r for r in local_result.repos if not r.is_duplicate]
         if unique_local:
+            lines.append("## Local Archive")
+            lines.append("")
             has_loc = any(r.loc_additions is not None for r in unique_local)
             header = "| Repo | Path | Commits | First Commit | Last Commit |"
             sep = "|------|------|--------:|-------------|------------|"
@@ -1465,8 +1467,8 @@ def _generate_local_only_report(org: str, local_result: LocalScanResult | None) 
     lines.append("## 2. Archived/Local Repos Summary")
     lines.append("")
     has_loc = any(r.loc_additions is not None for r in local_result.repos)
-    header = "| Repo | Path | Commits | First Commit | Last Commit |"
-    sep = "|------|------|--------:|-------------|------------|"
+    header = "| Repo | Path | Bare | Commits | First Commit | Last Commit |"
+    sep = "|------|------|:----:|--------:|-------------|------------|"
     if has_loc:
         header += " LOC (net) |"
         sep += "----------:|"
@@ -1476,7 +1478,8 @@ def _generate_local_only_report(org: str, local_result: LocalScanResult | None) 
         name = r.path.name
         first = r.first_commit_date or "—"
         last = r.last_commit_date or "—"
-        row_str = f"| {name} | `{r.path}` | {r.commit_count:,} | {first} | {last} |"
+        bare_str = "yes" if r.is_bare else "no"
+        row_str = f"| {name} | `{r.path}` | {bare_str} | {r.commit_count:,} | {first} | {last} |"
         if has_loc:
             if r.loc_additions is not None and r.loc_deletions is not None:
                 net = r.loc_additions - r.loc_deletions
