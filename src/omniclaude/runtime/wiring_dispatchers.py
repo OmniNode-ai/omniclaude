@@ -58,7 +58,11 @@ if TYPE_CHECKING:
         VllmInferenceBackend,
     )
 
-__all__ = ["ContractLoadError", "wire_skill_dispatchers"]
+__all__ = [
+    "ContractLoadError",
+    "wire_quirk_finding_subscription",
+    "wire_skill_dispatchers",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,16 @@ _ROUTE_ID = "skill-command-router"
 _COMPLETION_TOPIC = "onex.evt.omniclaude.skill-completed.v1"
 
 _CONTRACT_PARSE_THRESHOLD = 0.80
+
+# ---------------------------------------------------------------------------
+# Quirk finding subscription constants (OMN-2908)
+# ---------------------------------------------------------------------------
+
+_QUIRK_FINDING_TOPIC = (
+    "onex.evt.omniclaude.quirk-finding-produced.v1"  # arch-topic-naming: ignore
+)
+_QUIRK_FINDING_DISPATCHER_ID = "dispatcher.quirk.finding"
+_QUIRK_FINDING_ROUTE_ID = "quirk-finding-router"
 
 
 # ---------------------------------------------------------------------------
@@ -719,4 +733,170 @@ async def wire_skill_dispatchers(
         contracts_loaded=len(contracts),
         contracts_total=contracts_total,
         backends=backends_available,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Quirk finding dispatcher (OMN-2908)
+# ---------------------------------------------------------------------------
+
+
+class QuirkFindingDispatcher:
+    """Dispatcher for ``onex.evt.omniclaude.quirk-finding-produced.v1`` events.
+
+    On each inbound message, resolves ``NodeQuirkMemoryBridgeEffect`` from the
+    container and calls ``process_payload(payload)`` to promote the finding into
+    OmniMemory.  Cross-process quirk findings are promoted this way; in-process
+    findings already call ``promote_finding`` directly.
+
+    Fail-open: any exception during promotion is logged and swallowed so that a
+    malformed finding does not break the dispatch loop.
+
+    Ticket: OMN-2908
+    """
+
+    def __init__(self, container: Any) -> None:
+        self._container = container
+
+    async def handle(
+        self, envelope: ModelEventEnvelope[object] | dict[str, Any]
+    ) -> str | None:
+        """Handle one quirk-finding-produced event.
+
+        Extracts the raw payload dict and forwards it to
+        ``NodeQuirkMemoryBridgeEffect.process_payload()``.
+
+        Args:
+            envelope: Materialized dispatch dict or event envelope.
+
+        Returns:
+            ``"promoted"`` on success, ``None`` if the finding was skipped or
+            an error occurred.
+        """
+        try:
+            payload: dict[str, Any]
+            if isinstance(envelope, dict):
+                raw = envelope.get("payload")
+                payload = raw if isinstance(raw, dict) else {}
+            else:
+                raw_payload = envelope.payload
+                payload = raw_payload if isinstance(raw_payload, dict) else {}
+
+            bridge = self._resolve_bridge()
+            if bridge is None:
+                logger.warning(
+                    "QuirkFindingDispatcher: NodeQuirkMemoryBridgeEffect not available; "
+                    "skipping quirk finding payload"
+                )
+                return None
+
+            result = bridge.process_payload(payload)
+            if result is None:
+                return None
+            return "promoted"
+        except Exception:
+            logger.exception(
+                "QuirkFindingDispatcher: unhandled error promoting quirk finding"
+            )
+            return None
+
+    def _resolve_bridge(self) -> Any | None:
+        """Resolve ``NodeQuirkMemoryBridgeEffect`` from the container.
+
+        Returns ``None`` if the bridge is not registered or resolution fails.
+        """
+        try:
+            from omniclaude.quirks.memory_bridge import (  # noqa: PLC0415
+                NodeQuirkMemoryBridgeEffect,
+            )
+
+            if (
+                hasattr(self._container, "service_registry")
+                and self._container.service_registry is not None
+            ):
+                svc = self._container.service_registry.get(NodeQuirkMemoryBridgeEffect)
+                if isinstance(svc, NodeQuirkMemoryBridgeEffect):
+                    return svc
+
+            # Fall back to direct attribute access (test containers and dev setups)
+            if hasattr(self._container, "quirk_memory_bridge"):
+                bridge = self._container.quirk_memory_bridge
+                if bridge is not None:
+                    return bridge
+        except Exception:
+            logger.debug(
+                "QuirkFindingDispatcher: could not resolve NodeQuirkMemoryBridgeEffect "
+                "from container",
+                exc_info=True,
+            )
+        return None
+
+
+def _build_quirk_finding_route() -> ModelDispatchRoute:
+    """Build the ``ModelDispatchRoute`` for quirk-finding-produced events.
+
+    Returns:
+        A ``ModelDispatchRoute`` matching the quirk-finding-produced topic.
+    """
+    return ModelDispatchRoute(
+        route_id=_QUIRK_FINDING_ROUTE_ID,
+        topic_pattern=_QUIRK_FINDING_TOPIC,  # arch-topic-naming: ignore
+        message_category=EnumMessageCategory.EVENT,
+        message_type=None,  # match all message types on this topic
+        handler_id=_QUIRK_FINDING_DISPATCHER_ID,
+        description="Routes quirk-finding-produced events to NodeQuirkMemoryBridgeEffect",
+    )
+
+
+class QuirkFindingWiringSummary(TypedDict):
+    """Summary dict returned by ``wire_quirk_finding_subscription``."""
+
+    dispatchers: list[str]
+    routes: list[str]
+
+
+def wire_quirk_finding_subscription(
+    container: Any,
+    dispatch_engine: MessageDispatchEngine,
+) -> QuirkFindingWiringSummary:
+    """Wire the quirk-finding-produced subscription onto the dispatch engine.
+
+    Registers a ``QuirkFindingDispatcher`` and a single route on the
+    ``MessageDispatchEngine`` so that ``onex.evt.omniclaude.quirk-finding-produced.v1``
+    events are forwarded to ``NodeQuirkMemoryBridgeEffect.process_payload()``.
+
+    This ensures cross-process quirk findings are promoted to OmniMemory — findings
+    produced by other process instances reach the bridge even when the in-process
+    call path is not available.
+
+    Args:
+        container: ONEX container used to resolve ``NodeQuirkMemoryBridgeEffect``.
+        dispatch_engine: The engine to register the dispatcher and route on.
+
+    Returns:
+        A ``QuirkFindingWiringSummary`` dict with registered dispatchers and routes.
+
+    Ticket: OMN-2908
+    """
+    dispatcher = QuirkFindingDispatcher(container=container)
+
+    dispatch_engine.register_dispatcher(
+        _QUIRK_FINDING_DISPATCHER_ID,
+        dispatcher.handle,
+        category=EnumMessageCategory.EVENT,
+        message_types=None,
+    )
+
+    route = _build_quirk_finding_route()
+    dispatch_engine.register_route(route)
+
+    logger.info(
+        "Quirk-finding subscription wired: topic=%s, route=%s",
+        _QUIRK_FINDING_TOPIC,
+        _QUIRK_FINDING_ROUTE_ID,
+    )
+
+    return QuirkFindingWiringSummary(
+        dispatchers=[_QUIRK_FINDING_DISPATCHER_ID],
+        routes=[_QUIRK_FINDING_ROUTE_ID],
     )
