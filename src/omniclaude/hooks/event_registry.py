@@ -733,6 +733,70 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="run_id",
         required_fields=["run_id", "skill_name", "correlation_id", "status"],
     ),
+    # =========================================================================
+    # Wave 2 Pipeline Observability Events (OMN-2922)
+    # Consumed by omnidash Wave 2 projection nodes.
+    # =========================================================================
+    "epic.run.updated": EventRegistration(
+        event_type="epic.run.updated",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.EPIC_RUN_UPDATED,
+                transform=None,  # Passthrough — state table (upsert by run_id)
+                description="Epic run state update for omnidash epic-pipeline view",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "epic_id", "status"],
+    ),
+    "pr.watch.updated": EventRegistration(
+        event_type="pr.watch.updated",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PR_WATCH_UPDATED,
+                transform=None,  # Passthrough — state table (upsert by run_id)
+                description="PR watch state update for omnidash pr-watch view",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "pr_number", "repo", "status"],
+    ),
+    "gate.decision": EventRegistration(
+        event_type="gate.decision",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.GATE_DECISION,
+                transform=None,  # Passthrough — append-only event table
+                description="Slack gate decision outcome for omnidash gate-decisions view",
+            ),
+        ],
+        partition_key_field="gate_id",
+        required_fields=["gate_id", "decision", "correlation_id"],
+    ),
+    "budget.cap.hit": EventRegistration(
+        event_type="budget.cap.hit",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.BUDGET_CAP_HIT,
+                transform=None,  # Passthrough — state table (upsert by run_id)
+                description="Token budget cap hit for omnidash pipeline-budget view",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "tokens_used", "tokens_budget"],
+    ),
+    "circuit.breaker.tripped": EventRegistration(
+        event_type="circuit.breaker.tripped",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CIRCUIT_BREAKER_TRIPPED,
+                transform=None,  # Passthrough — no sensitive data
+                description="Kafka circuit breaker opened; emitted on threshold breach",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "failure_count", "threshold"],
+    ),
 }
 
 

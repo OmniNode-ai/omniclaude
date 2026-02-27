@@ -6,6 +6,28 @@
 
 Capability: skill.pr_watch
 All dispatch logic lives in the shared handle_skill_requested handler.
+
+Wave 2 Observability (OMN-2922):
+    Callers of this node (polymorphic agent running the pr-watch skill) are
+    responsible for emitting pr.watch.updated events at each terminal outcome
+    (approved, capped, timeout, failed) by calling:
+
+        from plugins.onex.hooks.lib.pipeline_event_emitters import emit_pr_watch_updated
+
+        emit_pr_watch_updated(
+            run_id=run_id,
+            pr_number=pr_number,
+            repo=repo,                   # e.g. "OmniNode-ai/omniclaude"
+            ticket_id=ticket_id,         # e.g. "OMN-2922"
+            status="approved",           # or "capped" / "timeout" / "failed"
+            review_cycles_used=cycles,
+            watch_duration_hours=hours,
+            correlation_id=correlation_id,
+            session_id=session_id,
+        )
+
+    Topic: onex.evt.omniclaude.pr-watch-updated.v1
+    Consumed by: omnidash /pr-watch view (state table, upsert by run_id).
 """
 
 from __future__ import annotations
@@ -25,6 +47,10 @@ class NodeSkillPrWatchOrchestrator(NodeOrchestrator):
 
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
+
+    Emits pr.watch.updated (PR_WATCH_UPDATED) at terminal outcomes via
+    plugins.onex.hooks.lib.pipeline_event_emitters.emit_pr_watch_updated
+    (OMN-2922). See module docstring for emit contract.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid as _uuid
 import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -560,6 +561,40 @@ async def emit_hook_event(
                 "session_id": getattr(payload, "session_id", "unknown"),
             },
         )
+
+        # Emit circuit.breaker.tripped when the circuit breaker opens (OMN-2922).
+        # Detected by checking if the error message indicates the breaker is OPEN.
+        # Uses emit_client_wrapper (non-blocking socket path) to avoid recursion.
+        _error_msg_lower = str(e).lower()
+        if (
+            "circuit breaker" in _error_msg_lower
+            or "circuit_breaker" in _error_msg_lower
+        ):
+            _emit_event_cb = None
+            try:
+                from emit_client_wrapper import (
+                    emit_event as _emit_event_cb,  # noqa: PLC0415
+                )
+            except ImportError:
+                pass
+            if _emit_event_cb is not None:
+                try:
+                    _kafka_cfg = create_kafka_config()
+                    _cb_payload: dict[str, object] = {
+                        "event_id": str(_uuid.uuid4()),
+                        "session_id": str(getattr(payload, "session_id", "")),
+                        "failure_count": _kafka_cfg.circuit_breaker_threshold,
+                        "threshold": _kafka_cfg.circuit_breaker_threshold,
+                        "reset_timeout_seconds": _kafka_cfg.circuit_breaker_reset_timeout,
+                        "last_error": f"{type(e).__name__}: {e!s}"[:500],
+                        "correlation_id": str(
+                            getattr(payload, "entity_id", _uuid.uuid4())
+                        ),
+                        "emitted_at": datetime.now(UTC).isoformat(),
+                    }
+                    _emit_event_cb("circuit.breaker.tripped", _cb_payload)
+                except Exception:
+                    pass  # Telemetry must never block hook execution
 
         error_msg = f"{type(e).__name__}: {e!s}"
         return ModelEventPublishResult(

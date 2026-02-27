@@ -137,6 +137,11 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "change.frame.emitted",  # OMN-2651 - ChangeFrame emission after JSONL persist
         "skill.started",  # OMN-2773 - Skill invocation started (before dispatch)
         "skill.completed",  # OMN-2773 - Skill invocation completed (after dispatch)
+        "epic.run.updated",  # OMN-2922 - Epic run state update (one row per run_id)
+        "pr.watch.updated",  # OMN-2922 - PR watch state update (one row per run_id)
+        "gate.decision",  # OMN-2922 - Gate outcome (ACCEPTED/REJECTED/TIMEOUT)
+        "budget.cap.hit",  # OMN-2922 - Token budget threshold exceeded
+        "circuit.breaker.tripped",  # OMN-2922 - Kafka circuit breaker opened
     ]
 )
 

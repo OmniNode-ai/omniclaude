@@ -779,6 +779,12 @@ class TestEventRegistryIntegration:
             # Skill lifecycle events (OMN-2773)
             "skill.started",
             "skill.completed",
+            # Wave 2 pipeline observability events (OMN-2922)
+            "epic.run.updated",
+            "pr.watch.updated",
+            "gate.decision",
+            "budget.cap.hit",
+            "circuit.breaker.tripped",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

@@ -80,6 +80,11 @@ class TestModuleImport:
             "change.frame.emitted",  # OMN-2651 - ChangeFrame emission after JSONL persist
             "skill.started",  # OMN-2773 - Skill invocation started
             "skill.completed",  # OMN-2773 - Skill invocation completed
+            "epic.run.updated",  # OMN-2922 - Wave 2: Epic run status update
+            "gate.decision",  # OMN-2922 - Wave 2: Pipeline gate decision
+            "pr.watch.updated",  # OMN-2922 - Wave 2: PR watch status update
+            "budget.cap.hit",  # OMN-2922 - Wave 2: Pipeline budget cap hit
+            "circuit.breaker.tripped",  # OMN-2922 - Wave 2: Circuit breaker tripped
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

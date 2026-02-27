@@ -28,7 +28,9 @@ from __future__ import annotations
 import functools
 import logging
 import math
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import tiktoken
@@ -41,6 +43,44 @@ if TYPE_CHECKING:
     from omniclaude.hooks.handler_context_injection import PatternRecord
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Budget cap hit emitter (OMN-2922)
+# ---------------------------------------------------------------------------
+
+
+def _emit_budget_cap_hit(
+    tokens_used: int,
+    tokens_budget: int,
+    run_id: str,
+    correlation_id: str,
+    session_id: str | None = None,
+) -> None:
+    """Emit a budget.cap.hit event when injection token budget is exceeded.
+
+    Fire-and-forget; never raises.
+    """
+    try:
+        from emit_client_wrapper import emit_event  # noqa: PLC0415
+    except ImportError:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "run_id": run_id,
+            "tokens_used": tokens_used,
+            "tokens_budget": tokens_budget,
+            "cap_reason": "max_tokens_injected exceeded",
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if session_id is not None:
+            payload["session_id"] = session_id
+        emit_event("budget.cap.hit", payload)
+    except Exception:
+        pass
+
 
 # =============================================================================
 # Header Constant (Single Source of Truth)
@@ -605,6 +645,9 @@ def select_patterns_for_injection(
     *,
     header_tokens: int | None = None,
     evidence_resolver: EvidenceResolver | None = None,
+    run_id: str | None = None,
+    correlation_id: str | None = None,
+    session_id: str | None = None,
 ) -> list[PatternRecord]:
     """Select patterns for injection applying all limits.
 
@@ -861,6 +904,18 @@ def select_patterns_for_injection(
         f"Pattern selection complete: {len(selected)}/{len(candidates)} patterns, "
         f"{total_tokens} tokens"
     )
+
+    # Emit budget.cap.hit when token budget was a binding constraint (OMN-2922).
+    # Only emit when run_id is provided (caller opts in to telemetry).
+    budget_cap_hit = total_tokens >= effective_token_budget and run_id is not None
+    if budget_cap_hit:
+        _emit_budget_cap_hit(
+            tokens_used=total_tokens,
+            tokens_budget=limits.max_tokens_injected,
+            run_id=run_id,
+            correlation_id=correlation_id or "",
+            session_id=session_id,
+        )
 
     return selected
 

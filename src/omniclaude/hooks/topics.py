@@ -228,6 +228,25 @@ class TopicBase(StrEnum):
     SKILL_COMPLETED = "onex.evt.omniclaude.skill-completed.v1"
     """Emitted after skill dispatch (success or failure); join key is run_id."""
 
+    # ==========================================================================
+    # Wave 2 pipeline observability topics (OMN-2922)
+    # Consumed by omnidash Wave 2 projection nodes.
+    # ==========================================================================
+    EPIC_RUN_UPDATED = "onex.evt.omniclaude.epic-run-updated.v1"
+    """State update for an in-flight epic run (one row per run_id in epic_run_lease)."""
+
+    PR_WATCH_UPDATED = "onex.evt.omniclaude.pr-watch-updated.v1"
+    """State update for an in-flight pr-watch session (one row per run_id in pr_watch_state)."""
+
+    GATE_DECISION = "onex.evt.omniclaude.gate-decision.v1"
+    """Append-only gate outcome (ACCEPTED, REJECTED, TIMEOUT) emitted by slack-gate."""
+
+    BUDGET_CAP_HIT = "onex.evt.omniclaude.budget-cap-hit.v1"
+    """Emitted when the token budget threshold is exceeded during context injection."""
+
+    CIRCUIT_BREAKER_TRIPPED = "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+    """Emitted when the Kafka circuit breaker transitions to OPEN state."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

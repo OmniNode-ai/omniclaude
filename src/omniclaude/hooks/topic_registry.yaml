@@ -1,0 +1,431 @@
+# topic_registry.yaml — Canonical event_type → topic mapping for omniclaude (OMN-2922)
+#
+# SINGLE SOURCE OF TRUTH for all omniclaude event type to Kafka topic mappings.
+# Both TopicBase (src/omniclaude/hooks/topics.py) and emit_client_wrapper
+# (plugins/onex/hooks/lib/emit_client_wrapper.py) MUST stay in sync with this file.
+#
+# Conventions:
+#   event_type: dotted notation (e.g. "session.started")
+#   topic:      ONEX canonical format onex.{kind}.{producer}.{event-name}.v{n}
+#   kind:       cmd | evt | dlq | intent | snapshot
+#   producer:   omniclaude | omninode | omniintelligence
+#
+# Load validation: tests/hooks/test_topic_registry.py asserts every entry here
+# has a matching constant in TopicBase and a matching entry in SUPPORTED_EVENT_TYPES.
+
+topics:
+  # ---------------------------------------------------------------------------
+  # omniclaude core hook events
+  # ---------------------------------------------------------------------------
+  - event_type: "session.started"
+    topic: "onex.evt.omniclaude.session-started.v1"
+    topic_base_constant: "SESSION_STARTED"
+    description: "Claude Code session initialization"
+
+  - event_type: "session.ended"
+    topic: "onex.evt.omniclaude.session-ended.v1"
+    topic_base_constant: "SESSION_ENDED"
+    description: "Claude Code session termination"
+
+  - event_type: "session.outcome"
+    topic: "onex.evt.omniclaude.session-outcome.v1"
+    topic_base_constant: "SESSION_OUTCOME_EVT"
+    description: "Session outcome EVT target for dashboards / monitoring"
+
+  - event_type: "prompt.submitted"
+    topic: "onex.evt.omniclaude.prompt-submitted.v1"
+    topic_base_constant: "PROMPT_SUBMITTED"
+    description: "User prompt submission (daemon fans out to 2 topics)"
+
+  - event_type: "tool.executed"
+    topic: "onex.evt.omniclaude.tool-executed.v1"
+    topic_base_constant: "TOOL_EXECUTED"
+    description: "Tool execution completion"
+
+  - event_type: "agent.action"
+    topic: "onex.evt.omniclaude.agent-action.v1"
+    topic_base_constant: "AGENT_ACTION"
+    description: "Agent action event"
+
+  - event_type: "learning.pattern"
+    topic: "onex.evt.omniclaude.learning-pattern.v1"
+    topic_base_constant: "LEARNING_PATTERN"
+    description: "Learning pattern event"
+
+  # ---------------------------------------------------------------------------
+  # omninode routing topics
+  # ---------------------------------------------------------------------------
+  - event_type: "routing.requested"
+    topic: "onex.cmd.omninode.routing-requested.v1"
+    topic_base_constant: "ROUTING_REQUESTED"
+    description: "Agent routing command request"
+
+  - event_type: "routing.completed"
+    topic: "onex.evt.omninode.routing-completed.v1"
+    topic_base_constant: "ROUTING_COMPLETED"
+    description: "Agent routing completed event"
+
+  - event_type: "routing.failed"
+    topic: "onex.evt.omninode.routing-failed.v1"
+    topic_base_constant: "ROUTING_FAILED"
+    description: "Agent routing failed event"
+
+  # ---------------------------------------------------------------------------
+  # Cross-service topics (omniclaude → omniintelligence)
+  # ---------------------------------------------------------------------------
+  - event_type: "claude.hook.event"
+    topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+    topic_base_constant: "CLAUDE_HOOK_EVENT"
+    description: "Raw Claude Code hook event consumed by omniintelligence"
+
+  - event_type: "tool.content"
+    topic: "onex.cmd.omniintelligence.tool-content.v1"
+    topic_base_constant: "TOOL_CONTENT"
+    description: "Tool content topic for pattern learning"
+
+  - event_type: "session.outcome.cmd"
+    topic: "onex.cmd.omniintelligence.session-outcome.v1"
+    topic_base_constant: "SESSION_OUTCOME_CMD"
+    description: "Session outcome CMD target for intelligence feedback loop"
+
+  # ---------------------------------------------------------------------------
+  # Hook adapter observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "agent.actions"
+    topic: "onex.evt.omniclaude.agent-actions.v1"
+    topic_base_constant: "AGENT_ACTIONS"
+    description: "Agent actions observability"
+
+  - event_type: "performance.metrics"
+    topic: "onex.evt.omniclaude.performance-metrics.v1"
+    topic_base_constant: "PERFORMANCE_METRICS"
+    description: "Performance metrics observability"
+
+  - event_type: "transformations"
+    topic: "onex.evt.omniclaude.agent-transformation.v1"
+    topic_base_constant: "TRANSFORMATIONS"
+    description: "Agent transformation observability"
+
+  - event_type: "detection.failures"
+    topic: "onex.evt.omniclaude.detection-failure.v1"
+    topic_base_constant: "DETECTION_FAILURES"
+    description: "Detection failure events"
+
+  # ---------------------------------------------------------------------------
+  # Context injection topics
+  # ---------------------------------------------------------------------------
+  - event_type: "context.retrieval.requested"
+    topic: "onex.cmd.omniclaude.context-retrieval-requested.v1"
+    topic_base_constant: "CONTEXT_RETRIEVAL_REQUESTED"
+    description: "Context retrieval command"
+
+  - event_type: "context.retrieval.completed"
+    topic: "onex.evt.omniclaude.context-retrieval-completed.v1"
+    topic_base_constant: "CONTEXT_RETRIEVAL_COMPLETED"
+    description: "Context retrieval completed"
+
+  - event_type: "context.injected"
+    topic: "onex.evt.omniclaude.context-injected.v1"
+    topic_base_constant: "CONTEXT_INJECTED"
+    description: "Context injection event"
+
+  - event_type: "injection.recorded"
+    topic: "onex.evt.omniclaude.injection-recorded.v1"
+    topic_base_constant: "INJECTION_RECORDED"
+    description: "Injection tracking event"
+
+  # ---------------------------------------------------------------------------
+  # Injection metrics topics
+  # ---------------------------------------------------------------------------
+  - event_type: "context.utilization"
+    topic: "onex.evt.omniclaude.context-utilization.v1"
+    topic_base_constant: "CONTEXT_UTILIZATION"
+    description: "Context utilization metrics"
+
+  - event_type: "agent.match"
+    topic: "onex.evt.omniclaude.agent-match.v1"
+    topic_base_constant: "AGENT_MATCH"
+    description: "Agent match event"
+
+  - event_type: "latency.breakdown"
+    topic: "onex.evt.omniclaude.latency-breakdown.v1"
+    topic_base_constant: "LATENCY_BREAKDOWN"
+    description: "Latency breakdown metrics"
+
+  # ---------------------------------------------------------------------------
+  # Routing feedback topics
+  # ---------------------------------------------------------------------------
+  - event_type: "routing.decision"
+    topic: "onex.evt.omniclaude.routing-decision.v1"
+    topic_base_constant: "ROUTING_DECISION"
+    description: "Routing decision event"
+
+  - event_type: "routing.feedback"
+    topic: "onex.evt.omniclaude.routing-feedback.v1"
+    topic_base_constant: "ROUTING_FEEDBACK"
+    description: "Routing feedback for reinforcement learning"
+
+  - event_type: "routing.skipped"
+    topic: "onex.evt.omniclaude.routing-feedback-skipped.v1"
+    topic_base_constant: "ROUTING_FEEDBACK_SKIPPED"
+    description: "Routing feedback skipped (guardrail gate)"
+
+  - event_type: "routing.outcome.raw"
+    topic: "onex.evt.omniclaude.routing-outcome-raw.v1"
+    topic_base_constant: "ROUTING_OUTCOME_RAW"
+    description: "Raw session outcome signals for feedback loop"
+
+  # ---------------------------------------------------------------------------
+  # LLM routing observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "llm.routing.decision"
+    topic: "onex.evt.omniclaude.llm-routing-decision.v1"
+    topic_base_constant: "LLM_ROUTING_DECISION"
+    description: "LLM routing decision observability"
+
+  - event_type: "llm.routing.fallback"
+    topic: "onex.evt.omniclaude.llm-routing-fallback.v1"
+    topic_base_constant: "LLM_ROUTING_FALLBACK"
+    description: "LLM routing fallback observability"
+
+  # ---------------------------------------------------------------------------
+  # Notification topics
+  # ---------------------------------------------------------------------------
+  - event_type: "notification.blocked"
+    topic: "onex.evt.omniclaude.notification-blocked.v1"
+    topic_base_constant: "NOTIFICATION_BLOCKED"
+    description: "Slack notification blocked (pipeline waiting for human input)"
+
+  - event_type: "notification.completed"
+    topic: "onex.evt.omniclaude.notification-completed.v1"
+    topic_base_constant: "NOTIFICATION_COMPLETED"
+    description: "Slack notification completed"
+
+  # ---------------------------------------------------------------------------
+  # Phase metrics topics
+  # ---------------------------------------------------------------------------
+  - event_type: "phase.metrics"
+    topic: "onex.evt.omniclaude.phase-metrics.v1"
+    topic_base_constant: "PHASE_METRICS"
+    description: "Pipeline phase instrumentation metrics"
+
+  # ---------------------------------------------------------------------------
+  # Manifest injection topics
+  # ---------------------------------------------------------------------------
+  - event_type: "manifest.injection.started"
+    topic: "onex.evt.omniclaude.manifest-injection-started.v1"
+    topic_base_constant: "MANIFEST_INJECTION_STARTED"
+    description: "Agent manifest injection started"
+
+  - event_type: "manifest.injected"
+    topic: "onex.evt.omniclaude.manifest-injected.v1"
+    topic_base_constant: "MANIFEST_INJECTED"
+    description: "Agent manifest injected"
+
+  - event_type: "manifest.injection.failed"
+    topic: "onex.evt.omniclaude.manifest-injection-failed.v1"
+    topic_base_constant: "MANIFEST_INJECTION_FAILED"
+    description: "Agent manifest injection failed"
+
+  # ---------------------------------------------------------------------------
+  # Agent status topics
+  # ---------------------------------------------------------------------------
+  - event_type: "agent.status"
+    topic: "onex.evt.omniclaude.agent-status.v1"
+    topic_base_constant: "AGENT_STATUS"
+    description: "Agent lifecycle status reporting"
+
+  # ---------------------------------------------------------------------------
+  # Transformation observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "transformation.started"
+    topic: "onex.evt.omniclaude.transformation-started.v1"
+    topic_base_constant: "TRANSFORMATION_STARTED"
+    description: "Agent transformation started"
+
+  - event_type: "transformation.completed"
+    topic: "onex.evt.omniclaude.transformation-completed.v1"
+    topic_base_constant: "TRANSFORMATION_COMPLETED"
+    description: "Agent transformation completed"
+
+  - event_type: "transformation.failed"
+    topic: "onex.evt.omniclaude.transformation-failed.v1"
+    topic_base_constant: "TRANSFORMATION_FAILED"
+    description: "Agent transformation failed"
+
+  # ---------------------------------------------------------------------------
+  # Execution and observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "execution.logs"
+    topic: "onex.evt.omniclaude.agent-execution-logs.v1"
+    topic_base_constant: "EXECUTION_LOGS"
+    description: "Agent execution logs"
+
+  - event_type: "agent.observability"
+    topic: "onex.evt.omniclaude.agent-observability.v1"
+    topic_base_constant: "AGENT_OBSERVABILITY"
+    description: "Agent observability events"
+
+  # ---------------------------------------------------------------------------
+  # Pattern compliance topics
+  # ---------------------------------------------------------------------------
+  - event_type: "compliance.evaluate"
+    topic: "onex.cmd.omniintelligence.compliance-evaluate.v1"
+    topic_base_constant: "COMPLIANCE_EVALUATE"
+    description: "Pattern compliance evaluation command"
+
+  - event_type: "compliance.evaluated"
+    topic: "onex.evt.omniintelligence.compliance-evaluated.v1"
+    topic_base_constant: "COMPLIANCE_EVALUATED"
+    description: "Pattern compliance evaluation result"
+
+  # ---------------------------------------------------------------------------
+  # Static context edit detection topics
+  # ---------------------------------------------------------------------------
+  - event_type: "static.context.edit.detected"
+    topic: "onex.evt.omniclaude.static-context-edit-detected.v1"
+    topic_base_constant: "STATIC_CONTEXT_EDIT_DETECTED"
+    description: "Static context file change detected"
+
+  # ---------------------------------------------------------------------------
+  # Enrichment observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "context.enrichment"
+    topic: "onex.evt.omniclaude.context-enrichment.v1"
+    topic_base_constant: "CONTEXT_ENRICHMENT"
+    description: "Per-enrichment observability events"
+
+  # ---------------------------------------------------------------------------
+  # Delegation observability topics
+  # ---------------------------------------------------------------------------
+  - event_type: "task.delegated"
+    topic: "onex.evt.omniclaude.task-delegated.v1"
+    topic_base_constant: "TASK_DELEGATED"
+    description: "Task delegated to sub-agent"
+
+  # ---------------------------------------------------------------------------
+  # Shadow validation topics
+  # ---------------------------------------------------------------------------
+  - event_type: "delegation.shadow.comparison"
+    topic: "onex.evt.omniclaude.delegation-shadow-comparison.v1"
+    topic_base_constant: "DELEGATION_SHADOW_COMPARISON"
+    description: "Shadow validation mode comparison results"
+
+  # ---------------------------------------------------------------------------
+  # Pattern enforcement topics
+  # ---------------------------------------------------------------------------
+  - event_type: "pattern.enforcement"
+    topic: "onex.evt.omniclaude.pattern-enforcement.v1"
+    topic_base_constant: "PATTERN_ENFORCEMENT"
+    description: "Pattern enforcement evaluation for omnidash dashboard"
+
+  # ---------------------------------------------------------------------------
+  # Intent-to-commit binding topics
+  # ---------------------------------------------------------------------------
+  - event_type: "intent.commit.bound"
+    topic: "onex.evt.omniclaude.intent-commit-bound.v1"
+    topic_base_constant: "INTENT_COMMIT_BOUND"
+    description: "Intent-to-commit binding record"
+
+  # ---------------------------------------------------------------------------
+  # Decision record topics
+  # ---------------------------------------------------------------------------
+  - event_type: "decision.recorded.evt"
+    topic: "onex.evt.omniintelligence.decision-recorded.v1"
+    topic_base_constant: "DECISION_RECORDED_EVT"
+    description: "Decision recorded (observability — summary fields only)"
+
+  - event_type: "decision.recorded.cmd"
+    topic: "onex.cmd.omniintelligence.decision-recorded.v1"
+    topic_base_constant: "DECISION_RECORDED_CMD"
+    description: "Decision recorded (restricted — full payload including rationale)"
+
+  - event_type: "decision.recorded.omniclaude"
+    topic: "onex.evt.omniclaude.decision-recorded.v1"
+    topic_base_constant: "DECISION_RECORDED_EVT_OMNICLAUDE"
+    description: "Decision recorded (omniclaude event bus)"
+
+  - event_type: "decision.status.changed"
+    topic: "onex.evt.omniclaude.decision-status-changed.v1"
+    topic_base_constant: "DECISION_STATUS_CHANGED_EVT"
+    description: "Decision status changed event"
+
+  - event_type: "decision.conflict.detected"
+    topic: "onex.evt.omniclaude.decision-conflict-detected.v1"
+    topic_base_constant: "DECISION_CONFLICT_DETECTED_EVT"
+    description: "Decision conflict detected event"
+
+  - event_type: "decision.conflict.status.changed"
+    topic: "onex.evt.omniclaude.decision-conflict-status-changed.v1"
+    topic_base_constant: "DECISION_CONFLICT_STATUS_CHANGED"
+    description: "Decision conflict status changed event"
+
+  # ---------------------------------------------------------------------------
+  # ChangeFrame emission topics
+  # ---------------------------------------------------------------------------
+  - event_type: "change.frame.emitted"
+    topic: "onex.evt.omniclaude.change-frame.v1"
+    topic_base_constant: "CHANGE_FRAME_EMITTED"
+    description: "ChangeFrame emitted after JSONL persist"
+
+  # ---------------------------------------------------------------------------
+  # Agent trace topics
+  # ---------------------------------------------------------------------------
+  - event_type: "agent.trace.fix.transition"
+    topic: "onex.evt.omniclaude.fix-transition.v1"
+    topic_base_constant: "AGENT_TRACE_FIX_TRANSITION"
+    description: "Agent fix state transition trace event"
+
+  # ---------------------------------------------------------------------------
+  # Quirks Detector topics
+  # ---------------------------------------------------------------------------
+  - event_type: "quirk.signal.detected"
+    topic: "onex.evt.omniclaude.quirk-signal-detected.v1"
+    topic_base_constant: "QUIRK_SIGNAL_DETECTED"
+    description: "Raw QuirkSignal emitted after detection"
+
+  - event_type: "quirk.finding.produced"
+    topic: "onex.evt.omniclaude.quirk-finding-produced.v1"
+    topic_base_constant: "QUIRK_FINDING_PRODUCED"
+    description: "QuirkFinding emitted after threshold is met"
+
+  # ---------------------------------------------------------------------------
+  # Skill lifecycle topics (OMN-2773)
+  # ---------------------------------------------------------------------------
+  - event_type: "skill.started"
+    topic: "onex.evt.omniclaude.skill-started.v1"
+    topic_base_constant: "SKILL_STARTED"
+    description: "Skill invocation started (before task_dispatcher call)"
+
+  - event_type: "skill.completed"
+    topic: "onex.evt.omniclaude.skill-completed.v1"
+    topic_base_constant: "SKILL_COMPLETED"
+    description: "Skill invocation completed (success or failure)"
+
+  # ---------------------------------------------------------------------------
+  # Wave 2 pipeline observability topics (OMN-2922)
+  # ---------------------------------------------------------------------------
+  - event_type: "epic.run.updated"
+    topic: "onex.evt.omniclaude.epic-run-updated.v1"
+    topic_base_constant: "EPIC_RUN_UPDATED"
+    description: "Epic run state update (one row per run_id in epic_run_lease)"
+
+  - event_type: "pr.watch.updated"
+    topic: "onex.evt.omniclaude.pr-watch-updated.v1"
+    topic_base_constant: "PR_WATCH_UPDATED"
+    description: "PR watch state update (one row per run_id in pr_watch_state)"
+
+  - event_type: "gate.decision"
+    topic: "onex.evt.omniclaude.gate-decision.v1"
+    topic_base_constant: "GATE_DECISION"
+    description: "Gate outcome (ACCEPTED/REJECTED/TIMEOUT) emitted by slack-gate"
+
+  - event_type: "budget.cap.hit"
+    topic: "onex.evt.omniclaude.budget-cap-hit.v1"
+    topic_base_constant: "BUDGET_CAP_HIT"
+    description: "Token budget threshold exceeded during context injection"
+
+  - event_type: "circuit.breaker.tripped"
+    topic: "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+    topic_base_constant: "CIRCUIT_BREAKER_TRIPPED"
+    description: "Kafka circuit breaker transitioned to OPEN state"
