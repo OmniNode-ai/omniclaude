@@ -1,7 +1,7 @@
 ---
 name: integration-gate
 description: Cross-repo integration gate — scans repos for merge-ready PRs, classifies into lanes (fast/standard/high_risk), detects cross-repo dependencies, applies topological ordering, and enqueues into GitHub Merge Queue with Slack gate approval
-version: 1.0.0
+version: 1.1.0
 category: workflow
 tags:
   - integration
@@ -30,7 +30,7 @@ args:
     description: "Bypass Slack gate with pre-issued token bound to plan (format: <run_id>:<plan_hash>:<slack_ts>)"
     required: false
   - name: --max-queue-size
-    description: Maximum PRs to enqueue per run (default: 10)
+    description: Maximum PRs to enqueue per run (default: 50)
     required: false
   - name: --require-approval
     description: Require GitHub APPROVED review (default: true)
@@ -242,7 +242,7 @@ def is_merge_ready(pr: dict, require_approval: bool = True) -> bool:
 | `--dry-run` | false | Plan only, no mutations |
 | `--run-id` | generated | Run identifier |
 | `--gate-attestation` | none | Bypass Slack gate (bound to plan_hash) |
-| `--max-queue-size` | 10 | Max PRs per run |
+| `--max-queue-size` | 50 | Max PRs per run |
 | `--require-approval` | true | Require GH APPROVED review |
 | `--authors` | all | Filter by GitHub usernames |
 | `--since` | none | Filter by ISO 8601 date |
@@ -392,4 +392,7 @@ Written to `~/.claude/skill-results/<run_id>/integration-gate.json`:
 
 ## Changelog
 
+- **v1.1.0**: Increase default `--max-queue-size` from 10 to 50. The previous default was
+  too conservative for repos with many merge-ready PRs, requiring multiple runs to drain
+  the queue.
 - **v1.0.0** (OMN-2819): Initial implementation.
