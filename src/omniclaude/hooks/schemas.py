@@ -656,6 +656,9 @@ class ModelRoutingFeedbackPayload(BaseModel):
         event_name: Literal discriminator for polymorphic deserialization.
         session_id: Session identifier string.
         outcome: Session outcome that triggered feedback (success or failed).
+        correlation_id: Optional correlation ID for distributed tracing. Propagated
+            to the omniintelligence consumer to satisfy its required field. None
+            when the producer does not have a correlation context available.
         emitted_at: Timestamp when the event was emitted (UTC).
 
     Example:
@@ -684,6 +687,11 @@ class ModelRoutingFeedbackPayload(BaseModel):
     outcome: Literal["success", "failed"] = Field(
         ...,
         description="Session outcome that triggered feedback",
+    )
+    correlation_id: UUID | None = Field(
+        default=None,
+        description="Correlation ID propagated to the consumer for tracing. Optional to maintain "
+        "backwards compatibility with existing producers that do not emit this field.",
     )
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
@@ -1767,7 +1775,7 @@ class ModelStaticContextEditDetectedPayload(BaseModel):
         ...     changed_file_count=2,
         ...     changed_files=[
         ...         ModelChangedFileRecord(
-        ...             file_path="/home/user/.claude/CLAUDE.md",
+        ...             file_path="/home/user/.claude/CLAUDE.md",  # local-path-ok
         ...             is_versioned=False,
         ...         ),
         ...     ],
