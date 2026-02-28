@@ -542,6 +542,7 @@ def _build_golden_path_events(
             {
                 "session_id": sid,
                 "outcome": "success",
+                "feedback_status": "produced",
                 "emitted_at": (T0 + timedelta(minutes=30, seconds=5)).isoformat(),
             },
         )
