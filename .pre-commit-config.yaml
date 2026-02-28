@@ -254,6 +254,13 @@ repos:
           && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
         pass_filenames: false
         stages: [pre-commit]
+      - id: check-ai-slop
+        name: Check for AI-slop patterns
+        language: system
+        entry: uv run python scripts/validation/check_ai_slop.py
+        types_or: [python, markdown]
+        pass_filenames: true
+        stages: [pre-commit]
 
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
