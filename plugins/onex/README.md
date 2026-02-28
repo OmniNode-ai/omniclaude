@@ -191,36 +191,46 @@ ln -s /path/to/omniclaude/plugins/onex ~/.claude/plugins/onex
 ln -s ~/Code/omniclaude/plugins/onex ~/.claude/plugins/onex
 ```
 
-#### 3. Update Hook Paths in settings.json
+#### 3. Remove Legacy Hook Entries from settings.json
 
-Update your `~/.claude/settings.json` to reference the new plugin location:
+If you previously had hook entries in `~/.claude/settings.json` pointing to
+`plugins/cache/omninode-tools/onex/`, remove them. Hooks are declared
+authoritatively in `hooks/hooks.json` (the plugin manifest). Claude Code
+loads `hooks.json` automatically via the plugin — duplicate entries in
+`settings.json` cause each event to fire twice.
 
-**Old paths** (deprecated):
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [{
-      "command": "/path/to/omniclaude/claude/hooks/user-prompt-submit.sh"
-    }]
-  }
-}
-```
+Running `deploy.sh --execute` (version 1.3.0+) automatically removes any
+legacy onex hook entries from `settings.json`.
 
-**New paths** (recommended):
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [{
-      "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/user-prompt-submit.sh"
-    }],
-    "PostToolUse": [{
-      "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/post-tool-use-quality.sh"
-    }],
-    "SessionStart": [{
-      "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/session-start.sh"
-    }]
-  }
-}
+To remove them manually:
+
+```bash
+# Remove all onex hook entries from settings.json
+python3 - <<'EOF'
+import json, re
+from pathlib import Path
+
+settings_path = Path.home() / ".claude/settings.json"
+settings = json.loads(settings_path.read_text())
+hooks = settings.get("hooks", {})
+
+def rm_onex(entries):
+    if not entries:
+        return entries
+    return [
+        e for e in entries
+        if not any(
+            re.search(r"plugins/cache/omninode-tools/onex/", h.get("command", ""))
+            for h in e.get("hooks", [])
+        )
+    ]
+
+for event in list(hooks.keys()):
+    hooks[event] = rm_onex(hooks[event])
+
+settings_path.write_text(json.dumps(settings, indent=2))
+print("Done. Restart Claude Code.")
+EOF
 ```
 
 #### 4. Update Environment Variables
@@ -291,7 +301,7 @@ The old directory structure (`claude/hooks/`, `agents/`, `skills/`, etc.) remain
 | Issue | Solution |
 |-------|----------|
 | Commands not found | Verify `~/.claude/plugins/onex` symlink exists |
-| Hooks not firing | Update paths in `~/.claude/settings.json` to new location |
+| Hooks not firing | Ensure `hooks/hooks.json` is present in the plugin directory; remove any duplicate onex entries from `~/.claude/settings.json` |
 | Import errors | Set `PROJECT_ROOT` and `OMNICLAUDE_PATH` in `.env` |
 | Old plugins still active | Remove old symlinks from `~/.claude/plugins/` |
 
@@ -352,24 +362,24 @@ ARCHON_INTELLIGENCE_URL=http://localhost:8053  # Intelligence coordinator
 
 **omniclaude**:
 ```bash
-PROJECT_ROOT=/Users/jonah/Code/omniclaude
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude
+PROJECT_ROOT=/path/to/omniclaude  # local-path-ok
+OMNICLAUDE_PATH=/path/to/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omniarchon**:
 ```bash
-PROJECT_ROOT=/Users/jonah/Code/omniarchon
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
+PROJECT_ROOT=/path/to/omniarchon  # local-path-ok
+OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omnibase_core**:
 ```bash
-PROJECT_ROOT=/Users/jonah/Code/omnibase_core
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
+PROJECT_ROOT=/path/to/omnibase_core  # local-path-ok
+OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
