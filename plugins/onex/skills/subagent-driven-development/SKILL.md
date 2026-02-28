@@ -196,3 +196,23 @@ Done!
 - **executing-plans** - Use for parallel session instead of same-session execution
 
 See code-reviewer template: `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`
+
+## Canonical Use Cases
+
+### Skill Development (Primary Use Case)
+
+Skill development — editing `SKILL.md`, `prompt.md`, skill helpers — is the primary use case for this skill. Skill sessions are high-token and consistently exhaust the main context window when done inline.
+
+**Pattern**:
+```
+Skill(skill="onex:subagent-driven-development")
+```
+
+Then break the skill work into tasks:
+1. Task: Read and understand existing skill files
+2. Task: Edit SKILL.md with new section
+3. Task: Edit prompt.md with new behavior
+4. Task: Run verification (test with a subagent per `onex:testing-skills-with-subagents`)
+5. Task: Commit and report
+
+This is mandated by OMN-2961 (`chore: enforce polly-dispatch policy for all skill development work`).

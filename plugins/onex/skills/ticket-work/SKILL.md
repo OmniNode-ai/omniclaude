@@ -49,6 +49,8 @@ Orchestrate ticket execution through structured phases with Linear as the single
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
+> **Skill Ticket Policy**: When this ticket involves skill development (editing SKILL.md, prompt.md, or skill helpers), dispatch all implementation work to a polymorphic agent via `onex:subagent-driven-development` or `onex:parallel-solve`. The main agent must remain the orchestrator — never the implementer. See `onex:writing-skills` → "Polly-Dispatch Policy" for details.
+
 ## Quick Start
 
 ```

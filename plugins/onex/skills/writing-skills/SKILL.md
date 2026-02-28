@@ -628,3 +628,36 @@ Same cycle: RED (baseline) -> GREEN (write skill) -> REFACTOR (close loopholes).
 Same benefits: Better quality, fewer surprises, bulletproof results.
 
 If you follow TDD for code, follow it for skills. It's the same discipline applied to documentation.
+
+## Polly-Dispatch Policy for Skill Implementation
+
+**MANDATORY**: All skill implementation work MUST be dispatched through polymorphic agents (pollys). The main agent acts as orchestrator only.
+
+### Why
+
+Skill development sessions consistently exhaust the main context window when done inline. Dispatching implementation, testing, and review to subagents preserves orchestrator context for coordination.
+
+### How
+
+When implementing a skill via `ticket-work` or `ticket-pipeline`:
+
+1. **Main agent handles** (low-token phases): intake, research, spec, Linear updates
+2. **Dispatch to polly** (high-token phases): implementation, testing, local review
+
+Use one of these skills for dispatch:
+- `onex:subagent-driven-development` — for sequential task batches
+- `onex:parallel-solve` — for independent parallel tasks
+
+### Example dispatch for Phase 1 (implement)
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="implement skill: {skill_name}",
+  prompt="Edit {skill_files} per the spec below. Commit changes.
+    Spec: {spec}"
+)
+```
+
+Even for small edits (3 files, 30 lines), dispatch to a polly. The overhead is negligible;
+the context savings compound across multi-skill sessions.
