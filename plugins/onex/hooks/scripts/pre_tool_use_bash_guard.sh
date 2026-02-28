@@ -5,7 +5,13 @@
 set -euo pipefail
 
 # Portable Plugin Configuration
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# Resolve absolute path of this script, handling relative invocation (e.g. ./pre_tool_use_bash_guard.sh).
+# Falls back to python3 if realpath is unavailable (non-GNU macOS without coreutils).
+_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
