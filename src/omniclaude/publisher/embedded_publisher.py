@@ -245,17 +245,37 @@ class EmbeddedEventPublisher:
                         self._secondary_event_bus = None
 
                 self._config.socket_path.parent.mkdir(parents=True, exist_ok=True)
-                if self._config.socket_path.exists():
-                    self._config.socket_path.unlink()
+                # Unconditional unlink (missing_ok=True) to eliminate the TOCTOU
+                # window between the exists() check and bind(). A concurrent daemon
+                # startup that raced past the stale-socket check can leave a socket
+                # in place between these two lines; missing_ok=True handles that
+                # case as well as the normal "file was already gone" case without
+                # masking real errors.
+                self._config.socket_path.unlink(missing_ok=True)
 
                 # Set readline buffer limit to match max_payload_bytes + overhead
                 # (default 64KB is too small for large event payloads)
                 stream_limit = self._config.max_payload_bytes + 4096
-                self._server = await asyncio.start_unix_server(
-                    self._handle_client,
-                    path=str(self._config.socket_path),
-                    limit=stream_limit,
-                )
+                try:
+                    self._server = await asyncio.start_unix_server(
+                        self._handle_client,
+                        path=str(self._config.socket_path),
+                        limit=stream_limit,
+                    )
+                except FileExistsError:
+                    # A concurrent daemon won the race and already bound the socket.
+                    # Remove it and retry once — if the second attempt also fails,
+                    # the exception propagates and the caller sees the real error.
+                    logger.warning(
+                        "FileExistsError on first bind attempt (concurrent startup race); "
+                        "removing socket and retrying"
+                    )
+                    self._config.socket_path.unlink(missing_ok=True)
+                    self._server = await asyncio.start_unix_server(
+                        self._handle_client,
+                        path=str(self._config.socket_path),
+                        limit=stream_limit,
+                    )
                 self._config.socket_path.chmod(self._config.socket_permissions)
 
                 self._publisher_task = asyncio.create_task(self._publisher_loop())
