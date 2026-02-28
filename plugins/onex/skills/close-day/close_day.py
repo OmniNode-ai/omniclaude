@@ -47,7 +47,7 @@ SCHEMA_VERSION = "1.0.0"
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Pull today's merged PRs across all repos
+# Pull today's merged PRs across all repos
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +92,7 @@ def fetch_merged_prs_for_repo(
 
 
 # ---------------------------------------------------------------------------
-# Step 3: Build actual_by_repo
+# Build actual_by_repo
 # ---------------------------------------------------------------------------
 
 
@@ -134,7 +134,7 @@ def build_actual_by_repo(
 
 
 # ---------------------------------------------------------------------------
-# Step 4: Detect drift — PRs with no OMN-XXXX ref → SCOPE drift
+# Detect drift — PRs with no OMN-XXXX ref → SCOPE drift
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +173,7 @@ def detect_drift(
 
 
 # ---------------------------------------------------------------------------
-# Step 5: Run invariant probes via check_arch_invariants.py
+# Run invariant probes via check_arch_invariants.py
 # ---------------------------------------------------------------------------
 
 
@@ -282,7 +282,7 @@ def probe_invariants(
 
 
 # ---------------------------------------------------------------------------
-# Step 6: Detect golden-path progress via emitted_at field
+# Detect golden-path progress via emitted_at field
 # ---------------------------------------------------------------------------
 
 
@@ -324,7 +324,7 @@ def detect_golden_path_progress(
 
 
 # ---------------------------------------------------------------------------
-# Step 8: Assemble and validate ModelDayClose
+# Assemble and validate ModelDayClose
 # ---------------------------------------------------------------------------
 
 
@@ -362,7 +362,13 @@ def build_day_close(
 
 def validate_day_close(data: dict[str, Any]) -> Any:
     """Validate data against ModelDayClose.  Raises ValidationError on failure."""
-    from onex_change_control import ModelDayClose
+    try:
+        from onex_change_control import ModelDayClose  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise ImportError(
+            "onex_change_control is required for ModelDayClose validation. "
+            "Install it or set ONEX_CC_REPO_PATH."
+        ) from exc
 
     return ModelDayClose.model_validate(data)
 
@@ -373,7 +379,7 @@ def serialize_day_close(data: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Step 9: Write or print
+# Write or print
 # ---------------------------------------------------------------------------
 
 _WARNING_BANNER = (
@@ -440,7 +446,7 @@ def run(
 
     print(f"[close-day] Generating ModelDayClose for {today}...")
 
-    # Step 1: Pull merged PRs
+    # Pull merged PRs
     repo_prs: dict[str, list[dict[str, Any]]] = {}
     for repo in OMNI_REPOS:
         prs = fetch_merged_prs_for_repo(repo, today)
@@ -448,26 +454,26 @@ def run(
             repo_prs[repo] = prs
             print(f"  {repo}: {len(prs)} merged PR(s)")
 
-    # Step 3: Build actual_by_repo
+    # Build actual_by_repo
     actual = build_actual_by_repo(repo_prs)
 
-    # Step 4: Detect drift
+    # Detect drift
     drift = detect_drift(repo_prs)
     if drift:
         print(f"  Drift detected: {len(drift)} entry(ies)")
 
-    # Step 5: Invariant probes
+    # Invariant probes
     invariant_statuses = probe_invariants(omni_home, script_path)
     print(
         f"  Invariants: reducers_pure={invariant_statuses['reducers_pure']}"
         f", orchestrators_no_io={invariant_statuses['orchestrators_no_io']}"
     )
 
-    # Step 6: Golden-path progress
+    # Golden-path progress
     gp_status = detect_golden_path_progress(today, golden_path_base)
     print(f"  Golden-path: {gp_status}")
 
-    # Step 7: Corrections for tomorrow from unknowns
+    # Corrections for tomorrow from unknowns
     corrections: list[str] = []
     if invariant_statuses.get("reducers_pure") == "unknown":
         corrections.append(
@@ -482,7 +488,7 @@ def run(
             "Verify real_infra_proof_progressing: check ~/.claude/golden-path/ for today's artifacts."
         )
 
-    # Step 8: Assemble + validate
+    # Assemble + validate
     raw = build_day_close(
         today=today,
         plan_items=[],
@@ -500,7 +506,7 @@ def run(
 
     yaml_str = serialize_day_close(raw)
 
-    # Step 9: Write or print
+    # Write or print
     cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
     write_or_print(yaml_str, today, cc_path)
     return 0

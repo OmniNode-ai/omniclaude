@@ -18,13 +18,13 @@
 
 ## Execution Steps
 
-### Step 1: Determine today's date
+### Determine today's date
 
 ```python
 TODAY = args.get("--date") or date.today().isoformat()
 ```
 
-### Step 2: Pull merged PRs across all repos
+### Pull merged PRs across all repos
 
 For each repo in `OMNI_REPOS` (the 10 OmniNode-ai GitHub repos):
 
@@ -38,7 +38,7 @@ gh pr list --state merged --search "merged:>=${TODAY}" \
 - On any error (timeout, auth failure, rate limit) → skip repo, do not abort
 - Result: `repo_prs: dict[str, list[dict]]`
 
-### Step 3: Pull plan from Linear MCP (optional)
+### Pull plan from Linear MCP (optional)
 
 ```python
 # List active-sprint tickets, extract OMN-XXXX ids
@@ -46,7 +46,7 @@ gh pr list --state merged --search "merged:>=${TODAY}" \
 plan_items = list_issues(state="In Progress") + list_issues(state="Todo")
 ```
 
-### Step 4: Build actual_by_repo
+### Build actual_by_repo
 
 Group PRs by repo. For each PR extract the first `OMN-XXXX` reference from title or branch name.
 
@@ -54,7 +54,7 @@ Group PRs by repo. For each PR extract the first `OMN-XXXX` reference from title
 actual_by_repo = build_actual_by_repo(repo_prs)
 ```
 
-### Step 5: Detect drift
+### Detect drift
 
 PRs with no `OMN-XXXX` ref in title or branch name → `drift_detected` entry:
 
@@ -63,7 +63,7 @@ drift_detected = detect_drift(repo_prs)
 # Each entry: {drift_id, category="scope", evidence, impact, correction_for_tomorrow}
 ```
 
-### Step 6: Run invariant probes
+### Run invariant probes
 
 Use `scripts/check_arch_invariants.py` (CDQA-07 / OMN-2977). **Do not reimplement.**
 
@@ -80,7 +80,7 @@ invariant_statuses = probe_invariants(omni_home, script_path)
 # effects_do_io_only is always "unknown" (cannot be probed via AST)
 ```
 
-### Step 7: Detect golden-path progress
+### Detect golden-path progress
 
 **Read `emitted_at` from artifact JSON** — do NOT use directory creation time or directory name.
 
@@ -91,7 +91,7 @@ invariant_statuses = probe_invariants(omni_home, script_path)
 golden_path_status = detect_golden_path_progress(TODAY)
 ```
 
-### Step 8: Handle unknowns
+### Handle unknowns
 
 Any `"unknown"` status → add actionable correction to `corrections_for_tomorrow`:
 
@@ -106,7 +106,7 @@ if golden_path_status == "unknown":
     )
 ```
 
-### Step 9: Assemble and validate
+### Assemble and validate
 
 ```python
 raw = build_day_close(
@@ -126,7 +126,7 @@ ModelDayClose.model_validate(raw)  # raises ValidationError if invalid
 yaml_str = yaml.dump(raw, default_flow_style=False, sort_keys=False)
 ```
 
-### Step 10: Write or print
+### Write or print
 
 ```python
 onex_cc_repo_path = os.environ.get("ONEX_CC_REPO_PATH")
