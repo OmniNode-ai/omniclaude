@@ -391,6 +391,9 @@ def _emit_llm_routing_decision(
     agreement: bool,
     routing_prompt_version: str,
     model_used: str,
+    fuzzy_latency_ms: int = 0,
+    fuzzy_confidence: float | None = None,
+    cost_usd: float | None = None,
 ) -> None:
     """Emit LLM routing decision event (OMN-2273).
 
@@ -409,24 +412,42 @@ def _emit_llm_routing_decision(
         agreement: True when LLM and fuzzy top candidates agree.
         routing_prompt_version: Prompt template version string.
         model_used: Model identifier used for routing.
+        fuzzy_latency_ms: Time spent on fuzzy routing in milliseconds (OMN-2962).
+        fuzzy_confidence: Confidence score from fuzzy routing 0.0-1.0 (OMN-2962).
+        cost_usd: Estimated cost of the LLM routing call in USD (OMN-2962).
     """
     if _emit_event_fn is None:
         logger.debug("emit_event not available, skipping llm routing decision emission")
         return
 
     try:
+        # Field names match LlmRoutingDecisionEvent (shared/llm-routing-types.ts)
+        # and the omnidash read-model-consumer projection (OMN-2962).
         payload: dict[str, object] = {
             "session_id": session_id or "unknown",
             "correlation_id": correlation_id,
-            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
+            # llm_agent: agent selected by LLM routing (consumer key: llm_agent)
+            "llm_agent": result.get("selected_agent", DEFAULT_AGENT),
             "llm_confidence": result.get("confidence", 0.0),
             "llm_latency_ms": result.get("latency_ms", 0),
-            "fallback_used": bool(result.get("fallback_used", False)),
-            "model_used": model_used,
-            "fuzzy_top_candidate": fuzzy_top_candidate,
-            "llm_selected_candidate": llm_selected_candidate,
+            # used_fallback: matches consumer schema field name
+            "used_fallback": bool(result.get("fallback_used", False)),
+            # model: matches consumer schema field name
+            "model": model_used,
+            # fuzzy_agent: agent selected by fuzzy routing (consumer key: fuzzy_agent)
+            "fuzzy_agent": fuzzy_top_candidate or "",
+            "fuzzy_confidence": fuzzy_confidence,
+            "fuzzy_latency_ms": fuzzy_latency_ms,
             "agreement": agreement,
             "routing_prompt_version": routing_prompt_version,
+            "cost_usd": cost_usd,
+            # Legacy fields retained for backwards compatibility with any consumers
+            # that read the old field names; new consumers should use llm_agent/fuzzy_agent.
+            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
+            "fuzzy_top_candidate": fuzzy_top_candidate,
+            "llm_selected_candidate": llm_selected_candidate,
+            "model_used": model_used,
+            "fallback_used": bool(result.get("fallback_used", False)),
         }
         _emit_event_fn(event_type="llm.routing.decision", payload=payload)
     except Exception as exc:
@@ -1253,6 +1274,45 @@ def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
         _agreement_lock.release()
 
 
+def _run_fuzzy_shadow(
+    prompt: str,
+) -> tuple[str, float | None, int]:
+    """Run fuzzy matching synchronously and return (agent, confidence, latency_ms).
+
+    Used by the LLM routing path (OMN-2962) to capture real fuzzy comparison
+    data BEFORE emitting the ``llm.routing.decision`` event, so that
+    ``fuzzy_agent``, ``fuzzy_confidence``, and ``fuzzy_latency_ms`` in the
+    event payload contain accurate values instead of hardcoded defaults.
+
+    Non-blocking: on any failure returns (DEFAULT_AGENT, None, 0).
+
+    Returns:
+        A 3-tuple of:
+            - fuzzy_agent: Agent selected by fuzzy routing (or DEFAULT_AGENT on failure).
+            - fuzzy_confidence: Confidence score 0.0-1.0, or None when unavailable.
+            - fuzzy_latency_ms: Elapsed time in milliseconds (0 on failure).
+    """
+    try:
+        router = _get_router()
+        if router is None:
+            return DEFAULT_AGENT, None, 0
+
+        _fuzzy_start = time.monotonic()
+        recommendations = router.route(prompt, max_recommendations=1)
+        fuzzy_latency_ms = int((time.monotonic() - _fuzzy_start) * 1000)
+
+        if (
+            recommendations
+            and recommendations[0].confidence.total >= CONFIDENCE_THRESHOLD
+        ):
+            top = recommendations[0]
+            return top.agent_name, float(top.confidence.total), fuzzy_latency_ms
+        return DEFAULT_AGENT, None, fuzzy_latency_ms
+    except Exception as exc:
+        logger.debug("_run_fuzzy_shadow failed (non-blocking): %s", exc)
+        return DEFAULT_AGENT, None, 0
+
+
 def route_via_events(
     prompt: str,
     correlation_id: str,
@@ -1335,62 +1395,68 @@ def route_via_events(
     if _use_llm_routing():
         llm_result = _route_via_llm(prompt, correlation_id)
         if llm_result is not None:
-            # Record agreement: compare LLM selection against fuzzy matching.
-            # Run fuzzy in shadow (result discarded) to track the agreement rate
-            # that feeds the LatencyGuard auto-disable gate.
+            # OMN-2962: Run fuzzy matching synchronously BEFORE emitting the
+            # llm.routing.decision event so that fuzzy_agent, fuzzy_confidence,
+            # fuzzy_latency_ms, and agreement contain real values.
             #
-            # Backgrounded in a daemon thread so that fuzzy routing (CPU-bound)
-            # does NOT add synchronous latency to the UserPromptSubmit hot path.
-            # Hooks must never block the UI (CLAUDE.md performance budget).
-            # The thread is a daemon so it does not prevent process exit.
+            # Previous design ran fuzzy in a background daemon thread AFTER
+            # emission, which meant every emitted event recorded agreement=False
+            # and fuzzy_agent="" because the thread had not yet completed.
+            # Kafka uses ON CONFLICT DO NOTHING so a corrective second event
+            # would have been silently discarded — synchronous execution is the
+            # only reliable fix.
             #
-            # _agreement_lock ensures at most one agreement-recording thread
-            # runs at a time.  acquire(blocking=False) skips spawning a new
-            # thread when one is already running (prevents unbounded thread
-            # accumulation under concurrent routing calls).
+            # Latency trade-off: fuzzy routing is CPU-bound and typically
+            # completes in <5 ms on the hook hot path. This is acceptable
+            # compared to the LLM call itself (~50-500 ms).
             _llm_selected = llm_result.get("selected_agent", "")
-            if _agreement_lock.acquire(blocking=False):
-                _agreement_thread = threading.Thread(
-                    target=_record_llm_fuzzy_agreement,
-                    args=(_llm_selected, prompt),
-                    daemon=True,
-                    name="llm-fuzzy-agreement",
-                )
-                try:
-                    _agreement_thread.start()
-                except Exception as exc:
-                    # Thread failed to start (e.g. RuntimeError: can't start new
-                    # thread).  Release the lock immediately so future routing
-                    # calls can still spawn an agreement thread.
-                    _agreement_lock.release()
+            _fuzzy_agent, _fuzzy_confidence, _fuzzy_latency_ms = _run_fuzzy_shadow(
+                prompt
+            )
+            _agreement = _llm_selected == _fuzzy_agent if _fuzzy_agent else False
+
+            # Record agreement with the LatencyGuard synchronously (was previously
+            # done in the background thread). The guard enforces the auto-disable
+            # gate based on agreement rate — recording synchronously is equivalent
+            # and avoids the complexity of a daemon thread solely for this purpose.
+            try:
+                _guard = _get_latency_guard()
+                if _guard is not None:
+                    _guard.record_agreement(agreed=_agreement)
                     logger.debug(
-                        "llm-fuzzy-agreement thread failed to start (non-blocking): %s",
-                        exc,
+                        "LatencyGuard agreement: llm=%s fuzzy=%s agreed=%s",
+                        _llm_selected,
+                        _fuzzy_agent,
+                        _agreement,
                     )
-            else:
+            except Exception as _exc:
                 logger.debug(
-                    "llm-fuzzy-agreement thread already running, skipping spawn"
+                    "LatencyGuard.record_agreement failed (non-blocking): %s", _exc
                 )
+
             _emit_routing_decision(
                 result=llm_result,
                 prompt=prompt,
                 correlation_id=correlation_id,
                 session_id=session_id,
             )
-            # OMN-2273: emit LLM-specific decision event with determinism audit fields.
-            # agreement is not yet known here (background thread), so we emit without
-            # it and rely on the LatencyGuard's record_agreement for tracking.
+            # OMN-2273/OMN-2962: emit LLM-specific decision event with complete
+            # determinism audit fields. All fuzzy comparison data is now available
+            # because _run_fuzzy_shadow() ran synchronously above.
             _emit_llm_routing_decision(
                 result=llm_result,
                 correlation_id=correlation_id,
                 session_id=session_id,
-                fuzzy_top_candidate=None,  # not yet known at emission time; background thread runs after this call
+                fuzzy_top_candidate=_fuzzy_agent or None,
                 llm_selected_candidate=llm_result.get(
                     "llm_selected_candidate", llm_result.get("selected_agent")
                 ),
-                agreement=False,  # not yet known at emission time; Kafka is append-only so this field cannot be updated retroactively
+                agreement=_agreement,
                 routing_prompt_version=_llm_routing_prompt_version,
                 model_used=llm_result.get("model_used", "unknown"),
+                fuzzy_latency_ms=_fuzzy_latency_ms,
+                fuzzy_confidence=_fuzzy_confidence,
+                cost_usd=None,  # no per-call cost tracking in LLM routing yet
             )
             return llm_result
         # OMN-2273: LLM routing returned None — emit fallback event so consumers can
