@@ -879,6 +879,102 @@ def report_summary(results: dict, epic: dict | None, structure_type: str, dry_ru
 
 ---
 
+## Post-Creation: Generate Contracts (every ticket)
+
+After the summary is printed, call `generate-ticket-contract` for every created (or skipped/updated)
+ticket. Do NOT filter by seam-keyword — call for every ticket. The generator handles seam detection
+internally and returns cheaply for non-seam tickets.
+
+```python
+def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
+    """Call generate-ticket-contract for every ticket in results.
+
+    Args:
+        results: Output from create_tickets_batch
+        dry_run: If True, report what would be generated without calling the skill
+
+    Returns:
+        List of contract results: {ticket_id, status, is_seam, path_or_error}
+    """
+    import time
+
+    all_tickets = []
+
+    for item in results['created']:
+        if item.get('dry_run'):
+            t_id = f"DRY-{item['entry']['id']}"
+            title = item['entry']['title']
+        else:
+            t = item['ticket']
+            t_id = t.get('identifier', 'UNKNOWN')
+            title = t.get('title', item['entry']['title'])
+        all_tickets.append({'ticket_id': t_id, 'title': title})
+
+    for item in results['skipped']:
+        e = item['existing']
+        all_tickets.append({'ticket_id': e['identifier'], 'title': e['title']})
+
+    for item in results['updated']:
+        e = item['existing']
+        all_tickets.append({'ticket_id': e['identifier'], 'title': e['title']})
+
+    contract_results = []
+
+    for t in all_tickets:
+        if dry_run:
+            contract_results.append({
+                'ticket_id': t['ticket_id'],
+                'status': 'dry_run',
+                'is_seam': None,
+                'path_or_error': '[DRY RUN] Would call generate-ticket-contract'
+            })
+            continue
+
+        time.sleep(0.1)  # Small delay between calls
+
+        try:
+            # Call generate-ticket-contract skill
+            result = Skill(
+                skill="onex:generate-ticket-contract",
+                args=f"{t['ticket_id']}"
+            )
+
+            contract_results.append({
+                'ticket_id': t['ticket_id'],
+                'status': result.get('status', 'unknown'),
+                'is_seam': result.get('is_seam_ticket', False),
+                'path_or_error': result.get('contract_path', result.get('error', ''))
+            })
+
+        except Exception as e:
+            contract_results.append({
+                'ticket_id': t['ticket_id'],
+                'status': 'error',
+                'is_seam': None,
+                'path_or_error': str(e)
+            })
+
+    return contract_results
+```
+
+Output a **Generated Contracts** table after calling the generator for all tickets:
+
+```markdown
+### Generated Contracts
+
+| Ticket | Seam? | Contract Status | Path |
+|--------|-------|-----------------|------|
+| OMN-XXXX | yes | valid | contracts/OMN-XXXX.yaml (written) |
+| OMN-YYYY | no  | valid | [printed — ONEX_CC_REPO_PATH not set] |
+| OMN-ZZZZ | no  | error | ValidationError: missing field 'requirements' |
+```
+
+**Key rule:** Call `generate-ticket-contract` for every ticket — no seam-keyword filtering at this
+layer. The generator handles seam detection internally. When `ONEX_CC_REPO_PATH` is not set,
+the YAML is printed inline with a manual commit banner.
+
+---
+
 ## Main Execution Flow
 
 ```python
