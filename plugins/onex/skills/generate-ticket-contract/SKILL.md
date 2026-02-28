@@ -1,3 +1,8 @@
+---
+name: generate-ticket-contract
+description: Auto-draft a ModelTicketContract YAML from ticket context with two-layer architecture — prompt generation and Python validation
+---
+
 # generate-ticket-contract skill
 
 **Skill ID**: `onex:generate-ticket-contract`
