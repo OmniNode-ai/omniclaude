@@ -100,6 +100,7 @@ jobs:
             --exclude 'https://www\.gnu\.org'
             --exclude 'https://www\.contributor-covenant\.org'
             --exclude 'https://claude\.ai'
+            --exclude 'https://freedesktop\.org'
             '**/*.md'
           fail: true
 
