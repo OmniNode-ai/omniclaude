@@ -333,8 +333,15 @@ class TestGoldenPathDetection:
 # Tests: output validates against ModelDayClose.model_validate()
 # ---------------------------------------------------------------------------
 
+_ONEX_CC_AVAILABLE = importlib.util.find_spec("onex_change_control") is not None
+_skip_no_onex_cc = pytest.mark.skipif(
+    not _ONEX_CC_AVAILABLE,
+    reason="onex_change_control not installed; skipping ModelDayClose validation tests",
+)
+
 
 @pytest.mark.unit
+@_skip_no_onex_cc
 class TestModelDayCloseValidation:
     def test_minimal_output_validates(self, today: str) -> None:
         """Minimal output (all unknowns, no PRs) → ModelDayClose validates OK."""

@@ -1,3 +1,26 @@
+---
+name: close-day
+description: Auto-generates a ModelDayClose YAML from today's GitHub PRs, git activity, and invariant probes
+version: 1.0.0
+category: workflow
+tags:
+  - day-close
+  - drift-detection
+  - invariants
+  - reporting
+author: OmniClaude Team
+composable: false
+inputs:
+  - name: date
+    type: str
+    description: ISO date to close (e.g. 2026-02-28); defaults to today
+    required: false
+outputs:
+  - name: yaml_path
+    type: str
+    description: Path where the day-close YAML was written (or "printed" if ONEX_CC_REPO_PATH not set)
+---
+
 # close-day Skill
 
 > **CDQA-04 / OMN-2981** — Auto-generates a `ModelDayClose` YAML from today's GitHub PRs,
