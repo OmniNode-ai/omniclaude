@@ -130,14 +130,14 @@ valkey_schema:
   watchset:
     key_pattern: "onex:watchset:{repo}:{pr_number}"
     type: SET
-    members: agent_id strings
+    members: "agent_id strings"
     ttl_seconds: 7200
     description: "Set of agent_ids watching this (repo, pr_number)"
 
   reverse_index:
     key_pattern: "onex:watchbyagent:{agent_id}"
     type: SET
-    members: "{repo}:{pr_number}" strings
+    members: '"{repo}:{pr_number}" strings'
     ttl_seconds: 7200
     description: "Set of (repo, pr_number) pairs watched by this agent"
 
