@@ -91,10 +91,13 @@ class TopicBase(StrEnum):
     # Routing feedback topics (OMN-1892)
     # ==========================================================================
     ROUTING_FEEDBACK = "onex.evt.omniclaude.routing-feedback.v1"
-    ROUTING_FEEDBACK_SKIPPED = "onex.evt.omniclaude.routing-feedback-skipped.v1"
-    # Raw session outcome signals (OMN-2356) — replaces no-op derived feedback
-    # omniintelligence consumes this and computes derived scores server-side
-    ROUTING_OUTCOME_RAW = "onex.evt.omniclaude.routing-outcome-raw.v1"
+    # TOMBSTONED (OMN-2622): folded into ROUTING_FEEDBACK via feedback_status field.
+    # Producer removed; topic no longer provisioned.
+    # ROUTING_FEEDBACK_SKIPPED = "onex.evt.omniclaude.routing-feedback-skipped.v1"
+    #
+    # TOMBSTONED (OMN-2622): deprecated — no named consumer, raw signals not
+    # suitable for long-term storage. Producer removed; topic no longer provisioned.
+    # ROUTING_OUTCOME_RAW = "onex.evt.omniclaude.routing-outcome-raw.v1"
 
     # ==========================================================================
     # Routing decision topics (PR-92)

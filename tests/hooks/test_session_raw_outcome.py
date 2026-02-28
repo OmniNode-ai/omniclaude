@@ -2,16 +2,21 @@
 # SPDX-License-Identifier: MIT
 
 # Copyright (c) 2025 OmniNode Team
-"""Unit tests for session raw outcome event (OMN-2356).
+"""Unit tests for routing feedback session outcome handling.
 
-Verifies:
-- ModelSessionRawOutcomePayload schema shape (no derived scores)
-- build_session_raw_outcome_event helper (used by session-end.sh logic)
-- routing.outcome.raw event type is registered in EVENT_REGISTRY
-- ROUTING_OUTCOME_RAW topic exists in TopicBase
-- Acceptance tests from ticket DoD
+OMN-2622: ModelSessionRawOutcomePayload and routing.outcome.raw topic are deprecated.
+All routing feedback (produced and skipped) is now emitted on routing-feedback.v1 via
+ModelRoutingFeedbackPayload with a ``feedback_status`` field.
 
-Part of OMN-2356: Emit raw outcome signals instead of hardcoded/zero derived scores.
+Remaining in this file:
+- build_session_raw_outcome_event helper (pure Python, used internally for accumulator logic)
+- TestBuildSessionEndEvent: Acceptance tests from OMN-2356 DoD (helper logic still valid)
+- TestSessionAccumulatorFileFormat: Session accumulator JSON round-trip tests
+- TestRoutingFeedbackSchema: Replaces TestSessionRawOutcomeSchema — validates new schema
+
+Removed (OMN-2622):
+- TestSessionRawOutcomeSchema: tests for ModelSessionRawOutcomePayload (removed)
+- TestRoutingOutcomeRawRegistry: tests for routing.outcome.raw registry entry (tombstoned)
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ pytestmark = pytest.mark.unit
 
 # =============================================================================
 # Helpers: build_session_raw_outcome_event
-# This mirrors the logic in session-end.sh to produce the raw payload dict.
+# This mirrors accumulator-reading logic in session-end.sh.
 # Pure function — no I/O, no datetime.now().
 # =============================================================================
 
@@ -48,7 +53,7 @@ def build_session_raw_outcome_event(
         duration_ms: Session duration from Claude's SessionEnd payload.
 
     Returns:
-        Dict matching ModelSessionRawOutcomePayload (minus emitted_at).
+        Dict with raw session observable facts.
         Intentionally excludes utilization_score and agent_match_score —
         those are derived values belonging in omniintelligence.
     """
@@ -69,210 +74,124 @@ def build_session_raw_outcome_event(
 
 
 # =============================================================================
-# Test: Schema shape — no derived scores
+# Test: New schema — ModelRoutingFeedbackPayload with feedback_status (OMN-2622)
 # =============================================================================
 
 
-class TestSessionRawOutcomeSchema:
-    """Verify ModelSessionRawOutcomePayload has correct shape."""
+class TestRoutingFeedbackSchema:
+    """Verify ModelRoutingFeedbackPayload schema with OMN-2622 feedback_status field."""
 
-    def test_schema_does_not_contain_derived_scores(self) -> None:
-        """Derived scores (utilization_score, agent_match_score) must not be in schema."""
+    def test_schema_contains_feedback_status_and_skip_reason(self) -> None:
+        """ModelRoutingFeedbackPayload must include feedback_status and skip_reason."""
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
-        # Verify the model fields do not include derived metrics
-        field_names = set(ModelSessionRawOutcomePayload.model_fields.keys())
-        assert "utilization_score" not in field_names, (
-            "utilization_score is a derived score — belongs in omniintelligence, not the hook"
+        field_names = set(ModelRoutingFeedbackPayload.model_fields.keys())
+        assert "feedback_status" in field_names, (
+            "feedback_status must be present [OMN-2622]"
         )
-        assert "agent_match_score" not in field_names, (
-            "agent_match_score is a derived score — belongs in omniintelligence, not the hook"
-        )
-
-    def test_schema_contains_required_raw_fields(self) -> None:
-        """Raw signal fields must be present."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
-
-        field_names = set(ModelSessionRawOutcomePayload.model_fields.keys())
-        for required in [
-            "session_id",
-            "injection_occurred",
-            "patterns_injected_count",
-            "tool_calls_count",
-            "duration_ms",
-            "agent_selected",
-            "routing_confidence",
-            "emitted_at",
-        ]:
-            assert required in field_names, f"Expected field {required!r} in schema"
+        assert "skip_reason" in field_names, "skip_reason must be present [OMN-2622]"
+        assert "outcome" in field_names, "outcome must be present"
+        assert "session_id" in field_names, "session_id must be present"
+        assert "emitted_at" in field_names, "emitted_at must be present"
 
     def test_schema_is_frozen(self) -> None:
-        """ModelSessionRawOutcomePayload must be frozen (immutable after construction)."""
+        """ModelRoutingFeedbackPayload must be frozen (immutable after construction)."""
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        event = ModelSessionRawOutcomePayload(
+        now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
+        event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
-            injection_occurred=True,
-            patterns_injected_count=3,
-            tool_calls_count=12,
-            duration_ms=45200,
+            outcome="success",
+            feedback_status="produced",
+            skip_reason=None,
             emitted_at=now,
         )
         with pytest.raises(Exception):
             event.session_id = "other"  # type: ignore[misc]
 
-    def test_schema_constructs_with_realistic_values(self) -> None:
-        """Schema accepts realistic session-end values."""
+    def test_produced_event_constructs_with_realistic_values(self) -> None:
+        """Schema accepts realistic produced session values."""
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        event = ModelSessionRawOutcomePayload(
+        now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
+        event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
-            injection_occurred=True,
-            patterns_injected_count=3,
-            tool_calls_count=12,
-            duration_ms=45200,
-            agent_selected="omniarchon",
-            routing_confidence=0.91,
+            outcome="success",
+            feedback_status="produced",
+            skip_reason=None,
             emitted_at=now,
         )
         assert event.session_id == "abc12345-1234-5678-abcd-1234567890ab"
-        assert event.injection_occurred is True
-        assert event.patterns_injected_count == 3
-        assert event.tool_calls_count == 12
-        assert event.duration_ms == 45200
-        assert event.agent_selected == "omniarchon"
-        assert abs(event.routing_confidence - 0.91) < 1e-9
+        assert event.outcome == "success"
+        assert event.feedback_status == "produced"
+        assert event.skip_reason is None
         assert event.emitted_at == now
 
-    def test_schema_constructs_with_zero_injection(self) -> None:
-        """Schema accepts a session with no injection (injection_occurred=False)."""
+    def test_skipped_event_constructs_with_skip_reason(self) -> None:
+        """Schema accepts skipped events with a skip_reason."""
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        event = ModelSessionRawOutcomePayload(
+        now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
+        event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
-            injection_occurred=False,
-            patterns_injected_count=0,
-            tool_calls_count=0,
-            duration_ms=0,
+            outcome="unknown",
+            feedback_status="skipped",
+            skip_reason="NO_INJECTION",
             emitted_at=now,
         )
-        assert event.injection_occurred is False
-        assert event.patterns_injected_count == 0
-        assert event.agent_selected == ""
-        assert event.routing_confidence == 0.0
-
-    def test_routing_confidence_above_one_raises_validation_error(self) -> None:
-        """routing_confidence > 1.0 must be rejected (ge=0.0, le=1.0 constraint)."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from pydantic import ValidationError
-
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
-
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        with pytest.raises(ValidationError):
-            ModelSessionRawOutcomePayload(
-                session_id="abc12345-1234-5678-abcd-1234567890ab",
-                injection_occurred=False,
-                patterns_injected_count=0,
-                tool_calls_count=0,
-                duration_ms=0,
-                routing_confidence=1.1,
-                emitted_at=now,
-            )
-
-    def test_routing_confidence_below_zero_raises_validation_error(self) -> None:
-        """routing_confidence < 0.0 must be rejected (ge=0.0, le=1.0 constraint)."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from pydantic import ValidationError
-
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
-
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        with pytest.raises(ValidationError):
-            ModelSessionRawOutcomePayload(
-                session_id="abc12345-1234-5678-abcd-1234567890ab",
-                injection_occurred=False,
-                patterns_injected_count=0,
-                tool_calls_count=0,
-                duration_ms=0,
-                routing_confidence=-0.1,
-                emitted_at=now,
-            )
-
-    def test_slash_command_sentinel_confidence_zero(self) -> None:
-        """Slash-command bypass: session-end.sh zeroes routing_confidence to 0.0.
-
-        When user-prompt-submit.sh detects a slash command, it writes the accumulator
-        with agent_selected="" and routing_confidence=1.0 (a sentinel meaning no real
-        routing decision was made). session-end.sh detects this pair and zeroes
-        routing_confidence to 0.0 before emitting, so omniintelligence receives an
-        unambiguous no-routing-decision signal (agent_selected="" + confidence=0.0).
-
-        Both states (pre-zeroing 1.0 and post-zeroing 0.0) must be valid schema values.
-        This test documents the expected emitted state (post-zeroing, confidence=0.0).
-        If the sentinel logic is removed from session-end.sh, consumers would receive
-        the misleading confidence=1.0 sentinel — this test provides a documentation
-        anchor for that regression risk.
-        """
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
-
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        # Post-zeroing: what session-end.sh actually emits for slash commands
-        emitted = ModelSessionRawOutcomePayload(
-            session_id="abc12345-1234-5678-abcd-1234567890ab",
-            injection_occurred=False,
-            patterns_injected_count=0,
-            agent_selected="",
-            tool_calls_count=0,
-            duration_ms=0,
-            routing_confidence=0.0,  # zeroed by sentinel detection in session-end.sh
-            emitted_at=now,
-        )
-        assert emitted.routing_confidence == 0.0
-        assert emitted.agent_selected == ""
+        assert event.feedback_status == "skipped"
+        assert event.skip_reason == "NO_INJECTION"
 
     def test_event_name_discriminator(self) -> None:
-        """event_name must be 'routing.outcome.raw' for polymorphic deserialization."""
+        """event_name must be 'routing.feedback' for polymorphic deserialization."""
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
-        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
-        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
-        event = ModelSessionRawOutcomePayload(
+        now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
+        event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
-            injection_occurred=False,
-            patterns_injected_count=0,
-            tool_calls_count=0,
-            duration_ms=0,
+            outcome="success",
+            feedback_status="produced",
+            skip_reason=None,
             emitted_at=now,
         )
-        assert event.event_name == "routing.outcome.raw"
+        assert event.event_name == "routing.feedback"
+
+    def test_routing_outcome_raw_tombstoned(self) -> None:
+        """routing.outcome.raw must NOT be in EVENT_REGISTRY (tombstoned OMN-2622)."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        assert "routing.outcome.raw" not in EVENT_REGISTRY, (
+            "routing.outcome.raw was tombstoned in OMN-2622 — must not be in EVENT_REGISTRY"
+        )
+
+    def test_routing_skipped_tombstoned(self) -> None:
+        """routing.skipped must NOT be in EVENT_REGISTRY (tombstoned OMN-2622)."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        assert "routing.skipped" not in EVENT_REGISTRY, (
+            "routing.skipped was tombstoned in OMN-2622 — must not be in EVENT_REGISTRY"
+        )
 
 
 # =============================================================================
@@ -365,81 +284,6 @@ class TestBuildSessionEndEvent:
             duration_ms=120000,  # From Claude's SessionEnd payload
         )
         assert event["duration_ms"] == 120000
-
-
-# =============================================================================
-# Test: Event registry
-# =============================================================================
-
-
-class TestRoutingOutcomeRawRegistry:
-    """Verify routing.outcome.raw is registered correctly in EVENT_REGISTRY."""
-
-    def test_routing_outcome_raw_is_registered(self) -> None:
-        """routing.outcome.raw must be in EVENT_REGISTRY."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.event_registry import EVENT_REGISTRY
-
-        assert "routing.outcome.raw" in EVENT_REGISTRY, (
-            "routing.outcome.raw must be registered in EVENT_REGISTRY"
-        )
-
-    def test_routing_outcome_raw_has_correct_required_fields(self) -> None:
-        """routing.outcome.raw required_fields must include key raw signal fields."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.event_registry import EVENT_REGISTRY
-
-        reg = EVENT_REGISTRY["routing.outcome.raw"]
-        required = set(reg.required_fields)
-        assert "session_id" in required
-        assert "injection_occurred" in required
-        assert "tool_calls_count" in required
-        assert "duration_ms" in required
-
-    def test_routing_outcome_raw_targets_correct_topic(self) -> None:
-        """routing.outcome.raw must fan-out to ROUTING_OUTCOME_RAW topic."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.event_registry import EVENT_REGISTRY
-        from omniclaude.hooks.topics import TopicBase
-
-        reg = EVENT_REGISTRY["routing.outcome.raw"]
-        assert len(reg.fan_out) == 1
-        assert reg.fan_out[0].topic_base == TopicBase.ROUTING_OUTCOME_RAW
-
-    def test_routing_outcome_raw_topic_value(self) -> None:
-        """ROUTING_OUTCOME_RAW topic must follow ONEX canonical naming."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.topics import TopicBase
-
-        topic = TopicBase.ROUTING_OUTCOME_RAW
-        assert topic.startswith("onex.evt.omniclaude."), (
-            "Topic must be an evt (observability) topic under omniclaude producer"
-        )
-        assert "routing-outcome-raw" in topic
-
-    def test_routing_outcome_raw_no_derived_scores_in_required_fields(self) -> None:
-        """Derived scores must not appear in required_fields for routing.outcome.raw."""
-        pytest.importorskip(
-            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
-        )
-        from omniclaude.hooks.event_registry import EVENT_REGISTRY
-
-        reg = EVENT_REGISTRY["routing.outcome.raw"]
-        required = set(reg.required_fields)
-        assert "utilization_score" not in required, (
-            "utilization_score is derived — must not be in required_fields"
-        )
-        assert "agent_match_score" not in required, (
-            "agent_match_score is derived — must not be in required_fields"
-        )
 
 
 # =============================================================================

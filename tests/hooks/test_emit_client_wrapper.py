@@ -62,8 +62,9 @@ class TestModuleImport:
             "agent.match",  # OMN-1889
             "latency.breakdown",  # OMN-1889
             "routing.decision",  # Polly-first routing observability
-            "routing.feedback",  # OMN-1892 - Routing feedback for reinforcement
-            "routing.skipped",  # OMN-1892 - Routing feedback skipped
+            "routing.feedback",  # OMN-1892 + OMN-2622 - Routing feedback (produced or skipped via feedback_status)
+            # TOMBSTONED (OMN-2622): "routing.skipped" folded into routing.feedback via feedback_status field
+            # TOMBSTONED (OMN-2622): "routing.outcome.raw" deprecated — no consumer, removed from registry
             "notification.blocked",  # OMN-1831
             "notification.completed",  # PR-92
             "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
@@ -73,7 +74,6 @@ class TestModuleImport:
             "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
             "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
             "context.enrichment",  # OMN-2274 - Enrichment observability
-            "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
             "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
             "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation
             "intent.commit.bound",  # OMN-2492 - Intent-to-commit binding record

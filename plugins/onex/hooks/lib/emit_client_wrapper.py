@@ -119,8 +119,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "agent.match",  # OMN-1889
         "latency.breakdown",  # OMN-1889
         "routing.decision",  # PR-92 - Routing decision emission via daemon
-        "routing.feedback",  # OMN-1892 - Routing feedback for reinforcement
-        "routing.skipped",  # OMN-1892 - Routing feedback skipped (guardrail gate)
+        "routing.feedback",  # OMN-1892 - Routing feedback (produced or skipped) [OMN-2622: folded routing.skipped]
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
         "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
@@ -130,7 +129,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
         "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
         "context.enrichment",  # OMN-2274 - Per-enrichment observability events
-        "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
+        # TOMBSTONED (OMN-2622): "routing.outcome.raw" removed — deprecated topic
         "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
         "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation for omnidash dashboard
         "intent.commit.bound",  # OMN-2492 - Intent-to-commit binding record

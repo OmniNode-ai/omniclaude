@@ -771,11 +771,13 @@ class TestRoutingFeedbackEmissionPath:
         assert result.should_reinforce is True
         assert result.skip_reason is None
 
-        # Step 3: Construct the frozen Pydantic payload
+        # Step 3: Construct the frozen Pydantic payload (OMN-2622: feedback_status required)
         now = datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC)
         payload = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
             outcome=str(result.details["session_outcome"]),
+            feedback_status="produced",
+            skip_reason=None,
             emitted_at=now,
         )
 
@@ -783,6 +785,8 @@ class TestRoutingFeedbackEmissionPath:
         assert payload.event_name == "routing.feedback"
         assert payload.session_id == "abc12345-1234-5678-abcd-1234567890ab"
         assert payload.outcome == "success"
+        assert payload.feedback_status == "produced"
+        assert payload.skip_reason is None
         assert payload.emitted_at == now
 
         # Verify frozen (immutable)
@@ -809,19 +813,26 @@ class TestRoutingFeedbackEmissionPath:
         payload = ModelRoutingFeedbackPayload(
             session_id="def12345-5678-abcd-1234-567890abcdef",
             outcome="failed",
+            feedback_status="produced",
+            skip_reason=None,
             emitted_at=datetime(2025, 6, 15, 15, 0, 0, tzinfo=UTC),
         )
         assert payload.event_name == "routing.feedback"
         assert payload.outcome == "failed"
+        assert payload.feedback_status == "produced"
 
     def test_skipped_payload_from_failed_guardrail(self) -> None:
-        """When guardrails reject, ModelRoutingFeedbackSkippedPayload is constructable."""
+        """When guardrails reject, ModelRoutingFeedbackPayload with status=skipped is constructable.
+
+        OMN-2622: ModelRoutingFeedbackSkippedPayload removed; skipped events now use
+        ModelRoutingFeedbackPayload with feedback_status='skipped' + skip_reason.
+        """
         pytest.importorskip(
             "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
         )
         from datetime import UTC, datetime
 
-        from omniclaude.hooks.schemas import ModelRoutingFeedbackSkippedPayload
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
 
         result = should_reinforce_routing(
             injection_occurred=False,
@@ -832,12 +843,15 @@ class TestRoutingFeedbackEmissionPath:
         assert result.should_reinforce is False
         assert result.skip_reason == SKIP_NO_INJECTION
 
-        payload = ModelRoutingFeedbackSkippedPayload(
+        payload = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            outcome="unknown",
+            feedback_status="skipped",
             skip_reason=result.skip_reason,
             emitted_at=datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC),
         )
-        assert payload.event_name == "routing.skipped"
+        assert payload.event_name == "routing.feedback"
+        assert payload.feedback_status == "skipped"
         assert payload.skip_reason == "NO_INJECTION"
 
         # Verify frozen (immutable)
