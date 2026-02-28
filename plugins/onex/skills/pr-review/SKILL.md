@@ -11,6 +11,63 @@ Apply the persona profile above when generating outputs.
 
 Production-ready PR review system that fetches all feedback from GitHub, organizes by priority, and enforces strict merge requirements.
 
+## Step 0: Seam Contract Check
+
+Run this step **before all other review steps** for every PR.
+
+### 1. Extract ticket_id from PR
+
+```
+Branch pattern: omn-(\d+) (case-insensitive) → OMN-{N}
+PR title pattern: \[OMN-(\d+)\] or OMN-(\d+):
+```
+
+If no ticket_id found: skip contract check, log "no ticket ID in PR" and proceed to Step 1.
+
+### 2. Locate contract
+
+```
+Primary:  $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml   (if ONEX_CC_REPO_PATH is set)
+Fallback: $OMNI_HOME/onex_change_control/contracts/{ticket_id}.yaml
+```
+
+**If contract not found:**
+- PR touches Kafka topic strings or event schemas → add MAJOR finding: "Seam signals detected but no contract found — run /generate-ticket-contract"
+- No seam signals → skip silently (not an error)
+
+### 3. If contract found AND is_seam_ticket=true
+
+Invoke the `contract-compliance-check` skill:
+
+```
+/contract-compliance-check {ticket_id}
+```
+
+Route result as follows:
+
+| Result | Action |
+|--------|--------|
+| `BLOCK` | Add as CRITICAL finding; halt review (do not proceed to Step 1) |
+| `WARN` | Add as MAJOR finding; continue review (proceed to Step 1) |
+| `PASS` | Log pass; continue review (proceed to Step 1) |
+
+**emergency_bypass semantics**: If `emergency_bypass.enabled=true` with non-empty `justification` and `follow_up_ticket_id`, downgrade BLOCK to WARN and continue.
+
+### 4. Report
+
+Post contract check result as a PR comment via `gh pr comment`:
+
+```bash
+gh pr comment {PR_NUMBER} --body "$(cat <<'EOF'
+## Seam Contract Check — {ticket_id}
+
+{contract_compliance_check_output}
+EOF
+)"
+```
+
+---
+
 ## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
 
 **DO NOT run bash scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
