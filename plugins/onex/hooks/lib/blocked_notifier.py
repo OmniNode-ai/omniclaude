@@ -178,13 +178,27 @@ def _format_slack_message(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def _send_via_handler(webhook_url: str, message: str) -> bool:
+def _send_via_handler(
+    webhook_url: str, message: str, correlation_id_str: str | None = None
+) -> bool:
     """Send notification via omnibase_infra HandlerSlackWebhook.
 
     Returns True if sent successfully, False otherwise.
     """
     import asyncio
     import importlib
+    from uuid import UUID, uuid4
+
+    # Use the payload's correlation_id so the handler context block shows
+    # the same ID as the message body (not a freshly-generated one).
+    alert_correlation_id: UUID
+    if correlation_id_str:
+        try:
+            alert_correlation_id = UUID(str(correlation_id_str))
+        except (ValueError, AttributeError):
+            alert_correlation_id = uuid4()
+    else:
+        alert_correlation_id = uuid4()
 
     mod = importlib.import_module("omnibase_infra.handlers.handler_slack_webhook")
     handler_cls = mod.HandlerSlackWebhook
@@ -203,11 +217,11 @@ def _send_via_handler(webhook_url: str, message: str) -> bool:
             message=message,
             title="Agent Blocked",
             details={},
+            correlation_id=alert_correlation_id,
         )
     except ImportError:
         # Fall back to a simple object with the required interface
         from dataclasses import dataclass, field
-        from uuid import uuid4
 
         @dataclass(frozen=True)
         class _FallbackAlert:
@@ -217,7 +231,7 @@ def _send_via_handler(webhook_url: str, message: str) -> bool:
             details: dict[str, str] = field(default_factory=dict)
             correlation_id: object = field(default_factory=uuid4)
 
-        alert = _FallbackAlert(message=message)  # type: ignore[assignment]
+        alert = _FallbackAlert(message=message, correlation_id=alert_correlation_id)
 
     try:
         asyncio.run(asyncio.wait_for(handler.handle(alert), timeout=10.0))
@@ -279,10 +293,11 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
 
         # R5: Format message
         message = _format_slack_message(payload)
+        correlation_id_str = str(payload.get("correlation_id", "")) or None
 
         # R6: Send notification — try handler first, fall back to urllib
         try:
-            return _send_via_handler(webhook_url, message)
+            return _send_via_handler(webhook_url, message, correlation_id_str)
         except ImportError:
             logger.debug(
                 "omnibase_infra not available, falling back to urllib for Slack"

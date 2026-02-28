@@ -114,6 +114,16 @@ def main(argv: list[str] | None = None) -> None:
             default=None,
             help="Additional metadata as a JSON string",
         )
+        parser.add_argument(
+            "--agent-name",
+            default=None,
+            help="Agent name override (falls back to AGENT_NAME env var)",
+        )
+        parser.add_argument(
+            "--session-id",
+            default=None,
+            help="Session ID override (falls back to SESSION_ID env var)",
+        )
 
         args = parser.parse_args(argv)
 
@@ -169,6 +179,8 @@ def main(argv: list[str] | None = None) -> None:
             progress=args.progress,
             blocking_reason=args.blocking_reason,
             metadata=metadata,
+            agent_name=args.agent_name,
+            session_id=args.session_id,
         )
 
         if not result:
