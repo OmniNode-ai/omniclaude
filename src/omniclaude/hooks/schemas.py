@@ -734,6 +734,26 @@ class ModelRoutingFeedbackPayload(BaseModel):
         description="Timestamp when the event was emitted (UTC)",
     )
 
+    @model_validator(mode="after")
+    def validate_feedback_consistency(self) -> ModelRoutingFeedbackPayload:
+        """Enforce feedback_status/skip_reason invariant.
+
+        - ``feedback_status='produced'`` requires ``skip_reason=None``.
+        - ``feedback_status='skipped'`` requires a non-empty ``skip_reason``.
+        """
+        if self.feedback_status == "produced" and self.skip_reason is not None:
+            raise ValueError(
+                "skip_reason must be None when feedback_status='produced'; "
+                f"got skip_reason={self.skip_reason!r}"
+            )
+        if self.feedback_status == "skipped" and (
+            self.skip_reason is None or not self.skip_reason.strip()
+        ):
+            raise ValueError(
+                "skip_reason is required (non-empty string) when feedback_status='skipped'"
+            )
+        return self
+
 
 # =============================================================================
 # Prompt Events

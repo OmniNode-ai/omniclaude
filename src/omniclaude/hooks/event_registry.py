@@ -363,7 +363,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "outcome"],
+        required_fields=["session_id", "outcome", "feedback_status"],
     ),
     # TOMBSTONED (OMN-2622): routing.skipped folded into routing.feedback via
     # feedback_status="skipped" + skip_reason fields on ModelRoutingFeedbackPayload.

@@ -845,12 +845,13 @@ class TestRoutingFeedbackEmissionPath:
 
         payload = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
-            outcome="unknown",
+            outcome="success",
             feedback_status="skipped",
             skip_reason=result.skip_reason,
             emitted_at=datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC),
         )
         assert payload.event_name == "routing.feedback"
+        assert payload.outcome == "success"
         assert payload.feedback_status == "skipped"
         assert payload.skip_reason == "NO_INJECTION"
 
