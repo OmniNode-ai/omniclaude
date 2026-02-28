@@ -260,8 +260,7 @@ Render the release plan as a table:
 
 ```
 Release Plan (run: release-20260225-a3f7b2)
-============================================
-
+---
   Repo               Tier  Current  New      Bump   Commits
   ─────────────────  ────  ───────  ───────  ─────  ───────
   omnibase_spi       1     1.2.0    1.2.1    patch  3
@@ -885,8 +884,7 @@ echo "Archived state file to ${ARCHIVE_DIR}/${run_id}.json"
 
 ```
 Release Summary (run: release-20260225-a3f7b2)
-===============================================
-
+---
   Repo               Old    New      PR                Tag                    PyPI
   ─────────────────  ─────  ───────  ────────────────  ─────────────────────  ─────────
   omnibase_spi       1.2.0  1.2.1    #42 (merged)      omnibase_spi/v1.2.1   available
