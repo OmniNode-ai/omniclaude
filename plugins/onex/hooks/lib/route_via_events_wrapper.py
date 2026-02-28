@@ -1446,6 +1446,10 @@ def route_via_events(
             #
             # OMN-2920: fallbacks are routing failures, not decisions — skip emission
             # so the llm-routing-decision topic only contains genuine LLM decisions.
+            # When fallback_used=True (LLM hallucinated an unrecognised agent name),
+            # emit a fallback event instead so consumers can observe both failure modes:
+            #   1. llm_result is None (LLM call failed entirely)
+            #   2. llm_result exists but fallback_used=True (hallucination fallback)
             if not llm_result.get("fallback_used", False):
                 _emit_llm_routing_decision(
                     result=llm_result,
@@ -1461,6 +1465,15 @@ def route_via_events(
                     fuzzy_latency_ms=_fuzzy_latency_ms,
                     fuzzy_confidence=_fuzzy_confidence,
                     cost_usd=None,  # no per-call cost tracking in LLM routing yet
+                )
+            else:
+                # LLM returned a result but used a trigger fallback (hallucinated agent)
+                _emit_llm_routing_fallback(
+                    correlation_id=correlation_id,
+                    session_id=session_id,
+                    fallback_reason="LLM returned unrecognised agent; using trigger fallback",
+                    llm_url=None,  # URL not surfaced through llm_result return value
+                    routing_prompt_version=_llm_routing_prompt_version,
                 )
             return llm_result
         # OMN-2273: LLM routing returned None — emit fallback event so consumers can
