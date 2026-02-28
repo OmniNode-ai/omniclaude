@@ -37,6 +37,7 @@ outputs:
       - repo: str
       - fix_cycles_used: int
       - elapsed_minutes: int
+      - preexisting_fixes_dispatched: int
 args:
   - name: pr_number
     description: GitHub PR number to watch
@@ -145,20 +146,77 @@ If neither inbox-wait nor `_bin/ci-status.sh` is available, use `gh run watch` d
 
 3. If all checks passed: exit with `status: passed`
 
-4. If failures detected and `auto_fix=true` and cycles remaining:
-   - Extract failure details from the CI status response (or `gh run view --log-failed`)
-   - Dispatch fix agent (polymorphic-agent) with failure details
-   - Increment fix cycle count
-   - Wait up to 60s for a new CI run to appear on the branch, then restart watch
-5. If fix cycles exhausted: exit with `status: capped`
+4. If failures detected and `auto_fix=true`:
+   - **TRIAGE each failing check** — classify as pre-existing or introduced:
+
+     ```bash
+     BASE_BRANCH=$(gh pr view {pr_number} --repo {repo} --json baseRefName -q '.baseRefName')
+     BASE_RUN_ID=$(gh run list --branch "$BASE_BRANCH" --repo {repo} -L 1 --json databaseId -q '.[0].databaseId')
+     BASE_FAILING=$(gh run view "$BASE_RUN_ID" --repo {repo} --json jobs \
+       -q '[.jobs[] | select(.conclusion == "failure") | .name]')
+     ```
+
+     - **Pre-existing**: check name appears in `BASE_FAILING` (failed on base branch before this PR)
+     - **Introduced**: failure is new — only present on this PR's branch
+
+   - For each **pre-existing** failure:
+     - Log: `"Pre-existing CI failure: {check_name} — dispatching separate fix PR (not blocking current PR)"`
+     - Dispatch a **background** fix agent targeting `main` (not this branch):
+
+       ```
+       Task(
+         subagent_type="onex:polymorphic-agent",
+         run_in_background=True,
+         description="ci-watch: fix pre-existing CI failure [{check_name}] in {repo}",
+         prompt="Pre-existing CI failure detected in {repo}.
+           Check name: {check_name}
+           Failure log:
+           {failure_log}
+
+           This failure exists on {base_branch} BEFORE PR #{pr_number}. The current PR did NOT
+           introduce it. Fix it on a fresh branch targeting {base_branch}.
+
+           Steps:
+           1. Create branch: fix/ci-preexisting-{sanitized_check_name}-{YYYYMMDD}
+              git -C {repo_path} fetch origin {base_branch}
+              git -C {repo_path} worktree add /tmp/preexisting-fix-{check_name} -b fix/ci-preexisting-...
+           2. Investigate and fix the root cause
+           3. Commit, push, and open a PR targeting {base_branch}
+           4. Report: branch, PR URL, root cause found, what was changed"
+       )
+       ```
+
+     - Increment `preexisting_fixes_dispatched`
+     - **Do NOT block the current PR** — continue watching
+
+   - If all failing checks are pre-existing (none introduced by this branch):
+     - Exit with `status: passed` — the current PR is clean
+
+   - For each **introduced** failure (and cycles remaining):
+     - Extract failure details from `gh run view --log-failed`
+     - Dispatch fix agent on the current branch (see Fix Dispatch Contract below)
+     - Increment `fix_cycles_used`
+     - Wait up to 60s for a new CI run to appear on the branch, then restart watch
+
+5. If introduced-failure fix cycles exhausted: exit with `status: capped`
 6. If elapsed > timeout_minutes: exit with `status: timeout`
 
-## Fix Dispatch Contract
+## Pre-Existing Detection: Edge Cases
+
+| Situation | Behavior |
+|-----------|----------|
+| Base branch has no recent CI run | Treat failure as **introduced** (conservative) |
+| `gh run list` returns empty on base | Treat failure as **introduced** |
+| Same check fails on both base and PR branch | **Pre-existing** — dispatch fix PR, don't block |
+| Check does not exist on base (new check) | **Introduced** — fix on current branch |
+| Base run is still in progress | Wait up to 2 minutes for it to complete, then proceed as **introduced** |
+
+## Fix Dispatch Contract (Introduced Failures)
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ci-watch: auto-fix CI failures on PR #{pr_number} (cycle {N})",
+  description="ci-watch: auto-fix introduced CI failures on PR #{pr_number} (cycle {N})",
   prompt="Invoke: Skill(skill=\"ci-fix-pipeline\",
     args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
@@ -183,12 +241,17 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ci-watch.json`
   "pr_number": 123,
   "repo": "org/repo",
   "fix_cycles_used": 1,
+  "preexisting_fixes_dispatched": 1,
   "elapsed_minutes": 12,
   "context_id": "{context_id}"
 }
 ```
 
 **Status values**: `passed` | `capped` | `timeout` | `error`
+
+> **Note**: `status: passed` means the **current PR's branch** is clean. If
+> `preexisting_fixes_dispatched > 0`, background fix PRs were opened for pre-existing
+> failures found on the base branch. Those PRs are independent and do not block this result.
 
 | Error | Behavior |
 |-------|----------|
