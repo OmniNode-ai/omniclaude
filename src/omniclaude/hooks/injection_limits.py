@@ -909,6 +909,7 @@ def select_patterns_for_injection(
     # Only emit when run_id is provided (caller opts in to telemetry).
     budget_cap_hit = total_tokens >= effective_token_budget and run_id is not None
     if budget_cap_hit:
+        assert run_id is not None  # narrowed by budget_cap_hit condition above
         _emit_budget_cap_hit(
             tokens_used=total_tokens,
             tokens_budget=limits.max_tokens_injected,
