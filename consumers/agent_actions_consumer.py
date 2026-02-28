@@ -1069,7 +1069,8 @@ class AgentActionsConsumer:
         topic: str = TopicBase.AGENT_OBSERVABILITY,
     ):
         """Send failed events to dead letter queue."""
-        dlq_topic = f"{topic}-dlq"
+        # Use canonical DLQ topic name (OMN-2959 — fixed from invalid f"{topic}-dlq")
+        dlq_topic = TopicBase.AGENT_OBSERVABILITY_DLQ
 
         for event in events:
             try:

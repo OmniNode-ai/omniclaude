@@ -66,6 +66,11 @@ class TestTopicBase:
             TopicBase.AGENT_OBSERVABILITY
             == "onex.evt.omniclaude.agent-observability.v1"
         )
+        # DLQ topic for agent observability consumer (OMN-2959)
+        assert (
+            TopicBase.AGENT_OBSERVABILITY_DLQ
+            == "onex.evt.omniclaude.agent-observability-dlq.v1"
+        )
 
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""

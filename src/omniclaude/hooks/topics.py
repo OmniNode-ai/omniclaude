@@ -142,6 +142,8 @@ class TopicBase(StrEnum):
     # ==========================================================================
     EXECUTION_LOGS = "onex.evt.omniclaude.agent-execution-logs.v1"
     AGENT_OBSERVABILITY = "onex.evt.omniclaude.agent-observability.v1"
+    # DLQ for agent observability consumer (OMN-2959 — fixed from invalid f"{topic}-dlq")
+    AGENT_OBSERVABILITY_DLQ = "onex.evt.omniclaude.agent-observability-dlq.v1"
 
     # ==========================================================================
     # Pattern compliance wiring (OMN-2263 → OMN-2256)
