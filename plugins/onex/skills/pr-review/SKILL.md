@@ -11,9 +11,9 @@ Apply the persona profile above when generating outputs.
 
 Production-ready PR review system that fetches all feedback from GitHub, organizes by priority, and enforces strict merge requirements.
 
-## Step 0: Seam Contract Check
+## Seam Contract Check (Pre-Review Gate)
 
-Run this step **before all other review steps** for every PR.
+Run this gate **before all other review steps** for every PR.
 
 ### 1. Extract ticket_id from PR
 
