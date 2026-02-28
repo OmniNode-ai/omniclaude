@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# golden-path-validate entrypoint
+#
+# Usage:
+#   run-golden-path '<json-string>'
+#   run-golden-path /path/to/decl.json
+#
+# Environment:
+#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (default: 192.168.86.200:29092)
+#   GOLDEN_PATH_ARTIFACT_DIR Evidence artifact base dir (default: ~/.claude/golden-path)
+#
+# Exit codes:
+#   0  Artifact written (check artifact.status for pass/fail/timeout)
+#   1  Usage or runtime error
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../.." && pwd)"
+
+usage() {
+    cat >&2 <<EOF
+Usage: run-golden-path '<json-declaration>' | run-golden-path /path/to/decl.json
+
+Arguments:
+  <json-declaration>  JSON string containing the golden path declaration, OR
+  /path/to/decl.json  Path to a JSON file containing the declaration.
+
+Environment:
+  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (default: 192.168.86.200:29092)
+  GOLDEN_PATH_ARTIFACT_DIR   Artifact base dir (default: ~/.claude/golden-path)
+
+Examples:
+  # From a JSON file
+  run-golden-path /tmp/my_decl.json
+
+  # From a JSON string
+  run-golden-path '{"node_id":"my_node","ticket_id":"OMN-9999",...}'
+EOF
+    exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+DECL_ARG="$1"
+
+# Determine if arg is a file path or inline JSON
+if [[ -f "${DECL_ARG}" ]]; then
+    DECL_JSON="$(cat "${DECL_ARG}")"
+else
+    DECL_JSON="${DECL_ARG}"
+fi
+
+# Validate it's parseable JSON
+if ! echo "${DECL_JSON}" | python3 -m json.tool > /dev/null 2>&1; then
+    echo "ERROR: Declaration is not valid JSON" >&2
+    exit 1
+fi
+
+cd "${REPO_ROOT}"
+
+exec uv run python - <<PYTHON
+import asyncio
+import json
+import sys
+import os
+
+decl_json = '''${DECL_JSON}'''
+decl = json.loads(decl_json)
+
+bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+artifact_base = os.environ.get("GOLDEN_PATH_ARTIFACT_DIR", str(__import__("pathlib").Path.home() / ".claude" / "golden-path"))
+
+from plugins.onex.skills.golden_path_validate.golden_path_runner import GoldenPathRunner
+
+async def main():
+    runner = GoldenPathRunner(
+        bootstrap_servers=bootstrap,
+        artifact_base_dir=artifact_base,
+    )
+    artifact = await runner.run(decl)
+    print(json.dumps(artifact.model_dump(), indent=2))
+    return 0 if artifact.status in ("pass",) else 1
+
+sys.exit(asyncio.run(main()))
+PYTHON
