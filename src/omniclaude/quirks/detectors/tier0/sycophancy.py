@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+# ai-slop-ok: sycophancy detector training data — phrases are test fixtures, not AI-generated slop
 
 """SycophancyDetector — Tier 0 heuristic detector for SYCOPHANCY quirks.
 
