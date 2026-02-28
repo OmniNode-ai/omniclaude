@@ -292,6 +292,7 @@ class TestValidateExitCodes:
                 [sys.executable, str(_VALIDATOR_PATH), str(tmp)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             assert result.returncode == 0, f"stderr: {result.stderr}"
             assert "OK" in result.stdout
@@ -309,6 +310,7 @@ class TestValidateExitCodes:
                 [sys.executable, str(_VALIDATOR_PATH), str(tmp)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             assert result.returncode == 1, f"stdout: {result.stdout}"
             assert "ticket_id" in result.stderr
@@ -320,6 +322,7 @@ class TestValidateExitCodes:
             [sys.executable, str(_VALIDATOR_PATH), "/tmp/nonexistent_contract.yaml"],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 2
 
@@ -328,6 +331,7 @@ class TestValidateExitCodes:
             [sys.executable, str(_VALIDATOR_PATH)],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 2
 
@@ -345,6 +349,7 @@ class TestValidateExitCodes:
                 [sys.executable, str(_VALIDATOR_PATH), str(tmp)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             assert result.returncode == 0, f"stderr: {result.stderr}"
         finally:

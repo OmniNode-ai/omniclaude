@@ -20,7 +20,10 @@ def _load_yaml(path: Path) -> object:
     try:
         import yaml  # type: ignore[import-untyped]
     except ImportError:
-        print("ERROR: PyYAML is not installed. Run: uv pip install pyyaml", file=sys.stderr)
+        print(
+            "ERROR: PyYAML is not installed. Run: uv pip install pyyaml",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     try:
@@ -46,7 +49,9 @@ def _validate(data: object) -> list[str]:
         return [f"Expected mapping at top level, got {type(data).__name__}"]
 
     try:
-        from omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract  # type: ignore[import-untyped]
+        from omnibase_core.models.ticket.model_ticket_contract import (
+            ModelTicketContract,
+        )  # type: ignore[import-untyped]
         from pydantic import ValidationError
     except ImportError as exc:
         return [f"Import error — ensure omnibase_core is installed: {exc}"]
@@ -81,7 +86,9 @@ def main() -> None:
             print(error, file=sys.stderr)
         sys.exit(1)
 
-    ticket_id = data.get("ticket_id", "unknown") if isinstance(data, dict) else "unknown"  # type: ignore[union-attr]
+    ticket_id = (
+        data.get("ticket_id", "unknown") if isinstance(data, dict) else "unknown"
+    )  # type: ignore[union-attr]
     print(f"OK: contract for {ticket_id} is valid")
     sys.exit(0)
 
