@@ -461,7 +461,7 @@ After completing all phases, print a summary:
 
 ```
 Gap Analysis Complete
-=====================
+---
 Epics audited: {N}
 Repos probed: {repos_in_scope}
 Findings (DETERMINISTIC): {len(findings)}

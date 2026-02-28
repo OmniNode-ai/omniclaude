@@ -348,7 +348,7 @@ After all agents return:
 Log summary:
 ```
 Phase 1 Complete
-================
+---
 Cards extracted: {N}
 Cards rejected (no handler_map): {M}
 Cards rejected (no provenance): {P}
@@ -382,7 +382,7 @@ Run immediately after Phase 1.6, before writing `_idea_cards.ndjson`.
 Log output appended to Phase 1 summary:
 ```
 Pre-Dedup Pass
-==============
+---
 Near-duplicates auto-removed: {R}
 Pairs flagged for merge review: {F}
 ```
@@ -832,7 +832,7 @@ After completing all phases, print:
 
 ```
 Curate Legacy Complete
-======================
+---
 Run ID: {run_id}
 Corpus roots scanned: {N}
 Files indexed: {total_files}
