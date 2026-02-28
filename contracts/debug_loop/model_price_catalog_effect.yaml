@@ -34,8 +34,8 @@ associated_documents:
       description: "Provides model pricing data for cost calculations"
 
   external_systems:
-    - name: "PostgreSQL (omninode_bridge)"
-      host: "192.168.86.200:5436"
+    - name: "PostgreSQL (omnibase_infra)"
+      host: "localhost:5436"
       table: "model_price_catalog"
       relationship: "data_persistence"
       description: "Stores LLM model pricing with versioning"

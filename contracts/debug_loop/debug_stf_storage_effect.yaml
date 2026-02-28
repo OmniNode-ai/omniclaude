@@ -44,8 +44,8 @@ associated_documents:
       description: "Receives STF hash for deduplication"
 
   external_systems:
-    - name: "PostgreSQL (omninode_bridge)"
-      host: "192.168.86.200:5436"
+    - name: "PostgreSQL (omnibase_infra)"
+      host: "localhost:5436"
       table: "debug_transform_functions"
       relationship: "data_persistence"
       description: "Stores STFs with quality metrics and usage tracking"

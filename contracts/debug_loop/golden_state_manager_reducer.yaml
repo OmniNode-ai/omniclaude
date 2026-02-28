@@ -34,8 +34,8 @@ associated_documents:
       description: "Uses quality scores for auto-approval threshold"
 
   external_systems:
-    - name: "PostgreSQL (omninode_bridge)"
-      host: "192.168.86.200:5436"
+    - name: "PostgreSQL (omnibase_infra)"
+      host: "localhost:5436"
       table: "debug_golden_states"
       relationship: "state_persistence"
       description: "Stores golden state nominations and approvals"

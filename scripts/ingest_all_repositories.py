@@ -47,7 +47,7 @@ class MultiRepositoryIngester:
         3. Fallback to default paths (for backwards compatibility)
         """
         repos = {}
-        repo_names = ["omnibase_core", "omnibase_spi", "omniarchon", "omninode_bridge"]
+        repo_names = ["omnibase_core", "omnibase_spi", "omniarchon"]
 
         # Check for base directory override
         base_dir = os.getenv("OMNI_REPOS_DIR")
@@ -441,7 +441,7 @@ class MultiRepositoryIngester:
 def main():
     """Main entry point."""
     print("🚀 Multi-Repository Intelligence Ingestion")
-    print("Processing: omnibase_core, omnibase_spi, omniarchon, omninode_bridge")
+    print("Processing: omnibase_core, omnibase_spi, omniarchon")
     print("=" * 80)
 
     ingester = MultiRepositoryIngester()
