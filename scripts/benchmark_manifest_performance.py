@@ -25,7 +25,7 @@ Usage:
     python3 scripts/benchmark_manifest_performance.py
 
 Requirements:
-- PostgreSQL running with omninode_bridge database
+- PostgreSQL running with omnibase_infra database
 - Qdrant running with code_patterns and execution_patterns collections
 - Kafka/Redpanda running
 - Environment variables configured in .env

@@ -15,7 +15,7 @@ producer: "omniclaude.quirks.extractor.NodeQuirkSignalExtractorEffect"
 description: >
   Emitted once per QuirkSignal produced by the Quirks Detector registry.
   Published after every detected behavioural anti-pattern; persisted to the
-  quirk_signals table in omnibase_infra (omninode_bridge).
+  quirk_signals table in omnibase_infra.
 
 envelope:
   event_type: "onex.evt.omniclaude.quirk-signal-detected.v1"

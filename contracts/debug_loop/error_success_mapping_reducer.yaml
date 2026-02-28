@@ -34,8 +34,8 @@ associated_documents:
       description: "Receives normalized error patterns for mapping"
 
   external_systems:
-    - name: "PostgreSQL (omninode_bridge)"
-      host: "192.168.86.200:5436"
+    - name: "PostgreSQL (omnibase_infra)"
+      host: "localhost:5436"
       table: "debug_error_success_mappings"
       relationship: "state_persistence"
       description: "Stores error→success mappings with confidence scores"
