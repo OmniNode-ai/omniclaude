@@ -114,7 +114,22 @@ Pre-fills title and suggests requirements.
 /create-ticket --from-contract contract.yaml --team Omninode
 ```
 
+## Step 3: Generate Contract
+
+After outputting the ticket template, call `generate-ticket-contract` with:
+- `ticket_id`: the OMN-XXXX (or DRAFT if pre-creation)
+- `title`: ticket title
+- `description`: full ticket description
+- `repo`: repo field from template
+
+Output the result as a second fenced code block labeled `Contract YAML`.
+Run `validate_contract.py` on the generated YAML and report any errors before printing.
+
+If `is_seam_ticket=true`, also output a fenced code block labeled `Golden Path Stub`
+with the generated test file content.
+
 ## See Also
 
 - `/create-ticket` - Create ticket from contract YAML
+- `/generate-ticket-contract` - Generate a ModelTicketContract YAML from ticket context
 - `/ticket-work` - Execute tickets using contract-driven phases
