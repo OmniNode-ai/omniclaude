@@ -277,6 +277,21 @@ repos:
       - omnimcp
     precedence: 5
 
+  - name: onex_change_control
+    description: >
+      Drift detection + governance — schema drift detection, contract drift
+      analysis, governance enforcement, change control workflows, and
+      structural compliance validation across ONEX contracts.
+    keywords:
+      - onex_change_control
+      - change-control
+      - drift
+      - governance
+      - schema
+      - contract
+      - change_control
+    precedence: 5
+
   - name: omninode_infra
     description: >
       Node infrastructure — ONEX node deployment, node runtime infrastructure,
