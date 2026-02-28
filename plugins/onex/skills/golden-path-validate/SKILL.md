@@ -1,3 +1,8 @@
+---
+name: golden-path-validate
+description: Execute a golden path event chain test using real Kafka/Redpanda to validate end-to-end event flows
+---
+
 # golden-path-validate
 
 **Ticket:** OMN-2976

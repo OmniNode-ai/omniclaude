@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Service contract for the omniclaude runtime plugin.
+# Scanned by seed-infisical.py to register env vars in Infisical.
+# NOT a node contract — node_type SERVICE is intentional.
+# ContractConfigExtractor ignores node_type (confirmed: contract_config_extractor.py:156-241).
+
+name: "omniclaude_runtime"
+contract_name: "omniclaude_runtime"
+node_type: "SERVICE"
+
+version:
+  major: 1
+  minor: 0
+  patch: 0
+
+description: >
+  Runtime plugin service contract. Declares environment variables required by
+  PluginClaude.wire_dispatchers(). Scanned by ContractConfigExtractor which
+  ignores node_type and processes all contracts uniformly.
+
+dependencies:
+  - name: "contracts_root"
+    type: "environment"
+    env_var: "OMNICLAUDE_CONTRACTS_ROOT"
+    description: >
+      Path to omniclaude skill node contracts directory (node_skill_*/contract.yaml).
+      Dev: /Volumes/PRO-G40/Code/omni_home/omniclaude/src/omniclaude/nodes
+      Docker: /app/src/omniclaude/nodes
+    required: true
+
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2026-02-28"
+  ticket: "OMN-2990"
+  tags:
+    - service
+    - runtime
+    - config
+    - omniclaude

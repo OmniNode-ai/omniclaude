@@ -1,3 +1,8 @@
+---
+name: decision-store
+description: Record, query, and conflict-check architectural and design decisions across the OmniNode platform
+---
+
 # decision-store skill
 
 **Skill ID**: `onex:decision-store`
