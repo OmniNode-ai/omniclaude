@@ -737,12 +737,13 @@ if [[ "$EXECUTE" == "true" ]]; then
           .hooks |= (. // {}) |
           .hooks.SessionStart     = ((.hooks.SessionStart     // []) | rm_onex | add_cmd("\($base)/session-start.sh")) |
           .hooks.SessionEnd       = ((.hooks.SessionEnd       // []) | rm_onex | add_cmd("\($base)/session-end.sh")) |
+          .hooks.Stop             = ((.hooks.Stop             // []) | rm_onex | add_cmd("\($base)/stop.sh")) |
           .hooks.UserPromptSubmit = ((.hooks.UserPromptSubmit // []) | rm_onex | add_cmd("\($base)/user-prompt-submit.sh")) |
           .hooks.PreToolUse       = ((.hooks.PreToolUse       // []) | rm_onex | add_m($ptum;  "\($base)/pre_tool_use_authorization_shim.sh")) |
           .hooks.PostToolUse      = ((.hooks.PostToolUse      // []) | rm_onex | add_m($ptoom; "\($base)/post-tool-use-quality.sh"))
         ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
 
-        echo -e "${GREEN}  Updated settings.json hooks (5 entries) -> ${HOOKS_BASE}${NC}"
+        echo -e "${GREEN}  Updated settings.json hooks (6 entries) -> ${HOOKS_BASE}${NC}"
     fi
 
     # Install register-tab.sh to ~/.claude/ — required by statusline.sh for tab bar.

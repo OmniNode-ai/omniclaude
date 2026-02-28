@@ -497,6 +497,23 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "fallback_reason", "routing_prompt_version"],
     ),
     # =========================================================================
+    # Stop Hook Events (STOP-HOOK-FIX)
+    # =========================================================================
+    # Emitted by the Stop hook after each assistant turn completion.
+    # Routed to the intelligence service cmd topic for pattern learning trigger.
+    # No payload transform — event contains only session metadata (no prompts).
+    "response.stopped": EventRegistration(
+        event_type="response.stopped",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CLAUDE_HOOK_EVENT,
+                transform=None,
+                description="Stop hook event routed to intelligence service for pattern learning trigger",
+            ),
+        ],
+        required_fields=["session_id", "event_type"],
+    ),
+    # =========================================================================
     # Context Enrichment Observability Events (OMN-2274, OMN-2441)
     # =========================================================================
     "context.enrichment": EventRegistration(

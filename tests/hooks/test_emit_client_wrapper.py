@@ -85,6 +85,7 @@ class TestModuleImport:
             "pr.watch.updated",  # OMN-2922 - Wave 2: PR watch status update
             "budget.cap.hit",  # OMN-2922 - Wave 2: Pipeline budget cap hit
             "circuit.breaker.tripped",  # OMN-2922 - Wave 2: Circuit breaker tripped
+            "response.stopped",  # Stop hook lifecycle event
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
