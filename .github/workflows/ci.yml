@@ -755,6 +755,35 @@ jobs:
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
         run: uv run python scripts/validation/validate_no_compact_cmd_topic.py
 
+  arch-invariants:
+    name: Architecture Invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check ONEX architectural invariants
+        run: uv run python scripts/check_arch_invariants.py src/
+
   # ============================================================================
   # SECURITY CHECKS
   # ============================================================================
@@ -1240,6 +1269,8 @@ jobs:
       - arch-no-utcnow
       # F5 checks (OMN-2595)
       - arch-no-compact-cmd-topic
+      # CDQA-07 (OMN-2977)
+      - arch-invariants
     if: always()
     steps:
       - name: Check quality results
@@ -1266,7 +1297,8 @@ jobs:
             "arch-cost-ledger-structure=${{ needs.arch-cost-ledger-structure.result }}" \
             "arch-no-direct-kafka-producer=${{ needs.arch-no-direct-kafka-producer.result }}" \
             "arch-no-utcnow=${{ needs.arch-no-utcnow.result }}" \
-            "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}"; do
+            "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}" \
+            "arch-invariants=${{ needs.arch-invariants.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
