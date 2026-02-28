@@ -139,6 +139,67 @@ From 24 failure memories:
 - Implications of success
 - ANY communication suggesting completion/correctness
 
+## Evidence Requirements Check
+
+Run this check **before claiming any ticket is complete** (before committing, PR creation, or marking Done).
+
+### Preflight: determine ticket_id
+
+```bash
+git rev-parse --abbrev-ref HEAD | grep -oiE 'omn-[0-9]+'
+```
+
+If no ticket_id found: skip, log "cannot determine ticket from branch" and continue with standard verification.
+
+### Locate contract
+
+```
+Primary:  $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml   (if ONEX_CC_REPO_PATH is set)
+Fallback: $OMNI_HOME/onex_change_control/contracts/{ticket_id}.yaml
+```
+
+If no contract found: skip, log "no contract for {ticket_id} — evidence check skipped" and continue.
+
+### For each evidence_requirement in contract
+
+**kind: tests**
+```bash
+# Run the command declared in the contract verification_steps
+{command_from_contract}
+# Require exit 0
+```
+
+**kind: ci**
+```bash
+# Find PR for current branch
+PR=$(gh pr list --head $(git branch --show-current) --json number --jq '.[0].number')
+
+# If no PR: WARN "no PR yet — CI check skipped"
+# If PR found: check CI status
+gh pr view $PR --json statusCheckRollup
+# Require all checkRuns.conclusion == SUCCESS or NEUTRAL
+```
+
+**kind: integration**
+```bash
+# Check for golden-path artifact for today with matching ticket_id and status=pass
+ls ~/.claude/golden-path/$(date +%Y-%m-%d)/
+# Look for artifact JSON where: artifact.ticket_id == {ticket_id} AND artifact.status == "pass"
+# If not found: offer to run /golden-path-validate now
+```
+
+**kind: manual**
+
+Ask the user: "Have you verified: {description}?" [yes/no]
+Block completion if the answer is no.
+
+### emergency_bypass semantics
+
+If `emergency_bypass.enabled=true` with non-empty `justification` and `follow_up_ticket_id`:
+downgrade all BLOCK verdicts to WARN. Completion may proceed with warning logged.
+
+---
+
 ## The Bottom Line
 
 **No shortcuts for verification.**

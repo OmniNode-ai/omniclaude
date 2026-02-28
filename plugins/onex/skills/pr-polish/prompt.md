@@ -236,9 +236,9 @@ if not no_push and (phase_0_status == "OK" or phase_1_status == "OK" or phase_2_
 ### Final Report
 
 ```
-======================================
+---
 PR Polish — Final Report
-======================================
+---
 PR:    #{pr_number} ({branch})
 Base:  {base_branch}
 
@@ -253,9 +253,9 @@ Phase 2 — Local Review Loop:     {phase_2_status}
 
 Push:  {pushed | skipped (--no-push) | failed}
 
-======================================
+---
 {final_verdict}
-======================================
+---
 ```
 
 `final_verdict` values:
@@ -362,9 +362,9 @@ Phase 2: Local Review Loop
 
 Pushed to remote.
 
-======================================
+---
 PR Polish — Final Report
-======================================
+---
 PR:    #226 (epic/OMN-2511/OMN-2512/f084b6c3)
 Base:  main
 
@@ -379,7 +379,7 @@ Phase 2 — Local Review Loop:     OK
 
 Push:  pushed
 
-======================================
+---
 DONE: PR #226 is merge-ready
-======================================
+---
 ```
