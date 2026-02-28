@@ -425,6 +425,8 @@ class TestEmissionDelegation:
             progress=0.45,
             blocking_reason="Human gate: approve spec",
             metadata={"extra": "data", "ticket_id": "OMN-1850"},
+            agent_name=None,
+            session_id=None,
         )
 
     def test_exit_code_zero_on_success(self) -> None:
