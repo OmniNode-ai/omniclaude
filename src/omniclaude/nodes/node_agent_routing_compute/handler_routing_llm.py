@@ -17,7 +17,7 @@ Flow:
         -> if explicit: return ModelRoutingResult(routing_policy="explicit_request")
         -> else: TriggerMatcher.match() -> collect candidates
         -> if no candidates: fallback_default
-        -> else: build structured prompt, call Qwen-14B (temperature=0.0, max_tokens=50)
+        -> else: build structured prompt, call Qwen-14B (temperature=0.0, max_tokens=150)
         -> parse response -> validate agent name exists in registry
         -> return ModelRoutingResult(routing_policy="trigger_match", routing_path="local")
         -> on LLM failure: fallback to highest-confidence trigger candidate
@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from uuid import UUID
 
 import httpx
@@ -62,7 +63,7 @@ _ROUTING_PROMPT_VERSION = "1.0.0"
 
 # Default LLM request settings
 _LLM_TEMPERATURE = 0.0
-_LLM_MAX_TOKENS = 50
+_LLM_MAX_TOKENS = 150
 
 # LLM call timeout in seconds (must stay well within routing budget)
 _LLM_TIMEOUT_SECONDS = 4.0
@@ -82,7 +83,7 @@ def _build_routing_prompt(candidates: list[ModelRoutingCandidate], prompt: str) 
 
     Presents the user prompt and candidate agents to the LLM, requesting
     the name of the single best-matching agent. The format is intentionally
-    terse to stay within ``max_tokens=50`` on the response side.
+    terse to stay within ``max_tokens=150`` on the response side.
 
     Args:
         candidates: Ranked candidate agents (max _MAX_CANDIDATES).
@@ -124,7 +125,12 @@ def _parse_agent_from_response(
     Returns:
         The matched agent name, or None if no valid name was found.
     """
-    text = response_text.strip().lower()
+    # Strip any <think>...</think> blocks before parsing (Qwen3 thinking mode)
+    text = (
+        re.sub(r"<think>.*?</think>", "", response_text, flags=re.DOTALL)
+        .strip()
+        .lower()
+    )
 
     # First try exact match (most common with temperature=0.0)
     if text in known_agents:
@@ -387,6 +393,9 @@ class HandlerRoutingLlm:
             "messages": [{"role": "user", "content": routing_prompt}],
             "temperature": _LLM_TEMPERATURE,
             "max_tokens": _LLM_MAX_TOKENS,
+            "chat_template_kwargs": {
+                "enable_thinking": False
+            },  # Qwen3: suppress <think> blocks
         }
 
         try:
