@@ -682,7 +682,7 @@ class TestGenerateReportLocalSection:
             bypass_ttl=False,
             local_result=local_result,
         )
-        assert "## 2. Archived/Local Repos Summary" in report
+        assert "## Local Archive" in report
         assert "/some/repo" in report
 
     @pytest.mark.unit
