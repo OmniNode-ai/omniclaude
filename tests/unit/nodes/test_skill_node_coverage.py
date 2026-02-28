@@ -7,8 +7,10 @@
 Normalizes names to hyphenated form on both sides to handle any mixed
 underscore/hyphen directory naming conventions.
 """
-import pytest
+
 from pathlib import Path
+
+import pytest
 
 from omniclaude.runtime.wiring_dispatchers import load_skill_contracts
 
@@ -21,7 +23,8 @@ def _normalize(name: str) -> str:
 def _get_skills() -> set[str]:
     skills_dir = Path("plugins/onex/skills")
     return {
-        _normalize(d.name) for d in skills_dir.iterdir()
+        _normalize(d.name)
+        for d in skills_dir.iterdir()
         if d.is_dir() and not d.name.startswith("_")
     }
 
@@ -30,8 +33,12 @@ def _get_node_skills() -> set[str]:
     nodes_dir = Path("src/omniclaude/nodes")
     result = set()
     for d in nodes_dir.iterdir():
-        if d.is_dir() and d.name.startswith("node_skill_") and d.name.endswith("_orchestrator"):
-            snake = d.name[len("node_skill_"):-len("_orchestrator")]
+        if (
+            d.is_dir()
+            and d.name.startswith("node_skill_")
+            and d.name.endswith("_orchestrator")
+        ):
+            snake = d.name[len("node_skill_") : -len("_orchestrator")]
             result.add(_normalize(snake))
     return result
 

@@ -7,8 +7,10 @@
 Uses string-contains checks deliberately (no yaml import) to avoid relying on
 a transitive PyYAML dependency. Schema validity gated by seed-infisical dry-run below.
 """
-import pytest
+
 from pathlib import Path
+
+import pytest
 
 _RUNTIME_CONTRACT = Path("src/omniclaude/contracts/contract_omniclaude_runtime.yaml")
 
