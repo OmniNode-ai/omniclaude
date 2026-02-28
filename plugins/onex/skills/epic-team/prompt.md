@@ -33,22 +33,127 @@ REVOKED_FILE = f"{STATE_DIR}/revoked_runs.yaml"
 
 ---
 
-## Inter-Agent Communication (Inbox Pattern)
+## Execution Model: Direct Dispatch (AUTHORITATIVE)
 
-Workers communicate task completion and unblock signals via the agent inbox pattern
-(`@_lib/agent-inbox/helpers.md`). This provides dual delivery: file-based STANDALONE
-inboxes for reliability and optional EVENT_BUS+ Kafka topics for real-time streaming.
+**Workers spawned as team members do not sustain execution.** They go idle immediately after
+spawning (`idleReason: available`) and never process tasks from the task queue. This is a
+fundamental constraint of the current agent runtime.
 
-**Key functions** (from `_lib/agent-inbox/helpers.md`):
-- `notify_task_completed()` — broadcast to epic + directed to team-lead
-- `send_unblock()` — directed unblock signal to a blocked worker
-- `read_inbox()` / `read_epic_broadcast()` — read pending messages
-- `wait_for_message()` — block-wait for a specific message type
-- `gc_inboxes()` — remove expired messages
+The proven working pattern is **direct dispatch from the team-lead session**:
 
-Workers MUST call `notify_task_completed()` after every task completion (in addition
-to TaskUpdate + SendMessage). The team-lead reads epic broadcasts to augment TaskList
-polling with richer context (PR URLs, commit SHAs, branches).
+1. Group tickets into dependency-respecting waves (independent tickets in the same wave)
+2. For each wave, dispatch one `Task()` per ticket in parallel
+3. Await all Task() calls in the wave before starting the next wave
+4. Collect results (status, pr_url) from each dispatched Task()
+
+This replaces the WORKER_TEMPLATE / SendMessage / TaskList polling loop pattern entirely.
+
+### Wave Construction
+
+```python
+def build_waves(assignments, cross_repo_splits):
+    """Group tickets into waves based on cross-repo part dependencies.
+
+    Wave 0: All non-split tickets + all Part 1 split tickets (no blockers).
+    Wave 1: All Part 2 split tickets (blocked by Part 1 completion).
+    Additional waves: any further dependency chains if present.
+
+    Independent tickets within a wave are dispatched in parallel (same message).
+    """
+    split_part2_ids = {s["ticket_id"] for s in cross_repo_splits if s.get("part") == 2}
+
+    wave0 = []   # no blockers
+    wave1 = []   # blocked by wave0 (Part 2 cross-repo splits)
+
+    for repo, ticket_ids in assignments.items():
+        for ticket_id in ticket_ids:
+            if ticket_id in split_part2_ids:
+                wave1.append((repo, ticket_id))
+            else:
+                wave0.append((repo, ticket_id))
+
+    waves = [w for w in [wave0, wave1] if w]
+    return waves
+```
+
+### Task Dispatch Per Ticket
+
+For each ticket in a wave, dispatch a Task() from the team-lead session:
+
+```python
+def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_id, run_id):
+    """Dispatch ticket-pipeline for a single ticket as a Task() subagent."""
+    result = Task(
+        subagent_type="onex:polymorphic-agent",
+        description=f"epic-team: run ticket-pipeline for {ticket_id} [{repo}]",
+        prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
+
+Ticket: {ticket_id} - {ticket_title}
+URL: {ticket_url}
+Repo: {repo} at {repo_path}
+Epic: {epic_id}  Run: {run_id}
+
+Invoke: Skill(skill="onex:ticket-pipeline", args="{ticket_id}")
+
+After ticket-pipeline completes, report back:
+- ticket_id: {ticket_id}
+- status: (merged/failed/blocked)
+- pr_url: (if available)
+- branch: (branch name used)
+"""
+    )
+    return result
+```
+
+### Wave Execution Loop
+
+```python
+waves = build_waves(state["assignments"], state["cross_repo_splits"])
+ticket_results = {}  # ticket_id -> {status, pr_url, branch}
+
+for wave_idx, wave in enumerate(waves):
+    print(f"\n=== Wave {wave_idx}: dispatching {len(wave)} ticket(s) ===")
+
+    # Dispatch all tickets in this wave in parallel (single message = simultaneous Task calls)
+    # The team-lead awaits all results before proceeding to the next wave.
+    wave_results = [
+        dispatch_ticket(repo, ticket_id, ...)
+        for repo, ticket_id in wave
+    ]
+
+    # Collect results
+    for result in wave_results:
+        tid = result.get("ticket_id")
+        ticket_results[tid] = {
+            "status": result.get("status", "unknown"),
+            "pr_url": result.get("pr_url"),
+            "branch": result.get("branch"),
+        }
+        print(f"  {tid}: {ticket_results[tid]['status']}")
+
+    # Persist results to state.yaml after each wave
+    state["ticket_results"] = ticket_results
+    write_yaml(STATE_FILE, state)
+
+    # Optional: Slack notification per completed ticket
+    for tid, res in {r.get("ticket_id"): r for r in wave_results}.items():
+        try:
+            if res.get("status") == "merged":
+                notify_ticket_completed(ticket_id=tid, pr_url=res.get("pr_url"),
+                                        slack_thread_ts=state.get("slack_thread_ts"))
+            else:
+                notify_ticket_failed(ticket_id=tid,
+                                     slack_thread_ts=state.get("slack_thread_ts"))
+        except Exception as e:
+            print(f"Warning: Slack notification for {tid} failed (non-fatal): {e}")
+
+print(f"\nAll {len(waves)} wave(s) complete.")
+```
+
+**DEPRECATED**: The WORKER_TEMPLATE, SendMessage/TaskList polling loop, and TeamCreate/TeamDelete
+lifecycle are superseded by this direct dispatch pattern. They remain in the state schema for
+historical reference but are no longer executed. See the deprecated section at the end of this
+document if you need the old pattern for reference.
 
 ---
 
@@ -392,7 +497,7 @@ print("Phase 2 complete: decomposition persisted.")
 
 ---
 
-## Phase 3 — Team Setup + Spawn
+## Phase 3 — Direct Dispatch (Wave-Based Execution)
 
 ### Actions
 
@@ -403,110 +508,19 @@ assert state["phase"] == "decomposed", f"Expected phase=decomposed, got {state['
 
 epic_id  = state["epic_id"]
 run_id   = state["run_id"]
-
-# 1. Create team
-team_name = f"epic-{epic_id}-{run_id[:8]}"
-TeamCreate(team_name=team_name)
-
-# 2. PERSIST team_name and phase BEFORE any TaskCreate
-state["phase"] = "spawned"
-state["team_name"] = team_name
-write_yaml(STATE_FILE, state)
-print(f"Team created and persisted: {team_name}")
-
-# 3. Create tasks — two-pass strategy to enforce cross-repo part ordering.
-#
-# Pass 1: Create all non-split tasks AND all Part 1 split tasks.
-#         After Pass 1, persist cross_repo_splits (with part1_task_id populated)
-#         to state.yaml before touching Part 2 tasks.
-# Pass 2: Create all Part 2 split tasks, using part1_task_id from state.yaml
-#         as the addBlockedBy dependency.
-#
-# This ordering is mandatory. If Part 2 tasks were created before their
-# corresponding Part 1 task, split["part1_task_id"] would be missing (KeyError).
-
 assignments = state["assignments"]
-cross_repo_splits = state["cross_repo_splits"]
-# Build a lookup keyed by (ticket_id, part) to avoid ambiguity
-cross_repo_by_ticket_part = {(s["ticket_id"], s["part"]): s for s in cross_repo_splits}
+cross_repo_splits = state.get("cross_repo_splits", [])
 
-def make_task_kwargs(repo, ticket_id, split, part):
-    ticket = get_ticket(ticket_id)  # from tickets persisted to state.yaml in Phase 1
-    score = state["ticket_scores"].get(ticket_id, {})
-    is_triage = score.get("triage", False)
-    triage_tag = "[triage:true]" if is_triage else ""
-
-    if part == 1:
-        part_tag = f"[origin:{split['origin_repo']}][part:1-of-2]"
-    elif part == 2:
-        part_tag = f"[part:2-of-2]"
-    else:
-        part_tag = ""
-
-    description = (
-        f"[epic:{epic_id}][run:{run_id}][repo:{repo}]"
-        f"[lease:{run_id[:8]}:{repo}]"
-        f"{triage_tag}{part_tag} {ticket.title} — {ticket.url}"
-    )
-    subject = f"TRIAGE-{ticket_id} [{repo}]" if is_triage else f"{ticket_id} [{repo}]"
-    return {"subject": subject, "description": description, "owner": f"worker-{repo}"}
-
-# --- Pass 1: non-split tasks + Part 1 split tasks ---
-for repo, ticket_ids in assignments.items():
-    for ticket_id in ticket_ids:
-        split_part2 = cross_repo_by_ticket_part.get((ticket_id, 2))
-        split_part1 = cross_repo_by_ticket_part.get((ticket_id, 1))
-
-        if split_part2:
-            # This assignment entry is a Part 2 split — skip in Pass 1
-            continue
-
-        split = split_part1  # None for non-split tickets
-        part = 1 if split_part1 else None
-        kwargs = make_task_kwargs(repo, ticket_id, split, part)
-        task = TaskCreate(**kwargs)
-
-        # Store part1_task_id in the split descriptor for Pass 2 use
-        if split_part1:
-            split_part1["part1_task_id"] = task.id
-            print(f"  [pass-1] Part 1 task created: {task.id} for {ticket_id} [{repo}]")
-        else:
-            print(f"  [pass-1] Task created: {task.id} for {ticket_id} [{repo}]")
-
-# Persist cross_repo_splits with part1_task_id populated BEFORE Pass 2
-state["cross_repo_splits"] = list(cross_repo_by_ticket_part.values())
+# 1. PERSIST phase="dispatching" BEFORE any Task() dispatch
+state["phase"] = "dispatching"
+state["ticket_results"] = {}
 write_yaml(STATE_FILE, state)
-print("  [pass-1] cross_repo_splits (with part1_task_id) persisted to state.yaml.")
 
-# --- Pass 2: Part 2 split tasks (part1_task_id now available from state.yaml) ---
-for repo, ticket_ids in assignments.items():
-    for ticket_id in ticket_ids:
-        split_part2 = cross_repo_by_ticket_part.get((ticket_id, 2))
-        if not split_part2:
-            continue
-
-        # Resolve part1_task_id from the persisted Part 1 split descriptor
-        split_part1 = cross_repo_by_ticket_part.get((ticket_id, 1))
-        part1_task_id = split_part1["part1_task_id"] if split_part1 else split_part2.get("part1_task_id")
-        if not part1_task_id:
-            raise RuntimeError(
-                f"Cannot create Part 2 task for {ticket_id}: part1_task_id not found. "
-                "This is a bug — Part 1 must be created and persisted before Part 2."
-            )
-
-        kwargs = make_task_kwargs(repo, ticket_id, split_part2, 2)
-        kwargs["addBlockedBy"] = [part1_task_id]
-        task = TaskCreate(**kwargs)
-        print(f"  [pass-2] Part 2 task created: {task.id} for {ticket_id} [{repo}] (blocked by {part1_task_id})")
-
-print(f"All tasks created for team {team_name}.")
-
-# 4. Notify Slack (non-fatal)
+# 2. Notify Slack: epic starting (non-fatal)
 try:
     slack_thread_ts = notify_pipeline_started(
         epic_id=epic_id,
         run_id=run_id,
-        team_name=team_name,
         ticket_count=sum(len(v) for v in assignments.values()),
     )
 except Exception as e:
@@ -514,148 +528,131 @@ except Exception as e:
     state["slack_last_error"] = str(e)
     print(f"Warning: Slack notification failed (non-fatal): {e}")
 
-# PERSIST slack_thread_ts only if non-None; never overwrite existing non-None with None
 if slack_thread_ts is not None:
     state["slack_thread_ts"] = slack_thread_ts
-# Never: state["slack_thread_ts"] = slack_thread_ts  (if it could be None and existing is set)
-# Only initialize slack_ts_candidates if not already present (preserve on re-entry/resume)
 if "slack_ts_candidates" not in state:
     state["slack_ts_candidates"] = []
 write_yaml(STATE_FILE, state)
 
-# 5. Spawn workers
-for repo in assignments.keys():
-    worker_prompt = WORKER_TEMPLATE.format(
-        repo=repo,
-        epic_id=epic_id,
-        run_id=run_id,
-        team_name=team_name,
-        run_id_short=run_id[:8],
-    )
-    Task(
-        subagent_type="onex:polymorphic-agent",
-        team_name=team_name,
-        name=f"worker-{repo}",
-        prompt=worker_prompt,
-    )
-    print(f"Spawned worker-{repo}")
+# 3. Build waves
+#
+# Wave 0: All non-split tickets + all Part 1 cross-repo split tickets (no blockers).
+# Wave 1: All Part 2 cross-repo split tickets (blocked by Wave 0 Part 1 completion).
+#
+# Independent tickets within a wave are dispatched in PARALLEL (all Task() calls in
+# a single message). Waves are serialized: wave N+1 starts only after wave N completes.
 
-print("Phase 3 complete: all workers spawned.")
+split_part2_ids = {s["ticket_id"] for s in cross_repo_splits if s.get("part") == 2}
+
+wave0 = [(repo, tid) for repo, tids in assignments.items()
+         for tid in tids if tid not in split_part2_ids]
+wave1 = [(repo, tid) for repo, tids in assignments.items()
+         for tid in tids if tid in split_part2_ids]
+waves = [w for w in [wave0, wave1] if w]
+
+print(f"Waves: {len(waves)} total")
+for i, wave in enumerate(waves):
+    print(f"  Wave {i}: {[tid for _, tid in wave]}")
+
+# 4. Execute waves sequentially; dispatch tickets within each wave in parallel
+ticket_results = {}
+
+tickets_by_id = {t["id"]: t for t in state.get("tickets", [])}
+
+for wave_idx, wave in enumerate(waves):
+    print(f"\n=== Wave {wave_idx}: dispatching {len(wave)} ticket(s) in parallel ===")
+
+    # Dispatch all tickets in this wave simultaneously.
+    # Each Task() call is independent — no cross-task dependencies within a wave.
+    wave_tasks = {}
+    for repo, ticket_id in wave:
+        ticket = tickets_by_id.get(ticket_id, {})
+        title = ticket.get("title", ticket_id)
+        url = ticket.get("url", "")
+        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"
+
+        result = Task(
+            subagent_type="onex:polymorphic-agent",
+            description=f"epic-team: ticket-pipeline for {ticket_id} [{repo}]",
+            prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
+
+Ticket: {ticket_id} - {title}
+URL: {url}
+Repo: {repo} at {repo_path}
+Epic: {epic_id}  Run: {run_id}
+
+Invoke: Skill(skill="onex:ticket-pipeline", args="{ticket_id}")
+
+After ticket-pipeline completes, report back:
+- ticket_id: {ticket_id}
+- status: (merged/failed/blocked)
+- pr_url: (if available)
+- branch: (branch name used)
+"""
+        )
+        wave_tasks[ticket_id] = result
+
+    # Collect wave results (all Task() calls have returned at this point)
+    for ticket_id, result in wave_tasks.items():
+        res = {
+            "status": result.get("status", "unknown") if isinstance(result, dict) else "unknown",
+            "pr_url": result.get("pr_url") if isinstance(result, dict) else None,
+            "branch": result.get("branch") if isinstance(result, dict) else None,
+        }
+        ticket_results[ticket_id] = res
+        print(f"  {ticket_id}: {res['status']}")
+
+        # Slack notification per ticket (non-fatal)
+        try:
+            if res["status"] == "merged":
+                notify_ticket_completed(
+                    ticket_id=ticket_id,
+                    pr_url=res.get("pr_url"),
+                    slack_thread_ts=state.get("slack_thread_ts"),
+                )
+            else:
+                notify_ticket_failed(
+                    ticket_id=ticket_id,
+                    slack_thread_ts=state.get("slack_thread_ts"),
+                )
+        except Exception as e:
+            print(f"Warning: Slack notification for {ticket_id} failed (non-fatal): {e}")
+
+    # Persist results after each wave
+    state["ticket_results"] = ticket_results
+    write_yaml(STATE_FILE, state)
+
+print(f"\nAll {len(waves)} wave(s) complete. {len(ticket_results)} ticket(s) processed.")
+print("Phase 3 complete: all tickets dispatched. Proceeding to Phase 5.")
 ```
+
+### Parallelism Rule
+
+All Task() calls within a single wave MUST be dispatched in the same response (same message).
+This ensures true parallelism — do NOT dispatch tickets sequentially within a wave.
+
+### Wave Serialization Rule
+
+Wave N+1 starts only after all Task() calls from Wave N have returned. Never dispatch Wave 1
+before Wave 0 is fully complete, because Wave 1 (Part 2 cross-repo splits) depend on Wave 0
+(Part 1) having created the target branch and initial implementation.
 
 ---
 
-## Phase 4 — Monitoring
+## Phase 4 — Done (Formerly "Monitoring")
+
+> **Note**: Phase 4 (Monitoring) is no longer a polling loop. With the direct dispatch model,
+> all tickets complete synchronously as Task() calls within Phase 3. Phase 4 is now a lightweight
+> cleanup step that flows immediately from Phase 3.
 
 ```python
-# PERSIST phase="monitoring" first
+# Phase 4 is entered immediately after Phase 3 wave execution completes.
+# No polling loop, no TaskList queries, no wait_for_event_or_timeout().
 state = load_yaml(STATE_FILE)
-assert state["phase"] in ("spawned", "monitoring"), f"Unexpected phase {state['phase']}"
-state["phase"] = "monitoring"
+state["phase"] = "monitoring"   # preserve state schema compatibility
 write_yaml(STATE_FILE, state)
-
-import hashlib, json
-
-def state_hash(s):
-    return hashlib.md5(json.dumps(s, sort_keys=True).encode()).hexdigest()
-
-terminal_statuses = {"completed", "failed"}
-notified_terminal = set()  # track which tasks we've already notified for
-
-while True:
-    # --- Rebuild ticket_status_map from TaskList (authoritative) ---
-    tasks = TaskList(**BASE_FILTER)
-    new_map = {task.subject: task.status for task in tasks}
-
-    # Persist only if changed
-    old_hash = state_hash(state.get("ticket_status_map", {}))
-    new_hash = state_hash(new_map)
-    if old_hash != new_hash:
-        state["ticket_status_map"] = new_map
-        write_yaml(STATE_FILE, state)
-
-    # --- Console: print status table at every team-lead turn ---
-    print_status_table(new_map, team_name=state["team_name"])
-
-    # --- Fire Slack for newly-terminal tasks ---
-    # ONLY fire Slack on notify_ticket_completed/failed (no Slack during polling)
-    for subject, status in new_map.items():
-        if status in terminal_statuses and subject not in notified_terminal:
-            notified_terminal.add(subject)
-            try:
-                if status == "completed":
-                    ts = notify_ticket_completed(
-                        subject=subject,
-                        slack_thread_ts=state.get("slack_thread_ts"),
-                    )
-                else:
-                    ts = notify_ticket_failed(
-                        subject=subject,
-                        slack_thread_ts=state.get("slack_thread_ts"),
-                    )
-                # If slack_thread_ts was None, capture the returned ts
-                if state["slack_thread_ts"] is None and ts is not None:
-                    state["slack_thread_ts"] = ts
-                    write_yaml(STATE_FILE, state)
-            except Exception as e:
-                state["slack_last_error"] = str(e)
-                write_yaml(STATE_FILE, state)
-                print(f"Warning: Slack notification failed for {subject}: {e}")
-
-    # --- Handle worker SendMessage (telemetry only) ---
-    # If a worker sends a message (e.g., PR URL update):
-    #   - Log it
-    #   - Update pr_urls in state.yaml if message contains pr_url
-    #   - Do NOT update ticket_status_map from messages alone
-    # (This block executes when a message arrives between polling turns)
-
-    # --- Read epic broadcast inbox for richer context ---
-    # Augment TaskList polling with inbox messages (PR URLs, commit SHAs)
-    # Inbox messages are supplementary; TaskList remains authoritative for status
-    try:
-        broadcasts = read_epic_broadcast(epic_id)
-        for broadcast in broadcasts:
-            payload = broadcast.get("payload", {})
-            tid = payload.get("ticket_id")
-            pr = payload.get("pr_url")
-            if tid and pr and tid not in state.get("pr_urls", {}):
-                state.setdefault("pr_urls", {})[tid] = pr
-                write_yaml(STATE_FILE, state)
-                print(f"[inbox] PR URL captured from broadcast: {tid} -> {pr}")
-    except Exception as inbox_err:
-        print(f"Warning: Inbox broadcast read failed (non-fatal): {inbox_err}")
-
-    # --- Check for finalization ---
-    if new_map and all(v in terminal_statuses for v in new_map.values()):
-        print("All tasks terminal. Proceeding to Phase 5.")
-        goto Phase5()
-
-    # Wait for next team-lead turn (event-driven; no busy loop)
-    wait_for_event_or_timeout()
-```
-
-### Worker SendMessage Handling
-
-When a worker sends a message, process it as follows:
-
-```python
-def handle_worker_message(message):
-    """Process incoming worker SendMessage. Telemetry only."""
-    print(f"[telemetry] Worker message received: {message.sender}")
-
-    # Extract and store pr_url if present
-    if "pr_url" in message.content:
-        pr_url = message.content["pr_url"]
-        ticket_id = message.content.get("ticket_id")
-        if ticket_id:
-            state = load_yaml(STATE_FILE)
-            state["pr_urls"][ticket_id] = pr_url
-            write_yaml(STATE_FILE, state)
-            print(f"[telemetry] PR URL stored: {ticket_id} -> {pr_url}")
-
-    # DO NOT update ticket_status_map here.
-    # Status is only updated via TaskList polling.
-    print(f"[telemetry] Message logged. TaskList remains authoritative for status.")
+# AUTO-ADVANCE to Phase 5 immediately
+goto Phase5()
 ```
 
 ---
@@ -672,10 +669,10 @@ write_yaml(STATE_FILE, state)
 print("Phase 5: persisted done state.")
 
 # 1. Notify Slack (non-fatal)
-ticket_status_map = state.get("ticket_status_map", {})
-completed = [s for s, v in ticket_status_map.items() if v == "completed"]
-failed    = [s for s, v in ticket_status_map.items() if v == "failed"]
-prs       = state.get("pr_urls", {})
+ticket_results = state.get("ticket_results", {})
+completed = [tid for tid, res in ticket_results.items() if res.get("status") == "merged"]
+failed    = [tid for tid, res in ticket_results.items() if res.get("status") != "merged"]
+prs       = {tid: res["pr_url"] for tid, res in ticket_results.items() if res.get("pr_url")}
 
 try:
     notify_epic_done(
@@ -691,7 +688,6 @@ except Exception as e:
 print("\n=== Epic Run Summary ===")
 print(f"Epic:    {state['epic_id']}")
 print(f"Run ID:  {state['run_id']}")
-print(f"Team:    {state['team_name']}")
 print(f"Start:   {state.get('start_time', 'unknown')}")
 print(f"End:     {state['end_time']}")
 print()
@@ -700,59 +696,41 @@ print("-" * 60)
 assignments = state.get("assignments", {})
 for repo in assignments:
     repo_tickets = assignments[repo]
-    done_count   = sum(1 for t in repo_tickets if ticket_status_map.get(f"{t} [{repo}]") == "completed"
-                       or ticket_status_map.get(f"TRIAGE-{t} [{repo}]") == "completed")
-    fail_count   = sum(1 for t in repo_tickets if ticket_status_map.get(f"{t} [{repo}]") == "failed"
-                       or ticket_status_map.get(f"TRIAGE-{t} [{repo}]") == "failed")
-    repo_prs     = [url for tid, url in prs.items() if tid in repo_tickets]
-    pr_str       = ", ".join(repo_prs) if repo_prs else "—"
+    done_count  = sum(1 for t in repo_tickets if ticket_results.get(t, {}).get("status") == "merged")
+    fail_count  = sum(1 for t in repo_tickets if ticket_results.get(t, {}).get("status") != "merged"
+                      and t in ticket_results)
+    repo_prs    = [prs[t] for t in repo_tickets if t in prs]
+    pr_str      = ", ".join(repo_prs) if repo_prs else "—"
     print(f"{repo:<20} {done_count:>6} {fail_count:>8}  {pr_str}")
 print()
 if failed:
-    print(f"FAILED tasks ({len(failed)}):")
-    for f in failed:
-        print(f"  - {f}")
+    print(f"Non-merged tickets ({len(failed)}):")
+    for tid in failed:
+        res = ticket_results.get(tid, {})
+        print(f"  - {tid}: {res.get('status', 'unknown')}")
     print()
 
-# 3. Print worktree locations and cleanup commands
-print("=== Worktree Locations ===")
-print("Each worker created a git worktree. Locations (workers do NOT auto-delete them):")
-for repo in assignments:
-    for ticket_id in assignments[repo]:
-        wt_path = f"../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}"
-        branch  = f"epic/{epic_id}/{ticket_id}/{run_id[:8]}"
-        print(f"\n  {ticket_id} [{repo}]")
-        print(f"    Path:   {wt_path}")
-        print(f"    Branch: {branch}")
-        print(f"    Remove: git -C ../{repo} worktree remove --force {wt_path}")
-
-print()
-print("=== Cleanup ===")
-print(f"To remove the task team (if still present):")
-print(f"  TeamDelete({state['team_name']})")
-
-# 4. GC agent inboxes — best-effort, non-fatal
-try:
-    removed = gc_inboxes(ttl_hours=24)
-    if removed > 0:
-        print(f"Inbox GC: removed {removed} expired messages.")
-except Exception as e:
-    print(f"Warning: Inbox GC failed (non-fatal): {e}")
-
-# 5. TeamDelete — best-effort, non-fatal
-try:
-    TeamDelete(state["team_name"])
-    print(f"Team {state['team_name']} deleted.")
-except Exception as e:
-    print(f"Warning: TeamDelete failed (non-fatal): {e}")
-    print(f"You may need to delete team {state['team_name']} manually.")
+# 3. Print branch / PR summary from ticket_results
+print("=== Ticket Results ===")
+for tid, res in ticket_results.items():
+    branch = res.get("branch") or "—"
+    pr_url = res.get("pr_url") or "—"
+    status = res.get("status", "unknown")
+    print(f"  {tid}: status={status}  branch={branch}  pr={pr_url}")
 ```
 
 ---
 
-## Worker Prompt Template
+## DEPRECATED: Worker Prompt Template
 
-The following constant `WORKER_TEMPLATE` is embedded in the team-lead orchestration. It is filled with `repo`, `epic_id`, `run_id`, `team_name`, `run_id_short` before spawning each worker.
+> **DEPRECATED** — The WORKER_TEMPLATE is no longer used. Workers spawned as team members go
+> idle immediately (`idleReason: available`) and never process tasks. The direct dispatch
+> pattern in Phase 3 (wave-based Task() dispatch from the team-lead session) is the
+> authoritative execution model. This template is preserved here for historical reference only.
+>
+> Do NOT use WORKER_TEMPLATE in new code. Do NOT spawn workers via TeamCreate + Task(team_name=...).
+
+The following constant `WORKER_TEMPLATE` was embedded in the team-lead orchestration. It is preserved for reference only.
 
 ```python
 WORKER_TEMPLATE = """
@@ -1015,7 +993,7 @@ run_id: "uuid-v4-string"          # Unique run identifier (uuid4)
 team_name: "epic-OMN-XXXX-abc12345"  # Claude team name (null until Phase 3)
 
 # --- Phase ---
-phase: "intake"                    # intake | decomposed | spawned | monitoring | done
+phase: "intake"                    # intake | decomposed | dispatching | monitoring | done
 
 # --- Slack ---
 slack_thread_ts: null              # Slack thread timestamp (null until first message sent)
@@ -1062,13 +1040,23 @@ ticket_scores:                     # Per-ticket decomposition metadata
     triage: true
 
 # --- Runtime ---
-ticket_status_map:                 # Subject -> status (rebuilt from TaskList each turn)
-  "OMN-1001 [omniclaude]": "completed"
-  "OMN-1002 [omniclaude]": "in_progress"
-  "OMN-1003 [omnibase_core]": "todo"
+ticket_results:                    # ticket_id -> {status, pr_url, branch} (from Task() results)
+  OMN-1001:
+    status: "merged"
+    pr_url: "https://github.com/org/omniclaude/pull/42"
+    branch: "jonah/omn-1001-feature"
+  OMN-1002:
+    status: "failed"
+    pr_url: null
+    branch: null
+  OMN-1003:
+    status: "merged"
+    pr_url: "https://github.com/org/omnibase_core/pull/15"
+    branch: "jonah/omn-1003-feature"
 
-pr_urls:                           # ticket_id -> PR URL (populated by worker messages)
-  OMN-1001: "https://github.com/org/omniclaude/pull/42"
+# DEPRECATED: ticket_status_map was populated by TaskList polling in the old worker model.
+# It is no longer written. Use ticket_results instead.
+# ticket_status_map: {}  # no longer written
 ```
 
 ### `~/.claude/epics/{epic_id}/revoked_runs.yaml`
@@ -1112,10 +1100,10 @@ Before marking any phase complete, verify:
 
 - [ ] Phase asserted before executing logic
 - [ ] New phase persisted to state.yaml BEFORE side effects
-- [ ] All TaskList calls use the triple filter (team_name + epic_id + run_id)
-- [ ] No status decisions made from worker messages alone
+- [ ] Wave 0 tickets dispatched in parallel (all Task() calls in one message)
+- [ ] Wave 1 only dispatched after Wave 0 results are collected
+- [ ] ticket_results persisted to state.yaml after each wave
 - [ ] slack_thread_ts never overwritten with None if currently non-None
-- [ ] TaskUpdate (completed/failed) fires BEFORE SendMessage in workers
-- [ ] TeamDelete called best-effort (non-fatal) in Phase 5
 - [ ] Slack notifications non-fatal everywhere
-- [ ] Worktree locations printed for manual cleanup (never auto-deleted)
+- [ ] Phase 5 summary uses ticket_results (not ticket_status_map)
+- [ ] WORKER_TEMPLATE not used; no TeamCreate/worker spawning in new runs

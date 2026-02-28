@@ -23,10 +23,14 @@ args:
 
 ## Overview
 
-Decompose a Linear epic into per-repo workstreams and autonomously drive them to completion using
-a team-lead + worker topology. The team lead (this session) owns planning, monitoring, state
-persistence, and lifecycle notifications. Per-repo workers are spawned as `Task()` subagents and
-execute tickets independently using `ticket-pipeline`.
+Decompose a Linear epic into per-repo workstreams and autonomously drive them to completion.
+The team lead (this session) owns planning, dispatch, state persistence, and lifecycle
+notifications. Tickets are executed by dispatching `ticket-pipeline` as sequential `Task()`
+subagents directly from the team-lead session, in dependency-respecting waves.
+
+**Key constraint**: Workers spawned as team members (via `TeamCreate` + `Task(team_name=...)`)
+go idle immediately and never process tasks. The proven working pattern is **direct dispatch
+from the team-lead session** — see the Architecture section below.
 
 **If the epic has zero child tickets**, epic-team invokes `decompose-epic` to create sub-tickets,
 then posts a Slack LOW_RISK gate. Silence for 30 minutes = proceed.
@@ -93,9 +97,12 @@ epic-team OMN-XXXX
       → If rejected: stop
       → Re-fetch newly created tickets
   → Assign tickets to repos via repo_manifest
-  → Spawn one worker per repo (Task() subagent)
-  → Each worker dispatches ticket-pipeline per ticket
-  → Monitor workers, aggregate results
+  → Build dependency waves:
+      Wave 0: independent tickets + cross-repo Part 1 splits (run in parallel)
+      Wave 1: cross-repo Part 2 splits (run after Wave 0 completes)
+  → For each wave: dispatch ticket-pipeline per ticket as Task() from team-lead session
+  → Await all Task() calls in wave before starting next wave
+  → Collect results (status, pr_url, branch) from each Task()
   → Send Slack lifecycle notifications (started, ticket done, epic done)
   → Persist state to ~/.claude/epics/{epic_id}/state.yaml
 ```
@@ -117,28 +124,39 @@ Task(
 )
 ```
 
-## Dispatch: Worker per Repo
+## Dispatch: Ticket-Pipeline per Ticket (Direct Dispatch Pattern)
+
+For each ticket in a wave, dispatch ticket-pipeline as a Task() from the team-lead session:
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="epic-team worker: {repo_name} ({n} tickets)",
-  prompt="You are the worker agent for repo {repo_name} in epic {epic_id}.
+  description="epic-team: ticket-pipeline for {ticket_id} [{repo}]",
+  prompt="You are executing ticket {ticket_id} for epic {epic_id}.
 
-    Working directory: {repo_path}
-    Tickets assigned: {ticket_list}
+    Ticket: {ticket_id} - {title}
+    URL: {url}
+    Repo: {repo} at {repo_path}
+    Epic: {epic_id}  Run: {run_id}
 
-    For each ticket, invoke:
-    Skill(skill=\"onex:ticket-pipeline\", args=\"{ticket_id}\")
-    <!-- ticket-pipeline skill is available — see plugins/onex/skills/ticket-pipeline/SKILL.md -->
+    Invoke: Skill(skill=\"onex:ticket-pipeline\", args=\"{ticket_id}\")
 
-    Wait for each ticket-pipeline to complete before starting the next.
-    Read result from ~/.claude/skill-results/{context_id}/ticket-pipeline.json after each ticket.
-
-    Report after each ticket: ticket_id, status, pr_url.
-    Report final summary when all tickets are done."
+    After ticket-pipeline completes, report back:
+    - ticket_id: {ticket_id}
+    - status: (merged/failed/blocked)
+    - pr_url: (if available)
+    - branch: (branch name used)"
 )
 ```
+
+**Wave parallelism**: All Task() calls within a wave MUST be dispatched in the same response
+(same message) for true parallelism. Do NOT dispatch tickets sequentially within a wave.
+
+**Wave serialization**: Wave N+1 starts only after all Task() calls from Wave N have returned.
+
+**DEPRECATED**: Spawning per-repo workers via `TeamCreate` + `Task(team_name=...)` + a
+`WORKER_TEMPLATE` is no longer used. See `prompt.md` for the deprecated WORKER_TEMPLATE
+preserved for historical reference.
 
 ## Skill Result Communication
 
@@ -233,7 +251,8 @@ Stale worktrees are cleaned up automatically after merge when `auto_cleanup_merg
 epic-team is a thin composition layer. It owns:
 - Epic decomposition (via `decompose-epic`)
 - Ticket-to-repo assignment (via repo_manifest)
-- Worker spawning (one Task() per repo)
+- Wave construction (group tickets by dependency into parallel waves)
+- Direct Task() dispatch of ticket-pipeline per ticket (from team-lead session)
 - State persistence (`~/.claude/epics/{epic_id}/state.yaml`)
 - Slack lifecycle notifications (started, ticket done, epic done)
 
@@ -243,6 +262,21 @@ It does NOT own:
 - CI polling (delegated to `ci-watch`)
 - PR review polling (delegated to `pr-watch`)
 - Merge execution (delegated to `auto-merge`)
+
+### Execution Model
+
+**Direct dispatch from team-lead session** is the authoritative execution pattern:
+
+1. Team-lead constructs waves of tickets grouped by dependency
+2. For each wave, team-lead dispatches one `Task()` per ticket in parallel
+3. Team-lead awaits all Task() completions in a wave before starting the next wave
+4. Results (status, pr_url, branch) are collected directly from Task() return values
+5. No background workers, no TaskList polling loop, no SendMessage coordination
+
+**Why not per-repo workers?** Workers spawned as team members via `TeamCreate` + `Task(team_name=...)`
+go idle immediately (`idleReason: available`) and never process tasks from the task queue.
+This is a confirmed behavior across multiple epic runs. The direct dispatch pattern is the
+only execution model that reliably completes tickets.
 
 ## See Also
 
