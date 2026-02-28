@@ -648,7 +648,7 @@ class TestHandlerRoutingLlm:
         payload = captured_payloads[0]
         assert payload["model"] == "Qwen2.5-14B"
         assert payload["temperature"] == 0.0
-        assert payload["max_tokens"] == 50
+        assert payload["max_tokens"] == 150
         assert payload["messages"][0]["role"] == "user"
 
     # -- LLM URL uses /v1/chat/completions endpoint --
