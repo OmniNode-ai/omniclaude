@@ -1443,21 +1443,25 @@ def route_via_events(
             # OMN-2273/OMN-2962: emit LLM-specific decision event with complete
             # determinism audit fields. All fuzzy comparison data is now available
             # because _run_fuzzy_shadow() ran synchronously above.
-            _emit_llm_routing_decision(
-                result=llm_result,
-                correlation_id=correlation_id,
-                session_id=session_id,
-                fuzzy_top_candidate=_fuzzy_agent or None,
-                llm_selected_candidate=llm_result.get(
-                    "llm_selected_candidate", llm_result.get("selected_agent")
-                ),
-                agreement=_agreement,
-                routing_prompt_version=_llm_routing_prompt_version,
-                model_used=llm_result.get("model_used", "unknown"),
-                fuzzy_latency_ms=_fuzzy_latency_ms,
-                fuzzy_confidence=_fuzzy_confidence,
-                cost_usd=None,  # no per-call cost tracking in LLM routing yet
-            )
+            #
+            # OMN-2920: fallbacks are routing failures, not decisions — skip emission
+            # so the llm-routing-decision topic only contains genuine LLM decisions.
+            if not llm_result.get("fallback_used", False):
+                _emit_llm_routing_decision(
+                    result=llm_result,
+                    correlation_id=correlation_id,
+                    session_id=session_id,
+                    fuzzy_top_candidate=_fuzzy_agent or None,
+                    llm_selected_candidate=llm_result.get(
+                        "llm_selected_candidate", llm_result.get("selected_agent")
+                    ),
+                    agreement=_agreement,
+                    routing_prompt_version=_llm_routing_prompt_version,
+                    model_used=llm_result.get("model_used", "unknown"),
+                    fuzzy_latency_ms=_fuzzy_latency_ms,
+                    fuzzy_confidence=_fuzzy_confidence,
+                    cost_usd=None,  # no per-call cost tracking in LLM routing yet
+                )
             return llm_result
         # OMN-2273: LLM routing returned None — emit fallback event so consumers can
         # observe how often the LLM path is skipped and the reason distribution.
