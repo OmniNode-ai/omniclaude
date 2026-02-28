@@ -379,7 +379,7 @@ Test: "POST /api/users - should create user"
 
 **Error**:
 ```
-/home/runner/work/project/src/utils/helpers.js
+/home/runner/work/project/src/utils/helpers.js  # local-path-ok
   23:5  error  'foo' is defined but never used  no-unused-vars
   45:3  error  Unexpected console statement     no-console
 ```

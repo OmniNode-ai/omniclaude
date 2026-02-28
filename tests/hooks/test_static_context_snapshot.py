@@ -412,7 +412,7 @@ class TestEmitChangeEvent:
 
     def test_emit_called_with_correct_payload(self) -> None:
         snap = FileSnapshot(
-            file_path="/home/user/.claude/CLAUDE.md",
+            file_path="/home/user/.claude/CLAUDE.md",  # local-path-ok
             content_hash="abc",
             session_id="session-1",
             is_versioned=False,
@@ -429,7 +429,7 @@ class TestEmitChangeEvent:
         assert payload["changed_file_count"] == 1
         files = payload["changed_files"]
         assert isinstance(files, list)
-        assert files[0]["file_path"] == "/home/user/.claude/CLAUDE.md"
+        assert files[0]["file_path"] == "/home/user/.claude/CLAUDE.md"  # local-path-ok
 
     def test_emit_failure_returns_false(self) -> None:
         snap = FileSnapshot(

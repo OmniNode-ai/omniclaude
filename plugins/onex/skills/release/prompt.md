@@ -72,8 +72,8 @@ GITHUB_ORG = "OmniNode-ai"
 ```python
 import os
 
-OMNI_HOME = "/Volumes/PRO-G40/Code/omni_home"
-WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"
+OMNI_HOME = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
+WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"  # local-path-ok
 STATE_DIR = os.path.expanduser("~/.claude/state/release")
 ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 ```
