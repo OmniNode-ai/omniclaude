@@ -315,6 +315,19 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
             _REPAIR_TRAP_REMOVE=false  # Venv is good; retain on exit
             echo ""
             echo -e "${GREEN}Venv repair complete!${NC}"
+
+            # Ensure the version-agnostic 'current' symlink points at the repaired version.
+            # If the symlink is missing or stale (e.g. repaired after a failed deploy that
+            # created a new version dir but skipped the symlink step), fix it now.
+            REPAIR_CURRENT_LINK="${CACHE_BASE}/current"
+            if [[ ! -L "$REPAIR_CURRENT_LINK" ]] || [[ "$(readlink "$REPAIR_CURRENT_LINK")" != "$ACTIVE_VERSION" ]]; then
+                REPAIR_CURRENT_TMP="${CACHE_BASE}/.current.tmp.$$"
+                ln -s "$ACTIVE_VERSION" "$REPAIR_CURRENT_TMP"
+                mv -f "$REPAIR_CURRENT_TMP" "$REPAIR_CURRENT_LINK"
+                echo -e "${GREEN}  Updated current symlink: ${REPAIR_CURRENT_LINK} -> ${ACTIVE_VERSION}${NC}"
+            else
+                echo -e "${GREEN}  current symlink already correct: ${REPAIR_CURRENT_LINK} -> ${ACTIVE_VERSION}${NC}"
+            fi
             echo ""
             echo "Restart Claude Code to activate the repaired venv."
         else
@@ -778,6 +791,40 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     done
     shopt -u nullglob
+
+    # Create / update the version-agnostic 'current' symlink.
+    # This allows ~/.omnibase/.env to set:
+    #   PLUGIN_PYTHON_BIN=~/.claude/plugins/cache/omninode-tools/onex/current/lib/.venv/bin/python3
+    # instead of a version-pinned path. The symlink is updated atomically on every
+    # deploy, so PLUGIN_PYTHON_BIN continues to resolve correctly after upgrades.
+    CURRENT_LINK="${CACHE_BASE}/current"
+    # Use a temp symlink + mv for atomic replacement (ln -sfn is not atomic on all platforms)
+    CURRENT_LINK_TMP="${CACHE_BASE}/.current.tmp.$$"
+    ln -s "$NEW_VERSION" "$CURRENT_LINK_TMP"
+    mv -f "$CURRENT_LINK_TMP" "$CURRENT_LINK"
+    echo -e "${GREEN}  Updated current symlink: ${CURRENT_LINK} -> ${NEW_VERSION}${NC}"
+
+    # Auto-update PLUGIN_PYTHON_BIN in ~/.omnibase/.env if it contains a version-pinned path.
+    # Rewrites any path of the form:
+    #   PLUGIN_PYTHON_BIN=.../cache/omninode-tools/onex/<X.Y.Z>/lib/.venv/bin/python3
+    # to the version-agnostic form:
+    #   PLUGIN_PYTHON_BIN=~/.claude/plugins/cache/omninode-tools/onex/current/lib/.venv/bin/python3
+    OMNIBASE_ENV="${HOME}/.omnibase/.env"
+    AGNOSTIC_BIN="${HOME}/.claude/plugins/cache/omninode-tools/onex/current/lib/.venv/bin/python3"
+    if [[ -f "$OMNIBASE_ENV" ]]; then
+        # Check if PLUGIN_PYTHON_BIN is set and version-pinned (contains /onex/<digits>/lib/.venv)
+        if grep -qE '^PLUGIN_PYTHON_BIN=.*/onex/[0-9]+\.[0-9]+\.[0-9]+/lib/\.venv' "$OMNIBASE_ENV" 2>/dev/null; then
+            # Rewrite to the version-agnostic form using the current symlink
+            sed -i.bak -E \
+                "s|^(PLUGIN_PYTHON_BIN=).*/onex/[0-9]+\\.[0-9]+\\.[0-9]+/lib/\\.venv/bin/python3|\1${AGNOSTIC_BIN}|" \
+                "$OMNIBASE_ENV"
+            echo -e "${GREEN}  Updated PLUGIN_PYTHON_BIN in ${OMNIBASE_ENV} to use version-agnostic path${NC}"
+            echo -e "${GREEN}    PLUGIN_PYTHON_BIN=${AGNOSTIC_BIN}${NC}"
+        elif grep -qE '^PLUGIN_PYTHON_BIN=' "$OMNIBASE_ENV" 2>/dev/null; then
+            # PLUGIN_PYTHON_BIN is set but not version-pinned — no rewrite needed
+            echo -e "${BLUE}  PLUGIN_PYTHON_BIN already set (not version-pinned); no rewrite needed${NC}"
+        fi
+    fi
 
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"

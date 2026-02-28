@@ -112,6 +112,26 @@ After running `/deploy-local-plugin --execute`:
 2. Verify with `/help` to see new commands
 3. Old version directories are removed automatically
 
+### Version-Agnostic `current/` Symlink
+
+Every `--execute` deploy creates or updates a stable symlink:
+
+```
+~/.claude/plugins/cache/omninode-tools/onex/current/  ->  <version>/
+```
+
+If `PLUGIN_PYTHON_BIN` is set in `~/.omnibase/.env` with a version-pinned path (e.g.
+`/onex/2.2.5/lib/.venv/bin/python3`), the deploy script automatically rewrites it to
+the version-agnostic form:
+
+```bash
+PLUGIN_PYTHON_BIN=~/.claude/plugins/cache/omninode-tools/onex/current/lib/.venv/bin/python3
+```
+
+This means `PLUGIN_PYTHON_BIN` survives future version upgrades without manual changes.
+The `current/` symlink is updated atomically on every deploy so the path always resolves
+to the live venv.
+
 ## Troubleshooting
 
 ### "command not found: jq"
@@ -148,6 +168,26 @@ ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv
 This builds `lib/.venv` in the currently-active deployed version (from `installed_plugins.json`)
 without syncing files or bumping the version. A smoke test confirms the venv is healthy before
 the command returns. Restart Claude Code after the repair completes.
+
+### `PLUGIN_PYTHON_BIN` points to wrong version after upgrade
+
+If `PLUGIN_PYTHON_BIN` was set with a version-pinned path (e.g. `.../onex/2.2.5/lib/.venv/...`)
+and a new version was deployed, the path silently resolves to an old or missing venv.
+
+**Fix — run a deploy**: The next `--execute` deploy auto-rewrites `PLUGIN_PYTHON_BIN` in
+`~/.omnibase/.env` to the version-agnostic form using the `current/` symlink.
+
+**Fix — manual one-liner**:
+```bash
+# Set PLUGIN_PYTHON_BIN to the version-agnostic current symlink path
+AGNOSTIC="$HOME/.claude/plugins/cache/omninode-tools/onex/current/lib/.venv/bin/python3"
+sed -i.bak -E \
+  "s|^(PLUGIN_PYTHON_BIN=).*/onex/[0-9]+\.[0-9]+\.[0-9]+/lib/\.venv/bin/python3|\1${AGNOSTIC}|" \
+  ~/.omnibase/.env
+```
+
+After this change, `PLUGIN_PYTHON_BIN` will always resolve to the live venv regardless of
+which version is deployed. No further manual updates needed.
 
 ## Skills Location
 
