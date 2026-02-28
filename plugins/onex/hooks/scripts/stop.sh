@@ -56,6 +56,22 @@ TOOLS_EXECUTED=$(echo "$STOP_INFO" | jq -r '.tools_executed // empty' 2>/dev/nul
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Session ID: $SESSION_ID" >> "$LOG_FILE"
 
+# Emit Stop event to Kafka for pattern learning trigger (non-blocking)
+if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
+    (
+        STOP_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg completion_status "$COMPLETION_STATUS" \
+            --arg event_type "Stop" \
+            '{session_id: $session_id, completion_status: $completion_status, event_type: $event_type}' 2>/dev/null)
+        if [[ -n "$STOP_PAYLOAD" ]] && [[ "$STOP_PAYLOAD" != "null" ]]; then
+            emit_via_daemon "response.stopped" "$STOP_PAYLOAD" 100
+        else
+            log "WARNING: Failed to construct stop payload, skipping Kafka emission"
+        fi
+    ) &
+fi
+
 # If tools not in JSON, query database
 if [[ -z "$TOOLS_EXECUTED" ]] || [[ "$TOOLS_EXECUTED" == "null" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Querying database for tools..." >> "$LOG_FILE"

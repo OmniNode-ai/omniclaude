@@ -784,6 +784,8 @@ class TestEventRegistryIntegration:
             "gate.decision",
             "budget.cap.hit",
             "circuit.breaker.tripped",
+            # Stop hook lifecycle events
+            "response.stopped",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
