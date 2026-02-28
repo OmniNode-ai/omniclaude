@@ -33,7 +33,7 @@ _CLOSE_DAY_PATH = _SKILL_DIR / "close_day.py"
 _spec = importlib.util.spec_from_file_location("close_day", _CLOSE_DAY_PATH)
 assert _spec is not None and _spec.loader is not None
 _close_day = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_close_day)  # type: ignore[union-attr]
+_spec.loader.exec_module(_close_day)
 
 # Expose module-level functions for convenience
 detect_drift = _close_day.detect_drift
