@@ -739,9 +739,9 @@ class TestEventRegistryIntegration:
             "prompt.submitted",
             # Tool events
             "tool.executed",
-            # Routing feedback events (OMN-1892)
+            # Routing feedback events (OMN-1892, OMN-2622)
+            # routing.skipped TOMBSTONED: folded into routing.feedback via feedback_status field
             "routing.feedback",
-            "routing.skipped",
             # Injection tracking events (OMN-1673 INJECT-004)
             "injection.recorded",
             # Metrics events (OMN-1889)
@@ -766,8 +766,7 @@ class TestEventRegistryIntegration:
             "llm.routing.fallback",
             # Enrichment observability (OMN-2274)
             "context.enrichment",
-            # Raw session outcome signals (OMN-2356)
-            "routing.outcome.raw",
+            # routing.outcome.raw TOMBSTONED (OMN-2622): deprecated — no consumer, removed from registry
             # Shadow validation mode comparison results (OMN-2283)
             "delegation.shadow.comparison",
             # Pattern enforcement observability (OMN-2442)

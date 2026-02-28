@@ -363,43 +363,15 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "outcome"],
+        required_fields=["session_id", "outcome", "feedback_status"],
     ),
-    "routing.skipped": EventRegistration(
-        event_type="routing.skipped",
-        fan_out=[
-            FanOutRule(
-                topic_base=TopicBase.ROUTING_FEEDBACK_SKIPPED,
-                transform=None,  # Passthrough
-                description="Routing feedback skipped (guardrail gate failed)",
-            ),
-        ],
-        partition_key_field="session_id",
-        required_fields=["session_id", "skip_reason"],
-    ),
-    # Raw session outcome signals (OMN-2356)
-    # Replaces the no-op derived feedback loop (injection_occurred=False hardcoded).
-    # omniintelligence's routing-feedback consumer computes derived scores from
-    # these raw observable facts + context utilization events.
-    # No derived scores (utilization_score, agent_match_score) in this event —
-    # computing them here requires DB reads (Invariant 5 violation).
-    "routing.outcome.raw": EventRegistration(
-        event_type="routing.outcome.raw",
-        fan_out=[
-            FanOutRule(
-                topic_base=TopicBase.ROUTING_OUTCOME_RAW,
-                transform=None,  # Passthrough — no sensitive data in raw signals
-                description="Raw session outcome signals for omniintelligence feedback loop",
-            ),
-        ],
-        partition_key_field="session_id",
-        required_fields=[
-            "session_id",
-            "injection_occurred",
-            "tool_calls_count",
-            "duration_ms",
-        ],
-    ),
+    # TOMBSTONED (OMN-2622): routing.skipped folded into routing.feedback via
+    # feedback_status="skipped" + skip_reason fields on ModelRoutingFeedbackPayload.
+    # Topic onex.evt.omniclaude.routing-feedback-skipped.v1 is no longer provisioned.
+    #
+    # TOMBSTONED (OMN-2622): routing.outcome.raw deprecated — no named consumer,
+    # raw/unnormalized signals not suitable for long-term storage.
+    # Topic onex.evt.omniclaude.routing-outcome-raw.v1 is no longer provisioned.
     # =========================================================================
     # Injection Tracking Events (OMN-1673 INJECT-004)
     # =========================================================================

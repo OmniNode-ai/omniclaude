@@ -647,15 +647,26 @@ class ModelSessionOutcome(BaseModel):
 class ModelRoutingFeedbackPayload(BaseModel):
     """Event payload for routing feedback reinforcement.
 
-    Emitted at session end when the feedback guardrails determine that
-    the routing decision should be reinforced (all gates passed). This
-    event enables the intelligence system to learn from successful and
-    failed routing decisions.
+    Emitted at session end for all routing feedback outcomes — both when
+    reinforcement was produced and when it was skipped by guardrails.
+    The ``feedback_status`` field distinguishes the two cases.
+
+    OMN-2622: Folded ``routing-feedback-skipped.v1`` into this schema.
+    Callers should now emit a single ``routing.feedback`` event for all
+    routing feedback outcomes and set ``feedback_status`` accordingly.
+    The ``routing-feedback-skipped.v1`` topic and ``ModelRoutingFeedbackSkippedPayload``
+    have been removed.
 
     Attributes:
         event_name: Literal discriminator for polymorphic deserialization.
         session_id: Session identifier string.
         outcome: Session outcome that triggered feedback (success or failed).
+        feedback_status: Whether reinforcement was produced or skipped.
+            ``"produced"`` means all guardrails passed and the feedback was emitted.
+            ``"skipped"`` means at least one guardrail failed (see ``skip_reason``).
+        skip_reason: Why reinforcement was skipped (e.g., NO_INJECTION,
+            UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD). None when
+            ``feedback_status`` is ``"produced"``.
         correlation_id: Optional correlation ID for distributed tracing. Propagated
             to the omniintelligence consumer to satisfy its required field. None
             when the producer does not have a correlation context available.
@@ -666,6 +677,15 @@ class ModelRoutingFeedbackPayload(BaseModel):
         >>> event = ModelRoutingFeedbackPayload(
         ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
         ...     outcome="success",
+        ...     feedback_status="produced",
+        ...     skip_reason=None,
+        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
+        ... )
+        >>> skipped = ModelRoutingFeedbackPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     outcome="unknown",
+        ...     feedback_status="skipped",
+        ...     skip_reason="NO_INJECTION",
         ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
         ... )
     """
@@ -684,9 +704,23 @@ class ModelRoutingFeedbackPayload(BaseModel):
         min_length=1,
         description="Session identifier",
     )
-    outcome: Literal["success", "failed"] = Field(
+    outcome: Literal["success", "failed", "abandoned", "unknown"] = Field(
         ...,
         description="Session outcome that triggered feedback",
+    )
+    feedback_status: Literal["produced", "skipped"] = Field(
+        ...,
+        description=(
+            "Whether routing reinforcement was produced (all guardrails passed) "
+            "or skipped (at least one guardrail failed). [OMN-2622]"
+        ),
+    )
+    skip_reason: str | None = Field(
+        default=None,
+        description=(
+            "Why reinforcement was skipped (NO_INJECTION, UNCLEAR_OUTCOME, "
+            "BELOW_SCORE_THRESHOLD). None when feedback_status is 'produced'. [OMN-2622]"
+        ),
     )
     correlation_id: UUID | None = Field(
         default=None,
@@ -700,145 +734,25 @@ class ModelRoutingFeedbackPayload(BaseModel):
         description="Timestamp when the event was emitted (UTC)",
     )
 
+    @model_validator(mode="after")
+    def validate_feedback_consistency(self) -> ModelRoutingFeedbackPayload:
+        """Enforce feedback_status/skip_reason invariant.
 
-class ModelSessionRawOutcomePayload(BaseModel):
-    """Event payload for raw session outcome signals (OMN-2356).
-
-    Emitted at session end with only observable facts — no derived scores.
-    Derived metrics (utilization_score, agent_match_score) belong in
-    omniintelligence's routing-feedback consumer, not in the hook.
-
-    This replaces the no-op feedback loop that emitted hardcoded/zero values.
-    omniintelligence consumes this event and computes derived scores from
-    the raw signals plus its own context (e.g., context utilization events).
-
-    Attributes:
-        event_name: Literal discriminator for polymorphic deserialization.
-        session_id: Session identifier string.
-        injection_occurred: Whether context injection happened this session.
-        patterns_injected_count: Number of patterns injected (0 if no injection).
-        tool_calls_count: Total tool calls observed during the session.
-        duration_ms: Session duration in milliseconds (0 if unknown).
-        agent_selected: Agent name selected by routing (empty string if none).
-        routing_confidence: Routing confidence score (0.0-1.0).
-        emitted_at: Timestamp when the event was emitted (UTC).
-
-    Note:
-        ``utilization_score`` and ``agent_match_score`` are intentionally
-        absent. Computing them requires DB reads (Invariant 5 violation).
-        omniintelligence's routing-feedback consumer handles derivation.
-
-    Example:
-        >>> from datetime import UTC, datetime
-        >>> event = ModelSessionRawOutcomePayload(
-        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
-        ...     injection_occurred=True,
-        ...     patterns_injected_count=3,
-        ...     tool_calls_count=12,
-        ...     duration_ms=45200,
-        ...     agent_selected="omniarchon",
-        ...     routing_confidence=0.91,
-        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
-        ... )
-    """
-
-    # extra="ignore" per CLAUDE.md repo invariant for all frozen event models
-    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
-
-    event_name: Literal["routing.outcome.raw"] = Field(
-        default="routing.outcome.raw",
-        description="Event type discriminator for polymorphic deserialization",
-    )
-    session_id: str = Field(
-        ...,
-        min_length=1,
-        description="Session identifier",
-    )
-    injection_occurred: bool = Field(
-        ...,
-        description="Whether context injection happened this session",
-    )
-    patterns_injected_count: int = Field(
-        ...,
-        ge=0,
-        description="Number of patterns injected (0 if no injection occurred)",
-    )
-    tool_calls_count: int = Field(
-        ...,
-        ge=0,
-        description="Total tool calls observed during the session",
-    )
-    duration_ms: int = Field(
-        ...,
-        ge=0,
-        description="Session duration in milliseconds (0 if unknown)",
-    )
-    agent_selected: str = Field(
-        default="",
-        description="Agent name selected by routing (empty string if none selected)",
-    )
-    routing_confidence: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Routing confidence score from the router (0.0-1.0)",
-    )
-    # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    # Uses TimezoneAwareDatetime for automatic timezone validation
-    emitted_at: TimezoneAwareDatetime = Field(
-        ...,
-        description="Timestamp when the event was emitted (UTC)",
-    )
-
-
-class ModelRoutingFeedbackSkippedPayload(BaseModel):
-    """Event payload for routing feedback that was skipped by guardrails.
-
-    Emitted at session end when the feedback guardrails determine that
-    the routing decision should NOT be reinforced (a gate failed). This
-    event provides observability into why feedback was suppressed.
-
-    Attributes:
-        event_name: Literal discriminator for polymorphic deserialization.
-        session_id: Session identifier string.
-        skip_reason: Why reinforcement was skipped (e.g., NO_INJECTION,
-            UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD).
-        emitted_at: Timestamp when the event was emitted (UTC).
-
-    Example:
-        >>> from datetime import UTC, datetime
-        >>> event = ModelRoutingFeedbackSkippedPayload(
-        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
-        ...     skip_reason="NO_INJECTION",
-        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
-        ... )
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    event_name: Literal["routing.skipped"] = Field(
-        default="routing.skipped",
-        description="Event type discriminator for polymorphic deserialization",
-    )
-    session_id: str = Field(
-        ...,
-        min_length=1,
-        description="Session identifier",
-    )
-    skip_reason: str = Field(
-        ...,
-        min_length=1,
-        description="Why reinforcement was skipped (NO_INJECTION, UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD)",
-    )
-    # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    # Uses TimezoneAwareDatetime for automatic timezone validation
-    emitted_at: TimezoneAwareDatetime = Field(
-        ...,
-        description="Timestamp when the event was emitted (UTC)",
-    )
+        - ``feedback_status='produced'`` requires ``skip_reason=None``.
+        - ``feedback_status='skipped'`` requires a non-empty ``skip_reason``.
+        """
+        if self.feedback_status == "produced" and self.skip_reason is not None:
+            raise ValueError(
+                "skip_reason must be None when feedback_status='produced'; "
+                f"got skip_reason={self.skip_reason!r}"
+            )
+        if self.feedback_status == "skipped" and (
+            self.skip_reason is None or not self.skip_reason.strip()
+        ):
+            raise ValueError(
+                "skip_reason is required (non-empty string) when feedback_status='skipped'"
+            )
+        return self
 
 
 # =============================================================================
@@ -2709,8 +2623,6 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelSessionOutcome",
     "ModelRoutingFeedbackPayload",
-    "ModelSessionRawOutcomePayload",
-    "ModelRoutingFeedbackSkippedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",

@@ -572,13 +572,13 @@ async def emit_hook_event(
         ):
             _emit_event_cb = None
             try:
-                from emit_client_wrapper import (
-                    emit_event as _emit_event_cb,  # noqa: PLC0415
+                from emit_client_wrapper import (  # type: ignore[no-redef]  # noqa: PLC0415
+                    emit_event as _emit_event_cb,
                 )
             except ImportError:
                 pass
             if _emit_event_cb is not None:
-                try:
+                try:  # type: ignore[unreachable]
                     _kafka_cfg = create_kafka_config()
                     _cb_payload: dict[str, object] = {
                         "event_id": str(_uuid.uuid4()),

@@ -165,15 +165,9 @@ topics:
     topic_base_constant: "ROUTING_FEEDBACK"
     description: "Routing feedback for reinforcement learning"
 
-  - event_type: "routing.skipped"
-    topic: "onex.evt.omniclaude.routing-feedback-skipped.v1"
-    topic_base_constant: "ROUTING_FEEDBACK_SKIPPED"
-    description: "Routing feedback skipped (guardrail gate)"
-
-  - event_type: "routing.outcome.raw"
-    topic: "onex.evt.omniclaude.routing-outcome-raw.v1"
-    topic_base_constant: "ROUTING_OUTCOME_RAW"
-    description: "Raw session outcome signals for feedback loop"
+  # TOMBSTONED (OMN-2622): routing.skipped — folded into routing.feedback via
+  # feedback_status field on ModelRoutingFeedbackPayload.
+  # TOMBSTONED (OMN-2622): routing.outcome.raw — deprecated, no consumer.
 
   # ---------------------------------------------------------------------------
   # LLM routing observability topics
