@@ -533,6 +533,185 @@ def bump_version(worktree_path: str, new_version: str) -> None:
 
 **State update**: Set phase to `BUMPED`.
 
+#### Sub-Step 2b: BUMP — omnibase_infra-specific post-bump actions
+
+After bumping the version in `pyproject.toml`, if the repo being released is `omnibase_infra`,
+run two additional automated updates before advancing to Sub-Step 3 (PIN).
+
+**Action 1: Update version_compatibility.py bounds**
+
+`omnibase_infra` maintains a `VERSION_MATRIX` in
+`src/omnibase_infra/runtime/version_compatibility.py` that defines the runtime-compatible
+version window for `omnibase_core` and `omnibase_spi`. When a coordinated release bumps
+these upstream packages, the matrix bounds must slide to match the new versions.
+
+The rule for each entry in `VERSION_MATRIX`:
+- `min_version` = new version of the upstream package (from this run's plan)
+- `max_version` = next minor version after `min_version` (e.g., `0.23.0` → `0.24.0`)
+
+```python
+def update_version_compatibility(
+    worktree_path: str,
+    state: dict,
+) -> None:
+    """Update VERSION_MATRIX bounds in version_compatibility.py for omnibase_infra.
+
+    For each upstream package released in this run (omnibase_core, omnibase_spi),
+    slide the [min_version, max_version) window to [new_version, next_minor).
+
+    Idempotency: if bounds already match the target, skip that entry.
+    """
+    vc_path = os.path.join(
+        worktree_path,
+        "src", "omnibase_infra", "runtime", "version_compatibility.py",
+    )
+    if not os.path.exists(vc_path):
+        print("  version_compatibility.py not found — skipping VERSION_MATRIX update")
+        return
+
+    with open(vc_path) as f:
+        content = f.read()
+
+    # Only update entries for packages that were released in this run
+    upstream_packages = ["omnibase_core", "omnibase_spi"]
+    modified = False
+
+    for pkg in upstream_packages:
+        pkg_state = state["repos"].get(pkg)
+        if not pkg_state or pkg_state["phase"] != "DONE":
+            continue  # Not released in this run
+
+        new_min = pkg_state["new_version"]
+        # Compute next minor: e.g. "0.23.0" → "0.24.0"
+        parts = new_min.split(".")
+        next_minor = f"{parts[0]}.{int(parts[1]) + 1}.0"
+
+        # Match the VersionConstraint block for this package:
+        #   VersionConstraint(
+        #       package="omnibase_core",
+        #       min_version="0.22.0",
+        #       max_version="0.23.0",
+        #   ),
+        block_pattern = (
+            rf'(VersionConstraint\(\s*\n\s*package="{pkg}",\s*\n'
+            rf'\s*min_version=")([^"]+)(",\s*\n'
+            rf'\s*max_version=")([^"]+)(")'
+        )
+        match = re.search(block_pattern, content, re.MULTILINE)
+        if not match:
+            print(f"  WARNING: No VERSION_MATRIX entry found for {pkg} — skipping")
+            continue
+
+        current_min = match.group(2)
+        current_max = match.group(4)
+
+        if current_min == new_min and current_max == next_minor:
+            print(f"  {pkg}: VERSION_MATRIX already [{new_min}, {next_minor}) — skipping")
+            continue
+
+        replacement = (
+            f'{match.group(1)}{new_min}{match.group(3)}{next_minor}{match.group(5)}'
+        )
+        content = content[:match.start()] + replacement + content[match.end():]
+        modified = True
+        print(
+            f"  {pkg}: VERSION_MATRIX updated "
+            f"[{current_min}, {current_max}) → [{new_min}, {next_minor})"
+        )
+
+    if modified:
+        with open(vc_path, "w") as f:
+            f.write(content)
+    else:
+        print("  version_compatibility.py: no changes needed")
+```
+
+**Action 2: Validate Dockerfile.runtime pins**
+
+`docker/Dockerfile.runtime` installs runtime plugin packages (`omniintelligence`,
+`omninode-claude`, `omninode-memory`) with explicit version pins. After a coordinated
+release, validate that these pins are consistent with the new upstream versions and
+log any that may need attention.
+
+This step is **validation-only** — it does not auto-update Dockerfile pins, because
+those packages are released on a separate cadence and may intentionally lag behind.
+Instead it emits structured warnings to the pipeline log so the operator is informed.
+
+```python
+def validate_dockerfile_pins(
+    worktree_path: str,
+    state: dict,
+) -> None:
+    """Validate Dockerfile.runtime plugin pins after an omnibase_infra bump.
+
+    Checks that plugin packages pinned in the Dockerfile are still consistent
+    with the new omnibase_infra version. Emits warnings for any pins that may
+    need updating but does NOT auto-modify the Dockerfile.
+
+    Packages inspected:
+      - omniintelligence
+      - omninode-claude
+      - omninode-memory
+    """
+    dockerfile_path = os.path.join(worktree_path, "docker", "Dockerfile.runtime")
+    if not os.path.exists(dockerfile_path):
+        print("  Dockerfile.runtime not found — skipping pin validation")
+        return
+
+    with open(dockerfile_path) as f:
+        content = f.read()
+
+    # Extract pinned versions from lines like:
+    #   uv pip install --constraint /tmp/constraints.txt omniintelligence==0.6.0
+    #   uv pip install --no-deps omninode-claude==0.3.0
+    pin_pattern = re.compile(
+        r'uv pip install[^\n]*(omniintelligence|omninode-claude|omninode-memory)'
+        r'==([0-9]+\.[0-9]+\.[0-9]+)'
+    )
+
+    # Detect --no-deps installs (workaround indicator)
+    no_deps_pattern = re.compile(
+        r'uv pip install --no-deps[^\n]*(omniintelligence|omninode-claude|omninode-memory)'
+    )
+
+    pins_found: dict[str, str] = {}
+    no_deps_packages: list[str] = []
+
+    for m in pin_pattern.finditer(content):
+        pkg, version = m.group(1), m.group(2)
+        pins_found[pkg] = version
+
+    for m in no_deps_pattern.finditer(content):
+        no_deps_packages.append(m.group(1))
+
+    new_infra_version = state["repos"].get("omnibase_infra", {}).get("new_version", "unknown")
+
+    print(f"  Dockerfile.runtime pin validation (omnibase_infra → {new_infra_version}):")
+    for pkg, pinned_version in pins_found.items():
+        has_workaround = pkg in no_deps_packages
+        workaround_flag = " [--no-deps workaround active]" if has_workaround else ""
+        print(f"    {pkg}=={pinned_version}{workaround_flag}")
+        if has_workaround:
+            print(
+                f"    WARNING: {pkg} is installed with --no-deps. "
+                f"Verify it is compatible with omnibase_infra=={new_infra_version} "
+                f"and update its pin when a compatible release is available."
+            )
+
+    if not pins_found:
+        print("  No pinned plugin packages found in Dockerfile.runtime")
+```
+
+**Orchestrator call site** — add these two calls at the end of `execute_repo_release()`
+after the `bump_version()` call, when `repo == "omnibase_infra"`:
+
+```python
+# In execute_repo_release(), after bump_version():
+if repo == "omnibase_infra":
+    update_version_compatibility(worktree_path, state)
+    validate_dockerfile_pins(worktree_path, state)
+```
+
 #### Sub-Step 3: PIN
 
 Update dependency pins in `pyproject.toml` for any same-run dependencies that have

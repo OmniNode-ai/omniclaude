@@ -182,7 +182,7 @@ for resume support.
 | Step | Name | Description |
 |------|------|-------------|
 | 1 | WORKTREE | Create worktree at `omni_worktrees/release/<run_id>/<repo>/` on branch `release/<run_id>/<repo>` |
-| 2 | BUMP | Update `version` field in `pyproject.toml` to new version |
+| 2 | BUMP | Update `version` field in `pyproject.toml` to new version. For `omnibase_infra`: also slides `VERSION_MATRIX` bounds in `version_compatibility.py` and validates `Dockerfile.runtime` plugin pins (see Per-Repo Notes below) |
 | 3 | PIN | Update dependency pins in `pyproject.toml` to `==X.Y.Z` for any same-run deps that have already completed |
 | 4 | CHANGELOG | Generate CHANGELOG entry from conventional commits since last tag |
 | 5 | LOCK | Run `uv lock` to regenerate lockfile with new version + pins |
@@ -201,6 +201,109 @@ that was released in the same run, the dependency specifier is updated to `==<ne
 
 Example: If `omnibase_core` was bumped to `1.5.0` in this run, then `omnibase_infra`'s
 `pyproject.toml` dependency on `omnibase_core` becomes `omnibase_core==1.5.0`.
+
+### Per-Repo Notes: omnibase_infra BUMP Actions
+
+The `omnibase_infra` repo requires two additional automated actions during Sub-Step 2 (BUMP),
+after the `pyproject.toml` version is updated. These run inline as part of the BUMP sub-step
+(not as a separate phase). See `prompt.md` Sub-Step 2b for the authoritative implementation.
+
+#### 1. version_compatibility.py — VERSION_MATRIX slide
+
+**File**: `src/omnibase_infra/runtime/version_compatibility.py`
+
+The `VERSION_MATRIX` defines the runtime-compatible version window for upstream packages
+(`omnibase_core`, `omnibase_spi`). After each coordinated release, the bounds must slide
+to match the new upstream versions.
+
+**Rule**: For each upstream package released in the same run:
+- `min_version` → new upstream version (e.g. `0.22.0` → `0.23.0`)
+- `max_version` → next minor after min (e.g. `0.23.0` → `0.24.0`)
+
+**Idempotency**: If bounds already match the target values, the file is not modified.
+
+Example — coordinated release bumping `omnibase_core` from `0.22.x` to `0.23.0`:
+
+```python
+# Before:
+VersionConstraint(
+    package="omnibase_core",
+    min_version="0.22.0",
+    max_version="0.23.0",
+),
+
+# After (auto-updated by release skill):
+VersionConstraint(
+    package="omnibase_core",
+    min_version="0.23.0",
+    max_version="0.24.0",
+),
+```
+
+#### 2. Dockerfile.runtime — pin validation
+
+**File**: `docker/Dockerfile.runtime`
+
+Runtime plugin packages (`omniintelligence`, `omninode-claude`, `omninode-memory`) are
+pinned with explicit version numbers and sometimes installed with `--no-deps` workarounds.
+
+This step is **validation-only** — it does not auto-update Dockerfile pins. Plugin packages
+are released on a separate cadence and may intentionally lag behind. The skill logs:
+- The pinned version of each plugin package
+- A warning for any package installed with `--no-deps` (workaround indicator)
+
+**When a `--no-deps` warning appears**: A separate ticket should track updating that plugin
+pin to a version with compatible transitive dependencies, at which point the `--no-deps`
+flag can be removed.
+
+### Smoke Test: Dry-Run Verification
+
+To verify the `omnibase_infra` BUMP auto-updates are applied correctly without making
+any real changes, run a dry-run release targeting only `omnibase_infra` and its upstreams:
+
+```bash
+# Dry-run: show plan + validate BUMP actions without committing
+/release omnibase_spi omnibase_core omnibase_infra --dry-run
+```
+
+The dry-run output should show:
+- `omnibase_infra` included in the plan with a valid bump level
+- No errors from version_compatibility.py or Dockerfile.runtime validation
+
+To verify the actual file mutations in isolation (without the full release pipeline),
+create a temporary worktree and simulate the BUMP step manually:
+
+```bash
+# 1. Create a test worktree from main
+git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree add \
+  /tmp/infra-bump-test -b test/bump-smoke-$(date +%s)
+
+# 2. Simulate: bump version_compatibility.py for omnibase_core 0.23.0 → 0.24.0
+python3 - <<'EOF'
+import re, sys
+
+vc_path = "/tmp/infra-bump-test/src/omnibase_infra/runtime/version_compatibility.py"
+with open(vc_path) as f:
+    content = f.read()
+
+# Check current state
+print("Current VERSION_MATRIX entry for omnibase_core:")
+m = re.search(r'VersionConstraint\([^)]*package="omnibase_core"[^)]*\)', content, re.DOTALL)
+if m:
+    print(m.group(0))
+else:
+    print("  NOT FOUND")
+EOF
+
+# 3. Clean up test worktree
+git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree remove /tmp/infra-bump-test --force
+```
+
+**Acceptance criteria** (Definition of Done):
+- `version_compatibility.py` bounds slide correctly for each upstream package in the run
+- `Dockerfile.runtime` pins are logged; `--no-deps` workarounds emit warnings
+- A full `--dry-run` of `omnibase_infra` completes without errors
+- No manual edits to these files are needed in the next coordinated release
 
 ## ModelSkillResult
 
@@ -482,6 +585,9 @@ This is HIGH_RISK — silence will NOT auto-advance.
 
 ## Changelog
 
+- **v1.1.0** (OMN-3207): omnibase_infra BUMP automation — auto-slide VERSION_MATRIX bounds
+  in `version_compatibility.py` and validate `Dockerfile.runtime` plugin pins as part of
+  Sub-Step 2 (BUMP). Adds Per-Repo Notes section and smoke test documentation.
 - **v1.0.0** (OMN-2805): Initial interface definition — arguments, dependency graph, error
   table, ModelSkillResult schema, state model, idempotency keys.
 
