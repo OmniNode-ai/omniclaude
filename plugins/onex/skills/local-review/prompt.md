@@ -72,6 +72,10 @@ Phase 0: Pre-existing issue scan
 
          fix_lock = PreexistingFixLock()
          # Fingerprint: sha256("{repo}:{rule}:{file}:{error_class}[:{line}]")[:12]
+         fp_parts = [repo, issue['rule'], issue['file'], issue.get('error_class', '')]
+         if issue.get('line'):
+             fp_parts.append(str(issue['line']))
+         fp_str = ":".join(fp_parts)
          fp_hash = sha256(fp_str.encode()).hexdigest()[:12]
          if not fix_lock.acquire(fp_hash, run_id=run_id, ticket_id=ticket_id):
              holder = fix_lock.holder(fp_hash)

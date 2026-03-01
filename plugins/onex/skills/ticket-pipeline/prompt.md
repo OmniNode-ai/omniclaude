@@ -1574,7 +1574,7 @@ def execute_phase(phase_name, state):
    status output (not silently dropped).
 
    Apply fixes only for `locked_issues`. Commit as:
-   ```
+   ```text
    chore(pre-existing): fix pre-existing issues [OMN-XXXX]
    ```
    After the commit, **release locks** for all successfully fixed issues:

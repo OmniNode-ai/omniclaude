@@ -9,6 +9,7 @@ concurrent pipeline workers from fixing the same pre-existing issue simultaneous
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -54,8 +55,6 @@ class TestPreexistingFixLockAcquire:
         assert (tmp_path / f"{FINGERPRINT}.lock").exists()
 
     def test_acquire_lock_file_contains_metadata(self, tmp_path: Path) -> None:
-        import json
-
         lock = PreexistingFixLock(lock_dir=tmp_path)
         lock.acquire(FINGERPRINT, run_id=RUN_ID, ticket_id=TICKET_ID)
         data = json.loads((tmp_path / f"{FINGERPRINT}.lock").read_text())
