@@ -109,7 +109,7 @@ The runner reads `KAFKA_BOOTSTRAP_SERVERS` from the environment, defaulting to
 ## Python API
 
 ```python
-from plugins.onex.skills.golden_path_validate.golden_path_runner import GoldenPathRunner
+from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
 
 runner = GoldenPathRunner(
     bootstrap_servers="192.168.86.200:29092",  # onex-allow-internal-ip
