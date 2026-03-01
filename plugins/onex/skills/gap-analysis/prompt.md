@@ -8,7 +8,7 @@ You are executing the gap-analysis skill. This prompt defines the complete orche
 
 ---
 
-## Step 0: Parse Arguments
+## Parse Arguments
 
 Parse from `$ARGUMENTS`:
 
@@ -477,6 +477,6 @@ Report: ~/.claude/gap-analysis/{epic_id}/{run_id}.md
 
 After writing the report files, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths — including early exits such as zero findings:
 
-ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json}
+ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json} <!-- local-path-ok -->
 
 If the skill exits early (zero findings, dry-run short-circuit, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.
