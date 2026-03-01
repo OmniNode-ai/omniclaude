@@ -272,6 +272,22 @@ Auto-detection (OMN-2614) will also pick up the correct phase automatically when
 | **Webhook** | HTTP handler receives ticket ID, sets env vars, invokes `claude -p` |
 | **Cron / CI** | Shell script iterates tickets and calls `claude -p` per ticket |
 
+### Common Anti-Patterns (DO NOT DO THESE)
+
+Recurring wrong-approach mistakes surfaced from session analysis (875 sessions, 75 `wrong_approach` instances):
+
+| Anti-Pattern | Correct Approach |
+|---|---|
+| Treating skills as separate from the node system | Skills are orchestration instructions that drive node execution and event emission. They are not an alternative architecture. |
+| Reimplementing CI merge branches | Use GitHub Merge Queue (`gh pr merge --auto`). Never re-implement CI merge coordination. |
+| plan-to-tickets: stalling on formatting | Attempt ticketization immediately; if it fails due to formatting, fix the minimum formatting and retry. |
+| Making `consumer.run()` block the Kafka event loop | Kafka consumers must not block the event loop. Use async patterns or background threads. |
+| Removing branch protection rules after adding them | Never remove branch protection rules. If temporary rules were added, flag them to the user. |
+| Routing a ticket to a repo based on title alone | Always verify the target repo from the Linear ticket metadata (`repo` field in TicketContract) before starting work. |
+| Iterating plans more than 2 self-review passes | After 2 review cycles, present the plan to the user. Do not continue internally iterating. |
+| Inventing raw Kafka topic strings outside contract.yaml | All topic names must come from a `ContractConfig` or event contract YAML. Never hardcode topic strings. |
+| Writing "call helper X()" in a skill without a real implementation | If logic is needed, it must be a tool, node, or handler — not a phantom callable referenced in markdown. |
+
 ### Fail-Fast Design
 
 Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is not. See **Failure Modes** for the complete table of degraded behaviors.
