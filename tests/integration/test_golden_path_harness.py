@@ -378,7 +378,7 @@ def _build_golden_path_events(
                 "correlation_id": cid,
                 "causation_id": caus,
                 "emitted_at": (T0).isoformat(),
-                "working_directory": "/Volumes/PRO-G40/Code/omniclaude2",
+                "working_directory": "/Volumes/PRO-G40/Code/omniclaude2",  # local-path-ok
                 "git_branch": "jonah/omn-2168-golden-path",
                 "hook_source": "startup",
             },

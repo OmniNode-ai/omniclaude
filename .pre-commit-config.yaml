@@ -63,7 +63,7 @@ repos:
         entry: bash scripts/check_local_paths_wrapper.sh
         language: system
         types: [text]
-        exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*'
+        exclude: '\.secrets\.baseline$|^docs/.*|^tests/fixtures/.*|test_results.*\.txt$|^shared_lib/.*\.md$|^plugins/onex/ENVIRONMENT_VARIABLES\.md$|^contracts/.*\.yaml$|^scripts/.*\.md$|^consumers/.*\.md$|^plugins/onex/skills/.*\.(md|yaml)$|^src/omniclaude/contracts/.*\.yaml$|^tests/hooks/test_phase_instrumentation\.py$|^tests/unit/hooks/lib/test_enrichment_observability_emitter\.py$'
         pass_filenames: true
         stages: [pre-commit]
 

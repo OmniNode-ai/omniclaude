@@ -3,6 +3,56 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.4.0] - 2026-02-28
+
+### Added
+- **80 skill nodes wired into ONEX runtime** (OMN-2988, PR #405): All skill nodes registered and reachable via plugin entry-point.
+- **CDQA epic — golden-path-validate skill** (OMN-2976, PR #400): New skill enforces golden-path validation as part of the CDQA gate.
+- **CDQA epic — contract-compliance-check** (PR #402): Skill computes compliance delta against `origin/main` baseline; supports `emergency_bypass` override.
+- **CDQA epic — arch-invariants CI gate** (PR #398): AST-based import scanning added as quality gate job in CI.
+- **CDQA epic — compliance gates in pr-review** (OMN-2982, PR #404): Compliance gates wired into `pr-review` and `verification-before-completion` skill.
+- **close-day skill** (OMN-2981, PR #403): New `close-day` skill generates `ModelDayClose` document.
+- **generate-ticket-contract skill** (OMN-2975, PR #397): New skill scaffolds ONEX contract YAML for any ticket; auto-injected by `plan-ticket` and `plan-to-tickets`.
+- **Stop hook pattern learning** (PR #394): Stop hook wired to fire pattern-learning trigger on session end.
+- **Adversarial review pass in writing-plans** (PR #412): Skills for planning now include a mandatory adversarial review step.
+- **onex_change_control in repo_manifest.yaml** (OMN-3135, PR #413): Epic-team manifest updated with new repo entry.
+- **CDQA gate as required pre-merge step** (OMN-3189, PR #415): CDQA validation enforced in the PR workflow, not just advisory.
+- **Skill node directories for linear-epic-org, linear-housekeeping, linear-triage, ticket-plan-sync** (OMN-2997, PR #408).
+- **Wave 2 topic constants + emitters** (OMN-2922, PR #385): 5 new pipeline topics with canonical `TopicBase` constants and typed emitters.
+- **AI-slop checker phase 2** (PR #396): Anti-AI-slop detection deployed and scoped to step narration in markdown.
+
+### Fixed
+- **Hook deduplication** (OMN-3017, PR #409): Removed duplicate hook registrations from `settings.json`.
+- **PLUGIN_ROOT realpath hardening** (OMN-3019, PR #411): All hook scripts now derive `PLUGIN_ROOT` via `realpath` to survive symlinks.
+- **PLUGIN_PYTHON_BIN version-agnostic** (OMN-3018, PR #410): Uses `current/` symlink instead of hardcoded Python version in deploy scripts.
+- **Blocked Slack notification fields** (PR #395): Agent/session/correlation IDs populated correctly in blocked-state Slack notification.
+- **CI-watch dispatch** (OMN-2998, PR #406): Fix PRs are now dispatched for pre-existing CI failures instead of bypassing checks.
+- **YAML quoting in contract** (PR #407): Unquoted member values in `node_github_pr_watcher_effect/contract.yaml` fixed.
+- **Publisher TOCTOU race on Unix socket bind** (OMN-2914, PR #381): Eliminated race condition on socket bind.
+- **Routing fallback event suppression** (PR #388): Fallback events no longer emitted to `llm-routing-decision.v1`.
+- **Routing-feedback topic consolidation** (OMN-2622, PR #391): `routing-feedback-skipped.v1` folded into `routing-feedback.v1`.
+- **Fuzzy comparison results emitted synchronously** (OMN-2962, PR #393): Routing decision event now includes fuzzy comparison data.
+- **DLQ topic name canonical** (OMN-2959, PR #390): Agent-observability consumer updated to use `TopicBase` constant for DLQ topic.
+- **Routing skill topic constants** (OMN-2940, PR #387): Routing skill migrated to canonical `TopicBase` topic constants.
+- **Optional correlation_id in routing feedback schema** (OMN-2936, PR #386): `ModelRoutingFeedbackPayload` updated to allow optional `correlation_id`.
+- **Release tag glob** (OMN-2912, PR #380): Release workflow replaced `${repo}/v*` glob with `v*` and added `git describe` primary path.
+- **gather-github-stats Local Archive header** (PR #383): Added missing section header and Bare column.
+- **AI-slop checker scope fix** (OMN-3191, PRs #416 #417): `step_narration` check scoped to markdown files only; code fence tracking added as follow-up.
+- **uv.lock regenerated** (PR implicit): Lock file regenerated to match `omnibase-core` 0.20→0.21 bump.
+
+### Changed
+- **Prompt separator standardization** (PR #399): `prompt.md` separator style changed from `====` to `---` across all skills.
+- **Polly-dispatch policy enforced** (OMN-2961, PR #392): Skill development work must go through polly-dispatch routing.
+- **Canonical event envelope field names documented** (OMN-2932, PR #384): Standards doc added for envelope field naming.
+- **Stale `omninode_bridge` and internal IP references removed** (PR #389): Cleanup of deprecated references.
+- **CLAUDE.md common anti-patterns section** (PR #418): Anti-pattern guidance added to agent instructions.
+
+### Dependencies
+- omnibase-core pinned to 0.22.0 (was 0.21.0)
+- omnibase-spi pinned to 0.15.0 (was 0.14.0)
+- omnibase-infra pinned to 0.13.0 (was 0.12.0)
+- omninode-intelligence pinned to 0.8.0 (was 0.7.0)
+
 ## [0.3.0] - 2026-02-27
 
 ### Changed

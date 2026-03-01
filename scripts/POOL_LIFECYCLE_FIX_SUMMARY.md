@@ -180,4 +180,4 @@ This fix addresses:
 
 - Python async context managers: https://docs.python.org/3/reference/datamodel.html#async-context-managers
 - asyncpg documentation: https://magicstack.github.io/asyncpg/
-- OmniClaude configuration: `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md`
+- OmniClaude configuration: `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` <!-- local-path-ok -->

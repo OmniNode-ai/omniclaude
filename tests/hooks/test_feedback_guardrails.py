@@ -351,7 +351,7 @@ class TestAllGatesPass:
         assert result.skip_reason is None
 
     def test_perfect_scores_reinforces(self) -> None:
-        """Perfect scores across the board reinforce."""
+        """All-perfect scores across the board trigger reinforcement."""
         result = should_reinforce_routing(
             injection_occurred=True,
             utilization_score=1.0,

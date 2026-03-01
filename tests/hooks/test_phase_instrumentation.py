@@ -1343,11 +1343,17 @@ class TestSanitization:
 
     def test_rejects_users_path(self):
         """/Users/ in URI is rejected."""
-        assert _validate_artifact_uri("/Users/jonah/artifacts/report.html") is False
+        assert (
+            _validate_artifact_uri("/Users/jonah/artifacts/report.html")
+            is False  # local-path-ok
+        )
 
     def test_rejects_home_path(self):
         """/home/ in URI is rejected."""
-        assert _validate_artifact_uri("/home/deploy/artifacts/report.html") is False
+        assert (
+            _validate_artifact_uri("/home/deploy/artifacts/report.html")
+            is False  # local-path-ok
+        )
 
     def test_rejects_root_path(self):
         """/root/ in URI is rejected."""
@@ -1407,7 +1413,10 @@ class TestSanitization:
 
     def test_rejects_volumes_path(self):
         """/Volumes/ in URI is rejected (macOS external drives)."""
-        assert _validate_artifact_uri("/Volumes/PRO-G40/Code/report.html") is False
+        assert (
+            _validate_artifact_uri("/Volumes/PRO-G40/Code/report.html")
+            is False  # local-path-ok
+        )
 
     def test_rejects_unc_path(self):
         """UNC paths like \\\\server\\share are rejected."""
@@ -1434,7 +1443,9 @@ class TestSanitization:
         assert _validate_artifact_uri("s3://bucket/volumes/drive/file.txt") is True
         assert _validate_artifact_uri("s3://bucket/HOME/deploy/file.txt") is True
         assert (
-            _validate_artifact_uri("https://cdn.example.com/home/assets/img.png")
+            _validate_artifact_uri(
+                "https://cdn.example.com/home/assets/img.png"  # local-path-ok
+            )
             is True
         )
 

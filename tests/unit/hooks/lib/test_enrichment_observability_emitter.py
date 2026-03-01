@@ -437,7 +437,10 @@ class TestDeriveRepo:
     """Tests for _derive_repo() helper."""
 
     def test_returns_basename(self) -> None:
-        assert eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2") == "omniclaude2"
+        assert (
+            eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2")
+            == "omniclaude2"  # local-path-ok
+        )
 
     def test_strips_trailing_slash(self) -> None:
         assert eoe._derive_repo("/path/to/repo/") == "repo"
@@ -1066,7 +1069,7 @@ class TestRepoAndAgentName:
                 correlation_id="c",
                 results=results,
                 kept_names={"summarization"},
-                project_path="/Volumes/PRO-G40/Code/omniclaude2",
+                project_path="/Volumes/PRO-G40/Code/omniclaude2",  # local-path-ok
             )
         assert payloads[0]["repo"] == "omniclaude2"
 

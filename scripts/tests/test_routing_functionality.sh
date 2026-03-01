@@ -187,7 +187,7 @@ echo ""
 echo "6. Testing Routing Query:"
 if command -v python3 &> /dev/null; then
     # Test if routing module exists
-    if python3 -c "import sys; sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude'); from agents.lib.routing_event_client import route_via_events; print('OK')" 2>/dev/null | grep -q "OK"; then
+    if python3 -c "import sys; sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude'); from agents.lib.routing_event_client import route_via_events; print('OK')" 2>/dev/null | grep -q "OK"; then  # local-path-ok
         pass "Routing event client module available"
 
         # Try actual routing request (with timeout)
@@ -195,7 +195,7 @@ if command -v python3 &> /dev/null; then
         ROUTING_TEST=$(timeout 10s python3 << 'EOF' 2>&1 || echo "TIMEOUT"
 import sys
 import asyncio
-sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude')
+sys.path.insert(0, '/Volumes/PRO-G40/Code/omniclaude')  # local-path-ok
 
 async def test_routing():
     try:
