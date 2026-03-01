@@ -866,6 +866,33 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
     fi
 fi
 
+# ── Post-compact context re-injection ────────────────────────────────────────
+# If a pre-compact.sh snapshot exists for this session, prepend it to AGENT_CONTEXT
+# and consume the file (one-shot). Written by the PreCompact hook before /compact runs.
+# SESSION_ID is already parsed above — do not re-read stdin.
+_COMPACT_CTX_FILE="/tmp/omniclaude-compact-ctx-${SESSION_ID}"
+
+if [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
+    _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null)
+    if [[ -n "$_COMPACT_CTX" ]]; then
+        if [[ -n "$AGENT_CONTEXT" ]]; then
+            AGENT_CONTEXT="${_COMPACT_CTX}
+
+---
+
+${AGENT_CONTEXT}"
+        else
+            AGENT_CONTEXT="$_COMPACT_CTX"
+        fi
+        rm -f "$_COMPACT_CTX_FILE"  # consume only after successful injection
+        log "Post-compact context injected (${#_COMPACT_CTX} bytes)"
+    else
+        # Empty file or read failure — leave for next prompt to retry
+        log "Post-compact snapshot empty or unreadable — leaving for retry: $_COMPACT_CTX_FILE"
+    fi
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Prepend first-prompt ticket context to AGENT_CONTEXT when present (OMN-3216).
 # Separator keeps the ticket section visually distinct from agent routing context.
 if [[ -n "$FIRST_PROMPT_TICKET_CONTEXT" ]]; then
