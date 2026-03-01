@@ -7,6 +7,12 @@
 
 set -euo pipefail
 
+# Ensure stable CWD before any Python invocation.
+# The session CWD may be on an external drive that disconnects/remounts;
+# Python's <frozen getpath> calls os.getcwd() during startup and crashes
+# with "failed to make path absolute" if the CWD is unavailable.
+cd "$HOME" 2>/dev/null || cd /tmp || true
+
 # -----------------------------
 # Portable Plugin Configuration
 # -----------------------------
