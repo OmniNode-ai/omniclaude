@@ -142,7 +142,7 @@ Version comparison uses semantic versioning (major.minor.patch).
 
 When this skill is invoked, execute the following:
 
-### Step 1: Query GitHub API for runner list
+### Step 1: Query GitHub API for runner list <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 gh api orgs/OmniNode-ai/actions/runners --jq '.runners[]'
@@ -151,7 +151,7 @@ gh api orgs/OmniNode-ai/actions/runners --jq '.runners[]'
 This returns per-runner: `id`, `name`, `status` (`online`/`offline`), `busy`,
 `runner_group_name`, `labels`, and timestamps.
 
-### Step 2: SSH to CI host — collect Docker labels and uptime
+### Step 2: SSH to CI host — collect Docker labels and uptime <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 # For each runner container (omnibase-runner-1, omnibase-runner-2, omnibase-runner-3):
@@ -161,13 +161,13 @@ ssh 192.168.86.201 "docker inspect omnibase-runner-1 --format '{{json .Config.La
 Parse `org.omninode.runner.version`, `org.omninode.gh.version`, `org.omninode.kubectl.version`,
 `org.omninode.uv.version` from the labels JSON.
 
-### Step 3: Collect host metrics
+### Step 3: Collect host metrics <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 ssh 192.168.86.201 "df -h /var/lib/docker && docker builder du 2>/dev/null | tail -1" # onex-allow-internal-ip
 ```
 
-### Step 4: Check latest runner version
+### Step 4: Check latest runner version <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 gh api repos/actions/runner/releases/latest --jq '.tag_name'
@@ -175,11 +175,11 @@ gh api repos/actions/runner/releases/latest --jq '.tag_name'
 
 Compare against the `org.omninode.runner.version` label from each container.
 
-### Step 5: Evaluate alerts
+### Step 5: Evaluate alerts <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 For each alert condition (see Alert Conditions above), check and collect triggered alerts.
 
-### Step 6: Render output
+### Step 6: Render output <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 Print the output in the format shown in the Output Format section:
 1. Alert block (if any alerts triggered) — shown first, with `⚠ ALERTS` header
