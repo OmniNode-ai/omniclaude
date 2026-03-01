@@ -143,10 +143,10 @@ get_time_ms() {
 # subprocesses spawned by hooks. This is standard shell behavior for local dev
 # environments but be aware of the implications for sensitive credentials.
 
-# Load global ~/.claude/.env first (lowest priority — project .env overrides below).
+# Load global ~/.omnibase/.env first (lowest priority — project .env overrides below).
 # This ensures LLM routing, Kafka, and other shared vars are always available even
 # when the hook runs from a non-project CWD (e.g. home dir on dock launch).
-_CLAUDE_GLOBAL_ENV="${HOME}/.claude/.env"
+_CLAUDE_GLOBAL_ENV="${HOME}/.omnibase/.env"
 if [[ -f "${_CLAUDE_GLOBAL_ENV}" ]]; then
     set -a
     # shellcheck disable=SC1090

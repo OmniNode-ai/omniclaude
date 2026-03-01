@@ -73,7 +73,7 @@ export PYTHON_CMD
 # ---------------------------------------------------------------------------
 # Load .env if available (for GH_TOKEN, etc.)
 _load_env() {
-    local env_file="${HOME}/.claude/.env"
+    local env_file="${HOME}/.omnibase/.env"
     if [[ -f "$env_file" ]]; then
         set -a
         # shellcheck disable=SC1090
