@@ -906,12 +906,12 @@ def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
     # Auto-detect onex_change_control repo if ONEX_CC_REPO_PATH not already set.
     # Respects any explicit override already in the environment.
     # Candidate search order (first existing directory wins):
-    #   1. /Volumes/PRO-G40/Code/omni_home/onex_change_control  (canonical mount)
+    #   1. /Volumes/PRO-G40/Code/omni_home/onex_change_control  (canonical mount)  # local-path-ok
     #   2. ~/Code/omni_home/onex_change_control                  (home-relative)
     #   3. Any sibling named 'onex_change_control' under omni_home parents         # walk up CWD
     if not os.environ.get('ONEX_CC_REPO_PATH'):
         _candidates = [
-            Path('/Volumes/PRO-G40/Code/omni_home/onex_change_control'),
+            Path('/Volumes/PRO-G40/Code/omni_home/onex_change_control'),  # local-path-ok
             Path.home() / 'Code' / 'omni_home' / 'onex_change_control',
         ]
         # Walk up from cwd looking for a sibling onex_change_control dir
