@@ -1,14 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""FailureSignature model and SHA-256 fingerprint computation pipeline.  # ai-slop-ok: pre-existing module docstring
-
-This module provides:
-- FailureSignature Pydantic model (frozen)
-- normalize_failure_output(): strips volatile data before hashing
-- compute_failure_signature(): deterministic fingerprint computation
+"""FailureSignature model and SHA-256 fingerprint computation pipeline.
 
 Stage 2 of DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md
+
+Exports:
+- FailureSignature: frozen Pydantic model representing a stable failure identifier
+- normalize_failure_output(): strips volatile data (timestamps, PIDs, paths) before hashing
+- compute_failure_signature(): deterministic fingerprint computation from raw check output
 
 Design goals:
 - Identical failures from different sessions produce the same fingerprint
