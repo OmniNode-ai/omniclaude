@@ -896,7 +896,40 @@ def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
     Returns:
         List of contract results: {ticket_id, status, is_seam, path_or_error}
     """
+    import os
     import time
+    from pathlib import Path
+
+    # Auto-detect onex_change_control repo if ONEX_CC_REPO_PATH not already set.
+    # Respects any explicit override already in the environment.
+    # Candidate search order (first existing directory wins):
+    #   1. /Volumes/PRO-G40/Code/omni_home/onex_change_control  (canonical mount)
+    #   2. ~/Code/omni_home/onex_change_control                  (home-relative)
+    #   3. Any sibling named 'onex_change_control' under omni_home parents         # walk up CWD
+    if not os.environ.get('ONEX_CC_REPO_PATH'):
+        _candidates = [
+            Path('/Volumes/PRO-G40/Code/omni_home/onex_change_control'),
+            Path.home() / 'Code' / 'omni_home' / 'onex_change_control',
+        ]
+        # Walk up from cwd looking for a sibling onex_change_control dir
+        for _parent in Path.cwd().parents:
+            _probe = _parent / 'onex_change_control'
+            if _probe.is_dir():
+                _candidates.insert(0, _probe)
+                break
+
+        for _candidate in _candidates:
+            if _candidate.is_dir():
+                os.environ['ONEX_CC_REPO_PATH'] = str(_candidate)
+                if not dry_run:
+                    (_candidate / 'contracts').mkdir(parents=True, exist_ok=True)
+                print(f'[contracts] Auto-detected ONEX_CC_REPO_PATH={_candidate}')
+                break
+        else:
+            print(
+                'Warning: ONEX_CC_REPO_PATH not set and onex_change_control not found '
+                'at standard paths — contracts will be printed inline for manual commit.'
+            )
 
     all_tickets = []
 
@@ -964,14 +997,16 @@ Output a **Generated Contracts** table after calling the generator for all ticke
 
 | Ticket | Seam? | Contract Status | Path |
 |--------|-------|-----------------|------|
-| OMN-XXXX | yes | valid | contracts/OMN-XXXX.yaml (written) |
-| OMN-YYYY | no  | valid | [printed — ONEX_CC_REPO_PATH not set] |
+| OMN-XXXX | yes | valid | contracts/OMN-XXXX.yaml (auto-written) |
+| OMN-YYYY | no  | valid | contracts/OMN-YYYY.yaml (auto-written) |
 | OMN-ZZZZ | no  | error | ValidationError: missing field 'requirements' |
 ```
 
 **Key rule:** Call `generate-ticket-contract` for every ticket — no seam-keyword filtering at this
-layer. The generator handles seam detection internally. When `ONEX_CC_REPO_PATH` is not set,
-the YAML is printed inline with a manual commit banner.
+layer. The generator handles seam detection internally. Before the per-ticket loop,
+`ONEX_CC_REPO_PATH` is auto-detected from standard paths so contracts are written directly to
+`onex_change_control/contracts/`. Only if detection fails will the YAML be printed inline with a
+manual commit banner.
 
 ---
 
