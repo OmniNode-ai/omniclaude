@@ -10,6 +10,8 @@ Coverage:
         - mkfs.ext4 /dev/sda (filesystem format)
         - dd of=/dev/sda1 (disk write)
         - base64 -d <<< … | sh (obfuscated exec)
+        - git commit --no-verify (forbidden in agent sessions, CLAUDE.md policy)
+        - git push --no-verify (forbidden in agent sessions, CLAUDE.md policy)
 
     SOFT_ALERT patterns
         Risky but sometimes legitimate — allowed, operator notified:
@@ -217,6 +219,40 @@ class TestHardBlockPatterns(unittest.TestCase):
 
     def test_printf_hex_pipe_bash(self) -> None:
         self._assert_blocked(r'printf "\x72\x6d\x20\x2d\x72\x66\x20\x2f" | bash')
+
+    # -- --no-verify (OMN-3208): forbidden in agent sessions --
+
+    def test_git_commit_no_verify(self) -> None:
+        """git commit --no-verify must be hard-blocked in agent sessions."""
+        self._assert_blocked('git commit --no-verify -m "fix: bypass hooks"')
+
+    def test_git_commit_no_verify_flag_first(self) -> None:
+        """Flag order: --no-verify before -m must also be blocked."""
+        self._assert_blocked("git commit --no-verify -m 'wip'")
+
+    def test_git_push_no_verify(self) -> None:
+        """git push --no-verify must be hard-blocked."""
+        self._assert_blocked("git push --no-verify origin main")
+
+    def test_git_commit_no_verify_bare(self) -> None:
+        """Bare git commit --no-verify (no other flags) must be blocked."""
+        self._assert_blocked("git commit --no-verify")
+
+    def test_git_no_verify_case_insensitive(self) -> None:
+        """Pattern is case-insensitive."""
+        self._assert_blocked("git commit --NO-VERIFY -m 'test'")
+
+    def test_git_no_verify_in_pipeline(self) -> None:
+        """--no-verify in a chained command must also be blocked."""
+        self._assert_blocked("git add . && git commit --no-verify -m 'msg'")
+
+    def test_git_commit_without_no_verify_is_allowed(self) -> None:
+        """Normal git commit must NOT be hard-blocked."""
+        self._assert_not_blocked('git commit -m "fix: proper commit"')
+
+    def test_git_push_without_no_verify_is_allowed_by_hard_block(self) -> None:
+        """git push without --no-verify must NOT match hard-block (may match soft-alert)."""
+        self._assert_not_blocked("git push origin main")
 
 
 # =============================================================================
@@ -490,6 +526,43 @@ class TestMainIntegration(unittest.TestCase):
             }
         )
         self.assertEqual(code, 2)
+
+    def test_main_hard_blocks_git_commit_no_verify(self) -> None:
+        """git commit --no-verify is blocked with a policy-specific reason."""
+        stdout, code = _run_main(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": 'git commit --no-verify -m "bypass"'},
+            }
+        )
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+        # Reason must mention the policy and the fix direction
+        self.assertIn("--no-verify", response["reason"])
+        self.assertIn("CLAUDE.md", response["reason"])
+
+    def test_main_hard_blocks_git_push_no_verify(self) -> None:
+        """git push --no-verify is also blocked."""
+        stdout, code = _run_main(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "git push --no-verify origin main"},
+            }
+        )
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+
+    def test_main_allows_git_commit_without_no_verify(self) -> None:
+        """Normal git commit must not be blocked."""
+        stdout, code = _run_main(
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": 'git commit -m "fix: proper commit"'},
+            }
+        )
+        self.assertEqual(code, 0)
 
     # -- SOFT_ALERT integration --
 

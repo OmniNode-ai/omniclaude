@@ -6,10 +6,18 @@ responds accordingly:
 
 HARD_BLOCK tier
     The command matches a pattern so catastrophic (filesystem format, disk
-    wipe, recursive rm on root/home, obfuscated shell execution) that it must
-    never run.  The hook emits a ``{"decision": "block", "reason": "..."}``
-    JSON response and exits with code **2**, causing Claude Code to abort the
-    tool call entirely.
+    wipe, recursive rm on root/home, obfuscated shell execution) or
+    categorically forbidden in agent sessions (``--no-verify`` on git hooks)
+    that it must never run.  The hook emits a
+    ``{"decision": "block", "reason": "..."}`` JSON response and exits with
+    code **2**, causing Claude Code to abort the tool call entirely.
+
+    ``--no-verify`` is classified as a hard-block for agents (not humans)
+    because agents have zero legitimate need to bypass pre-commit hooks.  If a
+    hook is broken, the correct action is to fix the hook or create a ticket.
+    Bypassing hooks masks pre-existing violations that OMN-3201 is tasked with
+    eliminating.  Human operators retain an out-of-band emergency path via
+    shell alias or direct terminal access.
 
 SOFT_ALERT tier
     The command is risky but not categorically forbidden (force push, hard
@@ -88,6 +96,16 @@ __all__ = [
 # inside an automated coding session.
 
 HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
+    # --no-verify on any git command — forbidden in agent sessions (CLAUDE.md policy).
+    # Agents must fix pre-commit violations, not bypass them.  Matches:
+    #   git commit --no-verify
+    #   git push --no-verify
+    #   git commit -m "..." --no-verify
+    # The flag may appear anywhere in the git command, so we match broadly.
+    re.compile(
+        r"\bgit\b[^;|&\n]*--no-verify\b",
+        re.IGNORECASE | re.MULTILINE,
+    ),
     # rm targeting root, home, bare wildcard, or $HOME — catastrophic data loss
     re.compile(
         r"(?:^|[;&|]\s*)(?:/(?:usr/(?:local/)?)?bin/)?rm\s+-\S*[rf]\S*\s+"
@@ -334,12 +352,26 @@ def main() -> int:
     # Tier 1 — HARD_BLOCK
     # ------------------------------------------------------------------
     if matches_any(command, HARD_BLOCK_PATTERNS):
-        block_response: dict[str, str] = {
-            "decision": "block",
-            "reason": (
+        # Provide a specific, actionable reason for --no-verify blocks.
+        _no_verify_pattern = re.compile(
+            r"\bgit\b[^;|&\n]*--no-verify\b", re.IGNORECASE | re.MULTILINE
+        )
+        if _no_verify_pattern.search(command):
+            block_reason = (
+                "--no-verify is forbidden in agent sessions (CLAUDE.md policy). "
+                "Fix the pre-commit violations in your code instead of bypassing "
+                "the hook. If a hook itself is broken, create a ticket to fix it "
+                "(see OMN-3201). Human operators retain an emergency bypass via "
+                "direct terminal access outside Claude Code."
+            )
+        else:
+            block_reason = (
                 "Destructive command blocked by bash_guard: matches hard-block "
                 f"pattern. Command: {command[:200]}"
-            ),
+            )
+        block_response: dict[str, str] = {
+            "decision": "block",
+            "reason": block_reason,
         }
         if webhook_url:
             notifier = threading.Thread(
