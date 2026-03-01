@@ -289,18 +289,13 @@ if [[ -z "$PR_NUMBER" || -z "$REPO" ]]; then
   exit 1
 fi
 
-TICKET_ID_ARG=""
-if [[ -n "$TICKET_ID" ]]; then
-  TICKET_ID_ARG="--arg ticket_id=${TICKET_ID}"
-fi
-
 exec claude --skill onex:auto-merge \
   --arg "pr_number=${PR_NUMBER}" \
   --arg "repo=${REPO}" \
   --arg "strategy=${STRATEGY}" \
   --arg "gate_timeout_hours=${GATE_TIMEOUT_HOURS}" \
   --arg "delete_branch=${DELETE_BRANCH}" \
-  ${TICKET_ID_ARG}
+  ${TICKET_ID:+--arg "ticket_id=${TICKET_ID}"}
 ```
 
 | Invocation | Description |

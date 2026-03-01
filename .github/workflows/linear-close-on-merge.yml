@@ -93,7 +93,7 @@ jobs:
           echo "Marking $TICKET_ID as Done (PR #$PR_NUMBER merged in $REPO)"
 
           # Search for the ticket by identifier using the Linear GraphQL API
-          SEARCH_RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          SEARCH_RESPONSE=$(curl -s --max-time 30 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"query\": \"{ issue(id: \\\"$TICKET_ID\\\") { id identifier title state { name } } }\"}" \
@@ -142,7 +142,7 @@ jobs:
           fi
 
           # Look up the "Done" state ID for this team
-          TEAM_RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          TEAM_RESPONSE=$(curl -s --max-time 30 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"query\": \"{ issue(id: \\\"$TICKET_ID\\\") { team { id states { nodes { id name type } } } } }\"}" \
@@ -177,7 +177,7 @@ jobs:
           fi
 
           # Update the ticket state to Done
-          UPDATE_RESPONSE=$(curl -s -X POST https://api.linear.app/graphql \
+          UPDATE_RESPONSE=$(curl -s --max-time 30 -X POST https://api.linear.app/graphql \
             -H "Authorization: $LINEAR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{\"query\": \"mutation { issueUpdate(id: \\\"$ISSUE_ID\\\", input: { stateId: \\\"$DONE_STATE_ID\\\" }) { success issue { id state { name } } } }\"}" \
