@@ -59,7 +59,7 @@ jobs:
 
           # Try standard branch: */omn-XXXX-* or */OMN-XXXX-*
           if [[ -z "$TICKET_ID" ]]; then
-            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "(OMN|omn)-[0-9]+" | head -1 | tr '[:lower:]' '[:upper:]')
+            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "(OMN|omn)-[0-9]+" | head -1 | tr '[:lower:]' '[:upper:]')  # First OMN ID = primary ticket for this branch
           fi
 
           if [[ -z "$TICKET_ID" ]]; then
@@ -81,6 +81,12 @@ jobs:
         run: |
           if [ -z "$LINEAR_API_KEY" ]; then
             echo "LINEAR_API_KEY is not set — skipping Linear ticket close"
+            exit 0
+          fi
+
+          # Validate LINEAR_API_KEY format (alphanumeric only)
+          if ! echo "$LINEAR_API_KEY" | grep -qE '^[A-Za-z0-9_-]+$'; then
+            echo "LINEAR_API_KEY appears malformed — skipping Linear ticket close"
             exit 0
           fi
 
@@ -136,7 +142,7 @@ jobs:
           echo "Issue $TICKET_ID (ID: $ISSUE_ID) current state: $CURRENT_STATE"
 
           # Only mark Done if not already Done/Cancelled/Duplicate
-          if echo "$CURRENT_STATE" | grep -qiE "^(done|cancelled|duplicate|completed)$"; then
+          if echo "$CURRENT_STATE" | grep -qiE "^(done|cancelled|duplicate|completed|merged|released|shipped|closed)$"; then
             echo "$TICKET_ID is already in state '$CURRENT_STATE' — no update needed."
             exit 0
           fi
