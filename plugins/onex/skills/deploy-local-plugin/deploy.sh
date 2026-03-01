@@ -490,6 +490,21 @@ if [[ "$EXECUTE" == "true" ]]; then
     fi
     echo -e "${GREEN}  Project root: ${PROJECT_ROOT}${NC}"
 
+    # Guard: deploy must run from the canonical (main) worktree, not a secondary worktree.
+    # Deploying from a worktree sets installLocation to that worktree path, which breaks
+    # the plugin when the worktree is later pruned (known_marketplaces.json points at nothing).
+    MAIN_WORKTREE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+    if [[ -n "$MAIN_WORKTREE" && "$PROJECT_ROOT" != "$MAIN_WORKTREE" ]]; then
+        echo -e "${RED}Error: Deploy must run from the canonical (main) worktree, not a secondary worktree.${NC}" >&2
+        echo "" >&2
+        echo -e "  Current:   ${YELLOW}${PROJECT_ROOT}${NC}" >&2
+        echo -e "  Canonical: ${GREEN}${MAIN_WORKTREE}${NC}" >&2
+        echo "" >&2
+        echo "Run deploy from the canonical repo instead:" >&2
+        echo "  CLAUDE_PLUGIN_ROOT=${MAIN_WORKTREE}/plugins/onex $0 --execute" >&2
+        exit 1
+    fi
+
     # Create target directory FIRST, then write bumped version to target only.
     # Never mutate SOURCE plugin.json — that caused corruption when deploys fail midway.
     mkdir -p "$TARGET"
