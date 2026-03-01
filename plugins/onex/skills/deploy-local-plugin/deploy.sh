@@ -732,6 +732,18 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
+    # =============================================================================
+    # INVARIANT: NEVER add hooks to settings.json.
+    # Hook registration lives EXCLUSIVELY in plugins/onex/hooks/hooks.json.
+    # Claude Code loads hooks.json automatically via the plugin manifest.
+    # Any hooks block in settings.json duplicates every invocation, causing:
+    #   - doubled log entries
+    #   - doubled Kafka/DB writes
+    #   - one invocation missing CLAUDE_PLUGIN_ROOT → find_python() crash
+    #
+    # The block below REMOVES legacy hook entries that pre-date OMN-3017.
+    # It DOES NOT add any new entries. Keep it that way.
+    # =============================================================================
     # Remove any legacy onex hook entries from settings.json.
     # Hooks are declared authoritatively in hooks/hooks.json (plugin manifest).
     # Claude Code loads hooks.json automatically via the plugin; settings.json

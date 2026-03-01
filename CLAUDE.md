@@ -287,6 +287,7 @@ Recurring wrong-approach mistakes surfaced from session analysis (875 sessions, 
 | Iterating plans more than 2 self-review passes | After 2 review cycles, present the plan to the user. Do not continue internally iterating. |
 | Inventing raw Kafka topic strings outside contract.yaml | All topic names must come from a `ContractConfig` or event contract YAML. Never hardcode topic strings. |
 | Writing "call helper X()" in a skill without a real implementation | If logic is needed, it must be a tool, node, or handler — not a phantom callable referenced in markdown. |
+| Adding hooks to `settings.json` | Never add a `hooks` block to `~/.claude/settings.json`. Hook registration lives exclusively in `plugins/onex/hooks/hooks.json`. The plugin manifest loads it automatically. Duplicate entries in `settings.json` cause every event to fire twice (doubled log entries, doubled Kafka emissions, find_python() crashes). deploy.sh actively removes any such entries on each deploy. |
 
 ### Fail-Fast Design
 
@@ -305,7 +306,7 @@ Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is no
 
 ### prune-worktrees.sh
 
-Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`.
+Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`. <!-- local-path-ok -->
 A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`)
 or its remote branch no longer exists.
 
