@@ -27,6 +27,10 @@ inputs:
     type: bool
     description: Delete branch after merge (default true)
     required: false
+  - name: ticket_id
+    type: str
+    description: "Linear ticket identifier (e.g. OMN-1234) to mark Done after merge (optional)"
+    required: false
 outputs:
   - name: skill_result
     type: ModelSkillResult
@@ -52,6 +56,9 @@ args:
     required: false
   - name: --no-delete-branch
     description: Don't delete branch after merge
+    required: false
+  - name: --ticket-id
+    description: Linear ticket ID to mark Done after merge (e.g. OMN-1234)
     required: false
 ---
 
@@ -172,9 +179,29 @@ gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_br
 This exception is documented and intentional. All other PR operations (view, list, checks)
 use tier-aware routing.
 
-### Step 6: Post Merge Notification <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
+### Step 6: Post Merge Notification and Close Linear Ticket <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
-Post Slack notification on merge completion.
+After a successful merge:
+
+1. **Post Slack notification** on merge completion.
+2. **Close Linear ticket** (if `ticket_id` is available in context — passed by `ticket-pipeline`):
+   ```python
+   if ticket_id:
+       try:
+           mcp__linear-server__save_issue(id=ticket_id, state="Done")
+       except Exception as e:
+           print(f"[auto-merge] Warning: Could not mark {ticket_id} as Done: {e}")
+           # Non-blocking: merge already succeeded; do not fail the skill
+   ```
+   This is a belt-and-suspenders step. The primary path (`ticket-pipeline` Phase 6)
+   also marks the ticket Done. If the pipeline session ended before the merge (e.g.
+   CI was still running), the `linear-close-on-merge` GitHub Actions workflow
+   (`.github/workflows/linear-close-on-merge.yml`) provides a third fallback.
+
+**Ticket ID resolution order:**
+1. Passed explicitly as `--ticket-id OMN-XXXX` argument
+2. Extracted from PR branch name via `OMN-XXXX` pattern (fallback if `--ticket-id` not provided)
+3. Skip update if neither resolves to a valid ID
 
 ## Slack Gate Message Format
 
