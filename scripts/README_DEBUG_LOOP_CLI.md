@@ -282,7 +282,7 @@ pip install click rich asyncpg
 **Error: "No module named 'omniclaude'"**
 ```bash
 # Ensure you're in the project root
-cd /Volumes/PRO-G40/Code/omniclaude
+cd /Volumes/PRO-G40/Code/omniclaude  # local-path-ok
 
 # Run from project root
 python3 scripts/debug_loop_cli.py --help

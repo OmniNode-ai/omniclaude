@@ -172,7 +172,7 @@ algorithm:
     - "Calculate confidence score"
 
   normalization_rules:
-    - "File paths: /home/user/file.py → <PATH>"
+    - "File paths: /home/user/file.py → <PATH>"  # local-path-ok
     - "Line numbers: line 42 → line <LINE>"
     - "Variable names: variable 'x' → variable '<VAR>'"
     - "Values: value '123' → value '<VALUE>'"
@@ -216,7 +216,7 @@ testing:
 
   fixtures:
     - name: "file_not_found"
-      error: "FileNotFoundError: [Errno 2] No such file or directory: '/home/user/test.py'"
+      error: "FileNotFoundError: [Errno 2] No such file or directory: '/home/user/test.py'"  # local-path-ok
       expected_pattern: "FileNotFoundError: [Errno 2] No such file or directory: '<PATH>'"
       expected_category: "file_error"
 

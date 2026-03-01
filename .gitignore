@@ -322,6 +322,7 @@ tmp/*
 *.pkl
 agents/models/
 test_results.txt
+test_results_*.txt
 
 # Temporary Documentation Files (auto-generated guides, reports, and cheatsheets)
 *_IMPROVEMENTS.md

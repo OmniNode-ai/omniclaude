@@ -52,7 +52,7 @@ contributor activity, and optionally lines-of-code metrics from a local archive.
 /gather-github-stats --github-only
 
 # Local archive only (no GitHub API calls)
-/gather-github-stats --local-only --local-path /Volumes/PRO-G40/Code/omni_home
+/gather-github-stats --local-only --local-path /Volumes/PRO-G40/Code/omni_home  # local-path-ok
 
 # Use cached results (fast re-run)
 /gather-github-stats --cached
@@ -61,7 +61,7 @@ contributor activity, and optionally lines-of-code metrics from a local archive.
 /gather-github-stats --output /tmp/my_stats.md
 
 # Include LOC metrics (slow — scans every .py/.ts file)
-/gather-github-stats --github-only --include-local-loc --local-path /Volumes/PRO-G40/Code
+/gather-github-stats --github-only --include-local-loc --local-path /Volumes/PRO-G40/Code  # local-path-ok
 
 # Include private repos
 /gather-github-stats --github-only --include-private

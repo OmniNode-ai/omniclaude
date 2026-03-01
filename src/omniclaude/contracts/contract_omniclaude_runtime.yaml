@@ -26,7 +26,7 @@ dependencies:
     env_var: "OMNICLAUDE_CONTRACTS_ROOT"
     description: >
       Path to omniclaude skill node contracts directory (node_skill_*/contract.yaml).
-      Dev: /Volumes/PRO-G40/Code/omni_home/omniclaude/src/omniclaude/nodes
+      Dev: /Volumes/PRO-G40/Code/omni_home/omniclaude/src/omniclaude/nodes  # local-path-ok
       Docker: /app/src/omniclaude/nodes
     required: true
 

@@ -18,7 +18,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **Changes**:
 - Added comprehensive environment variables documentation
 - Replaced hardcoded venv path `~/Code/omniclaude/claude/lib/.venv` with `${PROJECT_ROOT}/claude/lib/.venv`
-- Replaced repository documentation path `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` with `${PROJECT_ROOT}/CLAUDE.md`
+- Replaced repository documentation path `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` with `${PROJECT_ROOT}/CLAUDE.md`  <!-- local-path-ok -->
 - Added example .env configurations for each OmniNode repository
 - Updated troubleshooting section with environment variable verification commands
 - Updated Resources section with variable-based paths
@@ -36,7 +36,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 - `plugins/onex/skills/routing/request-agent-routing/execute_direct.py`
 
 **Changes**:
-- Replaced hardcoded default `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection
+- Replaced hardcoded default `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection  <!-- local-path-ok -->
 - Added priority-based path resolution:
   1. `OMNICLAUDE_PATH` environment variable (highest priority)
   2. Auto-detection from common locations
@@ -45,8 +45,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 - Improved error messages with hints for missing paths
 - Added cross-platform fallback paths:
   - `${HOME}/Code/omniclaude`
-  - `/Users/jonah/Code/omniclaude`
-  - `/Volumes/PRO-G40/Code/omniclaude`
+  - `/Users/jonah/Code/omniclaude`  <!-- local-path-ok -->
+  - `/Volumes/PRO-G40/Code/omniclaude`  <!-- local-path-ok -->
   - `/workspace/omniclaude`
 
 ### 3. Linear Insights Deep Dive Script
@@ -54,7 +54,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **File**: `plugins/onex/skills/linear-insights/deep-dive`
 
 **Changes**:
-- Replaced hardcoded output directory `/Users/jonah/Code/omni_save` with `${HOME}/Code/omni_save`
+- Replaced hardcoded output directory `/Users/jonah/Code/omni_save` with `${HOME}/Code/omni_save`  <!-- local-path-ok -->
 - Updated documentation references from absolute paths to `${LINEAR_INSIGHTS_OUTPUT_DIR}`
 - Added `OMNICLAUDE_PATH` environment variable support in Python snapshot code
 - Enhanced path detection logic with multiple fallback locations
@@ -65,7 +65,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **File**: `plugins/onex/skills/trace-correlation-id/trace-correlation-id`
 
 **Changes**:
-- Replaced hardcoded path `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection
+- Replaced hardcoded path `/Volumes/PRO-G40/Code/omniclaude` with environment variable detection  <!-- local-path-ok -->
 - Added priority-based resolution: OMNICLAUDE_PATH → PROJECT_ROOT → auto-detection
 - Added validation and helpful error messages
 - Supports cross-platform paths with fallback list
@@ -97,8 +97,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `PROJECT_ROOT` | Repository containing the plugin | `/Users/jonah/Code/omniclaude` |
-| `OMNICLAUDE_PATH` | Location of omniclaude repository | `/Users/jonah/Code/omniclaude` |
+| `PROJECT_ROOT` | Repository containing the plugin | `/Users/jonah/Code/omniclaude` | <!-- local-path-ok -->
+| `OMNICLAUDE_PATH` | Location of omniclaude repository | `/Users/jonah/Code/omniclaude` | <!-- local-path-ok -->
 | `CLAUDE_PLUGIN_ROOT` | Location of ONEX plugin (auto-detected) | `${PROJECT_ROOT}/plugins/onex` |
 
 ### Infrastructure Variables
@@ -125,8 +125,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omniclaude
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude
+PROJECT_ROOT=/Users/jonah/Code/omniclaude  # local-path-ok
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -135,8 +135,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omniarchon
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
+PROJECT_ROOT=/Users/jonah/Code/omniarchon  # local-path-ok
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -145,8 +145,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omnibase_core
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
+PROJECT_ROOT=/Users/jonah/Code/omnibase_core  # local-path-ok
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -155,8 +155,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omnidash
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # For shared config
+PROJECT_ROOT=/Users/jonah/Code/omnidash  # local-path-ok
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -189,8 +189,8 @@ All scripts now support auto-detection with fallback paths:
 1. Environment variable (e.g., `OMNICLAUDE_PATH`)
 2. Auto-detect from common locations:
    - `${HOME}/Code/omniclaude`
-   - `/Users/jonah/Code/omniclaude`
-   - `/Volumes/PRO-G40/Code/omniclaude`
+   - `/Users/jonah/Code/omniclaude`  <!-- local-path-ok -->
+   - `/Volumes/PRO-G40/Code/omniclaude`  <!-- local-path-ok -->
    - `/workspace/omniclaude`
 3. Error with helpful message
 
