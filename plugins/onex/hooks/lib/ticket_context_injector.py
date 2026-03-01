@@ -141,8 +141,7 @@ def find_active_ticket(tickets_dir: Path | None = None) -> str | None:
         tickets found or directory doesn't exist.
 
     Note:
-        This function handles all errors gracefully and will never raise.
-        On any error, it returns None.
+        All exceptions are caught internally; on any error, returns None.
 
         DEPRECATED (OMN-3216): This function uses an mtime heuristic that is
         unreliable when completed tickets accumulate. Prefer CWD-based
