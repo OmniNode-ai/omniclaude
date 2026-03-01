@@ -85,7 +85,7 @@ jobs:
           fi
 
           # Validate LINEAR_API_KEY format (alphanumeric only)
-          if ! echo "$LINEAR_API_KEY" | grep -qE '^[A-Za-z0-9_-]+$'; then
+          if ! printf '%s' "$LINEAR_API_KEY" | grep -qE '^[A-Za-z0-9_-]+$'; then
             echo "LINEAR_API_KEY appears malformed — skipping Linear ticket close"
             exit 0
           fi
@@ -105,7 +105,7 @@ jobs:
             -d "{\"query\": \"{ issue(id: \\\"$TICKET_ID\\\") { id identifier title state { name } } }\"}" \
             2>&1)
 
-          echo "Linear API search: $(echo "$SEARCH_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('found' if d.get('data',{}).get('issue') else 'not found')" 2>/dev/null || echo "completed")"
+          echo "Linear API search: $(echo "$SEARCH_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('found' if d.get('data',{}).get('issue') else 'not found')" 2>/dev/null || echo "status-unknown")"
 
           # Extract the internal UUID
           ISSUE_ID=$(echo "$SEARCH_RESPONSE" | python3 -c "

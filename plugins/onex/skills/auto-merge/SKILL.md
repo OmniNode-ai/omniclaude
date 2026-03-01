@@ -197,12 +197,12 @@ After a successful merge:
    also marks the ticket Done. The `linear-close-on-merge` GitHub Actions workflow
    (`.github/workflows/linear-close-on-merge.yml`) runs unconditionally on every PR
    merge to main/develop, ensuring ticket closure even when the pipeline session has
-   ended.
+   ended (simultaneous closes from multiple paths are safe — Linear state updates are idempotent).
 
 **Ticket ID resolution order:**
 1. Passed explicitly as `--ticket-id OMN-XXXX` argument
 2. Extracted from PR branch name via `OMN-XXXX` pattern (fallback if `--ticket-id` not provided)
-   (branch name extraction: `git branch --show-current | grep -ioE '(OMN|omn)-[0-9]+' | head -1`; only reliable when session is checked out on the PR branch — returns empty string if HEAD is detached)
+   (branch name extraction: `git branch --show-current | grep -ioE '(OMN|omn)-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]'`; only reliable when session is checked out on the PR branch — returns empty string if HEAD is detached)
 3. Skip update if neither resolves to a valid ID
 
 ## Slack Gate Message Format
