@@ -22,7 +22,7 @@ from uuid import uuid4
 
 import pytest
 
-from plugins.onex.skills.golden_path_validate.golden_path_runner import (
+from plugins.onex.skills._golden_path_validate.golden_path_runner import (
     AssertionEngine,
     EvidenceArtifact,
     GoldenPathRunner,
@@ -257,11 +257,11 @@ class TestGoldenPathRunnerTimeout:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -308,11 +308,11 @@ class TestGoldenPathRunnerCorrelation:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -371,11 +371,11 @@ class TestGoldenPathRunnerCorrelation:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -429,11 +429,11 @@ class TestGoldenPathRunnerSuccess:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -495,11 +495,11 @@ class TestGoldenPathRunnerSuccess:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -549,11 +549,11 @@ class TestGoldenPathRunnerSchemaHandling:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -595,11 +595,11 @@ class TestGoldenPathRunnerSchemaHandling:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -649,15 +649,15 @@ class TestGoldenPathRunnerSchemaHandling:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner._import_schema_class",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner._import_schema_class",
                 return_value=mock_schema_class,
             ),
         ):
@@ -702,15 +702,15 @@ class TestGoldenPathRunnerSchemaHandling:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner._import_schema_class",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner._import_schema_class",
                 return_value=mock_schema_class,
             ),
         ):
@@ -746,11 +746,11 @@ class TestGoldenPathRunnerArtifactPath:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):
@@ -786,11 +786,11 @@ class TestGoldenPathRunnerArtifactPath:
 
         with (
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
                 return_value=mock_consumer,
             ),
             patch(
-                "plugins.onex.skills.golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
                 return_value=mock_producer,
             ),
         ):

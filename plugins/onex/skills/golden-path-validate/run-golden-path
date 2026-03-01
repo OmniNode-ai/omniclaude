@@ -76,7 +76,7 @@ decl = json.loads(decl_json)
 bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
 artifact_base = os.environ.get("GOLDEN_PATH_ARTIFACT_DIR", str(__import__("pathlib").Path.home() / ".claude" / "golden-path"))
 
-from plugins.onex.skills.golden_path_validate.golden_path_runner import GoldenPathRunner
+from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
 
 async def main():
     runner = GoldenPathRunner(

@@ -25,7 +25,7 @@ def _get_skills() -> set[str]:
     return {
         _normalize(d.name)
         for d in skills_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("_")
+        if d.is_dir() and not d.name.startswith("_") and (d / "SKILL.md").exists()
     }
 
 
