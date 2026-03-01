@@ -43,6 +43,16 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-compact-probe.sh"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "^(Edit|Write)$",
