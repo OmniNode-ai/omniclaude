@@ -119,7 +119,7 @@ Tickets are dispatched **sequentially** (never in parallel). After each ticket:
 
 ## Resume Flow
 
-### Step 1: Acquire lock
+### Acquire lock
 
 ```
 lock_path = ~/.claude/epics/{epic_id}/resume-epic.lock
@@ -134,7 +134,7 @@ If lock_path exists AND mtime < 15 minutes ago:
 Write lock_path with current timestamp.
 ```
 
-### Step 2: Fetch epic and children
+### Fetch epic and children
 
 ```python
 epic = mcp__linear-server__get_issue(epic_id, includeRelations=False)
@@ -143,7 +143,7 @@ children = mcp__linear-server__list_issues(parentId=epic["id"], limit=250)
 
 Store `total_children = len(children)`.
 
-### Step 3: Classify each child
+### Classify each child
 
 For each child ticket:
 
@@ -163,7 +163,7 @@ else:
 
 Build two lists: `to_dispatch` and `skipped`.
 
-### Step 4: If --dry-run
+### Dry-run output path
 
 Print classification table:
 
@@ -193,7 +193,7 @@ Write `ModelSkillResult`:
 
 Exit.
 
-### Step 5: Dispatch (live run)
+### Dispatch (live run)
 
 For each ticket in `to_dispatch` (sequential):
 
@@ -215,7 +215,7 @@ For each ticket in `to_dispatch` (sequential):
    Continue.
 ```
 
-### Step 6: Release lock and report
+### Release lock and report
 
 ```
 Delete ~/.claude/epics/{epic_id}/resume-epic.lock
