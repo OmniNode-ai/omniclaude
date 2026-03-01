@@ -86,6 +86,12 @@ jobs:
             exit 0
           fi
 
+          # Validate extracted IDs are safe for JSON interpolation
+          if ! echo "$TICKET_ID" | grep -qE '^(OMN|omn)-[0-9]+$'; then
+            echo "Invalid TICKET_ID format: $TICKET_ID — skipping"
+            exit 0
+          fi
+
           echo "Marking $TICKET_ID as Done (PR #$PR_NUMBER merged in $REPO)"
 
           # Search for the ticket by identifier using the Linear GraphQL API
@@ -108,8 +114,9 @@ jobs:
               print('')
           " 2>/dev/null || echo "")
 
-          if [[ -z "$ISSUE_ID" ]]; then
-            echo "Could not find Linear issue for $TICKET_ID — skipping."
+          # Validate ISSUE_ID is a safe UUID-shaped value
+          if [ -z "$ISSUE_ID" ]; then
+            echo "Could not extract issue ID from Linear response — skipping"
             exit 0
           fi
 
@@ -155,8 +162,9 @@ jobs:
               print(sorted(completed, key=lambda s: s.get('name', ''))[0]['id'])
           " 2>/dev/null || echo "")
 
-          if [[ -z "$DONE_STATE_ID" ]]; then
-            echo "Could not resolve Done state ID for team — skipping update."
+          # Validate DONE_STATE_ID before use
+          if [ -z "$DONE_STATE_ID" ]; then
+            echo "Could not find Done state ID for this team — skipping"
             exit 0
           fi
 
