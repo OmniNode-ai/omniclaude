@@ -99,7 +99,7 @@ def normalize_failure_output(raw_output: str, repo_root: str) -> str:
 
     Args:
         raw_output: Raw output from a failed check (e.g., pytest output)
-        repo_root: Absolute path to repository root (e.g., /home/user/myproject)
+        repo_root: Absolute path to repository root (e.g., /home/user/myproject)  # local-path-ok
 
     Returns:
         Normalized string suitable for deterministic hashing
