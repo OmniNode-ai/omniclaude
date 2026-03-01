@@ -141,10 +141,13 @@ jobs:
                         .get('team', {})
                         .get('states', {})
                         .get('nodes', []))
-          for s in states:
-              if s.get('type', '').upper() == 'COMPLETED':
-                  print(s['id'])
-                  break
+          # Prefer 'Done' by name, fall back to deterministic first COMPLETED state
+          completed = [s for s in states if s.get('type', '').upper() == 'COMPLETED']
+          done = next((s for s in completed if s.get('name', '').lower() == 'done'), None)
+          if done:
+              print(done['id'])
+          elif completed:
+              print(sorted(completed, key=lambda s: s.get('name', ''))[0]['id'])
           " 2>/dev/null || echo "")
 
           if [[ -z "$DONE_STATE_ID" ]]; then
