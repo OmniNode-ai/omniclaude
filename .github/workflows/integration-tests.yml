@@ -31,7 +31,16 @@ jobs:
   # ============================================================================
   database-integration:
     name: Database Integration Tests
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     timeout-minutes: 20  # Prevent infinite hangs
 
     services:
@@ -251,7 +260,16 @@ jobs:
   # ============================================================================
   kafka-integration:
     name: Kafka Integration Tests
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     timeout-minutes: 20  # Prevent infinite hangs
 
     services:
@@ -400,7 +418,16 @@ jobs:
   # ============================================================================
   agent-observability:
     name: Agent Observability Tests
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     timeout-minutes: 20  # Prevent infinite hangs
 
     services:
@@ -557,7 +584,16 @@ jobs:
   # ============================================================================
   full-pipeline:
     name: Full Pipeline Integration Tests
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     timeout-minutes: 25  # Prevent infinite hangs (longer for full pipeline)
 
     services:
@@ -669,7 +705,16 @@ jobs:
   # ============================================================================
   integration-summary:
     name: Integration Tests Summary
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     needs:
       - database-integration
       - kafka-integration
