@@ -505,6 +505,15 @@ class ModelHookSessionStartedPayload(BaseModel):
         ...,
         description="What triggered the session start",
     )
+    action_description: str = Field(
+        default="",
+        max_length=160,
+        description=(
+            "Human-readable description of this event for consumer display. "
+            "Format: 'Session: {repo}@{branch}'. Empty default is safe for "
+            "unupdated emitters. See OMN-3297."
+        ),
+    )
 
 
 class ModelHookSessionEndedPayload(BaseModel):
@@ -588,6 +597,15 @@ class ModelHookSessionEndedPayload(BaseModel):
         default=0,
         ge=0,
         description="Number of tool invocations during the session",
+    )
+    action_description: str = Field(
+        default="",
+        max_length=160,
+        description=(
+            "Human-readable description of this event for consumer display. "
+            "Format: 'Session ended: {tool_count} tools, {duration}ms'. "
+            "Empty default is safe for unupdated emitters. See OMN-3297."
+        ),
     )
 
 
@@ -865,6 +883,15 @@ class ModelHookPromptSubmittedPayload(BaseModel):
         default=None,
         description="Classified intent if available (workflow, question, fix, etc.)",
     )
+    action_description: str = Field(
+        default="",
+        max_length=160,
+        description=(
+            "Human-readable description of this event for consumer display. "
+            "Format: 'Prompt: {first_80_chars}'. Empty default is safe for "
+            "unupdated emitters. See OMN-3297."
+        ),
+    )
 
     @field_validator("prompt_preview", mode="before")
     @classmethod
@@ -993,6 +1020,16 @@ class ModelHookToolExecutedPayload(BaseModel):
             "avoid including secrets. Apply appropriate access controls."
         ),
     )
+    action_description: str = Field(
+        default="",
+        max_length=160,
+        description=(
+            "Human-readable description of this tool execution for consumer display. "
+            "Format varies by tool: 'Read: {basename}', 'Bash: {first_60_chars}', "
+            "'Glob: {pattern}', 'Grep: {pattern}', '{ToolName}: unknown'. "
+            "Empty default is safe for unupdated emitters. See OMN-3297."
+        ),
+    )
 
 
 # =============================================================================
@@ -1105,6 +1142,15 @@ class ModelHookContextInjectedPayload(BaseModel):
         ge=0,
         le=10000,
         description="Time taken to retrieve context in milliseconds (max 10 seconds)",
+    )
+    action_description: str = Field(
+        default="",
+        max_length=160,
+        description=(
+            "Human-readable description of this context injection for consumer display. "
+            "Format: 'Context: {pattern_count} patterns ({token_count} tokens)'. "
+            "Empty default is safe for unupdated emitters. See OMN-3297."
+        ),
     )
 
 

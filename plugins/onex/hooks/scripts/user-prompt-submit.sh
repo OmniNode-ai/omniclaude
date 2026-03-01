@@ -114,6 +114,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
     # The daemon's EventRegistry handles per-topic field filtering:
     #   evt payloads MUST NOT include prompt_b64 (daemon strips it).
     #   cmd payloads include prompt_b64 for intelligence processing.
+    # Build action_description per OMN-3297: "Prompt: {first_80_chars}"
+    _AD_PROMPT=$(printf '%s' "${PROMPT:0:80}" | tr '\n\r' '  ')
+    _AD_PROMPT_STR="Prompt: ${_AD_PROMPT}"
+    _AD_PROMPT_STR="${_AD_PROMPT_STR:0:160}"
+
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | redact_secrets)" \
@@ -121,7 +126,8 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
         --arg prompt_b64 "$PROMPT_B64" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg event_type "UserPromptSubmit" \
-        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
+        --arg action_description "$_AD_PROMPT_STR" \
+        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type, action_description: $action_description}' 2>/dev/null)
 
     if [[ -n "$PROMPT_PAYLOAD" ]]; then
         emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &

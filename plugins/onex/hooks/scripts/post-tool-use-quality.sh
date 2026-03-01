@@ -342,6 +342,45 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
         TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
+        # Build action_description per OMN-3297 format spec and precedence table.
+        # Precedence for file-path tools: file_path -> path -> basename
+        # Bash: first 60 chars of command, stripped of newlines
+        # Glob: full pattern
+        # Grep: full pattern
+        # Other: "{ToolName}: unknown"
+        ACTION_DESCRIPTION=""
+        case "$TOOL_NAME" in
+            Read|Write|Edit|NotebookEdit)
+                _AD_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_input.path // ""' 2>/dev/null || echo "")
+                if [[ -n "$_AD_PATH" && "$_AD_PATH" != "null" ]]; then
+                    _AD_BASE="${_AD_PATH##*/}"
+                    ACTION_DESCRIPTION="${TOOL_NAME}: ${_AD_BASE}"
+                else
+                    ACTION_DESCRIPTION="${TOOL_NAME}: unknown"
+                fi
+                ;;
+            Bash)
+                _AD_CMD=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")
+                _AD_CMD=$(printf '%s' "$_AD_CMD" | tr '\n\r' '  ')
+                _AD_CMD="${_AD_CMD:0:60}"
+                ACTION_DESCRIPTION="Bash: ${_AD_CMD:-unknown}"
+                ;;
+            Glob)
+                _AD_PAT=$(echo "$TOOL_INFO" | jq -r '.tool_input.pattern // ""' 2>/dev/null || echo "")
+                ACTION_DESCRIPTION="Glob: ${_AD_PAT:-unknown}"
+                ;;
+            Grep)
+                _AD_PAT=$(echo "$TOOL_INFO" | jq -r '.tool_input.pattern // .tool_input.query // ""' 2>/dev/null || echo "")
+                ACTION_DESCRIPTION="Grep: ${_AD_PAT:-unknown}"
+                ;;
+            *)
+                ACTION_DESCRIPTION="${TOOL_NAME}: unknown"
+                ;;
+        esac
+        # Normalize: strip newlines, cap at 160 chars
+        ACTION_DESCRIPTION=$(printf '%s' "$ACTION_DESCRIPTION" | tr '\n\r' '  ')
+        ACTION_DESCRIPTION="${ACTION_DESCRIPTION:0:160}"
+
         # Build JSON payload for tool.executed event
         # Use jq for proper JSON escaping of all fields
         PAYLOAD=$(jq -n \
@@ -350,11 +389,13 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --argjson success "$([[ "$TOOL_SUCCESS" == "true" ]] && echo "true" || echo "false")" \
             --arg duration_ms "${DURATION_MS:-}" \
             --arg summary "$TOOL_SUMMARY" \
+            --arg action_description "$ACTION_DESCRIPTION" \
             '{
                 session_id: $session_id,
                 tool_name: $tool_name,
                 success: $success,
-                summary: $summary
+                summary: $summary,
+                action_description: $action_description
             } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
         )
 
