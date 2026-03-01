@@ -4,7 +4,7 @@ You are executing the gap-fix skill. This prompt defines the complete orchestrat
 
 ---
 
-## Step 0: Parse Arguments
+## Step 0: Parse Arguments <!-- ai-slop-ok: skill-step-heading -->
 
 Parse from `$ARGUMENTS`:
 

@@ -40,9 +40,10 @@ jobs:
     steps:
       - name: Extract ticket ID from branch name
         id: extract
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
         run: |
-          BRANCH="${{ github.event.pull_request.head.ref }}"
           echo "Branch: $BRANCH"
 
           # Pattern 1: jonahgabriel/omn-XXXX-... or jonah/omn-XXXX-...

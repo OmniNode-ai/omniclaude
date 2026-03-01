@@ -8,7 +8,7 @@ You are executing the gap-analysis skill. This prompt defines the complete orche
 
 ---
 
-## Step 0: Parse Arguments
+## Step 0: Parse Arguments <!-- ai-slop-ok: skill-step-heading -->
 
 Parse from `$ARGUMENTS`:
 
