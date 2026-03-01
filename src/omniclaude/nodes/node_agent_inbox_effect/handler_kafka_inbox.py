@@ -35,6 +35,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Final
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_agent_inbox_effect.models import (
     ModelInboxDeliveryResult,
     ModelInboxMessage,
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 TOPIC_DIRECTED_TEMPLATE: Final[str] = "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"  # noqa: arch-topic-naming
 
 #: Static topic for epic broadcast status messages (epic_id is a payload field).
-TOPIC_BROADCAST_TEMPLATE: Final[str] = "onex.evt.omniclaude.epic-status.v1"
+TOPIC_BROADCAST_TEMPLATE: Final[str] = TopicBase.EPIC_STATUS
 
 #: Semantic event type for agent inbox messages.
 EVENT_TYPE_AGENT_INBOX: Final[str] = "agent.inbox"

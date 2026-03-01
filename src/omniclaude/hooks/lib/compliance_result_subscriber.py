@@ -40,13 +40,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+from omniclaude.hooks.topics import TopicBase
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Topic constant (mirrors TopicBase.COMPLIANCE_EVALUATED)
 # ---------------------------------------------------------------------------
 
-COMPLIANCE_EVALUATED_TOPIC = "onex.evt.omniintelligence.compliance-evaluated.v1"
+COMPLIANCE_EVALUATED_TOPIC = TopicBase.COMPLIANCE_EVALUATED
 
 # ---------------------------------------------------------------------------
 # Lazy import helpers for kafka-python

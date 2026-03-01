@@ -40,13 +40,15 @@ import time
 from pathlib import Path
 from typing import Any
 
+from omniclaude.hooks.topics import TopicBase
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Topic constant (mirrors TopicBase.DECISION_RECORDED_CMD)
 # ---------------------------------------------------------------------------
 
-DECISION_RECORDED_CMD_TOPIC = "onex.cmd.omniintelligence.decision-recorded.v1"
+DECISION_RECORDED_CMD_TOPIC = TopicBase.DECISION_RECORDED_CMD
 
 # ---------------------------------------------------------------------------
 # Default audit log path
