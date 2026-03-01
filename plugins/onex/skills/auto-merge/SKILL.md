@@ -76,11 +76,42 @@ or timed out.
 /auto-merge 123 org/repo --no-delete-branch
 ```
 
+## CDQA Pre-Condition (Mandatory)
+
+**CDQA gates must pass before any merge proceeds. This requirement applies on all invocation
+paths — whether called from ticket-pipeline or directly.**
+
+When invoked from `ticket-pipeline`: CDQA gates run in Phase 5.5 before this skill is
+dispatched. The gate log is written to `~/.claude/skill-results/{context_id}/cdqa-gate-log.json`.
+
+When invoked directly (not from ticket-pipeline): this skill MUST run the CDQA gates itself
+before executing the merge mutation.
+
+### Direct Invocation: CDQA gate check
+
+```
+1. Read: ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+   If record exists with overall=PASS or overall=bypassed AND pr_number matches:
+     → skip re-run, proceed to Step 1
+   If no matching record:
+     → run all 3 CDQA gates (see @_lib/cdqa-gate/helpers.md)
+     → BLOCK result: post HIGH_RISK bypass gate, await operator reply
+     → BLOCK + held/timeout: exit with status: held
+     → all PASS or bypassed: proceed to Step 1
+```
+
+**There is no `--skip-cdqa` flag.** Bypassing CDQA requires the explicit Slack bypass
+protocol documented in `@_lib/cdqa-gate/helpers.md`. Any attempt to invoke auto-merge
+without CDQA gates passing (or a recorded bypass) must exit with `status: error` and
+message: `"CDQA gates not passed — run contract-compliance-check and verify CI gates"`.
+
+---
+
 ## Merge Flow (Tier-Aware)
 
 **Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
 
-### Step 1: Fetch PR State (Tier-Aware)
+### Step 1: Fetch PR State (Tier-Aware) <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 The merge readiness check depends on the current ONEX tier (see `@_lib/tier-routing/helpers.md`):
 
@@ -104,7 +135,7 @@ ${CLAUDE_PLUGIN_ROOT}/_bin/pr-merge-readiness.sh --pr {pr_number} --repo {repo}
 # Returns: { ready, mergeable, ci_status, review_decision, merge_state_status, blockers }
 ```
 
-### Step 2: Poll CI Readiness
+### Step 2: Poll CI Readiness <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
@@ -116,18 +147,18 @@ Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes
    - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
    - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out -- mergeStateStatus never reached CLEAN"
 
-### Step 3: Post HIGH_RISK Slack Gate
+### Step 3: Post HIGH_RISK Slack Gate <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Post HIGH_RISK Slack gate (see message format below).
 
-### Step 4: Poll for Slack Reply
+### Step 4: Poll for Slack Reply <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
    - On "merge" reply: execute merge (see Step 5)
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
    - On budget exhausted: exit with `status: timeout`
 
-### Step 5: Execute Merge (Explicit `gh` Exception)
+### Step 5: Execute Merge (Explicit `gh` Exception) <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 **The merge mutation always uses `gh pr merge` directly** -- this is an explicit exception
 to the tier routing policy. Rationale: the merge is a thin CLI call (single mutation, no
@@ -141,7 +172,7 @@ gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_br
 This exception is documented and intentional. All other PR operations (view, list, checks)
 use tier-aware routing.
 
-### Step 6: Post Merge Notification
+### Step 6: Post Merge Notification <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Post Slack notification on merge completion.
 
@@ -260,9 +291,12 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
 
 ## See Also
 
-- `ticket-pipeline` skill (invokes auto-merge after pr-watch passes)
-- `pr-watch` skill (runs before auto-merge)
+- `ticket-pipeline` skill (invokes auto-merge after cdqa_gate Phase 5.5 passes)
+- `pr-watch` skill (runs before auto-merge; Phase 5 in ticket-pipeline)
+- `contract-compliance-check` skill (CDQA Gate 1, OMN-2978)
+- `_lib/cdqa-gate/helpers.md` (CDQA gate protocol, bypass flow, result schema — OMN-3189)
 - `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
 - `_bin/pr-merge-readiness.sh` -- STANDALONE merge readiness backend
 - `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
 - OMN-2525 -- implementation ticket
+- OMN-3189 -- CDQA gate enforcement ticket
