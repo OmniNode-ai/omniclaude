@@ -99,6 +99,11 @@ SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/de
 # session-end.sh derives SESSION_STATE_FILE from .sessionId, so the file names
 # will not match and the accumulator will be orphaned in /tmp.  This is a known
 # limitation — sessionId should always be present in normal Claude Code operation.
+#
+# R9 (OMN-3216): Capture the original session ID (before backfill) so the
+# first-prompt injection guard can detect sessions that had no real sessionId.
+# After this line, SESSION_ID is always non-empty (backfilled with CORRELATION_ID).
+_ORIGINAL_SESSION_ID="$SESSION_ID"
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
@@ -655,11 +660,14 @@ _TICKET_INJECT_TIMEOUT_SEC="${OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC:-4}"
 _OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
 
 if [[ "$_TICKET_INJECT_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
-    # R9: Skip markers (and injection) entirely when SESSION_ID is empty.
-    # An empty SESSION_ID means different hooks produce different CORRELATION_IDs,
-    # so /tmp/omniclaude-ticket-ctx-* markers would never match across hooks.
-    if [[ -z "$SESSION_ID" ]]; then
-        log "First-prompt ticket injection: skipping (SESSION_ID is empty, markers unreliable)"
+    # R9: Skip markers (and injection) entirely when the original SESSION_ID was empty
+    # (i.e., sessionId was absent from hook input). After backfill, SESSION_ID is always
+    # set to CORRELATION_ID — so we check _ORIGINAL_SESSION_ID (captured before backfill)
+    # to detect sessions that genuinely had no real session ID. When the original is empty,
+    # different hook invocations produce different CORRELATION_IDs, so markers would never
+    # match across hooks.
+    if [[ -z "$_ORIGINAL_SESSION_ID" ]]; then
+        log "First-prompt ticket injection: skipping (original SESSION_ID was empty, markers unreliable)"
     else
         _FP_MARKER="/tmp/omniclaude-ticket-ctx-${SESSION_ID}"  # noqa: S108
 

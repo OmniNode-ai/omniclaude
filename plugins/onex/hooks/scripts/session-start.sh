@@ -833,8 +833,9 @@ ACTIVE_TICKET=""
 OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
 
 # R7: Clean up stale /tmp ticket marker files (older than 24h) at session start.
-# Uses -mmin +1440 (1440 minutes = 24 hours). Runs silently in background.
-find /tmp -maxdepth 1 -name "omniclaude-ticket-ctx-*" -mmin +1440 -delete 2>/dev/null || true
+# Uses -mmin +1440 (1440 minutes = 24 hours). Runs asynchronously to avoid blocking SessionStart.
+(find /tmp -maxdepth 1 -name "omniclaude-ticket-ctx-*" -mmin +1440 -delete 2>/dev/null || true) &
+disown 2>/dev/null || true
 
 # OMN-3216 R1/R10: CWD-based ticket extraction.
 # Extracts OMN-XXXX from the CWD path when CWD is inside OMNI_WORKTREES_DIR/OMN-XXXX/.
@@ -883,9 +884,17 @@ if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_c
         fi
     fi
 
-    # Run ticket context injection synchronously via CLI (fast, local-only).
-    # Single Python invocation for better performance within 50ms budget.
-    TICKET_OUTPUT=$(echo "$TICKET_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
+    # Run ticket context injection with a timeout guard (SessionStart budget ~50ms).
+    # Falls back to '{}' on timeout or non-zero exit.
+    set +e
+    TICKET_OUTPUT=$(echo "$TICKET_INPUT" | run_with_timeout 1 \
+        "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE")
+    _TICKET_INJECT_EXIT=$?
+    set -e
+    if [[ $_TICKET_INJECT_EXIT -ne 0 ]]; then
+        log "WARNING: ticket_context_injector.py timed out or failed (exit=${_TICKET_INJECT_EXIT}) — using empty output"
+        TICKET_OUTPUT='{}'
+    fi
 
     # R2: Detect jq parse failure vs. legitimate empty-success.
     # When jq exits 0 but .ticket_id is absent, log "invalid JSON" rather than
