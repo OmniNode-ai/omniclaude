@@ -37,8 +37,8 @@ The omniintelligence main-branch CI failure (run 22524715869) contained these vi
 | File | Line | Check | Classification | Verdict |
 |------|------|-------|----------------|---------|
 | `handler_claude_event.py` | 7 | boilerplate_docstring | "This module provides HandlerClaudeHookEvent, a handler class that processes" | TRUE POSITIVE |
-| `handler_claude_event.py` | 884 | step_narration | `# Step 1: Classify intent (if classifier available)` | FALSE POSITIVE |
-| `handler_claude_event.py` | 947 | step_narration | `# Step 2: Emit to Kafka (if producer and topic available)` | FALSE POSITIVE |
+| `handler_claude_event.py` | 884 | step_narration | Python comment: "Step 1: Classify intent (if classifier available)" | FALSE POSITIVE |
+| `handler_claude_event.py` | 947 | step_narration | Python comment: "Step 2: Emit to Kafka (if producer and topic available)" | FALSE POSITIVE |
 | `registry_claude_hook_event_effect.py` | 7 | boilerplate_docstring | "This module provides RegistryClaudeHookEventEffect, which creates and registers" | TRUE POSITIVE |
 | `dispatch_handlers.py` | 7 | boilerplate_docstring | "This module provides bridge handlers that adapt between the MessageDispatchEngine" | TRUE POSITIVE |
 
@@ -100,8 +100,8 @@ The rule correctly identifies them as warnings. Engineers should rewrite these a
 `step_narration` fires only in Markdown (`.md`) files. Python inline comments are excluded.
 
 **Rationale**: 48h audit confirmed 240+ false positives in Python code across 2 repos.
-Python `# Step N:` comments are legitimate ordered-step documentation. Only Markdown step
-headings (`## Step 1:`, `### Step 2:`) are LLM boilerplate.
+Python numbered step comments are legitimate ordered-step documentation. Only Markdown step
+headings are LLM boilerplate.
 
 **Implementation**: `_check_lines()` checks `filename.endswith(".md")` before applying the
 step narration check.
