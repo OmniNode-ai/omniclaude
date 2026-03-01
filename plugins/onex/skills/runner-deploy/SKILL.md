@@ -124,7 +124,7 @@ or remember the SSH invocation syntax.
 
 When this skill is invoked, execute the following:
 
-### Step 1: Check prerequisites
+### Step 1: Check prerequisites <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 # Verify GitHub token has org scope
@@ -136,7 +136,7 @@ ssh-add -l
 
 If prerequisites fail, report clearly which check failed and how to fix it. Do not proceed.
 
-### Step 2 (dry-run only): Show compose diff
+### Step 2 (dry-run only): Show compose diff <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 # SSH to host and show compose config (CI_HOST=192.168.86.201) # onex-allow-internal-ip
@@ -150,7 +150,7 @@ ssh 192.168.86.201 "grep -E '^ARG (RUNNER|NODE)_VERSION' ~/omnibase_infra/docker
 Print a clear summary of: current state, what would change, and which containers would be
 recreated. Exit without making changes.
 
-### Step 3 (deploy only): Run deploy-runners.sh
+### Step 3 (deploy only): Run deploy-runners.sh <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
 REBUILD_FLAG=""
@@ -162,7 +162,7 @@ ssh 192.168.86.201 "cd ~/omnibase_infra && bash scripts/deploy-runners.sh ${REBU
 
 Capture and display the full output. If the script exits non-zero, report the error and stop.
 
-### Step 4 (deploy only): Surface status
+### Step 4 (deploy only): Surface status <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 Invoke `runner-status` to confirm all runners registered successfully:
 
