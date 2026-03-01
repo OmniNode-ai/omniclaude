@@ -9,6 +9,18 @@ the /ticket-work workflow. It follows the same patterns as context_injection_wra
 
 Part of OMN-1830: Ticket context injection for session enrichment.
 
+DEPRECATION NOTICE (OMN-3216):
+    find_active_ticket() uses an mtime heuristic to pick the most recently
+    modified contract.yaml under ~/.claude/tickets/. This is unreliable because
+    completed tickets accumulate without cleanup, causing stale tickets (e.g.
+    OMN-2068) to surface as ghost injections in new sessions.
+
+    The correct ground truth is the session's CWD: if the session was launched
+    from inside OMNI_WORKTREES_DIR/OMN-XXXX/, the ticket is OMN-XXXX.
+    CWD-based extraction now runs in session-start.sh before calling this
+    injector. find_active_ticket() is retained only as a last-resort fallback
+    and will emit a logger.warning when it is reached.
+
 Usage:
     # Python API
     from ticket_context_injector import find_active_ticket, build_ticket_context
@@ -82,12 +94,16 @@ class TicketInjectorOutput(TypedDict):
         ticket_context: Formatted markdown context for injection.
         ticket_id: The ticket ID that was loaded (or None if no ticket found).
         retrieval_ms: Time taken to retrieve and format context.
+        fallback_used: True when find_active_ticket() mtime heuristic was used
+            as a last-resort fallback (CWD-based extraction failed or was not
+            attempted). Consumers should log a warning when this is True.
     """
 
     success: bool
     ticket_context: str
     ticket_id: str | None
     retrieval_ms: int
+    fallback_used: bool
 
 
 class ContractData(TypedDict, total=False):
@@ -125,9 +141,18 @@ def find_active_ticket(tickets_dir: Path | None = None) -> str | None:
         tickets found or directory doesn't exist.
 
     Note:
-        This function handles all errors gracefully and will never raise.
-        On any error, it returns None.
+        All exceptions are caught internally; on any error, returns None.
+
+        DEPRECATED (OMN-3216): This function uses an mtime heuristic that is
+        unreliable when completed tickets accumulate. Prefer CWD-based
+        extraction in session-start.sh. This function is retained only as a
+        last-resort fallback and emits a warning when invoked.
     """
+    logger.warning(
+        "find_active_ticket() mtime heuristic invoked as fallback (OMN-3216). "
+        "CWD-based extraction should have resolved the ticket before reaching this path. "
+        "If this fires repeatedly, check session-start.sh CWD extraction logic."
+    )
     try:
         search_dir = tickets_dir or DEFAULT_TICKETS_DIR
 
@@ -275,6 +300,7 @@ def _create_error_output(retrieval_ms: int = 0) -> TicketInjectorOutput:
         ticket_context="",
         ticket_id=None,
         retrieval_ms=retrieval_ms,
+        fallback_used=False,
     )
 
 
@@ -318,11 +344,16 @@ def main() -> None:
 
         explicit_ticket_id = input_json.get("ticket_id", "")
 
-        # Find active ticket or use explicit one
+        # Find active ticket or use explicit one.
+        # fallback_used is True when find_active_ticket() mtime heuristic is
+        # invoked (i.e. no CWD-derived ticket_id was passed in).
         ticket_id: str | None
+        fallback_used = False
         if explicit_ticket_id:
             ticket_id = explicit_ticket_id
         else:
+            # No CWD-derived ticket provided — must fall back to mtime heuristic.
+            fallback_used = True
             ticket_id = find_active_ticket(tickets_dir)
 
         # Build context if ticket found
@@ -339,6 +370,7 @@ def main() -> None:
             ticket_context=ticket_context,
             ticket_id=ticket_id,
             retrieval_ms=elapsed_ms,
+            fallback_used=fallback_used,
         )
 
         print(json.dumps(output))

@@ -638,6 +638,133 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED
 fi
 
 # -----------------------------
+# First-Prompt Ticket Context Injection (OMN-3216)
+# -----------------------------
+# Fallback for sessions not launched from a worktree (e.g., cd ~/; claude).
+# When the first prompt explicitly mentions an OMN-XXXX ticket, inject its context.
+# Only runs once per session (marker-guarded). Marker is set only on success or
+# "no ticket found" — never on timeout/failure (R5). Skipped when SESSION_ID is
+# empty since markers would collide across hooks that produce different IDs (R9).
+#
+# R4: Plugin version is discovered dynamically from plugin.json (not hardcoded).
+# R6: Timeout is configurable via OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC (default 4).
+# R8: Log prompt length when attempting first-prompt injection.
+# R10: OMNI_WORKTREES_DIR env var controls worktree root.
+
+FIRST_PROMPT_TICKET_CONTEXT=""
+_TICKET_INJECT_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
+_TICKET_INJECT_ENABLED=$(_normalize_bool "$_TICKET_INJECT_ENABLED")
+# R6: Configurable timeout in seconds (integer; sub-second becomes 1 via ceiling)
+_TICKET_INJECT_TIMEOUT_SEC="${OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC:-4}"
+[[ "$_TICKET_INJECT_TIMEOUT_SEC" =~ ^[0-9]+$ ]] || _TICKET_INJECT_TIMEOUT_SEC=4
+# R10: Configurable worktrees root directory
+_OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+
+if [[ "$_TICKET_INJECT_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    # R9: Skip markers (and injection) entirely when SESSION_ID is empty.
+    # An empty SESSION_ID means different hooks produce different CORRELATION_IDs,
+    # so /tmp/omniclaude-ticket-ctx-* markers would never match across hooks.
+    if [[ -z "$SESSION_ID" ]]; then
+        log "First-prompt ticket injection: skipping (SESSION_ID is empty, markers unreliable)"
+    else
+        _FP_MARKER="/tmp/omniclaude-ticket-ctx-${SESSION_ID}"  # noqa: S108
+
+        if [[ -f "$_FP_MARKER" ]]; then
+            log "First-prompt ticket injection: already done for session ${SESSION_ID:0:8}... (marker present)"
+        else
+            # R8: Log prompt length when attempting injection
+            log "First-prompt ticket injection: attempting (prompt length=${#PROMPT})"
+
+            # Extract ticket ID from prompt (look for OMN-<one-or-more-digits>).
+            # R1: Use BRE one-or-more quantifier `\+` (not `*`).
+            _FP_TICKET_FROM_PROMPT=""
+            _FP_TICKET_FROM_PROMPT=$(printf '%s' "$PROMPT" | grep -o 'OMN-[0-9]\+' | head -1 2>/dev/null) || _FP_TICKET_FROM_PROMPT=""
+
+            # Also try CWD-based extraction (for sessions where CWD changed post-start)
+            _FP_TICKET_FROM_CWD=""
+            _FP_CWD="${CWD:-$(pwd)}"
+            if [[ -n "$_FP_CWD" ]] && [[ -n "$_OMNI_WORKTREES_DIR" ]]; then
+                _fwt_dir="${_OMNI_WORKTREES_DIR%/}"
+                if [[ "$_FP_CWD" == "${_fwt_dir}/"* ]]; then
+                    _fp_after="${_FP_CWD#${_fwt_dir}/}"
+                    _fp_candidate="${_fp_after%%/*}"
+                    if echo "$_fp_candidate" | grep -q '^OMN-[0-9]\+$'; then
+                        _FP_TICKET_FROM_CWD="$_fp_candidate"
+                    fi
+                fi
+                unset _fwt_dir _fp_after _fp_candidate
+            fi
+
+            # Prefer prompt-mentioned ticket; fall back to CWD-based
+            _FP_TICKET="${_FP_TICKET_FROM_PROMPT:-$_FP_TICKET_FROM_CWD}"
+
+            _FP_MARKER_SET=false
+            if [[ -z "$_FP_TICKET" ]]; then
+                # No ticket found in prompt or CWD — mark as done so we don't retry
+                # on every subsequent prompt (R5: "no ticket found" → set marker)
+                log "First-prompt ticket injection: no OMN-XXXX ticket in prompt or CWD"
+                touch "$_FP_MARKER" 2>/dev/null || true
+                _FP_MARKER_SET=true
+            else
+                log "First-prompt ticket injection: found ticket $_FP_TICKET"
+
+                # Build injector input JSON
+                if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+                    _FP_INPUT=$(jq -n --arg ticket_id "$_FP_TICKET" \
+                        '{ticket_id: $ticket_id}' 2>/dev/null) || _FP_INPUT="{\"ticket_id\": \"${_FP_TICKET}\"}"
+                else
+                    _FP_INPUT="{\"ticket_id\": \"${_FP_TICKET}\"}"
+                fi
+
+                # Run injector with timeout (R6)
+                # R5: Do NOT set marker on timeout or error — allow retry on next prompt
+                set +e
+                _FP_OUTPUT=$(echo "$_FP_INPUT" | run_with_timeout "$_TICKET_INJECT_TIMEOUT_SEC" \
+                    "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE")
+                _FP_EXIT=$?
+                set -e
+
+                if [[ $_FP_EXIT -ne 0 ]]; then
+                    # Timeout or failure — do NOT set marker (R5: retry on next prompt)
+                    log "First-prompt ticket injection: injector timed out or failed (exit=${_FP_EXIT}) — marker NOT set (will retry)"
+                else
+                    # R2: Validate output is parseable JSON
+                    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+                        if ! echo "$_FP_OUTPUT" | jq -e . >/dev/null 2>/dev/null; then
+                            log "First-prompt ticket injection: invalid JSON from injector — marker NOT set (will retry)"
+                        else
+                            _FP_TICKET_CONTEXT=$(echo "$_FP_OUTPUT" | jq -r '.ticket_context // empty' 2>/dev/null) || _FP_TICKET_CONTEXT=""
+                            _FP_RETRIEVAL_MS=$(echo "$_FP_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || _FP_RETRIEVAL_MS=0
+                            if [[ -n "$_FP_TICKET_CONTEXT" ]]; then
+                                FIRST_PROMPT_TICKET_CONTEXT="$_FP_TICKET_CONTEXT"
+                                log "First-prompt ticket injection: success for $_FP_TICKET (${_FP_RETRIEVAL_MS}ms, ${#FIRST_PROMPT_TICKET_CONTEXT} chars)"
+                            else
+                                log "First-prompt ticket injection: injector returned no context for $_FP_TICKET"
+                            fi
+                            # R5: Set marker on success (even if context was empty — ticket was found/tried)
+                            touch "$_FP_MARKER" 2>/dev/null || true
+                            _FP_MARKER_SET=true
+                        fi
+                    else
+                        # jq unavailable — use Python to extract ticket_context
+                        _FP_TICKET_CONTEXT=$("$PYTHON_CMD" -c \
+                            "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_context',''))" \
+                            <<< "$_FP_OUTPUT" 2>/dev/null) || _FP_TICKET_CONTEXT=""
+                        if [[ -n "$_FP_TICKET_CONTEXT" ]]; then
+                            FIRST_PROMPT_TICKET_CONTEXT="$_FP_TICKET_CONTEXT"
+                            log "First-prompt ticket injection: success for $_FP_TICKET (jq unavailable)"
+                        fi
+                        touch "$_FP_MARKER" 2>/dev/null || true
+                        _FP_MARKER_SET=true
+                    fi
+                fi
+            fi
+            log "First-prompt ticket injection: marker_set=${_FP_MARKER_SET}"
+        fi
+    fi
+fi
+
+# -----------------------------
 # Agent Context Assembly (FIXED: Safe injection)
 # -----------------------------
 POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
@@ -735,6 +862,21 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
                 2>>"$LOG_FILE" || true
         ) &
     fi
+fi
+
+# Prepend first-prompt ticket context to AGENT_CONTEXT when present (OMN-3216).
+# Separator keeps the ticket section visually distinct from agent routing context.
+if [[ -n "$FIRST_PROMPT_TICKET_CONTEXT" ]]; then
+    if [[ -n "$AGENT_CONTEXT" ]]; then
+        AGENT_CONTEXT="${FIRST_PROMPT_TICKET_CONTEXT}
+
+---
+
+${AGENT_CONTEXT}"
+    else
+        AGENT_CONTEXT="$FIRST_PROMPT_TICKET_CONTEXT"
+    fi
+    log "First-prompt ticket context prepended to AGENT_CONTEXT (${#FIRST_PROMPT_TICKET_CONTEXT} chars)"
 fi
 
 # Final Output via jq to ensure JSON integrity

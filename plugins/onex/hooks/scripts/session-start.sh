@@ -814,32 +814,115 @@ else
 fi
 
 # -----------------------------
-# Ticket Context Injection (OMN-1830)
+# Ticket Context Injection (OMN-1830, OMN-3216)
 # -----------------------------
 # Inject active ticket context for session continuity.
 # Runs SYNCHRONOUSLY because it's purely local filesystem (fast).
 # This ensures ticket context is available immediately in additionalContext.
+#
+# OMN-3216: CWD-based extraction replaces the mtime heuristic.
+# Ground truth: if CWD is inside OMNI_WORKTREES_DIR/OMN-XXXX/, the ticket is OMN-XXXX.
+# The mtime heuristic (find_active_ticket in ticket_context_injector.py) is only
+# used as a last-resort fallback when CWD is not inside a worktree directory.
+#
+# R6: Timeout is configurable via OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC (default 4).
+# R7: Stale /tmp marker cleanup runs here (files older than 24h).
+# R9: Markers are skipped entirely when SESSION_ID is empty (hooks produce different IDs).
+# R10: OMNI_WORKTREES_DIR env var controls worktree root (default /Volumes/PRO-G40/Code/omni_worktrees).  # local-path-ok
 
 TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
 TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
 TICKET_CONTEXT=""
+ACTIVE_TICKET=""
+
+# R10: Configurable worktrees root directory
+OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+
+# R7: Clean up stale /tmp ticket marker files (older than 24h) at session start.
+# Uses -mmin +1440 (1440 minutes = 24 hours). Runs silently in background.
+find /tmp -maxdepth 1 -name "omniclaude-ticket-ctx-*" -mmin +1440 -delete 2>/dev/null || true
+
+# OMN-3216 R1/R10: CWD-based ticket extraction.
+# Extracts OMN-XXXX from the CWD path when CWD is inside OMNI_WORKTREES_DIR/OMN-XXXX/.
+# Uses `OMN-[0-9]\+` (BRE one-or-more) to require at least one digit (R1 fix).
+TICKET_FROM_CWD=""
+if [[ -n "$CWD" ]] && [[ -n "$OMNI_WORKTREES_DIR" ]]; then
+    # Normalize OMNI_WORKTREES_DIR: strip trailing slash for clean prefix matching
+    _wt_dir="${OMNI_WORKTREES_DIR%/}"
+    if [[ "$CWD" == "${_wt_dir}/"* ]]; then
+        # CWD is inside the worktrees directory — extract the ticket segment.
+        # Strip the worktrees prefix, then take the first path component.
+        _after_wt="${CWD#${_wt_dir}/}"
+        _candidate="${_after_wt%%/*}"
+        # Validate: must match OMN-<one-or-more-digits> (BRE, not ERE)
+        if echo "$_candidate" | grep -q '^OMN-[0-9]\+$'; then
+            TICKET_FROM_CWD="$_candidate"
+            log "CWD-based ticket extraction: $TICKET_FROM_CWD (from CWD=$CWD)"
+        else
+            log "CWD inside worktrees dir but segment '$_candidate' is not a valid ticket ID — skipping CWD extraction"
+        fi
+    else
+        log "CWD not inside OMNI_WORKTREES_DIR ($OMNI_WORKTREES_DIR) — no CWD-based ticket"
+    fi
+    unset _wt_dir _after_wt _candidate
+fi
+
+# R3: ACTIVE_TICKET defaults to TICKET_FROM_CWD; updated only if injector output has .ticket_id
+ACTIVE_TICKET="$TICKET_FROM_CWD"
 
 if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
     log "Checking for active ticket context"
 
-    # Run ticket context injection synchronously via CLI (fast, local-only)
-    # Single Python invocation for better performance within 50ms budget
-    TICKET_OUTPUT=$(echo '{}' | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
-
-    # Parse CLI output using jq
+    # Build injector input JSON.
+    # When CWD-based extraction succeeded, pass ticket_id directly so the injector
+    # uses it without triggering the mtime fallback (find_active_ticket).
+    # When CWD extraction failed, pass empty ticket_id so the injector falls back
+    # to the mtime heuristic as last resort.
     if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-        ACTIVE_TICKET=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || ACTIVE_TICKET=""
+        TICKET_INPUT=$(jq -n --arg ticket_id "$TICKET_FROM_CWD" \
+            'if $ticket_id != "" then {ticket_id: $ticket_id} else {} end' 2>/dev/null) || TICKET_INPUT='{}'
+    else
+        if [[ -n "$TICKET_FROM_CWD" ]]; then
+            TICKET_INPUT="{\"ticket_id\": \"${TICKET_FROM_CWD}\"}"
+        else
+            TICKET_INPUT='{}'
+        fi
+    fi
+
+    # Run ticket context injection synchronously via CLI (fast, local-only).
+    # Single Python invocation for better performance within 50ms budget.
+    TICKET_OUTPUT=$(echo "$TICKET_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
+
+    # R2: Detect jq parse failure vs. legitimate empty-success.
+    # When jq exits 0 but .ticket_id is absent, log "invalid JSON" rather than
+    # treating it as a silent success with no ticket.
+    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+        if ! echo "$TICKET_OUTPUT" | jq -e . >/dev/null 2>/dev/null; then
+            log "WARNING: ticket_context_injector.py returned invalid JSON (parse failure)"
+            TICKET_OUTPUT='{}'
+        fi
+
+        INJECTOR_TICKET_ID=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || INJECTOR_TICKET_ID=""
         TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_context // empty' 2>/dev/null) || TICKET_CONTEXT=""
         TICKET_RETRIEVAL_MS=$(echo "$TICKET_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || TICKET_RETRIEVAL_MS=0
+        TICKET_FALLBACK_USED=$(echo "$TICKET_OUTPUT" | jq -r '.fallback_used // false' 2>/dev/null) || TICKET_FALLBACK_USED="false"
+
+        # R3: Update ACTIVE_TICKET only if injector output has .ticket_id
+        if [[ -n "$INJECTOR_TICKET_ID" ]]; then
+            ACTIVE_TICKET="$INJECTOR_TICKET_ID"
+        fi
+        # If ACTIVE_TICKET is still empty after injector, it stays as TICKET_FROM_CWD (which may also be empty)
 
         if [[ -n "$ACTIVE_TICKET" ]] && [[ -n "$TICKET_CONTEXT" ]]; then
-            log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms)"
+            log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms, fallback_used=${TICKET_FALLBACK_USED})"
             log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+            # R9: Write coordination marker only when SESSION_ID is non-empty.
+            # user-prompt-submit.sh checks this marker to skip first-prompt injection
+            # for sessions where SessionStart already injected ticket context.
+            if [[ -n "$SESSION_ID" ]]; then
+                touch "/tmp/omniclaude-ticket-ctx-${SESSION_ID}" 2>/dev/null || true
+                log "Wrote ticket context marker: /tmp/omniclaude-ticket-ctx-${SESSION_ID:0:8}..."
+            fi
             # Write .ticket file for statusline tab label (omni_home tabs have no git branch)
             if [[ -n "${ITERM_SESSION_ID:-}" ]]; then
                 _ticket_guid="${ITERM_SESSION_ID#*:}"
