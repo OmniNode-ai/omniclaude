@@ -301,6 +301,33 @@ Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is no
 
 ---
 
+## Workspace Tooling
+
+### prune-worktrees.sh
+
+Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`.
+A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`)
+or its remote branch no longer exists.
+
+```bash
+# Dry-run (default): report stale worktrees without removing them
+scripts/prune-worktrees.sh
+
+# Execute: remove all stale worktrees
+scripts/prune-worktrees.sh --execute
+
+# Custom worktrees root
+scripts/prune-worktrees.sh --worktrees-root /path/to/worktrees
+
+# Verbose output (show active and skipped worktrees)
+scripts/prune-worktrees.sh --verbose
+```
+
+Run periodically after batch releases or PR merge sweeps to keep the worktree directory clean.
+Requires `gh` (GitHub CLI) authenticated and `git`.
+
+---
+
 ## Debugging
 
 ### Log Files
