@@ -194,9 +194,10 @@ After a successful merge:
            # Non-blocking: merge already succeeded; do not fail the skill
    ```
    This is a belt-and-suspenders step. The primary path (`ticket-pipeline` Phase 6)
-   also marks the ticket Done. If the pipeline session ended before the merge (e.g.
-   CI was still running), the `linear-close-on-merge` GitHub Actions workflow
-   (`.github/workflows/linear-close-on-merge.yml`) provides a third fallback.
+   also marks the ticket Done. The `linear-close-on-merge` GitHub Actions workflow
+   (`.github/workflows/linear-close-on-merge.yml`) runs unconditionally on every PR
+   merge to main/develop, ensuring ticket closure even when the pipeline session has
+   ended.
 
 **Ticket ID resolution order:**
 1. Passed explicitly as `--ticket-id OMN-XXXX` argument
@@ -265,12 +266,14 @@ REPO=""
 STRATEGY="squash"
 GATE_TIMEOUT_HOURS="24"
 DELETE_BRANCH="true"
+TICKET_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --strategy)            STRATEGY="$2";            shift 2 ;;
     --gate-timeout-hours)  GATE_TIMEOUT_HOURS="$2";  shift 2 ;;
     --no-delete-branch)    DELETE_BRANCH="false";     shift   ;;
+    --ticket-id)           TICKET_ID="$2";            shift 2 ;;
     -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
       if [[ -z "$PR_NUMBER" ]]; then PR_NUMBER="$1"; shift
@@ -286,12 +289,18 @@ if [[ -z "$PR_NUMBER" || -z "$REPO" ]]; then
   exit 1
 fi
 
+TICKET_ID_ARG=""
+if [[ -n "$TICKET_ID" ]]; then
+  TICKET_ID_ARG="--arg ticket_id=${TICKET_ID}"
+fi
+
 exec claude --skill onex:auto-merge \
   --arg "pr_number=${PR_NUMBER}" \
   --arg "repo=${REPO}" \
   --arg "strategy=${STRATEGY}" \
   --arg "gate_timeout_hours=${GATE_TIMEOUT_HOURS}" \
-  --arg "delete_branch=${DELETE_BRANCH}"
+  --arg "delete_branch=${DELETE_BRANCH}" \
+  ${TICKET_ID_ARG}
 ```
 
 | Invocation | Description |

@@ -76,8 +76,6 @@ jobs:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           TICKET_ID: ${{ steps.extract.outputs.ticket_id }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
@@ -117,6 +115,11 @@ jobs:
           # Validate ISSUE_ID is a safe UUID-shaped value
           if [ -z "$ISSUE_ID" ]; then
             echo "Could not extract issue ID from Linear response — skipping"
+            exit 0
+          fi
+
+          if ! echo "$ISSUE_ID" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "ISSUE_ID is not a valid UUID: $ISSUE_ID — skipping"
             exit 0
           fi
 
@@ -165,6 +168,11 @@ jobs:
           # Validate DONE_STATE_ID before use
           if [ -z "$DONE_STATE_ID" ]; then
             echo "Could not find Done state ID for this team — skipping"
+            exit 0
+          fi
+
+          if ! echo "$DONE_STATE_ID" | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "DONE_STATE_ID is not a valid UUID: $DONE_STATE_ID — skipping"
             exit 0
           fi
 
