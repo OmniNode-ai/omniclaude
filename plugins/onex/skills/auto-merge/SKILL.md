@@ -111,7 +111,7 @@ message: `"CDQA gates not passed — run contract-compliance-check and verify CI
 
 **Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
 
-### Step 1: Fetch PR State (Tier-Aware)
+### Step 1: Fetch PR State (Tier-Aware) <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 The merge readiness check depends on the current ONEX tier (see `@_lib/tier-routing/helpers.md`):
 
@@ -135,7 +135,7 @@ ${CLAUDE_PLUGIN_ROOT}/_bin/pr-merge-readiness.sh --pr {pr_number} --repo {repo}
 # Returns: { ready, mergeable, ci_status, review_decision, merge_state_status, blockers }
 ```
 
-### Step 2: Poll CI Readiness
+### Step 2: Poll CI Readiness <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
@@ -147,18 +147,18 @@ Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes
    - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
    - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out -- mergeStateStatus never reached CLEAN"
 
-### Step 3: Post HIGH_RISK Slack Gate
+### Step 3: Post HIGH_RISK Slack Gate <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Post HIGH_RISK Slack gate (see message format below).
 
-### Step 4: Poll for Slack Reply
+### Step 4: Poll for Slack Reply <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
    - On "merge" reply: execute merge (see Step 5)
    - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
    - On budget exhausted: exit with `status: timeout`
 
-### Step 5: Execute Merge (Explicit `gh` Exception)
+### Step 5: Execute Merge (Explicit `gh` Exception) <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 **The merge mutation always uses `gh pr merge` directly** -- this is an explicit exception
 to the tier routing policy. Rationale: the merge is a thin CLI call (single mutation, no
@@ -172,7 +172,7 @@ gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_br
 This exception is documented and intentional. All other PR operations (view, list, checks)
 use tier-aware routing.
 
-### Step 6: Post Merge Notification
+### Step 6: Post Merge Notification <!-- ai-slop-ok: pre-existing merge flow step heading -->
 
 Post Slack notification on merge completion.
 
