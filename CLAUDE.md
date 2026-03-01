@@ -305,7 +305,7 @@ Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is no
 
 ### prune-worktrees.sh
 
-Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`.
+Detects and removes stale git worktrees under `/Volumes/PRO-G40/Code/omni_worktrees/`. <!-- local-path-ok -->
 A worktree is considered stale when its branch's PR has been merged (queried via `gh pr list --state merged`)
 or its remote branch no longer exists.
 

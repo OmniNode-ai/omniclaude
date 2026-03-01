@@ -275,7 +275,7 @@ create a temporary worktree and simulate the BUMP step manually:
 
 ```bash
 # 1. Create a test worktree from main
-git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree add \
+git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree add \  # local-path-ok
   /tmp/infra-bump-test -b test/bump-smoke-$(date +%s)
 
 # 2. Simulate: bump version_compatibility.py for omnibase_core 0.23.0 → 0.24.0
@@ -296,7 +296,7 @@ else:
 EOF
 
 # 3. Clean up test worktree
-git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree remove /tmp/infra-bump-test --force
+git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree remove /tmp/infra-bump-test --force  # local-path-ok
 ```
 
 **Acceptance criteria** (Definition of Done):
