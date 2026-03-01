@@ -1,13 +1,13 @@
 ---
 name: executing-plans
-description: Use when partner provides a complete implementation plan to execute in controlled batches with review checkpoints - loads plan, reviews critically, executes tasks in batches, reports for review between batches
-version: 1.0.0
+description: Use when partner provides a complete implementation plan to execute — reviews the plan critically, creates Linear tickets via plan-to-tickets, then routes to epic-team (≥3 tickets) or ticket-pipeline (1-2 tickets)
+version: 2.0.0
 category: workflow
 tags:
   - planning
   - execution
-  - batch-processing
-  - review-checkpoints
+  - linear
+  - routing
 author: OmniClaude Team
 ---
 
@@ -15,70 +15,139 @@ author: OmniClaude Team
 
 ## Overview
 
-Load plan, review critically, execute tasks in batches, report for review between batches.
+Load a plan file, review it critically, create Linear tickets from it, then route to the
+appropriate execution skill based on ticket count.
 
-**Core principle:** Batch execution with checkpoints for architect review.
+**Core principle:** Linear-native routing. Plans become tickets; tickets drive execution.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-## The Process
+---
 
-### Step 1: Load and Review Plan
-1. Read plan file
-2. Review critically - identify any questions or concerns about the plan
-3. If concerns: Raise them with your human partner before starting
-4. If no concerns: Create TodoWrite and proceed
+## The 4-Step Flow
 
-### Step 2: Execute Batch
-**Default: First 3 tasks**
+### Step 1: Review Plan
 
-For each task:
-1. Mark as in_progress
-2. Follow each step exactly (plan has bite-sized steps)
-3. Run verifications as specified
-4. Mark as completed
+Load the plan file and review it critically before taking any action.
 
-### Step 3: Report
-When batch complete:
-- Show what was implemented
-- Show verification output
-- Say: "Ready for feedback."
+1. Read the plan file in full
+2. Identify any concerns:
+   - Missing acceptance criteria or definition of done
+   - Ambiguous or contradictory requirements
+   - Unclear dependencies between phases
+   - Missing repo label (required for architecture validation)
+   - Steps that reference external systems or secrets not yet available
+3. If concerns exist: raise them with your human partner and wait for resolution before proceeding
+4. If no concerns: proceed to Step 2
 
-### Step 4: Continue
-Based on feedback:
-- Apply changes if needed
-- Execute next batch
-- Repeat until complete
+**Do not proceed to ticket creation if the plan has unresolved questions.**
 
-### Step 5: Complete Development
+---
 
-After all tasks complete and verified:
-- Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use ${CLAUDE_PLUGIN_ROOT}/skills/finishing-a-development-branch
-- Follow that skill to verify tests, present options, execute choice
+### Step 2: Dry-Run Preview
+
+Call `/plan-to-tickets` with `--dry-run` to preview what tickets would be created.
+
+```bash
+/plan-to-tickets <plan-file> --dry-run [--repo <repo-label>] [--project <project>]
+```
+
+Review the dry-run output:
+- Confirm the detected structure (phase_sections, milestone_table, or priority_labels)
+- Confirm the epic title that would be used
+- Confirm the list of tickets that would be created
+- Check that dependencies are correctly detected
+
+If the preview looks wrong, stop and discuss with your partner before creating tickets.
+
+---
+
+### Step 3: Create Tickets
+
+Call `/plan-to-tickets` (without `--dry-run`) to create the Linear tickets under the epic.
+
+```bash
+/plan-to-tickets <plan-file> [--repo <repo-label>] [--project <project>] [--skip-existing]
+```
+
+After creation, record:
+- The epic identifier (e.g., OMN-XXXX)
+- The list of created ticket identifiers
+- The total ticket count
+
+**Common flags:**
+- `--repo <label>` — enables architecture dependency validation (recommended)
+- `--project <name>` — assigns tickets to a Linear project
+- `--skip-existing` — skip tickets that already exist instead of prompting
+- `--no-create-epic` — fail if the epic does not already exist
+
+---
+
+### Step 4: Route to Execution
+
+Route based on ticket count:
+
+#### 3 or more tickets → `/epic-team`
+
+```bash
+/epic-team <epic-id>
+```
+
+`epic-team` orchestrates a team of parallel worker agents, one per repo. It handles
+ticket assignment, worktree creation, and lifecycle notifications automatically.
+
+#### 1 or 2 tickets → `/ticket-pipeline` (per ticket)
+
+```bash
+/ticket-pipeline <ticket-id>
+```
+
+Run `/ticket-pipeline` for each ticket sequentially. Each pipeline handles the full
+implement → review → PR → CI → merge workflow autonomously.
+
+---
+
+## Routing Decision
+
+| Ticket Count | Skill | Why |
+|---|---|---|
+| ≥ 3 | `/epic-team <epic-id>` | Parallel execution across repos; team lead + worker topology |
+| 1–2 | `/ticket-pipeline <ticket-id>` (per ticket) | Lightweight; no team overhead needed |
+
+---
+
+## Verification Commands
+
+After routing, verify progress:
+
+```bash
+# Check epic status in Linear
+# (use Linear MCP or Linear UI to view the epic and child tickets)
+
+# If routed to epic-team — resume after session disconnect:
+/epic-team <epic-id> --resume
+
+# If routed to ticket-pipeline — check pipeline state:
+cat ~/.claude/pipelines/<ticket-id>/state.yaml
+```
+
+---
 
 ## When to Stop and Ask for Help
 
 **STOP executing immediately when:**
-- Hit a blocker mid-batch (missing dependency, test fails, instruction unclear)
-- Plan has critical gaps preventing starting
-- You don't understand an instruction
-- Verification fails repeatedly
+- Plan has critical gaps or missing context (before Step 2)
+- Dry-run output reveals structural problems (before Step 3)
+- `plan-to-tickets` fails with an architecture violation (before routing)
+- A ticket-pipeline run fails and cannot self-recover
 
 **Ask for clarification rather than guessing.**
 
-## When to Revisit Earlier Steps
-
-**Return to Review (Step 1) when:**
-- Partner updates the plan based on your feedback
-- Fundamental approach needs rethinking
-
-**Don't force through blockers** - stop and ask.
+---
 
 ## Remember
-- Review plan critically first
-- Follow plan steps exactly
-- Don't skip verifications
-- Reference skills when plan says to
-- Between batches: just report and wait
-- Stop when blocked, don't guess
+
+- Review plan critically before creating any tickets
+- Always dry-run first to preview ticket structure
+- Routing threshold is 3 tickets: `epic-team` for ≥3, `ticket-pipeline` for 1–2
+- Stop and ask if any step surfaces unexpected errors
