@@ -244,6 +244,30 @@ It does NOT own:
 - PR review polling (delegated to `pr-watch`)
 - Merge execution (delegated to `auto-merge`)
 
+## Failure Taxonomy and Recovery Strategies
+
+| Failure Class | Symptoms | Recovery Strategy |
+|---|---|---|
+| `rate_limit` | Sub-agent exits with rate limit error | Wait 60s, retry the ticket via `ticket-pipeline` sequentially |
+| `context_limit` | Sub-agent hits max context length mid-ticket | Spawn fresh sub-agent; previous work is in the branch |
+| `ci_failure_uv` | CI fails with lock file or uv version error | Verify CI uv version; regenerate lock with matching version |
+| `ci_failure_ruff` | CI fails with lint/format error | Run `uv run ruff check --fix` + `uv run ruff format`, recommit |
+| `stale_branch` | PR fails to merge — "main has moved" | `git rebase origin/main`, re-push, re-enable auto-merge |
+| `wrong_repo` | Ticket worked in wrong repo | Look up target repo in Linear ticket `repo` field; re-dispatch |
+| `blocker_unresolved` | Ticket blocked by another in-progress ticket | Move to end of queue; complete blocking ticket first |
+| `pr_template_blocked` | Mergeability gate rejected — missing PR body sections | Update PR body with required sections (Summary/Risk/Test Evidence/Rollback), rerun gate |
+| `unknown` | Failure doesn't match above patterns | Escalate to user: ticket ID, last command output, branch state |
+
+## Failure Attempt Definition
+
+A failure attempt is counted when `ticket-pipeline` returns non-zero exit OR the summary contains an explicit failure class. Partial completions (branch exists, some steps done) count as one attempt.
+
+## Self-Healing Rules
+
+- Attempt retry up to 2 times *within the same run only*. On interruption + re-run, counts reset.
+- After 2 failed attempts: produce failure report and stop dispatching new tickets.
+- Escalation = log the failure report and continue with remaining unblocked tickets.
+
 ## See Also
 
 - `prompt.md` — full orchestration logic, state machine, and error handling reference
