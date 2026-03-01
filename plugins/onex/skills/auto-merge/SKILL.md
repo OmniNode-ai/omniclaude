@@ -201,6 +201,7 @@ After a successful merge:
 **Ticket ID resolution order:**
 1. Passed explicitly as `--ticket-id OMN-XXXX` argument
 2. Extracted from PR branch name via `OMN-XXXX` pattern (fallback if `--ticket-id` not provided)
+   (branch name extraction: `git branch --show-current | grep -ioE '(OMN|omn)-[0-9]+' | head -1`)
 3. Skip update if neither resolves to a valid ID
 
 ## Slack Gate Message Format

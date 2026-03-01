@@ -52,9 +52,9 @@ jobs:
 
           TICKET_ID=""
 
-          # Try to extract from epic branch: epic/OMN-XXXX/OMN-YYYY/...
-          if printf '%s' "$BRANCH" | grep -qiE "^epic/OMN-[0-9]+/(OMN-[0-9]+)/"; then
-            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "^epic/OMN-[0-9]+/(OMN-[0-9]+)/" | grep -ioE "OMN-[0-9]+" | tail -1)
+          # Try to extract from epic branch: epic/OMN-XXXX/OMN-YYYY/... or epic/OMN-XXXX/OMN-YYYY
+          if printf '%s' "$BRANCH" | grep -qiE "^epic/OMN-[0-9]+/(OMN-[0-9]+)(/|$)"; then
+            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "^epic/OMN-[0-9]+/(OMN-[0-9]+)(/|$)" | grep -ioE "OMN-[0-9]+" | tail -1)
           fi
 
           # Try standard branch: */omn-XXXX-* or */OMN-XXXX-*
@@ -81,6 +81,11 @@ jobs:
           REPO: ${{ github.repository }}
         shell: bash
         run: |
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "LINEAR_API_KEY is not set — skipping Linear ticket close"
+            exit 0
+          fi
+
           echo "Marking $TICKET_ID as Done (PR #$PR_NUMBER merged in $REPO)"
 
           # Search for the ticket by identifier using the Linear GraphQL API
@@ -90,7 +95,7 @@ jobs:
             -d "{\"query\": \"{ issue(id: \\\"$TICKET_ID\\\") { id identifier title state { name } } }\"}" \
             2>&1)
 
-          echo "Search response: $SEARCH_RESPONSE"
+          echo "Linear API search: $(echo "$SEARCH_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('found' if d.get('data',{}).get('issue') else 'not found')" 2>/dev/null || echo "completed")"
 
           # Extract the internal UUID
           ISSUE_ID=$(echo "$SEARCH_RESPONSE" | python3 -c "
@@ -162,8 +167,6 @@ jobs:
             -d "{\"query\": \"mutation { issueUpdate(id: \\\"$ISSUE_ID\\\", input: { stateId: \\\"$DONE_STATE_ID\\\" }) { success issue { id state { name } } } }\"}" \
             2>&1)
 
-          echo "Update response: $UPDATE_RESPONSE"
-
           SUCCESS=$(echo "$UPDATE_RESPONSE" | python3 -c "
           import json, sys
           data = json.load(sys.stdin)
@@ -173,7 +176,7 @@ jobs:
           if [[ "$SUCCESS" == "True" ]]; then
             echo "Successfully marked $TICKET_ID as Done."
           else
-            echo "WARNING: Failed to mark $TICKET_ID as Done. Response: $UPDATE_RESPONSE"
+            echo "WARNING: Failed to mark $TICKET_ID as Done."
             # Non-fatal: do not fail the workflow for a Linear update failure
             exit 0
           fi
