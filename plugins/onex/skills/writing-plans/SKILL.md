@@ -56,7 +56,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 ## Task Structure
 
 ```markdown
-## Phase N: [Component Name]
+## Task N: [Component Name]
 
 **Files:**
 - Create: `exact/path/to/file.py`
