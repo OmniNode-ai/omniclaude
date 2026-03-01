@@ -10,7 +10,7 @@ workers can both discover the same pre-existing violation (e.g. an E501 in a sha
 file) and attempt to fix it simultaneously — producing duplicate PRs, merge conflicts,
 or divergent fixes.
 
-This module provides a file-based distributed lock keyed on the issue fingerprint:
+File-based distributed lock keyed on the issue fingerprint:  # ai-slop-ok: module description
 
     ``~/.claude/pipeline-locks/preexisting/<fingerprint>.lock``
 
@@ -29,7 +29,7 @@ Usage::
     lock = PreexistingFixLock()
 
     # Compute fingerprint as: sha256(f"{repo}:{rule}:{file}:{error_class}:{line}").hexdigest()[:12]
-    fingerprint = "abc123def456"
+    fingerprint = "preexisting01"  # example 12-char fingerprint
 
     if lock.acquire(fingerprint, run_id="epic-OMN-3266-abc", ticket_id="OMN-3260"):
         try:

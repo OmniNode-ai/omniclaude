@@ -4,7 +4,7 @@ You are executing the gap-fix skill. This prompt defines the complete orchestrat
 
 ---
 
-## Step 0: Parse Arguments
+## Parse Arguments
 
 Parse from `$ARGUMENTS`:
 
