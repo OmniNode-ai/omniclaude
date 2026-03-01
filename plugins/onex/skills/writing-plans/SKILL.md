@@ -42,7 +42,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan phase-by-phase.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -56,7 +56,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 ## Task Structure
 
 ```markdown
-### Task N: [Component Name]
+## Phase N: [Component Name]
 
 **Files:**
 - Create: `exact/path/to/file.py`
@@ -228,21 +228,11 @@ If the review instructions do not catch all five expected items, tighten the ins
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, hand off to the executing-plans skill:
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/plans/<filename>.md`.**
 
-**1. Subagent-Driven (this session)** - I dispatch fresh subagent per task, review between tasks, fast iteration
+**REQUIRED SUB-SKILL:** Use executing-plans to implement this plan phase-by-phase."
 
-**2. Parallel Session (separate)** - Open new session with executing-plans, batch execution with checkpoints
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use subagent-driven-development
-- Stay in this session
-- Fresh subagent per task + code review
-
-**If Parallel Session chosen:**
-- Guide them to open new session in worktree
-- **REQUIRED SUB-SKILL:** New session uses executing-plans
+- **REQUIRED SUB-SKILL:** Use executing-plans (v2 flow)
+- executing-plans drives phase-by-phase execution via the epic-team / ticket-pipeline routing
