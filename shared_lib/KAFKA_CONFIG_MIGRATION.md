@@ -72,8 +72,8 @@ brokers = get_kafka_bootstrap_servers_list()
 - `~/.claude/skills/agent-tracking/log-transformation/execute_kafka.py`
 
 ### 2. Intelligence Services (2 files)
-- `/Volumes/PRO-G40/Code/omniclaude/skills/intelligence/request-intelligence/execute.py`
-- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/intelligence_event_client.py`
+- `/Volumes/PRO-G40/Code/omniclaude/skills/intelligence/request-intelligence/execute.py`  <!-- local-path-ok -->
+- `/Volumes/PRO-G40/Code/omniclaude/agents/lib/intelligence_event_client.py`  <!-- local-path-ok -->
 
 ## Changes Made
 
@@ -163,7 +163,7 @@ When creating new services that need Kafka configuration:
 ## Related Documentation
 
 - `~/.claude/lib/kafka_config.py` - Module source code
-- `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` - Environment configuration
+- `/Volumes/PRO-G40/Code/omniclaude/CLAUDE.md` - Environment configuration  <!-- local-path-ok -->
 - Project `.env` file - Broker configuration settings
 
 ## Notes

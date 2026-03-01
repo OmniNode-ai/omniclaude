@@ -85,7 +85,7 @@ curl http://localhost:8080/metrics
 
 ### Start Consumer
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/consumers
+cd /Volumes/PRO-G40/Code/omniclaude/consumers  # local-path-ok
 ./start_agent_actions_consumer.sh
 ```
 
@@ -137,7 +137,7 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 ## Troubleshooting
 
 ### If Consumer Fails to Start
-1. Check .env file exists: `ls -la /Volumes/PRO-G40/Code/omniclaude/.env`
+1. Check .env file exists: `ls -la /Volumes/PRO-G40/Code/omniclaude/.env`  <!-- local-path-ok -->
 2. Verify environment variables: `source .env && echo $KAFKA_BOOTSTRAP_SERVERS`
 3. Check log file: `cat /tmp/agent_actions_consumer.log`
 4. Verify Kafka is accessible: `telnet 192.168.86.200 29092`

@@ -296,7 +296,7 @@ Use `--run-id` to override for testing.
         {"phase": "WORKTREE", "at": "2026-02-25T14:01:00Z"},
         {"phase": "DONE", "at": "2026-02-25T14:05:00Z"}
       ],
-      "worktree_path": "/Volumes/PRO-G40/Code/omni_worktrees/release/release-20260225-a3f7b2/omnibase_spi",
+      "worktree_path": "/Volumes/PRO-G40/Code/omni_worktrees/release/release-20260225-a3f7b2/omnibase_spi",  # local-path-ok
       "branch": "release/release-20260225-a3f7b2/omnibase_spi",
       "pr_url": "https://github.com/OmniNode-ai/omnibase_spi/pull/42",
       "pr_number": 42,

@@ -438,8 +438,8 @@ class TestDeriveRepo:
 
     def test_returns_basename(self) -> None:
         assert (
-            eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2")
-            == "omniclaude2"  # local-path-ok
+            eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2")  # local-path-ok
+            == "omniclaude2"
         )
 
     def test_strips_trailing_slash(self) -> None:
