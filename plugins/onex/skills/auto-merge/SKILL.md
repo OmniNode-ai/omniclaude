@@ -76,6 +76,37 @@ or timed out.
 /auto-merge 123 org/repo --no-delete-branch
 ```
 
+## CDQA Pre-Condition (Mandatory)
+
+**CDQA gates must pass before any merge proceeds. This requirement applies on all invocation
+paths — whether called from ticket-pipeline or directly.**
+
+When invoked from `ticket-pipeline`: CDQA gates run in Phase 5.5 before this skill is
+dispatched. The gate log is written to `~/.claude/skill-results/{context_id}/cdqa-gate-log.json`.
+
+When invoked directly (not from ticket-pipeline): this skill MUST run the CDQA gates itself
+before executing the merge mutation.
+
+### Direct Invocation: CDQA gate check
+
+```
+1. Read: ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+   If record exists with overall=PASS or overall=bypassed AND pr_number matches:
+     → skip re-run, proceed to Step 1
+   If no matching record:
+     → run all 3 CDQA gates (see @_lib/cdqa-gate/helpers.md)
+     → BLOCK result: post HIGH_RISK bypass gate, await operator reply
+     → BLOCK + held/timeout: exit with status: held
+     → all PASS or bypassed: proceed to Step 1
+```
+
+**There is no `--skip-cdqa` flag.** Bypassing CDQA requires the explicit Slack bypass
+protocol documented in `@_lib/cdqa-gate/helpers.md`. Any attempt to invoke auto-merge
+without CDQA gates passing (or a recorded bypass) must exit with `status: error` and
+message: `"CDQA gates not passed — run contract-compliance-check and verify CI gates"`.
+
+---
+
 ## Merge Flow (Tier-Aware)
 
 **Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
@@ -260,9 +291,12 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
 
 ## See Also
 
-- `ticket-pipeline` skill (invokes auto-merge after pr-watch passes)
-- `pr-watch` skill (runs before auto-merge)
+- `ticket-pipeline` skill (invokes auto-merge after cdqa_gate Phase 5.5 passes)
+- `pr-watch` skill (runs before auto-merge; Phase 5 in ticket-pipeline)
+- `contract-compliance-check` skill (CDQA Gate 1, OMN-2978)
+- `_lib/cdqa-gate/helpers.md` (CDQA gate protocol, bypass flow, result schema — OMN-3189)
 - `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
 - `_bin/pr-merge-readiness.sh` -- STANDALONE merge readiness backend
 - `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
 - OMN-2525 -- implementation ticket
+- OMN-3189 -- CDQA gate enforcement ticket

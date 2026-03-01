@@ -195,8 +195,10 @@ stateDiagram-v2
     local_review --> create_pr : auto (2 confirmed-clean runs)
     create_pr --> ci_watch : auto (policy)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
-    pr_review_loop --> auto_merge : auto (approved)
+    pr_review_loop --> cdqa_gate : auto (approved)
     pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
+    cdqa_gate --> auto_merge : all gates PASS or bypassed
+    cdqa_gate --> [*] : BLOCK held (operator hold/timeout)
     auto_merge --> [*] : merged (ledger cleared) or held (Slack waiting)
 ```
 
@@ -348,10 +350,34 @@ ticket-pipeline OMN-XXXX
 - `pr-watch` polls `gh pr reviews` every 10 minutes
 - Auto-invokes `pr-review-dev` on CHANGES_REQUESTED reviews, pushes fixes, re-requests review
 - Returns: `status: approved | capped | timeout | failed`
-- On `approved`: AUTO-ADVANCE to Phase 6
+- On `approved`: AUTO-ADVANCE to Phase 5.5 (CDQA gate)
 - On `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
 - On `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
 - On `failed`: Slack MEDIUM_RISK gate, stop pipeline
+
+### Phase 5.5: cdqa_gate (REQUIRED pre-merge step)
+
+**All three CDQA gates must pass before any merge proceeds. This phase is mandatory and
+cannot be skipped.**
+
+Runs inline in the orchestrator (no Task dispatch — gates are fast CI reads + one skill call).
+See `@_lib/cdqa-gate/helpers.md` for the full gate protocol, bypass flow, and result schema.
+
+**Gates** (run in order):
+1. **contract-compliance-check** — `Skill(skill="onex:contract-compliance-check", args="{ticket_id}")`
+2. **arch-invariants CI** — query CI check `arch-invariants` on the PR
+3. **AI-slop CI** — query CI check `check-ai-slop` on the PR
+
+**Result routing**:
+- All gates PASS (or WARN): record gate log, AUTO-ADVANCE to Phase 6
+- Any gate BLOCK: post Slack HIGH_RISK bypass gate; await operator reply
+  - `cdqa-bypass {ticket_id} <justification> <follow_up_ticket>` → downgrade to WARN, record bypass, advance
+  - Hold/cancel/timeout → exit pipeline with `status: held` (ledger NOT cleared; bypass the block to resume)
+
+**Gate result log**: appended to `~/.claude/skill-results/{context_id}/cdqa-gate-log.json`
+
+**Anti-pattern — soft-pass**: retrying a gate without fixing the underlying issue is invalid.
+A retry-to-fish-for-PASS must not be used. Fix the issue or use the explicit bypass protocol.
 
 ### Phase 6: auto_merge
 
@@ -391,6 +417,8 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `auto_fix_nits` | `false` | Skip nit-level PR comments during auto-fix |
 | `pr_review_timeout_hours` | `24` | Max hours waiting for PR approval before timeout |
 | `max_pr_review_cycles` | `3` | Max pr-review-dev fix cycles before capping |
+| `cdqa_gate_required` | `true` | **Always true — CDQA gate is mandatory on all merge paths. This switch is read-only; it cannot be set to false.** |
+| `cdqa_gate_timeout_hours` | `48` | Hours to wait for operator bypass reply before CDQA gate expires with `status: timeout` |
 | `auto_merge` | `false` | Merge immediately without HIGH_RISK Slack gate |
 | `slack_on_merge` | `true` | Post Slack notification on successful merge |
 | `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance); on expiry the ledger entry is cleared and the pipeline exits with `timeout` state requiring a new run |
@@ -645,6 +673,41 @@ Task(
 )
 ```
 
+### Phase 5.5: cdqa_gate — runs inline (mandatory pre-merge check)
+
+**This phase is mandatory. It cannot be skipped, bypassed silently, or disabled via policy.**
+
+No Task dispatch — the orchestrator runs gate checks inline. Gates are fast (CI reads + one
+skill call). See `@_lib/cdqa-gate/helpers.md` for the full gate spec.
+
+```
+# Inline orchestrator actions for Phase 5.5:
+# 1. Invoke: Skill(skill="onex:contract-compliance-check", args="{ticket_id}")
+#    → PASS / WARN: log and continue
+#    → BLOCK: post HIGH_RISK bypass gate, await reply
+#
+# 2. Query CI: arch-invariants check conclusion on PR #{pr_number}
+#    → success / skipped / not_found: log and continue
+#    → failure / cancelled: BLOCK → post HIGH_RISK bypass gate, await reply
+#
+# 3. Query CI: check-ai-slop check conclusion on PR #{pr_number}
+#    → success / skipped / not_found: log and continue
+#    → failure / cancelled: BLOCK → post HIGH_RISK bypass gate, await reply
+#
+# 4. Append gate result to:
+#    ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+#
+# 5. All gates PASS or bypassed: update state.yaml phase=auto_merge
+#    Any BLOCK + held/timeout: update state.yaml phase=cdqa_gate_held, clear ledger, exit
+# AUTO-ADVANCE to Phase 6 (only when all gates pass or are bypassed)
+```
+
+**Bypass**: requires explicit Slack reply `cdqa-bypass {ticket_id} <justification> <follow_up_ticket>`.
+See `@_lib/cdqa-gate/helpers.md` — Bypass Protocol.
+
+**Anti-pattern**: do NOT retry a failing gate without fixing the root cause. Retry-to-fish-for-PASS
+is an invalid bypass and must not be used.
+
 ### Phase 6: auto_merge — dispatch to polymorphic agent
 
 `merge_gate_timeout_hours` is passed to `auto-merge` to control the HIGH_RISK Slack gate lifetime.
@@ -676,6 +739,8 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `local-review` skill (Phase 2)
 - `ci-watch` skill (Phase 4, OMN-2523)
 - `pr-watch` skill (Phase 5, OMN-2524)
+- `contract-compliance-check` skill (Phase 5.5 Gate 1, OMN-2978)
+- `_lib/cdqa-gate/helpers.md` (Phase 5.5 gate protocol, OMN-3189)
 - `auto-merge` skill (Phase 6, OMN-2525)
 - `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
 - `ci-failures` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
