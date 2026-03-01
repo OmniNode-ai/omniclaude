@@ -473,6 +473,6 @@ The skill:
 
 After writing gap-fix-output.json, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths — including early exits such as all findings gated or zero auto-dispatchable findings:
 
-GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json}
+GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json}  # local-path-ok
 
 In `--dry-run` mode: still emit the path (no actual file written, but path is computed from source_run_id). If the skill exits early (all gated, zero eligible findings, dry-run, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.

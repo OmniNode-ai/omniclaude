@@ -1073,4 +1073,16 @@ else
     printf '%s' "$INPUT"
 fi
 
+# === Opportunistic env sync (non-blocking) ===
+# Runs sync-omnibase-env.py in background when Infisical is configured.
+# Throttle and flock guards in the script prevent duplicate syncs.
+if [[ -n "${INFISICAL_ADDR:-}" ]]; then
+  _sync_log="${HOME}/.claude/logs/env-sync.log"
+  mkdir -p "$(dirname "${_sync_log}")"
+  (uv run python "${OMNIBASE_INFRA_DIR}/scripts/sync-omnibase-env.py" \
+    >> "${_sync_log}" 2>&1) &
+  disown
+fi
+# === End env sync ===
+
 exit 0
