@@ -1528,11 +1528,64 @@ def execute_phase(phase_name, state):
    ```
    Capture output. Same classification logic.
 
-4. **AUTO-FIX path:** Apply fixes inline (lightweight). Commit as:
+4. **AUTO-FIX path:** Before applying any fix, check the pre-existing fix dedup lock to
+   ensure no other concurrent pipeline run is already fixing this issue.
+
+   ```python
+   import sys
+   from hashlib import sha256
+   from pathlib import Path
+
+   # Locate the preexisting_fix_lock module (same lib dir as cross_repo_detector.py)
+   lib_dir = Path(__file__).parent.parent / "hooks" / "lib"
+   if str(lib_dir) not in sys.path:
+       sys.path.insert(0, str(lib_dir))
+   from preexisting_fix_lock import PreexistingFixLock
+
+   fix_lock = PreexistingFixLock()  # uses ~/.claude/pipeline-locks/preexisting/
+   locked_issues = []    # issues successfully locked (will be fixed)
+   skipped_issues = []   # issues locked by another run (skip and log)
+
+   for issue in auto_fix_issues:
+       fp_parts = [repo, issue['rule'], issue['file'], issue.get('error_class', '')]
+       if issue.get('line'):
+           fp_parts.append(str(issue['line']))
+       fp_str = ":".join(fp_parts)
+       fp_hash = sha256(fp_str.encode()).hexdigest()[:12]
+
+       if fix_lock.acquire(fp_hash, run_id=run_id, ticket_id=ticket_id):
+           locked_issues.append({**issue, 'fp_hash': fp_hash})
+       else:
+           holder = fix_lock.holder(fp_hash)
+           holder_run = holder['run_id'] if holder else 'unknown'
+           holder_ticket = holder['ticket_id'] if holder else 'unknown'
+           skipped_issues.append({**issue, 'fp_hash': fp_hash,
+                                   'locked_by_run': holder_run,
+                                   'locked_by_ticket': holder_ticket})
+           print(
+               f"[pre-existing-lock] Skipping fix for {issue['file']} "
+               f"({issue['rule']}): fix in progress by run={holder_run} "
+               f"ticket={holder_ticket} — fingerprint={fp_hash}"
+           )
+   ```
+
+   Log skipped issues in `state.yaml` under
+   `phases.pre_flight.artifacts.dedup_lock_skipped` so they are visible in pipeline
+   status output (not silently dropped).
+
+   Apply fixes only for `locked_issues`. Commit as:
    ```
    chore(pre-existing): fix pre-existing issues [OMN-XXXX]
    ```
-   If fix attempt fails: downgrade to DEFER.
+   After the commit, **release locks** for all successfully fixed issues:
+   ```python
+   for issue in locked_issues:
+       fix_lock.release(issue['fp_hash'])
+   ```
+   If fix attempt fails: release lock for that issue, downgrade to DEFER.
+
+   **Lock TTL**: Locks auto-expire after 30 minutes (default). A crashed pipeline
+   will not hold locks permanently.
 
 5. **DEFER path:** Create Linear sub-ticket via MCP for deferred issues, with fingerprint-based
    dedup to prevent duplicate tickets across pipeline runs. Note in PR description template.
@@ -1639,7 +1692,7 @@ def execute_phase(phase_name, state):
 **Mutations:**
 - `phases.pre_flight.started_at`
 - `phases.pre_flight.completed_at`
-- `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids, deferred_fingerprints)
+- `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids, deferred_fingerprints, dedup_lock_skipped)
 - `~/.claude/pipelines/ledger.json` (entry created)
 
 **Exit conditions:**
