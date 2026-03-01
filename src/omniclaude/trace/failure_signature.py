@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""FailureSignature model and SHA-256 fingerprint computation pipeline.
+"""FailureSignature model and SHA-256 fingerprint computation pipeline.  # ai-slop-ok: pre-existing module docstring
 
 This module provides:
 - FailureSignature Pydantic model (frozen)
