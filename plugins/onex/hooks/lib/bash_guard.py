@@ -76,6 +76,7 @@ import urllib.request
 __all__ = [
     "HARD_BLOCK_PATTERNS",
     "SOFT_ALERT_PATTERNS",
+    "CONTEXT_ADVISORY_PATTERNS",
     "matches_any",
     "main",
 ]
@@ -180,6 +181,20 @@ SOFT_ALERT_PATTERNS: list[re.Pattern[str]] = [
     re.compile(
         r"(?:^|[;&|]\s*)(?:/(?:usr/(?:local/)?)?bin/)?rm\b\s+(?:-\S+\s+)*",
         re.IGNORECASE | re.MULTILINE,
+    ),
+]
+
+# =============================================================================
+# CONTEXT_ADVISORY patterns
+# =============================================================================
+# Commands that are not dangerous but warrant an informational advisory to
+# the operator.  The hook exits 0 (allow) but includes an ``"advisory"`` key
+# in the JSON response so the caller can surface the message.
+
+CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"^\s*uv\s+lock\b", re.IGNORECASE),
+        "ADVISORY: uv lock detected. Before modifying uv.lock, verify the CI-pinned uv version matches your local version to prevent lock-file drift between environments.",
     ),
 ]
 
@@ -352,6 +367,14 @@ def main() -> int:
             ).start()
         print("{}")
         return 0
+
+    # ------------------------------------------------------------------
+    # Tier 3 — CONTEXT_ADVISORY
+    # ------------------------------------------------------------------
+    for pattern, advisory_message in CONTEXT_ADVISORY_PATTERNS:
+        if pattern.search(command):
+            print(json.dumps({"advisory": advisory_message}))
+            return 0
 
     # ------------------------------------------------------------------
     # Default — ALLOW

@@ -696,5 +696,62 @@ class TestMainIntegrationViapytest(TestMainIntegration):
     """Re-expose TestMainIntegration under the @pytest.mark.unit marker."""
 
 
+# =============================================================================
+# CONTEXT_ADVISORY pattern tests
+# =============================================================================
+
+
+class TestContextAdvisoryPatterns(unittest.TestCase):
+    """Verify CONTEXT_ADVISORY tier: uv lock triggers advisory, others do not."""
+
+    def test_uv_lock_triggers_advisory(self) -> None:
+        """uv lock at head of command exits 0 with 'advisory' key mentioning 'uv'."""
+        stdout, code = _run_main(
+            {"tool_name": "Bash", "tool_input": {"command": "uv lock"}}
+        )
+        self.assertEqual(code, 0)
+        response = json.loads(stdout)
+        self.assertIn("advisory", response)
+        self.assertIn("uv", response["advisory"])
+
+    def test_uv_lock_with_flag_triggers_advisory(self) -> None:
+        """uv lock --no-cache also triggers advisory."""
+        stdout, code = _run_main(
+            {"tool_name": "Bash", "tool_input": {"command": "uv lock --no-cache"}}
+        )
+        self.assertEqual(code, 0)
+        response = json.loads(stdout)
+        self.assertIn("advisory", response)
+
+    def test_uv_sync_does_not_trigger_advisory(self) -> None:
+        """uv sync must NOT trigger advisory — returns empty dict."""
+        stdout, code = _run_main(
+            {"tool_name": "Bash", "tool_input": {"command": "uv sync"}}
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout), {})
+
+    def test_non_uv_command_unaffected(self) -> None:
+        """pytest tests/ -v must not trigger advisory — returns empty dict."""
+        stdout, code = _run_main(
+            {"tool_name": "Bash", "tool_input": {"command": "pytest tests/ -v"}}
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout), {})
+
+    def test_uv_lock_not_head_of_multiline_command(self) -> None:
+        """echo hi\\nuv lock — anchor prevents false positive, returns empty dict."""
+        stdout, code = _run_main(
+            {"tool_name": "Bash", "tool_input": {"command": "echo hi\nuv lock"}}
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout), {})
+
+
+@pytest.mark.unit
+class TestContextAdvisoryPatternsViapytest(TestContextAdvisoryPatterns):
+    """Re-expose TestContextAdvisoryPatterns under the @pytest.mark.unit marker."""
+
+
 if __name__ == "__main__":
     unittest.main()
