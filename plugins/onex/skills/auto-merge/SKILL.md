@@ -41,6 +41,8 @@ outputs:
       - repo: str
       - merge_commit: str | null
       - strategy: str
+      - ticket_id: str | null
+      - ticket_close_status: "closed" | "skipped" | "failed" | null
 args:
   - name: pr_number
     description: GitHub PR number to merge
@@ -235,7 +237,9 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
   "repo": "org/repo",
   "merge_commit": "abc1234",
   "strategy": "squash",
-  "context_id": "{context_id}"
+  "context_id": "{context_id}",
+  "ticket_id": "OMN-3262",
+  "ticket_close_status": "closed"
 }
 ```
 
@@ -247,6 +251,14 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 - `error`: Merge failed — includes:
   - `mergeStateStatus == "DIRTY"`: message "PR has merge conflicts — resolve before retrying"
   - Permissions error, API failure, or other terminal failure
+
+**`ticket_id`**: The Linear ticket identifier closed in Step 6 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
+
+**`ticket_close_status`** values:
+- `"closed"`: `mcp__linear-server__save_issue` succeeded; ticket marked Done
+- `"skipped"`: No `ticket_id` could be resolved — explicit arg absent and branch-name extraction returned empty
+- `"failed"`: `save_issue` call raised an exception; merge still succeeded (non-blocking)
+- `null`: Step 6 was not reached (skill exited before merge — `status` is `held`, `timeout`, or `error`)
 
 ## Executable Scripts
 
