@@ -52,7 +52,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 __all__ = ["PreexistingFixLock"]
@@ -121,7 +121,7 @@ class PreexistingFixLock:
             {
                 "run_id": run_id,
                 "ticket_id": ticket_id,
-                "acquired_at": datetime.now(timezone.utc).isoformat(),
+                "acquired_at": datetime.now(UTC).isoformat(),
                 "fingerprint": fingerprint,
             }
         ).encode()

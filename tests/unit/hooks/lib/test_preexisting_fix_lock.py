@@ -28,7 +28,6 @@ sys.path.insert(
 
 from preexisting_fix_lock import PreexistingFixLock
 
-
 FINGERPRINT = "abc123def456"
 RUN_ID = "epic-OMN-3266-test"
 TICKET_ID = "OMN-3260"
