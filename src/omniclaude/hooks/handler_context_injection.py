@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
+from omniclaude.hooks._helpers import normalize_action_description
 from omniclaude.hooks.cohort_assignment import (
     CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
     CONTRACT_DEFAULT_SALT,
@@ -1066,6 +1067,11 @@ class HandlerContextInjection:
             resolved_correlation_id = entity_id
 
         try:
+            _pattern_count = len(patterns)
+            _token_count = context_size_bytes // 4  # approximate: 4 bytes per token
+            _action_desc = normalize_action_description(
+                f"Context: {_pattern_count} patterns ({_token_count} tokens)"
+            )
             payload = ModelHookContextInjectedPayload(
                 entity_id=entity_id,
                 session_id=session_id or str(entity_id),
@@ -1073,11 +1079,12 @@ class HandlerContextInjection:
                 causation_id=uuid4(),
                 emitted_at=emitted_at,
                 context_source=context_source,
-                pattern_count=len(patterns),
+                pattern_count=_pattern_count,
                 context_size_bytes=context_size_bytes,
                 agent_domain=agent_domain or None,
                 min_confidence_threshold=min_confidence,
                 retrieval_duration_ms=retrieval_ms,
+                action_description=_action_desc,
             )
             await emit_hook_event(payload)
             logger.debug(

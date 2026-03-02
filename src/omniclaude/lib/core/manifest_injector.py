@@ -589,7 +589,7 @@ class ManifestInjectionStorage:
         Returns:
             True if successful, False otherwise
         """
-        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # OMN-2058: agent_manifest_injections table ownership transferred to omnibase_infra.
         # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
         logger.info(
             "Manifest injection storage disabled during DB-SPLIT (OMN-2058). "
@@ -622,7 +622,7 @@ class ManifestInjectionStorage:
             >>> storage.mark_agent_completed(correlation_id, success=True)
             True
         """
-        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # OMN-2058: agent_manifest_injections table ownership transferred to omnibase_infra.
         # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
         logger.info(
             "Agent completion tracking disabled during DB-SPLIT (OMN-2058). "
@@ -927,7 +927,7 @@ class ManifestInjector:
             return []
 
         # OMN-2058: disabled_patterns_current materialized view not available in
-        # omniclaude database. Table ownership transferred to omninode_bridge.
+        # omniclaude database. Table ownership transferred to omnibase_infra.
         # TODO(OMN-2058): Re-enable when omniclaude owns its own disabled_patterns view.
         self.logger.info(
             "Disabled patterns kill switch not available during DB-SPLIT (OMN-2058)"

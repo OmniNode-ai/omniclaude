@@ -37,9 +37,10 @@ class ModelEventPublishResult(BaseModel):
         error_message: Error details if publishing failed.
 
     Example:
+        >>> from omniclaude.hooks.topics import TopicBase
         >>> result = ModelEventPublishResult(
         ...     success=True,
-        ...     topic="onex.evt.omniclaude.session-started.v1",
+        ...     topic=TopicBase.SESSION_STARTED,
         ...     partition=0,
         ...     offset=12345,
         ... )

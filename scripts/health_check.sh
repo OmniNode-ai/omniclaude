@@ -419,7 +419,7 @@ check_service "archon-search"
 check_service "archon-memgraph"
 
 # Note: archon-kafka-consumer was renamed to archon-intelligence-consumer-*
-# Those services are managed by omniarchon repository, not checked here
+# Those services are managed by omniintelligence repository, not checked here
 # Similarly, archon-server and archon-router services do not exist
 
 # Check Omninode services (if they exist)

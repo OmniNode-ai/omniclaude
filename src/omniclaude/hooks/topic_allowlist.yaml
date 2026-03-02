@@ -1,0 +1,350 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# topic_allowlist.yaml — TopicBase entries with no corresponding contract declaration.
+#
+# CI fails if any TopicBase entry is absent from both contracts AND this allowlist.
+# Add entries here only when the contract schema cannot declare the topic (e.g., a
+# node contract only supports one topic_base and the topic is a secondary emission
+# target, or the topic is a cross-domain internal control plane topic with no
+# dedicated node contract), OR when the topic pre-dates contract governance (Phase 1
+# scope) and will be governed in a later phase.
+#
+# Each entry must document:
+#   topic:     the exact wire topic string (must match a TopicBase member value)
+#   lifecycle: classification (see below)
+#   reason:    why this topic is not in a contract declaration
+#   ticket:    Linear ticket that added this entry
+#
+# Lifecycle values:
+#   integration      — stable, consumed by downstream services
+#   telemetry        — best-effort, may be sampled or dropped
+#   internal_control — cross-domain control plane, not an observability topic
+#   observability    — hook/daemon observability topics, broad access
+#   legacy           — kept for backwards compat, pending removal
+#   pre_governance   — topic predates contract governance; to be governed in future phase
+#
+# (OMN-3294)
+
+allowed_extras:
+  # ---------------------------------------------------------------------------
+  # CMD topics: dual-emission targets and cross-domain control topics
+  # These cannot be declared in a node contract's event_bus.topic_base since the
+  # schema supports only one topic_base per contract.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.cmd.omniintelligence.routing-decision.v1"
+    lifecycle: internal_control
+    reason: >
+      Producer is omniclaude; domain is omniintelligence. This is the CMD half of the
+      dual-emission pattern in node_routing_emission_effect. The contract schema only
+      supports one topic_base (the EVT topic), so this CMD topic cannot be declared
+      there. Intentional cross-domain CMD — do NOT rename.
+    ticket: OMN-3294
+
+  # ---------------------------------------------------------------------------
+  # Pre-governance topics: TopicBase entries that predate contract governance.
+  # Phase 1 (OMN-3294) governs only the 5 newly registered topics. All entries
+  # below were already in TopicBase and are allowlisted here so CI passes in Phase 1.
+  # These will be governed (contract declarations added) in future phases.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.cmd.omniclaude.context-retrieval-requested.v1"
+    lifecycle: pre_governance
+    reason: Context injection CMD topic; predates contract governance (OMN-1403).
+    ticket: OMN-3294
+
+  - topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+    lifecycle: internal_control
+    reason: Full-prompt intelligence CMD topic (access-restricted); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.cmd.omniintelligence.compliance-evaluate.v1"
+    lifecycle: internal_control
+    reason: Compliance evaluation CMD topic; predates contract governance (OMN-2263).
+    ticket: OMN-3294
+
+  - topic: "onex.cmd.omniintelligence.decision-recorded.v1"
+    lifecycle: internal_control
+    reason: Decision record CMD (full payload, restricted access); predates contract governance (OMN-2465).
+    ticket: OMN-3294
+
+  - topic: "onex.cmd.omniintelligence.tool-content.v1"
+    lifecycle: internal_control
+    reason: Tool content CMD (file contents, access-restricted); predates contract governance (OMN-1702).
+    ticket: OMN-3294
+
+  - topic: "onex.cmd.omninode.routing-requested.v1"
+    lifecycle: integration
+    reason: Agent routing CMD topic; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-action.v1"
+    lifecycle: observability
+    reason: Agent action observability topic; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-actions.v1"
+    lifecycle: observability
+    reason: Hook adapter observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-execution-logs.v1"
+    lifecycle: observability
+    reason: Execution logs observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-match.v1"
+    lifecycle: observability
+    reason: Injection metrics topic (OMN-1889); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-observability-dlq.v1"
+    lifecycle: integration
+    reason: DLQ for agent observability consumer (OMN-2959); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-observability.v1"
+    lifecycle: observability
+    reason: Agent observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-status.v1"
+    lifecycle: observability
+    reason: Agent status/lifecycle topic (OMN-1848); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.agent-transformation.v1"
+    lifecycle: observability
+    reason: Transformation observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.budget-cap-hit.v1"
+    lifecycle: observability
+    reason: Token budget cap observability (Wave 2, OMN-2922); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.change-frame.v1"
+    lifecycle: observability
+    reason: ChangeFrame emission topic (OMN-2651); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+    lifecycle: observability
+    reason: Circuit breaker observability topic; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.context-enrichment.v1"
+    lifecycle: observability
+    reason: Enrichment observability topic (OMN-2274); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.context-injected.v1"
+    lifecycle: observability
+    reason: Context injection tracking (OMN-1403); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.context-retrieval-completed.v1"
+    lifecycle: observability
+    reason: Context injection tracking (OMN-1403); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.context-utilization.v1"
+    lifecycle: observability
+    reason: Injection metrics topic (OMN-1889); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.decision-conflict-detected.v1"
+    lifecycle: observability
+    reason: Decision store event (OMN-2766); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.decision-conflict-status-changed.v1"
+    lifecycle: observability
+    reason: Decision store event (OMN-2766); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.decision-recorded.v1"
+    lifecycle: observability
+    reason: Decision store event (OMN-2766); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.decision-status-changed.v1"
+    lifecycle: observability
+    reason: Decision store event (OMN-2766); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.delegation-shadow-comparison.v1"
+    lifecycle: observability
+    reason: Shadow validation topic (OMN-2283); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.detection-failure.v1"
+    lifecycle: observability
+    reason: Hook adapter observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.epic-run-updated.v1"
+    lifecycle: observability
+    reason: Wave 2 pipeline observability (OMN-2922); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.fix-transition.v1"
+    lifecycle: observability
+    reason: Agent trace topic (OMN-2412); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.gate-decision.v1"
+    lifecycle: observability
+    reason: Wave 2 gate decision topic (OMN-2922); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.injection-recorded.v1"
+    lifecycle: observability
+    reason: Injection tracking event (OMN-1673); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.intent-commit-bound.v1"
+    lifecycle: observability
+    reason: Intent-to-commit binding (OMN-2492); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.latency-breakdown.v1"
+    lifecycle: observability
+    reason: Injection metrics topic (OMN-1889); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.learning-pattern.v1"
+    lifecycle: observability
+    reason: Learning pattern observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.llm-routing-decision.v1"
+    lifecycle: observability
+    reason: LLM routing observability (OMN-2273); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.llm-routing-fallback.v1"
+    lifecycle: observability
+    reason: LLM routing observability (OMN-2273); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.manifest-injected.v1"
+    lifecycle: observability
+    reason: Manifest injection observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.manifest-injection-failed.v1"
+    lifecycle: observability
+    reason: Manifest injection observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.manifest-injection-started.v1"
+    lifecycle: observability
+    reason: Manifest injection observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.notification-blocked.v1"
+    lifecycle: observability
+    reason: Notification topics (OMN-1831); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.notification-completed.v1"
+    lifecycle: observability
+    reason: Notification topics (OMN-1831); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.pattern-enforcement.v1"
+    lifecycle: observability
+    reason: Pattern enforcement observability (OMN-2442); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.performance-metrics.v1"
+    lifecycle: observability
+    reason: Hook adapter observability topic (OMN-1552); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.phase-metrics.v1"
+    lifecycle: observability
+    reason: Pipeline phase metrics (OMN-2027); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.pr-watch-updated.v1"
+    lifecycle: observability
+    reason: Wave 2 pr-watch observability (OMN-2922); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.quirk-finding-produced.v1"
+    lifecycle: observability
+    reason: Quirks detector topic (OMN-2556); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.quirk-signal-detected.v1"
+    lifecycle: observability
+    reason: Quirks detector topic (OMN-2556); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.routing-feedback.v1"
+    lifecycle: observability
+    reason: Routing feedback topic (OMN-1892); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.session-outcome.v1"
+    lifecycle: observability
+    reason: Session outcome EVT target (OMN-1735); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.skill-completed.v1"
+    lifecycle: observability
+    reason: Skill lifecycle topic (OMN-2773); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.skill-started.v1"
+    lifecycle: observability
+    reason: Skill lifecycle topic (OMN-2773); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.static-context-edit-detected.v1"
+    lifecycle: observability
+    reason: Static context edit detection (OMN-2237); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.task-delegated.v1"
+    lifecycle: observability
+    reason: Delegation observability (OMN-2281); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.transformation-completed.v1"
+    lifecycle: observability
+    reason: Transformation observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.transformation-failed.v1"
+    lifecycle: observability
+    reason: Transformation observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniclaude.transformation-started.v1"
+    lifecycle: observability
+    reason: Transformation observability; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniintelligence.compliance-evaluated.v1"
+    lifecycle: integration
+    reason: Pattern compliance evaluated EVT (OMN-2263); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omniintelligence.decision-recorded.v1"
+    lifecycle: observability
+    reason: Decision record EVT summary (OMN-2465, observability/broad access); predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omninode.routing-completed.v1"
+    lifecycle: integration
+    reason: Agent routing EVT topic; predates contract governance.
+    ticket: OMN-3294
+
+  - topic: "onex.evt.omninode.routing-failed.v1"
+    lifecycle: integration
+    reason: Agent routing EVT topic; predates contract governance.
+    ticket: OMN-3294

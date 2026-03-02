@@ -318,7 +318,7 @@ The ONEX plugin is designed for cross-repository compatibility. Set these enviro
 # Used by: Hooks, skills, agents
 # Default detection: Automatic from .env location or pwd
 PROJECT_ROOT="${HOME}/Code/omniclaude"  # Example for omniclaude repo
-# For other repos: PROJECT_ROOT="${HOME}/Code/omniarchon"
+# For other repos: PROJECT_ROOT="${HOME}/Code/omniintelligence"
 
 # Plugin root - Location of the ONEX plugin
 # Set by Claude Code automatically when loading plugins
@@ -368,9 +368,9 @@ POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
-**omniarchon**:
+**omniintelligence**:
 ```bash
-PROJECT_ROOT=/path/to/omniarchon  # local-path-ok
+PROJECT_ROOT=/path/to/omniintelligence  # local-path-ok
 OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092

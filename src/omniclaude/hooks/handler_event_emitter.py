@@ -52,6 +52,7 @@ from omnibase_core.models.hooks.claude_code import (
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
+from omniclaude.hooks._helpers import normalize_action_description
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
@@ -113,6 +114,7 @@ class ModelToolExecutedConfig:
         success: Whether the tool execution succeeded.
         duration_ms: Tool execution duration in milliseconds.
         summary: Brief summary of the tool execution result.
+        action_description: Human-readable description for consumer display.
         tracing: Optional tracing configuration.
     """
 
@@ -122,6 +124,7 @@ class ModelToolExecutedConfig:
     success: bool = True
     duration_ms: int | None = None
     summary: str | None = None
+    action_description: str = ""
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
@@ -138,6 +141,7 @@ class ModelPromptSubmittedConfig:
         prompt_preview: Sanitized/truncated preview of the prompt.
         prompt_length: Total character count of the original prompt.
         detected_intent: Classified intent if available.
+        action_description: Human-readable description for consumer display.
         tracing: Optional tracing configuration.
     """
 
@@ -146,6 +150,7 @@ class ModelPromptSubmittedConfig:
     prompt_preview: str
     prompt_length: int
     detected_intent: str | None = None
+    action_description: str = ""
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
@@ -161,6 +166,7 @@ class ModelSessionStartedConfig:
         working_directory: Current working directory of the session.
         hook_source: What triggered the session start.
         git_branch: Current git branch if in a git repository.
+        action_description: Human-readable description for consumer display.
         tracing: Optional tracing configuration.
     """
 
@@ -168,6 +174,7 @@ class ModelSessionStartedConfig:
     working_directory: str
     hook_source: HookSource
     git_branch: str | None = None
+    action_description: str = ""
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
@@ -183,6 +190,7 @@ class ModelSessionEndedConfig:
         reason: What caused the session to end.
         duration_seconds: Total session duration in seconds.
         tools_used_count: Number of tool invocations during the session.
+        action_description: Human-readable description for consumer display.
         tracing: Optional tracing configuration.
     """
 
@@ -190,6 +198,7 @@ class ModelSessionEndedConfig:
     reason: SessionEndReason
     duration_seconds: float | None = None
     tools_used_count: int = 0
+    action_description: str = ""
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
@@ -648,6 +657,7 @@ async def emit_session_started_from_config(
         working_directory=config.working_directory,
         git_branch=config.git_branch,
         hook_source=config.hook_source,
+        action_description=normalize_action_description(config.action_description),
     )
 
     return await emit_hook_event(payload)
@@ -740,6 +750,7 @@ async def emit_session_ended_from_config(
         reason=config.reason,
         duration_seconds=config.duration_seconds,
         tools_used_count=config.tools_used_count,
+        action_description=normalize_action_description(config.action_description),
     )
 
     return await emit_hook_event(payload)
@@ -833,6 +844,7 @@ async def emit_prompt_submitted_from_config(
         prompt_preview=config.prompt_preview,
         prompt_length=config.prompt_length,
         detected_intent=config.detected_intent,
+        action_description=normalize_action_description(config.action_description),
     )
 
     return await emit_hook_event(payload)
@@ -930,6 +942,7 @@ async def emit_tool_executed_from_config(
         success=config.success,
         duration_ms=config.duration_ms,
         summary=config.summary,
+        action_description=normalize_action_description(config.action_description),
     )
 
     return await emit_hook_event(payload)

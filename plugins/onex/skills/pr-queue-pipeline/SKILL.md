@@ -382,7 +382,7 @@ Date: <date> | v1 | Scope: <repos> | Authors: <authors>
 - OmniNode-ai/omniintelligence#34 — fixed merge conflict
 
 ## Still Blocked (<N> PRs)
-- OmniNode-ai/omniarchon#12 — reason: conflict_unresolved
+- (none)
 
 ## Needs Human Review (<N> PRs)
 - OmniNode-ai/omnidash#19 — retry_count: 3, no progress

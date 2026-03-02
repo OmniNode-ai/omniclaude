@@ -109,12 +109,13 @@ If file doesn't exist, report error and stop.
 ## Step 2: Detect Plan Structure
 
 **Detection Cascade:**
-1. If `## Phase N:` sections exist → use them (`phase_sections`, canonical)
-2. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
-3. Else if `## Step N:` headings exist → use them (`step_sections`)
-4. Else if flat checklist items exist → use them (`flat_tasks`)
+1. If `## Task N:` sections exist → use them (`task_sections`, canonical)
+2. Else if `## Phase N:` sections exist → use them (`phase_sections`, legacy alias)
+3. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
+4. Else if `## Step N:` headings exist → use them (`step_sections`)
+5. Else if flat checklist items exist → use them (`flat_tasks`)
 
-If none match → fail fast: `"Plans must use ## Phase N: headings. Use writing-plans."`
+If none match → fail fast: `"Plans must use ## Task N: headings. Use writing-plans."`
 
 ```python
 import re
@@ -124,59 +125,67 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
 
     Returns:
         (structure_type, entries) where structure_type is one of:
-          'phase_sections' — ## Phase N: Title headings (canonical)
+          'task_sections'  — ## Task N: Title headings (canonical)
+          'phase_sections' — ## Phase N: Title headings (legacy alias)
           'numbered_h2'    — generic ## N. Title headings
           'step_sections'  — ## Step N: Title headings
           'flat_tasks'     — flat checklist items
         entries is list of {id, title, content, dependencies}
     """
-    # Try Phase sections first (canonical)
-    # Requires 'Phase' keyword to avoid matching arbitrary numbered headings
-    # Captures decimal phases: "## Phase 1.5: Title" -> phase_num = "1.5"
-    phase_pattern = r'^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$'
-    phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
-
-    if phase_matches:
+    def _extract_numbered_entries(matches, keyword: str, structure_type: str):
+        """Shared extraction logic for ## Task N: and ## Phase N: headings."""
         entries = []
-        for i, match in enumerate(phase_matches):
-            phase_num = match.group(1)
+        for i, match in enumerate(matches):
+            num = match.group(1)
             # Normalize: 1.5 -> 1_5 for valid ID
-            phase_id = phase_num.replace('.', '_')
+            entry_id = num.replace('.', '_')
             title = match.group(2).strip()
 
             # Extract content until next ## heading or end
             start = match.end()
-            if i + 1 < len(phase_matches):
-                end = phase_matches[i + 1].start()
+            if i + 1 < len(matches):
+                end = matches[i + 1].start()
             else:
-                # Find next ## heading or end of file
                 next_h2 = re.search(r'^## ', content[start:], re.MULTILINE)
                 end = start + next_h2.start() if next_h2 else len(content)
 
-            phase_content = content[start:end].strip()
-
-            # Parse dependencies from content (look for "Dependencies:" or "Depends on:")
-            deps = parse_dependencies(phase_content)
+            entry_content = content[start:end].strip()
+            deps = parse_dependencies(entry_content)
 
             entries.append({
-                'id': f'P{phase_id}',
-                'title': f'Phase {phase_num}: {title}',
-                'content': phase_content,
+                'id': f'P{entry_id}',
+                'title': f'{keyword} {num}: {title}',
+                'content': entry_content,
                 'dependencies': deps
             })
 
-        # Check for duplicate phase IDs - fail fast to prevent wrong dependency linking
+        # Check for duplicate IDs - fail fast to prevent wrong dependency linking
         seen_ids = {}
         for entry in entries:
             if entry['id'] in seen_ids:
                 raise ValueError(
-                    f"Duplicate phase ID '{entry['id']}' found. "
+                    f"Duplicate {keyword.lower()} ID '{entry['id']}' found. "
                     f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
-                    f"Fix plan file to use unique phase numbers."
+                    f"Fix plan file to use unique numbers."
                 )
             seen_ids[entry['id']] = entry['title']
 
-        return ('phase_sections', entries)
+        return (structure_type, entries)
+
+    # Try Task sections first (canonical)
+    # Captures decimal tasks: "## Task 1.5: Title" -> num = "1.5"
+    task_pattern = r'^## Task\s+(\d+(?:\.\d+)?):\s*(.+?)$'
+    task_matches = list(re.finditer(task_pattern, content, re.MULTILINE | re.IGNORECASE))
+
+    if task_matches:
+        return _extract_numbered_entries(task_matches, 'Task', 'task_sections')
+
+    # Try Phase sections (legacy alias — same behavior, different keyword)
+    phase_pattern = r'^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$'
+    phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
+
+    if phase_matches:
+        return _extract_numbered_entries(phase_matches, 'Phase', 'phase_sections')
 
     # Try Milestone table (legacy fallback)
     # Expected format: | **M1** | Deliverable | Dependencies |
@@ -899,7 +908,40 @@ def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
     Returns:
         List of contract results: {ticket_id, status, is_seam, path_or_error}
     """
+    import os
     import time
+    from pathlib import Path
+
+    # Auto-detect onex_change_control repo if ONEX_CC_REPO_PATH not already set.
+    # Respects any explicit override already in the environment.
+    # Candidate search order (first existing directory wins):
+    #   1. /Volumes/PRO-G40/Code/omni_home/onex_change_control  (canonical mount)  # local-path-ok
+    #   2. ~/Code/omni_home/onex_change_control                  (home-relative)
+    #   3. Any sibling named 'onex_change_control' under omni_home parents         # walk up CWD
+    if not os.environ.get('ONEX_CC_REPO_PATH'):
+        _candidates = [
+            Path('/Volumes/PRO-G40/Code/omni_home/onex_change_control'),  # local-path-ok
+            Path.home() / 'Code' / 'omni_home' / 'onex_change_control',
+        ]
+        # Walk up from cwd looking for a sibling onex_change_control dir
+        for _parent in Path.cwd().parents:
+            _probe = _parent / 'onex_change_control'
+            if _probe.is_dir():
+                _candidates.insert(0, _probe)
+                break
+
+        for _candidate in _candidates:
+            if _candidate.is_dir():
+                os.environ['ONEX_CC_REPO_PATH'] = str(_candidate)
+                if not dry_run:
+                    (_candidate / 'contracts').mkdir(parents=True, exist_ok=True)
+                print(f'[contracts] Auto-detected ONEX_CC_REPO_PATH={_candidate}')
+                break
+        else:
+            print(
+                'Warning: ONEX_CC_REPO_PATH not set and onex_change_control not found '
+                'at standard paths — contracts will be printed inline for manual commit.'
+            )
 
     all_tickets = []
 
@@ -967,14 +1009,16 @@ Output a **Generated Contracts** table after calling the generator for all ticke
 
 | Ticket | Seam? | Contract Status | Path |
 |--------|-------|-----------------|------|
-| OMN-XXXX | yes | valid | contracts/OMN-XXXX.yaml (written) |
-| OMN-YYYY | no  | valid | [printed — ONEX_CC_REPO_PATH not set] |
+| OMN-XXXX | yes | valid | contracts/OMN-XXXX.yaml (auto-written) |
+| OMN-YYYY | no  | valid | contracts/OMN-YYYY.yaml (auto-written) |
 | OMN-ZZZZ | no  | error | ValidationError: missing field 'requirements' |
 ```
 
 **Key rule:** Call `generate-ticket-contract` for every ticket — no seam-keyword filtering at this
-layer. The generator handles seam detection internally. When `ONEX_CC_REPO_PATH` is not set,
-the YAML is printed inline with a manual commit banner.
+layer. The generator handles seam detection internally. Before the per-ticket loop,
+`ONEX_CC_REPO_PATH` is auto-detected from standard paths so contracts are written directly to
+`onex_change_control/contracts/`. Only if detection fails will the YAML be printed inline with a
+manual commit banner.
 
 ---
 
@@ -989,7 +1033,7 @@ structure_type, entries = detect_structure(content)
 
 if structure_type == 'none' or not entries:
     # Fail fast with clear error
-    print("Plans must use ## Phase N: headings. Use writing-plans.")
+    print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use writing-plans.")
     raise SystemExit(1)
 
 print(f"[structure_detected] type={structure_type} entries={len(entries)}")

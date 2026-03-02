@@ -15,7 +15,7 @@ A banner appears in every prompt's context showing the current tier and probe ag
 
 | Tier | Config needed | What you get |
 |------|--------------|--------------|
-| **Standalone** | None | 73 skills, 54 agents, hooks fire (events silently dropped) |
+| **Standalone** | None | 90+ skills, 54 agents, hooks fire (events silently dropped) |
 | **Event Bus** | `KAFKA_BOOTSTRAP_SERVERS` | + routing telemetry, Kafka event emission |
 | **Full ONEX** | Full stack running | + context enrichment, semantic memory, pattern compliance |
 
@@ -23,7 +23,7 @@ See [QUICKSTART.md](QUICKSTART.md) for step-by-step setup instructions for each 
 
 ## What is OmniClaude?
 
-OmniClaude is a Claude Code plugin that instruments every Claude Code session with typed ONEX events. On each prompt it routes the request to a specialized agent (from a library of 53), enriches the context with learned patterns retrieved from the ONEX intelligence layer, enforces architectural compliance via pattern advisory, and — when local LLMs are available — optionally delegates tasks to them through a quality-gated orchestrator. All hook activity is emitted asynchronously to Kafka via a Unix socket daemon so the Claude Code UI is never blocked.
+OmniClaude is a Claude Code plugin that instruments every Claude Code session with typed ONEX events. On each prompt it routes the request to a specialized agent (from a library of 54), enriches the context with learned patterns retrieved from the ONEX intelligence layer, enforces architectural compliance via pattern advisory, and — when local LLMs are available — optionally delegates tasks to them through a quality-gated orchestrator. All hook activity is emitted asynchronously to Kafka via a Unix socket daemon so the Claude Code UI is never blocked.
 
 ## Hook Architecture
 
@@ -64,8 +64,8 @@ OmniClaude is a Claude Code plugin that instruments every Claude Code session wi
 ## What This Repo Provides
 
 - **5 Claude Code hooks** — SessionStart, UserPromptSubmit, PreToolUse (Edit/Write), PostToolUse, SessionEnd — each implemented as a shell script delegating to Python handler modules
-- **53 agent YAML definitions** for specialized routing (API design, debugging, PR review, testing, devops, and more)
-- **55+ skills and 4 slash commands** — reusable methodologies and user-invocable workflows
+- **54 agent YAML definitions** for specialized routing (API design, debugging, PR review, testing, devops, and more)
+- **90+ skills** — reusable methodologies and user-invocable workflows (see [Skills](#skills) below)
 - **Unix socket emit daemon** — non-blocking Kafka emission across hook invocations via a persistent background process
 - **LLM-based agent routing** — prompt-to-agent matching with fuzzy fallback to `polymorphic-agent`
 - **Multi-channel context enrichment** — learned patterns from Qdrant injected into the system prompt
@@ -136,7 +136,7 @@ omniclaude/
 │   ├── hooks/
 │   │   ├── hooks.json           # Hook configuration (tool matchers, script paths)
 │   │   ├── scripts/             # Shell handlers (session-start.sh, user-prompt-submit.sh, …)
-│   │   └── lib/                 # 55+ Python handler modules
+│   │   └── lib/                 # Python handler modules
 │   │       ├── emit_client_wrapper.py       # Public: event emission via daemon
 │   │       ├── context_injection_wrapper.py # Public: inject learned patterns
 │   │       ├── route_via_events_wrapper.py  # Public: agent routing
@@ -144,39 +144,160 @@ omniclaude/
 │   │       ├── delegation_orchestrator.py   # Local LLM delegation
 │   │       ├── pattern_enforcement.py       # Compliance enforcement
 │   │       └── …                            # Internal implementation modules
-│   ├── agents/configs/          # 53 agent YAML definitions
-│   ├── commands/                # 4 slash command definitions
-│   └── skills/                  # 55+ skill definitions
+│   ├── agents/configs/          # 54 agent YAML definitions
+│   └── skills/                  # 90+ skill definitions
 ├── docs/                        # Architecture decision records and proposals
 ├── tests/                       # Test suite (unit, integration)
 ├── pyproject.toml               # Package config
 └── CLAUDE.md                    # Development guide and reference
 ```
 
-## Kafka Topics
+## Skills
 
-Topics follow the ONEX canonical format: `onex.{kind}.{producer}.{event-name}.v{n}`
+Skills are invoked in Claude Code as `onex:<skill-name>`. All skills live under `plugins/onex/skills/`.
 
-| Topic | Kind | Purpose |
-|-------|------|---------|
-| `onex.evt.omniclaude.session-started.v1` | evt | Session initialization |
-| `onex.evt.omniclaude.session-ended.v1` | evt | Session close |
-| `onex.evt.omniclaude.prompt-submitted.v1` | evt | 100-char prompt preview (broad access) |
-| `onex.evt.omniclaude.tool-executed.v1` | evt | Tool completion metrics |
-| `onex.cmd.omniintelligence.claude-hook-event.v1` | cmd | Full prompt — intelligence only (restricted) |
-| `onex.cmd.omniintelligence.tool-content.v1` | cmd | Tool content for pattern learning (restricted) |
-| `onex.cmd.omninode.routing-requested.v1` | cmd | Agent routing requests |
-| `onex.evt.omniclaude.routing-decision.v1` | evt | Routing outcomes and confidence scores |
-| `onex.evt.omniclaude.manifest-injected.v1` | evt | Agent manifest injection tracking |
-| `onex.evt.omniclaude.context-injected.v1` | evt | Context enrichment tracking |
-| `onex.evt.omniclaude.task-delegated.v1` | evt | Local LLM delegation events |
-| `onex.cmd.omniintelligence.compliance-evaluate.v1` | cmd | Compliance evaluation requests |
+### Pipeline & Workflow
 
-Full topic list: `src/omniclaude/hooks/topics.py`
+| Skill | Description |
+|-------|-------------|
+| `onex:ticket-work` | Contract-driven ticket execution — intake, research, spec, implement, review, done phases with human gates |
+| `onex:ticket-pipeline` | Autonomous per-ticket pipeline — chains ticket-work → local-review → PR → CI → auto-merge unattended |
+| `onex:local-review` | Local code review loop — iterates review/fix/commit cycles without pushing |
+| `onex:pr-watch` | Poll GitHub PR for review feedback, auto-fix issues, and report terminal state |
+| `onex:ci-watch` | Poll GitHub Actions CI for a PR, auto-fix failures, and report terminal state |
+| `onex:ci-failures` | Fetch and analyze GitHub Actions CI failures for debugging |
+| `onex:ci-fix-pipeline` | Self-healing CI pipeline — 3-attempt retry budget with strategy rotation and autonomous fix loop |
+| `onex:pr-polish` | Full PR readiness loop — resolve conflicts, address review comments and CI failures |
+| `onex:pr-release-ready` | Fix ALL issues including nitpicks before release |
+| `onex:pr-review-dev` | Fix critical/major/minor issues (review + CI failures) |
+| `onex:auto-merge` | Merge a GitHub PR when all gates pass; uses Slack HIGH_RISK gate by default |
+| `onex:finishing-a-development-branch` | Guide completing development work — presents structured options for merge, PR, or cleanup |
 
-## Privacy Design
+### Code Review
 
-`prompt_preview` captures the **first 100 characters** of each user prompt only — full prompt content is never stored in observability topics. The field also automatically redacts secrets: OpenAI keys (`sk-*`), AWS keys (`AKIA*`), GitHub tokens (`ghp_*`), Slack tokens (`xox*`), PEM keys, Bearer tokens, and passwords in URLs. Full prompt content is sent exclusively to the access-restricted `onex.cmd.omniintelligence.*` topics consumed only by the OmniIntelligence service.
+| Skill | Description |
+|-------|-------------|
+| `onex:pr-review` | Comprehensive PR review with strict priority-based organization and merge readiness assessment |
+| `onex:requesting-code-review` | Dispatch code-reviewer subagent to verify implementation before proceeding |
+| `onex:receiving-code-review` | Handle incoming review feedback with technical rigor, not blind implementation |
+| `onex:review-cycle` | Guided local code review with human checkpoints and learning mode |
+
+### Linear & Project Management
+
+| Skill | Description |
+|-------|-------------|
+| `onex:linear` | Create, update, list, and manage Linear tickets with requirements and definition of done |
+| `onex:linear-triage` | Scan all non-completed tickets, verify status against actual PR state, auto-mark done |
+| `onex:linear-housekeeping` | Full triage + organize orphans into epics + sync MASTER_TICKET_PLAN.md |
+| `onex:linear-epic-org` | Organize orphaned tickets into epics — auto-creates obvious groupings, gates on ambiguous cases |
+| `onex:linear-insights` | Daily deep dive reports and velocity-based project completion estimates |
+| `onex:create-followup-tickets` | Create Linear tickets from code review issues found in the current session |
+| `onex:create-ticket` | Create a single Linear ticket from args, contract file, or plan milestone |
+| `onex:ticket-plan` | Generate a prioritized master ticket plan from Linear with dependency ordering |
+| `onex:ticket-plan-sync` | Sync MASTER_TICKET_PLAN.md with current Linear state |
+| `onex:plan-to-tickets` | Batch create Linear tickets from a plan markdown file |
+| `onex:project-status` | Linear insights dashboard — velocity, status, and project completion estimates |
+| `onex:decompose-epic` | Analyze a Linear epic description and create sub-tickets as Linear children |
+
+### Architecture & Design
+
+| Skill | Description |
+|-------|-------------|
+| `onex:brainstorming` | Refine rough ideas into fully-formed designs through collaborative questioning |
+| `onex:writing-plans` | Create comprehensive implementation plans with file paths, code examples, and verification steps |
+| `onex:decision-store` | Record, query, and conflict-check architectural decisions across the platform |
+| `onex:executing-plans` | Execute a complete implementation plan — creates tickets then routes to epic-team or ticket-pipeline |
+| `onex:plan-ticket` | Generate a copyable ticket contract template |
+| `onex:generate-ticket-contract` | Auto-draft a ModelTicketContract YAML from ticket context |
+| `onex:contract-compliance-check` | Pre-merge seam validation — returns PASS/WARN/BLOCK with emergency bypass support |
+
+### Testing & Debugging
+
+| Skill | Description |
+|-------|-------------|
+| `onex:systematic-debugging` | Four-phase debugging framework (root cause → pattern analysis → hypothesis → implement) |
+| `onex:test-driven-development` | Write the test first, watch it fail, write minimal code to pass |
+| `onex:testing-anti-patterns` | Prevent testing mock behavior, production pollution, and mocking without understanding |
+| `onex:condition-based-waiting` | Replace arbitrary timeouts with condition polling to eliminate flaky tests |
+| `onex:defense-in-depth` | Multi-layer validation — makes invalid data structurally impossible deep in execution |
+| `onex:root-cause-tracing` | Trace bugs backward through call stack to find the original trigger |
+| `onex:verification-before-completion` | Require running verification commands before claiming work is complete |
+
+### Integration Health
+
+| Skill | Description |
+|-------|-------------|
+| `onex:gap-analysis` | Cross-repo integration audit — finds Kafka drift, type mismatches, FK drift, API drift |
+| `onex:gap-cycle` | Full detect → fix → verify cycle (gap-analysis → gap-fix → golden-path-validate) |
+| `onex:gap-fix` | Auto-fix loop for gap-analysis findings — dispatches ticket-pipeline for eligible findings |
+| `onex:pipeline-audit` | Systematic multi-repo pipeline audit with parallel agents and severity-ordered gap register |
+| `onex:golden-path-validate` | Execute a golden path event chain test using real Kafka/Redpanda |
+
+### Observability & Status
+
+| Skill | Description |
+|-------|-------------|
+| `onex:system-status` | Comprehensive system health monitoring across agent performance, DB, Kafka, and services |
+| `onex:onex-status` | Show current OmniClaude integration tier, probe age, and per-service reachability |
+| `onex:agent-observability` | Real-time monitoring and diagnostics for the OmniClaude agent execution system |
+| `onex:agent-tracking` | PostgreSQL-backed observability for routing decisions, detection failures, and metrics |
+| `onex:action-logging` | Easy action logging for agents with automatic timing and Kafka integration |
+| `onex:log-execution` | Track agent execution in PostgreSQL for observability and intelligence gathering |
+| `onex:trace-correlation-id` | Full observability trace for agent executions by correlation ID |
+| `onex:pipeline-metrics` | Report pipeline health metrics — rework ratio, cycle time, CI stability, velocity |
+
+### Release & Deployment
+
+| Skill | Description |
+|-------|-------------|
+| `onex:release` | Org-wide coordinated release — bumps versions, pins deps, creates PRs, tags, triggers PyPI publish |
+| `onex:deploy-local-plugin` | Deploy local plugin files to Claude Code plugin cache for immediate testing |
+| `onex:setup-statusline` | Configure Claude Code status line to show folder name, git branch, and PR number |
+| `onex:ultimate-validate` | Generate comprehensive validation command for this codebase |
+| `onex:rrh` | Release Readiness Handshake — runs A1 (collect) → A2 (validate) → A3 (store) preflight |
+| `onex:integration-gate` | Cross-repo merge gate with topological ordering and Slack gate approval |
+
+### Multi-Agent Orchestration
+
+| Skill | Description |
+|-------|-------------|
+| `onex:parallel-solve` | Execute any task in parallel using polymorphic agents with requirements gathering |
+| `onex:dispatching-parallel-agents` | Dispatch multiple agents for 3+ independent failures that can be investigated concurrently |
+| `onex:subagent-driven-development` | Dispatch fresh subagent per task with code review between tasks |
+| `onex:epic-team` | Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos |
+| `onex:resume-epic` | Resume a mid-epic interruption by re-dispatching incomplete tickets to ticket-pipeline |
+
+### Daily Workflow
+
+| Skill | Description |
+|-------|-------------|
+| `onex:deep-dive` | Daily work analysis report from git commit history |
+| `onex:close-day` | Auto-generate a ModelDayClose YAML from today's GitHub PRs, git activity, and invariant probes |
+| `onex:velocity-estimate` | Project velocity and ETA analysis |
+| `onex:suggest-work` | Priority backlog recommendations |
+| `onex:crash-recovery` | Show recent pipeline state to orient after an unexpected session end or crash |
+| `onex:checkpoint` | Pipeline checkpoint management for resume, replay, and phase validation |
+
+### Utilities
+
+| Skill | Description |
+|-------|-------------|
+| `onex:using-superpowers` | Establish mandatory workflows at conversation start — find and use skills proactively |
+| `onex:using-git-worktrees` | Create isolated git worktrees with smart directory selection and safety verification |
+| `onex:writing-skills` | TDD for skill documentation — test with subagents before writing, iterate until bulletproof |
+| `onex:testing-skills-with-subagents` | Verify skills before deployment using RED-GREEN-REFACTOR cycle |
+| `onex:sharing-skills` | Contribute a skill upstream via pull request |
+| `onex:merge-sweep` | Org-wide PR sweep — enable auto-merge on ready PRs, run pr-polish on blocked PRs |
+| `onex:fix-prs` | Org-wide PR repair — fix merge conflicts, failing CI, and unaddressed review comments |
+| `onex:review-all-prs` | Org-wide PR review — scan all open PRs and run local-review until N consecutive clean passes |
+| `onex:list-prs` | Dashboard view of all open (non-draft) PRs across OmniNode-ai repos |
+| `onex:pr-queue-pipeline` | Daily org-wide PR queue drain — review, fix broken PRs, merge all ready PRs |
+| `onex:routing` | Request agent routing decisions via Kafka event bus |
+| `onex:intelligence` | Request intelligence from OmniIntelligence for pattern discovery and context enrichment |
+| `onex:generate-node` | Generate ONEX nodes via automated code generation with ContractInferencer |
+| `onex:curate-legacy` | Canonicalize legacy docs and feature ideas into a handler-first Ideas Registry |
+| `onex:slack-gate` | Post a risk-tiered Slack gate and poll for human reply |
+| `onex:gather-github-stats` | Gather GitHub repository statistics — PR counts, commit velocity, contributor activity |
 
 ## Development
 
@@ -201,6 +322,7 @@ KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 ## Documentation
 
 - [CLAUDE.md](CLAUDE.md) — Architecture, invariants, failure modes, performance budgets, and where to change things
+- [docs/TOPICS.md](docs/TOPICS.md) — Kafka topic catalog, naming convention, and access control
 - [docs/](docs/) — Architecture decision records and design proposals
 
 Open an issue or email contact@omninode.ai.

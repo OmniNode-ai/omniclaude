@@ -33,7 +33,16 @@ env:
 jobs:
   schema-compat:
     name: ONEX Change Control Schema Compatibility
-    runs-on: ubuntu-latest
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
     timeout-minutes: 10
     # Only run on PRs from the same repo -- forks lack access to private onex_change_control
     if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'

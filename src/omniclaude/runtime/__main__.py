@@ -141,11 +141,11 @@ def _check_route_matcher() -> tuple[bool, str]:
             message_category=EnumMessageCategory.COMMAND,
             message_type="dry-run",
         )
-        if route.matches_topic("onex.cmd.omniclaude.onex-status.v1"):
-            return True, "OK (pattern matches onex.cmd.omniclaude.onex-status.v1)"
+        if route.matches_topic("onex.cmd.omniclaude.onex-status.v1"):  # noqa: arch-topic-naming
+            return True, "OK (pattern matches onex.cmd.omniclaude.onex-status.v1)"  # noqa: arch-topic-naming
         return (
             False,
-            "Route matcher returned False for onex.cmd.omniclaude.onex-status.v1",
+            "Route matcher returned False for onex.cmd.omniclaude.onex-status.v1",  # noqa: arch-topic-naming
         )
     except Exception as exc:
         return False, f"Route matcher error: {exc}"

@@ -26,7 +26,7 @@
 1. All existing routing, intelligence, and transformation events aligned with standards
 2. Partition key policy module created with 5 event families
 3. Event validation utilities created with 9 validation functions
-4. Complete DLQ analysis across omninode_bridge and omniarchon
+4. Complete DLQ analysis across omnibase_infra and omniintelligence
 
 **Next Sprint Focus**:
 - Expand agent events from 3 to 10 (MVP requirement)
@@ -40,8 +40,8 @@
 |----------|----------|---------|
 | **EVENT_BUS_INTEGRATION_GUIDE** | `/Volumes/PRO-G40/Code/omninode/docs/EVENT_BUS_INTEGRATION_GUIDE.md` | Event standards, envelope structure, partition keys |
 | **MVP_EVENT_CATALOG** | `/Volumes/PRO-G40/Code/omninode/docs/MVP_EVENT_CATALOG.md` | Complete catalog of 123 events (91 MVP + 32 planned) |
-| **omninode_bridge DLQ** | `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/services/kafka_client.py` | Production DLQ with error taxonomy |
-| **omniarchon DLQ** | `/Volumes/PRO-G40/Code/omniarchon/python/src/events/dlq/dlq_handler.py` | DLQ handler with reprocessing |
+| **omnibase_infra DLQ** | `omnibase_infra/src/omnibase_infra/services/kafka_client.py` | Production DLQ with error taxonomy |
+| **omniintelligence DLQ** | `omniintelligence/src/omniintelligence/events/dlq/dlq_handler.py` | DLQ handler with reprocessing |
 
 ---
 
@@ -381,15 +381,15 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 
 ### DLQ Research Findings
 
-**omninode_bridge DLQ**:
-- Location: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/services/kafka_client.py`
+**omnibase_infra DLQ**:
+- Location: `omnibase_infra/src/omnibase_infra/services/kafka_client.py`
 - Pattern: Producer-side with error taxonomy
 - Error Classes: 6 (retryable transient, retryable dependency, non-retryable validation/policy/security/idempotency)
 - Max Retries: 3 (configurable)
 - Monitoring: Dedicated DLQ monitor service
 
-**omniarchon DLQ**:
-- Location: `/Volumes/PRO-G40/Code/omniarchon/python/src/events/dlq/dlq_handler.py`
+**omniintelligence DLQ**:
+- Location: `omniintelligence/src/omniintelligence/events/dlq/dlq_handler.py`
 - Pattern: Hybrid (producer + consumer + dedicated handler)
 - Features: Auto-discovery, reprocessing, secret sanitization, circuit breaker
 - Max Retries: 3 (configurable)
@@ -399,7 +399,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 - **Status**: Not Started
 - **Purpose**: Classify errors for intelligent retry behavior
 - **Location**: Create `agents/lib/error_taxonomy.py`
-- **Reference**: `/Volumes/PRO-G40/Code/omninode_bridge/src/omninode_bridge/services/error_taxonomy.py`
+- **Reference**: `omnibase_infra/src/omnibase_infra/services/error_taxonomy.py`
 - **Error Classes**:
   1. RETRYABLE_TRANSIENT (6 retries, 100-5000ms backoff)
   2. RETRYABLE_DEPENDENCY (3 retries, 500-10000ms backoff)
@@ -423,14 +423,14 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
   - DLQ payload: original event + error metadata + retry count
   - Max retries: 3 (configurable via env var)
   - Exponential backoff with jitter
-- **Reference**: omniarchon `events/publisher/event_publisher.py` lines 234-239
+- **Reference**: omniintelligence `events/publisher/event_publisher.py` lines 234-239
 - **Estimated Effort**: 6-8 hours
 
 ### Task 3.3: Implement Secret Sanitization ⏳
 - **Status**: Not Started
 - **Purpose**: Prevent credential leaks in DLQ
 - **Location**: Create `agents/lib/secret_sanitizer.py`
-- **Reference**: omniarchon `events/publisher/event_publisher.py` lines 423-444
+- **Reference**: omniintelligence `events/publisher/event_publisher.py` lines 423-444
 - **Features**:
   - Mask API keys (GEMINI_API_KEY, ZAI_API_KEY, OPENAI_API_KEY)
   - Mask passwords (POSTGRES_PASSWORD, etc.)
@@ -446,7 +446,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
   - Track retry count per message key
   - Send to DLQ after max retries
   - Non-retryable errors → immediate DLQ
-- **Reference**: omniarchon `intelligence-consumer/src/error_handler.py`
+- **Reference**: omniintelligence `intelligence-consumer/src/error_handler.py`
 - **Estimated Effort**: 4-6 hours
 
 ### Task 3.5: Create DLQ Monitoring Service (Optional) ⏳
@@ -460,8 +460,8 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
   - Reprocessing capability (optional)
   - Metrics tracking
 - **Reference**:
-  - omninode_bridge `monitoring/codegen_dlq_monitor.py`
-  - omniarchon `events/dlq/dlq_handler.py`
+  - omnibase_infra `monitoring/codegen_dlq_monitor.py`
+  - omniintelligence `events/dlq/dlq_handler.py`
 - **Estimated Effort**: 6-8 hours
 
 **Phase 3 Total Estimated Effort**: 23-32 hours
@@ -511,7 +511,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 - **Contents**:
   - Event flow diagrams
   - Design patterns (request/response, lifecycle, status)
-  - Integration points with omniarchon, omninode_bridge
+  - Integration points with omniintelligence, omnibase_infra
   - Best practices
 - **Estimated Effort**: 4-6 hours
 
@@ -556,7 +556,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
   - Non-retryable errors → immediate DLQ
   - Secret sanitization in DLQ payloads
   - DLQ monitoring and alerting
-- **Reference**: omninode_bridge `tests/integration/monitoring/test_codegen_dlq_monitor_integration.py`
+- **Reference**: omnibase_infra `tests/integration/monitoring/test_codegen_dlq_monitor_integration.py`
 - **Estimated Effort**: 6-8 hours
 
 **Phase 5 Total Estimated Effort**: 20-28 hours
@@ -630,7 +630,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 
 ### High Risk
 1. **DLQ Implementation Complexity**
-   - Mitigation: Reference omninode_bridge and omniarchon implementations
+   - Mitigation: Reference omnibase_infra and omniintelligence implementations
    - Estimated time buffer: +40% (built into estimates)
 
 2. **Backward Compatibility**
@@ -673,7 +673,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
 
 ### Design Decisions
 1. **Topic Naming**: Use `omninode.*` prefix for consistency with platform
-2. **Envelope Structure**: Use OnexEnvelopeV1 from omninode_bridge as standard
+2. **Envelope Structure**: Use OnexEnvelopeV1 from omnibase_core as standard
 3. **Partition Keys**: Use `correlation_id` for all workflow-related events
 4. **DLQ**: Hybrid approach (producer-side + consumer-side + monitoring)
 5. **Secret Sanitization**: Apply before DLQ to prevent credential leaks

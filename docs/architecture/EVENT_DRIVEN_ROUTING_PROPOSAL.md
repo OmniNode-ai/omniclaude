@@ -482,7 +482,7 @@ Proposed (Service-Level Persistent):
 
 **Location**: `agents/services/agent-router-service/`
 
-**Reference Implementation**: The database adapter (`omninode_bridge/src/omninode_bridge/nodes/effects/database_adapter/`) provides a proven pattern for this service. Key learnings:
+**Reference Implementation**: The database adapter (`omnibase_infra/src/omnibase_infra/nodes/effects/database_adapter/`) provides a proven pattern for this service. Key learnings:
 - ✅ Request-response pattern via Kafka works well
 - ✅ Container-based registry (no BaseOnexRegistry dependency needed)
 - ✅ Correlation tracking enables complete traceability

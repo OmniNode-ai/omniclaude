@@ -579,6 +579,7 @@ if __name__ == "__main__":
 
         print("✓ One-off action logged")
 
-        print("\nAll tests passed! Check Kafka topic 'onex.evt.omniclaude.agent-actions.v1' for events.")
+        from omniclaude.hooks.topics import TopicBase as _TopicBase
+        print(f"\nAll tests passed! Check Kafka topic {_TopicBase.AGENT_ACTIONS!r} for events.")
 
     asyncio.run(test())

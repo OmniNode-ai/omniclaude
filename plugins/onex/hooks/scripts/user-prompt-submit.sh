@@ -114,6 +114,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
     # The daemon's EventRegistry handles per-topic field filtering:
     #   evt payloads MUST NOT include prompt_b64 (daemon strips it).
     #   cmd payloads include prompt_b64 for intelligence processing.
+    # Build action_description per OMN-3297: "Prompt: {first_80_chars}"
+    _AD_PROMPT=$(printf '%s' "${PROMPT:0:80}" | tr '\n\r' '  ')
+    _AD_PROMPT_STR="Prompt: ${_AD_PROMPT}"
+    _AD_PROMPT_STR="${_AD_PROMPT_STR:0:160}"
+
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | redact_secrets)" \
@@ -121,7 +126,8 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
         --arg prompt_b64 "$PROMPT_B64" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg event_type "UserPromptSubmit" \
-        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
+        --arg action_description "$_AD_PROMPT_STR" \
+        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type, action_description: $action_description}' 2>/dev/null)
 
     if [[ -n "$PROMPT_PAYLOAD" ]]; then
         emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &
@@ -864,6 +870,35 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
     fi
 fi
 
+# ── Post-compact context re-injection ────────────────────────────────────────
+# If a pre-compact.sh snapshot exists for this session, prepend it to AGENT_CONTEXT
+# and consume the file (one-shot). Written by the PreCompact hook before /compact runs.
+# SESSION_ID is already parsed above — do not re-read stdin.
+_COMPACT_CTX_FILE="/tmp/omniclaude-compact-ctx-${SESSION_ID}"
+
+_COMPACT_CTX_CONSUME=false
+if [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
+    _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null) || true
+    if [[ -n "$_COMPACT_CTX" ]]; then
+        if [[ -n "$AGENT_CONTEXT" ]]; then
+            AGENT_CONTEXT="${_COMPACT_CTX}
+
+---
+
+${AGENT_CONTEXT}"
+        else
+            AGENT_CONTEXT="$_COMPACT_CTX"
+        fi
+        # Mark for deferred deletion — file is consumed only after final jq output succeeds
+        _COMPACT_CTX_CONSUME=true
+        log "Post-compact context injected (${#_COMPACT_CTX} bytes)"
+    else
+        # Empty file or read failure — leave for next prompt to retry
+        log "Post-compact snapshot empty or unreadable — leaving for retry: $_COMPACT_CTX_FILE"
+    fi
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Prepend first-prompt ticket context to AGENT_CONTEXT when present (OMN-3216).
 # Separator keeps the ticket section visually distinct from agent routing context.
 if [[ -n "$FIRST_PROMPT_TICKET_CONTEXT" ]]; then
@@ -880,7 +915,12 @@ ${AGENT_CONTEXT}"
 fi
 
 # Final Output via jq to ensure JSON integrity
-printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
+# Consume the post-compact snapshot file only after jq succeeds (fail-safe semantics).
+if printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
     '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE" \
-    || { log "ERROR: Final jq output failed, passing through raw input"; printf %s "$INPUT"; }
+     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"; then
+    [[ "$_COMPACT_CTX_CONSUME" == "true" ]] && rm -f "$_COMPACT_CTX_FILE"
+else
+    log "ERROR: Final jq output failed, passing through raw input"
+    printf %s "$INPUT"
+fi

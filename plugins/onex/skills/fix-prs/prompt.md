@@ -51,7 +51,6 @@ If `--repos` is provided, use that list. Otherwise use canonical omni_home repos
 - `OmniNode-ai/omniclaude`
 - `OmniNode-ai/omnibase_core`
 - `OmniNode-ai/omniintelligence`
-- `OmniNode-ai/omniarchon`
 - `OmniNode-ai/omnidash`
 
 If `~/Code/omni_home/repos.yaml` exists, read from it instead.

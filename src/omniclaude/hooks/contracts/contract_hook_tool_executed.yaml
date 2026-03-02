@@ -31,8 +31,9 @@ node_type: "EFFECT"
 description: >
   Effect node for emitting tool executed events. When a tool completes execution
   (via PostToolUse hook), this node publishes a ModelHookToolExecutedPayload event
-  to Kafka. Captures tool_execution_id, tool name, success status, duration, and
-  optional summary for learning pipeline analysis and developer productivity insights.
+  to Kafka. Captures tool_execution_id, tool name, success status, duration,
+  optional summary, and action_description (human-readable per-tool format) for
+  learning pipeline analysis and developer productivity insights. See OMN-3297.
 
 # Strongly typed I/O models
 input_model:
@@ -109,6 +110,8 @@ capabilities:
     description: "Capture duration and success status"
   - name: "tool_classification"
     description: "Identify tool by name for analytics"
+  - name: "action_description_normalization"
+    description: "Produce human-readable action_description per OMN-3297 format spec"
 
 # Model definitions (reference - actual models in schemas.py)
 definitions:
@@ -158,6 +161,14 @@ definitions:
         nullable: true
         maxLength: 500
         description: "Brief summary of the tool execution result"
+      action_description:
+        type: string
+        maxLength: 160
+        default: ""
+        description: >
+          Human-readable description for consumer display. Format varies by tool:
+          'Read: {basename}', 'Bash: {first_60_chars}', 'Glob: {pattern}',
+          'Grep: {pattern}', '{ToolName}: unknown'. See OMN-3297.
     required:
       - entity_id
       - session_id

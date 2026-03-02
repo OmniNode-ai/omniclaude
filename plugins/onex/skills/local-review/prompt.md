@@ -59,9 +59,40 @@ Phase 0: Pre-existing issue scan
        - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
        - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
   4. For AUTO-FIX:
-       - Apply fixes
+       - Before applying any fix, check the pre-existing fix dedup lock:
+         ```python
+         import sys
+         from hashlib import sha256
+         from pathlib import Path
+
+         lib_dir = Path(__file__).parent.parent.parent / "hooks" / "lib"
+         if str(lib_dir) not in sys.path:
+             sys.path.insert(0, str(lib_dir))
+         from preexisting_fix_lock import PreexistingFixLock
+
+         fix_lock = PreexistingFixLock()
+         # Fingerprint: sha256("{repo}:{rule}:{file}:{error_class}[:{line}]")[:12]
+         fp_parts = [repo, issue['rule'], issue['file'], issue.get('error_class', '')]
+         if issue.get('line'):
+             fp_parts.append(str(issue['line']))
+         fp_str = ":".join(fp_parts)
+         fp_hash = sha256(fp_str.encode()).hexdigest()[:12]
+         if not fix_lock.acquire(fp_hash, run_id=run_id, ticket_id=ticket_id):
+             holder = fix_lock.holder(fp_hash)
+             print(f"[pre-existing-lock] Skipping fix for {issue['file']} "
+                   f"({issue['rule']}): fix in progress by "
+                   f"run={holder['run_id'] if holder else 'unknown'} — "
+                   f"fingerprint={fp_hash}")
+             continue  # skip this issue; don't attempt a duplicate fix
+         ```
+       - Apply fixes only for issues where lock was successfully acquired
        - Commit as: chore(pre-existing): fix pre-existing lint/type errors
        - This commit is separate from all feature commits
+       - Release lock after each successful fix:
+         ```python
+         fix_lock.release(fp_hash)
+         ```
+       - If fix fails: release lock, move issue to DEFER list
   5. For DEFER (if Linear MCP available):
        a. For each deferred failure, compute fingerprint:
           ```python

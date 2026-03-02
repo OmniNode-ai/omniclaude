@@ -1,0 +1,19 @@
+# Topic Naming Lint Baseline (OMN-3259)
+#
+# Pre-existing topic naming violations in Python source files tracked for
+# future cleanup. Topics listed here are excluded from the linter's failure
+# criteria.
+#
+# DO NOT add new topics to this list. New violations must be fixed before
+# merging. Remove entries as violations are resolved.
+#
+# Format: one raw topic string per line (comments start with #)
+#
+# Tracked violations:
+#   onex.evt.omniclaude.agent-inbox.{agent_id}.v1 — 6-segment topic with
+#     template variable (node_agent_inbox_effect)
+#   onex.cmd.omniclaude.*.v1 — wildcard event name used for subscription
+#     pattern matching (runtime/__main__.py, wiring_dispatchers.py)
+#
+onex.evt.omniclaude.agent-inbox.{agent_id}.v1
+onex.cmd.omniclaude.*.v1
