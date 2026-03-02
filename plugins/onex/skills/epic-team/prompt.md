@@ -553,7 +553,57 @@ waves = [w for w in [wave0, wave1] if w]
 print(f"Waves: {len(waves)} total")
 for i, wave in enumerate(waves):
     print(f"  Wave {i}: {[tid for _, tid in wave]}")
+```
 
+## Pre-Dispatch: Collision Detection
+
+Before dispatching any ticket to workers, run the collision detector.
+
+```python
+@_lib/collision-detector/helpers.md
+
+# Collect all child ticket IDs for this epic
+all_ticket_ids = [tid for _, tid in [t for wave in waves for t in wave]]
+
+# Run collision detection
+collision_result = detect_collisions(all_ticket_ids, epic_id)
+
+# Write collision report
+write_json(f"~/.claude/epics/{epic_id}/collision_report.json", collision_result)
+
+# Post LOW_RISK Slack notification (no gate required)
+n_independent = len(collision_result["independent"])
+n_collision_sets = len(collision_result["collision_sets"])
+collision_ticket_ids = [t for cs in collision_result["collision_sets"] for t in cs["tickets"]]
+print(
+    f"Collision detection complete. {n_independent} independent, "
+    f"{n_collision_sets} collision sets. Serializing: {collision_ticket_ids}"
+)
+# notify_slack(LOW_RISK, message above, thread_ts=slack_thread_ts)
+
+# Build dispatch plan from collision result
+# - immediate: all tickets in collision_result["independent"] → dispatch in parallel
+# - serialized_queues: each collision set → dispatch as a queue (one at a time)
+immediate_tickets = set(collision_result["independent"])
+serialized_queues = collision_result.get("serialization_order", [])
+
+# Reorder waves to respect collision-aware dispatch plan:
+# Within each wave, split into immediate (parallel) and serialized (sequential) subsets.
+# Serialized tickets in a collision set wait for the previous ticket to reach create_pr phase.
+```
+
+## Dispatch Execution
+
+For each queue in `serialized_queues`:
+- Dispatch tickets one at a time
+- Wait for the current ticket to reach the `create_pr` phase (PR URL present in ledger) before starting the next ticket
+
+For all tickets in `immediate`:
+- Dispatch all simultaneously
+
+**WIP limit:** If more than 5 tickets are in `Mergeable` state simultaneously (check the pipeline ledger for `phase: create_pr` entries), pause all new dispatches. Resume when any PR moves to merged or closed.
+
+```python
 # 4. Execute waves sequentially; dispatch tickets within each wave in parallel
 ticket_results = {}
 
