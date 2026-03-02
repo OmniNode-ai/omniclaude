@@ -62,6 +62,12 @@ event_bus:
     success_topic: "onex.evt.omniclaude.systematic-debugging-completed.v1"
     failure_topic: "onex.evt.omniclaude.systematic-debugging-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.systematic-debugging.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.systematic-debugging-completed.v1"
+    - "onex.evt.omniclaude.systematic-debugging-failed.v1"
 # Capabilities
 capabilities:
   - name: skill.systematic_debugging

@@ -62,6 +62,12 @@ event_bus:
     success_topic: "onex.evt.omniclaude.intelligence-completed.v1"
     failure_topic: "onex.evt.omniclaude.intelligence-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.intelligence.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.intelligence-completed.v1"
+    - "onex.evt.omniclaude.intelligence-failed.v1"
 # Capabilities
 capabilities:
   - name: skill.intelligence

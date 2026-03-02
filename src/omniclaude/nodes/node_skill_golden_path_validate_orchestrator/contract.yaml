@@ -62,6 +62,12 @@ event_bus:
     success_topic: "onex.evt.omniclaude.golden-path-validate-completed.v1"
     failure_topic: "onex.evt.omniclaude.golden-path-validate-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.golden-path-validate.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.golden-path-validate-completed.v1"
+    - "onex.evt.omniclaude.golden-path-validate-failed.v1"
 # Capabilities
 capabilities:
   - name: skill.golden_path_validate
