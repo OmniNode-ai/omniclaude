@@ -881,23 +881,18 @@ fi
 # R3: ACTIVE_TICKET defaults to TICKET_FROM_CWD; updated only if injector output has .ticket_id
 ACTIVE_TICKET="$TICKET_FROM_CWD"
 
-if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
-    log "Checking for active ticket context"
+if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]] && [[ -n "$TICKET_FROM_CWD" ]]; then
+    log "Checking for active ticket context (ticket: $TICKET_FROM_CWD)"
 
     # Build injector input JSON.
-    # When CWD-based extraction succeeded, pass ticket_id directly so the injector
-    # uses it without triggering the mtime fallback (find_active_ticket).
-    # When CWD extraction failed, pass empty ticket_id so the injector falls back
-    # to the mtime heuristic as last resort.
+    # TICKET_FROM_CWD is guaranteed non-empty here (guard above).
+    # Pass ticket_id directly so the injector fetches context without
+    # triggering the mtime fallback (find_active_ticket).
     if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
         TICKET_INPUT=$(jq -n --arg ticket_id "$TICKET_FROM_CWD" \
-            'if $ticket_id != "" then {ticket_id: $ticket_id} else {} end' 2>/dev/null) || TICKET_INPUT='{}'
+            '{ticket_id: $ticket_id}' 2>/dev/null) || TICKET_INPUT="{\"ticket_id\": \"${TICKET_FROM_CWD}\"}"
     else
-        if [[ -n "$TICKET_FROM_CWD" ]]; then
-            TICKET_INPUT="{\"ticket_id\": \"${TICKET_FROM_CWD}\"}"
-        else
-            TICKET_INPUT='{}'
-        fi
+        TICKET_INPUT="{\"ticket_id\": \"${TICKET_FROM_CWD}\"}"
     fi
 
     # Run ticket context injection synchronously via CLI (fast, local-only).
@@ -948,6 +943,8 @@ if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_c
         TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_context',''))" 2>/dev/null) || TICKET_CONTEXT=""
         log "Ticket context check completed (jq unavailable for detailed parsing)"
     fi
+elif [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    log "Ticket context injection skipped (not in a worktree — mtime fallback disabled)"
 elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
     log "Ticket context injection disabled (TICKET_INJECTION_ENABLED=false)"
 else
