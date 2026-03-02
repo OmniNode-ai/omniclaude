@@ -20,7 +20,7 @@ You are executing the pr-watch skill. Poll a GitHub PR for review feedback, auto
 
 ---
 
-## Step 1: Parse arguments
+## Step 1: Parse arguments <!-- ai-slop-ok: skill-step-heading -->
 
 Extract from the invocation arguments:
 
@@ -37,7 +37,7 @@ infer from `gh pr view {pr_number} --json headRepository`.
 
 ---
 
-## Step 2: Load pipeline state
+## Step 2: Load pipeline state <!-- ai-slop-ok: skill-step-heading -->
 
 Load `~/.claude/pipelines/{ticket_id}/state.yaml` if it exists. Extract:
 
@@ -60,7 +60,7 @@ else:
 
 ---
 
-## Step 3: Initialize watch state
+## Step 3: Initialize watch state <!-- ai-slop-ok: skill-step-heading -->
 
 ```python
 import time, json, subprocess, datetime
@@ -88,7 +88,7 @@ if not pr_url:
 
 ---
 
-## Step 4: Poll loop
+## Step 4: Poll loop <!-- ai-slop-ok: skill-step-heading -->
 
 On each iteration, perform the MERGED check first (Step 4a), then the review-state check
 (Step 4b). The MERGED check takes priority — a merged PR is always a terminal state
@@ -207,7 +207,7 @@ while True:
 
 ---
 
-## Step 5: Merge-completion finalization (`_handle_merged`)
+## Step 5: Merge-completion finalization (`_handle_merged`) <!-- ai-slop-ok: skill-step-heading -->
 
 Called when `pr_state == "MERGED"` is detected during any poll iteration.
 
@@ -280,7 +280,7 @@ PR #{pr_number} ({ticket_id}) merged via auto-merge ✓
 
 ---
 
-## Step 6: Helper functions
+## Step 6: Helper functions <!-- ai-slop-ok: skill-step-heading -->
 
 ### `_dispatch_pr_review_dev`
 
