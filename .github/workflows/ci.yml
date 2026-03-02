@@ -34,7 +34,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -87,7 +87,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -132,7 +132,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 10
@@ -171,7 +171,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
@@ -197,7 +197,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -235,7 +235,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -273,7 +273,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -312,7 +312,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -337,7 +337,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -433,7 +433,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -472,7 +472,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -511,7 +511,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -550,7 +550,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -589,7 +589,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -628,7 +628,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -667,7 +667,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 10
@@ -787,7 +787,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -826,7 +826,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -865,7 +865,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -908,7 +908,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -946,7 +946,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 5
@@ -988,7 +988,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -1038,7 +1038,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
@@ -1100,7 +1100,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 15
@@ -1216,7 +1216,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 15
@@ -1304,7 +1304,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 10
@@ -1365,7 +1365,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 10
@@ -1430,7 +1430,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs: test
@@ -1507,7 +1507,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs:
@@ -1589,7 +1589,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs:
@@ -1636,7 +1636,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs:
@@ -1683,7 +1683,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     timeout-minutes: 20
@@ -1778,7 +1778,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs: build
@@ -1802,7 +1802,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     needs: build
@@ -1826,7 +1826,7 @@ jobs:
          (github.event_name == 'push' ||
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'schedule'))
-        && fromJSON('["self-hosted","omnibase-ci","linux","x64"]')
+        && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
     steps:
