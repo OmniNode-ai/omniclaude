@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_root_cause_tracing_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.root-cause-tracing.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "root-cause-tracing",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.root-cause-tracing-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

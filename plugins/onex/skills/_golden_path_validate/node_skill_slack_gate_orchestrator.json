@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_slack_gate_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.slack-gate.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "slack-gate",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.slack-gate-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

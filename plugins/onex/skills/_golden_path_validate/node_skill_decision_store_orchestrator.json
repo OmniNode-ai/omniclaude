@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_decision_store_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.decision-store.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "decision-store",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.decision-store-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}
