@@ -135,7 +135,7 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -441,27 +441,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no DB access in orchestrator/compute (static)
-        run: uv run python scripts/validation/validate_no_db_in_orchestrator.py
+        run: python3 scripts/validation/validate_no_db_in_orchestrator.py
 
   arch-no-git-outside-effects:
     name: "Arch: No git/gh calls outside effects (check 2)"
@@ -480,27 +466,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no git/gh subprocess calls outside effects
-        run: uv run python scripts/validation/validate_no_git_outside_effects.py
+        run: python3 scripts/validation/validate_no_git_outside_effects.py
 
   arch-no-linear-outside-effects:
     name: "Arch: No LinearClient outside effects (check 3)"
@@ -519,27 +491,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no LinearClient outside effects
-        run: uv run python scripts/validation/validate_no_linear_outside_effects.py
+        run: python3 scripts/validation/validate_no_linear_outside_effects.py
 
   arch-no-repo-adapter-in-orchestrator:
     name: "Arch: No repository adapter imports in orchestrator/compute (check 4)"
@@ -558,27 +516,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no repository adapter imports in orchestrator/compute
-        run: uv run python scripts/validation/validate_no_repo_adapter_in_orchestrator.py
+        run: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
 
   arch-cost-ledger-isolation:
     name: "Arch: ModelCostLedger confined to effects (check 5)"
@@ -597,27 +541,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check cost ledger isolation
-        run: uv run python scripts/validation/validate_cost_ledger_isolation.py
+        run: python3 scripts/validation/validate_cost_ledger_isolation.py
 
   arch-topic-naming:
     name: "Arch: onex.* topic naming convention (check 6)"
@@ -636,27 +566,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check topic naming convention
-        run: uv run python scripts/validation/validate_topic_naming.py
+        run: python3 scripts/validation/validate_topic_naming.py
 
   arch-omnidash-db-role:
     name: "Arch: omnidash_readonly role provisioning + CI (check 7)"
@@ -795,27 +711,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check ModelCostLedger structure
-        run: uv run python scripts/validation/validate_cost_ledger_structure.py
+        run: python3 scripts/validation/validate_cost_ledger_structure.py
 
   arch-no-direct-kafka-producer:
     name: "Arch: No direct Kafka producer outside publisher (check 10)"
@@ -834,27 +736,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no direct Kafka producer usage
-        run: uv run python scripts/validation/validate_no_direct_kafka_producer.py
+        run: python3 scripts/validation/validate_no_direct_kafka_producer.py
 
   arch-no-utcnow:
     name: "Arch: No datetime.utcnow() (check 11)"

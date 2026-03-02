@@ -3,6 +3,14 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.4.1] - 2026-03-02
+
+### Fixed
+- **Relax omninode-intelligence pin** (OMN-3328): Changed `omninode-intelligence==0.8.0` to `>=0.8.0,<0.10.0` to prevent silent downgrade during Docker rebuilds when 0.9.x is installed. This unblocks removal of the brittle Dockerfile `--no-deps` workaround in follow-up infra changes.
+
+### Dependencies
+- omninode-intelligence relaxed from `==0.8.0` to `>=0.8.0,<0.10.0` (lock resolves to 0.9.1)
+
 ## [0.4.0] - 2026-02-28
 
 ### Added
