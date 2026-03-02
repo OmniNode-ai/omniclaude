@@ -14,6 +14,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import copy
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -192,7 +193,7 @@ def test_emitter_passes_helper_output_without_mutation() -> None:
     captured: list[dict[str, object]] = []
 
     def fake_emit(event_type: str, payload: dict[str, object]) -> bool:
-        captured.append(dict(payload))  # copy so mutation after call is visible
+        captured.append(copy.deepcopy(payload))  # deep copy so nested mutations are detected
         return True
 
     # Build the expected payload independently for comparison
@@ -237,3 +238,9 @@ def test_emitter_passes_helper_output_without_mutation() -> None:
     UUID(str(emitted["id"]))
     # correlation_id is a valid UUID
     UUID(str(emitted["correlation_id"]))
+
+    # Stable payload fields must match exactly (id and created_at are generated per-call)
+    _GENERATED_FIELDS = {"id", "created_at"}
+    assert {k: v for k, v in emitted.items() if k not in _GENERATED_FIELDS} == {
+        k: v for k, v in expected.items() if k not in _GENERATED_FIELDS
+    }, "Emitted payload (excluding generated fields) does not match helper output — emitter must not mutate"
