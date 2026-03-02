@@ -876,8 +876,9 @@ fi
 # SESSION_ID is already parsed above — do not re-read stdin.
 _COMPACT_CTX_FILE="/tmp/omniclaude-compact-ctx-${SESSION_ID}"
 
+_COMPACT_CTX_CONSUME=false
 if [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
-    _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null)
+    _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null) || true
     if [[ -n "$_COMPACT_CTX" ]]; then
         if [[ -n "$AGENT_CONTEXT" ]]; then
             AGENT_CONTEXT="${_COMPACT_CTX}
@@ -888,7 +889,8 @@ ${AGENT_CONTEXT}"
         else
             AGENT_CONTEXT="$_COMPACT_CTX"
         fi
-        rm -f "$_COMPACT_CTX_FILE"  # consume only after successful injection
+        # Mark for deferred deletion — file is consumed only after final jq output succeeds
+        _COMPACT_CTX_CONSUME=true
         log "Post-compact context injected (${#_COMPACT_CTX} bytes)"
     else
         # Empty file or read failure — leave for next prompt to retry
@@ -913,7 +915,12 @@ ${AGENT_CONTEXT}"
 fi
 
 # Final Output via jq to ensure JSON integrity
-printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
+# Consume the post-compact snapshot file only after jq succeeds (fail-safe semantics).
+if printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
     '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE" \
-    || { log "ERROR: Final jq output failed, passing through raw input"; printf %s "$INPUT"; }
+     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"; then
+    [[ "$_COMPACT_CTX_CONSUME" == "true" ]] && rm -f "$_COMPACT_CTX_FILE"
+else
+    log "ERROR: Final jq output failed, passing through raw input"
+    printf %s "$INPUT"
+fi

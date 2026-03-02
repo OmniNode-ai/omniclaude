@@ -14,9 +14,16 @@ set -euo pipefail
 
 # Portable Plugin Configuration
 # Resolve absolute path of this script, handling relative invocation.
-# Falls back to python3 if realpath is unavailable (non-GNU macOS without coreutils).
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+# Tries realpath (GNU coreutils), then readlink -f (available on GNU/macOS 12.3+),
+# then falls back to the raw BASH_SOURCE path. Avoids invoking python3 before
+# common.sh and find_python() are sourced.
+if _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null)"; then
+    :
+elif _SELF="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)"; then
+    :
+else
+    _SELF="${BASH_SOURCE[0]}"
+fi
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
@@ -134,6 +141,10 @@ if [[ -n "$ACTIVE_STATE_FILE" && -f "$ACTIVE_STATE_FILE" ]]; then
     REPO_PATH=$(sed -n 's/^repo_path:[[:space:]]*//p' "$ACTIVE_STATE_FILE" 2>/dev/null | head -1 || true)
 fi
 
+# Build snapshot — disable pipefail around the pipeline so head -c truncation
+# (which sends SIGPIPE to the writer) does not abort the hook under set -euo pipefail.
+# Exit 141 (SIGPIPE) is treated as success; any other non-zero is logged non-fatally.
+set +o pipefail
 {
     echo "## Context Snapshot (pre-compact)"
     echo "Captured: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -158,7 +169,14 @@ fi
         echo "CWD: ${SESSION_CWD:-(unknown)}"
         echo "No active pipeline ticket detected."
     fi
-} | head -c $MAX_SNAPSHOT_BODY > "$SNAPSHOT_FILE"
+} | head -c $MAX_SNAPSHOT_BODY > "$SNAPSHOT_FILE"; _SNAP_RC=${PIPESTATUS[0]}
+set -o pipefail
+
+# SIGPIPE (141) is expected when head truncates output — treat as success.
+# Any other non-zero writer exit is logged but not fatal.
+if [[ $_SNAP_RC -ne 0 && $_SNAP_RC -ne 141 ]]; then
+    log "PreCompact: snapshot writer exited $_SNAP_RC (non-fatal)"
+fi
 
 # Append truncation marker if body was capped
 SNAPSHOT_SIZE=$(wc -c < "$SNAPSHOT_FILE")
