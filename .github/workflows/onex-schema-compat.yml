@@ -45,7 +45,7 @@ jobs:
       }}
     timeout-minutes: 10
     # Only run on PRs from the same repo -- forks lack access to private onex_change_control
-    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
