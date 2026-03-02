@@ -761,27 +761,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check no datetime.utcnow() usage
-        run: uv run python scripts/validation/validate_no_utcnow.py
+        run: python3 scripts/validation/validate_no_utcnow.py
 
   # ============================================================================
   # F5 ARCHITECTURAL CHECKS (OMN-2595: Consumer Group Rules)
@@ -803,27 +789,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
-        run: uv run python scripts/validation/validate_no_compact_cmd_topic.py
+        run: python3 scripts/validation/validate_no_compact_cmd_topic.py
 
   arch-invariants:
     name: Architecture Invariants
@@ -841,27 +813,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: "0.6.1"
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Load cached venv
-        uses: actions/cache@v5
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen --group dev
-
       - name: Check ONEX architectural invariants
-        run: uv run python scripts/check_arch_invariants.py src/
+        run: python3 scripts/check_arch_invariants.py src/
 
   # ============================================================================
   # SECURITY CHECKS
