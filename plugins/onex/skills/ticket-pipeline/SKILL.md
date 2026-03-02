@@ -330,7 +330,25 @@ ticket-pipeline OMN-XXXX
 - Autonomous: loops until clean or policy limits hit
 - Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
 - Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
+- AUTO-ADVANCE to Phase 2.5 (only if quality gate passed: 2 confirmed-clean runs)
+
+### Phase 2.5: mergeability_gate
+
+**Trigger:** After local_review confirms 2 consecutive clean passes.
+
+**Action:**
+1. If PR does not exist yet: skip (gate runs after create_pr in this case; see Phase 3.5)
+2. If PR exists: invoke `@skills/mergeability-gate` with the PR number and repo
+3. Read result from `~/.claude/skill-results/{context_id}/mergeability-gate.json`
+4. If `status == "blocked"`: HALT pipeline, emit `phase=mergeability_gate outcome=blocked reasons=...` to ledger, post blocking reasons as PR comment, mark ticket state "blocked"
+5. If `status == "needs-split"`: Post advisory comment with split reasons, continue (do not block — agent decides whether to split)
+6. If `status == "mergeable"`: advance to create_pr
+
+**Phase 3.5: mergeability_gate (post-create_pr)**
+
+If PR was just created (Phase 3), run the mergeability gate once immediately after creation to apply the initial label. This is non-blocking — just labels the PR.
+
+- AUTO-ADVANCE to Phase 3
 
 ### Phase 3: create_pr
 
