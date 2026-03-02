@@ -497,6 +497,40 @@ print("Phase 2 complete: decomposition persisted.")
 
 ---
 
+## Epic Integration Branch Setup
+
+After child tickets are confirmed (Phase 2 complete), set up per-repo integration branches.
+
+```python
+@_lib/integration-branch/helpers.md
+
+# Collect all repos affected by this epic
+repos_affected = list(state["assignments"].keys())  # e.g. ["omniclaude", "omnibase_core"]
+
+# Create integration branch in each repo
+integration_branches = {}
+for repo in repos_affected:
+    branch_name = f"epic/{epic_id}/integration"
+    create_integration_branch(epic_id, repo)
+    integration_branches[repo] = branch_name
+
+# Persist integration branches to state
+state["integration_branches"] = integration_branches
+write_yaml(STATE_FILE, state)
+
+# Notify Slack (LOW_RISK, no gate required)
+repo_list = ", ".join(repos_affected)
+print(f"Integration branches created for repos: {repo_list}")
+# notify_slack(LOW_RISK, f"Integration branches created for repos: {repo_list}", thread_ts=slack_thread_ts)
+```
+
+**Note:** Tickets' PRs should target `epic/{epic_id}/integration`, NOT `main`. When
+ticket-pipeline creates a PR, it should use `--base epic/{epic_id}/integration` if an
+integration branch exists for the repo. Pass `EPIC_INTEGRATION_BRANCH` env var to
+ticket-pipeline headless invocations.
+
+---
+
 ## Phase 3 — Direct Dispatch (Wave-Based Execution)
 
 ### Actions
@@ -870,6 +904,55 @@ for tid, res in ticket_results.items():
     pr_url = res.get("pr_url") or "—"
     status = res.get("status", "unknown")
     print(f"  {tid}: status={status}  branch={branch}  pr={pr_url}")
+```
+
+## Epic Integration and Final Report
+
+When all child tickets have PRs in `merged` or `done` state, run the integration lifecycle.
+
+```python
+@_lib/integration-branch/helpers.md
+
+# Check if integration branches exist for this epic
+integration_branches = state.get("integration_branches", {})
+
+if integration_branches:
+    # Run integration tests in each repo
+    integration_test_results = {}
+    for repo, branch_name in integration_branches.items():
+        test_result = run_integration_tests(epic_id, repo)
+        integration_test_results[repo] = test_result
+
+    # Emit integration report
+    prs_merged_list = [
+        {"pr_number": res.get("pr_number"), "ticket_id": tid, "title": res.get("title", "")}
+        for tid, res in ticket_results.items()
+        if res.get("status") == "merged"
+    ]
+    emit_integration_report(epic_id, integration_test_results, prs_merged_list)
+
+    # Determine if all tests pass
+    all_pass = all(
+        r.get("pass", False) for r in integration_test_results.values()
+    )
+
+    if all_pass:
+        # Post HIGH_RISK Slack gate asking to merge integration branch to main
+        # notify_slack(HIGH_RISK,
+        #   f"[HIGH_RISK] All integration tests pass for {epic_id}. "
+        #   f"Merge epic/{epic_id}/integration to main? Reply 'merge-epic {epic_id}' to approve.",
+        #   thread_ts=slack_thread_ts
+        # )
+        print(f"All integration tests pass. Awaiting approval to merge epic/{epic_id}/integration to main.")
+        # On approval: merge integration branch to main in each repo
+        # for repo in repos_affected:
+        #     merge_integration_branch_to_main(epic_id, repo)
+    else:
+        print(f"Integration tests FAILED. Review ~/.claude/epics/{epic_id}/integration_test_results.txt")
+
+    # Mark epic as Done in Linear
+    # linear_update_issue(epic_id, state="Done")
+    print(f"Epic {epic_id} complete. Linear status updated to Done.")
 ```
 
 ---
