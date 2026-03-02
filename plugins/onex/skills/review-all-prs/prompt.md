@@ -157,7 +157,7 @@ If `--cleanup-orphans` is set:
 
 ---
 
-## Step 1: Determine Repo Scope
+## Step 1: Determine Repo Scope <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 If `--repos` is provided, use that list. Otherwise use canonical omni_home repos:
 - `OmniNode-ai/omniclaude`
@@ -177,7 +177,7 @@ Skip any repo where file count > `--large-repo-file-threshold`. Log: "Skipping <
 
 ---
 
-## Step 2: Scan Phase (Parallel)
+## Step 2: Scan Phase (Parallel) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Scan up to `--max-parallel-repos` repos concurrently (default: 3). For each repo:
 
@@ -236,7 +236,7 @@ Scan Complete:
 
 ---
 
-## Step 3: Empty Check
+## Step 3: Empty Check <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```
 IF work_queue is empty:
@@ -256,7 +256,7 @@ IF dry_run:
 
 ---
 
-## Step 4: Create Worktrees (Before Dispatch)
+## Step 4: Create Worktrees (Before Dispatch) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Before creating each worktree, **acquire a claim** from the global claim registry.
 A worktree creation is a PR mutation commitment — the claim must be held before any
@@ -331,7 +331,7 @@ cleaned manually. Marker-first guarantees the sweeper can find and remove it.
 
 ---
 
-## Step 5: Dispatch Review Agents (Parallel)
+## Step 5: Dispatch Review Agents (Parallel) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Dispatch up to `--max-parallel-prs` agents concurrently. For each PR with a successfully created
 worktree:
@@ -393,7 +393,7 @@ Wait for all agents to complete (with timeout enforcement). Collect results.
 
 ---
 
-## Step 6: Cleanup Worktrees
+## Step 6: Cleanup Worktrees <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 For each PR (whether the agent succeeded, failed, or timed out), in a `finally` block:
 
@@ -425,7 +425,7 @@ Run with --cleanup-orphans to retry cleanup.
 
 ---
 
-## Step 7: Update Ledger
+## Step 7: Update Ledger <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 For each PR result, update the run ledger at
 `~/.claude/pr-queue/<date>/review-all-prs_<run_id>.json`:
@@ -445,7 +445,7 @@ Write atomically (write to temp file, then rename).
 
 ---
 
-## Step 8: Collect Results and Emit
+## Step 8: Collect Results and Emit <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Aggregate per-PR results:
 

@@ -45,7 +45,7 @@ This ensures any interrupted prior execution doesn't leave orphaned claims.
 
 ---
 
-## Step 1: Determine Repo Scope
+## Step 1: Determine Repo Scope <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 If `--repos` is provided, use that list. Otherwise use canonical omni_home repos:
 - `OmniNode-ai/omniclaude`
@@ -57,7 +57,7 @@ If `~/Code/omni_home/repos.yaml` exists, read from it instead.
 
 ---
 
-## Step 2: Scan Phase (Parallel)
+## Step 2: Scan Phase (Parallel) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Scan up to `--max-parallel-repos` repos concurrently. For each repo:
 
@@ -110,7 +110,7 @@ Apply `--max-total-prs` cap: truncate `work_queue[]` to the cap.
 
 ---
 
-## Step 3: Empty Check
+## Step 3: Empty Check <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```
 IF work_queue is empty:
@@ -121,7 +121,7 @@ IF work_queue is empty:
 
 ---
 
-## Step 4: Dispatch Fix Agents (Parallel)
+## Step 4: Dispatch Fix Agents (Parallel) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Before dispatching each PR agent, **acquire a claim** from the global registry.
 Skip PRs where another active claim exists (from a different run). Release claims in
@@ -261,7 +261,7 @@ Wait for all agents to complete. Collect results.
 
 ---
 
-## Step 5: Update Ledger
+## Step 5: Update Ledger <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 For each PR result, update `~/.claude/pr-queue/<date>/run_<run_id>.json`:
 
@@ -280,7 +280,7 @@ Write atomically (write to temp file, then rename).
 
 ---
 
-## Step 6: Collect Results and Emit
+## Step 6: Collect Results and Emit <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Aggregate per-PR results:
 

@@ -52,7 +52,7 @@ if deleted:
 
 ---
 
-## Step 1: Pre-Flight Validation
+## Step 1: Pre-Flight Validation <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 **CRITICAL**: Before any scanning or I/O, validate arguments:
 
@@ -87,7 +87,7 @@ def parse_since(since_str: str) -> datetime:
 
 ---
 
-## Step 2: Determine Repo Scope
+## Step 2: Determine Repo Scope <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 If `--repos` is provided, use that list. Otherwise, use the canonical omni_home repo list:
 
@@ -102,7 +102,7 @@ hardcoded list above.
 
 ---
 
-## Step 3: Scan Phase (Parallel, Tier-Aware)
+## Step 3: Scan Phase (Parallel, Tier-Aware) <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Scan up to `--max-parallel-repos` repos concurrently. The scan method depends on the
 current ONEX tier (see `@_lib/tier-routing/helpers.md`):
@@ -286,7 +286,7 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 
 ---
 
-## Step 4: Empty Check
+## Step 4: Empty Check <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```
 IF candidates is empty AND polish_queue is empty (or --skip-polish):
@@ -299,7 +299,7 @@ IF candidates is empty AND polish_queue is empty (or --skip-polish):
 
 ---
 
-## Step 5: Dry Run Check
+## Step 5: Dry Run Check <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```
 IF --dry-run:
@@ -485,7 +485,7 @@ Wait for all polish agents to complete. Collect results into `polish_results[]`.
 
 ---
 
-## Step 8: Collect Results
+## Step 8: Collect Results <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```python
 auto_merge_set_count = sum(1 for r in auto_merge_results if r["result"] == "auto_merge_set")
@@ -517,7 +517,7 @@ else:
 
 ---
 
-## Step 9: Post Sweep Summary to Slack
+## Step 9: Post Sweep Summary to Slack <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 Post a LOW_RISK informational summary. No polling — this is notification only.
 Best-effort: if posting fails, log warning and continue.
@@ -577,7 +577,7 @@ except Exception as e:
 
 ---
 
-## Step 10: Emit ModelSkillResult
+## Step 10: Emit ModelSkillResult <!-- ai-slop-ok: ordered-skill-step-heading -->
 
 ```json
 {
