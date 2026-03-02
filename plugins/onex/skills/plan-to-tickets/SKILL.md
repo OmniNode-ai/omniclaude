@@ -109,12 +109,13 @@ If file doesn't exist, report error and stop.
 ## Step 2: Detect Plan Structure
 
 **Detection Cascade:**
-1. If `## Phase N:` sections exist → use them (`phase_sections`, canonical)
-2. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
-3. Else if `## Step N:` headings exist → use them (`step_sections`)
-4. Else if flat checklist items exist → use them (`flat_tasks`)
+1. If `## Task N:` sections exist → use them (`task_sections`, canonical)
+2. Else if `## Phase N:` sections exist → use them (`phase_sections`, legacy alias)
+3. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
+4. Else if `## Step N:` headings exist → use them (`step_sections`)
+5. Else if flat checklist items exist → use them (`flat_tasks`)
 
-If none match → fail fast: `"Plans must use ## Phase N: headings. Use writing-plans."`
+If none match → fail fast: `"Plans must use ## Task N: headings. Use writing-plans."`
 
 ```python
 import re
@@ -124,59 +125,67 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
 
     Returns:
         (structure_type, entries) where structure_type is one of:
-          'phase_sections' — ## Phase N: Title headings (canonical)
+          'task_sections'  — ## Task N: Title headings (canonical)
+          'phase_sections' — ## Phase N: Title headings (legacy alias)
           'numbered_h2'    — generic ## N. Title headings
           'step_sections'  — ## Step N: Title headings
           'flat_tasks'     — flat checklist items
         entries is list of {id, title, content, dependencies}
     """
-    # Try Phase sections first (canonical)
-    # Requires 'Phase' keyword to avoid matching arbitrary numbered headings
-    # Captures decimal phases: "## Phase 1.5: Title" -> phase_num = "1.5"
-    phase_pattern = r'^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$'
-    phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
-
-    if phase_matches:
+    def _extract_numbered_entries(matches, keyword: str, structure_type: str):
+        """Shared extraction logic for ## Task N: and ## Phase N: headings."""
         entries = []
-        for i, match in enumerate(phase_matches):
-            phase_num = match.group(1)
+        for i, match in enumerate(matches):
+            num = match.group(1)
             # Normalize: 1.5 -> 1_5 for valid ID
-            phase_id = phase_num.replace('.', '_')
+            entry_id = num.replace('.', '_')
             title = match.group(2).strip()
 
             # Extract content until next ## heading or end
             start = match.end()
-            if i + 1 < len(phase_matches):
-                end = phase_matches[i + 1].start()
+            if i + 1 < len(matches):
+                end = matches[i + 1].start()
             else:
-                # Find next ## heading or end of file
                 next_h2 = re.search(r'^## ', content[start:], re.MULTILINE)
                 end = start + next_h2.start() if next_h2 else len(content)
 
-            phase_content = content[start:end].strip()
-
-            # Parse dependencies from content (look for "Dependencies:" or "Depends on:")
-            deps = parse_dependencies(phase_content)
+            entry_content = content[start:end].strip()
+            deps = parse_dependencies(entry_content)
 
             entries.append({
-                'id': f'P{phase_id}',
-                'title': f'Phase {phase_num}: {title}',
-                'content': phase_content,
+                'id': f'P{entry_id}',
+                'title': f'{keyword} {num}: {title}',
+                'content': entry_content,
                 'dependencies': deps
             })
 
-        # Check for duplicate phase IDs - fail fast to prevent wrong dependency linking
+        # Check for duplicate IDs - fail fast to prevent wrong dependency linking
         seen_ids = {}
         for entry in entries:
             if entry['id'] in seen_ids:
                 raise ValueError(
-                    f"Duplicate phase ID '{entry['id']}' found. "
+                    f"Duplicate {keyword.lower()} ID '{entry['id']}' found. "
                     f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
-                    f"Fix plan file to use unique phase numbers."
+                    f"Fix plan file to use unique numbers."
                 )
             seen_ids[entry['id']] = entry['title']
 
-        return ('phase_sections', entries)
+        return (structure_type, entries)
+
+    # Try Task sections first (canonical)
+    # Captures decimal tasks: "## Task 1.5: Title" -> num = "1.5"
+    task_pattern = r'^## Task\s+(\d+(?:\.\d+)?):\s*(.+?)$'
+    task_matches = list(re.finditer(task_pattern, content, re.MULTILINE | re.IGNORECASE))
+
+    if task_matches:
+        return _extract_numbered_entries(task_matches, 'Task', 'task_sections')
+
+    # Try Phase sections (legacy alias — same behavior, different keyword)
+    phase_pattern = r'^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$'
+    phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
+
+    if phase_matches:
+        return _extract_numbered_entries(phase_matches, 'Phase', 'phase_sections')
 
     # Try Milestone table (legacy fallback)
     # Expected format: | **M1** | Deliverable | Dependencies |
@@ -1024,7 +1033,7 @@ structure_type, entries = detect_structure(content)
 
 if structure_type == 'none' or not entries:
     # Fail fast with clear error
-    print("Plans must use ## Phase N: headings. Use writing-plans.")
+    print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use writing-plans.")
     raise SystemExit(1)
 
 print(f"[structure_detected] type={structure_type} entries={len(entries)}")
