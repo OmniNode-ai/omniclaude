@@ -42,6 +42,7 @@ Output:
 """
 
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -52,6 +53,7 @@ from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+from uuid import UUID, uuid4
 
 # Add script directory to path for sibling imports
 _SCRIPT_DIR = Path(__file__).parent
@@ -329,6 +331,104 @@ def _sanitize_prompt_preview(prompt: str, max_length: int = 100) -> str:
     return _redact_secrets_fn(preview)
 
 
+def _safe_metadata_value(v: Any) -> str | int | float | bool | None:
+    """Coerce a value to a JSON primitive safe for metadata fields.
+
+    Metadata values must be JSON primitives (str/int/float/bool/None).
+    Any other type (list, dict, custom object) is stringified.
+
+    Args:
+        v: Any value.
+
+    Returns:
+        The value unchanged if it is already a primitive, or str(v) otherwise.
+    """
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    return str(v)
+
+
+def _build_routing_decision_payload(
+    result: dict[str, Any],
+    prompt: str,
+    correlation_id: str,
+    session_id: str | None,
+) -> dict[str, object]:
+    """Build a payload dict matching the ``ModelRoutingDecision`` schema.
+
+    Introduced in OMN-3410 to fix ``ValidationError`` in
+    ``omninode-agent-actions-consumer``.  All field renames, additions,
+    and collapses are applied here so that both call sites share a single
+    implementation.
+
+    Field mapping (old → new):
+    - (missing)         → id: str(uuid4())
+    - session_id        → claude_session_id (str | None)
+    - correlation_id    → correlation_id (UUID guard applied)
+    - selected_agent    → selected_agent (kept)
+    - confidence        → confidence_score (float, clamped 0.0-1.0)
+    - (missing)         → created_at: datetime.now(UTC).isoformat()
+    - domain            → domain (coerced: result.get("domain") or None)
+    - reasoning         → routing_reason (coerced: result.get("reasoning") or None)
+    - routing_method, routing_policy, routing_path, latency_ms,
+      prompt_preview, event_attempted → collapsed into metadata dict
+
+    Args:
+        result: Routing decision result dictionary.
+        prompt: Original user prompt (will be sanitized before emission).
+        correlation_id: Correlation ID for tracking; coerced to UUID.
+        session_id: Session identifier; stored as ``claude_session_id``.
+
+    Returns:
+        Payload dict ready for emission.
+    """
+    # UUID guard for correlation_id
+    try:
+        _cid_str = str(UUID(str(correlation_id)))
+        _cid_original: str | None = None
+    except (ValueError, AttributeError):
+        _cid_str = str(uuid4())
+        _cid_original = str(correlation_id)
+        logger.debug(
+            "routing_decision: non-UUID correlation_id replaced",
+            extra={"original": _cid_original, "replacement": _cid_str},
+        )
+
+    # Confidence clamp: values > 1.0 (e.g. 75) clamp to 1.0 — not percent
+    _raw_conf = result.get("confidence", 0.5)
+    if isinstance(_raw_conf, (int, float)):
+        confidence_score: float = max(0.0, min(1.0, float(_raw_conf)))
+    else:
+        confidence_score = 0.5
+
+    # Collapse legacy top-level fields into metadata
+    metadata: dict[str, str | int | float | bool | None] = {
+        k: _safe_metadata_value(result.get(k))
+        for k in (
+            "routing_method",
+            "routing_policy",
+            "routing_path",
+            "latency_ms",
+            "event_attempted",
+        )
+    }
+    metadata["prompt_preview"] = _safe_metadata_value(_sanitize_prompt_preview(prompt))
+    if _cid_original is not None:
+        metadata["correlation_id_original"] = _cid_original
+
+    return {
+        "id": str(uuid4()),
+        "correlation_id": _cid_str,
+        "claude_session_id": session_id or None,
+        "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
+        "confidence_score": confidence_score,
+        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "domain": result.get("domain") or None,
+        "routing_reason": result.get("reasoning") or None,
+        "metadata": metadata,
+    }
+
+
 def _emit_routing_decision(
     result: dict[str, Any],
     prompt: str,
@@ -356,25 +456,12 @@ def _emit_routing_decision(
         return
 
     try:
-        payload: dict[str, object] = {
-            "session_id": session_id or "unknown",
-            "correlation_id": correlation_id,
-            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
-            "confidence": result.get("confidence", 0.5),
-            "routing_method": result.get(
-                "routing_method", RoutingMethod.FALLBACK.value
-            ),
-            "routing_policy": result.get(
-                "routing_policy", RoutingPolicy.FALLBACK_DEFAULT.value
-            ),
-            "routing_path": result.get("routing_path", "local"),
-            "latency_ms": result.get("latency_ms", 0),
-            "domain": result.get("domain", ""),
-            "reasoning": result.get("reasoning", ""),
-            "prompt_preview": _sanitize_prompt_preview(prompt),
-            "event_attempted": result.get("event_attempted", False),
-        }
-
+        payload = _build_routing_decision_payload(
+            result=result,
+            prompt=prompt,
+            correlation_id=correlation_id,
+            session_id=session_id,
+        )
         _emit_event_fn(event_type="routing.decision", payload=payload)
     except Exception as e:
         # Non-blocking: routing emission failure must not break routing
