@@ -20,7 +20,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-  merge_queue:
+  merge_group:
   workflow_dispatch:
 
 env:
