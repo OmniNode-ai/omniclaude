@@ -55,11 +55,11 @@ class TestSessionStartEnvSync:
         """
         content = _script()
         # The guard condition must check INFISICAL_ADDR
-        assert 'INFISICAL_ADDR' in content, (
+        assert "INFISICAL_ADDR" in content, (
             "session-start.sh must reference INFISICAL_ADDR for the env sync guard"
         )
         # The sync call must invoke sync-omnibase-env.py
-        assert 'sync-omnibase-env.py' in content, (
+        assert "sync-omnibase-env.py" in content, (
             "session-start.sh must call sync-omnibase-env.py when INFISICAL_ADDR is set"
         )
 
@@ -83,16 +83,16 @@ class TestSessionStartEnvSync:
         """
         content = _script()
         # Find the env sync section
-        assert 'sync-omnibase-env.py' in content, (
+        assert "sync-omnibase-env.py" in content, (
             "sync-omnibase-env.py must be present before checking backgrounding"
         )
         # The sync must be backgrounded with & (either bare & or ) &)
         # We verify both & and disown appear near the sync section
-        assert 'disown' in content, (
+        assert "disown" in content, (
             "session-start.sh must call disown after the sync background job "
             "to detach it from the shell and prevent blocking"
         )
         # Verify the subshell pattern: (...) &
-        assert ') &' in content or ')&' in content, (
+        assert ") &" in content or ")&" in content, (
             "session-start.sh must background the sync using ') &' subshell pattern"
         )
