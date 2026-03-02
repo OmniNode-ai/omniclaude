@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_linear_epic_org_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.linear-epic-org.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "linear-epic-org",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.linear-epic-org-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

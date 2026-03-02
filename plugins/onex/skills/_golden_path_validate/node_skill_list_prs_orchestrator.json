@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_list_prs_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.list-prs.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "list-prs",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.list-prs-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

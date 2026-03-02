@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_system_status_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.system-status.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "system-status",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.system-status-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

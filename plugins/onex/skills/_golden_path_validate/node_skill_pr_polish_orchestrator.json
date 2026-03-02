@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_pr_polish_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.pr-polish.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "pr-polish",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.pr-polish-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

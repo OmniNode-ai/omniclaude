@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_writing_skills_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.writing-skills.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "writing-skills",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.writing-skills-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

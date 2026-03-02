@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_requesting_code_review_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.requesting-code-review.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "requesting-code-review",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.requesting-code-review-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

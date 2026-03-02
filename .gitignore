@@ -228,6 +228,8 @@ PR_DESCRIPTION.md
 *_analysis*.json
 *_errors*.txt
 mypy_*.txt
+# Golden path fixture files are intentionally committed (they match *_analysis*.json above)
+!plugins/onex/skills/_golden_path_validate/*.json
 
 # Security scan outputs (ephemeral, should not be committed)
 bandit*.json

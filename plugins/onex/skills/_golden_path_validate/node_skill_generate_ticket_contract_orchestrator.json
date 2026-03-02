@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_generate_ticket_contract_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.generate-ticket-contract.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "generate-ticket-contract",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.generate-ticket-contract-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

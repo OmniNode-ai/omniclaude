@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_curate_legacy_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.curate-legacy.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "curate-legacy",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.curate-legacy-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

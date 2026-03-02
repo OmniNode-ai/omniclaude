@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_release_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.release.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "release",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.release-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

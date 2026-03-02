@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_testing_anti_patterns_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.testing-anti-patterns.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "testing-anti-patterns",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.testing-anti-patterns-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

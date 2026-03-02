@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_plan_to_tickets_orchestrator",
+  "ticket_id": "OMN-3390",
+  "input": {
+    "topic": "onex.cmd.omniclaude.plan-to-tickets.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "plan-to-tickets",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.plan-to-tickets-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}
