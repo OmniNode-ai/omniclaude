@@ -2888,7 +2888,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 
    # Update Linear to Done
    try:
-       mcp__linear-server__save_issue(id=ticket_id, state="Done")
+       mcp__linear-server__update_issue(id=ticket_id, state="Done")
    except Exception as e:
        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
    ```
