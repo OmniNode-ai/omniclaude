@@ -45,9 +45,9 @@ from omniclaude.config import settings
 
 # Topic names (wire-ready, no environment prefix per OMN-1972)
 # Corrected to canonical onex.cmd/evt convention (OMN-2367)
-TOPIC_CODE_ANALYSIS_REQUESTED = "onex.cmd.omniintelligence.code-analysis.v1"
-TOPIC_CODE_ANALYSIS_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
-TOPIC_CODE_ANALYSIS_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
+TOPIC_CODE_ANALYSIS_REQUESTED = "onex.cmd.omniintelligence.code-analysis.v1"  # noqa: arch-topic-naming
+TOPIC_CODE_ANALYSIS_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"  # noqa: arch-topic-naming
+TOPIC_CODE_ANALYSIS_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"  # noqa: arch-topic-naming
 
 
 class IntelligenceConfig(BaseModel):

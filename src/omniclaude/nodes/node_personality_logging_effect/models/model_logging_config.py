@@ -16,6 +16,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from omniclaude.hooks.topics import TopicBase
+
 
 class ModelThrottleConfig(BaseModel):
     """Rate-limiting configuration."""
@@ -112,11 +114,11 @@ class ModelLoggingConfig(BaseModel):
         description="User-supplied YAML phrase-pack files",
     )
     kafka_input_topic: str = Field(
-        default="onex.evt.omniclaude.log-event-emitted.v1",
+        default=TopicBase.LOG_EVENT_EMITTED,
         description="Kafka topic to consume LogEvents from",
     )
     kafka_output_topic: str = Field(
-        default="onex.evt.omniclaude.log-event-rendered.v1",
+        default=TopicBase.LOG_EVENT_RENDERED,
         description="Kafka topic to emit rendered events to",
     )
     slack_webhook_url: SecretStr | None = Field(

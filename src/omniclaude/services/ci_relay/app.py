@@ -21,13 +21,14 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.services.ci_relay.models import CICallbackPayload, PRStatusEvent
 from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 # Topic for PR status events
-PR_STATUS_TOPIC = "onex.evt.omniclaude.github-pr-status.v1"
+PR_STATUS_TOPIC = TopicBase.GITHUB_PR_STATUS
 
 # Module-level rate limiter (single instance per process)
 _rate_limiter = RateLimiter()

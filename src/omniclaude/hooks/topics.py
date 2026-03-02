@@ -103,6 +103,35 @@ class TopicBase(StrEnum):
     # Routing decision topics (PR-92)
     # ==========================================================================
     ROUTING_DECISION = "onex.evt.omniclaude.routing-decision.v1"
+    # Cross-domain CMD topic: producer=omniclaude, domain=omniintelligence.
+    # Internal control plane — not an observability topic. No contract topic_base
+    # (schema supports one topic_base per contract); governed via topic_allowlist.yaml.
+    # Lifecycle: internal_control (OMN-3294)
+    ROUTING_DECISION_CMD = "onex.cmd.omniintelligence.routing-decision.v1"  # noqa: arch-topic-naming
+
+    # ==========================================================================
+    # GitHub PR status topics (OMN-3294)
+    # Lifecycle: Integration (stable) — governed by node_github_pr_watcher_effect/contract.yaml
+    # ==========================================================================
+    GITHUB_PR_STATUS = "onex.evt.omniclaude.github-pr-status.v1"
+    # DLQ / error topic for the PR watcher node
+    PR_WATCHER_FAILED = "onex.evt.omniclaude.pr-watcher-failed.v1"
+
+    # ==========================================================================
+    # Epic status topics (OMN-3294)
+    # Lifecycle: Integration (stable) — governed by node_agent_inbox_effect/contract.yaml
+    # ==========================================================================
+    EPIC_STATUS = "onex.evt.omniclaude.epic-status.v1"
+
+    # ==========================================================================
+    # Personality logging telemetry topics (OMN-3294)
+    # Lifecycle: Telemetry (best-effort, may be sampled) — governed by
+    #            node_personality_logging_effect/contract.yaml
+    # Note: Telemetry topics may be sampled or dropped. No business logic may
+    #       hard-depend on them.
+    # ==========================================================================
+    LOG_EVENT_EMITTED = "onex.evt.omniclaude.log-event-emitted.v1"
+    LOG_EVENT_RENDERED = "onex.evt.omniclaude.log-event-rendered.v1"
 
     # ==========================================================================
     # LLM routing observability topics (OMN-2273)

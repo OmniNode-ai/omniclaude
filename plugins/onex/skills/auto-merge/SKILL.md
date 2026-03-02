@@ -27,6 +27,10 @@ inputs:
     type: bool
     description: Delete branch after merge (default true)
     required: false
+  - name: ticket_id
+    type: str
+    description: "Linear ticket identifier (e.g. OMN-1234) to mark Done after merge (optional)"
+    required: false
 outputs:
   - name: skill_result
     type: ModelSkillResult
@@ -37,6 +41,8 @@ outputs:
       - repo: str
       - merge_commit: str | null
       - strategy: str
+      - ticket_id: str | null
+      - ticket_close_status: "closed" | "skipped" | "failed" | null
 args:
   - name: pr_number
     description: GitHub PR number to merge
@@ -52,6 +58,9 @@ args:
     required: false
   - name: --no-delete-branch
     description: Don't delete branch after merge
+    required: false
+  - name: --ticket-id
+    description: Linear ticket ID to mark Done after merge (e.g. OMN-1234)
     required: false
 ---
 
@@ -172,9 +181,31 @@ gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_br
 This exception is documented and intentional. All other PR operations (view, list, checks)
 use tier-aware routing.
 
-### Step 6: Post Merge Notification <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
+### Step 6: Post Merge Notification and Close Linear Ticket <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
-Post Slack notification on merge completion.
+After a successful merge:
+
+1. **Post Slack notification** on merge completion.
+2. **Close Linear ticket** (if `ticket_id` is available in context — passed by `ticket-pipeline`):
+   ```python
+   if ticket_id:
+       try:
+           mcp__linear-server__save_issue(id=ticket_id, state="Done")
+       except Exception as e:
+           print(f"[auto-merge] Warning: Could not mark {ticket_id} as Done: {e}")
+           # Non-blocking: merge already succeeded; do not fail the skill
+   ```
+   This is a belt-and-suspenders step. The primary path (`ticket-pipeline` Phase 6)
+   also marks the ticket Done. The `linear-close-on-merge` GitHub Actions workflow
+   (`.github/workflows/linear-close-on-merge.yml`) runs unconditionally on every PR
+   merge to main/develop, ensuring ticket closure even when the pipeline session has
+   ended (simultaneous closes from multiple paths are safe — Linear state updates are idempotent).
+
+**Ticket ID resolution order:**
+1. Passed explicitly as `--ticket-id OMN-XXXX` argument
+2. Extracted from PR branch name via `OMN-XXXX` pattern (fallback if `--ticket-id` not provided)
+   (branch name extraction: `git branch --show-current | grep -ioE '(OMN|omn)-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]'`; only reliable when session is checked out on the PR branch — returns empty string if HEAD is detached)
+3. Skip update if neither resolves to a valid ID
 
 ## Slack Gate Message Format
 
@@ -206,7 +237,9 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
   "repo": "org/repo",
   "merge_commit": "abc1234",
   "strategy": "squash",
-  "context_id": "{context_id}"
+  "context_id": "{context_id}",
+  "ticket_id": "OMN-3262",
+  "ticket_close_status": "closed"
 }
 ```
 
@@ -218,6 +251,14 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.jso
 - `error`: Merge failed — includes:
   - `mergeStateStatus == "DIRTY"`: message "PR has merge conflicts — resolve before retrying"
   - Permissions error, API failure, or other terminal failure
+
+**`ticket_id`**: The Linear ticket identifier closed in Step 6 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
+
+**`ticket_close_status`** values:
+- `"closed"`: `mcp__linear-server__save_issue` succeeded; ticket marked Done
+- `"skipped"`: No `ticket_id` could be resolved — explicit arg absent and branch-name extraction returned empty
+- `"failed"`: `save_issue` call raised an exception; merge still succeeded (non-blocking)
+- `null`: Step 6 was not reached (skill exited before merge — `status` is `held`, `timeout`, or `error`)
 
 ## Executable Scripts
 
@@ -237,12 +278,14 @@ REPO=""
 STRATEGY="squash"
 GATE_TIMEOUT_HOURS="24"
 DELETE_BRANCH="true"
+TICKET_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --strategy)            STRATEGY="$2";            shift 2 ;;
     --gate-timeout-hours)  GATE_TIMEOUT_HOURS="$2";  shift 2 ;;
     --no-delete-branch)    DELETE_BRANCH="false";     shift   ;;
+    --ticket-id)           TICKET_ID="$2";            shift 2 ;;
     -*)  echo "Unknown flag: $1" >&2; exit 1 ;;
     *)
       if [[ -z "$PR_NUMBER" ]]; then PR_NUMBER="$1"; shift
@@ -263,7 +306,8 @@ exec claude --skill onex:auto-merge \
   --arg "repo=${REPO}" \
   --arg "strategy=${STRATEGY}" \
   --arg "gate_timeout_hours=${GATE_TIMEOUT_HOURS}" \
-  --arg "delete_branch=${DELETE_BRANCH}"
+  --arg "delete_branch=${DELETE_BRANCH}" \
+  ${TICKET_ID:+--arg "ticket_id=${TICKET_ID}"}
 ```
 
 | Invocation | Description |

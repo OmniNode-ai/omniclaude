@@ -485,17 +485,28 @@ if [[ "$KAFKA_ENABLED" == "true" && "$JQ_AVAILABLE" -eq 1 ]]; then
             GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
         fi
 
+        # Build action_description per OMN-3297: "Session: {repo}@{branch}"
+        # repo = basename of CWD; branch = git branch or "unknown"
+        _AD_REPO="${CWD##*/}"
+        _AD_BRANCH="${GIT_BRANCH:-unknown}"
+        _AD_STR="Session: ${_AD_REPO}@${_AD_BRANCH}"
+        # Normalize: strip newlines, cap at 160 chars
+        _AD_STR=$(printf '%s' "$_AD_STR" | tr '\n\r' '  ')
+        _AD_STR="${_AD_STR:0:160}"
+
         # Build payload with all fields needed for session.started event
         SESSION_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg working_directory "$CWD" \
             --arg hook_source "startup" \
             --arg git_branch "$GIT_BRANCH" \
+            --arg action_description "$_AD_STR" \
             '{
                 session_id: $session_id,
                 working_directory: $working_directory,
                 hook_source: $hook_source,
-                git_branch: $git_branch
+                git_branch: $git_branch,
+                action_description: $action_description
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully

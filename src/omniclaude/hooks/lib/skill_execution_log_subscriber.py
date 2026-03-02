@@ -43,13 +43,15 @@ import time
 from typing import Any
 from uuid import UUID
 
+from omniclaude.hooks.topics import TopicBase
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Topic constant (mirrors TopicBase.SKILL_COMPLETED)
 # ---------------------------------------------------------------------------
 
-SKILL_COMPLETED_TOPIC = "onex.evt.omniclaude.skill-completed.v1"
+SKILL_COMPLETED_TOPIC = TopicBase.SKILL_COMPLETED
 
 # Consumer group ID — version suffix required by F5 rules (OMN-2593)
 DEFAULT_GROUP_ID = "omniclaude-skill-execution-log-subscriber.v1"

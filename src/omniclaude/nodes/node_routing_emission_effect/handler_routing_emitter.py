@@ -37,6 +37,7 @@ from collections.abc import Callable
 from typing import Final
 from uuid import UUID
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_routing_emission_effect.models import (
     ModelEmissionRequest,
     ModelEmissionResult,
@@ -52,10 +53,10 @@ logger = logging.getLogger(__name__)
 EVENT_TYPE_ROUTING_DECISION: Final[str] = "routing.decision"
 
 #: Public observability topic (preview-safe, broad access).
-TOPIC_EVT: Final[str] = "onex.evt.omniclaude.routing-decision.v1"
+TOPIC_EVT: Final[str] = TopicBase.ROUTING_DECISION
 
 #: Restricted intelligence topic (full data).
-TOPIC_CMD: Final[str] = "onex.cmd.omniintelligence.routing-decision.v1"
+TOPIC_CMD: Final[str] = TopicBase.ROUTING_DECISION_CMD
 
 #: Both topics combined for result reporting.
 DUAL_TOPICS: Final[tuple[str, ...]] = (TOPIC_EVT, TOPIC_CMD)

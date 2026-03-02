@@ -17,6 +17,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from omniclaude.hooks.topics import TopicBase
+
 
 class InboxRouteResult(BaseModel):
     """Result of routing a PR status event to agent inboxes."""
@@ -104,7 +106,7 @@ class AgentInboxMessage(BaseModel):
         return cls(
             agent_id=agent_id,
             event_type="pr-status",
-            source_topic="onex.evt.omniclaude.github-pr-status.v1",
+            source_topic=TopicBase.GITHUB_PR_STATUS,
             payload=pr_status_payload,
             trace=trace or {},
         )

@@ -9,7 +9,7 @@ which failure was fixed, which frames were involved, and what diff produced the 
 
 FixTransitions are:
 1. Persisted to the fix_transitions table (via TRACE-02 DDL)
-2. Emitted to Kafka topic 'onex.evt.omniclaude.fix-transition.v1' (non-blocking)
+2. Emitted to Kafka topic TopicBase.AGENT_TRACE_FIX_TRANSITION (non-blocking)
 
 Design constraints:
 - detect_fix_transition() is pure logic, no I/O (testable without DB)
@@ -25,11 +25,11 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.trace.change_frame import ChangeFrame
 
 # ---------------------------------------------------------------------------
@@ -181,9 +181,7 @@ def detect_fix_transition(
 
 
 #: Kafka topic for fix transition events (ONEX naming: onex.{kind}.{producer}.{event}.v{n})
-FIX_TRANSITION_TOPIC: Literal["onex.evt.omniclaude.fix-transition.v1"] = (
-    "onex.evt.omniclaude.fix-transition.v1"
-)
+FIX_TRANSITION_TOPIC: str = TopicBase.AGENT_TRACE_FIX_TRANSITION
 
 
 def serialize_fix_transition_event(

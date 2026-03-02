@@ -37,6 +37,7 @@ import yaml
 from omnibase_core.enums import EnumMessageCategory
 from omnibase_core.models.dispatch.model_dispatch_route import ModelDispatchRoute
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.shared.handler_skill_requested import handle_skill_requested
 from omniclaude.nodes.shared.models.model_skill_completion_event import (
     ModelSkillCompletionEvent,
@@ -70,10 +71,12 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_TOPIC_PATTERN = "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore
+_TOPIC_PATTERN = (
+    "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore  # noqa: arch-topic-naming
+)
 _DISPATCHER_ID = "dispatcher.skill.command"
 _ROUTE_ID = "skill-command-router"
-_COMPLETION_TOPIC = "onex.evt.omniclaude.skill-completed.v1"
+_COMPLETION_TOPIC = TopicBase.SKILL_COMPLETED
 
 _CONTRACT_PARSE_THRESHOLD = 0.80
 
@@ -81,9 +84,7 @@ _CONTRACT_PARSE_THRESHOLD = 0.80
 # Quirk finding subscription constants (OMN-2908)
 # ---------------------------------------------------------------------------
 
-_QUIRK_FINDING_TOPIC = (
-    "onex.evt.omniclaude.quirk-finding-produced.v1"  # arch-topic-naming: ignore
-)
+_QUIRK_FINDING_TOPIC = TopicBase.QUIRK_FINDING_PRODUCED
 _QUIRK_FINDING_DISPATCHER_ID = "dispatcher.quirk.finding"
 _QUIRK_FINDING_ROUTE_ID = "quirk-finding-router"
 
