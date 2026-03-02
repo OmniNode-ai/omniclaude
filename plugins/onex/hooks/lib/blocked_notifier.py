@@ -179,7 +179,11 @@ def _format_slack_message(payload: dict[str, object]) -> str:
 
 
 def _send_via_handler(
-    webhook_url: str, message: str, correlation_id_str: str | None = None
+    webhook_url: str,
+    message: str,
+    correlation_id_str: str | None = None,
+    agent_name: str | None = None,
+    session_id: str | None = None,
 ) -> bool:
     """Send notification via omnibase_infra HandlerSlackWebhook.
 
@@ -205,6 +209,14 @@ def _send_via_handler(
 
     handler = handler_cls(webhook_url=webhook_url)
 
+    # Build structured details dict — only include fields with meaningful values.
+    # Exclude the "unknown" sentinel to avoid surfacing unresolved env vars as fields.
+    details: dict[str, str] = {}
+    if agent_name and agent_name != "unknown":
+        details["Agent"] = agent_name
+    if session_id and session_id != "unknown":
+        details["Session"] = session_id
+
     # Try to use ModelSlackAlert from omnibase_infra
     try:
         from omnibase_infra.handlers.models.model_slack_alert import (
@@ -216,7 +228,7 @@ def _send_via_handler(
             severity=EnumAlertSeverity.WARNING,
             message=message,
             title="Agent Blocked",
-            details={},
+            details=details,
             correlation_id=alert_correlation_id,
         )
     except ImportError:
@@ -231,7 +243,9 @@ def _send_via_handler(
             details: dict[str, str] = field(default_factory=dict)
             correlation_id: object = field(default_factory=uuid4)
 
-        alert = _FallbackAlert(message=message, correlation_id=alert_correlation_id)
+        alert = _FallbackAlert(
+            message=message, details=details, correlation_id=alert_correlation_id
+        )
 
     try:
         asyncio.run(asyncio.wait_for(handler.handle(alert), timeout=10.0))
@@ -294,10 +308,18 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
         # R5: Format message
         message = _format_slack_message(payload)
         correlation_id_str = str(payload.get("correlation_id", "")) or None
+        agent_name_str = str(payload.get("agent_name", "")) or None
+        session_id_str = str(payload.get("session_id", "")) or None
 
         # R6: Send notification — try handler first, fall back to urllib
         try:
-            return _send_via_handler(webhook_url, message, correlation_id_str)
+            return _send_via_handler(
+                webhook_url,
+                message,
+                correlation_id_str,
+                agent_name=agent_name_str,
+                session_id=session_id_str,
+            )
         except ImportError:
             logger.debug(
                 "omnibase_infra not available, falling back to urllib for Slack"
