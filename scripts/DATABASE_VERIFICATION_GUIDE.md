@@ -17,7 +17,7 @@ cat /tmp/database_verification_latest.txt
 ## What It Checks
 
 ### 1. Connectivity (1 check)
-- PostgreSQL connection to `omninode_bridge` database
+- PostgreSQL connection to `omnibase_infra` database
 - Validates credentials from `.env` file
 - Uses external IP (192.168.86.200:5436) for host access
 
@@ -194,7 +194,7 @@ echo "Host: ${POSTGRES_HOST}"
 echo "Port: ${POSTGRES_PORT}"
 
 # Test manual connection
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### Low Health Score
@@ -252,7 +252,7 @@ fi
   COMPREHENSIVE DATABASE SYSTEM VERIFICATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Database: omninode_bridge @ 192.168.86.200:5436
+Database: omnibase_infra @ 192.168.86.200:5436
 User: postgres
 Timestamp: 2025-11-09 19:02:43
 

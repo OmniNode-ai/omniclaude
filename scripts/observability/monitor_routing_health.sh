@@ -6,7 +6,7 @@
 # ROUTING HEALTH MONITORING SCRIPT
 # ============================================================================
 # Purpose: Monitor routing health with threshold checks and alerts
-# Database: omninode_bridge
+# Database: omnibase_infra
 # Queries: routing_metrics.sql
 # Correlation ID: 60d7acac-8d46-4041-ae43-49f1aa7fdccc
 #

@@ -73,12 +73,11 @@ ALIAS_MAP = {
     "infra": "omnibase_infra",
     "intelligence": "omniintelligence",
     "claude": "omniclaude",
-    "archon": "omniarchon",
 }
 
 KNOWN_REPOS = [
     "omniclaude", "omniintelligence", "omnibase_core", "omnibase_infra",
-    "omniarchon", "omnimemory", "omnidash", "omnidash2", "omniweb",
+    "omnimemory", "omnidash", "omnidash2", "omniweb",
 ]
 
 def canonicalize(raw: str) -> str | None:

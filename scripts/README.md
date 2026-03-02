@@ -224,7 +224,7 @@ ls -la .env
 source .env
 
 # 3. Test manual connection
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### "Missing tables" errors
@@ -234,7 +234,7 @@ psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
 source .env && echo $POSTGRES_DATABASE
 
 # 2. List actual tables
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "\dt"
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "\dt"
 
 # 3. Run schema migrations if needed
 # (see database migration documentation)

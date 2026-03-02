@@ -63,7 +63,7 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 | [COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md](architecture/COMPLIANCE_ENFORCEMENT_ARCHITECTURE.md) | PostToolUse enforcement, PatternAdvisory |
 | [DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md) | Task classifier, local LLM, quality gate |
 | [LLM_ROUTING_ARCHITECTURE.md](architecture/LLM_ROUTING_ARCHITECTURE.md) | Endpoint registry, token-count routing |
-| [SERVICE-BOUNDARIES.md](architecture/SERVICE-BOUNDARIES.md) | Omniclaude vs omniarchon service ownership |
+| [SERVICE-BOUNDARIES.md](architecture/SERVICE-BOUNDARIES.md) | Omniclaude vs omniintelligence service ownership |
 
 > **Note**: `architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md` and `architecture/ROUTING_ARCHITECTURE_COMPARISON.md` are ⚠️ Deprecated — they describe a superseded routing proposal. See banners within those files.
 

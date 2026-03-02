@@ -30,7 +30,7 @@ Required environment variables:
 - `POSTGRES_PORT` (default: 5436)
 - `POSTGRES_USER` (default: postgres)
 - `POSTGRES_PASSWORD` (required - no default)
-- `POSTGRES_DATABASE` (default: omninode_bridge)
+- `POSTGRES_DATABASE` (default: omnibase_infra)
 
 ## Usage
 
@@ -318,7 +318,7 @@ AsyncPGProtocol (adapter)
   ↓
 NodeDebugSTFStorageEffect / NodeModelPriceCatalogEffect
   ↓
-PostgreSQL (omninode_bridge database)
+PostgreSQL (omnibase_infra database)
   ↓
 Rich formatted output
 ```
@@ -349,10 +349,10 @@ The CLI directly uses ONEX nodes:
 
 ### With Database
 
-Connects to shared `omninode_bridge` database:
+Connects to shared `omnibase_infra` database:
 - **Host:** 192.168.86.200 (remote server)
 - **Port:** 5436 (external access)
-- **Database:** omninode_bridge
+- **Database:** omnibase_infra
 
 ### With Configuration
 

@@ -9,7 +9,7 @@
 | This repo owns | Another repo owns |
 |----------------|-------------------|
 | Claude Code hooks (SessionStart, UserPromptSubmit, PostToolUse, SessionEnd) | **omniintelligence** -- intelligence processing, code analysis |
-| Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniarchon** -- search service, bridge services |
+| Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniintelligence** -- intelligence processing, code analysis |
 | Slash commands and skills (`plugins/onex/commands/`, `plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
 | Event emission via Unix socket daemon | **omnibase_infra** -- Kubernetes, deployment |
 | Context injection (learned patterns into prompts) | |

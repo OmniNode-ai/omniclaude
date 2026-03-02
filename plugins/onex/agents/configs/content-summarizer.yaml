@@ -113,7 +113,7 @@ intelligence_integration:
 implementation:
   node_type: "effect"
   node_class: "NodeContentSummarizerEffect"
-  node_location: "omninode_bridge/nodes/content_summarizer_effect/v1_0_0"
+  node_location: "omniclaude/nodes/content_summarizer_effect/v1_0_0"
   base_class: "ModelServiceEffect (omnibase_core)"
 
   strategies:
@@ -227,7 +227,7 @@ quality_gates:
 
 # Integration Points
 integration:
-  omninode_bridge: "NodeContentSummarizerEffect in omninode_bridge repository"
+  omniclaude: "NodeContentSummarizerEffect in omniclaude repository"
   omnibase_core: "Uses ModelServiceEffect base class and mixins"
   omniclaude: "Integrated via agent registry and routing system"
   onex_compliance: "Full ONEX v2.0 standards compliance"
@@ -254,6 +254,6 @@ test_examples:
 
 # Documentation References
 documentation:
-  node_location: "src/omninode_bridge/nodes/content_summarizer_effect/v1_0_0/node.py"
+  node_location: "src/omniclaude/nodes/content_summarizer_effect/v1_0_0/node.py"
   examples: "examples/use_content_summarizer.py"
-  contract: "src/omninode_bridge/nodes/content_summarizer_effect/v1_0_0/contract.yaml"
+  contract: "src/omniclaude/nodes/content_summarizer_effect/v1_0_0/contract.yaml"

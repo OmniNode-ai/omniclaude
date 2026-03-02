@@ -95,7 +95,6 @@ Known omni_home repos (update as workspace grows):
 - `OmniNode-ai/omniclaude`
 - `OmniNode-ai/omnibase_core`
 - `OmniNode-ai/omniintelligence`
-- `OmniNode-ai/omniarchon`
 - `OmniNode-ai/omnidash`
 
 If a repo manifest exists at `~/Code/omni_home/repos.yaml`, read from it instead of the

@@ -7,7 +7,7 @@
 
 ## Purpose
 
-This document defines clear service ownership boundaries between **omniclaude** and external services (primarily **omniarchon**). Understanding these boundaries is critical for:
+This document defines clear service ownership boundaries between **omniclaude** and external services (primarily **omniintelligence**). Understanding these boundaries is critical for:
 
 - Preventing cross-repository architectural violations
 - Maintaining clean service separation
@@ -155,11 +155,11 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 
 ## External Service Dependencies
 
-These services are **NOT owned by omniclaude**. They are provided by external systems (primarily **omniarchon**) and should be treated as black-box dependencies.
+These services are **NOT owned by omniclaude**. They are provided by external systems (primarily **omniintelligence**) and should be treated as black-box dependencies.
 
-### 1. Archon Intelligence Service
+### 1. Intelligence Service
 
-**Owner**: omniarchon repository
+**Owner**: omniintelligence repository
 **Endpoint**: `${ARCHON_INTELLIGENCE_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
@@ -181,16 +181,16 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ```
 
 **DO NOT**:
-- ❌ Modify Archon Intelligence service code
-- ❌ Add endpoints to Archon Intelligence
-- ❌ Change Archon Intelligence configuration
-- ❌ Deploy Archon Intelligence from omniclaude
+- ❌ Modify Intelligence service code
+- ❌ Add endpoints to Intelligence service
+- ❌ Change Intelligence service configuration
+- ❌ Deploy Intelligence service from omniclaude
 
 ---
 
-### 2. Archon Search Service
+### 2. Intelligence Search Service
 
-**Owner**: omniarchon repository
+**Owner**: omniintelligence repository
 **Endpoint**: `${ARCHON_SEARCH_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
@@ -212,9 +212,9 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 
 ---
 
-### 3. Archon Bridge Service
+### 3. Intelligence Bridge Service
 
-**Owner**: omniarchon repository
+**Owner**: omniintelligence repository
 **Endpoint**: `${ARCHON_BRIDGE_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
@@ -289,7 +289,7 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092
 
 **Purpose**: Persistent storage for agent execution, routing decisions, and observability data
 
-**Database**: `omninode_bridge`
+**Database**: `omnibase_infra`
 
 **Tables Used by omniclaude** (subset of 34 total):
 - `agent_routing_decisions` - Agent selection and confidence scores
@@ -327,7 +327,7 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 
 ### 6. Qdrant Vector Database
 
-**Owner**: Deployed locally in omniclaude (but patterns managed by omniarchon)
+**Owner**: Deployed locally in omniclaude (but patterns managed by omniintelligence)
 **Endpoint**: `${QDRANT_URL}` (see `.env`)
 **Access Pattern**: HTTP REST API
 
@@ -346,7 +346,7 @@ QDRANT_PORT=${QDRANT_PORT}    # Typically: 6333
 QDRANT_URL=${QDRANT_URL}      # Full URL for HTTP access
 ```
 
-**Note**: While Qdrant runs locally in omniclaude's Docker, the **patterns are populated and managed by omniarchon**. omniclaude only reads from these collections.
+**Note**: While Qdrant runs locally in omniclaude's Docker, the **patterns are populated and managed by omniintelligence**. omniclaude only reads from these collections.
 
 ---
 
@@ -376,7 +376,7 @@ KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # For Docker
 # PostgreSQL Database
 POSTGRES_HOST=<see .env.example>       # Remote server IP
 POSTGRES_PORT=<see .env.example>       # External port (typically 5436)
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_DATABASE=omnibase_infra
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<set_in_env>         # NEVER commit real passwords
 
@@ -584,17 +584,17 @@ await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
 ### ❌ Cross-Repository Service Modifications
 
 **DO NOT**:
-- Edit `omniarchon/docker-compose.yml` from omniclaude
-- Add Archon services to omniclaude's docker-compose
-- Modify Archon service configurations
-- Deploy Archon services from omniclaude
+- Edit docker-compose files from unrelated repos
+- Add intelligence services to omniclaude's docker-compose
+- Modify intelligence service configurations
+- Deploy intelligence services from omniclaude
 
 **WHY**: Violates service ownership boundaries and causes deployment conflicts
 
 **INSTEAD**:
-- Use Archon services as black-box dependencies
+- Use intelligence services as black-box dependencies
 - Configure endpoints via `.env`
-- Request features via Archon team
+- Request features via omniintelligence team
 
 ---
 
@@ -661,8 +661,8 @@ conn = psycopg2.connect(
 # BAD: Direct HTTP call to Qdrant
 response = requests.post("http://localhost:6333/collections/execution_patterns/points/search", ...)
 
-# BAD: Direct SQL query to omniarchon tables
-cursor.execute("SELECT * FROM archon_specific_table")
+# BAD: Direct SQL query to external service tables
+cursor.execute("SELECT * FROM external_service_table")
 ```
 
 **INSTEAD**:
@@ -736,7 +736,7 @@ GEMINI_API_KEY=actual_key_here
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  Qdrant (${QDRANT_URL}) - LOCALLY DEPLOYED               │  │
-│  │    - Pattern storage (managed by omniarchon)             │  │
+│  │    - Pattern storage (managed by omniintelligence)       │  │
 │  │    - Vector search                                       │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -744,19 +744,19 @@ GEMINI_API_KEY=actual_key_here
                    (Kafka Events + HTTP APIs)
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                      OMNIARCHON OWNS                             │
+│                    OMNIINTELLIGENCE OWNS                         │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Intelligence (${ARCHON_INTELLIGENCE_URL})        │  │
+│  │  Intelligence Service (${INTELLIGENCE_URL})              │  │
 │  │    - Intelligence coordination                           │  │
 │  │    - Pattern discovery orchestration                     │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Search (${ARCHON_SEARCH_URL})                    │  │
+│  │  Intelligence Search                                     │  │
 │  │    - Full-text search                                    │  │
 │  │    - Semantic search                                     │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │  Archon Bridge (${ARCHON_BRIDGE_URL})                    │  │
+│  │  Intelligence Bridge                                     │  │
 │  │    - PostgreSQL connector                                │  │
 │  │    - Query optimization                                  │  │
 │  └───────────────────────────────────────────────────────────┘  │
@@ -790,8 +790,8 @@ GEMINI_API_KEY=actual_key_here
 └──────────────────────────┘      └──────────────────────────┘
             ↓                                    ↓
 ┌──────────────────────────┐      ┌──────────────────────────┐
-│  archon-router-consumer  │      │  Archon Intelligence     │
-│  (omniclaude service)    │      │  (omniarchon service)    │
+│  archon-router-consumer  │      │  Intelligence Service    │
+│  (omniclaude service)    │      │  (omniintelligence)      │
 │                          │      │                          │
 │  - Agent selection       │      │  - Query Qdrant          │
 │  - Confidence scoring    │      │  - Query Memgraph        │
@@ -850,10 +850,10 @@ kcat -L -b ${KAFKA_BOOTSTRAP_SERVERS}
 ```
 
 **Resolution**:
-1. Verify services are running: `docker ps | grep archon`
-2. Check network connectivity: `ping ${ARCHON_INTELLIGENCE_URL%%:*}` (extract host from URL)
+1. Verify services are running: `docker ps | grep omniintelligence`
+2. Check network connectivity: `ping ${INTELLIGENCE_URL%%:*}` (extract host from URL)
 3. Verify `/etc/hosts` entries (only needed for host scripts, not Docker services)
-4. Check service logs: `docker logs archon-intelligence`
+4. Check service logs: `docker logs omnibase-intelligence-api`
 
 ---
 
@@ -947,10 +947,10 @@ python3 agents/lib/agent_history_browser.py --limit 20
 
 **Resolution**:
 1. Verify Qdrant is running: `docker ps | grep qdrant`
-2. Check if patterns were populated by omniarchon
+2. Check if patterns were populated by omniintelligence
 3. Verify Kafka intelligence events are flowing
-4. Check archon-intelligence logs for errors
-5. Restart Qdrant if needed: `docker restart archon-qdrant`
+4. Check omniintelligence logs for errors
+5. Restart Qdrant if needed: `docker restart qdrant`
 
 ---
 

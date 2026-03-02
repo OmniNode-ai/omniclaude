@@ -94,7 +94,7 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     source "$PROJECT_ROOT/.env"
 fi
 
-QUERY_RESULT=$(PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -t -c "
+QUERY_RESULT=$(PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omnibase_infra -t -c "
 SELECT
     action_id,
     agent_name,
@@ -117,7 +117,7 @@ else
     echo "$QUERY_RESULT"
     echo ""
     echo "  Recent agent_actions entries:"
-    PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -c "
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql -h <your-infrastructure-host> -p 5436 -U postgres -d omnibase_infra -c "
     SELECT
         action_id,
         agent_name,
@@ -143,4 +143,4 @@ echo ""
 echo "To verify manually:"
 echo "  1. Check logs: tail -f $LOG_FILE"
 echo "  2. Check Kafka topic: kcat -C -b <kafka-bootstrap-servers>:29102 -t agent-actions -o end"
-echo "  3. Check database: psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge -c \"SELECT * FROM agent_actions WHERE correlation_id = '$CORRELATION_ID';\""
+echo "  3. Check database: psql -h <your-infrastructure-host> -p 5436 -U postgres -d omnibase_infra -c \"SELECT * FROM agent_actions WHERE correlation_id = '$CORRELATION_ID';\""

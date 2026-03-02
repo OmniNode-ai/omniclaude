@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 """
-Quick validation script to test event publishing/consuming with omniarchon.
+Quick validation script to test event publishing/consuming with omniintelligence.
 
 Tests:
 1. Kafka connectivity
@@ -33,7 +33,7 @@ FAILED_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
 
 
 async def test_event_flow():
-    """Test end-to-end event flow with omniarchon."""
+    """Test end-to-end event flow with omniintelligence."""
 
     print("🔍 Starting Event Integration Validation\n")
     print("=" * 60)
@@ -156,9 +156,9 @@ async def test_event_flow():
         print("   - Event consuming: ✅")
         print("   - Handler processing: ⚠️  (no response)")
         print("\n💡 Next steps:")
-        print("   - Check if IntelligenceAdapterHandler is running in omniarchon")
+        print("   - Check if IntelligenceAdapterHandler is running in omniintelligence")
         print("   - Verify handler is consuming from code-analysis-requested topic")
-        print("   - Check omniarchon logs for errors")
+        print("   - Check omniintelligence logs for errors")
 
     print("=" * 60)
     return success
