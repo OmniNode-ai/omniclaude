@@ -35,7 +35,7 @@ producer: omniclaude | omninode | omniintelligence
 **Intended state**:
 - `evt.*` topics: Any consumer may subscribe
 - `cmd.omniintelligence.*` topics: Only OmniIntelligence service
-- ACL policy: Managed via Redpanda Console (`192.168.86.200:8080`)
+- ACL policy: Managed via Redpanda Console (`192.168.86.200:8080`) <!-- onex-allow-internal-ip -->
 
 ## Privacy Design
 
