@@ -29,8 +29,9 @@ golden-path fixtures.
 | `fixture_path` | `str \| null` | Relative path to the fixture file from repo root; `null` if not found |
 | `node_id_match` | `bool` | Whether the fixture's `node_id` field exactly matches the requested `node_name` |
 
-**Invariant**: `fixture_path` is non-null if and only if `exists` is `true`.
-`node_id_match` is `false` when `exists` is `false`.
+**Invariant**: `exists` is `true` if and only if `node_id_match` is `true`. A file that exists
+on disk but whose `node_id` field does not match is treated as not found (`exists: false`).
+`fixture_path` is non-null if and only if `exists` is `true`.
 
 ### FixtureRunResult
 
@@ -49,10 +50,14 @@ golden-path fixtures.
 | `stdout` | `str` | Full captured stdout from the `run-golden-path` invocation |
 
 **Status semantics**:
-- `pass` — golden-path ran, all assertions passed, evidence artifact written
-- `fail` — golden-path ran but one or more assertions failed
-- `timeout` — golden-path ran but output event was not received within `timeout_ms`
-- `runner_error` — `run-golden-path` process exited non-zero or stdout contained no status marker
+
+- `pass` — golden-path runner exited cleanly; all assertions passed; evidence artifact written
+- `fail` — golden-path runner exited cleanly; one or more assertions failed
+- `timeout` — golden-path runner exited cleanly; the expected output event was not received
+  within `timeout_ms` (event-delivery timeout, not a process-level timeout)
+- `runner_error` — the `run-golden-path` process exited non-zero, was killed by the 120-second
+  wall-clock limit, or produced stdout that contained no recognizable status marker; this is a
+  process-level failure, distinct from an event-delivery timeout
 
 ---
 
@@ -79,6 +84,7 @@ integration verification.
    ```
 
 2. Classify each changed file into one of:
+
    | Category | Pattern |
    |----------|---------|
    | `CONTRACT` | `src/**/contracts/*.yaml` or `src/**/*_contract*.yaml` |
@@ -132,21 +138,25 @@ Check whether a golden-path fixture exists for the given node.
    - If `node_id == node_name`: record as a match
 
 3. Return result:
+
    ```json
-   // Found with exact match
+   // Exact node_id match found
    {"exists": true, "fixture_path": "plugins/onex/skills/_golden_path_validate/{filename}.json", "node_id_match": true}
 
-   // File found but node_id differs (filename match, content mismatch)
-   {"exists": true, "fixture_path": "plugins/onex/skills/_golden_path_validate/{filename}.json", "node_id_match": false}
-
-   // Not found
+   // A file exists in the directory but no fixture has a matching node_id field
    {"exists": false, "fixture_path": null, "node_id_match": false}
    ```
+
+   `exists` is `true` **only** when a fixture with an exact `node_id == node_name` match is
+   found. A file that happens to be named similarly but whose `node_id` field does not match
+   is treated as not found — the caller should create a new fixture rather than run the
+   mismatched one.
 
 **Note**: `fixture_path` is a repo-relative path (not absolute) to allow portability across
 worktrees and CI environments.
 
 **Edge cases**:
+
 - Fixture directory does not exist → return `{exists: false, fixture_path: null, node_id_match: false}`
 - Fixture file is not valid JSON → skip that file (log warning)
 - Multiple files match the same `node_id` → use the first match (log warning about duplicates)
@@ -307,14 +317,14 @@ When any node returns BLOCK:
 
 ## Usage in ticket-pipeline
 
-The integration verification gate runs as **Phase 5.75** — after pr_review_loop (Phase 5)
-approves the PR and before the CDQA gate (Phase 5.5) runs.
+The integration verification gate runs as **Phase 5.75** — after the CDQA gate (Phase 5.5)
+and before auto_merge (Phase 6).
 
 ```
-Phase 5:   pr_review_loop       → status: approved
-Phase 5.75: integration_gate    → all nodes PASS (or bypassed)  ← this phase
-Phase 5.5: cdqa_gate            → all gates PASS (or bypassed)
-Phase 6:   auto_merge           → merge executes
+Phase 5:    pr_review_loop      → status: approved
+Phase 5.5:  cdqa_gate          → all gates PASS (or bypassed)
+Phase 5.75: integration_gate   → all nodes PASS (or bypassed)  ← this phase
+Phase 6:    auto_merge         → merge executes
 ```
 
 The orchestrator calls `run_integration_verification_gate(ticket_id, pr_number, repo, context_id)`
