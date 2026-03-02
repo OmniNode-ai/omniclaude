@@ -29,10 +29,13 @@ This is called once per epic, not once per ticket.
 
 ## `merge_pr_into_integration(pr_number, repo, epic_id)` — Procedure
 
+Import `@_lib/pr-safety/helpers.md` before calling any mutation.
+
 1. Confirm PR is labeled `mergeable` (check labels via `gh pr view`)
 2. Confirm PR is rebased on `epic/{epic_id}/integration`, not `main`
-   - If not: `gh pr edit {pr_number} --base epic/{epic_id}/integration`
-3. Merge: `gh pr merge {pr_number} --repo {repo} --squash --delete-branch`
+   - If not: use `mutate_pr(pr_key, action="rebase_for_integration", run_id=run_id, fn=...)` to update the base branch
+3. Merge via `mutate_pr(pr_key, action="merge_into_integration", run_id=run_id, fn=...)`:
+   - Inside `fn`: invoke the squash-merge subprocess command for the PR (use `@_lib/pr-safety/helpers.md` for the merge call)
 4. Log merge to `~/.claude/epics/{epic_id}/integration_log.json`:
    ```json
    { "pr_number": 1234, "merged_at": "2026-02-28T00:00:00Z", "ticket_id": "OMN-XXXX" }

@@ -2,6 +2,12 @@
 
 You are evaluating PR #{pr_number} in {repo} for mergeability.
 
+Import the PR safety library before any mutations:
+
+```
+@_lib/pr-safety/helpers.md
+```
+
 ## Step 1: Fetch PR state
 
 Run:
@@ -43,35 +49,36 @@ else → status = "mergeable"
 
 ## Step 5: Apply label and write result
 
-Apply GitHub label. Use the gh CLI to add the appropriate label and remove the others:
+Apply GitHub label via `mutate_pr()` from `@_lib/pr-safety/helpers.md`:
 
-For status "mergeable":
-```
-gh pr edit {pr_number} --repo {repo} --add-label "mergeable"
-gh pr edit {pr_number} --repo {repo} --remove-label "blocked"
-gh pr edit {pr_number} --repo {repo} --remove-label "needs-split"
-```
+```python
+pr_key = validate_pr_key(f"{repo}#{pr_number}")
 
-For status "needs-split":
-```
-gh pr edit {pr_number} --repo {repo} --add-label "needs-split"
-gh pr edit {pr_number} --repo {repo} --remove-label "mergeable"
-gh pr edit {pr_number} --repo {repo} --remove-label "blocked"
-```
+def apply_label(fresh_record):
+    # Add status label and remove the other two
+    label_map = {
+        "mergeable": ("mergeable", ["blocked", "needs-split"]),
+        "needs-split": ("needs-split", ["mergeable", "blocked"]),
+        "blocked": ("blocked", ["mergeable", "needs-split"]),
+    }
+    add_label, remove_labels = label_map[status]
 
-For status "blocked":
-```
-gh pr edit {pr_number} --repo {repo} --add-label "blocked"
-gh pr edit {pr_number} --repo {repo} --remove-label "mergeable"
-gh pr edit {pr_number} --repo {repo} --remove-label "needs-split"
-```
+    # Create label if missing
+    result = subprocess.run(
+        ["gh", "label", "create", add_label, "--repo", repo, "--color", "#0075ca"],
+        capture_output=True
+    )
+    # Apply add
+    subprocess.run(["gh", "label", "add", add_label, "--issue", str(pr_number), "--repo", repo])
+    # Remove others (ignore errors for missing labels)
+    for lbl in remove_labels:
+        subprocess.run(
+            ["gh", "label", "remove", lbl, "--issue", str(pr_number), "--repo", repo],
+            capture_output=True
+        )
+    return {"applied_label": add_label, "removed_labels": remove_labels}
 
-Run each label command independently. If a remove-label command fails because the label
-does not exist, that is not an error — continue.
-
-If a label does not exist in the repo, create it first:
-```
-gh label create {label_name} --repo {repo} --color "#0075ca"
+mutate_pr(pr_key, action="apply_mergeability_label", run_id=run_id, fn=apply_label)
 ```
 
 Write result JSON to `~/.claude/skill-results/{context_id}/mergeability-gate.json`:
@@ -89,24 +96,31 @@ Write result JSON to `~/.claude/skill-results/{context_id}/mergeability-gate.jso
 
 ## Step 6: Post comment on blocked or needs-split
 
-If status is "blocked":
-Post a PR comment listing each blocked reason:
-```
-gh pr comment {pr_number} --repo {repo} --body "**Mergeability Gate: BLOCKED**
+Route comment through `mutate_pr()`:
 
-The following issues must be resolved before this PR can merge:
-{blocked_reasons as numbered list}"
-```
+```python
+if status in ("blocked", "needs-split"):
+    if status == "blocked":
+        body = (
+            "**Mergeability Gate: BLOCKED**\n\n"
+            "The following issues must be resolved before this PR can merge:\n"
+            + "\n".join(f"{i+1}. {r}" for i, r in enumerate(blocked_reasons))
+        )
+    else:
+        body = (
+            "**Mergeability Gate: NEEDS SPLIT (advisory)**\n\n"
+            "This PR may benefit from being split:\n"
+            + "\n".join(f"{i+1}. {r}" for i, r in enumerate(split_reasons))
+            + "\n\nThis is advisory — the pipeline will continue but the agent should consider restructuring."
+        )
 
-If status is "needs-split":
-Post a PR comment listing each split reason:
-```
-gh pr comment {pr_number} --repo {repo} --body "**Mergeability Gate: NEEDS SPLIT (advisory)**
+    def post_comment(fresh_record, _body=body):
+        subprocess.run(
+            ["gh", "issue", "comment", str(pr_number), "--repo", repo, "--body", _body]
+        )
+        return {"comment_posted": True}
 
-This PR may benefit from being split:
-{split_reasons as numbered list}
-
-This is advisory — the pipeline will continue but the agent should consider restructuring."
+    mutate_pr(pr_key, action="post_mergeability_comment", run_id=run_id, fn=post_comment)
 ```
 
 ## Step 7: If blocked — post HIGH_RISK Slack gate
