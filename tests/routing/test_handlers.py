@@ -343,6 +343,81 @@ class TestHandlerRoutingEmitter:
         assert result.success is False
         assert "RuntimeError" in result.error
 
+    @pytest.mark.asyncio
+    async def test_payload_shape_matches_routing_decision_contract(self) -> None:
+        """Emitted payload has ModelRoutingDecision-shaped required fields (OMN-3424).
+
+        Verifies that _build_payload emits contract-shaped field names:
+          - id, confidence_score, created_at, routing_reason, claude_session_id
+        and does NOT emit the old pre-contract field names:
+          - session_id, confidence
+        """
+        from datetime import datetime
+        from uuid import UUID
+
+        emitted_payloads: list[dict] = []
+
+        def capture_emit(event_type: str, payload: dict) -> bool:
+            emitted_payloads.append(payload)
+            return True
+
+        handler = HandlerRoutingEmitter(emit_fn=capture_emit)
+        request = ModelEmissionRequest(
+            correlation_id=uuid4(),
+            session_id="session-xyz",
+            selected_agent="agent-api-architect",
+            confidence=0.92,
+            confidence_breakdown=ModelConfidenceBreakdown(
+                total=0.92,
+                trigger_score=0.95,
+                context_score=0.88,
+                capability_score=0.90,
+                historical_score=0.60,
+                explanation="test payload shape",
+            ),
+            routing_policy="trigger_match",
+            routing_path="event",
+            prompt_preview="design the api",
+            prompt_length=15,
+            emitted_at=datetime.now(UTC),
+        )
+        await handler.emit_routing_decision(request)
+
+        assert len(emitted_payloads) == 1
+        payload = emitted_payloads[0]
+
+        # Required ModelRoutingDecision fields must be present
+        required = {
+            "id",
+            "correlation_id",
+            "selected_agent",
+            "confidence_score",
+            "created_at",
+        }
+        missing = required - payload.keys()
+        assert not missing, f"Required contract fields missing from payload: {missing}"
+
+        # Old pre-contract field names must not appear at top level
+        forbidden = {"session_id", "confidence"}
+        present_forbidden = forbidden & payload.keys()
+        assert not present_forbidden, (
+            f"Old pre-contract field names present in payload: {present_forbidden}"
+        )
+
+        # id and correlation_id must be valid UUID strings
+        UUID(str(payload["id"]))
+        UUID(str(payload["correlation_id"]))
+
+        # created_at must be a parseable timezone-aware ISO datetime
+        parsed = datetime.fromisoformat(str(payload["created_at"]))
+        assert parsed.tzinfo is not None, "created_at must be timezone-aware"
+
+        # confidence_score must be the mapped value
+        assert payload["confidence_score"] == pytest.approx(0.92)
+
+        # claude_session_id must carry the session_id value
+        assert payload["claude_session_id"] == "session-xyz"
+
 
 # ══════════════════════════════════════════════════════════════════════
 # HandlerHistoryPostgres

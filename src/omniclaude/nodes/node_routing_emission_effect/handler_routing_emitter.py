@@ -34,8 +34,9 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Final
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_routing_emission_effect.models import (
@@ -217,22 +218,39 @@ class HandlerRoutingEmitter:
     ) -> dict[str, object]:
         """Build the event payload for the emit daemon.
 
-        The payload shape matches the existing emission format in
-        ``route_via_events_wrapper._emit_routing_decision`` so the
-        daemon's EventRegistry can process it without changes.
+        Emits fields matching the ``ModelRoutingDecision`` contract directly
+        (OMN-3424).  Field mapping from ``ModelEmissionRequest``:
+
+        - ``id``               → str(uuid4())              (new, idempotency key)
+        - ``correlation_id``   → str(correlation_id)
+        - ``claude_session_id``→ request.session_id        (renamed from ``session_id``)
+        - ``selected_agent``   → request.selected_agent
+        - ``confidence_score`` → request.confidence        (renamed from ``confidence``)
+        - ``created_at``       → datetime.now(UTC).isoformat()  (new, TTL key)
+        - ``routing_reason``   → request.routing_policy    (contract optional field)
+        - ``confidence_breakdown`` → request.confidence_breakdown.model_dump()
+        - ``routing_policy``   → request.routing_policy
+        - ``routing_path``     → request.routing_path
+        - ``prompt_preview``   → request.prompt_preview
+        - ``prompt_length``    → request.prompt_length
+        - ``emitted_at``       → request.emitted_at.isoformat()
 
         Args:
             request: The emission request model.
             correlation_id: Resolved correlation ID.
 
         Returns:
-            Dictionary payload ready for the emit daemon.
+            Dictionary payload ready for the emit daemon with
+            ``ModelRoutingDecision``-shaped required fields.
         """
         return {
+            "id": str(uuid4()),
             "correlation_id": str(correlation_id),
-            "session_id": request.session_id,
+            "claude_session_id": request.session_id,
             "selected_agent": request.selected_agent,
-            "confidence": request.confidence,
+            "confidence_score": request.confidence,
+            "created_at": datetime.now(UTC).isoformat(),
+            "routing_reason": request.routing_policy,
             "confidence_breakdown": request.confidence_breakdown.model_dump(),
             "routing_policy": request.routing_policy,
             "routing_path": request.routing_path,
