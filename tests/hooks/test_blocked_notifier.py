@@ -396,6 +396,125 @@ class TestSlackDelivery:
         assert "Session:" in message
         assert "Correlation ID:" in message
 
+    def test_send_via_handler_populates_details_with_known_values(self) -> None:
+        """_send_via_handler passes agent_name and session_id as structured details.
+
+        Test uses the fallback dataclass path (no omnibase_infra import) to inspect
+        the details dict constructed by _send_via_handler without requiring the full
+        omnibase_infra stack.
+        """
+        import sys
+        import types
+        import unittest.mock as mock
+
+        from plugins.onex.hooks.lib.blocked_notifier import _send_via_handler
+
+        captured_details: dict[str, str] = {}
+
+        # Build a minimal fake handler module so importlib.import_module succeeds
+        fake_handler_mod = types.ModuleType(
+            "omnibase_infra.handlers.handler_slack_webhook"
+        )
+
+        class _FakeHandler:
+            def __init__(self, webhook_url: str) -> None:
+                pass
+
+            async def handle(self, alert: object) -> None:
+                pass
+
+        fake_handler_mod.HandlerSlackWebhook = _FakeHandler  # type: ignore[attr-defined]
+
+        # Intercept ModelSlackAlert construction to capture details
+        class _SpyAlert:
+            def __init__(self, **kwargs: object) -> None:
+                d = kwargs.get("details")
+                if isinstance(d, dict):
+                    captured_details.update(d)
+
+        fake_alert_mod = types.ModuleType(
+            "omnibase_infra.handlers.models.model_slack_alert"
+        )
+
+        class _FakeSeverity:
+            WARNING = "warning"
+
+        fake_alert_mod.EnumAlertSeverity = _FakeSeverity  # type: ignore[attr-defined]
+        fake_alert_mod.ModelSlackAlert = _SpyAlert  # type: ignore[attr-defined]
+
+        patched_modules = {
+            "omnibase_infra.handlers.handler_slack_webhook": fake_handler_mod,
+            "omnibase_infra.handlers.models.model_slack_alert": fake_alert_mod,
+        }
+
+        with mock.patch.dict(sys.modules, patched_modules):
+            _send_via_handler(
+                "https://hooks.slack.test/test",
+                "Agent blocked",
+                "corr-id-123",
+                agent_name="real-agent",
+                session_id="real-session",
+            )
+
+        assert captured_details.get("Agent") == "real-agent"
+        assert captured_details.get("Session") == "real-session"
+
+    def test_send_via_handler_excludes_unknown_sentinel_from_details(self) -> None:
+        """_send_via_handler does not add 'Agent'/'Session' fields when values are 'unknown'."""
+        import sys
+        import types
+        import unittest.mock as mock
+
+        from plugins.onex.hooks.lib.blocked_notifier import _send_via_handler
+
+        captured_details: dict[str, str] = {}
+
+        fake_handler_mod = types.ModuleType(
+            "omnibase_infra.handlers.handler_slack_webhook"
+        )
+
+        class _FakeHandler:
+            def __init__(self, webhook_url: str) -> None:
+                pass
+
+            async def handle(self, alert: object) -> None:
+                pass
+
+        fake_handler_mod.HandlerSlackWebhook = _FakeHandler  # type: ignore[attr-defined]
+
+        class _SpyAlert:
+            def __init__(self, **kwargs: object) -> None:
+                d = kwargs.get("details")
+                if isinstance(d, dict):
+                    captured_details.update(d)
+
+        fake_alert_mod = types.ModuleType(
+            "omnibase_infra.handlers.models.model_slack_alert"
+        )
+
+        class _FakeSeverity:
+            WARNING = "warning"
+
+        fake_alert_mod.EnumAlertSeverity = _FakeSeverity  # type: ignore[attr-defined]
+        fake_alert_mod.ModelSlackAlert = _SpyAlert  # type: ignore[attr-defined]
+
+        patched_modules = {
+            "omnibase_infra.handlers.handler_slack_webhook": fake_handler_mod,
+            "omnibase_infra.handlers.models.model_slack_alert": fake_alert_mod,
+        }
+
+        with mock.patch.dict(sys.modules, patched_modules):
+            _send_via_handler(
+                "https://hooks.slack.test/test",
+                "Agent blocked",
+                "corr-id-123",
+                agent_name="unknown",
+                session_id="unknown",
+            )
+
+        assert "Agent" not in captured_details
+        assert "Session" not in captured_details
+
 
 # =============================================================================
 # Fail-Open Tests
