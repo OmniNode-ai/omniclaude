@@ -2358,11 +2358,12 @@ EOF
 
 6. **Update Linear:**
    ```python
-   try:
-       mcp__linear-server__update_issue(id=ticket_id, state="In Review")
-   except Exception as e:
-       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
-       # Non-blocking: Linear update failure is logged but does not stop pipeline
+   if not dry_run:
+       try:
+           mcp__linear-server__update_issue(id=ticket_id, state="In Review")
+       except Exception as e:
+           print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+           # Non-blocking: Linear update failure is logged but does not stop pipeline
    ```
 
 7. **Dry-run behavior:** All pre-checks execute normally. Push, PR creation, exception checks, auto-merge enable, and Linear update are skipped. State records what _would_ have happened.
@@ -2812,7 +2813,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
                pr_url=pr_url,
            )
            try:
-               mcp__linear-server__save_issue(id=ticket_id, state="Done")
+               mcp__linear-server__update_issue(id=ticket_id, state="Done")
            except Exception as _le:
                print(f"Warning: Failed to update Linear to Done: {_le}")
            # Clear ledger

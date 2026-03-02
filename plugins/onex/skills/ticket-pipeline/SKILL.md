@@ -757,7 +757,7 @@ Phase 6 runs inline in the orchestrator on the normal path (no Task dispatch).
 **Exception path** (`NEEDS_GATE=True`): dispatches auto-merge skill with HIGH_RISK gate.
 `merge_gate_timeout_hours` controls how long the gate waits before expiring.
 
-```
+```python
 # Only dispatched when NEEDS_GATE=True (hold label, open blockedBy, or arm failure):
 Task(
   subagent_type="onex:polymorphic-agent",
