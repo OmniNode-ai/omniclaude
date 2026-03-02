@@ -193,7 +193,9 @@ def test_emitter_passes_helper_output_without_mutation() -> None:
     captured: list[dict[str, object]] = []
 
     def fake_emit(event_type: str, payload: dict[str, object]) -> bool:
-        captured.append(copy.deepcopy(payload))  # deep copy so nested mutations are detected
+        captured.append(
+            copy.deepcopy(payload)
+        )  # deep copy so nested mutations are detected
         return True
 
     # Build the expected payload independently for comparison
@@ -243,4 +245,6 @@ def test_emitter_passes_helper_output_without_mutation() -> None:
     _GENERATED_FIELDS = {"id", "created_at"}
     assert {k: v for k, v in emitted.items() if k not in _GENERATED_FIELDS} == {
         k: v for k, v in expected.items() if k not in _GENERATED_FIELDS
-    }, "Emitted payload (excluding generated fields) does not match helper output — emitter must not mutate"
+    }, (
+        "Emitted payload (excluding generated fields) does not match helper output — emitter must not mutate"
+    )
