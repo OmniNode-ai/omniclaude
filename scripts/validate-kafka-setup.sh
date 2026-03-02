@@ -185,7 +185,7 @@ if [ "$TABLE_EXISTS" = "t" ]; then
     print_status "Table 'agent_actions' exists"
 else
     echo -e "${RED}❌ Table 'agent_actions' does not exist${NC}"
-    echo -e "${YELLOW}   Run: docker exec omniclaude_test_postgres psql -U postgres -d omninode_bridge -f /docker-entrypoint-initdb.d/init-test-db.sql${NC}"
+    echo -e "${YELLOW}   Run: docker exec omniclaude_test_postgres psql -U postgres -d omnibase_infra -f /docker-entrypoint-initdb.d/init-test-db.sql${NC}"
     exit 1
 fi
 

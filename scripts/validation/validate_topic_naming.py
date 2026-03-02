@@ -31,7 +31,6 @@ _KNOWN_PRODUCERS = (
     "omniclaude",
     "omninode",
     "omniintelligence",
-    "omniarchon",
     "omnimemory",
     "omnibase",
 )
@@ -43,7 +42,7 @@ VALID_TOPIC_RE = re.compile(
 
 # Pattern that suggests a string is meant to be a topic name
 TOPIC_STRING_HEURISTIC_RE = re.compile(
-    r"^(onex|omninode|omniclaude|omniarchon|omniintelligence)\."
+    r"^(onex|omninode|omniclaude|omniintelligence)\."
 )
 
 

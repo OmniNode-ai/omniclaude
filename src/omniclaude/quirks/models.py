@@ -6,7 +6,7 @@
 Two top-level models:
 
 * ``QuirkSignal`` — a raw detection event emitted by a detector tier.
-  Persisted to the ``quirk_signals`` table in ``omninode_bridge``.
+  Persisted to the ``quirk_signals`` table in ``omnibase_infra``.
 
 * ``QuirkFinding`` — a policy recommendation derived from one or more
   signals.  Persisted to the ``quirk_findings`` table.

@@ -7,7 +7,7 @@ This document describes the migration from hardcoded paths to environment variab
 
 ## Overview
 
-The ONEX plugin has been updated to support deployment across all OmniNode repositories (omniclaude, omniarchon, omnibase_core, omnidash) by abstracting hardcoded paths to environment variables.
+The ONEX plugin has been updated to support deployment across all OmniNode repositories (omniclaude, omniintelligence, omnibase_core, omnidash) by abstracting hardcoded paths to environment variables.
 
 ## Changes Made
 
@@ -26,8 +26,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **New Sections**:
 - **Required Path Variables**: PROJECT_ROOT, CLAUDE_PLUGIN_ROOT, OMNICLAUDE_PATH
 - **Infrastructure Variables**: PostgreSQL, Kafka, Qdrant
-- **Optional Service Variables**: LINEAR_INSIGHTS_OUTPUT_DIR, ARCHON_INTELLIGENCE_URL
-- **Example .env Files by Repository**: omniclaude, omniarchon, omnibase_core
+- **Optional Service Variables**: LINEAR_INSIGHTS_OUTPUT_DIR, INTELLIGENCE_URL
+- **Example .env Files by Repository**: omniclaude, omniintelligence, omnibase_core
 
 ### 2. Python Routing Scripts
 
@@ -87,7 +87,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 **Contents**:
 - Complete documentation of all environment variables
 - Organized by category (Path, PostgreSQL, Kafka, Qdrant, etc.)
-- Repository-specific examples for omniclaude, omniarchon, omnibase_core, omnidash
+- Repository-specific examples for omniclaude, omniintelligence, omnibase_core, omnidash
 - Validation commands for testing configuration
 - Setup instructions with step-by-step guidance
 
@@ -117,7 +117,7 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LINEAR_INSIGHTS_OUTPUT_DIR` | Deep dive output directory | `${HOME}/Code/omni_save` |
-| `ARCHON_INTELLIGENCE_URL` | Intelligence coordinator | `http://localhost:8053` |
+| `INTELLIGENCE_URL` | Intelligence coordinator | `http://localhost:8053` |
 
 ## Usage Across Repositories
 
@@ -131,11 +131,11 @@ POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
-### OmniArchon
+### OmniIntelligence
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omniarchon  # local-path-ok
+PROJECT_ROOT=/Users/jonah/Code/omniintelligence  # local-path-ok
 OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092

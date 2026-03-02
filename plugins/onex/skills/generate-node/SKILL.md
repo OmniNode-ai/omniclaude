@@ -5,7 +5,7 @@ description: Generate ONEX nodes via automated code generation with ContractInfe
 
 # Generate ONEX Node
 
-Fully automated ONEX node generation using the omninode_bridge codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
+Fully automated ONEX node generation using the omniclaude codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
 
 ## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
 
@@ -123,7 +123,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create payment processing O
 
 ```bash
 # Regenerate node from existing code (extracts prompt automatically)
-${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omniclaude/nodes/llm_effect/v1_0_0/llm_effect_llm
 
 # Regenerate with custom output directory
 ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/my_node --output-dir ./regenerated
@@ -251,11 +251,11 @@ When regenerating nodes without README.md files, the skill uses **Z.ai LLM API**
 - Kafka/Redpanda (port 9092/29092) - For event-driven orchestration
 - Consul (port 28500) - For service discovery
 
-**Environment Variables** (in omninode_bridge/.env):
+**Environment Variables** (in `~/.omnibase/.env`):
 ```bash
 POSTGRES_HOST=<postgres-host>
 POSTGRES_PORT=5436
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_DATABASE=omnibase_infra
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<set_in_env>
 
@@ -278,7 +278,7 @@ ZAI_ENDPOINT=https://api.z.ai/api/anthropic  # Override endpoint
 ZAI_MODEL=glm-4-flash      # Override model (glm-4-flash, glm-4-plus, etc.)
 ```
 
-**Working Directory**: Must be run from within the `omninode_bridge` repository.
+**Working Directory**: Must be run from within the `omniclaude` repository.
 
 ## Error Handling
 
@@ -306,7 +306,7 @@ The skill provides comprehensive error handling:
 
 **Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/generate-node/`
 **Executable**: `${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate`
-**Repository**: `omninode_bridge` (see sibling directory)
+**Repository**: `omniclaude`
 
 ## Integration with Other Tools
 
@@ -316,7 +316,7 @@ This skill integrates with:
 - **BusinessLogicGenerator** - LLM-powered business logic
 - **Kafka Event Bus** - Real-time progress tracking
 - **PostgreSQL** - Workflow state persistence
-- **Archon Intelligence** - RAG-enhanced context gathering (optional)
+- **OmniIntelligence** - RAG-enhanced context gathering (optional)
 
 ## Node Types Reference
 
@@ -357,7 +357,7 @@ If generation fails or produces unexpected results:
 curl http://<redpanda-console-host>:8080  # Redpanda Console
 
 # Check PostgreSQL connection
-psql -h <your-infrastructure-host> -p 5436 -U postgres -d omninode_bridge
+psql -h <your-infrastructure-host> -p 5436 -U postgres -d omnibase_infra
 
 # View generation events in Kafka
 kcat -C -b <kafka-bootstrap-servers>:9092 -t node.generation.requested

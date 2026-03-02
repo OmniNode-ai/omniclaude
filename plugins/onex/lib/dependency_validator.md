@@ -146,7 +146,6 @@ def get_ticket_repo_label(ticket: dict) -> str | None:
     known_repos = {
         'omniclaude', 'omniintelligence', 'omnidash', 'omnimemory', 'omniagent',
         'omnibase_core', 'omnibase_spi', 'omnibase_infra',
-        'omniarchon'
     }
 
     # Labels can be strings or dicts with 'name' field

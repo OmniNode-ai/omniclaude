@@ -13,7 +13,7 @@
 # Old shared-infrastructure tables (agent_routing_decisions, agent_manifest_injections,
 # agent_execution_logs, agent_transformation_events, router_performance_metrics,
 # agent_actions) were removed as part of DB-SPLIT-07 -- they belong to the shared
-# omninode_bridge database, not the per-service omniclaude database.
+# omnibase_infra database, not the per-service omniclaude database.
 
 set -e
 

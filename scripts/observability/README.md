@@ -201,7 +201,7 @@ POSTGRES_PASSWORD=your_password_here
 POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
 POSTGRES_USER=postgres
-POSTGRES_DB=omninode_bridge
+POSTGRES_DB=omnibase_infra
 KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092
 ```
 
@@ -275,7 +275,7 @@ echo $POSTGRES_PASSWORD
 docker ps | grep postgres
 
 # Test connection manually
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra
 ```
 
 ### Kafka Consumer Not Processing Events

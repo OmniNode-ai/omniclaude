@@ -12,7 +12,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create PostgreSQL CRUD Effe
 **Regenerate Existing Node:**
 ```bash
 # Automatically extracts prompt from README or analyzes code with Z.ai
-${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omniclaude/nodes/llm_effect/v1_0_0/llm_effect_llm
 ```
 
 ## Features
@@ -53,5 +53,5 @@ Claude: [Uses ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create Postgr
 ## See Also
 
 - Full skill documentation: `${CLAUDE_PLUGIN_ROOT}/skills/generate-node/skill.md`
-- ContractInferencer docs: See `omninode_bridge/docs/codegen/CONTRACT_INFERENCER.md`
-- ONEX v2.0 Specification: See `omninode_bridge/docs/architecture/ONEX_V2_SPECIFICATION.md`
+- ContractInferencer docs: See `omniclaude/docs/codegen/CONTRACT_INFERENCER.md`
+- ONEX v2.0 Specification: See `omnibase_core/docs/architecture/ONEX_V2_SPECIFICATION.md`

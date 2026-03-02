@@ -12,7 +12,6 @@ Repository Detection:
 - Omninode repos: Paths containing 'omnibase_', '/omni' + lowercase letter (e.g., /omniauth, /omnitools)
 - Excluded from Omninode (use PEP 8):
   - Archon repo: Path contains 'Archon'
-  - omninode_bridge repo: Path contains 'omninode_bridge' (uses standard PEP 8, not Omninode conventions)
 - Other repos: Use standard PEP 8
 
 Omninode Conventions (when detected):
@@ -208,7 +207,6 @@ class NamingValidator:
 
         Non-Omninode patterns (use standard PEP 8):
         - Contains 'Archon' - uses standard PEP 8
-        - Contains 'omninode_bridge' - uses standard PEP 8 (NOT Omninode conventions)
         - Any other path - uses standard PEP 8
 
         Args:
@@ -221,10 +219,6 @@ class NamingValidator:
 
         # Check for Archon repo (explicit exclusion)
         if "archon" in path_lower:
-            return False
-
-        # Check for omninode_bridge repo (explicit exclusion - uses standard PEP 8)
-        if "omninode_bridge" in path_lower:
             return False
 
         # Check for omnibase_ pattern

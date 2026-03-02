@@ -6,7 +6,7 @@ Dashboard queries and scripts for monitoring agent execution status in real-time
 
 **Created**: 2025-10-30
 **Updated**: 2025-11-06
-**Database**: omninode_bridge on 192.168.86.200:5436
+**Database**: omnibase_infra on 192.168.86.200:5436
 **Correlation ID**: a27b9e0c-ffc2-4357-b53a-ed080e1edf9c
 
 ---
@@ -41,7 +41,7 @@ The script will:
 4. Test each view to ensure it works
 5. Display summary of created views
 
-**Note**: Views are already applied in the default omninode_bridge database. Only run this if:
+**Note**: Views are already applied in the default omnibase_infra database. Only run this if:
 - Setting up on a new database
 - Views are missing or outdated
 - You've modified dashboard_views.sql
@@ -483,10 +483,10 @@ PGPASSWORD="${POSTGRES_PASSWORD}" ./scripts/observability/dashboard_stats.sh
 **Check**:
 ```bash
 # Verify views exist
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "\dv v_agent_*"
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "\dv v_agent_*"
 
 # Check raw data
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT COUNT(*) FROM agent_execution_logs;"
+psql -h 192.168.86.200 -p 5436 -U postgres -d omnibase_infra -c "SELECT COUNT(*) FROM agent_execution_logs;"
 ```
 
 ### Slow Queries
@@ -538,7 +538,7 @@ ORDER BY time;
 - [Agent Traceability Guide](../../docs/observability/AGENT_TRACEABILITY.md)
 
 **Database Schema**:
-- See `agent_execution_logs` table in `omninode_bridge` database
+- See `agent_execution_logs` table in `omnibase_infra` database
 - Indexes: correlation_id, agent_name, started_at, status
 
 **Contact**:

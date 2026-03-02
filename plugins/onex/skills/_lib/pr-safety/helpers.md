@@ -596,7 +596,7 @@ FORBIDDEN_IMPORTS_APP_UI = [
     # DB access helpers in wrong layer
     r"^\+.*getIntelligenceDb\(\)",
     r"^\+.*get_db\(\)",
-    r"^\+.*from\s+omninode_bridge\.db\s+import",
+    r"^\+.*from\s+omnibase_infra\.db\s+import",
 ]
 
 FORBIDDEN_SQL_OUTSIDE_INFRA = [
