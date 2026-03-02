@@ -1,6 +1,6 @@
 ---
 name: ticket-pipeline
-description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
+description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, integration verification gate, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
 version: 5.0.0
 category: workflow
 tags:
@@ -20,7 +20,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge). Overrides auto-detection when provided.
+    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -40,7 +40,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -195,10 +195,10 @@ stateDiagram-v2
     local_review --> create_pr : auto (2 confirmed-clean runs)
     create_pr --> ci_watch : auto (policy)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
-    pr_review_loop --> cdqa_gate : auto (approved)
+    pr_review_loop --> integration_verification_gate : auto (approved)
     pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
-    cdqa_gate --> auto_merge : all gates PASS or bypassed
-    cdqa_gate --> [*] : BLOCK held (operator hold/timeout)
+    integration_verification_gate --> auto_merge : pass or warn
+    integration_verification_gate --> [*] : BLOCK held (bypass required)
     auto_merge --> [*] : merged (ledger cleared) or held (Slack waiting)
 ```
 
@@ -350,7 +350,7 @@ ticket-pipeline OMN-XXXX
 - `pr-watch` polls `gh pr reviews` every 10 minutes
 - Auto-invokes `pr-review-dev` on CHANGES_REQUESTED reviews, pushes fixes, re-requests review
 - Returns: `status: approved | capped | timeout | failed`
-- On `approved`: AUTO-ADVANCE to Phase 5.5 (CDQA gate)
+- On `approved`: AUTO-ADVANCE to Phase 5.75 (integration verification gate)
 - On `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
 - On `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
 - On `failed`: Slack MEDIUM_RISK gate, stop pipeline
@@ -369,7 +369,7 @@ See `@_lib/cdqa-gate/helpers.md` for the full gate protocol, bypass flow, and re
 3. **AI-slop CI** — query CI check `check-ai-slop` on the PR
 
 **Result routing**:
-- All gates PASS (or WARN): record gate log, AUTO-ADVANCE to Phase 6
+- All gates PASS (or WARN): record gate log, AUTO-ADVANCE to Phase 5.75
 - Any gate BLOCK: post Slack HIGH_RISK bypass gate; await operator reply
   - `cdqa-bypass {ticket_id} <justification> <follow_up_ticket>` → downgrade to WARN, record bypass, advance
   - Hold/cancel/timeout → exit pipeline with `status: held` (ledger NOT cleared; bypass the block to resume)
@@ -378,6 +378,33 @@ See `@_lib/cdqa-gate/helpers.md` for the full gate protocol, bypass flow, and re
 
 **Anti-pattern — soft-pass**: retrying a gate without fixing the underlying issue is invalid.
 A retry-to-fish-for-PASS must not be used. Fix the issue or use the explicit bypass protocol.
+
+### Phase 5.75: integration_verification_gate (OMN-3341)
+
+Runs inline in the orchestrator. Verifies that all Kafka nodes with changed contracts have
+passing golden-path fixtures before merge executes.
+
+**Skip immediately if** no `CONTRACT` / `TOPIC_CONSTANTS` / `EVENT_MODELS` files changed in the PR.
+
+**Stage 1 logic:**
+- `BLOCK_REQUIRED` when: new nodes added OR `event_bus.subscribe_topics` / `publish_topics` changed AND fixture is missing
+- `WARN_ONLY` when: Kafka contract present but unchanged in this PR
+- `Fixture failing` → MEDIUM_RISK Slack gate with 60-minute override timer
+
+**State artifacts** (written to `phases.integration_verification_gate.artifacts`):
+```yaml
+integration_gate_status: pass|warn|block
+integration_gate_stage: 1
+nodes_blocked: [list]
+nodes_warned: [list]
+integration_debt: true|false
+```
+
+**Helpers**: `get_kafka_nodes_from_pr()`, `check_fixture_exists()`, `run_fixture()` from
+`_lib/integration-verification-gate/helpers.md` (OMN-3341).
+
+- On `pass` or `warn`: AUTO-ADVANCE to Phase 6
+- On `block`: post Slack HIGH_RISK bypass gate; requires `integration-bypass {ticket_id} <justification> <follow_up_ticket_id>`
 
 ### Phase 6: auto_merge
 

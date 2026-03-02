@@ -31,7 +31,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -127,6 +127,14 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+  integration_verification_gate:
+    started_at: null
+    completed_at: null
+    artifacts: {}
+    blocked_reason: null
+    block_kind: null
+    last_error: null
+    last_error_at: null
   auto_merge:
     started_at: null
     completed_at: null
@@ -171,7 +179,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "create_pr", "ci_watch", "pr_review_loop", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "create_pr", "ci_watch", "pr_review_loop", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -1031,6 +1039,15 @@ def build_phase_payload(phase_name, state, result):
             "watch_duration_hours": artifacts.get("watch_duration_hours", 0),
         }
 
+    elif phase_name == "integration_verification_gate":
+        return {
+            "integration_gate_status": artifacts.get("integration_gate_status", ""),
+            "integration_gate_stage": artifacts.get("integration_gate_stage", 1),
+            "nodes_blocked": list(artifacts.get("nodes_blocked", [])),
+            "nodes_warned": list(artifacts.get("nodes_warned", [])),
+            "integration_debt": artifacts.get("integration_debt", False),
+        }
+
     elif phase_name == "auto_merge":
         return {
             "status": artifacts.get("status", ""),
@@ -1096,6 +1113,12 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
         artifacts["status"] = payload.get("status", "")
         artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
         artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0)
+    elif phase == "integration_verification_gate":
+        artifacts["integration_gate_status"] = payload.get("integration_gate_status", "")
+        artifacts["integration_gate_stage"] = payload.get("integration_gate_stage", 1)
+        artifacts["nodes_blocked"] = payload.get("nodes_blocked", [])
+        artifacts["nodes_warned"] = payload.get("nodes_warned", [])
+        artifacts["integration_debt"] = payload.get("integration_debt", False)
     elif phase == "auto_merge":
         artifacts["status"] = payload.get("status", "")
         artifacts["merged_at"] = payload.get("merged_at", "")
@@ -1457,6 +1480,7 @@ def execute_phase(phase_name, state):
         "create_pr": execute_create_pr,
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
+        "integration_verification_gate": execute_integration_verification_gate,
         "auto_merge": execute_auto_merge,
         # Kept for backward compat when resuming old-format (v1.0) state files
         "ready_for_merge": execute_ready_for_merge,
@@ -2285,7 +2309,7 @@ EOF
    ```
 
 2. **Handle result:**
-   - `approved`: AUTO-ADVANCE to Phase 6
+   - `approved`: AUTO-ADVANCE to Phase 5.75
    - `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
    - `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
    - `failed`: Slack MEDIUM_RISK gate, stop pipeline
@@ -2303,10 +2327,18 @@ EOF
 
 ---
 
+### Phase 5.75: INTEGRATION_VERIFICATION_GATE
+
+Runs inline in the orchestrator (OMN-3341). See the authoritative spec in the
+"Phase Handlers" section below (Phase 5.75: INTEGRATION_VERIFICATION_GATE).
+
+---
+
 ### Phase 6: AUTO_MERGE
 
 **Invariants:**
 - Phase 5 (pr_review_loop) is completed with approved status
+- Phase 5.75 (integration_verification_gate) is completed (pass or warn)
 - PR number is available in `phases.create_pr.artifacts.pr_number`
 
 **Actions:**
@@ -2489,7 +2521,7 @@ and auto-merge asynchronously.
    ```
 
 2. **Handle result:**
-   - `approved`: AUTO-ADVANCE to Phase 6
+   - `approved`: AUTO-ADVANCE to Phase 5.75
    - `capped`: Slack MEDIUM_RISK "merge blocked" + stop pipeline
    - `timeout`: Slack MEDIUM_RISK "review timeout" + stop pipeline
    - `failed`: Slack MEDIUM_RISK gate, stop pipeline
@@ -2506,10 +2538,120 @@ and auto-merge asynchronously.
 
 ---
 
+### Phase 5.75: INTEGRATION_VERIFICATION_GATE
+
+**Invariants:**
+- Phase 5 (pr_review_loop) is completed with `approved` status
+- PR number is available in `phases.create_pr.artifacts.pr_number`
+
+**Purpose:** Verify that all Kafka nodes with changed contracts have passing golden-path
+fixtures before the merge executes. Runs inline (no Task dispatch) using helpers from
+`_lib/integration-verification-gate/helpers.md` (OMN-3341).
+
+**Stage 1 Logic:**
+
+**Skip immediately if** no integration-relevant files changed (no `CONTRACT` / `TOPIC_CONSTANTS` /
+`EVENT_MODELS` file patterns appear in the PR diff). Call `get_kafka_nodes_from_pr()`:
+
+```python
+kafka_nodes, topic_constants_changed = get_kafka_nodes_from_pr(pr_number, repo)
+if not kafka_nodes and not topic_constants_changed:
+    # No integration-relevant changes — skip gate entirely
+    return {
+        "status": "completed",
+        "blocking_issues": 0,
+        "nit_count": 0,
+        "artifacts": {
+            "integration_gate_status": "pass",
+            "integration_gate_stage": 1,
+            "nodes_blocked": [],
+            "nodes_warned": [],
+            "integration_debt": False,
+        },
+        "reason": None,
+        "block_kind": None,
+    }
+```
+
+**For each node in kafka_nodes:**
+
+1. Call `check_fixture_exists(node_name, repo_root)`.
+
+2. If `exists: false`:
+   - Post Slack blocked message:
+     ```
+     Integration gate blocked: no fixture found for `{node_name}`.
+     Create `_golden_path_validate/{node_name}.json` before merging.
+     ```
+   - Add to `nodes_blocked`; set `integration_debt: true`; result is `BLOCK_REQUIRED`
+
+3. If `exists: true`:
+   - Call `run_fixture(fixture_path)`.
+   - If `status: pass` → add to nodes that passed (do not add to any list)
+   - If `status: fail` or `status: timeout` → fixture failing → `MEDIUM_RISK` Slack gate:
+     ```python
+     # Post to existing Slack thread with 60-minute override timer
+     # Wait for operator override
+     # BLOCK if no override received within 60 minutes
+     ```
+     If no override: add to `nodes_blocked`; set `integration_debt: true`
+     If override received: add to `nodes_warned`; set `integration_debt: true`
+   - If `status: runner_error` → add to `nodes_warned` (non-blocking, log warning)
+
+4. **WARN_ONLY** (unchanged Kafka contract): if `topic_constants_changed: false` and the
+   contract file is present but not modified in this PR, post Slack warning to thread and
+   do not block merge. Add to `nodes_warned`.
+
+**Overall result routing:**
+
+- `nodes_blocked` is non-empty → return `blocked` (hard stop)
+- `nodes_blocked` is empty, `nodes_warned` is non-empty → return `completed` (with warn artifacts)
+- All nodes passed → return `completed` (clean pass)
+
+**State Artifacts (written to `phases.auto_merge.artifacts` AND `phases.integration_verification_gate.artifacts`):**
+
+```yaml
+integration_gate_status: pass|warn|block
+integration_gate_stage: 1
+nodes_blocked: [list of node names]
+nodes_warned: [list of node names]
+integration_debt: true|false
+```
+
+**Gate Result Recording:**
+
+Append to `~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+following the schema in `_lib/integration-verification-gate/helpers.md`.
+
+**Bypass Protocol:**
+
+When any node returns BLOCK, post HIGH_RISK Slack gate following the bypass protocol in
+`_lib/integration-verification-gate/helpers.md`. Requires explicit
+`integration-bypass {ticket_id} <justification> <follow_up_ticket_id>` reply.
+Silence = HOLD. On hold: clear ledger, exit with `status: held`.
+Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
+
+**Dry-run behavior:** Gate logic is skipped. State records `dry_run: true`.
+
+**Mutations:**
+- `phases.integration_verification_gate.started_at`
+- `phases.integration_verification_gate.completed_at`
+- `phases.integration_verification_gate.artifacts` (integration_gate_status, integration_gate_stage, nodes_blocked, nodes_warned, integration_debt)
+- `~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+
+**Exit conditions:**
+- **Completed (pass):** No integration-relevant files changed, OR all nodes have passing fixtures
+- **Completed (warn):** Some nodes produced warnings (runner_error, unchanged contracts); merge proceeds
+- **Blocked:** One or more nodes missing fixtures (BLOCK_REQUIRED) or fixture failing with no operator override
+- **Held:** Operator replied hold to the bypass Slack gate
+
+---
+
 ### Phase 6: AUTO_MERGE
 
 **Invariants:**
 - Phase 5 (pr_review_loop) is completed with `approved` status
+- Phase 5.75 (integration_verification_gate) is completed (pass or warn)
 - PR exists and is open
 
 **Actions:**
@@ -2646,6 +2788,7 @@ When `/ticket-pipeline {ticket_id}` is invoked on an existing pipeline:
    - create_pr: blocked (auto_push=false)
    - ci_watch: pending
    - pr_review_loop: pending
+   - integration_verification_gate: pending
    - auto_merge: pending
 
    Resuming from: create_pr
