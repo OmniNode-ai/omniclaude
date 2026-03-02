@@ -37,7 +37,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Projection topic (canonical wire name per OMN-1972 — no env prefix)
-_PROJECTION_TOPIC = "onex.evt.omniintelligence.pattern-projection.v1"
+_PROJECTION_TOPIC = "onex.evt.omniintelligence.pattern-projection.v1"  # noqa: arch-topic-naming
 
 # Default staleness threshold in seconds (10 minutes)
 _DEFAULT_STALE_SECONDS = 600

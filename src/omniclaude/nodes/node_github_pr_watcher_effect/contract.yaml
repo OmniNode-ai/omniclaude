@@ -61,6 +61,14 @@ event_bus:
     # Pattern: onex.evt.omniclaude.agent-inbox.{agent_id}.v1
     success_topic: null     # Dynamic routing, not a fixed topic
     failure_topic: "onex.evt.omniclaude.pr-watcher-failed.v1"
+  # Canonical topic registry (used by gap-analysis scanner) [OMN-3372]
+  # ci_relay service (src/omniclaude/services/ci_relay/) publishes github-pr-status
+  # as this node governs that service's contract.
+  subscribe_topics:
+    - "onex.evt.omniclaude.github-pr-status.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.github-pr-status.v1"
+    - "onex.evt.omniclaude.pr-watcher-failed.v1"
 
 # Capabilities
 capabilities:

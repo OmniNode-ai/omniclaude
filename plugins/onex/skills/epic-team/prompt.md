@@ -569,7 +569,7 @@ for wave_idx, wave in enumerate(waves):
         ticket = tickets_by_id.get(ticket_id, {})
         title = ticket.get("title", ticket_id)
         url = ticket.get("url", "")
-        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"
+        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"  # local-path-ok
 
         result = Task(
             subagent_type="onex:polymorphic-agent",
@@ -667,6 +667,109 @@ state["phase"] = "done"
 state["end_time"] = datetime.datetime.utcnow().isoformat() + "Z"
 write_yaml(STATE_FILE, state)
 print("Phase 5: persisted done state.")
+
+# 0. Post-wave integration check (non-blocking) [OMN-3345]
+# Run gap-cycle --no-fix per repo touched during the wave.
+# Results are informational only — always advances to Done regardless of status.
+import re as _re
+import json as _json
+
+_epic_id = state.get("epic_id", "unknown")
+_assignments = state.get("assignments", {})
+_repos_touched = list(_assignments.keys())
+_integration_check = {
+    "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+    "repos": {},
+}
+
+for _repo in _repos_touched:
+    try:
+        # Invoke gap-cycle with --no-fix (not --dry-run — these are different flags)
+        _gap_result = Skill(skill="onex:gap-cycle", args=f"--repo {_repo} --no-fix")
+
+        # Parse ARTIFACT: <path> from stdout
+        _artifact_match = _re.search(r"ARTIFACT: (.+)", _gap_result or "")
+        if not _artifact_match:
+            print(f"[integration-check] WARNING: gap-cycle for {_repo} did not emit ARTIFACT marker. Skipping.")
+            _integration_check["repos"][_repo] = {
+                "status": "RED",
+                "findings_count": -1,
+                "critical_count": -1,
+                "artifact_path": None,
+                "error": "no ARTIFACT marker in gap-cycle stdout",
+            }
+            continue
+
+        _artifact_path = _artifact_match.group(1).strip()
+
+        # Load summary.json
+        try:
+            with open(_artifact_path) as _f:
+                _summary = _json.load(_f)
+        except Exception as _read_err:
+            print(f"[integration-check] WARNING: Could not read artifact {_artifact_path}: {_read_err}")
+            _integration_check["repos"][_repo] = {
+                "status": "RED",
+                "findings_count": -1,
+                "critical_count": -1,
+                "artifact_path": _artifact_path,
+                "error": str(_read_err),
+            }
+            continue
+
+        # Extract fields
+        _composite_status = _summary.get("composite_status", "error")
+        _findings_count = _summary.get("findings_count", 0)
+        _critical_count = _summary.get("critical_count", 0)
+
+        # Classify: GREEN / YELLOW / RED
+        if _composite_status == "pass" and _findings_count == 0:
+            _repo_status = "GREEN"
+        elif _composite_status in ("warn",) or (
+            _composite_status not in ("fail", "error", "blocked") and _critical_count == 0
+        ):
+            _repo_status = "YELLOW"
+        else:
+            _repo_status = "RED"
+
+        _integration_check["repos"][_repo] = {
+            "status": _repo_status,
+            "findings_count": _findings_count,
+            "critical_count": _critical_count,
+            "artifact_path": _artifact_path,
+        }
+
+        # Post per-repo status to Slack epic thread
+        _emoji = {"GREEN": "\U0001f7e2", "YELLOW": "\U0001f7e1", "RED": "\U0001f534"}[_repo_status]
+        if _repo_status == "GREEN":
+            _slack_msg = f"{_emoji} `{_repo}`: integration clean"
+        elif _repo_status == "YELLOW":
+            _slack_msg = f"{_emoji} `{_repo}`: {_findings_count} warnings — review recommended"
+        else:
+            _slack_msg = f"{_emoji} `{_repo}`: {_critical_count} critical findings — create remediation tickets"
+
+        try:
+            notify_slack(
+                message=_slack_msg,
+                slack_thread_ts=state.get("slack_thread_ts"),
+            )
+        except Exception as _slack_err:
+            print(f"[integration-check] WARNING: Slack post for {_repo} failed (non-fatal): {_slack_err}")
+
+    except Exception as _err:
+        print(f"[integration-check] WARNING: gap-cycle for {_repo} failed (non-fatal): {_err}")
+        _integration_check["repos"][_repo] = {
+            "status": "RED",
+            "findings_count": -1,
+            "critical_count": -1,
+            "artifact_path": None,
+            "error": str(_err),
+        }
+
+# Write integration_check to state.yaml
+state["integration_check"] = _integration_check
+write_yaml(STATE_FILE, state)
+print(f"[integration-check] Post-wave check complete: {_integration_check}")
 
 # 1. Notify Slack (non-fatal)
 ticket_results = state.get("ticket_results", {})

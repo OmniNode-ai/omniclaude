@@ -33,9 +33,9 @@ class IntelligenceEventClient:
     """Kafka client for intelligence events using RequestResponseWiring."""
 
     # Canonical topic names per onex.cmd/evt convention (OMN-2367)
-    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"
-    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
-    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
+    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"  # noqa: arch-topic-naming
+    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"  # noqa: arch-topic-naming
+    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"  # noqa: arch-topic-naming
 
     # Legacy topic — stable constant during dual-publish migration window (OMN-2368).
     # Public so tests can pin the exact value and guard against silent renames.

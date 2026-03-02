@@ -13,6 +13,17 @@ input=$(cat)
 PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // "."')
 FOLDER_NAME=$(basename "$PROJECT_DIR")
 
+# ANSI color variables and timestamp for ONEX statusline rows
+green='\033[32m'
+yellow='\033[33m'
+dim='\033[2m'
+reset='\033[0m'
+cyan='\033[36m'
+white='\033[97m'
+blue='\033[34m'
+sep="  \033[2m|\033[0m  "
+now=$(date +%s)
+
 # Get git info if in a repo
 GIT_BRANCH=""
 DIRTY=""
@@ -41,6 +52,20 @@ if [ -n "$GIT_BRANCH" ]; then
 else
   LINE1="[\033[36m${FOLDER_NAME}\033[0m]"
 fi
+
+# ONEX Tier Badge: read ~/.claude/.onex_capabilities, append to Row 1
+onex_tier=""
+capabilities_file="$HOME/.claude/.onex_capabilities"
+if [ -f "$capabilities_file" ] && command -v jq >/dev/null 2>&1; then
+    tier=$(jq -r '.tier // empty' "$capabilities_file" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    case "$tier" in
+        full_onex)  onex_tier="${green}FULL_ONEX${reset}" ;;
+        event_bus)  onex_tier="${yellow}EVENT_BUS${reset}" ;;
+        standalone) onex_tier="${dim}STANDALONE${reset}" ;;
+        *)          [ -n "$tier" ] && onex_tier="${dim}ONEX${reset}" ;;
+    esac
+fi
+[ -n "$onex_tier" ] && LINE1+=" ${dim}|${reset} ${onex_tier}"
 
 # Row 2: Tab bar showing all active Claude Code sessions
 TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
@@ -107,7 +132,7 @@ APPLESCRIPT
   # Stale threshold: skip entries older than 24 hours (86400 seconds)
   # Only applied when live position data is unavailable (non-macOS/non-iTerm).
   # When live data IS available, GUID matching filters dead entries instead.
-  NOW=$(date +%s)
+  NOW=$now
   STALE_THRESHOLD=$((NOW - 86400))
 
   # Read all registry files, parse with single jq invocation
@@ -265,9 +290,95 @@ APPLESCRIPT
   fi
 fi
 
-# Output: row 1 always, row 2 if there are registered tabs
-if [ -n "$LINE2" ]; then
+# Row 3: Active pipeline state (only emitted when an active pipeline entry exists)
+ledger="$HOME/.claude/pipelines/ledger.json"
+pipeline_line=""
+active_ticket=""
+
+if [ -f "$ledger" ] && command -v jq >/dev/null 2>&1; then
+    ledger_mtime=$(stat -f %m "$ledger" 2>/dev/null || stat -c %Y "$ledger" 2>/dev/null)
+    if [[ "$ledger_mtime" =~ ^[0-9]+$ ]]; then
+        ledger_age=$(( now - ledger_mtime ))
+        active_raw=$(jq -r '
+          to_entries
+          | map(select(.value.completed_at == null and (.value.terminal // false) != true))
+          | sort_by(.value.started_at // "")
+          | last
+          | if . then "\(.key)\t\(.value.phase // "")\t\(.value.pr_number // "")" else "" end
+        ' "$ledger" 2>/dev/null)
+
+        if [ -n "$active_raw" ]; then
+            active_ticket=$(printf '%s' "$active_raw" | cut -f1)
+            active_phase=$(printf '%s'  "$active_raw" | cut -f2)
+            active_pr=$(printf '%s'     "$active_raw" | cut -f3)
+
+            if [ "$ledger_age" -gt 600 ]; then
+                pipeline_line="${dim}${active_ticket} · stale${reset}"
+            else
+                pipeline_line="${cyan}${active_ticket}${reset}"
+                [ -n "$active_phase" ] && pipeline_line+=" ${dim}·${reset} ${white}${active_phase}${reset}"
+                [[ "$active_pr" =~ ^[0-9]+$ ]] && \
+                    pipeline_line+=" ${dim}·${reset} ${blue}PR#${active_pr}${reset}"
+            fi
+        fi
+    fi
+fi
+
+# Routing agent + confidence (/tmp/omniclaude-session-*.json)
+agent_line=""
+session_file=$(ls -t /tmp/omniclaude-session-*.json 2>/dev/null | head -1)
+
+if [ -n "$session_file" ] && [ -f "$session_file" ]; then
+    file_mtime=$(stat -f %m "$session_file" 2>/dev/null || stat -c %Y "$session_file" 2>/dev/null)
+    if [[ "$file_mtime" =~ ^[0-9]+$ ]] && [ $(( now - file_mtime )) -le 300 ]; then
+        agent=$(jq -r '.agent_selected // empty' "$session_file" 2>/dev/null)
+        raw_conf=$(jq -r '.routing_confidence // empty' "$session_file" 2>/dev/null)
+
+        if [ -n "$agent" ]; then
+            agent_line="${dim}last routing:${reset} ${white}${agent}${reset}"
+            if [[ "$raw_conf" =~ ^[0-9]*\.?[0-9]+$ ]]; then
+                conf_pct=$(awk "BEGIN {
+                    v = $raw_conf + 0
+                    if (v <= 1) v = v * 100
+                    if (v > 100) v = 100
+                    printf \"%.0f\", v
+                }")
+                [ "$conf_pct" -gt 0 ] 2>/dev/null && agent_line+=" ${dim}(${conf_pct}%)${reset}"
+            fi
+        fi
+    fi
+fi
+
+# Rate limit warning (/tmp/omniclaude-blocked-rate-limits.json)
+rate_warn=""
+rate_limit_file="/tmp/omniclaude-blocked-rate-limits.json"
+
+if [ -f "$rate_limit_file" ]; then
+    rl_mtime=$(stat -f %m "$rate_limit_file" 2>/dev/null || stat -c %Y "$rate_limit_file" 2>/dev/null)
+    if [[ "$rl_mtime" =~ ^[0-9]+$ ]] && [ $(( now - rl_mtime )) -le 600 ]; then
+        blocked_count=$(jq 'if type == "object" then length else 0 end' \
+                        "$rate_limit_file" 2>/dev/null)
+        if [[ "$blocked_count" =~ ^[0-9]+$ ]] && [ "$blocked_count" -gt 0 ]; then
+            rate_warn="${yellow}⚠ ${blocked_count} rate-limited${reset}"
+        fi
+    fi
+fi
+
+# Assemble LINE3 (only when active pipeline exists)
+LINE3=""
+if [ -n "$pipeline_line" ]; then
+    LINE3="$pipeline_line"
+    [ -n "$agent_line" ] && LINE3+="${sep}${agent_line}"
+    [ -n "$rate_warn" ]  && LINE3+="${sep}${rate_warn}"
+fi
+
+# Output: row 1 always, row 2 if tabs registered, row 3 if pipeline active
+if [ -n "$LINE2" ] && [ -n "$LINE3" ]; then
+  echo -e "${LINE1}\n${LINE2}\n${LINE3}"
+elif [ -n "$LINE2" ]; then
   echo -e "${LINE1}\n${LINE2}"
+elif [ -n "$LINE3" ]; then
+  echo -e "${LINE1}\n${LINE3}"
 else
   echo -e "${LINE1}"
 fi
