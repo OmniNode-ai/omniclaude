@@ -7,7 +7,7 @@ You are executing the ticket-pipeline skill. This prompt defines the complete or
 Parse arguments from the skill invocation:
 
 ```
-/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge]
+/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate]
 ```
 
 ```python
@@ -26,6 +26,7 @@ if not re.match(r'^[A-Z]+-\d+$', ticket_id):
 dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 auto_merge = "--auto-merge" in args
+require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
 
 skip_to = None
 if "--skip-to" in args:
@@ -72,11 +73,23 @@ policy:
   auto_fix_nits: false
   pr_review_timeout_hours: 24
   max_pr_review_cycles: 3
-  auto_merge: false
+  auto_merge: true            # Default true; set false only via --require-gate
+  policy_auto_merge: true     # Mirrors auto_merge at pipeline start; read at Phase 6
   slack_on_merge: true
   merge_gate_timeout_hours: 48
   merge_strategy: squash
   delete_branch_on_merge: true
+
+# PR identity — stored at Phase 3 creation time; used for all subsequent gh calls
+pr_url: null                  # "https://github.com/OmniNode-ai/{repo}/pull/{N}"
+repo_full_name: null          # "OmniNode-ai/{repo}"
+pr_number: null
+
+# Auto-merge state — set by Phase 3 after exception checks
+auto_merge_armed: false       # true when gh pr merge --auto succeeded in Phase 3
+hold_reason: null             # non-null when auto_merge_armed=false; reason string
+hold_label_applied: false     # true if Phase 3 applied the "hold" label to the PR
+auto_merge_enabled_at: null   # ISO-8601 timestamp when gh pr merge --auto succeeded
 
 phases:
   pre_flight:
@@ -300,12 +313,26 @@ else:
             "auto_fix_nits": False,
             "pr_review_timeout_hours": 24,
             "max_pr_review_cycles": 3,
-            "auto_merge": auto_merge,  # Set from --auto-merge flag
+            # auto_merge defaults to True (auto-merge is the normal path).
+            # Set to False only when --require-gate is explicitly passed.
+            "auto_merge": False if require_gate else True,
+            # policy_auto_merge mirrors the above at pipeline start time.
+            # Phase 6 reads this from state (never re-evaluates the CLI flag).
+            "policy_auto_merge": False if require_gate else True,
             "slack_on_merge": True,
             "merge_gate_timeout_hours": 48,
             "merge_strategy": "squash",
             "delete_branch_on_merge": True,
         },
+        # PR identity — populated by Phase 3 after PR creation
+        "pr_url": None,
+        "repo_full_name": None,
+        "pr_number": None,
+        # Auto-merge state — populated by Phase 3 after exception checks
+        "auto_merge_armed": False,
+        "hold_reason": None,
+        "hold_label_applied": False,
+        "auto_merge_enabled_at": None,
         "phases": {
             phase_name: {
                 "started_at": None,
@@ -320,9 +347,11 @@ else:
         }
     }
 
-# Override policy.auto_merge if --auto-merge flag was passed
-if auto_merge_flag:
+# Override: --auto-merge flag forces auto_merge=True even if --require-gate was also passed
+# (--auto-merge wins; --require-gate is the opt-out, --auto-merge is the explicit opt-in)
+if auto_merge:
     state["policy"]["auto_merge"] = True
+    state["policy"]["policy_auto_merge"] = True
 ```
 
 ### 3. Handle --skip-to (Checkpoint-Validated Resume, OMN-2144)
@@ -2182,15 +2211,128 @@ EOF
 )"
    ```
 
-4. **Enable GitHub auto-merge** (immediately after PR creation):
-   ```bash
-   # Idempotent — safe to run even if already enabled
-   gh pr merge --auto --squash {pr_number} --repo {repo}
-   ```
-   If this fails (e.g. repo doesn't have auto-merge enabled): log a warning and continue.
-   Do NOT block the pipeline on this failure.
+4. **Persist PR identity to state** (immediately after PR creation):
+   ```python
+   pr_info = json.loads(subprocess.check_output(["gh", "pr", "view", "--json", "url,number,headRefName"]))
+   pr_url = pr_info["url"]
+   pr_number = pr_info["number"]
+   # Derive repo_full_name from remote URL
+   import re as _re
+   _remote = subprocess.check_output(["git", "remote", "get-url", "origin"], text=True).strip()
+   _match = _re.search(r'[:/]([\w.-]+/[\w.-]+?)(?:\.git)?$', _remote)
+   repo_full_name = _match.group(1) if _match else ""
 
-5. **Update Linear:**
+   # Persist to top-level state (not just artifacts) so Phase 6 can use pr_url directly
+   state["pr_url"] = pr_url
+   state["repo_full_name"] = repo_full_name
+   state["pr_number"] = pr_number
+   result["artifacts"]["pr_url"] = pr_url
+   result["artifacts"]["pr_number"] = pr_number
+   result["artifacts"]["branch_name"] = branch_name
+   save_state(state, state_path)
+   # Log: "pr_url={pr_url}; repo_full_name={repo_full_name}; pr_number={pr_number}"
+   ```
+
+5. **Exception checks before enabling auto-merge:**
+
+   ```python
+   HOLD_LABELS = {"hold", "do-not-merge", "do-not-merge-yet"}
+   skip_auto_merge = False
+   hold_reason = None
+
+   # STEP 1 — Fetch current PR labels
+   try:
+       pr_label_data = json.loads(subprocess.check_output(
+           ["gh", "pr", "view", pr_url, "--json", "labels"], text=True
+       ))
+       pr_labels = {label["name"] for label in pr_label_data.get("labels", [])}
+   except Exception as e:
+       print(f"Warning: Could not fetch PR labels: {e}. Skipping hold-label check.")
+       pr_labels = set()
+
+   if pr_labels & HOLD_LABELS:
+       skip_auto_merge = True
+       hold_reason = f"label: {pr_labels & HOLD_LABELS}"
+
+   # STEP 2 — Fetch Linear blockedBy
+   # Conservative rule: treat a blocker as "open" unless state.type is explicitly
+   # "completed" or "cancelled". If state.type is absent, treat as open.
+   if not skip_auto_merge:
+       try:
+           _issue = mcp__linear-server__get_issue(id=ticket_id, includeRelations=True)
+           open_blockers = [
+               t["identifier"] for t in (_issue.get("blockedBy") or [])
+               if (t.get("state") or {}).get("type") not in ("completed", "cancelled")
+           ]
+           if open_blockers:
+               skip_auto_merge = True
+               hold_reason = f"open blockedBy: {open_blockers}"
+               print(f"auto_merge_armed=false; hold_reason={hold_reason}")
+       except Exception as e:
+           # Conservative: Linear unavailable → skip auto-merge
+           skip_auto_merge = True
+           hold_reason = f"linear_unavailable: {e}"
+           # Best-effort Slack warning — must NOT block merge decision
+           try:
+               notify_sync(slack_notifier, "notify_blocked",
+                   phase="create_pr",
+                   reason=f"Could not check blockedBy for {ticket_id}. Skipping auto-merge; manual review required.",
+                   block_kind="blocked_policy",
+                   thread_ts=state.get("slack_thread_ts"),
+               )
+           except Exception:
+               pass  # Slack notification failures never affect merge behavior
+
+   # STEP 3 — Apply hold label if skipping (idempotent)
+   if skip_auto_merge and "hold" not in pr_labels:
+       try:
+           subprocess.run(["gh", "pr", "edit", pr_url, "--add-label", "hold"],
+                         capture_output=True, timeout=30)
+           pr_labels.add("hold")
+           state["hold_label_applied"] = True
+       except Exception as e:
+           print(f"Warning: Could not apply hold label: {e}")
+           state["hold_label_applied"] = False
+   else:
+       state["hold_label_applied"] = False
+
+   # STEP 4 — Persist state and conditionally enable auto-merge
+   state["hold_reason"] = hold_reason if skip_auto_merge else None
+   state["auto_merge_armed"] = False  # default; updated below
+
+   if not skip_auto_merge:
+       try:
+           subprocess.check_call(
+               ["gh", "pr", "merge", pr_url, "--auto", "--squash"],
+               timeout=30
+           )
+           state["auto_merge_armed"] = True
+           from datetime import datetime, timezone
+           state["auto_merge_enabled_at"] = datetime.now(timezone.utc).isoformat()
+           save_state(state, state_path)
+           print(f"auto_merge_armed=true; auto-merge enabled for {pr_url}")
+       except Exception as e:
+           # auto-merge enable failed (unsupported, conflicts, branch protection)
+           state["auto_merge_armed"] = False
+           state["hold_reason"] = f"auto_merge_enable_failed: {e}"
+           if "hold" not in pr_labels:
+               try:
+                   subprocess.run(["gh", "pr", "edit", pr_url, "--add-label", "hold"],
+                                 capture_output=True, timeout=30)
+                   state["hold_label_applied"] = True
+               except Exception:
+                   pass
+           save_state(state, state_path)
+           print(f"auto_merge_armed=false; hold_reason={state['hold_reason']}")
+   else:
+       save_state(state, state_path)
+       print(f"auto_merge_armed=false; hold_reason={hold_reason}")
+
+   # NOTE: hold label is NOT auto-removed. User must manually remove "hold" label
+   # if blockers clear. This is v1 behavior; watcher logic is out of scope.
+   ```
+
+6. **Update Linear:**
    ```python
    try:
        mcp__linear-server__update_issue(id=ticket_id, state="In Review")
@@ -2199,25 +2341,17 @@ EOF
        # Non-blocking: Linear update failure is logged but does not stop pipeline
    ```
 
-6. **Record artifacts:**
-   ```python
-   pr_info = json.loads(subprocess.check_output(["gh", "pr", "view", "--json", "url,number"]))
-   result["artifacts"] = {
-       "pr_url": pr_info["url"],
-       "pr_number": pr_info["number"],
-       "branch_name": branch_name
-   }
-   ```
-
-7. **Dry-run behavior:** All pre-checks execute normally. Push, PR creation, auto-merge enable, and Linear update are skipped. State records what _would_ have happened.
+7. **Dry-run behavior:** All pre-checks execute normally. Push, PR creation, exception checks, auto-merge enable, and Linear update are skipped. State records what _would_ have happened.
 
 **Mutations:**
 - `phases.create_pr.started_at`
 - `phases.create_pr.completed_at`
 - `phases.create_pr.artifacts` (pr_url, pr_number, branch_name)
+- `state.pr_url`, `state.repo_full_name`, `state.pr_number` (top-level; resume-safe)
+- `state.auto_merge_armed`, `state.hold_reason`, `state.hold_label_applied`, `state.auto_merge_enabled_at`
 
 **Exit conditions:**
-- **Completed:** PR created (or already exists) and Linear updated
+- **Completed:** PR created (or already exists), exception checks run, auto-merge armed or hold applied, Linear updated
 - **Blocked (policy):** auto_push or auto_pr_create is false
 - **Blocked (pre-check):** any pre-check fails
 - **Failed:** push or PR creation errors
@@ -2307,60 +2441,33 @@ EOF
 
 **Invariants:**
 - Phase 5 (pr_review_loop) is completed with approved status
-- PR number is available in `phases.create_pr.artifacts.pr_number`
+- `state["pr_url"]` is set (populated by Phase 3)
+- `state["auto_merge_armed"]` reflects Phase 3 exception-check result
 
 **Actions:**
 
-1. **Dispatch auto-merge to a separate agent:**
-   ```
-   Task(
-     subagent_type="onex:polymorphic-agent",
-     description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
-     prompt="Invoke: Skill(skill=\"onex:auto-merge\",
-       args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
-       Report back with: status, merged_at, branch_deleted."
-   )
-   ```
+This phase runs inline in the orchestrator. No Task dispatch on the normal path. See the
+"Phase 6: AUTO_MERGE" entry in the Phase Handlers section below for the full authoritative
+implementation including NEEDS_GATE predicate, one-shot merge check, and exception path dispatch.
 
-2. **Handle result:**
-   - `merged`: clear ticket-run ledger entry, post Slack "merged", update Linear to Done. AUTO-ADVANCE (terminal).
-   - `held`: pipeline exits cleanly; resumes when human replies "merge" to Slack HIGH_RISK gate.
-   - `failed`: post Slack MEDIUM_RISK gate, stop pipeline.
+**Summary:**
+- Compute `NEEDS_GATE` from `state["auto_merge_armed"]`, current PR labels, and `policy_auto_merge`
+- **Normal path** (`NEEDS_GATE=False`): one-shot check if already merged → if yes, update Linear + clear ledger; if no, exit with `auto_merge_pending` (pr-watch handles merge observation)
+- **Exception path** (`NEEDS_GATE=True`): dispatch auto-merge skill with HIGH_RISK gate; after approval, `gh pr merge {pr_url} --squash`
 
-3. **On merged:** clear ledger entry and update Linear status to Done:
-   ```python
-   # Clear ticket-run ledger entry
-   import json
-   from pathlib import Path
-   ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
-   try:
-       ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
-       ledger.pop(ticket_id, None)
-       ledger_path.write_text(json.dumps(ledger, indent=2))
-   except Exception as e:
-       print(f"Warning: Failed to clear ledger entry for {ticket_id}: {e}")
-       # Non-blocking
-
-   # Update Linear to Done
-   try:
-       mcp__linear-server__update_issue(id=ticket_id, state="Done")
-   except Exception as e:
-       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
-       # Non-blocking
-   ```
-
-4. **Dry-run behavior:** merge is skipped. State records `dry_run: true`.
+4. **Dry-run behavior:** NEEDS_GATE computation runs. Merge and Linear update are skipped. State records `dry_run: true`.
 
 **Mutations:**
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
-- `phases.auto_merge.artifacts` (status, merged_at, branch_deleted)
+- `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged` | `held`, merged_at)
 - `~/.claude/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
-- **Completed (merged):** PR merged, branch deleted (if policy), Linear set to Done
-- **Completed (held):** Waiting for human "merge" reply on Slack HIGH_RISK gate
-- **Failed:** merge failed
+- **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
+- **Completed (auto_merge_pending):** GitHub auto-merge armed; pr-watch observes completion
+- **Completed (held):** Waiting for human "merge" reply on Slack HIGH_RISK gate (NEEDS_GATE=true)
+- **Failed:** merge errors
 
 ---
 
@@ -2510,40 +2617,147 @@ and auto-merge asynchronously.
 
 **Invariants:**
 - Phase 5 (pr_review_loop) is completed with `approved` status
-- PR exists and is open
+- `state["pr_url"]` is set (populated by Phase 3)
+- `state["auto_merge_armed"]` reflects Phase 3 exception-check result
 
 **Actions:**
 
-1. **Dispatch auto-merge to a separate agent:**
-   ```
-   Task(
-     subagent_type="onex:polymorphic-agent",
-     description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
-     prompt="You are executing auto-merge for {ticket_id}.
-       Invoke: Skill(skill=\"onex:auto-merge\",
-         args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy}{' --no-delete-branch' if not delete_branch_on_merge else ''}\")
+1. **Read state and compute NEEDS_GATE predicate** (runs inline, no dispatch):
 
-       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/auto-merge.json
-       Report back with: status (merged|held|failed), merged_at, branch_deleted."
+   ```python
+   pr_url = state.get("pr_url") or state["phases"]["create_pr"]["artifacts"].get("pr_url", "")
+   pr_number = state.get("pr_number") or state["phases"]["create_pr"]["artifacts"].get("pr_number", "")
+   policy_auto_merge = state["policy"].get("policy_auto_merge", True)  # default True
+   HOLD_LABELS = {"hold", "do-not-merge", "do-not-merge-yet"}
+
+   # Fetch current PR labels (re-check at Phase 6 entry — labels may have changed since Phase 3)
+   try:
+       _pr_label_data = json.loads(subprocess.check_output(
+           ["gh", "pr", "view", pr_url, "--json", "labels"], text=True
+       ))
+       _pr_labels = [label["name"] for label in _pr_label_data.get("labels", [])]
+   except Exception as _e:
+       print(f"Warning: Could not fetch PR labels at Phase 6: {_e}. Treating as no hold labels.")
+       _pr_labels = []
+
+   NEEDS_GATE = (
+       state.get("auto_merge_armed") == False
+       or any(label in HOLD_LABELS for label in _pr_labels)
+       or policy_auto_merge == False  # explicit --require-gate override only
    )
    ```
 
-2. **Handle result:**
-   - `merged`:
-     1. Clear ticket-run ledger entry (remove `{ticket_id}` key from `~/.claude/pipelines/ledger.json`)
-     2. Post Slack: "Merged PR #{pr_number} for {ticket_id} — {PR URL}"
-     3. Update Linear ticket status to Done
-     4. Emit `status: finished, progress: 1.00` via emit_ticket_status.py
-   - `held`: pipeline exits cleanly (entry stays in ledger; human replies "merge" to Slack gate)
-   - `failed`: Post Slack MEDIUM_RISK gate, clear ledger entry with error note, stop pipeline
+2. **When `NEEDS_GATE` is False (auto-merge armed, normal path):**
+
+   ```python
+   # Log: "auto_merge_armed=true; entering poll mode — delegating to pr-watch"
+   print(f"auto_merge_armed=true; entering poll mode — delegating to pr-watch")
+
+   # One-shot merge check: handle race between Phase 5.5 approval and GitHub auto-merge
+   try:
+       _pr_state_data = json.loads(subprocess.check_output(
+           ["gh", "pr", "view", pr_url, "--json", "state,mergedAt"], text=True
+       ))
+       if _pr_state_data.get("state") == "MERGED":
+           # Fast path: already merged (race between Phase 5.5 and now)
+           print(f"PR #{pr_number} ({ticket_id}) merged via auto-merge")
+           notify_sync(slack_notifier, "notify_phase_completed",
+               phase="auto_merge",
+               summary=f"PR #{pr_number} ({ticket_id}) merged via auto-merge",
+               thread_ts=state.get("slack_thread_ts"),
+               pr_url=pr_url,
+           )
+           try:
+               mcp__linear-server__save_issue(id=ticket_id, state="Done")
+           except Exception as _le:
+               print(f"Warning: Failed to update Linear to Done: {_le}")
+           # Clear ledger
+           try:
+               _ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+               _ledger.pop(ticket_id, None)
+               ledger_path.write_text(json.dumps(_ledger, indent=2))
+           except Exception as _le2:
+               print(f"Warning: Failed to clear ledger: {_le2}")
+           result = {
+               "status": "completed",
+               "blocking_issues": 0,
+               "nit_count": 0,
+               "artifacts": {"status": "merged_via_auto", "merged_at": _pr_state_data.get("mergedAt", "")},
+               "reason": None,
+               "block_kind": None,
+           }
+           return result
+   except Exception as _e:
+       print(f"Warning: Could not check PR state: {_e}. Delegating to pr-watch for merge observation.")
+
+   # PR not yet merged — exit with auto_merge_pending; pr-watch will observe completion
+   # and update Linear + post Slack when GitHub merges the PR.
+   result = {
+       "status": "completed",
+       "blocking_issues": 0,
+       "nit_count": 0,
+       "artifacts": {"status": "auto_merge_pending"},
+       "reason": None,
+       "block_kind": None,
+   }
+   return result
+   ```
+
+3. **When `NEEDS_GATE` is True (exception path):**
+
+   ```python
+   hold_reason = state.get("hold_reason", "unknown")
+   print(f"NEEDS_GATE=true; hold_reason={hold_reason}; entering HIGH_RISK gate")
+
+   # Dispatch auto-merge to a separate agent using existing HIGH_RISK gate flow
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
+     prompt="You are executing auto-merge (NEEDS_GATE path) for {ticket_id}.
+       Invoke: Skill(skill=\"onex:auto-merge\",
+         args=\"--pr {pr_number} --ticket-id {ticket_id} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
+
+       Note: NEEDS_GATE=true for this PR (hold_reason: {hold_reason}).
+       The HIGH_RISK gate will fire and wait for operator 'merge' reply.
+       After gate approval: gh pr merge {pr_url} --squash
+       Any 'already merged' error from gh is caught and treated as success.
+       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/auto-merge.json
+       Report back with: status (merged|held|failed), merged_at, branch_deleted."
+   )
+
+   # Handle result:
+   # merged → clear ledger, post Slack, update Linear to Done, emit status
+   # held   → pipeline exits cleanly (ledger entry stays; human replies "merge" to gate)
+   # failed → post Slack MEDIUM_RISK gate, clear ledger with error note, stop pipeline
+   ```
+
+**Handle completed (merged) result:**
+   ```python
+   # Clear ticket-run ledger entry
+   try:
+       ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
+       ledger.pop(ticket_id, None)
+       ledger_path.write_text(json.dumps(ledger, indent=2))
+   except Exception as e:
+       print(f"Warning: Failed to clear ledger entry for {ticket_id}: {e}")
+
+   # Update Linear to Done
+   try:
+       mcp__linear-server__save_issue(id=ticket_id, state="Done")
+   except Exception as e:
+       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+   ```
 
 **Mutations:**
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
-- `phases.auto_merge.artifacts` (status, merged_at, branch_deleted)
+- `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged` | `held`, merged_at, branch_deleted)
+- `~/.claude/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
-- **Completed:** PR merged (`merged`) or waiting for human gate (`held`)
+- **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
+- **Completed (auto_merge_pending):** GitHub auto-merge armed; pr-watch observes completion
+- **Completed (held):** Waiting for human "merge" reply on Slack HIGH_RISK gate (NEEDS_GATE=true)
 - **Failed:** merge errors
 
 ---

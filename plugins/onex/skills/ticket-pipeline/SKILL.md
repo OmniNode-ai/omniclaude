@@ -29,7 +29,10 @@ args:
     description: Break stale lock and start fresh run. Bypasses auto-detection entirely.
     required: false
   - name: --auto-merge
-    description: Pass auto_merge=true to auto-merge sub-skill (skip HIGH_RISK gate)
+    description: Explicitly force auto_merge=true (overrides --require-gate if both are passed)
+    required: false
+  - name: --require-gate
+    description: Opt out of auto-merge default; require explicit HIGH_RISK gate before merging
     required: false
 ---
 
@@ -91,7 +94,8 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 /ticket-pipeline OMN-1234 --dry-run
 /ticket-pipeline OMN-1234 --skip-to create_pr
 /ticket-pipeline OMN-1234 --force-run
-/ticket-pipeline OMN-1234 --auto-merge    # Skip HIGH_RISK merge gate
+/ticket-pipeline OMN-1234 --auto-merge    # Explicit override: force auto-merge (default)
+/ticket-pipeline OMN-1234 --require-gate  # Opt out: require HIGH_RISK Slack gate before merge
 ```
 
 ## Headless Usage
@@ -164,8 +168,11 @@ claude -p "Run ticket-pipeline for OMN-1234 --dry-run" ...
 # Force restart from implement (ignores existing state and branch)
 claude -p "Run ticket-pipeline for OMN-1234 --force-run" ...
 
-# Skip HIGH_RISK merge gate (auto-merge immediately after approval)
+# Explicitly force auto-merge (same as default; included for clarity)
 claude -p "Run ticket-pipeline for OMN-1234 --auto-merge" ...
+
+# Opt out of auto-merge: require HIGH_RISK Slack gate before merge
+claude -p "Run ticket-pipeline for OMN-1234 --require-gate" ...
 
 # Jump to a specific phase
 claude -p "Run ticket-pipeline for OMN-1234 --skip-to local_review" ...
@@ -381,9 +388,10 @@ A retry-to-fish-for-PASS must not be used. Fix the issue or use the explicit byp
 
 ### Phase 6: auto_merge
 
-- Invokes `auto-merge` sub-skill (OMN-2525) with configured policy
-- Default (`auto_merge: false`): HIGH_RISK Slack gate requiring explicit "merge" reply
-- With `--auto-merge` flag: merges immediately without gate
+- Default (`auto_merge: true`): computes `NEEDS_GATE` predicate; if armed, one-shot check then delegates to pr-watch for merge observation; no HIGH_RISK gate
+- With `--require-gate` flag: forces `NEEDS_GATE=true`; invokes `auto-merge` sub-skill with HIGH_RISK gate requiring explicit "merge" reply
+- With `--auto-merge` flag: explicitly forces `auto_merge=true` (overrides `--require-gate` if both passed)
+- Exception path (hold labels, open blockedBy, or auto-merge arm failure): `NEEDS_GATE=true`, enters HIGH_RISK gate flow
 - All three merge conditions must be met before proceeding:
   1. CI passing (all required checks `conclusion: success`)
   2. At least 1 approved review, no current CHANGES_REQUESTED
@@ -419,7 +427,8 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `max_pr_review_cycles` | `3` | Max pr-review-dev fix cycles before capping |
 | `cdqa_gate_required` | `true` | **Always true — CDQA gate is mandatory on all merge paths. This switch is read-only; it cannot be set to false.** |
 | `cdqa_gate_timeout_hours` | `48` | Hours to wait for operator bypass reply before CDQA gate expires with `status: timeout` |
-| `auto_merge` | `false` | Merge immediately without HIGH_RISK Slack gate |
+| `auto_merge` | `true` | Auto-merge is the default path; set to `false` only via `--require-gate` |
+| `policy_auto_merge` | `true` | Mirrors `auto_merge` at pipeline start time; read by Phase 6 NEEDS_GATE predicate |
 | `slack_on_merge` | `true` | Post Slack notification on successful merge |
 | `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance); on expiry the ledger entry is cleared and the pipeline exits with `timeout` state requiring a new run |
 | `merge_strategy` | `squash` | Merge strategy: squash \| merge \| rebase |
@@ -498,14 +507,16 @@ Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
 
 ## Maximum Damage Assessment
 
-If pipeline runs unattended with `--auto-merge`, worst case:
+Default behavior (auto_merge=true, no `--require-gate`), worst case:
 - Pushes code to main via squash-merge — can be reverted
 - Deletes feature branch — recreatable from merge commit
 - Creates sub-tickets for cross-repo work — deleteable
 - Hands off to epic-team for parallel execution — epic-team has its own gates
 - Sends Slack notifications — ignorable
 
-Without `--auto-merge` (default): pipeline halts at Phase 6 waiting for explicit "merge" reply.
+Exception path (hold labels or open blockedBy detected): Phase 3 applies "hold" label and Phase 6 fires HIGH_RISK gate — pipeline halts waiting for explicit "merge" reply.
+
+With `--require-gate`: pipeline always halts at Phase 6 waiting for explicit "merge" reply (same as old default).
 
 ## Supporting Modules (OMN-1970)
 
@@ -708,18 +719,25 @@ See `@_lib/cdqa-gate/helpers.md` — Bypass Protocol.
 **Anti-pattern**: do NOT retry a failing gate without fixing the root cause. Retry-to-fish-for-PASS
 is an invalid bypass and must not be used.
 
-### Phase 6: auto_merge — dispatch to polymorphic agent
+### Phase 6: auto_merge — inline orchestrator (NEEDS_GATE=False) or dispatch (NEEDS_GATE=True)
 
-`merge_gate_timeout_hours` is passed to `auto-merge` to control the HIGH_RISK Slack gate lifetime.
-When `auto_merge: false`, the gate waits up to `merge_gate_timeout_hours` (default 48h) for a human
-"merge" reply before expiring. On expiry, the pipeline clears the ledger and a new run is required.
+Phase 6 runs inline in the orchestrator on the normal path (no Task dispatch).
+
+**Normal path** (`NEEDS_GATE=False`): orchestrator performs one-shot merge check and either:
+- Clears ledger + updates Linear to Done (if PR already merged)
+- Exits with `auto_merge_pending` (delegates merge observation to pr-watch)
+
+**Exception path** (`NEEDS_GATE=True`): dispatches auto-merge skill with HIGH_RISK gate.
+`merge_gate_timeout_hours` controls how long the gate waits before expiring.
 
 ```
+# Only dispatched when NEEDS_GATE=True (hold label, open blockedBy, or arm failure):
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ticket-pipeline: Phase 6 auto_merge for {ticket_id} on PR #{pr_number}",
+  description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
   prompt="Invoke: Skill(skill=\"onex:auto-merge\",
-    args=\"--pr {pr_number} --ticket-id {ticket_id}{' --auto-merge' if auto_merge else ''} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
+    args=\"--pr {pr_number} --ticket-id {ticket_id} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
+    Note: NEEDS_GATE=true for this PR (hold_reason: {hold_reason}).
     Report back with: status, merged_at, branch_deleted."
 )
 ```
