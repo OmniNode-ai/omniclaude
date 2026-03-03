@@ -27,7 +27,7 @@ if env_path.exists():
     load_dotenv(env_path)
     print(f"✓ Loaded .env from {env_path}")
     print(
-        f"  KAFKA_BOOTSTRAP_SERVERS={os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'not set')}"
+        f"  KAFKA_BOOTSTRAP_SERVERS={os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'not set')}"  # kafka-fallback-ok
     )
 else:
     print(f"⚠️  .env not found at {env_path}, using defaults")
