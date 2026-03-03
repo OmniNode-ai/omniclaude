@@ -46,8 +46,12 @@ EXECUTE=false
 NO_VERSION_BUMP=true
 BUMP_VERSION=false
 REPAIR_VENV=false
+LEVEL_FILTER="advanced"   # default: no filtering (advanced includes all)
+INCLUDE_DEBUG=false
+_LEVEL_EXPLICIT=false     # track whether --level was passed explicitly
 
-for arg in "$@"; do
+while [[ $# -gt 0 ]]; do
+    arg="$1"
     case $arg in
         --execute)
             EXECUTE=true
@@ -63,16 +67,39 @@ for arg in "$@"; do
         --repair-venv)
             REPAIR_VENV=true
             ;;
+        --level=*)
+            LEVEL_FILTER="${arg#--level=}"
+            _LEVEL_EXPLICIT=true
+            ;;
+        --level)
+            if [[ $# -lt 2 ]]; then
+                echo -e "${RED}Error: --level requires a value: basic | intermediate | advanced${NC}" >&2
+                exit 1
+            fi
+            LEVEL_FILTER="$2"
+            _LEVEL_EXPLICIT=true
+            shift
+            ;;
+        --include-debug)
+            INCLUDE_DEBUG=true
+            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--bump-version]"
+            echo "Usage: deploy.sh [--execute] [--bump-version] [--level basic|intermediate|advanced] [--include-debug]"
             echo "       deploy.sh --repair-venv"
             echo ""
             echo "Options:"
-            echo "  --execute         Actually perform deployment (default: dry run)"
-            echo "  --bump-version    Increment patch version (default: deploy to same version)"
-            echo "  --repair-venv     Build lib/.venv in the active deployed version without a full redeploy."
-            echo "                    Use when hooks fail with 'No valid Python found' after a deploy."
-            echo "  --help            Show this help message"
+            echo "  --execute                  Actually perform deployment (default: dry run)"
+            echo "  --bump-version             Increment patch version (default: deploy to same version)"
+            echo "  --level basic|intermediate|advanced"
+            echo "                             Filter skills by tier (inclusive downward):"
+            echo "                               basic       → only level: basic skills"
+            echo "                               intermediate → level: basic + intermediate"
+            echo "                               advanced    → all skills (default, no filtering)"
+            echo "  --include-debug            Include skills with debug: true (excluded by default"
+            echo "                             when --level is specified below advanced)"
+            echo "  --repair-venv              Build lib/.venv in the active deployed version without a full redeploy."
+            echo "                             Use when hooks fail with 'No valid Python found' after a deploy."
+            echo "  --help                     Show this help message"
             exit 0
             ;;
         *)
@@ -81,7 +108,17 @@ for arg in "$@"; do
             exit 1
             ;;
     esac
+    shift
 done
+
+# Validate --level value
+case "$LEVEL_FILTER" in
+    basic|intermediate|advanced) ;;
+    *)
+        echo -e "${RED}Error: --level must be one of: basic | intermediate | advanced (got: '${LEVEL_FILTER}')${NC}" >&2
+        exit 1
+        ;;
+esac
 
 # Guard: --no-version-bump and --bump-version are mutually exclusive.
 # Since --no-version-bump sets NO_VERSION_BUMP=true and --bump-version sets
@@ -376,9 +413,65 @@ fi
 
 TARGET="${CACHE_BASE}/${NEW_VERSION}"
 
-# Count files in each component
+# =============================================================================
+# Skill tier filtering helpers (OMN-3453)
+# Sourced from _filter_helpers.sh to keep them independently testable.
+# =============================================================================
+_FILTER_HELPERS="${BASH_SOURCE[0]%/*}/_filter_helpers.sh"
+if [[ ! -f "$_FILTER_HELPERS" ]]; then
+    echo -e "${RED}Error: _filter_helpers.sh not found at ${_FILTER_HELPERS}${NC}" >&2
+    exit 1
+fi
+# shellcheck source=_filter_helpers.sh
+source "$_FILTER_HELPERS"
+
+# Copy qualifying skills from source to target, applying LEVEL_FILTER + INCLUDE_DEBUG rules.
+# Always mirrors the target to match source exactly (deletes skills removed upstream).
+sync_skills_filtered() {
+    local src_skills_dir="$1"
+    local tgt_skills_dir="$2"
+
+    mkdir -p "$tgt_skills_dir"
+
+    # First pass: sync all qualifying skill dirs
+    local included=0 excluded=0
+    for skill_dir in "${src_skills_dir}"/*/; do
+        [[ -d "$skill_dir" ]] || continue
+        local skill_name
+        skill_name="$(basename "$skill_dir")"
+
+        if _skill_passes_filter "$skill_dir"; then
+            rsync -a "${skill_dir}" "${tgt_skills_dir}/${skill_name}/"
+            (( included++ )) || true
+        else
+            excluded=1
+            # If a previously-deployed version of this skill exists in target, remove it
+            # so the deployed set stays in sync with the filter.
+            [[ -d "${tgt_skills_dir}/${skill_name}" ]] && rm -rf "${tgt_skills_dir}/${skill_name}"
+        fi
+    done
+
+    # Second pass: remove any target skills that no longer exist in source
+    for tgt_skill in "${tgt_skills_dir}"/*/; do
+        [[ -d "$tgt_skill" ]] || continue
+        local tgt_name
+        tgt_name="$(basename "$tgt_skill")"
+        if [[ ! -d "${src_skills_dir}/${tgt_name}" ]]; then
+            rm -rf "${tgt_skill}"
+        fi
+    done
+
+    echo -e "${GREEN}  Skills synced: ${included} included, $( [[ $excluded -eq 1 ]] && echo "some" || echo "none" ) excluded by filter${NC}"
+}
+
+# Count qualifying skills (respects current LEVEL_FILTER and INCLUDE_DEBUG)
 count_skills() {
-    ls -1d "${SOURCE_ROOT}/skills"/*/ 2>/dev/null | wc -l | tr -d ' '
+    local count=0
+    for skill_dir in "${SOURCE_ROOT}/skills"/*/; do
+        [[ -d "$skill_dir" ]] || continue
+        _skill_passes_filter "$skill_dir" && (( count++ )) || true
+    done
+    echo "$count"
 }
 
 count_agents() {
@@ -413,7 +506,11 @@ echo ""
 
 # Print component counts
 echo "Components to sync:"
-echo "  skills/:        $(count_skills) directories"
+if [[ "$_LEVEL_EXPLICIT" == "true" ]]; then
+    echo "  skills/:        $(count_skills) directories (level filter: ${LEVEL_FILTER}, include-debug: ${INCLUDE_DEBUG})"
+else
+    echo "  skills/:        $(count_skills) directories"
+fi
 echo "  agents/configs: $(count_agents) files"
 echo "  hooks/:         $(count_hooks) items"
 echo "  .claude-plugin: plugin.json + metadata"
@@ -511,8 +608,8 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Created target directory${NC}"
 
     # Sync components
-    echo "  Syncing skills..."
-    rsync -a --delete "${SOURCE_ROOT}/skills/" "${TARGET}/skills/"
+    echo "  Syncing skills (level: ${LEVEL_FILTER}, include-debug: ${INCLUDE_DEBUG})..."
+    sync_skills_filtered "${SOURCE_ROOT}/skills" "${TARGET}/skills"
 
     echo "  Syncing agents..."
     rsync -a --delete "${SOURCE_ROOT}/agents/" "${TARGET}/agents/"

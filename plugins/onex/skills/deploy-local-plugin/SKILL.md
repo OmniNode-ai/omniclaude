@@ -38,10 +38,36 @@ This skill solves the deployment gap between development and testing.
 # Deploy without bumping version
 /deploy-local-plugin --execute --no-version-bump
 
+# New user install — daily driver skills only (excludes debug: true skills)
+/deploy-local-plugin --execute --level basic
+
+# Intermediate user install
+/deploy-local-plugin --execute --level intermediate
+
+# Full install including debug/diagnostic skills
+/deploy-local-plugin --execute --include-debug
+
 # Repair: build lib/.venv in the active deployed version (no file sync, no version bump)
 # Use when hooks fail with "No valid Python found" after a deploy
 /deploy-local-plugin --repair-venv
 ```
+
+## Skill Tier Filtering
+
+`--level basic|intermediate|advanced` controls which skills are copied into the plugin cache.
+Filtering is **inclusive downward** — lower tiers are always included when a higher tier is requested:
+
+| Flag | Skills included |
+|------|----------------|
+| `--level basic` | Only `level: basic` skills |
+| `--level intermediate` | `level: basic` + `level: intermediate` skills |
+| `--level advanced` | All skills (default — identical to omitting `--level`) |
+
+Skills marked `debug: true` are **excluded** from all filtered deploys (any explicit `--level`)
+unless `--include-debug` is also passed. When no `--level` flag is used, debug skills are
+included as before (backwards-compatible default).
+
+Internal support library dirs (prefixed with `_`) are always included regardless of filter.
 
 ## How It Works
 
