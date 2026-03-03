@@ -107,18 +107,18 @@ def applicable_checks(
     - ``AuditCheckStatus.WARN`` — check applies but result is downgraded to WARN
       (used for unknown node types where topic checks are unreliable)
 
-    Applicability matrix:
+    Applicability matrix (check → applies to):
 
-    - skill_md              : All skills
-    - orchestrator_node     : All skills
-    - contract_yaml         : All skills
-    - event_bus_present     : Orchestrator nodes only
-    - topics_nonempty       : Orchestrator nodes where requires_event_bus=True
-    - topics_namespaced     : Orchestrator nodes where requires_event_bus=True
-    - test_coverage         : All skills
-    - linear_ticket         : All skills
+    - skill_md: All skills
+    - orchestrator_node: All skills
+    - contract_yaml: All skills
+    - event_bus_present: Orchestrator nodes only
+    - topics_nonempty: Orchestrator nodes where requires_event_bus=True
+    - topics_namespaced: Orchestrator nodes where requires_event_bus=True
+    - test_coverage: All skills
+    - linear_ticket: All skills
 
-    Unknown node types: only CRITICAL checks apply; topic checks are downgraded to WARN.
+    Unknown node types: only universal checks apply; topic checks are downgraded to WARN.
 
     Args:
         node_type: The ``node_type`` value from contract.yaml.
