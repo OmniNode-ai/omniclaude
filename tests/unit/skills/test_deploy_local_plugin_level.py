@@ -80,9 +80,7 @@ def _run_filter_check(
         # Match deploy.sh: _LEVEL_EXPLICIT is true only when --level was explicitly passed.
         # For the default-advanced case (no flag), _LEVEL_EXPLICIT=false so debug skills
         # are not excluded (backwards-compatible behaviour).
-        _explicit = (
-            "false" if (level_filter == "advanced" and not include_debug) else "true"
-        )
+        _explicit = "false" if level_filter == "advanced" else "true"
     else:
         _explicit = "true" if level_explicit else "false"
 
@@ -112,7 +110,16 @@ def _run_filter_check(
         timeout=10,
         check=False,
     )
-    return "PASS" in result.stdout
+    if result.returncode != 0:
+        raise AssertionError(
+            f"_run_filter_check script failed (exit {result.returncode}):\n"
+            f"  stdout: {result.stdout!r}\n"
+            f"  stderr: {result.stderr!r}"
+        )
+    output = result.stdout.strip()
+    if output not in {"PASS", "FAIL"}:
+        raise AssertionError(f"Unexpected helper output: {output!r}")
+    return output == "PASS"
 
 
 # ---------------------------------------------------------------------------

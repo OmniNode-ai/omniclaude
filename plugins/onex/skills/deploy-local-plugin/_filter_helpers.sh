@@ -12,13 +12,15 @@
 
 # =============================================================================
 # _level_rank <level> → prints integer rank (basic=1, intermediate=2, advanced=3)
+# Unknown levels return a sentinel rank (100) that sorts after all valid levels,
+# causing the <= comparison in _skill_passes_filter to exclude them.
 # =============================================================================
 _level_rank() {
     case "$1" in
         basic)        echo 1 ;;
         intermediate) echo 2 ;;
         advanced)     echo 3 ;;
-        *)            echo 0 ;;   # unknown — treat as excluded
+        *)            echo 100 ;;  # unknown — sentinel: excluded by <= comparison
     esac
 }
 

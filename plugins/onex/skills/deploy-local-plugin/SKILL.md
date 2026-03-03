@@ -61,7 +61,7 @@ Filtering is **inclusive downward** — lower tiers are always included when a h
 |------|----------------|
 | `--level basic` | Only `level: basic` skills |
 | `--level intermediate` | `level: basic` + `level: intermediate` skills |
-| `--level advanced` | All skills (default — identical to omitting `--level`) |
+| `--level advanced` | All non-debug skills (all levels); `debug: true` skills excluded unless `--include-debug` is passed |
 
 Skills marked `debug: true` are **excluded** from all filtered deploys (any explicit `--level`)
 unless `--include-debug` is also passed. When no `--level` flag is used, debug skills are
