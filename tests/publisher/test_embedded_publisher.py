@@ -254,6 +254,35 @@ class TestEmbeddedEventPublisher:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_publish_event_with_uuid_payload(
+        self,
+        publisher: EmbeddedEventPublisher,
+        mock_event_bus: MagicMock,
+    ) -> None:
+        """UUID values in payload must serialize without raising TypeError."""
+        import uuid as uuid_mod
+        from datetime import UTC, datetime
+
+        test_uuid = uuid_mod.uuid4()
+        event = ModelQueuedEvent(
+            event_id="uuid-test",
+            event_type="test.event",
+            topic="test-topic",
+            payload={"session_id": test_uuid, "label": "test"},
+            queued_at=datetime.now(UTC),
+        )
+
+        result = await publisher._publish_event(event)
+        assert result is True
+        mock_event_bus.publish.assert_awaited_once()
+
+        # Verify the published value bytes contain the UUID serialized as a string
+        call_kwargs = mock_event_bus.publish.await_args.kwargs
+        value_bytes: bytes = call_kwargs["value"]
+        parsed = json.loads(value_bytes)
+        assert parsed.get("session_id") == str(test_uuid)
+
+    @pytest.mark.asyncio
     async def test_publisher_loop_retries_then_drops(
         self,
         publisher_config: PublisherConfig,
