@@ -2,13 +2,13 @@
 
 You are generating a Ticket Context Bundle for ticket {ticket_id}.
 
-## Step 1: Check for existing fresh bundle
+## Freshness Check
 
 Read `~/.claude/tcb/{ticket_id}/bundle.json` if it exists.
 If exists AND `is_stale()` returns False AND `force_regenerate` is not set: STOP and output
 "TCB exists and is fresh -- skip. Use force_regenerate=true to override."
 
-## Step 2: Fetch ticket from Linear
+## Ticket Fetch
 
 Use Linear MCP to fetch the ticket. Extract:
 - `title` -- the primary intent signal
@@ -16,7 +16,7 @@ Use Linear MCP to fetch the ticket. Extract:
 - `labels` -- capability/risk hints
 - `epic_id` -- if present, fetch epic for additional repo scope
 
-## Step 3: Normalize intent
+## Intent Normalization
 
 Intent text = "{title}\n{description}"
 
@@ -31,9 +31,9 @@ Apply keyword matching against repo_manifest:
 
 Extract risk tags (migration, security, concurrency, perf, integration) and capability tags.
 
-## Step 4: Retrieve candidates
+## Candidate Retrieval
 
-### 4a: File entrypoints
+### File entrypoints
 
 For each repo in `normalized.repos`:
 
@@ -47,7 +47,7 @@ For each candidate file: note days since last commit and 30-day commit frequency
 Score each using `score_candidate(path, modules, repos, days_since_commit, commit_freq)`.
 Take top 10 by score.
 
-### 4b: Related PRs
+### Related PRs
 
 ```bash
 # PRs merged in last 14 days touching the same modules
@@ -57,7 +57,7 @@ gh pr list --repo OmniNode-ai/{repo} --state merged --limit 20 \
 
 Take up to 5 related PRs per repo (top 10 total). Score by recency.
 
-### 4c: Test recommendations
+### Test recommendations
 
 For each suggested_entrypoint file at `src/{repo}/foo.py`:
 - Look for corresponding test at `tests/unit/.../{test_name}.py` (mirror the path)
@@ -65,7 +65,7 @@ For each suggested_entrypoint file at `src/{repo}/foo.py`:
 - Score: proximity to entrypoint (1.0 if mirrored path, 0.6 if module match)
 Take top 15 tests by score.
 
-### 4d: Patterns and constraints
+### Patterns and constraints
 
 Check `~/.claude/patterns/active_patterns.json` if it exists (written by node_pattern_feedback_effect).
 Filter patterns by `status == "active"` and any tag overlap with capability_tags.
@@ -76,12 +76,12 @@ Hard-coded constraints that always apply if modules overlap:
 - `contracts/` or `contract.yaml` touched -> add constraint: "No contract changes without version bump" (severity: error)
 - `auth` in capability_tags -> add constraint: "Auth changes require security review sign-off" (severity: error)
 
-## Step 5: Assemble bundle
+## Bundle Assembly
 
 Create `ModelTicketContextBundle` with all collected data, applying size caps.
 `created_at` = now (UTC), `ttl_days` = 7.
 
-## Step 6: Store JSON artifact
+## Artifact Storage
 
 ```bash
 mkdir -p ~/.claude/tcb/{ticket_id}
@@ -89,7 +89,7 @@ mkdir -p ~/.claude/tcb/{ticket_id}
 
 Write bundle as JSON to `~/.claude/tcb/{ticket_id}/bundle.json`.
 
-## Step 7: Post to Linear ticket
+## Linear Comment
 
 Call Linear MCP `create_comment`:
 ```
@@ -97,6 +97,6 @@ issueId: {ticket_id}
 body: {tcb.to_markdown_summary()}
 ```
 
-## Step 8: Output result
+## Output
 
 Print: "TCB generated for {ticket_id}: {len(entrypoints)} entrypoints, {len(tests)} tests, {len(patterns)} patterns, TTL {ttl_days}d"
