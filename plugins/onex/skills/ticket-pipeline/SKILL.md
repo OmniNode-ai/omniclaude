@@ -353,7 +353,24 @@ ticket-pipeline OMN-XXXX
 - Autonomous: loops until clean or policy limits hit
 - Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
 - Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 2.5 (only if quality gate passed: 2 confirmed-clean runs)
+- AUTO-ADVANCE to Phase 2.4 (only if quality gate passed: 2 confirmed-clean runs)
+
+### Phase 2.4: hostile_review
+
+**Trigger:** After local_review confirms 2 consecutive clean passes. Runs BEFORE mergeability_gate.
+
+**Action:**
+1. Invoke `@skills/hostile-reviewer` with PR number, repo, and ticket_id
+2. Read result from `~/.claude/skill-results/{context_id}/hostile-reviewer.json`
+3. If `overall_verdict == "blocking_issue"`:
+   - Re-enter implementation phase (set phase back to `implement`)
+   - Attach hostile reviewer findings to ticket context as "blocking findings"
+   - Increment `hostile_block_count` in ledger (cap at 3; if exceeded, post MEDIUM_RISK Slack gate to human)
+4. If `overall_verdict == "risks_noted"` or `"clean"`:
+   - Note risks in PR description under a "Hostile Review Notes" section
+   - Advance to Phase 2.5 (mergeability_gate)
+
+- AUTO-ADVANCE to Phase 2.5 (on risks_noted or clean)
 
 ### Phase 2.5: mergeability_gate
 
@@ -465,9 +482,18 @@ integration_debt: true|false
   2. At least 1 approved review, no current CHANGES_REQUESTED
   3. No unresolved review comments
 - Returns: `status: merged | held | failed`
-- On `merged`: clear ticket-run ledger entry, post Slack "merged", update Linear to Done
+- On `merged`: clear ticket-run ledger entry, post Slack "merged", update Linear to Done, emit TCB outcome metric via `@_lib/pipeline-metrics/helpers.md`
 - On `held`: pipeline exits cleanly; `held` is **not** a terminal state — the pipeline resumes when a human replies "merge" to the Slack HIGH_RISK gate. `merge_gate_timeout_hours` (default 48h) controls how long the gate stays open before expiring. On expiry, the ledger entry is cleared and a new pipeline run is required.
 - On `failed`: post Slack MEDIUM_RISK gate, stop pipeline
+
+#### Metrics Emission
+
+At each phase exit, emit via `@_lib/pipeline-metrics/helpers.md`:
+- Phase entry time is recorded at phase start
+- Emit on phase exit (pass or fail)
+- Track `iteration_count` via ledger (increment on each `implement` phase re-entry)
+
+After auto_merge success: emit TCB outcome event (entrypoints used vs suggested).
 
 ## Pipeline Policy
 
@@ -501,6 +527,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `merge_gate_timeout_hours` | `48` | Hours to wait for explicit "merge" reply (HIGH_RISK held, no auto-advance); on expiry the ledger entry is cleared and the pipeline exits with `timeout` state requiring a new run |
 | `merge_strategy` | `squash` | Merge strategy: squash \| merge \| rebase |
 | `delete_branch_on_merge` | `true` | Delete branch after successful merge |
+| `hostile_block_count` | `0` | Running count of blocking issues found by hostile_review phase; capped at 3 before posting MEDIUM_RISK Slack gate |
 
 ## Cross-Repo Auto-Split
 
@@ -823,6 +850,8 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
+- `hostile-reviewer` skill (Phase 2.4, OMN-3107)
+- `_lib/pipeline-metrics/helpers.md` (phase transition + TCB outcome metrics, OMN-3107)
 - `ci-watch` skill (Phase 4, OMN-2523)
 - `pr-watch` skill (Phase 5, OMN-2524)
 - `contract-compliance-check` skill (Phase 5.5 Gate 1, OMN-2978)
