@@ -2,6 +2,8 @@
 name: pipeline-metrics
 description: Report pipeline health metrics — rework ratio, cycle time, CI stability, and feature velocity
 version: 1.0.0
+level: advanced
+debug: false
 category: reporting
 tags:
   - metrics

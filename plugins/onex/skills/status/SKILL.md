@@ -1,7 +1,9 @@
 ---
-name: onex-status
+name: status
 description: Show current OmniClaude integration tier, probe age, and per-service reachability for self-diagnosis
 version: 1.0.0
+level: advanced
+debug: true
 category: debug
 tags:
   - debug
@@ -12,7 +14,7 @@ tags:
 author: OmniClaude Team
 ---
 
-# /onex-status
+# /onex:status
 
 Display the current OmniClaude integration tier, probe file age, and per-service reachability.
 Useful for self-diagnosing misconfiguration instantly.
@@ -20,7 +22,7 @@ Useful for self-diagnosing misconfiguration instantly.
 ## Quick Start
 
 ```
-/onex-status
+/onex:status
 ```
 
 ## What It Shows
@@ -38,7 +40,7 @@ Services:
 Probe file:    ~/.claude/.onex_capabilities
 Last updated:  2026-02-25T16:15:00Z
 
-To refresh: restart Claude Code session or run /onex-status again
+To refresh: restart Claude Code session or run /onex:status again
 ```
 
 ## Behavior
@@ -54,12 +56,12 @@ To refresh: restart Claude Code session or run /onex-status again
 |---------|-------------|--------|
 | `STANDALONE` (unexpected) | `KAFKA_BOOTSTRAP_SERVERS` not set or unreachable | Set env var and restart Claude Code session |
 | `EVENT_BUS` instead of `FULL_ONEX` | Intelligence service not reachable | Check `INTELLIGENCE_SERVICE_URL` and service health |
-| `UNKNOWN (re-probing...)` | First session or stale probe file | Run `/onex-status` again in 5s |
+| `UNKNOWN (re-probing...)` | First session or stale probe file | Run `/onex:status` again in 5s |
 | Probe file older than 5 min | SessionStart probe not running | Check session-start.sh logs |
 
 ## Implementation
 
-This skill invokes `plugins/onex/skills/onex-status/status.py` which:
+This skill invokes `plugins/onex/skills/status/status.py` which:
 - Imports `capability_probe` when available (requires OMN-2782 to be deployed)
 - Falls back to inline probe logic when `capability_probe.py` is not yet installed
 - Always exits cleanly — never raises exceptions to the user

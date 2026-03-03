@@ -2,6 +2,8 @@
 name: test-driven-development
 description: Use when implementing any feature or bugfix, before writing implementation code - write the test first, watch it fail, write minimal code to pass; ensures tests actually verify behavior by requiring failure first
 version: 1.0.0
+level: basic
+debug: false
 category: testing
 tags:
   - testing

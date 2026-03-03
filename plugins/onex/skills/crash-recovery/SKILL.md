@@ -2,6 +2,8 @@
 name: crash-recovery
 description: Show recent pipeline state to orient after an unexpected session end or crash
 version: "1.0.0"
+level: advanced
+debug: true
 category: pipeline
 tags:
   - pipeline

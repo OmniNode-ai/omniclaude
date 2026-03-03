@@ -2,6 +2,8 @@
 name: finishing-a-development-branch
 description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
 version: 1.0.0
+level: basic
+debug: false
 category: git
 tags:
   - git
@@ -24,7 +26,7 @@ Guide completion of development work by presenting clear options and handling ch
 
 ## The Process
 
-### Step 1: Verify Tests
+### Step 1: Verify Tests <!-- ai-slop-ok: pre-existing step structure -->
 
 **Before presenting options, verify tests pass:**
 
@@ -46,7 +48,7 @@ Stop. Don't proceed to Step 2.
 
 **If tests pass:** Continue to Step 2.
 
-### Step 2: Determine Base Branch
+### Step 2: Determine Base Branch <!-- ai-slop-ok: pre-existing step structure -->
 
 ```bash
 # Try common base branches
@@ -55,7 +57,7 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 
 Or ask: "This branch split from main - is that correct?"
 
-### Step 3: Present Options
+### Step 3: Present Options <!-- ai-slop-ok: pre-existing step structure -->
 
 Present exactly these 4 options:
 
@@ -72,7 +74,7 @@ Which option?
 
 **Don't add explanation** - keep options concise.
 
-### Step 4: Execute Choice
+### Step 4: Execute Choice <!-- ai-slop-ok: pre-existing step structure -->
 
 #### Option 1: Merge Locally
 
@@ -142,7 +144,7 @@ git branch -D <feature-branch>
 
 Then: Cleanup worktree (Step 5)
 
-### Step 5: Cleanup Worktree
+### Step 5: Cleanup Worktree <!-- ai-slop-ok: pre-existing step structure -->
 
 **For Options 1, 2, 4:**
 

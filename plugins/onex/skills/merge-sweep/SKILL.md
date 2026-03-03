@@ -2,6 +2,8 @@
 name: merge-sweep
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
 version: 3.0.0
+level: advanced
+debug: false
 category: workflow
 tags:
   - pr

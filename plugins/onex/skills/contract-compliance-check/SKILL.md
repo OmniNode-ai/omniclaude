@@ -1,6 +1,8 @@
 ---
 name: contract-compliance-check
 description: Pre-merge seam validation — reads a ModelTicketContract, diffs the branch against origin/main, and returns PASS / WARN / BLOCK with emergency_bypass support
+level: advanced
+debug: false
 ---
 
 # contract-compliance-check skill

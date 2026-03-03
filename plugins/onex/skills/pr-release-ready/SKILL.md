@@ -2,6 +2,8 @@
 name: pr-release-ready
 description: PR Release Ready - Fix ALL Issues including nitpicks
 version: 1.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - pr
@@ -35,7 +37,7 @@ Fetch all PR review comments including nitpicks. No dispatch needed.
 ### Fix Phase -- dispatch via parallel-solve
 
 ```
-Skill(skill="parallel-solve")
+Skill(skill="onex:parallel-solve")
 ```
 
 Pass ALL collated issues (including nitpicks) as context.

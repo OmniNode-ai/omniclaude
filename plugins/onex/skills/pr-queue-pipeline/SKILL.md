@@ -2,6 +2,8 @@
 name: pr-queue-pipeline
 description: Daily org-wide PR queue drain — review all PRs, fix broken PRs, then merge all ready PRs with a single Slack gate (v1 adds review-all-prs as Phase 1; use --skip-review for v0 behavior)
 version: 0.2.0
+level: advanced
+debug: false
 category: workflow
 tags:
   - pr

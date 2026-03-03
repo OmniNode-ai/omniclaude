@@ -2,6 +2,8 @@
 name: integration-gate
 description: Cross-repo integration gate — scans repos for merge-ready PRs, classifies into lanes (fast/standard/high_risk), detects cross-repo dependencies, applies topological ordering, and enqueues into GitHub Merge Queue with Slack gate approval
 version: 1.1.0
+level: advanced
+debug: true
 category: workflow
 tags:
   - integration

@@ -2,6 +2,8 @@
 name: ticket-work
 description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
 version: 2.0.0
+level: basic
+debug: false
 category: workflow
 tags:
   - linear
@@ -247,7 +249,7 @@ After user approves spec ("approve spec", "build it"), execute automation steps 
 status, contract update) then run the Decision Context Loader and structural conflict gate
 **before** dispatching the implementation agent:
 
-#### Step 1: DecisionContextLoader (inline, no dispatch)
+#### Step 1: DecisionContextLoader (inline, no dispatch) <!-- ai-slop-ok: pre-existing step structure -->
 
 ```
 # Run inline before dispatching implementation agent:
@@ -269,7 +271,7 @@ status, contract update) then run the Decision Context Loader and structural con
 #    Store block in context for injection into polymorphic agent prompt.
 ```
 
-#### Step 2: structural conflict gate (inline, no dispatch)
+#### Step 2: structural conflict gate (inline, no dispatch) <!-- ai-slop-ok: pre-existing step structure -->
 
 ```
 # Run inline after DecisionContextLoader, before dispatching agent:
@@ -293,7 +295,7 @@ status, contract update) then run the Decision Context Loader and structural con
 #      Log to ticket-work log, continue to dispatch
 ```
 
-#### Step 3: dispatch implementation agent
+#### Step 3: dispatch implementation agent <!-- ai-slop-ok: pre-existing step structure -->
 
 Dispatch only after Steps 1 and 2 complete (including any HIGH_RISK gate resolution):
 

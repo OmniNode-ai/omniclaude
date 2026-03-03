@@ -1,6 +1,8 @@
 ---
 name: linear-ticket-management
 description: Create, update, list, and manage Linear tickets with requirements and definition of done
+level: basic
+debug: false
 ---
 
 # Linear Ticket Management

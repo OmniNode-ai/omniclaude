@@ -2,6 +2,8 @@
 name: defense-in-depth
 description: Use when invalid data causes failures deep in execution, requiring validation at multiple system layers - validates at every layer data passes through to make bugs structurally impossible
 version: 1.0.0
+level: advanced
+debug: false
 category: methodology
 tags:
   - validation

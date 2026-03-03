@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT
 
 # Copyright (c) 2025 OmniNode Team
-"""NodeSkillOnexStatusOrchestrator — thin orchestrator shell for the onex-status skill.
+"""NodeSkillStatusOrchestrator — thin orchestrator shell for the status skill.
 
-Capability: skill.onex_status
+Capability: skill.status
 All dispatch logic lives in the shared handle_skill_requested handler.
 """
 
@@ -18,17 +18,17 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeSkillOnexStatusOrchestrator(NodeOrchestrator):
-    """Orchestrator node for the onex-status skill.
+class NodeSkillStatusOrchestrator(NodeOrchestrator):
+    """Orchestrator node for the status skill.
 
-    Capability: skill.onex_status
+    Capability: skill.status
 
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:
-        """Initialize the NodeSkillOnexStatusOrchestrator.
+        """Initialize the NodeSkillStatusOrchestrator.
 
         Args:
             container: ONEX container for dependency injection.
@@ -36,4 +36,4 @@ class NodeSkillOnexStatusOrchestrator(NodeOrchestrator):
         super().__init__(container)
 
 
-__all__ = ["NodeSkillOnexStatusOrchestrator"]
+__all__ = ["NodeSkillStatusOrchestrator"]

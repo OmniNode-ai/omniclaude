@@ -1,6 +1,8 @@
 ---
 name: routing
 description: Request agent routing decisions via Kafka event bus — maps user prompts to the most appropriate specialized agent
+level: advanced
+debug: true
 ---
 
 # Routing

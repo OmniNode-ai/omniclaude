@@ -2,6 +2,8 @@
 name: runner-deploy
 description: Deploy or update self-hosted GitHub Actions runners on the OmniNode CI host <!-- onex-allow-internal-ip -->
 version: 1.0.0
+level: advanced
+debug: true
 category: tooling
 tags:
   - ci

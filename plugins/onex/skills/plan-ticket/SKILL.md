@@ -2,6 +2,8 @@
 name: plan-ticket
 description: Generate a copyable ticket contract template - fill in the blanks and pass to /create-ticket
 version: 2.0.0
+level: advanced
+debug: false
 category: workflow
 tags:
   - linear
@@ -114,7 +116,7 @@ Pre-fills title and suggests requirements.
 /create-ticket --from-contract contract.yaml --team Omninode
 ```
 
-## Step 3: Generate Contract
+## Step 3: Generate Contract <!-- ai-slop-ok: pre-existing step structure -->
 
 After outputting the ticket template, call `generate-ticket-contract` with:
 - `ticket_id`: the OMN-XXXX (or DRAFT if pre-creation)

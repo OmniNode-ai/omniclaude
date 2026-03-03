@@ -2,6 +2,8 @@
 name: create-ticket
 description: Create a single Linear ticket from args, contract file, or plan milestone with conflict resolution
 version: 1.0.0
+level: basic
+debug: false
 category: workflow
 tags: [linear, tickets, automation]
 author: OmniClaude Team
@@ -434,7 +436,7 @@ mcp__linear-server__update_issue(
 
 ## Execution Flow
 
-### Step 1: Parse Arguments
+### Step 1: Parse Arguments <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 # Validate mutual exclusivity
@@ -450,7 +452,7 @@ if args.from_plan and not args.milestone:
     error("--from-plan requires --milestone")
 ```
 
-### Step 2: Load Ticket Data
+### Step 2: Load Ticket Data <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 if args.title:
@@ -461,7 +463,7 @@ elif args.from_plan:
     ticket_data = parse_plan_milestone(args.from_plan, args.milestone)
 ```
 
-### Step 3: Check for Conflicts
+### Step 3: Check for Conflicts <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 existing = search_existing_tickets(ticket_data["title"], args.team)
@@ -478,7 +480,7 @@ if existing:
         return
 ```
 
-### Step 4: Generate Description
+### Step 4: Generate Description <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 description = build_ticket_description(ticket_data, args)
@@ -540,7 +542,7 @@ if args.blocked_by:
 
 **Foundation repos**: omnibase_core, omnibase_spi, omnibase_infra
 
-### Step 5: Create Ticket
+### Step 5: Create Ticket <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 # Build create params
@@ -560,7 +562,7 @@ if args.blocked_by:
 result = mcp__linear-server__create_issue(**params)
 ```
 
-### Step 6: Report Success
+### Step 6: Report Success <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 print(f"""

@@ -2,6 +2,8 @@
 name: decompose-epic
 description: Analyze a Linear epic description and create sub-tickets as Linear children
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags: [epic, linear, decomposition, planning]
 author: OmniClaude Team

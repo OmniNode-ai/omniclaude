@@ -2,6 +2,8 @@
 name: rrh
 description: Opt-in preflight validation via Release Readiness Handshake (RRH) -- runs A1 (collect) -> A2 (validate) -> A3 (store) pipeline before side-effecting phases
 version: 1.0.0
+level: advanced
+debug: false
 category: validation
 tags:
   - rrh
