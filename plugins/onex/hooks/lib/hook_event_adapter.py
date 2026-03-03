@@ -242,8 +242,6 @@ class HookEventAdapter:
         resolved = bootstrap_servers or os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
         if not resolved:
             _BUS_LOCAL_DEFAULT = "localhost:19092"
-            import warnings
-
             logging.getLogger(__name__).warning(
                 "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s (bus_local). "
                 "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (bus_local) or "
