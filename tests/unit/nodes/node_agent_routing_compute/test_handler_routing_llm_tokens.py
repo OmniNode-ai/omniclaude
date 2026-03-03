@@ -140,13 +140,16 @@ class TestHandlerRoutingLlmTokens:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            selected, prompt_tokens, completion_tokens, total_tokens = (
-                await handler._ask_llm(
-                    candidates=candidates,
-                    prompt="debug this",
-                    agent_names=agent_names,
-                    correlation_id=uuid4(),
-                )
+            (
+                selected,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            ) = await handler._ask_llm(
+                candidates=candidates,
+                prompt="debug this",
+                agent_names=agent_names,
+                correlation_id=uuid4(),
             )
 
         assert selected == "agent-debugger"
@@ -186,13 +189,16 @@ class TestHandlerRoutingLlmTokens:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            selected, prompt_tokens, completion_tokens, total_tokens = (
-                await handler._ask_llm(
-                    candidates=candidates,
-                    prompt="debug this",
-                    agent_names=agent_names,
-                    correlation_id=uuid4(),
-                )
+            (
+                selected,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+            ) = await handler._ask_llm(
+                candidates=candidates,
+                prompt="debug this",
+                agent_names=agent_names,
+                correlation_id=uuid4(),
             )
 
         assert selected == "agent-debugger"
