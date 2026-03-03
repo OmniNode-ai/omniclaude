@@ -1477,7 +1477,7 @@ class ManifestInjector:
                         data = await response.json()
                         # OpenAI-compatible format: data[0].embedding
                         embedding = data["data"][0]["embedding"]
-                        return cast(list[float], embedding)
+                        return cast("list[float]", embedding)
                     else:
                         error_text = await response.text()
                         raise OnexError(
@@ -2316,7 +2316,7 @@ class ManifestInjector:
             # Derive display info for the response regardless of DSN vs fields
             dsn = settings.omniclaude_db_url.get_secret_value().strip()
             host = settings.postgres_host or ("(via DSN)" if dsn else "")
-            port = settings.postgres_port or (0 if dsn else 0)
+            port = settings.postgres_port or 0
             database = settings.postgres_database or ("(via DSN)" if dsn else "")
 
             # Check credentials availability
