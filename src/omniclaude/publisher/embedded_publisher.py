@@ -24,7 +24,7 @@ import os
 import signal
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
 
 from omnibase_core.errors import OnexError
@@ -61,6 +61,28 @@ from omniclaude.publisher.publisher_models import (
 logger = logging.getLogger(__name__)
 
 PUBLISHER_POLL_INTERVAL_SECONDS: float = 0.1
+
+
+class _UUIDDatetimeEncoder(json.JSONEncoder):
+    """JSON encoder that serializes UUID and datetime objects.
+
+    ``JsonType`` (omnibase_core) allows ``uuid.UUID`` and ``datetime`` values
+    because Pydantic's default ``model_dump()`` preserves these Python types.
+    When those payloads reach the publish path they must be converted to their
+    JSON wire representations before being passed to ``json.dumps()``.
+
+    Conversion rules:
+        - ``uuid.UUID``   → lowercase hyphenated string (RFC 4122)
+        - ``datetime``    → ISO-8601 string with timezone offset
+        - All other types → delegated to the default encoder
+    """
+
+    def default(self, o: Any) -> Any:  # noqa: ANN401
+        if isinstance(o, UUID):
+            return str(o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 class EmbeddedEventPublisher:
@@ -508,7 +530,7 @@ class EmbeddedEventPublisher:
 
             # Serialize and check size
             try:
-                transformed_json = json.dumps(transformed)
+                transformed_json = json.dumps(transformed, cls=_UUIDDatetimeEncoder)
             except (TypeError, ValueError) as e:
                 logger.warning(
                     f"Payload serialization failed for {event_type} -> {topic}: {e}"
@@ -641,7 +663,7 @@ class EmbeddedEventPublisher:
 
         try:
             key = event.partition_key.encode("utf-8") if event.partition_key else None
-            value = json.dumps(event.payload).encode("utf-8")
+            value = json.dumps(event.payload, cls=_UUIDDatetimeEncoder).encode("utf-8")
 
             payload_correlation_id = (
                 event.payload.get("correlation_id")

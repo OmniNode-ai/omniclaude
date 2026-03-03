@@ -696,3 +696,82 @@ class TestDualEmit:
 
         assert result is True
         assert primary_bus.publish.await_count == 1  # exactly one publish, no secondary
+
+
+class TestUUIDDatetimeEncoder:
+    """Tests for OMN-3514: UUID/datetime-aware JSON encoder in the publish path."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_publish_event_with_uuid_payload_succeeds(
+        self, publisher: EmbeddedEventPublisher, mock_event_bus: MagicMock
+    ) -> None:
+        """_publish_event must not raise when event.payload contains uuid.UUID objects.
+
+        Regression test for OMN-3514: JsonType allows UUID values (from model_dump()
+        without mode='json'), but json.dumps() would raise TypeError on them.
+        _UUIDDatetimeEncoder must convert them to strings before Kafka publish.
+        """
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from omniclaude.publisher.event_queue import ModelQueuedEvent
+
+        session_uuid = uuid4()
+        event = ModelQueuedEvent(
+            event_id="uuid-payload-test",
+            event_type="test.event",
+            topic="test-topic",
+            # Payload intentionally contains a raw uuid.UUID object — this mirrors
+            # what callers get when they call model_dump() (not model_dump(mode="json"))
+            # on a Pydantic model whose fields are typed as UUID.
+            payload={  # type: ignore[arg-type]
+                "session_id": session_uuid,
+                "correlation_id": uuid4(),
+                "nested": {"trace_id": uuid4()},
+                "label": "ok",
+            },
+            queued_at=datetime.now(UTC),
+        )
+
+        result = await publisher._publish_event(event)
+        assert result is True
+        mock_event_bus.publish.assert_awaited_once()
+
+        # The published value must be valid JSON bytes with UUID serialized as a string.
+        call_kwargs = mock_event_bus.publish.await_args.kwargs
+        value_bytes: bytes = call_kwargs["value"]
+        decoded = json.loads(value_bytes.decode("utf-8"))
+        assert decoded["session_id"] == str(session_uuid)
+        assert decoded["label"] == "ok"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_publish_event_with_datetime_payload_succeeds(
+        self, publisher: EmbeddedEventPublisher, mock_event_bus: MagicMock
+    ) -> None:
+        """_publish_event must not raise when event.payload contains datetime objects.
+
+        JsonType also allows datetime values (model_dump() default behaviour).
+        """
+        from datetime import UTC, datetime
+
+        from omniclaude.publisher.event_queue import ModelQueuedEvent
+
+        ts = datetime(2026, 3, 3, 12, 0, 0, tzinfo=UTC)
+        event = ModelQueuedEvent(
+            event_id="datetime-payload-test",
+            event_type="test.event",
+            topic="test-topic",
+            payload={"emitted_at": ts, "count": 1},  # type: ignore[arg-type]
+            queued_at=datetime.now(UTC),
+        )
+
+        result = await publisher._publish_event(event)
+        assert result is True
+
+        call_kwargs = mock_event_bus.publish.await_args.kwargs
+        value_bytes: bytes = call_kwargs["value"]
+        decoded = json.loads(value_bytes.decode("utf-8"))
+        assert decoded["emitted_at"] == ts.isoformat()
+        assert decoded["count"] == 1
