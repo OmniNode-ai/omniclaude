@@ -68,7 +68,7 @@ class TestCheckRouteMatcher:
         ok, msg = _check_route_matcher()
         assert ok is True
         assert "OK" in msg
-        assert "onex.cmd.omniclaude.onex-status.v1" in msg
+        assert "onex.cmd.omniclaude.status.v1" in msg
 
 
 # ---------------------------------------------------------------------------
