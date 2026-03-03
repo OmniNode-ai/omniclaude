@@ -155,7 +155,9 @@ class TestFeatureDashboardBody:
 
     def test_ticketize_mode_instructions_present(self) -> None:
         _, body = _parse_frontmatter(_SKILL_MD)
-        assert "ticketize" in body.lower(), "Body must contain ticketize mode instructions"
+        assert "ticketize" in body.lower(), (
+            "Body must contain ticketize mode instructions"
+        )
         assert "Running feature-dashboard ticketize" in body, (
             "Body must contain the ticketize announce string"
         )
@@ -184,9 +186,7 @@ class TestFeatureDashboardBody:
             "linear_ticket",
         ]
         for check in required_checks:
-            assert check in body, (
-                f"Applicability matrix must include check '{check}'"
-            )
+            assert check in body, f"Applicability matrix must include check '{check}'"
 
     def test_coverage_check_hierarchy_documented(self) -> None:
         _, body = _parse_frontmatter(_SKILL_MD)
@@ -201,9 +201,7 @@ class TestFeatureDashboardBody:
 
     def test_stable_json_behavior_documented(self) -> None:
         _, body = _parse_frontmatter(_SKILL_MD)
-        assert "stable.json" in body, (
-            "Body must document stable.json write behavior"
-        )
+        assert "stable.json" in body, "Body must document stable.json write behavior"
         assert "generated_at" in body, (
             "Body must document that generated_at is excluded from stable.json"
         )
