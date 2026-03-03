@@ -445,6 +445,73 @@ if [[ ${#MISSING_DIRS[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# =============================================================================
+# Validate progression.yaml — reject dead skill references (OMN-3455)
+# =============================================================================
+# All `from` and `to` values in skills/progression.yaml must match actual skill
+# directory names under skills/. Fail fast so dead references never ship to cache.
+PROGRESSION_YAML="${SOURCE_ROOT}/skills/progression.yaml"
+if [[ -f "$PROGRESSION_YAML" ]]; then
+    echo "Validating progression.yaml skill references..."
+    _PROGRESSION_ERRORS=0
+
+    # Collect known skill names (directories under skills/ that aren't _-prefixed)
+    # Output one skill name per line (no trailing slash)
+    _KNOWN_SKILLS=()
+    while IFS= read -r -d '' skill_dir; do
+        _KNOWN_SKILLS+=("$(basename "$skill_dir")")
+    done < <(find "${SOURCE_ROOT}/skills" -mindepth 1 -maxdepth 1 -type d -not -name '_*' -print0 2>/dev/null)
+
+    # Parse progression.yaml with python3 (yaml is stdlib-accessible via PyYAML if installed,
+    # otherwise fall back to grep-based extraction which is good enough for name validation)
+    _PARSE_CMD=""
+    if python3 -c "import yaml" 2>/dev/null; then
+        _PARSE_CMD="python3"
+    fi
+
+    if [[ -n "$_PARSE_CMD" ]]; then
+        # Extract all from/to values via Python
+        mapfile -t _REFERENCED_SKILLS < <(python3 - "$PROGRESSION_YAML" <<'PYEOF'
+import sys, yaml
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
+for edge in data.get("progressions", []):
+    for key in ("from", "to"):
+        v = str(edge.get(key, "")).strip()
+        if v:
+            print(v)
+PYEOF
+)
+    else
+        # Fallback: grep for quoted and unquoted from:/to: values
+        mapfile -t _REFERENCED_SKILLS < <(grep -E '^\s+(from|to):' "$PROGRESSION_YAML" | sed 's/.*:\s*//' | tr -d '"'"'" | tr -d ' ')
+    fi
+
+    for ref in "${_REFERENCED_SKILLS[@]}"; do
+        [[ -z "$ref" ]] && continue
+        _found=false
+        for known in "${_KNOWN_SKILLS[@]}"; do
+            if [[ "$known" == "$ref" ]]; then
+                _found=true
+                break
+            fi
+        done
+        if [[ "$_found" == "false" ]]; then
+            echo -e "${RED}  ERROR: progression.yaml references unknown skill: '${ref}'${NC}"
+            ((_PROGRESSION_ERRORS++)) || true
+        fi
+    done
+
+    if [[ "$_PROGRESSION_ERRORS" -gt 0 ]]; then
+        echo -e "${RED}progression.yaml validation failed: ${_PROGRESSION_ERRORS} dead reference(s) found.${NC}"
+        echo -e "${RED}Fix skill names in ${PROGRESSION_YAML} before deploying.${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}  progression.yaml OK ($(( ${#_REFERENCED_SKILLS[@]} )) references validated)${NC}"
+    fi
+    echo ""
+fi
+
 # Execute or show instruction
 if [[ "$EXECUTE" == "true" ]]; then
     echo "Deploying..."

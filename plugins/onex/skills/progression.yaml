@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Skill Progression Graph (OMN-3455)
+#
+# Defines which skills "unlock" which other skills based on usage history.
+# SessionStart reads ~/.claude/onex-skill-usage.log and injects 1-2 suggestions
+# when the user has used a `from` skill at least `after_uses` times without
+# having used the `to` skill yet.
+#
+# Validation: All `from` and `to` values must correspond to actual skill names.
+# The deploy-local-plugin validator rejects dead references at deploy time.
+
+progressions:
+  # Core workflow ladder: local review → PR polish
+  - from: local-review
+    to: pr-polish
+    after_uses: 5
+
+  # Core workflow ladder: ticket-work → ticket-pipeline
+  - from: ticket-work
+    to: ticket-pipeline
+    after_uses: 3
+
+  # PR review escalation: basic → advanced
+  - from: pr-review
+    to: pr-review-dev
+    after_uses: 5
+
+  # Gap analysis → gap fix workflow
+  - from: gap-analysis
+    to: gap-fix
+    after_uses: 2
+
+  # Gap fix → gap cycle (automated loop)
+  - from: gap-fix
+    to: gap-cycle
+    after_uses: 4
+
+  # Deep dive → suggest-work (use insights to drive work)
+  - from: deep-dive
+    to: suggest-work
+    after_uses: 3
+
+  # Create ticket → plan-ticket (richer planning)
+  - from: create-ticket
+    to: plan-ticket
+    after_uses: 3
+
+  # ticket-pipeline → epic-team (scale to multi-ticket workflows)
+  - from: ticket-pipeline
+    to: epic-team
+    after_uses: 5
+
+  # local-review → ultimate-validate (deeper quality validation)
+  - from: local-review
+    to: ultimate-validate
+    after_uses: 10
+
+  # pr-watch → merge-sweep (bulk PR management)
+  - from: pr-watch
+    to: merge-sweep
+    after_uses: 5
+
+  # status → project-status (team-level visibility)
+  - from: status
+    to: project-status
+    after_uses: 3
+
+  # writing-plans → plan-to-tickets (convert plans to Linear tickets)
+  - from: writing-plans
+    to: plan-to-tickets
+    after_uses: 3
+
+  # systematic-debugging → root-cause-tracing (deeper analysis)
+  - from: systematic-debugging
+    to: root-cause-tracing
+    after_uses: 3
+
+  # ci-watch → ci-fix-pipeline (automated CI repair)
+  - from: ci-watch
+    to: ci-fix-pipeline
+    after_uses: 3
