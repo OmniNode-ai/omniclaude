@@ -108,8 +108,8 @@ def get_kafka_bootstrap_servers() -> str:
     Raises OnexError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
 
     Returns:
-        Bootstrap server address (e.g., "<kafka-bootstrap-servers>:29092" for host scripts
-        or "omninode-bridge-redpanda:9092" for Docker services)
+        Bootstrap server address (e.g., "localhost:19092" for bus_local
+        or "localhost:29092" for bus_cloud)
 
     Raises:
         OnexError: If KAFKA_BOOTSTRAP_SERVERS is not set in environment
@@ -117,8 +117,8 @@ def get_kafka_bootstrap_servers() -> str:
 
     Note:
         Configuration context matters:
-        - Docker services: Use "omninode-bridge-redpanda:9092"
-        - Host scripts: Use "<kafka-bootstrap-servers>:29092"
+        - bus_local (default): Use "localhost:19092" (local Docker Redpanda, OMN-3431)
+        - bus_cloud: Use "localhost:29092" (cloud Kafka via launchd tunnel)
         Set via KAFKA_BOOTSTRAP_SERVERS in .env file
     """
     bootstrap = settings.get_effective_kafka_bootstrap_servers()
@@ -129,14 +129,14 @@ def get_kafka_bootstrap_servers() -> str:
             message=(
                 "KAFKA_BOOTSTRAP_SERVERS not configured. "
                 "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
-                "Use 'omninode-bridge-redpanda:9092' for Docker services "
-                "or '<kafka-bootstrap-servers>:29092' for host scripts. "
+                "Use 'localhost:19092' for bus_local (local Docker Redpanda, OMN-3431) "
+                "or 'localhost:29092' for bus_cloud (launchd tunnel). "
                 "See CLAUDE.md for deployment context details."
             ),
             details={
                 "setting": "KAFKA_BOOTSTRAP_SERVERS",
-                "docker_value": "omninode-bridge-redpanda:9092",
-                "host_value": "<kafka-bootstrap-servers>:29092",
+                "bus_local_value": "localhost:19092",
+                "bus_cloud_value": "localhost:29092",
             },
         )
 

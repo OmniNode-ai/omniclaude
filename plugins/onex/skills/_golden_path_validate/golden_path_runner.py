@@ -11,7 +11,7 @@ Usage::
 
     from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
 
-    runner = GoldenPathRunner(bootstrap_servers="192.168.86.200:29092")  # onex-allow-internal-ip
+    runner = GoldenPathRunner(bootstrap_servers="localhost:19092")
     artifact = await runner.run(decl)
 
 Declaration format::
@@ -286,7 +286,7 @@ class AssertionEngine:
 _DEFAULT_ARTIFACT_BASE_DIR = str(Path.home() / ".claude" / "golden-path")
 _DEFAULT_BOOTSTRAP_SERVERS = os.environ.get(
     "KAFKA_BOOTSTRAP_SERVERS",
-    "192.168.86.200:29092",  # onex-allow-internal-ip
+    "localhost:19092",  # bus_local default (OMN-3431)
 )
 
 

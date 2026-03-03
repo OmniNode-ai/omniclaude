@@ -227,7 +227,7 @@ class AgentActionsConsumer:
         if not kafka_brokers_str:
             raise ValueError(
                 "KAFKA_BOOTSTRAP_SERVERS must be set via config file or environment variable. "
-                "Example: KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
+                "Example: KAFKA_BOOTSTRAP_SERVERS=localhost:19092"
             )
         self.kafka_brokers = kafka_brokers_str.split(",")
 
@@ -289,7 +289,7 @@ class AgentActionsConsumer:
         if not postgres_host:
             raise ValueError(
                 "POSTGRES_HOST environment variable must be set. "
-                "Example: POSTGRES_HOST=192.168.86.200"
+                "Example: POSTGRES_HOST=localhost"
             )
 
         if SETTINGS_AVAILABLE:

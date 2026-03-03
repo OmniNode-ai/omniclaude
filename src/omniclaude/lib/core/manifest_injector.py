@@ -672,7 +672,7 @@ class ManifestInjector:
 
         Args:
             kafka_brokers: Kafka bootstrap servers
-                Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
+                Default: KAFKA_BOOTSTRAP_SERVERS env var or localhost:19092 (bus_local, OMN-3431)
             enable_intelligence: Enable event-based queries
             query_timeout_ms: Timeout for intelligence queries (default: 10000ms)
                              Increased from 5000ms to account for Kafka delivery retries
@@ -686,7 +686,7 @@ class ManifestInjector:
         self.logger = logging.getLogger(__name__)
 
         self.kafka_brokers = kafka_brokers or os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
+            "KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"
         )
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms
