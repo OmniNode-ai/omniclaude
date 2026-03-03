@@ -259,6 +259,29 @@ No active decisions for this scope.
 contradicts an injected decision before proceeding. Contradictions trigger a Slack
 `MEDIUM_RISK` notification and require human confirmation to continue.
 
+#### TCB Injection (Phase 0.5 extension, OMN-3104)
+
+After loading architectural decisions:
+
+1. Check `~/.claude/tcb/{ticket_id}/bundle.json`
+2. If exists and fresh (not stale): load the bundle
+3. If stale or missing: invoke `@skills/generate-tcb` with `ticket_id` (blocking -- wait for completion)
+4. Prepend TCB markdown summary to the working context under this header:
+
+   ```
+   ---
+   ## TICKET CONTEXT BUNDLE (Suggestions -- Verify Before Acting)
+   {tcb.to_markdown_summary()}
+   ---
+   ```
+
+5. Log: "TCB loaded for {ticket_id} (age: {age_days}d, entrypoints: {N}, tests: {M})"
+
+**Important**: TCB content is SUGGESTIONS, not requirements. The agent MUST:
+- Verify each suggested entrypoint still exists before using it
+- Cite which TCB suggestions were used in the PR description's TCB section
+- Note any suggestions that were irrelevant or incorrect (feeds future scoring)
+
 AUTO-ADVANCE to Phase 0.6
 
 ### Phase 0.6: structural conflict gate (before implement)

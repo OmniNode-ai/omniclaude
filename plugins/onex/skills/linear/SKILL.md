@@ -209,6 +209,20 @@ Each issue dict contains:
 | MINOR | 3 (Normal) | Code quality, documentation |
 | NITPICK | 4 (Low) | Style, formatting, naming |
 
+## Post-Creation: TCB Generation
+
+After successfully creating a ticket and receiving its ID:
+
+1. Invoke `@skills/generate-tcb` with the new ticket ID (and epic_id if known)
+2. This is fire-and-forget for now -- if TCB generation fails, log a warning but do NOT fail ticket creation
+3. Log: "TCB queued for {ticket_id}"
+
+Note: TCB generation may take 10-30 seconds. The ticket creation response should be returned
+to the user immediately; TCB generation happens asynchronously in the background.
+
+**Async pattern**: Use Task() with `run_in_background=true` if available. If not available,
+dispatch as a sequential step after ticket creation confirm message is delivered.
+
 ## MCP Integration
 
 This skill uses the Linear MCP server for all API operations. Linear MCP is retained because:
