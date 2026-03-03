@@ -725,7 +725,8 @@ class TestUUIDDatetimeEncoder:
             # Payload intentionally contains a raw uuid.UUID object — this mirrors
             # what callers get when they call model_dump() (not model_dump(mode="json"))
             # on a Pydantic model whose fields are typed as UUID.
-            payload={  # type: ignore[arg-type]
+            # JsonType allows UUID values (JsonPrimitive includes UUID), so no type: ignore needed.
+            payload={
                 "session_id": session_uuid,
                 "correlation_id": uuid4(),
                 "nested": {"trace_id": uuid4()},
@@ -763,7 +764,7 @@ class TestUUIDDatetimeEncoder:
             event_id="datetime-payload-test",
             event_type="test.event",
             topic="test-topic",
-            payload={"emitted_at": ts, "count": 1},  # type: ignore[arg-type]
+            payload={"emitted_at": ts, "count": 1},
             queued_at=datetime.now(UTC),
         )
 
