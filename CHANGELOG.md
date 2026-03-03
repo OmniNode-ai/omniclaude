@@ -3,13 +3,35 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
-## [0.4.1] - 2026-03-02
+## [0.4.1] - 2026-03-03
+
+### Added
+
+- **TCB skill** [OMN-3104] (#475): Ticket Context Bundle skill for provenance-stamped TCB generation; wired into create-ticket and ticket-pipeline
+- **Planning Context Resolver Phase 2** [OMN-3105] (#476): Context resolver for planning workflows
+- **Hostile Reviewer skill Phase 3** [OMN-3107] (#478): Hostile reviewer skill with pipeline wiring and metrics
+- **Token tracking in routing decisions** [OMN-3448] (#477): Add `prompt_tokens`, `completion_tokens`, `total_tokens` to `HandlerRoutingLlm` routing decision events
+- **PostToolUse hook skill invocation logging** [OMN-3454] (#484): PostToolUse hook writes skill invocations to `~/.claude/onex-skill-usage.log`
+- **deploy-local-plugin `--level` flag** [OMN-3453] (#486): Skill tier filtering for deploy-local-plugin
+- **Insights-to-plan skill** [OMN-3471] (#488): New skill converts insights into plan documents
+- **SessionStart next-skill suggestions** [OMN-3455] (#489): SessionStart hook injects next-skill suggestions from usage history
+- **PR Factory Hardening Phase 0** [OMN-3102] (#474): Template library, mergeability gate, collision detection
 
 ### Fixed
-- **Relax omninode-intelligence pin** (OMN-3328): Changed `omninode-intelligence==0.8.0` to `>=0.8.0,<0.10.0` to prevent silent downgrade during Docker rebuilds when 0.9.x is installed. This unblocks removal of the brittle Dockerfile `--no-deps` workaround in follow-up infra changes.
+
+- **macOS date arithmetic + hook test harness** (#487): Fix macOS `date +%s%3N` literal-`N` suffix causing arithmetic failure and hook `exit 1`; add `test-hooks.sh` 12-test bash harness for CI validation
+- **Dead Kafka fallbacks replaced** [OMN-3475] (#490): Replace decommissioned M2/bridge Kafka broker fallbacks with `localhost:19092`
+- **Unqualified skill refs and onex-status rename** [OMN-3452] (#485): Fix unqualified skill references; rename onex-status → status skill; add level/debug metadata
+- **HandlerRoutingEmitter payload alignment** [OMN-3424] (#471): Align emitter payload field names with `ModelRoutingDecision` contract
+
+### Changed
+
+- **Trivy ignore-unfixed** (#473): Add `ignore-unfixed: true` to Trivy scans to skip non-actionable OS CVEs
 
 ### Dependencies
-- omninode-intelligence relaxed from `==0.8.0` to `>=0.8.0,<0.10.0` (lock resolves to 0.9.1)
+
+- `omninode-intelligence` relaxed from `==0.8.0` to `>=0.8.0,<0.10.0` (lock resolves to 0.9.1) [OMN-3328]
+- Dependency bumps: actions/upload-artifact (#479), github/codeql-action (#480), codecov/codecov-action (#481), actions/setup-python (#482), actions/download-artifact (#483)
 
 ## [0.4.0] - 2026-02-28
 
