@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: database-integration-failure-logs
           path: |
@@ -247,7 +247,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Upload database test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: database-test-results
@@ -395,7 +395,7 @@ jobs:
 
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: kafka-integration-failure-logs
           path: |
@@ -405,7 +405,7 @@ jobs:
             .pytest_cache/
 
       - name: Upload Kafka test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: kafka-test-results
@@ -571,7 +571,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Upload observability test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: observability-test-results
@@ -692,7 +692,7 @@ jobs:
           name: full-pipeline-integration
 
       - name: Upload test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: full-pipeline-test-results

@@ -911,7 +911,7 @@ jobs:
             -f txt
 
       - name: Upload Bandit report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bandit-security-report
@@ -1079,7 +1079,7 @@ jobs:
           mv .coverage .coverage.${{ matrix.group }} 2>/dev/null || true
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
@@ -1088,7 +1088,7 @@ jobs:
           retention-days: 1
 
       - name: Upload test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
@@ -1177,7 +1177,7 @@ jobs:
           fi
 
       - name: Upload hooks test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: hooks-test-results
@@ -1238,7 +1238,7 @@ jobs:
           fi
 
       - name: Upload agent framework test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: agent-framework-test-results
@@ -1370,7 +1370,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload merged coverage artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-merged
