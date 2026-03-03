@@ -1,16 +1,16 @@
 {
-  "node_id": "node_skill_onex_status_orchestrator",
+  "node_id": "node_skill_status_orchestrator",
   "ticket_id": "OMN-3390",
   "input": {
-    "topic": "onex.cmd.omniclaude.onex-status.v1",
+    "topic": "onex.cmd.omniclaude.status.v1",
     "fixture": {
       "event_type": "skill_requested",
-      "skill_name": "onex-status",
+      "skill_name": "status",
       "args": {}
     }
   },
   "output": {
-    "topic": "onex.evt.omniclaude.onex-status-completed.v1"
+    "topic": "onex.evt.omniclaude.status-completed.v1"
   },
   "timeout_ms": 10000,
   "assertions": [
