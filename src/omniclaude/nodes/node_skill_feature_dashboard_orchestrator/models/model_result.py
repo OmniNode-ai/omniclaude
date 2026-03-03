@@ -30,7 +30,7 @@ class AuditCheckName(StrEnum):
 
 
 class AuditCheckStatus(StrEnum):
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
     WARN = "warn"
 

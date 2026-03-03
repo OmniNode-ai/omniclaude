@@ -205,7 +205,9 @@ class TestModelGap:
 
 
 class TestModelSkillAudit:
-    def _make_check(self, name: AuditCheckName, status: AuditCheckStatus) -> ModelAuditCheck:
+    def _make_check(
+        self, name: AuditCheckName, status: AuditCheckStatus
+    ) -> ModelAuditCheck:
         return ModelAuditCheck(name=name, status=status, evidence=["ok"])
 
     def test_frozen(self) -> None:
@@ -401,7 +403,10 @@ class TestModelContractYaml:
         contract = ModelContractYaml(
             name="my-skill",
             node_type="effect",
-            event_bus={"subscribe_topics": ["onex.cmd.foo.v1"], "publish_topics": ["onex.evt.foo.v1"]},
+            event_bus={
+                "subscribe_topics": ["onex.cmd.foo.v1"],
+                "publish_topics": ["onex.evt.foo.v1"],
+            },
         )
         assert contract.event_bus is not None
         assert contract.event_bus.subscribe_topics == ["onex.cmd.foo.v1"]
