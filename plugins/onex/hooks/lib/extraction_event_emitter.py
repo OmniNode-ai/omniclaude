@@ -65,14 +65,23 @@ if _THIS_DIR not in sys.path:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Optional emit_event import — graceful degradation when daemon not running
+# Optional emit_event import — graceful degradation when daemon not running.
+# On ImportError we write to stderr (captured by the hook to LOG_FILE via
+# 2>>"$LOG_FILE") so the operator can diagnose a missing/broken venv. (OMN-3251)
 # ---------------------------------------------------------------------------
 try:
     from emit_client_wrapper import (
         emit_event as _emit_event,
     )
-except ImportError:
+except ImportError as _import_err:
+    sys.stderr.write(
+        f"[extraction_event_emitter] import failed: {_import_err}\n"
+        "  Extraction events will not be emitted.\n"
+        "  Fix: rebuild the plugin venv — "
+        "${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv\n"
+    )
     _emit_event = None
+    del _import_err
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +244,9 @@ def emit_extraction_events(data: dict[str, Any]) -> int:
         Number of events successfully emitted (0-3).
     """
     if _emit_event is None:
-        logger.debug("emit_client_wrapper not available; extraction events skipped")
+        # emit_client_wrapper failed to import — already logged to stderr at import time.
+        # Log at WARNING so it surfaces in LOG_FILE (logging.lastResort threshold). (OMN-3251)
+        logger.warning("emit_client_wrapper not available; extraction events skipped")
         return 0
 
     session_id: str = str(data.get("session_id") or "")
