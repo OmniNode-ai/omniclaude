@@ -51,8 +51,8 @@ def get_kafka_bootstrap_servers() -> str:
     """
     Get Kafka bootstrap servers from environment with proper fallback chain.
 
-    This function provides a single source of truth for Kafka broker configuration,
-    eliminating duplicate fallback logic across all OmniClaude services.
+    Centralizes Kafka broker resolution, eliminating duplicate fallback logic
+    across all OmniClaude services.
 
     Priority order:
     1. KAFKA_BOOTSTRAP_SERVERS (general config)
