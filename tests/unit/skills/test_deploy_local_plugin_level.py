@@ -80,7 +80,9 @@ def _run_filter_check(
         # Match deploy.sh: _LEVEL_EXPLICIT is true only when --level was explicitly passed.
         # For the default-advanced case (no flag), _LEVEL_EXPLICIT=false so debug skills
         # are not excluded (backwards-compatible behaviour).
-        _explicit = "false" if (level_filter == "advanced" and not include_debug) else "true"
+        _explicit = (
+            "false" if (level_filter == "advanced" and not include_debug) else "true"
+        )
     else:
         _explicit = "true" if level_explicit else "false"
 
@@ -108,6 +110,7 @@ def _run_filter_check(
         capture_output=True,
         text=True,
         timeout=10,
+        check=False,
     )
     return "PASS" in result.stdout
 
@@ -117,12 +120,14 @@ def _run_filter_check(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def skills_dir(tmp_path: Path) -> Path:
     """Build a small fixture skills directory covering all tier/debug combos."""
     _make_skill(tmp_path, "skill_basic_nodebug", level="basic", debug=False)
     _make_skill(tmp_path, "skill_basic_debug", level="basic", debug=True)
-    _make_skill(tmp_path, "skill_intermediate_nodebug", level="intermediate", debug=False)
+    _make_skill(
+        tmp_path, "skill_intermediate_nodebug", level="intermediate", debug=False
+    )
     _make_skill(tmp_path, "skill_intermediate_debug", level="intermediate", debug=True)
     _make_skill(tmp_path, "skill_advanced_nodebug", level="advanced", debug=False)
     _make_skill(tmp_path, "skill_advanced_debug", level="advanced", debug=True)
@@ -152,10 +157,14 @@ class TestLevelBasic:
         assert _run_filter_check(skills_dir, "skill_basic_debug", "basic", True)
 
     def test_intermediate_excluded(self, skills_dir: Path) -> None:
-        assert not _run_filter_check(skills_dir, "skill_intermediate_nodebug", "basic", False)
+        assert not _run_filter_check(
+            skills_dir, "skill_intermediate_nodebug", "basic", False
+        )
 
     def test_advanced_excluded(self, skills_dir: Path) -> None:
-        assert not _run_filter_check(skills_dir, "skill_advanced_nodebug", "basic", False)
+        assert not _run_filter_check(
+            skills_dir, "skill_advanced_nodebug", "basic", False
+        )
 
     def test_internal_lib_included(self, skills_dir: Path) -> None:
         assert _run_filter_check(skills_dir, "_lib", "basic", False)
@@ -171,10 +180,14 @@ class TestLevelIntermediate:
     """--level intermediate: includes basic + intermediate; advanced excluded."""
 
     def test_basic_included(self, skills_dir: Path) -> None:
-        assert _run_filter_check(skills_dir, "skill_basic_nodebug", "intermediate", False)
+        assert _run_filter_check(
+            skills_dir, "skill_basic_nodebug", "intermediate", False
+        )
 
     def test_intermediate_included(self, skills_dir: Path) -> None:
-        assert _run_filter_check(skills_dir, "skill_intermediate_nodebug", "intermediate", False)
+        assert _run_filter_check(
+            skills_dir, "skill_intermediate_nodebug", "intermediate", False
+        )
 
     def test_intermediate_debug_excluded(self, skills_dir: Path) -> None:
         assert not _run_filter_check(
@@ -182,10 +195,14 @@ class TestLevelIntermediate:
         )
 
     def test_intermediate_debug_included_with_flag(self, skills_dir: Path) -> None:
-        assert _run_filter_check(skills_dir, "skill_intermediate_debug", "intermediate", True)
+        assert _run_filter_check(
+            skills_dir, "skill_intermediate_debug", "intermediate", True
+        )
 
     def test_advanced_excluded(self, skills_dir: Path) -> None:
-        assert not _run_filter_check(skills_dir, "skill_advanced_nodebug", "intermediate", False)
+        assert not _run_filter_check(
+            skills_dir, "skill_advanced_nodebug", "intermediate", False
+        )
 
     def test_internal_lib_included(self, skills_dir: Path) -> None:
         assert _run_filter_check(skills_dir, "_lib", "intermediate", False)
@@ -205,7 +222,9 @@ class TestLevelAdvanced:
     """
 
     def test_advanced_nodebug_included(self, skills_dir: Path) -> None:
-        assert _run_filter_check(skills_dir, "skill_advanced_nodebug", "advanced", False)
+        assert _run_filter_check(
+            skills_dir, "skill_advanced_nodebug", "advanced", False
+        )
 
     def test_advanced_debug_included_by_default(self, skills_dir: Path) -> None:
         # No explicit --level → _LEVEL_EXPLICIT=false → debug skills pass through
@@ -217,7 +236,9 @@ class TestLevelAdvanced:
         assert _run_filter_check(skills_dir, "skill_basic_nodebug", "advanced", False)
 
     def test_intermediate_included(self, skills_dir: Path) -> None:
-        assert _run_filter_check(skills_dir, "skill_intermediate_nodebug", "advanced", False)
+        assert _run_filter_check(
+            skills_dir, "skill_intermediate_nodebug", "advanced", False
+        )
 
     def test_internal_lib_included(self, skills_dir: Path) -> None:
         assert _run_filter_check(skills_dir, "_lib", "advanced", False)
@@ -238,6 +259,7 @@ class TestArgParsing:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
             env={**os.environ, "HOME": os.environ.get("HOME", "/tmp")},
         )
         assert result.returncode != 0
@@ -249,6 +271,7 @@ class TestArgParsing:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
             env={**os.environ, "HOME": os.environ.get("HOME", "/tmp")},
         )
         assert result.returncode != 0
@@ -259,6 +282,7 @@ class TestArgParsing:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
             env={**os.environ, "HOME": os.environ.get("HOME", "/tmp")},
         )
         assert result.returncode == 0
