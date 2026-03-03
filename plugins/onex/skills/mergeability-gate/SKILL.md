@@ -1,3 +1,27 @@
+---
+name: mergeability-gate
+description: Evaluate a PR's mergeability and label it appropriately. Outputs one of three statuses — mergeable, needs-split, or blocked — called by ticket-pipeline between local_review and create_pr phases.
+version: 1.0.0
+category: workflow
+tags:
+  - pr
+  - mergeability
+  - gate
+  - ci
+  - labels
+author: OmniClaude Team
+args:
+  - name: pr_number
+    description: PR number to evaluate
+    required: true
+  - name: repo
+    description: Target GitHub repo (e.g., OmniNode-ai/omnibase_core)
+    required: true
+  - name: ticket_id
+    description: Linear ticket ID for fetching expected test evidence
+    required: false
+---
+
 # mergeability-gate
 
 ## Description

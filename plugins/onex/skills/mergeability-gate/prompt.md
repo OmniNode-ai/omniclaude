@@ -8,7 +8,7 @@ Import the PR safety library before any mutations:
 @_lib/pr-safety/helpers.md
 ```
 
-## Step 1: Fetch PR state
+## Fetch PR state
 
 Run:
 ```
@@ -22,14 +22,14 @@ Extract:
 - `additions + deletions` → net diff size
 - `files` → count distinct module prefixes
 
-## Step 2: Evaluate blocked criteria
+## Evaluate blocked criteria
 
 Check each criterion:
 1. Template validation: `validate_pr_template(body)` → if `(False, reasons)`, add reasons to `blocked_reasons`
 2. CI status: if any check is `FAILURE`, add `"CI failing: {check_name}"` to `blocked_reasons`
 3. Conflicts: if `mergeable == "CONFLICTING"`, add `"merge conflicts present"` to `blocked_reasons`
 
-## Step 3: Evaluate needs-split criteria
+## Evaluate needs-split criteria
 
 1. Net diff: if `additions + deletions > 500` and not waived, add to `split_reasons`
 2. Mixed concerns: if more than 2 top-level directories changed (excluding tests/docs), add to `split_reasons`
@@ -39,7 +39,7 @@ Check each criterion:
 (matching `tests/`, `docs/`, `*.md`, `*_test.py`), the net diff threshold rises to 1000 lines
 before triggering `needs-split`.
 
-## Step 4: Determine final status
+## Determine final status
 
 ```
 if blocked_reasons is not empty → status = "blocked"
@@ -47,7 +47,7 @@ else if split_reasons is not empty → status = "needs-split"
 else → status = "mergeable"
 ```
 
-## Step 5: Apply label and write result
+## Apply label and write result
 
 Apply GitHub label via `mutate_pr()` from `@_lib/pr-safety/helpers.md`:
 
@@ -94,7 +94,7 @@ Write result JSON to `~/.claude/skill-results/{context_id}/mergeability-gate.jso
 }
 ```
 
-## Step 6: Post comment on blocked or needs-split
+## Post comment on blocked or needs-split
 
 Route comment through `mutate_pr()`:
 
@@ -123,7 +123,7 @@ if status in ("blocked", "needs-split"):
     mutate_pr(pr_key, action="post_mergeability_comment", run_id=run_id, fn=post_comment)
 ```
 
-## Step 7: If blocked — post HIGH_RISK Slack gate
+## If blocked — post HIGH_RISK Slack gate
 
 If status is "blocked", post a HIGH_RISK Slack gate notification and halt:
 
