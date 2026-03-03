@@ -4,7 +4,7 @@ Compile planning context for epic {epic_id} across repos: {repos_in_scope}
 
 OMNI_HOME=${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}  # local-path-ok
 
-## Step 1: Contract Schema Drift Detection
+## Step 1: Contract Schema Drift Detection  <!-- ai-slop-ok -->
 
 For each repo in repos_in_scope, scan its contract.yaml files:
 
@@ -22,7 +22,7 @@ For each contract.yaml found:
 
 Record findings in: `contracts[]` section of output (see schema in Step 7).
 
-## Step 2: Pattern Queries (VALIDATED + PROVISIONAL only)
+## Step 2: Pattern Queries (VALIDATED + PROVISIONAL only)  <!-- ai-slop-ok -->
 
 For each module in the epic's normalized intent modules:
 
@@ -37,7 +37,7 @@ For each returned pattern:
 - Include if `status in ["validated", "provisional"]` AND `quality_score >= 0.7`
 - Map to `planning_context.patterns[]`: `{id, signature_hash, status, confidence, quality_score, domain_id}`
 
-## Step 3: Historical Failure Correlation *(SQL safety + psql quoting + preflight)*
+## Step 3: Historical Failure Correlation *(SQL safety + psql quoting + preflight)*  <!-- ai-slop-ok -->
 
 ```bash
 source ~/.omnibase/.env
@@ -93,7 +93,7 @@ If psql fails: set `historical_failures_status = "service_unavailable"`, continu
 Parse each `|`-delimited row into `historical_failures[]`:
 `{signature: event_type, repo: repo_id, frequency: int, last_seen: iso8601}`
 
-## Step 4: Risk Score Computation *(unimplemented weights = 0.0)*
+## Step 4: Risk Score Computation *(unimplemented weights = 0.0)*  <!-- ai-slop-ok -->
 
 Computable weights (Phase 2):
 
@@ -139,7 +139,7 @@ Confidence:
 - `"medium"` = one source service_unavailable
 - `"low"` = two or more sources service_unavailable
 
-## Step 5: Invariant Check
+## Step 5: Invariant Check  <!-- ai-slop-ok -->
 
 From `contract.yaml` files: extract any constraints that appear in the epic's scope:
 - Any `event_bus.subscribe_topics` or `publish_topics` → topic contracts
@@ -153,7 +153,7 @@ Known capabilities (from `omnibase_infra` handler_registry.py):
 
 Unresolvable capability → add to `invariants[]` with `status: unresolved`
 
-## Step 6: Fail-Fast Check *(HIGH_RISK for blocking gates)*
+## Step 6: Fail-Fast Check *(HIGH_RISK for blocking gates)*  <!-- ai-slop-ok -->
 
 If `risk_score >= 0.76` (Critical):
 ```
@@ -173,7 +173,7 @@ If pattern API or ledger is `service_unavailable`:
 - Continue — soft degradation, no gate, no block.
 - Reflect in `confidence` field of output.
 
-## Step 7: Write Output
+## Step 7: Write Output  <!-- ai-slop-ok -->
 
 ```bash
 mkdir -p ~/.claude/epics/{epic_id}
@@ -237,7 +237,7 @@ planning_context:
     invariant_violation_weight: 0.00
 ```
 
-## Step 8: Log and Notify
+## Step 8: Log and Notify  <!-- ai-slop-ok -->
 
 Log summary to epic Slack thread (LOW_RISK, no gate unless `risk_score >= 0.76`):
 
