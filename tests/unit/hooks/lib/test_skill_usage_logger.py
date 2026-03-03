@@ -12,7 +12,7 @@ import json
 import os
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -22,7 +22,6 @@ from omniclaude.hooks.lib.skill_usage_logger import (
     _write_to_file,
     append_skill_usage,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -82,7 +81,11 @@ class TestWriteToFile:
     @pytest.mark.unit
     def test_creates_file_if_not_exists(self, tmp_path: Path) -> None:
         log = tmp_path / "skill-usage.log"
-        entry = {"skill_name": "onex:ticket-pipeline", "timestamp": "t", "session_id": "s"}
+        entry = {
+            "skill_name": "onex:ticket-pipeline",
+            "timestamp": "t",
+            "session_id": "s",
+        }
         ok = _write_to_file(entry=entry, log_path=log)
         assert ok is True
         assert log.exists()
@@ -90,7 +93,11 @@ class TestWriteToFile:
     @pytest.mark.unit
     def test_appends_valid_json_line(self, tmp_path: Path) -> None:
         log = tmp_path / "skill-usage.log"
-        entry = {"skill_name": "onex:ticket-pipeline", "timestamp": "t", "session_id": "s"}
+        entry = {
+            "skill_name": "onex:ticket-pipeline",
+            "timestamp": "t",
+            "session_id": "s",
+        }
         _write_to_file(entry=entry, log_path=log)
         lines = _read_log_lines(log)
         assert len(lines) == 1
@@ -130,7 +137,11 @@ class TestWriteToFile:
     def test_line_is_compact_json(self, tmp_path: Path) -> None:
         """Each line must be valid JSON without leading/trailing whitespace."""
         log = tmp_path / "usage.log"
-        entry = {"skill_name": "onex:ticket-pipeline", "timestamp": "t", "session_id": "s"}
+        entry = {
+            "skill_name": "onex:ticket-pipeline",
+            "timestamp": "t",
+            "session_id": "s",
+        }
         _write_to_file(entry=entry, log_path=log)
         raw_line = log.read_text(encoding="utf-8").strip()
         parsed = json.loads(raw_line)
@@ -174,18 +185,14 @@ class TestAppendSkillUsage:
     @pytest.mark.unit
     def test_db_skipped_when_disabled(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
-        with patch(
-            "omniclaude.hooks.lib.skill_usage_logger._write_to_db"
-        ) as mock_db:
+        with patch("omniclaude.hooks.lib.skill_usage_logger._write_to_db") as mock_db:
             append_skill_usage("onex:any", "s", log_path=log, db_enabled=False)
         mock_db.assert_not_called()
 
     @pytest.mark.unit
     def test_db_attempted_when_enabled(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
-        with patch(
-            "omniclaude.hooks.lib.skill_usage_logger._write_to_db"
-        ) as mock_db:
+        with patch("omniclaude.hooks.lib.skill_usage_logger._write_to_db") as mock_db:
             append_skill_usage("onex:any", "s", log_path=log, db_enabled=True)
         mock_db.assert_called_once()
 
@@ -205,16 +212,15 @@ class TestAppendSkillUsage:
         log = tmp_path / "usage.log"
         with (
             patch.dict(os.environ, {"ENABLE_POSTGRES": "true"}),
-            patch(
-                "omniclaude.hooks.lib.skill_usage_logger._write_to_db"
-            ) as mock_db,
+            patch("omniclaude.hooks.lib.skill_usage_logger._write_to_db") as mock_db,
         ):
             append_skill_usage("onex:any", "s", log_path=log)
         mock_db.assert_called_once()
 
     @pytest.mark.unit
     def test_default_log_path_constant(self) -> None:
-        assert DEFAULT_USAGE_LOG == Path.home() / ".claude" / "onex-skill-usage.log"
+        expected = Path.home() / ".claude" / "onex-skill-usage.log"
+        assert expected == DEFAULT_USAGE_LOG
 
     @pytest.mark.unit
     def test_multiple_invocations_append_sequentially(self, tmp_path: Path) -> None:
@@ -223,7 +229,7 @@ class TestAppendSkillUsage:
         for skill in skills:
             append_skill_usage(skill, "sess-1", log_path=log, db_enabled=False)
         lines = _read_log_lines(log)
-        assert [l["skill_name"] for l in lines] == skills
+        assert [line["skill_name"] for line in lines] == skills
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +247,7 @@ class TestMainEntryPoint:
         with (
             patch("sys.stdin", StringIO(stdin_data)),
             patch.object(skill_usage_logger, "DEFAULT_USAGE_LOG", tmp_log),
-            patch(
-                "omniclaude.hooks.lib.skill_usage_logger._maybe_write_to_db"
-            ),
+            patch("omniclaude.hooks.lib.skill_usage_logger._maybe_write_to_db"),
         ):
             try:
                 skill_usage_logger._main()
