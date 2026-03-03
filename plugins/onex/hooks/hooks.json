@@ -41,6 +41,14 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-delegation-rule.sh"
+          }
+        ]
       }
     ],
     "PreCompact": [
@@ -98,6 +106,24 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-ci-reminder.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-skill-delegation-enforcer.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Read|Write|Edit|Bash|Glob|Grep|WebFetch|WebSearch|NotebookEdit|NotebookRead|Task)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-delegation-counter.sh"
           }
         ]
       }

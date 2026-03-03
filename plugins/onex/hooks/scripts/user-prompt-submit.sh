@@ -68,6 +68,7 @@ run_with_timeout() {
 INPUT="$(cat)"
 # Start-of-hook timestamp for total latency measurement (OMN-2344)
 _HOOK_START_MS="$(date +%s%3N 2>/dev/null || echo 0)"
+_HOOK_START_MS="${_HOOK_START_MS//[^0-9]/}"; [[ -z "$_HOOK_START_MS" ]] && _HOOK_START_MS=0
 if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
     log "ERROR: Malformed JSON on stdin, using empty object"
     INPUT='{}'
@@ -824,6 +825,7 @@ echo "[$_TS3] [UserPromptSubmit] INJECTED context_chars=${#AGENT_CONTEXT} meets_
 # -----------------------------
 if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emitter.py" ]]; then
     _HOOK_END_MS="$(date +%s%3N 2>/dev/null || echo 0)"
+    _HOOK_END_MS="${_HOOK_END_MS//[^0-9]/}"; [[ -z "$_HOOK_END_MS" ]] && _HOOK_END_MS=0
     _TOTAL_LATENCY_MS="$(( _HOOK_END_MS - _HOOK_START_MS ))"
     # Clamp to 0 on clock skew (e.g. date fallback produces 0-0=0 which is fine)
     [[ "$_TOTAL_LATENCY_MS" -lt 0 ]] 2>/dev/null && _TOTAL_LATENCY_MS=0
@@ -919,8 +921,10 @@ fi
 if printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
     '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
      .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"; then
-    [[ "$_COMPACT_CTX_CONSUME" == "true" ]] && rm -f "$_COMPACT_CTX_FILE"
+    [[ "$_COMPACT_CTX_CONSUME" == "true" ]] && rm -f "$_COMPACT_CTX_FILE" || true
 else
     log "ERROR: Final jq output failed, passing through raw input"
     printf %s "$INPUT"
 fi
+
+exit 0
