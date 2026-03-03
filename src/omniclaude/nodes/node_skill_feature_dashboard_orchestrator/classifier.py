@@ -109,25 +109,14 @@ def applicable_checks(
 
     Applicability matrix:
 
-    +-----------------------+--------------------------------------------------+
-    | Check                 | Applies to                                       |
-    +=======================+==================================================+
-    | skill_md              | All skills                                       |
-    +-----------------------+--------------------------------------------------+
-    | orchestrator_node     | All skills                                       |
-    +-----------------------+--------------------------------------------------+
-    | contract_yaml         | All skills                                       |
-    +-----------------------+--------------------------------------------------+
-    | event_bus_present     | Orchestrator nodes only                          |
-    +-----------------------+--------------------------------------------------+
-    | topics_nonempty       | Orchestrator nodes where requires_event_bus=True |
-    +-----------------------+--------------------------------------------------+
-    | topics_namespaced     | Orchestrator nodes where requires_event_bus=True |
-    +-----------------------+--------------------------------------------------+
-    | test_coverage         | All skills                                       |
-    +-----------------------+--------------------------------------------------+
-    | linear_ticket         | All skills                                       |
-    +-----------------------+--------------------------------------------------+
+    - skill_md              : All skills
+    - orchestrator_node     : All skills
+    - contract_yaml         : All skills
+    - event_bus_present     : Orchestrator nodes only
+    - topics_nonempty       : Orchestrator nodes where requires_event_bus=True
+    - topics_namespaced     : Orchestrator nodes where requires_event_bus=True
+    - test_coverage         : All skills
+    - linear_ticket         : All skills
 
     Unknown node types: only CRITICAL checks apply; topic checks are downgraded to WARN.
 
