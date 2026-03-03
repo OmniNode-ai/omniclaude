@@ -294,7 +294,12 @@ class HandlerRoutingLlm:
         # the LLM cannot select an agent that failed to meet the confidence
         # threshold.
         above_threshold_names = {c.agent_name for c in above_threshold}
-        selected_agent = await self._ask_llm(
+        (
+            selected_agent,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        ) = await self._ask_llm(
             candidates=above_threshold,
             prompt=request.prompt,
             agent_names=above_threshold_names,
@@ -319,6 +324,10 @@ class HandlerRoutingLlm:
                 candidates=tuple(candidates),
                 fallback_reason="LLM unavailable or returned unrecognised agent; "
                 "using top trigger match",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                omninode_enabled=True,
             )
 
         # 10. Build result with LLM-selected agent
@@ -362,6 +371,10 @@ class HandlerRoutingLlm:
             routing_path="local",
             candidates=annotated_candidates,
             fallback_reason=None,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            omninode_enabled=True,
         )
 
     # ------------------------------------------------------------------
@@ -374,8 +387,11 @@ class HandlerRoutingLlm:
         prompt: str,
         agent_names: set[str],
         correlation_id: UUID,
-    ) -> str | None:
+    ) -> tuple[str | None, int, int, int]:
         """Send a chat completion request and parse the agent name from the response.
+
+        Also extracts token usage from the vLLM ``usage`` dict so callers can
+        include token counts in the routing decision event.
 
         Args:
             candidates: Ranked candidates to present to the LLM.
@@ -384,7 +400,10 @@ class HandlerRoutingLlm:
             correlation_id: For logging.
 
         Returns:
-            A validated agent name from the LLM, or None on failure.
+            A 4-tuple ``(selected_agent, prompt_tokens, completion_tokens, total_tokens)``.
+            ``selected_agent`` is a validated agent name or None on failure.
+            Token counts default to 0 when the LLM call fails or the ``usage`` key
+            is absent from the response.
         """
         routing_prompt = _build_routing_prompt(candidates, prompt)
 
@@ -412,28 +431,28 @@ class HandlerRoutingLlm:
                 self._timeout,
                 correlation_id,
             )
-            return None
+            return None, 0, 0, 0
         except httpx.NetworkError as exc:
             logger.warning(
                 "LLM routing connection error: %s (correlation_id=%s)",
                 exc,
                 correlation_id,
             )
-            return None
+            return None, 0, 0, 0
         except httpx.HTTPError as exc:
             logger.warning(
                 "LLM routing HTTP error: %s (correlation_id=%s)",
                 exc,
                 correlation_id,
             )
-            return None
+            return None, 0, 0, 0
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             logger.warning(
                 "LLM routing response parse error: %s (correlation_id=%s)",
                 exc,
                 correlation_id,
             )
-            return None
+            return None, 0, 0, 0
 
         try:
             raw_text: str = data["choices"][0]["message"]["content"]
@@ -443,7 +462,13 @@ class HandlerRoutingLlm:
                 exc,
                 correlation_id,
             )
-            return None
+            return None, 0, 0, 0
+
+        # Extract token usage from the vLLM response; default to 0 when absent.
+        _usage = data.get("usage", {})
+        prompt_tokens: int = int(_usage.get("prompt_tokens", 0))
+        completion_tokens: int = int(_usage.get("completion_tokens", 0))
+        total_tokens: int = prompt_tokens + completion_tokens
 
         selected = _parse_agent_from_response(raw_text, agent_names)
         if selected is None:
@@ -452,7 +477,7 @@ class HandlerRoutingLlm:
                 raw_text[:100],
                 correlation_id,
             )
-        return selected
+        return selected, prompt_tokens, completion_tokens, total_tokens
 
     @staticmethod
     def _make_fallback(

@@ -316,7 +316,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value="agent-debugger",
+            return_value=("agent-debugger", 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -342,7 +342,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value="agent-debugger",
+            return_value=("agent-debugger", 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -366,7 +366,7 @@ class TestHandlerRoutingLlm:
         request = _make_request("debug this issue", agents)
 
         with patch.object(
-            handler, "_ask_llm", new_callable=AsyncMock, return_value=None
+            handler, "_ask_llm", new_callable=AsyncMock, return_value=(None, 0, 0, 0)
         ):
             result = await handler.compute_routing(request)
 
@@ -399,14 +399,17 @@ class TestHandlerRoutingLlm:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            result = await handler._ask_llm(
+            selected, pt, ct, tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
+        assert pt == 0
+        assert ct == 0
+        assert tt == 0
 
     # -- HTTP timeout -> returns None (graceful degradation) --
 
@@ -427,14 +430,17 @@ class TestHandlerRoutingLlm:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            result = await handler._ask_llm(
+            selected, pt, ct, tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
+        assert pt == 0
+        assert ct == 0
+        assert tt == 0
 
     # -- HTTP error -> returns None --
 
@@ -464,14 +470,17 @@ class TestHandlerRoutingLlm:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            result = await handler._ask_llm(
+            selected, pt, ct, tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
+        assert pt == 0
+        assert ct == 0
+        assert tt == 0
 
     # -- LLM returns unrecognised agent name -> returns None --
 
@@ -498,14 +507,17 @@ class TestHandlerRoutingLlm:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            result = await handler._ask_llm(
+            selected, pt, ct, tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
+        assert pt == 0
+        assert ct == 0
+        assert tt == 0
 
     # -- successful _ask_llm parsing a valid response --
 
@@ -532,14 +544,17 @@ class TestHandlerRoutingLlm:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            result = await handler._ask_llm(
+            selected, pt, ct, tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result == "agent-debugger"
+        assert selected == "agent-debugger"
+        assert pt == 0
+        assert ct == 0
+        assert tt == 0
 
     # -- LLM selects agent not in candidates (still in registry) --
 
@@ -561,7 +576,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value="agent-api-architect",
+            return_value=("agent-api-architect", 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -582,7 +597,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value="agent-test-0",
+            return_value=("agent-test-0", 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 
@@ -603,7 +618,7 @@ class TestHandlerRoutingLlm:
             handler,
             "_ask_llm",
             new_callable=AsyncMock,
-            return_value="agent-debugger",
+            return_value=("agent-debugger", 0, 0, 0),
         ):
             result = await handler.compute_routing(request)
 

@@ -53,6 +53,11 @@ class ModelRoutingResult(BaseModel):
         routing_path: Infrastructure path used for routing.
         candidates: All evaluated candidates, sorted by confidence descending.
         fallback_reason: Reason if fallback agent was selected.
+        prompt_tokens: Tokens consumed by the LLM prompt (0 when LLM was not used).
+        completion_tokens: Tokens generated in the LLM completion (0 when LLM was not used).
+        total_tokens: Sum of prompt_tokens and completion_tokens.
+        omninode_enabled: True when HandlerRoutingLlm and HandlerRoutingEmitter both ran
+            (i.e. the full ONEX routing path was active).
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -89,6 +94,28 @@ class ModelRoutingResult(BaseModel):
         default=None,
         max_length=500,
         description="Reason if fallback agent was selected",
+    )
+    prompt_tokens: int = Field(
+        default=0,
+        ge=0,
+        description="Tokens consumed by the LLM prompt (0 when LLM was not used)",
+    )
+    completion_tokens: int = Field(
+        default=0,
+        ge=0,
+        description="Tokens generated in the LLM completion (0 when LLM was not used)",
+    )
+    total_tokens: int = Field(
+        default=0,
+        ge=0,
+        description="Sum of prompt_tokens and completion_tokens",
+    )
+    omninode_enabled: bool = Field(
+        default=False,
+        description=(
+            "True when HandlerRoutingLlm and HandlerRoutingEmitter both ran "
+            "(i.e. the full ONEX routing path was active)"
+        ),
     )
 
 

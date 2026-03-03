@@ -277,14 +277,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client({"model": "Qwen2.5-14B"}),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -299,14 +299,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client({"choices": []}),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -323,14 +323,14 @@ class TestMalformedApiResponseRecovery:
                 {"choices": [{"finish_reason": "stop"}]}
             ),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -347,14 +347,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client(bad_response),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -369,14 +369,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client({"choices": None}),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -391,14 +391,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client({}),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -415,14 +415,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client(empty_content),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -448,14 +448,14 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client(unrelated),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result is None
+        assert selected is None
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -481,11 +481,11 @@ class TestMalformedApiResponseRecovery:
             "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
             return_value=self._make_mock_client(verbose),
         ):
-            result = await handler._ask_llm(
+            selected, _pt, _ct, _tt = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
                 agent_names=agent_names,
                 correlation_id=uuid4(),
             )
 
-        assert result == "agent-debugger"
+        assert selected == "agent-debugger"
