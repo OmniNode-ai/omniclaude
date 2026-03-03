@@ -3,6 +3,15 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.4.2] - 2026-03-03
+
+### Fixed
+- **Relax omnibase-infra pin to `>=0.14.0,<0.15.0`** (OMN-3512): Changed exact pin `omnibase-infra==0.13.0` to a sliding window `>=0.14.0,<0.15.0`. The exact pin caused dependency conflicts when the plugin venv installed omnibase-infra 0.14.0 (released 2026-03-03).
+- **UUID serialization in embedded publisher** (OMN-3514, PR #497): Fixed `TypeError` when serializing `UUID` and `datetime` values in the Kafka publish path. Added a JSON encoder that handles these types before passing to `json.dumps`.
+
+### Dependencies
+- omnibase-infra relaxed from `==0.13.0` to `>=0.14.0,<0.15.0` (lock resolves to 0.14.0)
+
 ## [0.4.1] - 2026-03-03
 
 ### Added
