@@ -239,7 +239,7 @@ The skill runs an 8-step checkpoint flow. Each numbered step either dispatches
 an agent or pauses for human input via AskUserQuestion. In `--auto` mode,
 all AskUserQuestion calls are skipped with pre-determined choices.
 
-### Step 1: Scope Selection
+### Step 1: Scope Selection <!-- ai-slop-ok: pre-existing step structure -->
 
 **Skipped if `--auto`** (uses defaults: all changes since base branch).
 
@@ -262,7 +262,7 @@ If `git stash push` fails (e.g., nothing to stash, dirty stash state), warn the
 user but continue without a restore point. The restore point enables "Discard all
 changes" in Step 6.
 
-### Step 2: Review Dispatch
+### Step 2: Review Dispatch <!-- ai-slop-ok: pre-existing step structure -->
 
 Dispatch the review agent using the Review Phase template above.
 
@@ -271,7 +271,7 @@ Parse the JSON response. On parse failure:
 2. If that fails, retry the dispatch once with stronger JSON-only instructions
 3. If retry fails, report error to user and exit the current iteration
 
-### Step 3: Issue Presentation
+### Step 3: Issue Presentation <!-- ai-slop-ok: pre-existing step structure -->
 
 Display a summary table:
 
@@ -312,7 +312,7 @@ Display a summary table:
 
 **If no blocking issues**: report summary, skip to Step 8 (final summary).
 
-### Step 4: Fix Selection
+### Step 4: Fix Selection <!-- ai-slop-ok: pre-existing step structure -->
 
 **Skipped if `--auto`** (auto-selects Critical+Major).
 
@@ -325,7 +325,7 @@ AskUserQuestion with options:
 
 If "Report only": skip to Step 8 (final summary).
 
-### Step 5: Fix Execution (per severity batch)
+### Step 5: Fix Execution (per severity batch) <!-- ai-slop-ok: pre-existing step structure -->
 
 For each selected severity (critical first, then major, then minor):
 
@@ -354,7 +354,7 @@ Fixed {n} {severity} issue(s) in {m} file(s) (+{insertions}/-{deletions})
 git add {approved_files}
 ```
 
-### Step 6: Commit Checkpoint
+### Step 6: Commit Checkpoint <!-- ai-slop-ok: pre-existing step structure -->
 
 **If `--auto`**: auto-commit with message `fix(review-cycle): auto-fix {n} critical and {m} major issue(s)` and skip to Step 8.
 
@@ -368,7 +368,7 @@ AskUserQuestion with options:
 
    > **WARNING**: `git checkout -- .` discards ALL uncommitted changes in the working tree, not just changes from this review cycle. If you used `--files` to scope the review to specific files, this option still destroys changes in ALL files. If you have unrelated uncommitted work, use the restore point approach ("Discard current batch" with per-batch `git restore`) or commit unrelated changes before starting the review cycle. The restore point only covers changes that were stashable at review start.
 
-### Step 7: Continue Loop
+### Step 7: Continue Loop <!-- ai-slop-ok: pre-existing step structure -->
 
 **If `--auto`**: no loop, proceed to Step 8.
 
@@ -378,7 +378,7 @@ AskUserQuestion with options:
 2. "Done" -- proceed to Step 8
 3. "Show summary" -- display current session stats, then re-ask
 
-### Step 8: Final Summary
+### Step 8: Final Summary <!-- ai-slop-ok: pre-existing step structure -->
 
 ```markdown
 ## Review Cycle Complete

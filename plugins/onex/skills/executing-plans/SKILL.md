@@ -28,7 +28,7 @@ appropriate execution skill based on ticket count.
 
 ## The 4-Step Flow
 
-### Step 1: Review Plan
+### Step 1: Review Plan <!-- ai-slop-ok: pre-existing step structure -->
 
 Load the plan file and review it critically before taking any action.
 
@@ -46,7 +46,7 @@ Load the plan file and review it critically before taking any action.
 
 ---
 
-### Step 2: Dry-Run Preview
+### Step 2: Dry-Run Preview <!-- ai-slop-ok: pre-existing step structure -->
 
 Call `/plan-to-tickets` with `--dry-run` to preview what tickets would be created.
 
@@ -64,7 +64,7 @@ If the preview looks wrong, stop and discuss with your partner before creating t
 
 ---
 
-### Step 3: Create Tickets
+### Step 3: Create Tickets <!-- ai-slop-ok: pre-existing step structure -->
 
 Call `/plan-to-tickets` (without `--dry-run`) to create the Linear tickets under the epic.
 
@@ -85,7 +85,7 @@ After creation, record:
 
 ---
 
-### Step 4: Route to Execution
+### Step 4: Route to Execution <!-- ai-slop-ok: pre-existing step structure -->
 
 Route based on ticket count:
 

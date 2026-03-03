@@ -78,7 +78,7 @@ After fixes complete, offer to fix deferred nitpicks.
 
 ## Detailed Workflow
 
-### Step 1: Fetch PR Review Issues
+### Step 1: Fetch PR Review Issues <!-- ai-slop-ok: pre-existing step structure -->
 
 Execute the collate-issues helper to get PR review issues in parallel-solve-ready format:
 
@@ -121,7 +121,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-o
 
 ---
 
-### Step 2: Fetch CI Failures
+### Step 2: Fetch CI Failures <!-- ai-slop-ok: pre-existing step structure -->
 
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
@@ -169,7 +169,7 @@ MINOR (CI Failures):
 
 ---
 
-### Step 3: Combine and Fire Parallel-Solve
+### Step 3: Combine and Fire Parallel-Solve <!-- ai-slop-ok: pre-existing step structure -->
 
 **Combine the outputs from Step 1 and Step 2.5**, grouping by severity:
 
@@ -200,7 +200,7 @@ MINOR:
 
 ---
 
-### Step 4: Ask About Nitpicks
+### Step 4: Ask About Nitpicks <!-- ai-slop-ok: pre-existing step structure -->
 
 After parallel-solve completes, check the **Step 1 output** for any NITPICK sections:
 

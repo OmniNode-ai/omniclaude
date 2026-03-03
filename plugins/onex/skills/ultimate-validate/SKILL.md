@@ -19,7 +19,7 @@ Analyze this codebase deeply and create `.claude/commands/validate.md` that comp
 
 **Announce at start:** "I'm using the ultimate-validate skill to generate a comprehensive validation command."
 
-## Step 0: Discover Real User Workflows
+## Step 0: Discover Real User Workflows <!-- ai-slop-ok: pre-existing step structure -->
 
 **Before analyzing tooling, understand what users ACTUALLY do:**
 
@@ -39,7 +39,7 @@ Analyze this codebase deeply and create `.claude/commands/validate.md` that comp
 
 **Critical: Your E2E tests should mirror actual workflows from docs, not just test internal APIs.**
 
-## Step 1: Deep Codebase Analysis
+## Step 1: Deep Codebase Analysis <!-- ai-slop-ok: pre-existing step structure -->
 
 Explore the codebase to understand:
 
@@ -61,7 +61,7 @@ Explore the codebase to understand:
 - CI/CD workflows (`.github/workflows/`, etc.)
 - Test commands in package.json or scripts
 
-## Step 2: Generate validate.md
+## Step 2: Generate validate.md <!-- ai-slop-ok: pre-existing step structure -->
 
 Create `.claude/commands/validate.md` with these phases (ONLY include phases that exist in the codebase):
 

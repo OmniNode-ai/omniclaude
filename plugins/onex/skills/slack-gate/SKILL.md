@@ -127,7 +127,7 @@ Gate expires in {timeout_minutes} minutes.
 
 ## Implementation
 
-### Step 1: Credential Resolution
+### Step 1: Credential Resolution <!-- ai-slop-ok: pre-existing step structure -->
 
 ```bash
 # Load from ~/.omnibase/.env (source of truth)
@@ -163,7 +163,7 @@ SLACK_CHANNEL_ID=$(curl -s \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['secret']['secretValue'])")
 ```
 
-### Step 2: Post via chat.postMessage
+### Step 2: Post via chat.postMessage <!-- ai-slop-ok: pre-existing step structure -->
 
 Use `chat.postMessage` instead of the webhook to capture `thread_ts`:
 
@@ -196,7 +196,7 @@ curl -s -X POST "$SLACK_WEBHOOK_URL" \
 THREAD_TS=""
 ```
 
-### Step 3: Poll for Replies (MEDIUM_RISK / HIGH_RISK only)
+### Step 3: Poll for Replies (MEDIUM_RISK / HIGH_RISK only) <!-- ai-slop-ok: pre-existing step structure -->
 
 LOW_RISK skips this step entirely.
 
@@ -217,7 +217,7 @@ The helper script exits with:
 - `1` and prints `REJECTED:<reply_text>` → exit with `status: rejected`
 - `2` and prints `TIMEOUT` → exit with `status: timeout`
 
-### Step 4: Write Skill Result
+### Step 4: Write Skill Result <!-- ai-slop-ok: pre-existing step structure -->
 
 ```json
 {

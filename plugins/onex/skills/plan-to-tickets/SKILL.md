@@ -91,7 +91,7 @@ Create Linear tickets from a plan markdown file. Parses phases or milestones, cr
 
 ---
 
-## Step 1: Read and Validate Plan File
+## Step 1: Read and Validate Plan File <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 from pathlib import Path
@@ -108,7 +108,7 @@ If file doesn't exist, report error and stop.
 
 ---
 
-## Step 2: Detect Plan Structure
+## Step 2: Detect Plan Structure <!-- ai-slop-ok: pre-existing step structure -->
 
 **Detection Cascade:**
 1. If `## Task N:` sections exist → use them (`task_sections`, canonical)
@@ -349,7 +349,7 @@ def parse_dependency_string(deps_str: str) -> list[str]:
 
 ---
 
-## Step 3: Extract Epic Title
+## Step 3: Extract Epic Title <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def extract_epic_title(content: str, override: str | None = None) -> str:
@@ -367,7 +367,7 @@ def extract_epic_title(content: str, override: str | None = None) -> str:
 
 ---
 
-## Step 4: Resolve or Create Epic
+## Step 4: Resolve or Create Epic <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | None, dry_run: bool = False) -> dict | None:
@@ -450,7 +450,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
 
 ---
 
-## Step 5: Build Ticket Descriptions
+## Step 5: Build Ticket Descriptions <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def build_ticket_description(entry: dict, structure_type: str, arch_violation_override: bool = False) -> str:
@@ -494,7 +494,7 @@ def build_ticket_description(entry: dict, structure_type: str, arch_violation_ov
 
 ---
 
-## Step 6: Check for Existing Tickets
+## Step 6: Check for Existing Tickets <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def check_existing_ticket(title: str, team: str) -> dict | None:
@@ -514,7 +514,7 @@ def check_existing_ticket(title: str, team: str) -> dict | None:
 
 ---
 
-## Step 7: Handle Conflicts
+## Step 7: Handle Conflicts <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def handle_conflict(existing: dict, entry: dict, skip_existing: bool) -> str:
@@ -665,7 +665,7 @@ if not should_proceed:
 
 ---
 
-## Step 8: Create Tickets in Batch
+## Step 8: Create Tickets in Batch <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def create_tickets_batch(
@@ -848,7 +848,7 @@ def create_tickets_batch(
 
 ---
 
-## Step 9: Report Summary
+## Step 9: Report Summary <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
 def report_summary(results: dict, epic: dict | None, structure_type: str, dry_run: bool):

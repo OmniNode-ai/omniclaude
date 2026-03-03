@@ -116,7 +116,7 @@ Pre-fills title and suggests requirements.
 /create-ticket --from-contract contract.yaml --team Omninode
 ```
 
-## Step 3: Generate Contract
+## Step 3: Generate Contract <!-- ai-slop-ok: pre-existing step structure -->
 
 After outputting the ticket template, call `generate-ticket-contract` with:
 - `ticket_id`: the OMN-XXXX (or DRAFT if pre-creation)
