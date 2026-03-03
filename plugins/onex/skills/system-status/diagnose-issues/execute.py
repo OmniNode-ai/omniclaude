@@ -169,7 +169,7 @@ def check_infrastructure_issues() -> list[dict[str, Any]]:
                     "component": "kafka",
                     "issue": "Kafka broker unreachable",
                     "details": kafka_result.get("error", "Connection failed"),
-                    "recommendation": "Check Kafka broker: docker logs omninode-bridge-redpanda",
+                    "recommendation": "Check Kafka broker: docker logs omnibase-infra-redpanda",
                     "auto_fix_available": False,
                 }
             )

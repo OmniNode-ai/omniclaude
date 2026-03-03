@@ -258,7 +258,7 @@ def determine_overall_status(services: dict, infrastructure: dict) -> tuple:
             )
             if component == "kafka":
                 recommendations.append(
-                    "Check Kafka broker at: docker logs omninode-bridge-redpanda"
+                    "Check Kafka broker: docker logs omnibase-infra-redpanda"
                 )
             elif component == "postgres":
                 recommendations.append("Verify PostgreSQL credentials in .env file")

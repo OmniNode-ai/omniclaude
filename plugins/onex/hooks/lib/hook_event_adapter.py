@@ -234,14 +234,28 @@ class HookEventAdapter:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - Default: KAFKA_BOOTSTRAP_SERVERS env var or "omninode-bridge-redpanda:9092"
-                - Remote broker: "<kafka-bootstrap-servers>:9092" (primary)
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - Default: KAFKA_BOOTSTRAP_SERVERS env var or localhost:19092 (bus_local)
+                - bus_local: localhost:19092 (local Docker Redpanda, always-on, OMN-3431)
+                - bus_cloud: localhost:29092 (cloud Kafka via launchd tunnel)
             enable_events: Enable event publishing (feature flag)
         """
-        self.bootstrap_servers = bootstrap_servers or os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
-        )
+        resolved = bootstrap_servers or os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+        if not resolved:
+            _BUS_LOCAL_DEFAULT = "localhost:19092"
+            import warnings
+
+            logging.getLogger(__name__).warning(
+                "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s (bus_local). "
+                "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (bus_local) or "
+                "localhost:29092 (bus_cloud).",
+                _BUS_LOCAL_DEFAULT,
+            )
+            warnings.warn(
+                f"KAFKA_BOOTSTRAP_SERVERS not set — using bus_local default {_BUS_LOCAL_DEFAULT}.",
+                stacklevel=2,
+            )
+            resolved = _BUS_LOCAL_DEFAULT
+        self.bootstrap_servers = resolved
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
 

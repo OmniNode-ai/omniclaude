@@ -15,7 +15,7 @@ Usage:
     from lib.kafka_config import get_kafka_bootstrap_servers
 
     brokers = get_kafka_bootstrap_servers()
-    # Returns: "192.168.86.200:29092" (or value from environment)
+    # Returns: "localhost:19092" if KAFKA_BOOTSTRAP_SERVERS is unset (bus_local default)
 
 Integration:
     - agent-tracking skills (log-routing-decision, log-agent-action, etc.)
@@ -27,14 +27,24 @@ Environment Variable Priority:
     1. KAFKA_BOOTSTRAP_SERVERS (general config)
     2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)
     3. KAFKA_BROKERS (legacy compatibility)
-    4. Default: 192.168.86.200:29092 (external port for host scripts)
+    4. Default: localhost:19092 (bus_local — local Docker Redpanda, OMN-3431)
+
+Two-bus policy (OMN-3431):
+    bus_local (default): localhost:19092  — local Docker Redpanda, always-on
+    bus_cloud:           localhost:29092  — cloud Kafka via launchd tunnel
 
 Created: 2025-10-28
-Version: 1.0.0
+Version: 1.1.0
 Correlation ID: cec9c22e-0944-4eae-9f9f-08803f056aeb
 """
 
+import logging
 import os
+import warnings
+
+_log = logging.getLogger(__name__)
+
+_BUS_LOCAL_DEFAULT = "localhost:19092"
 
 
 def get_kafka_bootstrap_servers() -> str:
@@ -48,37 +58,52 @@ def get_kafka_bootstrap_servers() -> str:
     1. KAFKA_BOOTSTRAP_SERVERS (general config)
     2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)
     3. KAFKA_BROKERS (legacy compatibility)
-    4. Default: 192.168.86.200:29092 (external port for host scripts)
+    4. Default: localhost:19092 (bus_local — local Docker Redpanda, OMN-3431)
 
     Returns:
-        str: Comma-separated bootstrap servers (e.g., "192.168.86.200:9092")
+        str: Comma-separated bootstrap servers (e.g., "localhost:19092")
 
     Examples:
-        >>> # With no environment variables set
+        >>> # With no environment variables set (warns and returns bus_local default)
         >>> get_kafka_bootstrap_servers()
-        '192.168.86.200:29092'
+        'localhost:19092'
 
         >>> # With KAFKA_BOOTSTRAP_SERVERS set
-        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:9092'
+        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:19092'
         >>> get_kafka_bootstrap_servers()
-        'localhost:9092'
+        'localhost:19092'
 
-        >>> # With multiple brokers
-        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = '192.168.86.200:29092,192.168.86.201:29092'
+        >>> # Cloud bus (activate with: bus-cloud in shell)
+        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:29092'
         >>> get_kafka_bootstrap_servers()
-        '192.168.86.200:29092,192.168.86.201:29092'
+        'localhost:29092'
 
     Notes:
         - Returns a string suitable for both kafka-python and confluent-kafka
         - For list format, use get_kafka_bootstrap_servers_list()
-        - Default broker uses external port 29092 for host scripts (port 9092 is internal Docker only)
+        - Logs a warning when falling back to the default (bus_local)
+        - bus_local: localhost:19092 (local Docker Redpanda, always-on)
+        - bus_cloud: localhost:29092 (cloud Kafka via launchd tunnel, activate with bus-cloud)
     """
-    return (
+    result = (
         os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
         or os.environ.get("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS")
         or os.environ.get("KAFKA_BROKERS")
-        or "192.168.86.200:29092"
     )
+    if result:
+        return result
+    default = _BUS_LOCAL_DEFAULT
+    _log.warning(
+        "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s (bus_local). "
+        "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (bus_local) or "
+        "localhost:29092 (bus_cloud).",
+        default,
+    )
+    warnings.warn(
+        f"KAFKA_BOOTSTRAP_SERVERS not set — using bus_local default {default}.",
+        stacklevel=2,
+    )
+    return default
 
 
 def get_kafka_bootstrap_servers_list() -> list[str]:
@@ -93,11 +118,11 @@ def get_kafka_bootstrap_servers_list() -> list[str]:
 
     Examples:
         >>> get_kafka_bootstrap_servers_list()
-        ['192.168.86.200:29092']
+        ['localhost:19092']
 
-        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:9092,localhost:9093'
+        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:19092,localhost:19093'
         >>> get_kafka_bootstrap_servers_list()
-        ['localhost:9092', 'localhost:9093']
+        ['localhost:19092', 'localhost:19093']
 
     Notes:
         - Suitable for confluent-kafka Consumer/Producer configuration

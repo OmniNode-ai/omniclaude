@@ -19,7 +19,7 @@ Usage:
     python scripts/bus_audit.py
     python scripts/bus_audit.py --json
     python scripts/bus_audit.py --failures-only -v
-    python scripts/bus_audit.py --broker 192.168.86.200:29092
+    python scripts/bus_audit.py --broker localhost:19092
 
 Related tickets: OMN-2116
 """
@@ -1230,13 +1230,13 @@ def main() -> None:
             "  python scripts/bus_audit.py\n"
             "  python scripts/bus_audit.py --json\n"
             "  python scripts/bus_audit.py --failures-only -v\n"
-            "  python scripts/bus_audit.py --broker 192.168.86.200:29092\n"
+            "  python scripts/bus_audit.py --broker localhost:19092\n"
         ),
     )
     parser.add_argument(
         "--broker",
-        default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"),
-        help="Kafka bootstrap servers (default: $KAFKA_BOOTSTRAP_SERVERS or 192.168.86.200:29092)",
+        default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"),
+        help="Kafka bootstrap servers (default: $KAFKA_BOOTSTRAP_SERVERS or localhost:19092)",
     )
     parser.add_argument(
         "--sample-count",
