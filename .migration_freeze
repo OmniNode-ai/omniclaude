@@ -11,6 +11,8 @@
 # To lift the freeze: remove this file once DB boundary work for omniclaude is complete.
 #
 # Enforcement: CI job (migration-freeze) + pre-commit hook (migration-freeze-check)
-# Tracking: OMN-2073
-# Parent:   OMN-2055
-# Created:  2026-02-10
+# Tracking:    OMN-2073
+# Parent:      OMN-2055
+freeze_date=2026-02-10
+ticket=OMN-2073
+reason=Schema freeze during DB-per-repo refactor (OMN-2055); omniclaude boundary work in progress
