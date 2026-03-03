@@ -589,6 +589,20 @@ for i, wave in enumerate(waves):
     print(f"  Wave {i}: {[tid for _, tid in wave]}")
 ```
 
+## Planning Context Resolution
+
+After child tickets are confirmed and integration branches created:
+
+1. Build `repos_in_scope` from the collision_report or ticket contract repos
+2. Invoke `@skills/planning-context-resolver` with `epic_id` and `repos_in_scope`
+3. Read `~/.claude/epics/{epic_id}/planning_context.yaml`
+4. If `risk_band == "Critical"`: pause for Slack gate (resolver handles the gate — check for existing gate)
+5. If any invariant has `status == "unresolved"`: pause for Slack gate (resolver handles the gate)
+6. Set `PLANNING_CONTEXT_PATH=~/.claude/epics/{epic_id}/planning_context.yaml` in dispatch env
+7. Proceed to collision detection and ticket dispatch
+
+---
+
 ## Pre-Dispatch: Collision Detection
 
 Before dispatching any ticket to workers, run the collision detector.
