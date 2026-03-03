@@ -63,6 +63,14 @@ logger = logging.getLogger(__name__)
 PUBLISHER_POLL_INTERVAL_SECONDS: float = 0.1
 
 
+def _json_default(obj: object) -> str:
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 class EmbeddedEventPublisher:
     """Unix socket server for persistent Kafka event emission.
 
@@ -641,7 +649,7 @@ class EmbeddedEventPublisher:
 
         try:
             key = event.partition_key.encode("utf-8") if event.partition_key else None
-            value = json.dumps(event.payload).encode("utf-8")
+            value = json.dumps(event.payload, default=_json_default).encode("utf-8")
 
             payload_correlation_id = (
                 event.payload.get("correlation_id")

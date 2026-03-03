@@ -419,7 +419,7 @@ def _build_routing_decision_payload(
     return {
         "id": str(uuid4()),
         "correlation_id": _cid_str,
-        "claude_session_id": session_id or None,
+        "session_id": session_id or None,
         "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
         "confidence_score": confidence_score,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),

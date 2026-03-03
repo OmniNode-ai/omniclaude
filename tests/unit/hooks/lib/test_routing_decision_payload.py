@@ -48,7 +48,6 @@ _REQUIRED_KEYS = frozenset(
 )
 _FORBIDDEN_KEYS = frozenset(
     {
-        "session_id",
         "confidence",
         "routing_method",
         "routing_policy",
@@ -98,6 +97,8 @@ def test_payload_has_required_keys() -> None:
     assert not present_forbidden, (
         f"Forbidden keys present at top level of payload: {present_forbidden}"
     )
+
+    assert payload["session_id"] == _SAMPLE_SESSION
 
 
 @pytest.mark.unit
