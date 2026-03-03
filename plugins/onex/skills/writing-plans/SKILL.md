@@ -2,6 +2,8 @@
 name: writing-plans
 description: Use when design is complete and you need detailed implementation tasks for engineers with zero codebase context - creates comprehensive implementation plans with exact file paths, complete code examples, and verification steps assuming engineer has minimal domain knowledge
 version: 1.0.0
+level: basic
+debug: false
 category: methodology
 tags:
   - planning

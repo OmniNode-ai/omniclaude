@@ -2,6 +2,8 @@
 name: close-day
 description: Auto-generates a ModelDayClose YAML from today's GitHub PRs, git activity, and invariant probes
 version: 1.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - day-close

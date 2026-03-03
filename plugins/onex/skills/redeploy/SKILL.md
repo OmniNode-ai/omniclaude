@@ -2,6 +2,8 @@
 name: redeploy
 description: Full post-release runtime redeploy — syncs bare clones, updates Dockerfile plugin pins, rebuilds Docker runtime, seeds Infisical, and verifies health
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags: [deploy, runtime, docker, infisical, post-release]
 author: OmniClaude Team

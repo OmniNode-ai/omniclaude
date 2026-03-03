@@ -2,6 +2,8 @@
 name: deep-dive
 description: Deep Dive Command - Daily Work Analysis Report
 version: 1.0.0
+level: basic
+debug: false
 category: reporting
 tags: [reporting, analysis, daily]
 author: OmniClaude Team

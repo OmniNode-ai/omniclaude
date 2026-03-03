@@ -1,6 +1,8 @@
 ---
 name: linear-insights
 description: Daily deep dive reports and velocity-based project completion estimates using Linear data
+level: intermediate
+debug: false
 ---
 
 # Linear Insights

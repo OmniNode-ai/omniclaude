@@ -298,7 +298,7 @@ def _dispatch_pr_review_dev(
     Task(
         subagent_type="onex:polymorphic-agent",
         description=f"pr-watch: fix review comments for PR #{pr_number} (cycle {cycle})",
-        prompt=f"""Invoke: Skill(skill="pr-review-dev", args="{pr_number}")
+        prompt=f"""Invoke: Skill(skill="onex:pr-review-dev", args="{pr_number}")
 
         Fix all Critical, Major, and Minor issues.{nit_instruction}
         Push fixes to the PR branch for repo {repo}.

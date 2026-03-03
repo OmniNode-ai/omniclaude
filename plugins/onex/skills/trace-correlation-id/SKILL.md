@@ -1,6 +1,8 @@
 ---
 name: trace-correlation-id
 description: Complete observability trace for agent executions by correlation ID — shows all events, decisions, and outcomes for a specific run
+level: advanced
+debug: true
 ---
 
 # Trace Correlation ID

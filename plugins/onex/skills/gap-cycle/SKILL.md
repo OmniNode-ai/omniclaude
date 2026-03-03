@@ -5,6 +5,8 @@ description: >
   fix (gap-fix) → verify (golden-path-validate routing, optional).
   Single entry point replacing manual sub-skill chaining. v0.1.
 version: 0.1.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - gap-analysis

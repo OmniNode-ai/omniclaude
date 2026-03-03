@@ -2,6 +2,8 @@
 name: resume-epic
 description: Resume a mid-epic interruption by re-dispatching incomplete tickets to ticket-pipeline
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags: [epic, resume, recovery, linear, ticket-pipeline]
 author: OmniClaude Team

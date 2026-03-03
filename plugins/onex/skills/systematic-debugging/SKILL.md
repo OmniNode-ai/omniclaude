@@ -2,6 +2,8 @@
 name: systematic-debugging
 description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - four-phase framework (root cause investigation, pattern analysis, hypothesis testing, implementation) that ensures understanding before attempting solutions
 version: 1.0.0
+level: basic
+debug: false
 category: debugging
 tags:
   - debugging

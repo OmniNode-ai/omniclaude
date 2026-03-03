@@ -2,6 +2,8 @@
 name: dispatching-parallel-agents
 description: Use when facing 3+ independent failures that can be investigated without shared state or dependencies - dispatches multiple Claude agents to investigate and fix independent problems concurrently
 version: 1.1.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - parallelization

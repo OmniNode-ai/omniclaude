@@ -2,6 +2,8 @@
 name: project-status
 description: Project Status Command - Linear Insights Dashboard
 version: 1.0.0
+level: intermediate
+debug: false
 category: reporting
 tags: [linear, reporting, project, status]
 author: OmniClaude Team

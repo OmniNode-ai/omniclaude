@@ -2,6 +2,8 @@
 name: runner-status
 description: Display health, version, and host metrics for all self-hosted GitHub Actions runners
 version: 1.0.0
+level: advanced
+debug: true
 category: tooling
 tags:
   - ci

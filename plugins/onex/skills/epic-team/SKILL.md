@@ -2,6 +2,8 @@
 name: epic-team
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
 version: 2.0.0
+level: advanced
+debug: false
 category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
 args:

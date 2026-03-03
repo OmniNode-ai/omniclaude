@@ -2,6 +2,8 @@
 name: ci-failures
 description: Fetch and analyze GitHub Actions CI failures for debugging
 version: 1.0.0
+level: intermediate
+debug: false
 category: development
 tags:
   - github

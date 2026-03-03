@@ -2,6 +2,8 @@
 name: suggest-work
 description: Suggest Work Command - Priority Backlog Recommendations
 version: 1.0.0
+level: basic
+debug: false
 category: workflow
 tags: [linear, backlog, suggestions, priority]
 author: OmniClaude Team

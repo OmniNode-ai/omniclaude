@@ -2,6 +2,8 @@
 name: ci-watch
 description: Poll GitHub Actions CI for a PR, auto-fix failures, and report terminal state
 version: 1.0.0
+level: basic
+debug: false
 category: workflow
 tags: [ci, github-actions, automation, polling]
 author: OmniClaude Team
@@ -217,7 +219,7 @@ If neither inbox-wait nor `_bin/ci-status.sh` is available, use `gh run watch` d
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-watch: auto-fix introduced CI failures on PR #{pr_number} (cycle {N})",
-  prompt="Invoke: Skill(skill=\"ci-fix-pipeline\",
+  prompt="Invoke: Skill(skill=\"onex:ci-fix-pipeline\",
     args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
     Failure details:
@@ -307,7 +309,7 @@ exec claude --skill ci-watch \
 |------------|-------------|
 | `/ci-watch --pr {N}` | Interactive: poll CI on PR N, auto-fix on failure |
 | `/ci-watch --pr {N} --no-auto-fix` | Interactive: poll CI on PR N, gate on failure |
-| `Skill(skill="ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
+| `Skill(skill="onex:ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
 | `ci-watch.sh --pr {N} --ticket-id {T} --timeout-minutes 90` | Shell: direct invocation with all parameters |
 
 ## Invocation from ticket-pipeline

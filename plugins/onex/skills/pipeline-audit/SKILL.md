@@ -2,6 +2,8 @@
 name: pipeline-audit
 description: Systematically audit an end-to-end multi-repo pipeline for integration correctness by proving every join between services with file-level evidence, dispatching parallel agents per repo and per proof category, and compiling a severity-ordered gap register with actionable tickets
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags:
   - integration

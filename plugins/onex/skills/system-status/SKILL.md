@@ -1,6 +1,8 @@
 ---
 name: system-status
 description: Comprehensive system health monitoring — checks agent performance, database, Kafka topics, pattern discovery, and service status across the ONEX platform
+level: advanced
+debug: true
 ---
 
 # System Status

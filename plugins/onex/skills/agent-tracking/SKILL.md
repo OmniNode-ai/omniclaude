@@ -1,6 +1,8 @@
 ---
 name: agent-tracking
 description: PostgreSQL-backed observability skills for tracking agent routing decisions, detection failures, transformations, and performance metrics
+level: advanced
+debug: true
 ---
 
 # Agent Tracking

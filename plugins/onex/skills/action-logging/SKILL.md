@@ -1,6 +1,8 @@
 ---
 name: action-logging
 description: Easy-to-use action logging for agents with automatic timing, context management, and Kafka integration. Track tool calls, decisions, errors, and successes with minimal code.
+level: advanced
+debug: true
 ---
 
 # Action Logging

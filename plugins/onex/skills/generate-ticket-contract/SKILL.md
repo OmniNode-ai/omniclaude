@@ -1,6 +1,8 @@
 ---
 name: generate-ticket-contract
 description: Auto-draft a ModelTicketContract YAML from ticket context with two-layer architecture — prompt generation and Python validation
+level: advanced
+debug: false
 ---
 
 # generate-ticket-contract skill

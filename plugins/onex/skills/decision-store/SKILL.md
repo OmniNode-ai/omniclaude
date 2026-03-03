@@ -1,6 +1,8 @@
 ---
 name: decision-store
 description: Record, query, and conflict-check architectural and design decisions across the OmniNode platform
+level: intermediate
+debug: false
 ---
 
 # decision-store skill

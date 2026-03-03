@@ -2,6 +2,8 @@
 name: pr-review-dev
 description: PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 version: 1.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - pr
@@ -63,7 +65,7 @@ Filter nitpicks by default.
 ### Fix Phase -- dispatch via parallel-solve
 
 ```
-Skill(skill="parallel-solve")
+Skill(skill="onex:parallel-solve")
 ```
 
 Pass collated issues as context.

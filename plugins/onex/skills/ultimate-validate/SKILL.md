@@ -2,6 +2,8 @@
 name: ultimate-validate
 description: Generate comprehensive validation command for this codebase
 version: 1.0.0
+level: advanced
+debug: true
 category: tooling
 tags:
   - validation

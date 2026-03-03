@@ -2,6 +2,8 @@
 name: ticket-pipeline
 description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, integration verification gate, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
 version: 5.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - pipeline
@@ -707,7 +709,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
   prompt="You are executing ticket-work for {ticket_id}.
-    Invoke: Skill(skill=\"ticket-work\", args=\"{ticket_id}\")
+    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
 
     Ticket: {ticket_id} - {title}
     Description: {description}
@@ -729,7 +731,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
-    Invoke: Skill(skill=\"local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
 
     Branch: {branch_name}
     Repo: {repo_path}

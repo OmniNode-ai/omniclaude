@@ -2,6 +2,8 @@
 name: "agent-observability"
 description: "Real-time monitoring and diagnostics for the OmniClaude agent execution system"
 version: "1.0.0"
+level: advanced
+debug: true
 author: "OmniClaude Team"
 category: "observability"
 tags:

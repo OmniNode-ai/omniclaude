@@ -2,6 +2,8 @@
 name: ticket-plan-sync
 description: Sync MASTER_TICKET_PLAN.md with current Linear state — full regeneration or targeted patch update
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags:
   - linear

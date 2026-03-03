@@ -116,7 +116,7 @@ intelligence_integration:
 # Skills Available
 skills_available:
   log_execution:
-    skill_name: "log-execution"
+    skill_name: "onex:log-execution"
     when_to_use:
       - "At research task initialization to log task start"
       - "During major research phases to track progress"

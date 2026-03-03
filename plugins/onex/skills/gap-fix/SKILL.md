@@ -2,6 +2,8 @@
 name: gap-fix
 description: Auto-fix loop for gap-analysis findings — reads a gap-analysis report, classifies findings by auto-dispatch eligibility, dispatches ticket-pipeline for safe-only findings, then calls pr-queue-pipeline on the created PRs
 version: 0.1.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - gap-analysis

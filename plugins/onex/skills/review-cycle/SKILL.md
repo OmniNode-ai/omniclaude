@@ -2,6 +2,8 @@
 name: review-cycle
 description: Guided local code review with human checkpoints and learning mode
 version: 1.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - review

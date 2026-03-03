@@ -2,6 +2,8 @@
 name: pr-watch
 description: Poll GitHub PR for review feedback, auto-fix issues, and report terminal state
 version: 1.0.0
+level: basic
+debug: false
 category: workflow
 tags: [pr, github, review, automation, polling]
 author: OmniClaude Team
@@ -102,7 +104,7 @@ Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by 
 Task(
   subagent_type="onex:polymorphic-agent",
   description="pr-watch: fix review comments for PR #{pr_number} (cycle {N})",
-  prompt="Invoke: Skill(skill=\"pr-review-dev\", args=\"{pr_number}\")
+  prompt="Invoke: Skill(skill=\"onex:pr-review-dev\", args=\"{pr_number}\")
 
     Review comments:
     {review_comments}

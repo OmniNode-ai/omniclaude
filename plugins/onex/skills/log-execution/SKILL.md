@@ -2,6 +2,8 @@
 name: "log-execution"
 description: "Track agent execution in PostgreSQL for observability and intelligence gathering"
 version: "1.0.0"
+level: advanced
+debug: true
 author: "OmniClaude Team"
 category: "observability"
 tags:

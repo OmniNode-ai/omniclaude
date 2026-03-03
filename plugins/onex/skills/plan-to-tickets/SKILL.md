@@ -2,6 +2,8 @@
 name: plan-to-tickets
 description: Batch create Linear tickets from a plan markdown file - parses phases/milestones, creates epic if needed, links dependencies
 version: 1.0.0
+level: advanced
+debug: false
 category: workflow
 tags: [linear, tickets, planning, batch]
 author: OmniClaude Team

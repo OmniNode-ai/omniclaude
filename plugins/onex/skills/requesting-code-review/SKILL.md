@@ -2,6 +2,8 @@
 name: requesting-code-review
 description: Use when completing tasks, implementing major features, or before merging to verify work meets requirements - dispatches code-reviewer subagent to review implementation against plan or requirements before proceeding
 version: 1.0.0
+level: intermediate
+debug: false
 category: code-review
 tags:
   - code-review

@@ -2,6 +2,8 @@
 name: parallel-solve
 description: Execute any task in parallel using polymorphic agents with requirements gathering
 version: 1.0.0
+level: intermediate
+debug: false
 category: workflow
 tags:
   - parallel
