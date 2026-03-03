@@ -225,7 +225,7 @@ except Exception as e:
         log "ERROR: The emit daemon will crash with: AIOKafkaProducer.__init__() got an unexpected keyword argument 'reconnect_backoff_ms'"
         log "ERROR: All extraction events (context.utilization, agent.match, latency.breakdown) will be silently dropped."
         log "FIX: Rebuild the plugin venv to install omnibase_infra>=0.14.0:"
-        log "FIX:   \${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv"
+        log "FIX:   ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv"
         write_daemon_status "stale_dependency"
         return 0  # Non-fatal: continue without publisher; hook still provides ticket context
     else
