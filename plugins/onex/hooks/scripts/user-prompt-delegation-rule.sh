@@ -26,7 +26,10 @@ if [[ -n "$SESSION_ID" ]]; then
 fi
 
 # Build the rule text via a variable to avoid jq escaping issues
-RULE_TEXT="DELEGATION RULE: For any task requiring more than 2 tool calls (writing code, running tests, managing tickets, reading multiple files, executing workflows), spawn onex:polymorphic-agent as your FIRST action. Conversational responses are exempt."
+RULE_TEXT="DELEGATION RULE: For any task requiring more than 2 tool calls, delegate as your FIRST action — before any reads, writes, or bash calls:
+• Multiple independent subtasks (check N repos, run N tests, scan N files) → Skill('onex:parallel-solve')
+• Single coherent task or workflow → Agent(subagent_type='onex:polymorphic-agent', prompt='...', description='...')
+Conversational responses are exempt."
 
 jq -n --arg msg "$RULE_TEXT" '{
     hookSpecificOutput: {

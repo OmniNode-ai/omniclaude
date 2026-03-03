@@ -78,7 +78,7 @@ jq -n \
     --arg tool "$TOOL_NAME" \
     '{
         hookSpecificOutput: {
-            additionalContext: ("DELEGATION ENFORCER: " + ($count | tostring) + " work tool calls (" + $tool + " just now) without delegating. If this is a work task, STOP and spawn onex:polymorphic-agent to handle the rest. Continuing inline will fill the context window.")
+            additionalContext: ("DELEGATION ENFORCER: " + ($count | tostring) + " work tool calls (" + $tool + " just now) without delegating. STOP. Choose one: multiple independent subtasks -> Skill(onex:parallel-solve) | single workflow -> Agent(subagent_type=onex:polymorphic-agent). Continuing inline fills the context window.")
         }
     }'
 
