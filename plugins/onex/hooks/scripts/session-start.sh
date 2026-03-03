@@ -1002,6 +1002,34 @@ else
     log "Architecture handshake injection skipped (architecture_handshake_injector.py not found)"
 fi
 
+# -----------------------------
+# Skill Suggestion Injection (OMN-3455)
+# -----------------------------
+# Reads ~/.claude/onex-skill-usage.log and injects 1-2 "next skill" suggestions
+# based on the static progression graph (skills/progression.yaml).
+# Runs SYNCHRONOUSLY (local filesystem only, ~5ms) so suggestions are available
+# immediately in additionalContext for the very first prompt.
+#
+# Privacy: suggestions contain only skill names — no prompt content, no personal data.
+
+SKILL_SUGGESTIONS_ENABLED="${OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED:-true}"
+SKILL_SUGGESTIONS_ENABLED=$(_normalize_bool "$SKILL_SUGGESTIONS_ENABLED")
+SKILL_SUGGESTIONS=""
+
+if [[ "${SKILL_SUGGESTIONS_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/skill_suggestion_injector.py" ]]; then
+    _sugg_output=$("$PYTHON_CMD" "${HOOKS_LIB}/skill_suggestion_injector.py" "${SESSION_ID:-}" 2>>"$LOG_FILE") || _sugg_output=""
+    if [[ -n "$_sugg_output" ]]; then
+        SKILL_SUGGESTIONS="$_sugg_output"
+        log "Skill suggestions injected (${#SKILL_SUGGESTIONS} chars)"
+    else
+        log "Skill suggestions: no suggestions available"
+    fi
+elif [[ "${SKILL_SUGGESTIONS_ENABLED}" != "true" ]]; then
+    log "Skill suggestion injection disabled (OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED=false)"
+else
+    log "Skill suggestion injection skipped (skill_suggestion_injector.py not found)"
+fi
+
 # Performance tracking
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
@@ -1015,8 +1043,9 @@ fi
 # Build output with additionalContext
 # NOTE: Pattern injection is async, so patterns won't be available here.
 # UserPromptSubmit will handle pattern injection for the first prompt.
-# Architecture handshake and ticket context are sync, so they ARE available immediately.
-# Combined format: handshake first, then ticket context (separated by ---)
+# Architecture handshake, ticket context, and skill suggestions are sync,
+# so they ARE available immediately.
+# Combined format: handshake first, then ticket context, then skill suggestions.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
     # Check for emit health warning
     COMBINED_CONTEXT=""
@@ -1027,9 +1056,10 @@ if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
         fi
     fi
 
-    # Combine handshake and ticket context if both present
+    # Combine handshake, ticket context, and skill suggestions if present
     HAS_HANDSHAKE="false"
     HAS_TICKET="false"
+    HAS_SKILL_SUGGESTIONS="false"
 
     if [[ -n "$HANDSHAKE_CONTEXT" ]]; then
         if [[ -n "$COMBINED_CONTEXT" ]]; then
@@ -1056,17 +1086,32 @@ ${TICKET_CONTEXT}"
         HAS_TICKET="true"
     fi
 
+    if [[ -n "$SKILL_SUGGESTIONS" ]]; then
+        if [[ -n "$COMBINED_CONTEXT" ]]; then
+            COMBINED_CONTEXT="${COMBINED_CONTEXT}
+
+---
+
+${SKILL_SUGGESTIONS}"
+        else
+            COMBINED_CONTEXT="$SKILL_SUGGESTIONS"
+        fi
+        HAS_SKILL_SUGGESTIONS="true"
+    fi
+
     if [[ -n "$COMBINED_CONTEXT" ]]; then
         # Include combined context in additionalContext (sync injection)
         printf '%s' "$INPUT" | jq \
             --arg ctx "$COMBINED_CONTEXT" \
             --argjson has_handshake "$HAS_HANDSHAKE" \
             --argjson has_ticket "$HAS_TICKET" \
+            --argjson has_skill_suggestions "$HAS_SKILL_SUGGESTIONS" \
             '.hookSpecificOutput.hookEventName = "SessionStart" |
              .hookSpecificOutput.additionalContext = $ctx |
              .hookSpecificOutput.metadata.injection_mode = "sync" |
              .hookSpecificOutput.metadata.has_handshake_context = $has_handshake |
-             .hookSpecificOutput.metadata.has_ticket_context = $has_ticket'
+             .hookSpecificOutput.metadata.has_ticket_context = $has_ticket |
+             .hookSpecificOutput.metadata.has_skill_suggestions = $has_skill_suggestions'
     elif [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
         # Async pattern injection was started - set metadata to indicate this
         printf '%s' "$INPUT" | jq \
