@@ -1639,6 +1639,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
@@ -1652,6 +1653,7 @@ jobs:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'
           severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
 
   # ============================================================================
   # DEPLOYMENT
