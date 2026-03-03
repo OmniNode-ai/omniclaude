@@ -39,7 +39,7 @@ For each repo in `normalized.repos`:
 
 ```bash
 # Get recently modified files in matching directories
-git -C /Volumes/PRO-G40/Code/omni_home/{repo} log --name-only --since="30 days ago" \
+git -C /Volumes/PRO-G40/Code/omni_home/{repo} log --name-only --since="30 days ago" \  # local-path-ok
   --pretty=format: -- "src/**/*{module}*" | sort | uniq -c | sort -rn | head -20
 ```
 

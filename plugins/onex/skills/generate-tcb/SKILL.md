@@ -1,3 +1,10 @@
+---
+name: generate-tcb
+description: Generate an Intent-Warmed Ticket Context Bundle (TCB) for a Linear ticket with grounded evidence
+version: 1.0.0
+category: workflow
+---
+
 # generate-tcb
 
 ## Description
