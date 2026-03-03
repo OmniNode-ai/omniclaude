@@ -1,3 +1,27 @@
+---
+name: hostile-reviewer
+description: Adversarial code review that attempts to break the change. Produces exactly 2 risks with confidence scores. Output is MANDATORY — cannot rubber-stamp.
+version: 1.0.0
+category: review
+tags:
+  - review
+  - adversarial
+  - pr
+  - quality
+  - risk
+author: OmniClaude Team
+args:
+  - name: pr_number
+    description: PR number to review
+    required: true
+  - name: repo
+    description: Target GitHub repo (e.g., OmniNode-ai/omniclaude)
+    required: true
+  - name: ticket_id
+    description: Linear ticket ID for loading TCB constraints
+    required: false
+---
+
 # hostile-reviewer
 
 ## Description
@@ -23,7 +47,7 @@ Assume the implementer is competent but missed edge cases.
 - Focus: edge cases, concurrency, rollback safety, data mutations, security exposure
 
 ## When Called
-- ticket-pipeline Phase 5.8 (between local_review and mergeability_gate)
+- ticket-pipeline Phase 2.4 (between local_review and mergeability_gate)
 - Can also be called standalone for any PR
 
 ## Output
