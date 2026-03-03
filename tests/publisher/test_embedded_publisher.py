@@ -776,3 +776,42 @@ class TestUUIDDatetimeEncoder:
         decoded = json.loads(value_bytes.decode("utf-8"))
         assert decoded["emitted_at"] == ts.isoformat()
         assert decoded["count"] == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_uuid_correlation_id_preserved_in_headers(
+        self, publisher: EmbeddedEventPublisher, mock_event_bus: MagicMock
+    ) -> None:
+        """When payload.correlation_id is a UUID object, headers must use it verbatim.
+
+        Regression test for CodeRabbit review on OMN-3514: before the fix,
+        UUID correlation_ids in the payload were silently replaced with a new
+        uuid4() because isinstance(payload_correlation_id, str) was False.
+        """
+        from datetime import UTC, datetime
+        from uuid import uuid4
+
+        from omnibase_infra.event_bus.models import ModelEventHeaders
+
+        from omniclaude.publisher.event_queue import ModelQueuedEvent
+
+        expected_correlation_id = uuid4()
+        event = ModelQueuedEvent(
+            event_id="corr-uuid-test",
+            event_type="test.event",
+            topic="test-topic",
+            payload={
+                "correlation_id": expected_correlation_id,
+                "session_id": "s-123",
+            },
+            queued_at=datetime.now(UTC),
+        )
+
+        result = await publisher._publish_event(event)
+        assert result is True
+
+        call_kwargs = mock_event_bus.publish.await_args.kwargs
+        headers: ModelEventHeaders = call_kwargs["headers"]
+        assert headers.correlation_id == expected_correlation_id, (
+            "UUID correlation_id from payload must be preserved in headers, not replaced"
+        )

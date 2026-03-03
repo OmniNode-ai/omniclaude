@@ -670,7 +670,10 @@ class EmbeddedEventPublisher:
                 if isinstance(event.payload, dict)
                 else None
             )
-            if isinstance(payload_correlation_id, str):
+            if isinstance(payload_correlation_id, UUID):
+                # Payload already contains a UUID object (from model_dump() without mode='json')
+                correlation_id = payload_correlation_id
+            elif isinstance(payload_correlation_id, str):
                 try:
                     correlation_id = UUID(payload_correlation_id)
                 except ValueError:
