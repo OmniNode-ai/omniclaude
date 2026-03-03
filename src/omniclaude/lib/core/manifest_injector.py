@@ -685,8 +685,8 @@ class ManifestInjector:
         # Initialize logger early for use throughout __init__
         self.logger = logging.getLogger(__name__)
 
-        self.kafka_brokers = kafka_brokers or os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"
+        self.kafka_brokers = (
+            kafka_brokers or settings.get_effective_kafka_bootstrap_servers() or None
         )
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms

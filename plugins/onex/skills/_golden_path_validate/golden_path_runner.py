@@ -46,7 +46,6 @@ import asyncio
 import importlib
 import json
 import logging
-import os
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +54,8 @@ from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from pydantic import BaseModel, ConfigDict, Field
+
+from shared_lib.kafka_config import get_kafka_bootstrap_servers
 
 logger = logging.getLogger(__name__)
 
@@ -284,10 +285,7 @@ class AssertionEngine:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_ARTIFACT_BASE_DIR = str(Path.home() / ".claude" / "golden-path")
-_DEFAULT_BOOTSTRAP_SERVERS = os.environ.get(
-    "KAFKA_BOOTSTRAP_SERVERS",
-    "localhost:19092",  # bus_local default (OMN-3431)
-)
+_DEFAULT_BOOTSTRAP_SERVERS = get_kafka_bootstrap_servers()
 
 
 class GoldenPathRunner:

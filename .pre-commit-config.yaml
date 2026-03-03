@@ -272,6 +272,19 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # Kafka broker URL fallback guard (OMN-3555)
+      # Prevents bus split regressions caused by stale hardcoded broker addresses
+      # in os.getenv() default/fallback strings (root cause of OMN-3534).
+      # Flags: :19092, :29092 as hardcoded fallback values in source.
+      # Suppression: add `# onex-allow-kafka-broker` to the flagged line.
+      - id: no-hardcoded-kafka-broker
+        name: Block hardcoded Kafka broker URL fallbacks
+        entry: uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
