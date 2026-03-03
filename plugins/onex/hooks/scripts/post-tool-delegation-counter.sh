@@ -47,7 +47,7 @@ fi
 
 # Non-work tools (meta/conversational) — skip counting
 case "$TOOL_NAME" in
-    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList|Skill)
+    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList)
         printf '%s\n' "$TOOL_INFO"
         exit 0
         ;;
