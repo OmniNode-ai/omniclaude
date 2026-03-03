@@ -8,6 +8,26 @@ Read `~/.claude/tcb/{ticket_id}/bundle.json` if it exists.
 If exists AND `is_stale()` returns False AND `force_regenerate` is not set: STOP and output
 "TCB exists and is fresh -- skip. Use force_regenerate=true to override."
 
+## Step 0.5: Load Planning Context (if available)
+
+Check for `~/.claude/epics/{epic_id}/planning_context.yaml` where `epic_id` is from the ticket.
+
+If found:
+  Load the file. Extract:
+  - `patterns.items` (VALIDATED/PROVISIONAL from DB — use INSTEAD of heuristic pattern lookup)
+  - `historical_failures.items` (use to populate related_changes with `kind="commit"` and provenance)
+  - `risk_flags` (add to TCB constraints with `severity=warning`)
+  - `invariants` (add to TCB constraints with severity derived from status)
+
+  When planning_context is loaded:
+  - SKIP Step 6 (constraints are already populated from planning_context)
+  - SKIP the curl pattern query in Step 3d (patterns are already DB-backed from planning_context)
+  - ADD `planning_context` risk flags as TCB constraints of `type=policy`, `severity=warning`
+
+If not found:
+  Proceed with heuristic-only approach (Steps 1–7 as written).
+  Log: "No planning_context.yaml found for epic {epic_id} — using heuristic TCB generation"
+
 ## Ticket Fetch
 
 Use Linear MCP to fetch the ticket. Extract:
