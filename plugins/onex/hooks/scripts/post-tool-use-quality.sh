@@ -145,6 +145,20 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
             mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
             printf '%s' "$_display_skill" > "/tmp/omniclaude-tabs/${_mode_guid}.mode" 2>/dev/null || true
         fi
+        # -----------------------------------------------------------------------
+        # Skill Usage Logging (OMN-3454)
+        # Appends {"skill_name":..., "timestamp":..., "session_id":...} to
+        # ~/.claude/onex-skill-usage.log for Kaizen progression injection.
+        # Non-blocking: runs in background subshell; hook exits 0 on failure.
+        # -----------------------------------------------------------------------
+        SKILL_USAGE_LOGGER="${HOOKS_LIB}/skill_usage_logger.py"
+        if [[ -f "$SKILL_USAGE_LOGGER" ]]; then
+            (
+                printf '%s\n' "$TOOL_INFO" \
+                    | "$PYTHON_CMD" "$SKILL_USAGE_LOGGER" \
+                        2>>"$LOG_FILE" || true
+            ) &
+        fi
     fi
 elif [[ "$TOOL_NAME" == "Task" ]]; then
     SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null) || SUBAGENT_TYPE="unknown"
