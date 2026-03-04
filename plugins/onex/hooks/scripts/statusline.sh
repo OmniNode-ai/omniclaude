@@ -310,7 +310,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     # Calculate percentage for bar
     EXTRA_PCT=0
     if [[ "$EXTRA_LIMIT" =~ ^[0-9]+\.?[0-9]*$ ]] && [ "$(printf '%s' "$EXTRA_LIMIT" | awk '{printf "%d", $1 * 100}')" -gt 0 ] 2>/dev/null; then
-      EXTRA_PCT=$(awk "BEGIN { printf \"%.0f\", (${EXTRA_USED} / ${EXTRA_LIMIT}) * 100 }" 2>/dev/null) || EXTRA_PCT=0
+      EXTRA_PCT=$(awk -v used="$EXTRA_USED" -v lim="$EXTRA_LIMIT" 'BEGIN { if (lim > 0) printf "%.0f", (used / lim) * 100; else printf "0" }' 2>/dev/null) || EXTRA_PCT=0
     fi
     EXTRA_BAR=$(build_bar "$EXTRA_PCT")
     EXTRA_RESET_FMT=$(format_reset "$EXTRA_RESET")
@@ -407,6 +407,7 @@ APPLESCRIPT
   # Read all registry files, parse with single jq invocation
   # Output: tab_pos|repo|ticket|iterm_guid|project_path (one per line, sorted by tab_pos)
   ENTRIES=""
+  set +f  # re-enable globbing for tab file discovery
   for f in "$TAB_REGISTRY_DIR"/*.json; do
     [ -f "$f" ] || continue
     # Skip stale files only when we lack live position data to verify liveness
@@ -417,6 +418,7 @@ APPLESCRIPT
     ENTRIES="${ENTRIES}$(cat "$f" 2>/dev/null)
 "
   done
+  set -f  # restore noglob
 
   TAB_LINE=""
   if [ -n "$ENTRIES" ]; then
