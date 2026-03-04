@@ -25,7 +25,7 @@ You write test cases (pressure scenarios with subagents), watch them fail (basel
 
 **Core principle:** If you didn't watch an agent fail without the skill, you don't know if the skill teaches the right thing.
 
-**REQUIRED BACKGROUND:** You MUST understand superpowers:test-driven-development before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
+**REQUIRED BACKGROUND:** You MUST understand superpowers:test-discipline before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
 
 **Official guidance:** For Anthropic's official skill authoring best practices, see anthropic-best-practices.md. This document provides additional patterns and guidelines that complement the TDD-focused approach in this skill.
 
@@ -70,7 +70,7 @@ The entire skill creation process follows RED-GREEN-REFACTOR.
 ## Skill Types
 
 ### Technique
-Concrete method with steps to follow (condition-based-waiting, root-cause-tracing)
+Concrete method with steps to follow (condition-based-waiting, systematic-debugging)
 
 ### Pattern
 Way of thinking about problems (flatten-with-flags, test-invariants)
@@ -252,7 +252,7 @@ wc -w skills/path/SKILL.md
 - `condition-based-waiting` > `async-test-helpers`
 - `using-skills` not `skill-usage`
 - `flatten-with-flags` > `data-structure-refactoring`
-- `root-cause-tracing` > `debugging-techniques`
+- `systematic-debugging` > `debugging-techniques`
 
 **Gerunds (-ing) work well for processes:**
 - `creating-skills`, `testing-skills`, `debugging-with-logs`
@@ -263,10 +263,10 @@ wc -w skills/path/SKILL.md
 **When writing documentation that references other skills:**
 
 Use skill name only, with explicit requirement markers:
-- Good: `**REQUIRED SUB-SKILL:** Use superpowers:test-driven-development`
+- Good: `**REQUIRED SUB-SKILL:** Use superpowers:test-discipline`
 - Good: `**REQUIRED BACKGROUND:** You MUST understand superpowers:systematic-debugging`
-- Bad: `See skills/testing/test-driven-development` (unclear if required)
-- Bad: `@skills/testing/test-driven-development/SKILL.md` (force-loads, burns context)
+- Bad: `See skills/testing/test-discipline` (unclear if required)
+- Bad: `@skills/testing/test-discipline/SKILL.md` (force-loads, burns context)
 
 **Why no @ links:** `@` syntax force-loads files immediately, consuming 200k+ context before you need them.
 
@@ -367,7 +367,7 @@ Edit skill without testing? Same violation.
 - Don't "adapt" while running tests
 - Delete means delete
 
-**REQUIRED BACKGROUND:** The superpowers:test-driven-development skill explains why this matters. Same principles apply to documentation.
+**REQUIRED BACKGROUND:** The superpowers:test-discipline skill explains why this matters. Same principles apply to documentation.
 
 ## Testing All Skill Types
 
@@ -387,7 +387,7 @@ Different skill types need different test approaches:
 
 ### Technique Skills (how-to guides)
 
-**Examples:** condition-based-waiting, root-cause-tracing, defensive-programming
+**Examples:** condition-based-waiting, systematic-debugging, defensive-programming
 
 **Test with:**
 - Application scenarios: Can they apply the technique correctly?
@@ -647,8 +647,8 @@ When implementing a skill via `ticket-work` or `ticket-pipeline`:
 2. **Dispatch to polly** (high-token phases): implementation, testing, local review
 
 Use one of these skills for dispatch:
-- `onex:subagent-driven-development` — for sequential task batches
-- `onex:parallel-solve` — for independent parallel tasks
+- `onex:multi-agent --mode sequential-with-review` — for sequential task batches
+- `onex:multi-agent --mode parallel-build` — for independent parallel tasks
 
 ### Example dispatch for Phase 1 (implement)
 

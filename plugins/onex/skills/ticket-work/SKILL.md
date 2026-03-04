@@ -51,7 +51,7 @@ Orchestrate ticket execution through structured phases with Linear as the single
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
-> **Skill Ticket Policy**: When this ticket involves skill development (editing SKILL.md, prompt.md, or skill helpers), dispatch all implementation work to a polymorphic agent via `onex:subagent-driven-development` or `onex:parallel-solve`. The main agent must remain the orchestrator — never the implementer. See `onex:writing-skills` → "Polly-Dispatch Policy" for details.
+> **Skill Ticket Policy**: When this ticket involves skill development (editing SKILL.md, prompt.md, or skill helpers), dispatch all implementation work to a polymorphic agent via `onex:multi-agent --mode sequential-with-review` or `onex:multi-agent --mode parallel-build`. The main agent must remain the orchestrator — never the implementer. See `onex:writing-skills` → "Polly-Dispatch Policy" for details.
 
 ## Quick Start
 
@@ -369,20 +369,20 @@ When invoked directly by a human (`/ticket-work OMN-XXXX`), skip writing the res
 
 When the implementation agent returns an error or verification fails repeatedly:
 
-**Auto-dispatch root-cause-tracing:**
+**Auto-dispatch systematic-debugging:**
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ticket-work: root-cause-tracing on implementation failure",
+  description="ticket-work: systematic-debugging on implementation failure",
   prompt="The implementation agent for {ticket_id} failed or verification failed.
     Error: {error_details}
     Files touched: {files_list}
 
-    Invoke: Skill(skill=\"onex:root-cause-tracing\")
+    Invoke: Skill(skill=\"onex:systematic-debugging\")
 
-    Trace the root cause of the implementation failure. Report: root cause, fix recommendation,
-    whether retry is safe, files involved."
+    Use Phase 1 (Backward Tracing) to trace the root cause of the implementation failure.
+    Report: root cause, fix recommendation, whether retry is safe, files involved."
 )
 ```
 
@@ -393,7 +393,6 @@ This replaces the former advisory annotation `REQUIRED SUB-SKILL: root-cause-tra
 - Linear MCP tools (`mcp__linear-server__*`)
 - Related: OMN-1807 (ModelTicketContract in omnibase_core) - contract schema mirrors this model
 - Related: OMN-1831 (Slack notifications) - notification implementation
-- `root-cause-tracing` skill (auto-dispatched on implementation failure)
-- `systematic-debugging` skill (dispatched when root-cause-tracing identifies deep error)
+- `systematic-debugging` skill (auto-dispatched on implementation failure; Phase 1 covers backward tracing)
 - `decision-store` skill (OMN-2768) — DecisionContextLoader and check-conflicts
 - `NodeDecisionStoreQueryCompute` (OMN-2767) — decision query node used at spec→implementation gate

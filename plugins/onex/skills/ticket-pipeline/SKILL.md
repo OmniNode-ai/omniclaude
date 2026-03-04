@@ -36,6 +36,9 @@ args:
   - name: --require-gate
     description: Opt out of auto-merge default; require explicit HIGH_RISK gate before merging
     required: false
+  - name: --docs-only
+    description: "User assertion that all changes are documentation-only (.md/.yaml). Skips integration verification. Misuse can skip required checks."
+    required: false
 ---
 
 # Ticket Pipeline
@@ -99,6 +102,24 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 /ticket-pipeline OMN-1234 --auto-merge    # Explicit override: force auto-merge (default)
 /ticket-pipeline OMN-1234 --require-gate  # Opt out: require HIGH_RISK Slack gate before merge
 ```
+
+## Docs-Only Mode (`--docs-only`)
+
+User assertion that all changes are documentation-only (`.md`, `.yaml`, `.rst` files).
+
+**What `--docs-only` skips:**
+- golden-path-validate
+- Schema checks
+- Service restart verification
+- Integration verification gate
+
+**What `--docs-only` preserves:**
+- local-review
+- CI watch
+- Basic linting
+- PR creation and review
+
+**Usage:** Pass when changes are purely documentation. Misuse (passing --docs-only for code changes) will skip required safety checks.
 
 ## Headless Usage
 
@@ -860,7 +881,7 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `_lib/cdqa-gate/helpers.md` (Phase 5.5 gate protocol, OMN-3189)
 - `auto-merge` skill (Phase 6, OMN-2525)
 - `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
-- `ci-failures` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
+- `ci-fix-pipeline` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
 - `decompose-epic` skill (cross-repo split, OMN-2522)
 - `epic-team` skill (receives handoff after cross-repo split)
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)

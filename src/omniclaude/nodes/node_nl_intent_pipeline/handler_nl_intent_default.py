@@ -5,23 +5,19 @@
 """Default NL Intent Pipeline handler.
 
 Classifies raw NL input into a typed ModelIntentObject using pattern-based
-keyword matching plus an optional HTTP call to the OMN-2348 Intent Intelligence
-Framework (omniintelligence service).
+keyword matching.
 
 Design decisions:
-- HTTP call to external service is *optional* and always non-blocking:
-  if the service is unavailable, the handler falls back to keyword matching.
-- No LLM calls in this handler — classification is deterministic by default.
-- The handler is pure input→output; no I/O side effects (COMPUTE node).
+- No LLM calls in this handler -- classification is deterministic.
+- The handler is pure input->output; no I/O side effects (COMPUTE node).
+- Intent classification via the intelligence service flows through the Kafka
+  event bus (onex.cmd.omniintelligence.claude-hook-event.v1), not HTTP.
+  The dead HTTP endpoint (/api/v1/intent/classify) was removed in OMN-2875.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import time
-import urllib.error
-import urllib.request
 import uuid
 
 from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_intent_type import (
@@ -29,9 +25,6 @@ from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_intent_type import (
 )
 from omniclaude.nodes.node_nl_intent_pipeline.enums.enum_resolution_path import (
     EnumResolutionPath,
-)
-from omniclaude.nodes.node_nl_intent_pipeline.models.model_classification_response import (
-    ModelClassificationResponse,
 )
 from omniclaude.nodes.node_nl_intent_pipeline.models.model_extracted_entity import (
     ModelExtractedEntity,
@@ -73,8 +66,8 @@ _KEYWORD_PATTERNS: list[tuple[str, EnumIntentType, float]] = [
     ("debug", EnumIntentType.DEBUGGING, 0.10),
 ]
 
-# Map intent_class strings (from OMN-2348 service) to EnumIntentType
-_SERVICE_CLASS_MAP: dict[str, EnumIntentType] = {
+# Map intent_class strings to EnumIntentType (used by force_intent_type override)
+_INTENT_CLASS_MAP: dict[str, EnumIntentType] = {
     "SECURITY": EnumIntentType.SECURITY,
     "CODE": EnumIntentType.CODE,
     "REFACTOR": EnumIntentType.REFACTOR,
@@ -89,21 +82,21 @@ _SERVICE_CLASS_MAP: dict[str, EnumIntentType] = {
     "INFRASTRUCTURE": EnumIntentType.INFRASTRUCTURE,
 }
 
-# HTTP timeout for external classification service
-_SERVICE_TIMEOUT_S = 0.9
-
 
 class HandlerNlIntentDefault:
-    """Default handler for NL → Intent Object classification.
+    """Default handler for NL -> Intent Object classification.
 
     Classification flow:
     1. If request.force_intent_type is set, use that type with confidence=1.0.
-    2. Try calling the OMN-2348 intent intelligence service (non-blocking).
-    3. Fall back to keyword matching if the service is unavailable.
-    4. If no keywords match, classify as UNKNOWN with confidence=0.0.
+    2. Use keyword matching to classify the prompt.
+    3. If no keywords match, classify as UNKNOWN with confidence=0.0.
 
     Entity extraction is keyword-based in this implementation.  A future
     handler can plug in NER models without changing the public interface.
+
+    Note: Intent classification via the intelligence service flows through the
+    Kafka event bus asynchronously (OMN-2875). This handler is a synchronous
+    fallback for prompt-time classification.
     """
 
     @property
@@ -114,15 +107,11 @@ class HandlerNlIntentDefault:
     def parse_intent(
         self,
         request: ModelNlParseRequest,
-        *,
-        classification_url: str | None = None,
     ) -> ModelIntentObject:
         """Parse raw NL input into a typed ModelIntentObject.
 
         Args:
             request: Parse request containing raw NL and correlation metadata.
-            classification_url: Optional override for the classification service
-                URL.  Defaults to the standard OMN-2348 endpoint.
 
         Returns:
             Typed ModelIntentObject (frozen, JSON-serializable).
@@ -131,7 +120,7 @@ class HandlerNlIntentDefault:
 
         # 1. Forced intent type (test/routing override)
         if request.force_intent_type is not None:
-            resolved_type = _SERVICE_CLASS_MAP.get(
+            resolved_type = _INTENT_CLASS_MAP.get(
                 request.force_intent_type.upper(), EnumIntentType.UNKNOWN
             )
             return ModelIntentObject.build(
@@ -144,38 +133,7 @@ class HandlerNlIntentDefault:
                 resolution_path=EnumResolutionPath.INFERENCE,
             )
 
-        # 2. Try external classification service (OMN-2348 integration)
-        service_result = _call_classification_service(
-            prompt=request.raw_nl,
-            session_id=request.session_id,
-            correlation_id=str(request.correlation_id),
-            timeout_s=_SERVICE_TIMEOUT_S,
-            url_override=classification_url,
-        )
-
-        if service_result is not None and service_result.success:
-            intent_class_str = service_result.intent_class.upper()
-            intent_type = _SERVICE_CLASS_MAP.get(
-                intent_class_str, EnumIntentType.UNKNOWN
-            )
-            confidence = service_result.confidence
-            logger.debug(
-                "Service classification: %s (confidence=%.2f, correlation_id=%s)",
-                intent_type.value,
-                confidence,
-                request.correlation_id,
-            )
-            return ModelIntentObject.build(
-                intent_id=intent_id,
-                nl_input=request.raw_nl,
-                intent_type=intent_type,
-                confidence=confidence,
-                entities=_extract_entities(request.raw_nl),
-                summary=_build_summary(request.raw_nl, intent_type),
-                resolution_path=EnumResolutionPath.NONE,
-            )
-
-        # 3. Fall back to keyword matching
+        # 2. Keyword matching (synchronous, deterministic)
         keyword_type, keyword_confidence = _keyword_classify(request.raw_nl)
         logger.debug(
             "Keyword classification: %s (confidence=%.2f, correlation_id=%s)",
@@ -288,76 +246,3 @@ def _build_summary(text: str, intent_type: EnumIntentType) -> str:
     prefix = intent_type.value.replace("_", " ").title()
     snippet = text.strip()[:100].replace("\n", " ")
     return f"{prefix} intent: {snippet}"[:200]
-
-
-def _call_classification_service(
-    *,
-    prompt: str,
-    session_id: str,
-    correlation_id: str,
-    timeout_s: float,
-    url_override: str | None,
-) -> ModelClassificationResponse | None:
-    """Call the OMN-2348 intent classification service.
-
-    Non-blocking: returns None on any error or timeout so callers can fall
-    back gracefully.
-
-    Args:
-        prompt: Raw NL text to classify.
-        session_id: Session identifier.
-        correlation_id: Correlation UUID string.
-        timeout_s: HTTP request timeout.
-        url_override: Override URL (for tests or alternative deployments).
-
-    Returns:
-        ModelClassificationResponse on success, None on failure.
-    """
-    import os
-
-    if url_override is None:
-        explicit = os.environ.get("OMNICLAUDE_INTENT_API_URL", "").strip()
-        if explicit:
-            url = explicit
-        else:
-            base = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
-            url = (base.rstrip("/") + "/api/v1/intent/classify") if base else ""
-
-        if not url:
-            return None  # Service not configured; skip without logging
-    else:
-        url = url_override
-
-    try:
-        start = time.monotonic()
-        intent_id = str(uuid.uuid4())
-        payload = json.dumps(
-            {
-                "prompt": prompt,
-                "session_id": session_id,
-                "correlation_id": correlation_id,
-                "intent_id": intent_id,
-            }
-        ).encode("utf-8")
-
-        req = urllib.request.Request(  # noqa: S310  # nosec B310
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
-            raw = resp.read().decode("utf-8")
-
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-        logger.debug("Intent service responded in %dms", elapsed_ms)
-        return ModelClassificationResponse.model_validate_json(raw)
-
-    except (urllib.error.URLError, TimeoutError, OSError):
-        logger.debug("Intent classification service unavailable (non-fatal)")
-        return None
-    except Exception:  # noqa: BLE001
-        logger.debug(
-            "Intent classification service call failed (non-fatal)", exc_info=True
-        )
-        return None

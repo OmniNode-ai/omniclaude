@@ -33,7 +33,7 @@ outputs:
 ## Overview
 
 Scan all non-completed tickets in Linear, determine their true status, apply updates,
-and produce a `TriageReport` for downstream skills (`linear-epic-org`, `ticket-plan-sync`).
+and produce a `TriageReport` for downstream skills (`linear-epic-org`, `ticket-plan --sync`).
 
 **Announce at start:** "I'm using the linear-triage skill to assess ticket health."
 
@@ -263,6 +263,6 @@ The `orphaned_tickets` list from the TriageReport is the input to `linear-epic-o
 
 - `@_lib/contracts/helpers.md` — TicketContract, TriageReport schemas
 - `linear-epic-org` skill — consumes orphaned_tickets from this report
-- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan-sync
-- `ticket-plan-sync` skill — uses triage output for MASTER_TICKET_PLAN.md sync
+- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync
+- `ticket-plan --sync` — uses triage output for MASTER_TICKET_PLAN.md sync
 - Linear MCP tools (`mcp__linear-server__*`)
