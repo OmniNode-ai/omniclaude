@@ -10,7 +10,9 @@ function in ``~/.zshrc``) before running integration tests.
 
 Guard behaviour
 ---------------
-* Fires only when at least one collected item lives under ``tests/integration/``.
+* Fires only when at least one collected item lives under ``tests/integration/``
+  AND the session is not explicitly filtering OUT integration tests (e.g. the
+  CI ``-m "not integration"`` invocation).
 * Asserts ``KAFKA_BOOTSTRAP_SERVERS == 'localhost:19092'`` — unset is wrong.
 * After a passing env-var check, verifies TCP reachability of ``localhost:19092``
   with a 2-second timeout so a dead broker is caught before any test executes.
@@ -18,10 +20,17 @@ Guard behaviour
 
 Scope guard
 -----------
-``pytest_collection_finish`` fires after all items are collected and before the
-run protocol starts, so ``session.items`` is fully populated.  The guard checks
-whether any collected item lives under ``tests/integration/`` and is a no-op
-when none are found (pure unit-test runs are completely unaffected).
+``pytest_collection_finish`` fires after all items are collected (and after
+``pytest_collection_modifyitems`` has applied marker-based deselection) and
+before the run protocol starts, so ``session.items`` reflects the final
+selected set.
+
+Two conditions must both be true for the guard to activate:
+1. ``session.items`` contains at least one item whose path includes
+   ``tests/integration/`` (path-based scope check).
+2. The session's marker expression does NOT explicitly exclude the
+   ``integration`` marker (e.g. ``-m "not integration"`` in CI).  When both
+   conditions hold, the session intends to run integration tests.
 
 Related: OMN-3571, OMN-3473
 """
@@ -61,6 +70,18 @@ def _broker_is_reachable(host: str, port: int, timeout: float) -> bool:
         s.close()
 
 
+def _session_excludes_integration(session: pytest.Session) -> bool:
+    """Return True if the session marker expression explicitly excludes integration tests.
+
+    Example: ``pytest -m "not integration"`` sets ``markexpr`` to
+    ``"not integration"``.  In that case the session is intentionally NOT
+    running integration tests, so the broker guard should be a no-op.
+    """
+    markexpr: str = getattr(session.config.option, "markexpr", "") or ""
+    # Covers: "not integration", "unit and not integration", etc.
+    return "not integration" in markexpr
+
+
 # ---------------------------------------------------------------------------
 # Guard hook — fires after collection, before any test runs
 # ---------------------------------------------------------------------------
@@ -69,13 +90,20 @@ def _broker_is_reachable(host: str, port: int, timeout: float) -> bool:
 def pytest_collection_finish(session: pytest.Session) -> None:
     """Assert bus_local broker config before any integration test executes.
 
-    Fires after collection completes (``session.items`` is fully populated)
-    and before the run protocol begins, so the guard can abort cleanly
-    without any test having executed.
+    Fires after collection completes (``session.items`` is fully populated and
+    marker-based deselection has already been applied) and before the run
+    protocol begins, so the guard can abort cleanly without any test having
+    executed.
 
-    The hook is a no-op when no integration tests are collected so that pure
-    unit-test runs (``uv run pytest tests/unit/``) are completely unaffected.
+    The hook is a no-op when:
+    * No items under ``tests/integration/`` are in the session, OR
+    * The session's marker expression explicitly excludes the ``integration``
+      marker (CI ``-m "not integration"`` pattern).
     """
+    # Skip if marker expression explicitly excludes integration tests (CI path)
+    if _session_excludes_integration(session):
+        return
+
     # Detect whether any collected item lives under tests/integration/
     integration_items: Sequence[pytest.Item] = [
         item for item in session.items if _INTEGRATION_MARKER in str(item.fspath)
