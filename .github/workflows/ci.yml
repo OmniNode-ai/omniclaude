@@ -112,6 +112,8 @@ jobs:
             --no-progress
             --exclude 'https://linear\.app'
             --exclude 'https://github\.com/OmniNode-ai'
+            --exclude 'https://github\.com/fastapi'
+            --exclude 'https://stackoverflow\.com'
             --exclude 'https://staging\.omniclaude\.example\.com'
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
