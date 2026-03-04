@@ -147,6 +147,19 @@ cat ~/.claude/pipelines/<ticket-id>/state.yaml
 
 ---
 
+## Post-Completion
+
+When all tickets/tasks close:
+
+1. **Discover open PRs**: `gh pr list --head <branch> --json number,title,state`
+2. **If PRs have review comments**: offer `pr-polish`
+3. **Offer**: "All work complete. Run /finishing-a-development-branch? [Y/n]"
+4. If Y: invoke finishing-a-development-branch
+
+This is an offer only — user must approve before dispatch.
+
+---
+
 ## Remember
 
 - Review plan critically before creating any tickets

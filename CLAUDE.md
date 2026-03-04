@@ -401,7 +401,7 @@ These modules are intended for external use:
 | `OMNICLAUDE_CONTEXT_API_ENABLED` | Enable (`true`) or disable (`false`) the omniintelligence HTTP API as a context injection pattern source (default: true) | No |
 | `OMNICLAUDE_CONTEXT_API_TIMEOUT_MS` | Timeout in milliseconds for omniintelligence API calls during context injection (default: 900, range: 100–10000) | No |
 | `DUAL_PUBLISH_LEGACY_TOPICS` | Enable dual-publish to legacy topics during migration window (OMN-2368); set to `1` to enable | No (default: false) |
-| `OMNICLAUDE_INTENT_API_URL` | Explicit override for the intent classification endpoint URL (default: `INTELLIGENCE_SERVICE_URL/api/v1/intent/classify` or `http://localhost:8053/api/v1/intent/classify`) | No |
+| `OMNICLAUDE_INTENT_API_URL` | **REMOVED in OMN-2875** -- the HTTP classify endpoint never existed. Intent classification flows through the Kafka event bus. | No |
 | `OMNICLAUDE_STATE_DIR` | Override the correlation state directory used by intent_classifier CLI (default: `~/.claude/hooks/.state`) | No (dev/test only) |
 | `OMNICLAUDE_INTENT_<CLASS>_MODEL` | Override recommended model for a given intent class (e.g. `OMNICLAUDE_INTENT_SECURITY_MODEL=claude-opus-4-6`) | No |
 | `OMNICLAUDE_INTENT_<CLASS>_TEMPERATURE` | Override temperature hint for a given intent class | No |

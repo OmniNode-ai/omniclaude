@@ -1,0 +1,23 @@
+{
+  "node_id": "node_skill_feature_dashboard_orchestrator",
+  "ticket_id": "OMN-3505",
+  "input": {
+    "topic": "onex.cmd.omniclaude.feature-dashboard.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "feature-dashboard",
+      "args": {}
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.feature-dashboard-completed.v1"
+  },
+  "timeout_ms": 10000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

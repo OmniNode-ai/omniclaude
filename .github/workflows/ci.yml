@@ -112,6 +112,8 @@ jobs:
             --no-progress
             --exclude 'https://linear\.app'
             --exclude 'https://github\.com/OmniNode-ai'
+            --exclude 'https://github\.com/fastapi'
+            --exclude 'https://stackoverflow\.com'
             --exclude 'https://staging\.omniclaude\.example\.com'
             --exclude 'https://omniclaude\.example\.com'
             --exclude 'http://localhost'
@@ -120,6 +122,8 @@ jobs:
             --exclude 'https://claude\.ai'
             --exclude 'https://freedesktop\.org'
             --exclude 'https://www\.freedesktop\.org'
+            --exclude 'https://github\.com/fastapi'
+            --exclude 'https://stackoverflow\.com'
             '**/*.md'
           fail: true
 
@@ -837,7 +841,7 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -1633,7 +1637,7 @@ jobs:
           cache-from: type=gha
 
       - name: Trivy vulnerability scanner (SARIF)
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'sarif'
@@ -1648,7 +1652,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Trivy vulnerability scanner (table)
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.34.2
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'

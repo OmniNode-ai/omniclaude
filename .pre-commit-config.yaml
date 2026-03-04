@@ -254,6 +254,50 @@ repos:
           && echo "ERROR: hardcoded internal IP found (add # onex-allow-internal-ip to suppress)" && exit 1 || exit 0'
         pass_filenames: false
         stages: [pre-commit]
+      # OMN-3554: Reject hardcoded Kafka broker address fallbacks
+      # Detects os.getenv("KAFKA_*", non-empty) and private-IP Kafka broker ports
+      - id: kafka-no-hardcoded-fallback
+        name: Reject hardcoded Kafka broker address fallbacks
+        entry: >
+          bash -c
+          'FAILED=0;
+          MATCHES=$(grep -rn --include="*.py"
+          --exclude-dir=.venv
+          --exclude-dir=__pycache__
+          --exclude-dir=.claude
+          --exclude-dir=scripts
+          -E "os\.getenv\([[:space:]]*[\"'"'"']KAFKA_[^\"'"'"']+[\"'"'"'][[:space:]]*,[[:space:]]*[\"'"'"'][^\"'"'"']+[\"'"'"']"
+          . 2>/dev/null |
+          grep -v "kafka-fallback-ok" |
+          grep -v "noqa");
+          if [ -n "$MATCHES" ]; then
+          echo "ERROR: Hardcoded Kafka bootstrap fallback detected:";
+          echo "$MATCHES";
+          echo "";
+          echo "FIX: Remove the fallback value or add # kafka-fallback-ok";
+          FAILED=1;
+          fi;
+          IP_MATCHES=$(grep -rn --include="*.py"
+          --exclude-dir=.venv
+          --exclude-dir=__pycache__
+          --exclude-dir=.claude
+          -E "192\.168\.[0-9]+\.[0-9]+:(9092|19092|29092|29093)"
+          . 2>/dev/null |
+          grep -v "kafka-fallback-ok" |
+          grep -v "noqa" |
+          grep -v "onex-allow-internal-ip");
+          if [ -n "$IP_MATCHES" ]; then
+          echo "ERROR: Hardcoded private-IP Kafka broker address in Python file:";
+          echo "$IP_MATCHES";
+          echo "";
+          echo "FIX: Use KAFKA_BOOTSTRAP_SERVERS env var or add # kafka-fallback-ok";
+          FAILED=1;
+          fi;
+          exit $FAILED'
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-commit]
       - id: check-ai-slop
         name: Check for AI-slop patterns
         language: system
@@ -270,6 +314,19 @@ repos:
         language: system
         types_or: [python]
         pass_filenames: false
+        stages: [pre-commit]
+
+      # Kafka broker URL fallback guard (OMN-3555)
+      # Prevents bus split regressions caused by stale hardcoded broker addresses
+      # in os.getenv() default/fallback strings (root cause of OMN-3534).
+      # Flags: :19092, :29092 as hardcoded fallback values in source.
+      # Suppression: add `# onex-allow-kafka-broker` to the flagged line.
+      - id: no-hardcoded-kafka-broker
+        name: Block hardcoded Kafka broker URL fallbacks
+        entry: uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
+        language: system
+        pass_filenames: false
+        always_run: true
         stages: [pre-commit]
 
 # Configuration

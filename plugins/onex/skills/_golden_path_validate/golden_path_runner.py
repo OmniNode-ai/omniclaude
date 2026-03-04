@@ -46,7 +46,6 @@ import asyncio
 import importlib
 import json
 import logging
-import os
 import warnings
 from datetime import UTC, datetime
 from pathlib import Path
@@ -54,7 +53,10 @@ from typing import Any
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka.admin import AIOKafkaAdminClient
 from pydantic import BaseModel, ConfigDict, Field
+
+from shared_lib.kafka_config import get_kafka_bootstrap_servers
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,14 @@ class EvidenceArtifact(BaseModel):
     emitted_at: str = Field(
         ..., description="ISO-8601 timestamp when fixture was emitted"
     )
-    status: str = Field(..., description="Overall result: pass | fail | timeout")
+    status: str = Field(
+        ..., description="Overall result: pass | fail | timeout | error"
+    )
+    error_reason: str | None = Field(
+        default=None,
+        description="Machine-readable error reason when status=error "
+        "(e.g. output_topic_not_found)",
+    )
     input_topic: str = Field(
         ..., description="Kafka topic the fixture was published to"
     )
@@ -284,10 +293,7 @@ class AssertionEngine:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_ARTIFACT_BASE_DIR = str(Path.home() / ".claude" / "golden-path")
-_DEFAULT_BOOTSTRAP_SERVERS = os.environ.get(
-    "KAFKA_BOOTSTRAP_SERVERS",
-    "localhost:19092",  # bus_local default (OMN-3431)
-)
+_DEFAULT_BOOTSTRAP_SERVERS = get_kafka_bootstrap_servers()
 
 
 class GoldenPathRunner:
@@ -349,6 +355,35 @@ class GoldenPathRunner:
 
         emitted_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
+        # Step 0: Verify output topic exists before subscribing (OMN-3568)
+        topic_exists = await self._check_topic_exists(output_topic)
+        if not topic_exists:
+            logger.warning(
+                "Output topic %r does not exist on broker %s",
+                output_topic,
+                self._bootstrap_servers,
+            )
+            artifact = self._build_artifact(
+                node_id=node_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                emitted_at=emitted_at,
+                status="error",
+                error_reason="output_topic_not_found",
+                input_topic=input_topic,
+                output_topic=output_topic,
+                latency_ms=-1,
+                correlation_id=correlation_id,
+                consumer_group_id=consumer_group_id,
+                schema_validation_status="not_declared",
+                assertions=[],
+                raw_output_preview="",
+                kafka_offset=-1,
+                kafka_timestamp_ms=-1,
+            )
+            self._write_artifact(artifact)
+            return artifact
+
         # Build fixture payload with injected correlation_id
         fixture: dict[str, Any] = dict(decl["input"].get("fixture", {}))
         fixture["correlation_id"] = correlation_id
@@ -365,7 +400,6 @@ class GoldenPathRunner:
             bootstrap_servers=self._bootstrap_servers,
         )
 
-        artifact: EvidenceArtifact
         emit_time: float | None = None
 
         try:
@@ -491,6 +525,41 @@ class GoldenPathRunner:
             except Exception:
                 pass
 
+    async def _check_topic_exists(self, topic: str) -> bool:
+        """Check whether a topic already exists on the broker.
+
+        Uses AIOKafkaAdminClient.list_topics() to verify the topic was created
+        before the test run. This prevents Redpanda's auto-create-on-subscribe
+        from masking missing topics as timeouts (OMN-3568).
+
+        Args:
+            topic: Kafka topic name to check.
+
+        Returns:
+            True if the topic exists, False otherwise.
+        """
+        admin: AIOKafkaAdminClient | None = None
+        try:
+            admin = AIOKafkaAdminClient(
+                bootstrap_servers=self._bootstrap_servers,
+            )
+            await admin.start()
+            cluster_metadata = await admin.list_topics()
+            return topic in cluster_metadata
+        except Exception:
+            logger.exception(
+                "Failed to check topic existence for %r; assuming it exists", topic
+            )
+            # On admin client failure, fall through to normal flow so the run
+            # degrades gracefully (same behavior as before this fix).
+            return True
+        finally:
+            if admin is not None:
+                try:
+                    await admin.close()
+                except Exception:
+                    pass
+
     def _build_artifact(
         self,
         *,
@@ -509,6 +578,7 @@ class GoldenPathRunner:
         raw_output_preview: str,
         kafka_offset: int,
         kafka_timestamp_ms: int,
+        error_reason: str | None = None,
     ) -> EvidenceArtifact:
         return EvidenceArtifact(
             node_id=node_id,
@@ -516,6 +586,7 @@ class GoldenPathRunner:
             run_id=run_id,
             emitted_at=emitted_at,
             status=status,
+            error_reason=error_reason,
             input_topic=input_topic,
             output_topic=output_topic,
             latency_ms=latency_ms,

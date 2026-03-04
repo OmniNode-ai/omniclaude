@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Post-merge hook: trigger feature-dashboard audit after merges to main
+# ─────────────────────────────────────────────────────────────────────
+# Skip conditions (all log to $LOG_FILE, always exit 0):
+#   1. plugins/onex/skills/feature-dashboard/SKILL.md absent
+#   2. Branch != main
+#   3. No relevant changes (plugins/onex/skills/ or src/omniclaude/nodes/)
+#   4. Rate limited (.git/.feature-dashboard-last-run timestamp <10 min ago)
+#   5. KAFKA_BOOTSTRAP_SERVERS unset
+#
+# On pass:
+#   - Write epoch to .git/.feature-dashboard-last-run
+#   - Launch: claude -p "Run feature-dashboard skill --mode=audit --format=all"
+#   - Capture PID, disown, log single line to stderr, exit 0
+#
+# Install:
+#   cp scripts/git-hooks/post-merge .git/hooks/post-merge && chmod +x .git/hooks/post-merge
+# ─────────────────────────────────────────────────────────────────────
+
+set -uo pipefail
+
+# Resolve repo root from hook location
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$0")/../.." && pwd)"
+LOG_FILE="${REPO_ROOT}/.git/feature-dashboard-post-merge.log"
+LAST_RUN_FILE="${REPO_ROOT}/.git/.feature-dashboard-last-run"
+SKILL_SENTINEL="${REPO_ROOT}/plugins/onex/skills/feature-dashboard/SKILL.md"
+RATE_LIMIT_SECONDS=600  # 10 minutes
+
+# Helper: append timestamped message to log file (never to stderr)
+log_skip() {
+    local reason="$1"
+    printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$reason" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# ── Skip condition 1: SKILL.md sentinel absent ───────────────────────
+if [[ ! -f "$SKILL_SENTINEL" ]]; then
+    log_skip "skip: feature-dashboard skill not installed"
+    exit 0
+fi
+
+# ── Skip condition 2: branch != main ─────────────────────────────────
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    log_skip "skip: not on main"
+    exit 0
+fi
+
+# ── Skip condition 3: no relevant changes ────────────────────────────
+# Check if HEAD touched plugins/onex/skills/ or src/omniclaude/nodes/
+CHANGED_FILES="$(git -C "$REPO_ROOT" diff-tree --no-commit-id -r HEAD --name-only 2>/dev/null || true)"
+RELEVANT=0
+if echo "$CHANGED_FILES" | grep -qE '^plugins/onex/skills/|^src/omniclaude/nodes/'; then
+    RELEVANT=1
+fi
+if [[ "$RELEVANT" -eq 0 ]]; then
+    log_skip "skip: no skill/node changes"
+    exit 0
+fi
+
+# ── Skip condition 4: rate limited ───────────────────────────────────
+if [[ -f "$LAST_RUN_FILE" ]]; then
+    LAST_RUN="$(cat "$LAST_RUN_FILE" 2>/dev/null || echo 0)"
+    NOW="$(date +%s)"
+    ELAPSED=$(( NOW - LAST_RUN ))
+    if [[ "$ELAPSED" -lt "$RATE_LIMIT_SECONDS" ]]; then
+        log_skip "skip: rate limited"
+        exit 0
+    fi
+fi
+
+# ── Skip condition 5: KAFKA_BOOTSTRAP_SERVERS unset ──────────────────
+if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    log_skip "skip: KAFKA_BOOTSTRAP_SERVERS unset"
+    exit 0
+fi
+
+# ── All conditions passed: launch audit ──────────────────────────────
+
+# Write epoch timestamp to rate-limit file
+date +%s > "$LAST_RUN_FILE" 2>/dev/null || true
+
+# Launch claude in background (read-only audit, no Linear tools)
+claude -p "Run feature-dashboard skill --mode=audit --format=all" \
+    --allowedTools "Bash,Read,Write,Glob,Grep" \
+    >> "$LOG_FILE" 2>&1 &
+
+PID="${!}"
+
+# Capture PID and validate launch
+if [[ -z "$PID" ]]; then
+    log_skip "error: failed to start claude"
+    exit 0
+fi
+
+# Single-line stderr notification (only on successful launch)
+echo "started: PID=${PID}, log=${LOG_FILE}" >&2
+
+# Disown process to prevent blocking the merge
+disown "$PID" 2>/dev/null || true
+
+exit 0

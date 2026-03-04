@@ -117,7 +117,7 @@ If file doesn't exist, report error and stop.
 4. Else if `## Step N:` headings exist → use them (`step_sections`)
 5. Else if flat checklist items exist → use them (`flat_tasks`)
 
-If none match → fail fast: `"Plans must use ## Task N: headings. Use writing-plans."`
+If none match → fail fast: `"Plans must use ## Task N: headings. Use design-to-plan."`
 
 ```python
 import re
@@ -1035,7 +1035,7 @@ structure_type, entries = detect_structure(content)
 
 if structure_type == 'none' or not entries:
     # Fail fast with clear error
-    print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use writing-plans.")
+    print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use design-to-plan.")
     raise SystemExit(1)
 
 print(f"[structure_detected] type={structure_type} entries={len(entries)}")

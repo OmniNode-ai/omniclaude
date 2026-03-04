@@ -6,6 +6,15 @@
 
 Normalizes names to hyphenated form on both sides to handle any mixed
 underscore/hyphen directory naming conventions.
+
+CANONICAL_SKILLS is the PRIMARY source of truth for the ``test_coverage`` audit check
+performed by the feature-dashboard skill (see plugins/onex/skills/feature-dashboard/SKILL.md,
+section ``test_coverage``).  Any skill listed here is given a definitive PASS; skills that
+have test coverage detected only via filesystem heuristics receive a WARN instead.
+
+Maintenance: add a new entry whenever a new skill node is generated.  The test
+``test_canonical_skills_in_sync`` will fail if this set drifts out of sync with the
+filesystem, preventing silent gaps.
 """
 
 from pathlib import Path
@@ -13,6 +22,17 @@ from pathlib import Path
 import pytest
 
 from omniclaude.runtime.wiring_dispatchers import load_skill_contracts
+
+# ---------------------------------------------------------------------------
+# Canonical skill list — PRIMARY source of truth for test_coverage audit
+# ---------------------------------------------------------------------------
+# Kebab-case slugs matching plugins/onex/skills/<slug>/SKILL.md
+# and src/omniclaude/nodes/node_skill_<snake>_orchestrator/
+CANONICAL_SKILLS: frozenset[str] = frozenset(
+    {
+        "feature-dashboard",
+    }
+)
 
 
 def _normalize(name: str) -> str:
@@ -83,4 +103,26 @@ def test_all_skill_node_contracts_parse() -> None:
         f"Generator produced malformed contracts: "
         f"{discovered_count - len(contracts)}/{discovered_count} failed to parse.\n"
         f"This is a generator bug. Check docs/templates/skill_node_contract.yaml.template."
+    )
+
+
+@pytest.mark.unit
+def test_canonical_skills_in_sync() -> None:
+    """CANONICAL_SKILLS must be a subset of filesystem-detected skills.
+
+    This ensures that every skill listed in CANONICAL_SKILLS has both a
+    SKILL.md and a matching orchestrator node, preventing stale entries.
+
+    Note: CANONICAL_SKILLS may be a *subset* of all detected skills — not all
+    skills are required to be in the canonical list.  The inverse check (all
+    skills in the canonical list) is intentionally omitted; the feature-dashboard
+    skill's heuristic fallback handles skills not explicitly listed here.
+    """
+    all_detected = _get_skills() & _get_node_skills()
+    missing_from_fs = CANONICAL_SKILLS - all_detected
+    assert not missing_from_fs, (
+        f"{len(missing_from_fs)} canonical skill(s) not found on filesystem "
+        f"(missing SKILL.md or orchestrator node):\n"
+        + "\n".join(f"  - {s}" for s in sorted(missing_from_fs))
+        + "\n\nEither the skill was deleted or the canonical list has a stale entry."
     )

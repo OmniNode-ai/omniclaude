@@ -4,10 +4,12 @@
 # Copyright (c) 2025 OmniNode Team
 """NodeSkillFeatureDashboardOrchestrator - Feature dashboard skill audit node.
 
-This package provides the node type classifier, applicability matrix, and result
-models for the feature-dashboard skill orchestrator.
+This package provides the orchestrator node, node type classifier, applicability
+matrix, and result models for the feature-dashboard skill orchestrator.
 
 Exported Components:
+    Node:
+        NodeSkillFeatureDashboardOrchestrator - Thin orchestrator shell node
     Classifier:
         ORCHESTRATOR_TYPES  - Set of orchestrator node type strings
         EFFECT_TYPES        - Set of effect node type strings
@@ -23,9 +25,13 @@ from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.classifier impor
     applicable_checks,
     requires_event_bus,
 )
+from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.node import (
+    NodeSkillFeatureDashboardOrchestrator,
+)
 
 __all__ = [
     "EFFECT_TYPES",
+    "NodeSkillFeatureDashboardOrchestrator",
     "ORCHESTRATOR_TYPES",
     "UNKNOWN_TYPE",
     "applicable_checks",

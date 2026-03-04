@@ -173,7 +173,8 @@ def _format_slack_message(payload: dict[str, object]) -> str:
         lines.append(f"Reason: {blocking_reason}")
 
     lines.append("")
-    lines.append(f"Correlation ID: {payload.get('correlation_id', 'unknown')}")
+    corr_id = payload.get("correlation_id")
+    lines.append(f"Correlation ID: {corr_id or 'not available'}")
 
     return "\n".join(lines)
 

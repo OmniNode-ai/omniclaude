@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the insights-to-plan skill.
-  Parse a Claude Code insights HTML report, archive it to the registry, and generate a writing-plans-compatible action plan
+  Parse a Claude Code insights HTML report, archive it to the registry, and generate a design-to-plan-compatible action plan
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.

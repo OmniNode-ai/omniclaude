@@ -197,6 +197,42 @@ start_emit_daemon_if_needed() {
     # Ensure logs directory exists for publisher output
     mkdir -p "${HOOKS_DIR}/logs"
 
+    # Pre-flight: verify omnibase_infra>=0.14.0 is installed. (OMN-3251)
+    # omnibase_infra==0.13.0 passes reconnect_backoff_ms to AIOKafkaProducer,
+    # which aiokafka==0.11.0 does not accept, causing the daemon to crash at
+    # startup and all extraction events to fail silently. The fix shipped in
+    # omnibase_infra==0.14.0. When a stale venv is detected we log a targeted
+    # error and skip daemon startup rather than letting it fail in the background.
+    local _oi_ok
+    _oi_ok="$("$PYTHON_CMD" -c "
+import importlib.metadata, sys
+try:
+    v = importlib.metadata.version('omnibase-infra')
+    parts = [int(x) for x in v.split('.')[:2]]
+    if parts >= [0, 14]:
+        print('ok')
+    else:
+        print('stale:' + v)
+except Exception as e:
+    print('unknown:' + str(e))
+" 2>/dev/null || echo "unknown:import-error")"
+
+    if [[ "$_oi_ok" == ok ]]; then
+        : # version is fine, proceed
+    elif [[ "$_oi_ok" == stale:* ]]; then
+        local _stale_ver="${_oi_ok#stale:}"
+        log "ERROR: omnibase_infra==${_stale_ver} in plugin venv is too old (need >=0.14.0). (OMN-3251)"
+        log "ERROR: The emit daemon will crash with: AIOKafkaProducer.__init__() got an unexpected keyword argument 'reconnect_backoff_ms'"
+        log "ERROR: All extraction events (context.utilization, agent.match, latency.breakdown) will be silently dropped."
+        log "FIX: Rebuild the plugin venv to install omnibase_infra>=0.14.0:"
+        log "FIX:   ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv"
+        write_daemon_status "stale_dependency"
+        return 0  # Non-fatal: continue without publisher; hook still provides ticket context
+    else
+        log "WARNING: Could not verify omnibase_infra version (${_oi_ok}); proceeding with daemon startup"
+    fi
+    unset _oi_ok
+
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
         log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"

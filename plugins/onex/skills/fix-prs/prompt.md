@@ -45,7 +45,7 @@ This ensures any interrupted prior execution doesn't leave orphaned claims.
 
 ---
 
-## Step 1: Determine Repo Scope
+## Phase 1: Determine Repo Scope
 
 If `--repos` is provided, use that list. Otherwise use canonical omni_home repos:
 - `OmniNode-ai/omniclaude`
@@ -57,7 +57,7 @@ If `~/Code/omni_home/repos.yaml` exists, read from it instead.
 
 ---
 
-## Step 2: Scan Phase (Parallel)
+## Phase 2: Scan (Parallel)
 
 Scan up to `--max-parallel-repos` repos concurrently. For each repo:
 
@@ -110,7 +110,7 @@ Apply `--max-total-prs` cap: truncate `work_queue[]` to the cap.
 
 ---
 
-## Step 3: Empty Check
+## Phase 3: Empty Check
 
 ```
 IF work_queue is empty:
@@ -121,7 +121,7 @@ IF work_queue is empty:
 
 ---
 
-## Step 4: Dispatch Fix Agents (Parallel)
+## Phase 4: Dispatch Fix Agents (Parallel)
 
 Before dispatching each PR agent, **acquire a claim** from the global registry.
 Skip PRs where another active claim exists (from a different run). Release claims in
@@ -213,15 +213,15 @@ Task(
 
     First, inspect failing checks for external infra:
 
-    External infra indicators (skip ci-failures for matching checks):
+    External infra indicators (skip ci-fix-pipeline for matching checks):
     - deploy, production, prod, staging, aws, gcp, azure, service-account, docker-push, publish, release, upload-to
 
     For each failing REQUIRED check:
     - If check name contains any indicator: mark blocked_external, skip
     - If all failing checks are blocked_external: record result=blocked_external, STOP (skip D)
 
-    For non-external checks: invoke ci-failures sub-skill:
-    Skill(skill='onex:ci-failures', args={max_fix_iterations: <max_fix_iterations>})
+    For non-external checks: invoke ci-fix-pipeline sub-skill:
+    Skill(skill='onex:ci-fix-pipeline', args={max_fix_iterations: <max_fix_iterations>})
 
     Record CI fix result.
 
@@ -261,7 +261,7 @@ Wait for all agents to complete. Collect results.
 
 ---
 
-## Step 5: Update Ledger
+## Phase 5: Update Ledger
 
 For each PR result, update `~/.claude/pr-queue/<date>/run_<run_id>.json`:
 
@@ -280,7 +280,7 @@ Write atomically (write to temp file, then rename).
 
 ---
 
-## Step 6: Collect Results and Emit
+## Phase 6: Collect Results and Emit
 
 Aggregate per-PR results:
 
@@ -344,8 +344,8 @@ Fix PRs Complete — run <run_id>
 | `gh pr list` fails for a repo | Log warning, skip repo, continue |
 | All repos fail to scan | Emit `status: error` |
 | Rebase conflict unresolvable | Record `failed`, `reason: conflict_unresolved`, continue |
-| External CI check | Record `blocked_external`, continue (skip ci-failures) |
-| ci-failures skill error | Record `partial` or `failed`, continue |
+| External CI check | Record `blocked_external`, continue (skip ci-fix-pipeline) |
+| ci-fix-pipeline skill error | Record `partial` or `failed`, continue |
 | pr-review-dev skill error | Record `partial`, continue |
 | Force-push rejected by remote | Log error, record `failed`, continue |
 
