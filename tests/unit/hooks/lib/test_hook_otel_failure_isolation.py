@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 # ---------------------------------------------------------------------------
 # sys.path setup: mirror how hooks/lib scripts are loaded by hook scripts
@@ -233,3 +233,186 @@ class TestPhoenixOtelExporterIsolation:
         assert mod._provider_initialized is False
         assert mod._tracer is None
         assert mod._tracer_provider is None
+
+
+# ---------------------------------------------------------------------------
+# Tests: OMN-3611 — span kind, start_time, openinference attr, status
+# ---------------------------------------------------------------------------
+
+
+class TestPhoenixOtelSpanEnhancements:
+    """Tests for start_time, SpanKind.INTERNAL, openinference attr, and status (OMN-3611)."""
+
+    def setup_method(self) -> None:
+        """Reset singleton state before each test."""
+        import phoenix_otel_exporter as mod  # noqa: F401
+
+        mod_obj = sys.modules.get("phoenix_otel_exporter")
+        if mod_obj is not None:
+            mod_obj.reset_tracer()
+
+    def _make_mock_tracer(self) -> tuple[MagicMock, MagicMock]:
+        """Create a mock tracer and span pair for testing."""
+        mock_span = MagicMock()
+        mock_span.__enter__ = MagicMock(return_value=mock_span)
+        mock_span.__exit__ = MagicMock(return_value=False)
+
+        mock_tracer = MagicMock()
+        mock_tracer.start_as_current_span.return_value = mock_span
+        return mock_tracer, mock_span
+
+    def test_span_created_with_internal_kind(self) -> None:
+        """Span must be created with kind=SpanKind.INTERNAL."""
+        import phoenix_otel_exporter as mod
+
+        from opentelemetry import trace as otel_trace
+
+        mock_tracer, _mock_span = self._make_mock_tracer()
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=True,
+                injected_pattern_count=3,
+                agent_matched=True,
+                selected_agent="polymorphic-agent",
+                injection_latency_ms=10.0,
+                cohort="treatment",
+            )
+
+        # Verify start_as_current_span was called with kind=INTERNAL
+        call_kwargs = mock_tracer.start_as_current_span.call_args
+        assert call_kwargs.kwargs.get("kind") == otel_trace.SpanKind.INTERNAL or (
+            len(call_kwargs.args) > 1
+            and call_kwargs.args[1] == otel_trace.SpanKind.INTERNAL
+        ), f"Expected SpanKind.INTERNAL, got call: {call_kwargs}"
+
+    def test_start_time_passed_when_provided(self) -> None:
+        """When start_time is provided, it must be forwarded to start_as_current_span."""
+        import phoenix_otel_exporter as mod
+
+        mock_tracer, _mock_span = self._make_mock_tracer()
+        test_start_time = 1709568000000000000  # nanoseconds
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=True,
+                injected_pattern_count=1,
+                agent_matched=True,
+                selected_agent="agent-x",
+                injection_latency_ms=5.0,
+                cohort="treatment",
+                start_time=test_start_time,
+            )
+
+        call_kwargs = mock_tracer.start_as_current_span.call_args
+        assert call_kwargs.kwargs.get("start_time") == test_start_time, (
+            f"Expected start_time={test_start_time}, got call: {call_kwargs}"
+        )
+
+    def test_start_time_omitted_when_none(self) -> None:
+        """When start_time is None (default), start_time kwarg must not be passed."""
+        import phoenix_otel_exporter as mod
+
+        mock_tracer, _mock_span = self._make_mock_tracer()
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=True,
+                injected_pattern_count=1,
+                agent_matched=True,
+                selected_agent="agent-x",
+                injection_latency_ms=5.0,
+                cohort="treatment",
+            )
+
+        call_kwargs = mock_tracer.start_as_current_span.call_args
+        assert "start_time" not in call_kwargs.kwargs, (
+            f"start_time should not be passed when None, got: {call_kwargs}"
+        )
+
+    def test_openinference_span_kind_attribute_set(self) -> None:
+        """openinference.span.kind attribute must be set to OPENINFERENCE_SPAN_KIND."""
+        import phoenix_otel_exporter as mod
+
+        mock_tracer, mock_span = self._make_mock_tracer()
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=True,
+                injected_pattern_count=2,
+                agent_matched=True,
+                selected_agent="polymorphic-agent",
+                injection_latency_ms=20.0,
+                cohort="treatment",
+            )
+
+        set_attrs = {
+            c.args[0]: c.args[1] for c in mock_span.set_attribute.call_args_list
+        }
+        assert "openinference.span.kind" in set_attrs, (
+            "openinference.span.kind attribute not set on span"
+        )
+        assert set_attrs["openinference.span.kind"] == "RETRIEVER"
+
+    def test_span_status_ok_when_injected(self) -> None:
+        """When manifest_injected=True, span status must be set to OK."""
+        import phoenix_otel_exporter as mod
+
+        mock_tracer, mock_span = self._make_mock_tracer()
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=True,
+                injected_pattern_count=3,
+                agent_matched=True,
+                selected_agent="polymorphic-agent",
+                injection_latency_ms=10.0,
+                cohort="treatment",
+            )
+
+        # Verify set_status was called
+        assert mock_span.set_status.called, "set_status was not called on span"
+        status_arg = mock_span.set_status.call_args.args[0]
+        # The Status object wraps a StatusCode
+        from opentelemetry.trace import StatusCode
+
+        assert status_arg.status_code == StatusCode.OK, (
+            f"Expected StatusCode.OK, got {status_arg.status_code}"
+        )
+
+    def test_span_status_error_when_not_injected(self) -> None:
+        """When manifest_injected=False, span status must be ERROR with description."""
+        import phoenix_otel_exporter as mod
+
+        mock_tracer, mock_span = self._make_mock_tracer()
+
+        with patch.object(mod, "_get_tracer", return_value=mock_tracer):
+            mod.emit_injection_span(
+                session_id="s1",
+                correlation_id="c1",
+                manifest_injected=False,
+                injected_pattern_count=0,
+                agent_matched=False,
+                selected_agent="",
+                injection_latency_ms=5.0,
+                cohort="control",
+            )
+
+        assert mock_span.set_status.called, "set_status was not called on span"
+        status_arg = mock_span.set_status.call_args.args[0]
+        from opentelemetry.trace import StatusCode
+
+        assert status_arg.status_code == StatusCode.ERROR, (
+            f"Expected StatusCode.ERROR, got {status_arg.status_code}"
+        )
+        assert "injection did not produce patterns" in status_arg.description

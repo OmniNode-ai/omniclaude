@@ -79,10 +79,19 @@ try:
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.trace import StatusCode
+    from opentelemetry.trace.status import Status
 
     _OTEL_AVAILABLE = True
 except ImportError:
     _OTEL_AVAILABLE = False
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+OPENINFERENCE_SPAN_KIND = "RETRIEVER"
 
 
 # =============================================================================
@@ -213,6 +222,7 @@ def emit_injection_span(
     selected_agent: str,
     injection_latency_ms: float,
     cohort: str,
+    start_time: int | None = None,
 ) -> bool:
     """Emit a manifest injection OTEL span to Phoenix.
 
@@ -228,6 +238,8 @@ def emit_injection_span(
         selected_agent: Name of the matched agent (empty string if none).
         injection_latency_ms: End-to-end injection latency in milliseconds.
         cohort: A/B cohort assignment: "control" or "treatment".
+        start_time: Optional span start time in nanoseconds (epoch). If None,
+            the OTEL SDK uses the current time.
 
     Returns:
         True if span was successfully started and queued for export.
@@ -239,7 +251,15 @@ def emit_injection_span(
         return False
 
     try:
-        with tracer.start_as_current_span("manifest_injection") as span:
+        span_kwargs: dict[str, Any] = {
+            "kind": otel_trace.SpanKind.INTERNAL,
+        }
+        if start_time is not None:
+            span_kwargs["start_time"] = start_time
+
+        with tracer.start_as_current_span(
+            "manifest_injection", **span_kwargs
+        ) as span:
             span.set_attribute("session_id", session_id)
             span.set_attribute("correlation_id", correlation_id)
             span.set_attribute("manifest_injected", manifest_injected)
@@ -248,6 +268,18 @@ def emit_injection_span(
             span.set_attribute("selected_agent", selected_agent)
             span.set_attribute("injection_latency_ms", injection_latency_ms)
             span.set_attribute("cohort", cohort)
+            span.set_attribute("openinference.span.kind", OPENINFERENCE_SPAN_KIND)
+
+            # Set span status based on whether injection succeeded
+            if manifest_injected:
+                span.set_status(Status(StatusCode.OK))
+            else:
+                span.set_status(
+                    Status(
+                        StatusCode.ERROR,
+                        "injection did not produce patterns",
+                    )
+                )
 
         logger.debug(
             "PhoenixOTEL: span queued (session=%s, cohort=%s, injected=%s, patterns=%d)",
@@ -265,6 +297,7 @@ def emit_injection_span(
 
 
 __all__ = [
+    "OPENINFERENCE_SPAN_KIND",
     "emit_injection_span",
     "reset_tracer",
 ]
