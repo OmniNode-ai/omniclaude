@@ -235,7 +235,10 @@ class AgentActionsConsumer:
             self.group_id = config.get("group_id", settings.kafka_group_id)
         else:
             self.group_id = config.get(
-                "group_id", os.getenv("KAFKA_GROUP_ID", "agent-observability-postgres")  # kafka-fallback-ok
+                "group_id",
+                os.getenv(
+                    "KAFKA_GROUP_ID", "agent-observability-postgres"
+                ),  # kafka-fallback-ok
             )
         # Subscribe to all agent observability topics
         self.topics = config.get(
