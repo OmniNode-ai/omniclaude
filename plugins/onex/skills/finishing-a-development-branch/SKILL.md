@@ -65,7 +65,7 @@ Present exactly these 4 options:
 Implementation complete. What would you like to do?
 
 1. Merge back to <base-branch> locally
-2. Push and create a Pull Request
+2. Push and create a Pull Request (automerge enabled)
 3. Keep the branch as-is (I'll handle it later)
 4. Discard this work
 
@@ -100,18 +100,32 @@ Then: Cleanup worktree (Step 5)
 #### Option 2: Push and Create PR
 
 ```bash
-# Push branch
-git push -u origin <feature-branch>
+# Auth + detached HEAD guard
+gh auth status || { echo "ERROR: not logged into GitHub CLI"; exit 1; }
+HEAD_BRANCH=$(git branch --show-current)
+test -n "$HEAD_BRANCH" || { echo "ERROR: detached HEAD — cannot create PR"; exit 1; }
 
-# Create PR
-gh pr create --title "<title>" --body "$(cat <<'EOF'
+# Push branch
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+git push -u origin "$HEAD_BRANCH"
+
+# Create PR — resolve number from URL (deterministic anchor)
+PR_URL=$(gh pr create --title "<title>" --repo "$REPO" --body "$(cat <<'EOF'
 ## Summary
 <2-3 bullets of what changed>
 
 ## Test Plan
 - [ ] <verification steps>
 EOF
-)"
+)")
+echo "$PR_URL" | grep -qE 'https://github\.com/.*/pull/[0-9]+' \
+  || { echo "ERROR: PR_URL doesn't look like a PR URL: $PR_URL"; exit 1; }
+PR_NUMBER=$(gh pr view "$PR_URL" --json number -q .number)
+test -n "$PR_NUMBER" || { echo "ERROR: failed to resolve PR number from: $PR_URL"; exit 1; }
+
+# Enable automerge
+# GitHub merges when all branch protection requirements are satisfied.
+gh pr merge --auto --squash "$PR_NUMBER" --repo "$REPO"
 ```
 
 Then: Cleanup worktree (Step 5)
@@ -165,7 +179,7 @@ git worktree remove <worktree-path>
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |
 |--------|-------|------|---------------|----------------|
 | 1. Merge locally | Yes | - | - | Yes |
-| 2. Create PR | - | Yes | Yes | - |
+| 2. Create PR (automerge) | - | Yes | Yes | - |
 | 3. Keep as-is | - | - | Yes | - |
 | 4. Discard | - | - | - | Yes (force) |
 
