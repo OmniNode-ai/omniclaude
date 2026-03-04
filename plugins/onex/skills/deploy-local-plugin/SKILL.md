@@ -11,6 +11,19 @@ tags:
   - development
   - tooling
 author: OmniClaude Team
+args:
+  - name: --list-skills
+    description: "Show all skills with level/debug/status (no deploy)"
+    required: false
+  - name: --select
+    description: "Interactive checklist for skill selection"
+    required: false
+  - name: --skill
+    description: "Explicit skill inclusion (comma-separated names)"
+    required: false
+  - name: --exclude
+    description: "Explicit skill exclusion (comma-separated names)"
+    required: false
 ---
 
 # Deploy Local Plugin Skill
@@ -68,6 +81,34 @@ unless `--include-debug` is also passed. When no `--level` flag is used, debug s
 included as before (backwards-compatible default).
 
 Internal support library dirs (prefixed with `_`) are always included regardless of filter.
+
+## Skill Selection
+
+By default, all skills are deployed. Use these flags to control which skills are included:
+
+### `--list-skills`
+Display a table of all skills showing name, level, debug status, and deployment status. Does not deploy.
+
+### `--select`
+Interactive checklist mode. Presents all skills grouped by category with checkboxes. Selected skills are deployed; unselected are skipped.
+
+### `--skill <names>`
+Deploy only the named skills (comma-separated). Example: `--skill local-review,pr-review,ticket-pipeline`
+
+### `--exclude <names>`
+Deploy all skills EXCEPT the named ones (comma-separated). Example: `--exclude debug-only-skill,experimental-feature`
+
+### Selection Persistence
+Selections are persisted to `~/.claude/plugin-skill-selection.json`. Format:
+```json
+{
+  "included": ["skill-a", "skill-b"],
+  "excluded": ["skill-c"],
+  "last_updated": "2026-03-04T12:00:00Z"
+}
+```
+
+Subsequent `--select` runs pre-check previously selected skills. Use `--skill` or `--exclude` to override persisted selections for a single deploy.
 
 ## How It Works
 
