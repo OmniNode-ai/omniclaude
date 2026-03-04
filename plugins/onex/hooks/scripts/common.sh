@@ -314,6 +314,10 @@ emit_via_daemon() {
             && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
         # Milestone-based Slack alerts for sustained failures (avoid spam)
         local n=$((_prev_failures + 1))
+        if (( n == 5 )); then
+            # Attempt daemon auto-restart after 5 consecutive failures (OMN-3647)
+            _try_restart_emit_daemon &
+        fi
         if (( n == 10 || n == 25 || n == 50 || n == 100 )); then
             local _last_ok
             if [[ -z "$_prev_success_ts" || "$_prev_success_ts" -eq 0 ]]; then
@@ -323,6 +327,164 @@ emit_via_daemon() {
             fi
             ( slack_notify "emit_sustained" "[omniclaude][${_SLACK_HOST}] ${n} consecutive emit failures for '${event_type}'. Last success: ${_last_ok}. Daemon may be unhealthy." ) &
         fi
+        return 1
+    fi
+}
+
+# =============================================================================
+# Emit Daemon Self-Healing (OMN-3647)
+# =============================================================================
+# Auto-restart emit daemon after 5 consecutive failures with 4-layer idempotency guards.
+# Called by emit_via_daemon when fail counter reaches 5.
+#
+# Design:
+#   Guard 1: Atomic mkdir lock (prevents concurrent restarts)
+#   Guard 2: Socket ping check (maybe daemon recovered)
+#   Guard 3: Kafka reachability probe with 1s timeout + 10min cooldown
+#   Guard 4: Stale process cleanup with tight pattern matching
+#
+# Returns: 0 on restart attempt (whether successful or not), 1 if skipped
+
+_try_restart_emit_daemon() {
+    local socket_path="${OMNICLAUDE_EMIT_SOCKET:-${TMPDIR:-/tmp}/omniclaude-emit.sock}"
+    local lock_dir="/tmp/omniclaude-emit-restart.lock"
+    local fail_count_file="/tmp/omniclaude-emit-fail-count"
+    local restart_ts_file="/tmp/omniclaude-emit-restart-last-at"
+    local kafka_unreachable_file="/tmp/omniclaude-emit-kafka-unreachable"
+
+    local now
+    now=$(date +%s)
+
+    # Guard 1: Atomic mkdir lock (prevents concurrent restarts)
+    # Use mkdir's atomicity on POSIX systems to create exclusive lock
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        log "Emit daemon restart already in progress (lock exists)"
+        return 1
+    fi
+
+    # Ensure trap cleanup runs even if the function exits early
+    trap "rmdir '$lock_dir' 2>/dev/null || true" RETURN
+
+    # Guard 2: Ping socket before restart (exit cleanly if already responsive)
+    if [[ -S "$socket_path" ]]; then
+        if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" ping \
+            >> "$LOG_FILE" 2>&1; then
+            log "Emit daemon socket responsive, skipping restart"
+            echo "0 0 $now unknown" > "$fail_count_file" 2>/dev/null || true
+            return 0
+        fi
+    fi
+
+    # Guard 3: Kafka reachability probe with 1s timeout + 10min cooldown
+    # Use nc (netcat) for TCP check if available, fall back to Python check
+    local kafka_reachable=false
+    if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+        # Parse first broker from comma-separated list
+        local first_broker
+        first_broker=$(echo "$KAFKA_BOOTSTRAP_SERVERS" | cut -d',' -f1)
+        local broker_host broker_port
+        broker_host="${first_broker%:*}"
+        broker_port="${first_broker##*:}"
+
+        if command -v nc &>/dev/null; then
+            # Use nc with 1s timeout (macOS compatible)
+            if nc -z -w 1 "$broker_host" "$broker_port" >/dev/null 2>&1; then
+                kafka_reachable=true
+            fi
+        else
+            # Fallback: Python socket check
+            if "$PYTHON_CMD" -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('$broker_host', $broker_port)); s.close()" >/dev/null 2>&1; then
+                kafka_reachable=true
+            fi
+        fi
+    else
+        # Kafka not configured, treat as reachable to allow restart attempt
+        kafka_reachable=true
+    fi
+
+    if ! $kafka_reachable; then
+        # Kafka unreachable: check cooldown timer
+        local kafka_unreachable_ts=0
+        if [[ -f "$kafka_unreachable_file" ]]; then
+            read -r kafka_unreachable_ts < "$kafka_unreachable_file" 2>/dev/null || kafka_unreachable_ts=0
+        fi
+
+        local cooldown_elapsed=$(( now - kafka_unreachable_ts ))
+        local cooldown_seconds=600  # 10 minutes
+
+        if (( cooldown_elapsed < cooldown_seconds )); then
+            local remaining=$(( cooldown_seconds - cooldown_elapsed ))
+            log "Emit daemon: Kafka unreachable, restart suppressed (cooldown: ${remaining}s remaining)"
+            return 1
+        fi
+
+        # Cooldown expired, record new timestamp and proceed with restart attempt
+        echo "$now" > "$kafka_unreachable_file" 2>/dev/null || true
+    fi
+
+    # Guard 4: Restart cooldown (60s minimum between attempts)
+    local restart_ts=0
+    if [[ -f "$restart_ts_file" ]]; then
+        read -r restart_ts < "$restart_ts_file" 2>/dev/null || restart_ts=0
+    fi
+
+    local restart_cooldown_seconds=60
+    local restart_elapsed=$(( now - restart_ts ))
+    if (( restart_elapsed < restart_cooldown_seconds )); then
+        local remaining=$(( restart_cooldown_seconds - restart_elapsed ))
+        log "Emit daemon: restart attempt suppressed (cooldown: ${remaining}s remaining)"
+        return 1
+    fi
+
+    # All guards passed - attempt restart
+    log "Emit daemon: Attempting restart after 5 consecutive failures"
+
+    # Record restart attempt timestamp before cleanup
+    echo "$now" > "$restart_ts_file" 2>/dev/null || true
+
+    # Clean up stale socket and processes
+    rm -f "$socket_path" 2>/dev/null || true
+
+    # Kill stale daemon process with tight pattern matching
+    # Match process with full socket path to avoid false positives
+    local stale_pids
+    stale_pids=$(pgrep -f "omniclaude\.publisher start.*--socket-path $(printf '%s\n' "$socket_path" | sed 's/[[\.*^$/]/\\&/g')" 2>/dev/null) || true
+
+    if [[ -n "$stale_pids" ]]; then
+        log "Emit daemon: Killing stale processes: $stale_pids"
+        echo "$stale_pids" | xargs -r kill -9 2>/dev/null || true
+        sleep 0.1  # Brief pause for kernel to clean up resources
+    fi
+
+    # Respawn daemon using same startup sequence as session-start.sh
+    # This requires KAFKA_BOOTSTRAP_SERVERS and PYTHON_CMD to be set
+    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+        log "Emit daemon: Cannot restart, KAFKA_BOOTSTRAP_SERVERS not set"
+        return 1
+    fi
+
+    nohup "$PYTHON_CMD" -m omniclaude.publisher start \
+        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --socket-path "$socket_path" \
+        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+
+    local daemon_pid=$!
+    log "Emit daemon: Respawned with PID $daemon_pid, socket: $socket_path"
+
+    # Wait briefly for socket to be created (max 200ms in 20ms increments)
+    local wait_count=0
+    local max_wait=10
+    while [[ ! -S "$socket_path" && $wait_count -lt $max_wait ]]; do
+        sleep 0.02
+        ((wait_count++)) || true
+    done
+
+    if [[ -S "$socket_path" ]]; then
+        log "Emit daemon: Socket created successfully, resetting failure counter"
+        echo "0 0 $now unknown" > "$fail_count_file" 2>/dev/null || true
+        return 0
+    else
+        log "Emit daemon: Socket not created after restart (PID: $daemon_pid)"
         return 1
     fi
 }
