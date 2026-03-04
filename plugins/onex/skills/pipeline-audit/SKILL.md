@@ -41,7 +41,7 @@ A multi-repo pipeline is only as strong as its weakest integration point. Code e
 
 **Do NOT use when:**
 - The pipeline is a single repo (use unit/integration tests instead)
-- You only need to debug one specific integration point (use root-cause-tracing instead)
+- You only need to debug one specific integration point (use systematic-debugging instead)
 - The pipeline has no shared state (no DB, no message bus, no API calls between repos)
 - You are doing a code review of a single PR (use pr-review instead)
 
@@ -560,8 +560,7 @@ A completed pipeline audit produces:
 
 ## See Also
 
-- `root-cause-tracing` skill (for debugging a single integration failure)
-- `dispatching-parallel-agents` skill (for parallel agent execution patterns)
+- `systematic-debugging` skill (for debugging individual service issues; Phase 1 covers backward tracing)
+- `multi-agent` skill (for parallel agent execution patterns, `--mode parallel-debug`)
 - `verification-before-completion` skill (for ensuring claims are backed by evidence)
 - `trace-correlation-id` skill (for correlation ID specific tracing)
-- `systematic-debugging` skill (for debugging individual service issues)

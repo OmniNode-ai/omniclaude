@@ -165,8 +165,7 @@ Skills are invoked in Claude Code as `onex:<skill-name>`. All skills live under 
 | `onex:local-review` | Local code review loop — iterates review/fix/commit cycles without pushing |
 | `onex:pr-watch` | Poll GitHub PR for review feedback, auto-fix issues, and report terminal state |
 | `onex:ci-watch` | Poll GitHub Actions CI for a PR, auto-fix failures, and report terminal state |
-| `onex:ci-failures` | Fetch and analyze GitHub Actions CI failures for debugging |
-| `onex:ci-fix-pipeline` | Self-healing CI pipeline — 3-attempt retry budget with strategy rotation and autonomous fix loop |
+| `onex:ci-fix-pipeline` | Self-healing CI pipeline — 3-attempt retry budget with strategy rotation and autonomous fix loop. Use `--analyze-only` for read-only failure diagnosis (formerly `ci-failures`). |
 | `onex:pr-polish` | Full PR readiness loop — resolve conflicts, address review comments and CI failures |
 | `onex:pr-release-ready` | Fix ALL issues including nitpicks before release |
 | `onex:pr-review-dev` | Fix critical/major/minor issues (review + CI failures) |

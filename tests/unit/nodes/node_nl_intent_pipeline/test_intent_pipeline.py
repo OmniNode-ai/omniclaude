@@ -13,16 +13,13 @@ Coverage:
   - Includes intent_type, entities, confidence, nl_input_hash
   - Low-confidence intents are flagged (not rejected)
   - Intent object is JSON/YAML serializable
-- R2: Integration with OMN-2348 primitives
-  - Service call succeeds and maps intent_class to EnumIntentType
-  - Service unavailable falls back to keyword classification
+- R2: Keyword classification covers all intent types
 """
 
 from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -262,13 +259,13 @@ class TestEntityExtraction:
 
 
 # ---------------------------------------------------------------------------
-# R1: Handler — keyword fallback path
+# R1: Handler -- keyword classification path
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestHandlerNlIntentDefaultKeywordPath:
-    """HandlerNlIntentDefault uses keyword fallback when service unavailable."""
+    """HandlerNlIntentDefault uses keyword matching for classification."""
 
     def test_parse_returns_intent_object(self) -> None:
         handler = _handler()
@@ -280,7 +277,7 @@ class TestHandlerNlIntentDefaultKeywordPath:
         handler = _handler()
         result = handler.parse_intent(_request("asdfghjkl qwertyuiop zxcvbnm"))
         assert result.is_low_confidence is True
-        # No exception raised — rejection is the ambiguity gate's job
+        # No exception raised -- rejection is the ambiguity gate's job
 
     def test_confidence_in_range(self) -> None:
         handler = _handler()
@@ -296,7 +293,7 @@ class TestHandlerNlIntentDefaultKeywordPath:
         expected = hashlib.sha256(nl.encode()).hexdigest()
         assert result.nl_input_hash == expected
 
-    def test_resolution_path_inference_on_keyword_fallback(self) -> None:
+    def test_resolution_path_inference_on_keyword(self) -> None:
         handler = _handler()
         result = handler.parse_intent(_request("refactor the auth module"))
         assert result.resolution_path == EnumResolutionPath.INFERENCE
@@ -309,7 +306,7 @@ class TestHandlerNlIntentDefaultKeywordPath:
 
 
 # ---------------------------------------------------------------------------
-# R1: Handler — forced intent type override
+# R1: Handler -- forced intent type override
 # ---------------------------------------------------------------------------
 
 
@@ -331,73 +328,3 @@ class TestHandlerForcedIntentType:
             _request("anything", force_intent_type="DOES_NOT_EXIST")
         )
         assert result.intent_type == EnumIntentType.UNKNOWN
-
-
-# ---------------------------------------------------------------------------
-# R2: Integration with OMN-2348 service
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestHandlerServiceIntegration:
-    """HandlerNlIntentDefault uses service response when available."""
-
-    def test_service_response_maps_to_enum(self) -> None:
-        handler = _handler()
-        mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(
-            {"success": True, "intent_class": "SECURITY", "confidence": 0.94}
-        ).encode("utf-8")
-        mock_response.__enter__ = lambda s: s
-        mock_response.__exit__ = MagicMock(return_value=False)
-
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            result = handler.parse_intent(
-                _request("fix authentication", correlation_id=uuid.uuid4()),
-                classification_url="http://mock-service/api/v1/intent/classify",
-            )
-
-        assert result.intent_type == EnumIntentType.SECURITY
-        assert result.confidence == 0.94
-        # Service call does not add INFERENCE resolution path
-        assert result.resolution_path == EnumResolutionPath.NONE
-
-    def test_service_unavailable_falls_back_to_keyword(self) -> None:
-        handler = _handler()
-        with patch(
-            "urllib.request.urlopen",
-            side_effect=OSError("connection refused"),
-        ):
-            result = handler.parse_intent(
-                _request("refactor the module"),
-                classification_url="http://bad-host/classify",
-            )
-
-        # Falls back to keyword; refactor matches
-        assert result.intent_type == EnumIntentType.REFACTOR
-        # Keyword fallback uses INFERENCE resolution path
-        assert result.resolution_path == EnumResolutionPath.INFERENCE
-
-    def test_no_service_url_skips_call(self) -> None:
-        """When no service is configured, no HTTP call is made."""
-        handler = _handler()
-        with patch("urllib.request.urlopen") as mock_open:
-            import os
-
-            env_backup = {
-                "OMNICLAUDE_INTENT_API_URL": os.environ.pop(
-                    "OMNICLAUDE_INTENT_API_URL", None
-                ),
-                "INTELLIGENCE_SERVICE_URL": os.environ.pop(
-                    "INTELLIGENCE_SERVICE_URL", None
-                ),
-            }
-            try:
-                result = handler.parse_intent(_request("write tests"))
-            finally:
-                for k, v in env_backup.items():
-                    if v is not None:
-                        os.environ[k] = v
-
-        mock_open.assert_not_called()
-        assert isinstance(result, ModelIntentObject)

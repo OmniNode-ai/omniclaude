@@ -138,7 +138,7 @@ Task(
 Skill(skill="onex:pr-review-dev", args="{pr_number} {--no-ci if set}")
 ```
 
-This handles fetching PR review comments, CI failures, running parallel-solve for all Critical/Major/Minor issues, and offering to fix nitpicks.
+This handles fetching PR review comments, CI failures, running multi-agent parallel-build for all Critical/Major/Minor issues, and offering to fix nitpicks.
 
 ### Phase 2: Local Review Loop — invoke local-review skill
 

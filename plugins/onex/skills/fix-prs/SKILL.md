@@ -31,7 +31,7 @@ args:
     description: Repos scanned in parallel (default: 3)
     required: false
   - name: --max-fix-iterations
-    description: Max ci-failures iterations per PR (default: 3)
+    description: Max ci-fix-pipeline iterations per PR (default: 3)
     required: false
   - name: --authors
     description: Limit to PRs by these GitHub usernames (comma-separated; default: all)
@@ -75,7 +75,7 @@ unaddressed review comments. No Slack gate — runs to completion autonomously.
 Processed in this order. A PR may have multiple issues; all applicable categories run:
 
 1. **Merge conflicts** — rebase onto `pr.baseRefName` (NEVER hardcoded `main`); must resolve before CI can run reliably
-2. **Failing CI** — invoke `ci-failures` sub-skill; skip checks requiring external secrets/infra
+2. **Failing CI** — invoke `ci-fix-pipeline` sub-skill; skip checks requiring external secrets/infra
 3. **Review comments** — invoke `pr-review-dev`; never auto-dismiss reviews, never force-push unless `--allow-force-push`
 
 ## PR Classification Predicates
@@ -116,7 +116,7 @@ def pr_state_unknown(pr) -> bool:
 | `--max-total-prs` | 20 | Hard cap on PRs processed per run |
 | `--max-parallel-prs` | 5 | Concurrent fix agents |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel |
-| `--max-fix-iterations` | 3 | Max ci-failures sub-skill iterations per PR |
+| `--max-fix-iterations` | 3 | Max ci-fix-pipeline iterations per PR |
 | `--authors` | all | Limit to PRs by these GitHub usernames (comma-separated) |
 | `--allow-force-push` | false | Permit force-push after rebase; always leaves PR comment |
 | `--ignore-ledger` | false | Bypass idempotency ledger |
@@ -180,9 +180,9 @@ If `retry_count >= 3` and neither condition is met: skip with `result: needs_hum
       Query failing checks:
         For each REQUIRED failed check:
           If check name contains external secret indicators (AWS_, DEPLOY_, PROD_, service-account):
-            → record result=blocked_external, blocked_check=<name>, skip ci-failures for this check
+            → record result=blocked_external, blocked_check=<name>, skip ci-fix-pipeline for this check
         If all failing checks are external: record result=blocked_external for PR, skip to d
-      Invoke: Skill(skill="onex:ci-failures") with --max-fix-iterations <max_fix_iterations>
+      Invoke: Skill(skill="onex:ci-fix-pipeline") with --max-fix-iterations <max_fix_iterations>
       Collect result; record in ledger with new error_fingerprint
 
    d. IF needs_review_work AND CI is now green AND --category includes reviews:
@@ -200,21 +200,21 @@ If `retry_count >= 3` and neither condition is met: skip with `result: needs_hum
 
 ## CI Secrets Guard
 
-Before invoking `ci-failures` for any failing check, inspect the check name:
+Before invoking `ci-fix-pipeline` for any failing check, inspect the check name:
 
 ```
-External infra indicators (skip ci-failures for these checks):
+External infra indicators (skip ci-fix-pipeline for these checks):
   - Check name contains: deploy, production, prod, staging, aws, gcp, azure,
     service-account, docker-push, publish, release, upload-to
 
 If the failing check matches any indicator:
   → record blocked_check = <check_name>
   → result = blocked_external for that check
-  → do NOT invoke ci-failures
+  → do NOT invoke ci-fix-pipeline
   → continue to next check
 ```
 
-If ALL failing checks are blocked_external: record PR as `result: blocked_external`, skip ci-failures entirely.
+If ALL failing checks are blocked_external: record PR as `result: blocked_external`, skip ci-fix-pipeline entirely.
 
 ## Force Push Guardrail
 
@@ -274,15 +274,15 @@ Status values:
 | Error | Behavior |
 |-------|----------|
 | Rebase fails with unresolvable conflicts | Record `result: failed`, `reason: conflict_unresolved` |
-| CI check requires external secrets | Record `blocked_external`, skip ci-failures for that check |
-| `ci-failures` skill fails | Record `result: partial` or `failed`, continue other PRs |
+| CI check requires external secrets | Record `blocked_external`, skip ci-fix-pipeline for that check |
+| `ci-fix-pipeline` skill fails | Record `result: partial` or `failed`, continue other PRs |
 | `pr-review-dev` fails | Record `result: partial`, continue other PRs |
 | `gh pr list` fails for a repo | Log warning, skip that repo |
 | PR retry_count >= 3, no progress | Record `result: needs_human` |
 
 ## Sub-skills Used
 
-- `ci-failures` (existing) — diagnose and fix CI failures per PR
+- `ci-fix-pipeline` (existing) — diagnose and fix CI failures per PR
 - `pr-review-dev` (existing) — address GitHub review comments
 
 ## Integration Test
@@ -312,7 +312,7 @@ Run with: `uv run pytest tests/integration/skills/fix_prs/ -m unit -v`
 | No direct gh pr merge | fix-prs repairs PRs, does not merge them | unit |
 | No direct gh pr checkout | prompt.md delegates checkout to sub-skills | unit |
 | No direct worktree creation | Use get_worktree() from _lib/pr-safety | unit |
-| Delegates to ci-failures | CI fixing dispatched to ci-failures sub-skill | unit |
+| Delegates to ci-fix-pipeline | CI fixing dispatched to ci-fix-pipeline sub-skill | unit |
 | Delegates to pr-review-dev | Review fixing dispatched to pr-review-dev sub-skill | unit |
 | ModelSkillResult statuses | all_fixed / partial / nothing_to_fix / error documented | unit |
 | Force push guardrail | --allow-force-push + PR comment requirement documented | unit |
@@ -323,6 +323,6 @@ Run with: `uv run pytest tests/integration/skills/fix_prs/ -m unit -v`
 
 - `merge-sweep` skill — merges PRs that are already fix-prs clean
 - `pr-queue-pipeline` skill — orchestrates fix-prs → merge-sweep in sequence
-- `ci-failures` skill — per-PR CI failure analysis and repair
+- `ci-fix-pipeline` skill — per-PR CI failure analysis and repair
 - `pr-review-dev` skill — address code review comments
 - OMN-2636 — integration test suite

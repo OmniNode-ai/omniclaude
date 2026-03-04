@@ -1,6 +1,6 @@
 ---
 name: using-superpowers
-description: Use when starting any conversation - establishes mandatory workflows for finding and using skills, including using Skill tool before announcing usage, following brainstorming before coding, and creating TodoWrite todos for checklists
+description: Use when starting any conversation - establishes mandatory workflows for finding and using skills, including using Skill tool before announcing usage, following design-to-plan before coding, and creating TodoWrite todos for checklists
 version: 1.0.0
 level: basic
 debug: false
@@ -76,8 +76,8 @@ Before using a skill, announce that you are using it.
 "I'm using [Skill Name] to [what you're doing]."
 
 **Examples:**
-- "I'm using the brainstorming skill to refine your idea into a design."
-- "I'm using the test-driven-development skill to implement this feature."
+- "I'm using the design-to-plan skill to refine your idea into a design."
+- "I'm using the test-discipline skill to implement this feature."
 
 **Why:** Transparency helps your human partner understand your process and catch errors early. It also confirms you actually read the skill.
 
@@ -93,7 +93,7 @@ The skill itself tells you which type it is.
 
 Your human partner's specific instructions describe WHAT to do, not HOW.
 
-"Add X", "Fix Y" = the goal, NOT permission to skip brainstorming, TDD, or RED-GREEN-REFACTOR.
+"Add X", "Fix Y" = the goal, NOT permission to skip design-to-plan, TDD, or RED-GREEN-REFACTOR.
 
 **Red flags:** "Instruction was specific" - "Seems simple" - "Workflow is overkill"
 

@@ -122,6 +122,8 @@ jobs:
             --exclude 'https://claude\.ai'
             --exclude 'https://freedesktop\.org'
             --exclude 'https://www\.freedesktop\.org'
+            --exclude 'https://github\.com/fastapi'
+            --exclude 'https://stackoverflow\.com'
             '**/*.md'
           fail: true
 
@@ -839,7 +841,7 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 

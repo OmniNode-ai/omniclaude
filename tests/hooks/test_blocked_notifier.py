@@ -396,6 +396,38 @@ class TestSlackDelivery:
         assert "Session:" in message
         assert "Correlation ID:" in message
 
+    def test_message_format_handles_none_correlation_id(self) -> None:
+        """When correlation_id is None in payload, shows 'not available' instead of 'None'."""
+        from plugins.onex.hooks.lib.blocked_notifier import _format_slack_message
+
+        payload = _make_blocked_payload(correlation_id=None)
+
+        message = _format_slack_message(payload)
+
+        assert "Correlation ID: not available" in message
+
+    def test_message_format_handles_missing_correlation_id(self) -> None:
+        """When correlation_id key is absent from payload, shows 'not available'."""
+        from plugins.onex.hooks.lib.blocked_notifier import _format_slack_message
+
+        payload = _make_blocked_payload()
+        del payload["correlation_id"]
+
+        message = _format_slack_message(payload)
+
+        assert "Correlation ID: not available" in message
+
+    def test_message_format_shows_valid_correlation_id(self) -> None:
+        """When correlation_id is a valid UUID string, it is shown in the message."""
+        from plugins.onex.hooks.lib.blocked_notifier import _format_slack_message
+
+        test_uuid = str(uuid4())
+        payload = _make_blocked_payload(correlation_id=test_uuid)
+
+        message = _format_slack_message(payload)
+
+        assert f"Correlation ID: {test_uuid}" in message
+
     def test_send_via_handler_populates_details_with_known_values(self) -> None:
         """_send_via_handler passes agent_name and session_id as structured details.
 

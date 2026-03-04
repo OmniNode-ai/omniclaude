@@ -112,6 +112,15 @@ def emit_agent_status(
             else os.environ.get("SESSION_ID", "unknown")
         )
 
+        if resolved_agent_name == "unknown":
+            logger.warning(
+                "agent_name resolved to 'unknown' — AGENT_NAME env var not set and no --agent-name provided"
+            )
+        if resolved_session_id == "unknown":
+            logger.warning(
+                "session_id resolved to 'unknown' — SESSION_ID env var not set and no --session-id provided"
+            )
+
         # Build validated payload — Pydantic enforces all constraints
         # correlation_id is always required (no default on the model);
         # generate here if the caller didn't supply one, consistent with
