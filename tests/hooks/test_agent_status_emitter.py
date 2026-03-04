@@ -439,6 +439,82 @@ class TestEnvironmentVariableFallback:
         assert captured_payload["agent_name"] == "unknown"
         assert captured_payload["session_id"] == "unknown"
 
+    def test_unknown_agent_name_logs_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When agent_name resolves to 'unknown', a warning is logged."""
+        from plugins.onex.hooks.lib import agent_status_emitter
+
+        monkeypatch.delenv("AGENT_NAME", raising=False)
+        monkeypatch.delenv("SESSION_ID", raising=False)
+
+        with (
+            patch(
+                "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
+                return_value=True,
+            ),
+            patch.object(agent_status_emitter.logger, "warning") as mock_warn,
+        ):
+            agent_status_emitter.emit_agent_status(
+                "idle",
+                "No agent name",
+                session_id="explicit-session",
+            )
+
+        warning_messages = [str(c) for c in mock_warn.call_args_list]
+        assert any(
+            "agent_name resolved to 'unknown'" in msg for msg in warning_messages
+        )
+
+    def test_unknown_session_id_logs_warning(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When session_id resolves to 'unknown', a warning is logged."""
+        from plugins.onex.hooks.lib import agent_status_emitter
+
+        monkeypatch.delenv("AGENT_NAME", raising=False)
+        monkeypatch.delenv("SESSION_ID", raising=False)
+
+        with (
+            patch(
+                "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
+                return_value=True,
+            ),
+            patch.object(agent_status_emitter.logger, "warning") as mock_warn,
+        ):
+            agent_status_emitter.emit_agent_status(
+                "idle",
+                "No session id",
+                agent_name="explicit-agent",
+            )
+
+        warning_messages = [str(c) for c in mock_warn.call_args_list]
+        assert any(
+            "session_id resolved to 'unknown'" in msg for msg in warning_messages
+        )
+
+    def test_no_warning_when_agent_name_and_session_id_provided(self) -> None:
+        """When both agent_name and session_id are explicit, no unknown warnings are logged."""
+        from plugins.onex.hooks.lib import agent_status_emitter
+
+        with (
+            patch(
+                "plugins.onex.hooks.lib.emit_client_wrapper.emit_event",
+                return_value=True,
+            ),
+            patch.object(agent_status_emitter.logger, "warning") as mock_warn,
+        ):
+            agent_status_emitter.emit_agent_status(
+                "idle",
+                "All explicit",
+                agent_name="explicit-agent",
+                session_id="explicit-session",
+            )
+
+        # No warning calls should mention "resolved to 'unknown'"
+        for call in mock_warn.call_args_list:
+            assert "resolved to 'unknown'" not in str(call)
+
     def test_explicit_args_override_env_vars(self) -> None:
         """Explicit agent_name/session_id args take precedence over env vars."""
         from plugins.onex.hooks.lib.agent_status_emitter import emit_agent_status

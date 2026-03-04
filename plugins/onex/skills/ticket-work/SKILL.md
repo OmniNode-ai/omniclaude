@@ -179,7 +179,9 @@ Emit agent status events at key workflow points so external systems (dashboards,
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state STATE --message "MESSAGE" \
-  --phase PHASE --ticket-id {ticket_id} [--progress N] [--blocking-reason REASON]
+  --phase PHASE --ticket-id {ticket_id} \
+  --agent-name "${AGENT_NAME:-ticket-work}" --session-id "${SESSION_ID:-unknown}" \
+  [--progress N] [--blocking-reason REASON]
 ```
 
 **Note:** Always include `--progress` when transitioning phases, using the values from the table below to ensure dashboards and alerting accurately reflect workflow position.
@@ -215,6 +217,7 @@ Example: 3 of 5 requirements done yields progress = 0.82.
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state working --message "Implemented 3/5 requirements" \
   --phase implementation --ticket-id {ticket_id} --progress 0.82 \
+  --agent-name "${AGENT_NAME:-ticket-work}" --session-id "${SESSION_ID:-unknown}" \
   --metadata '{"requirements_completed": "3", "requirements_total": "5"}'
 ```
 
@@ -226,6 +229,7 @@ When a phase encounters an error (e.g., verification failure), emit an error sta
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state error --message "Verification failed: tests" \
   --phase review --ticket-id {ticket_id} \
+  --agent-name "${AGENT_NAME:-ticket-work}" --session-id "${SESSION_ID:-unknown}" \
   --metadata '{"error": "pytest exit code 1"}'
 ```
 
