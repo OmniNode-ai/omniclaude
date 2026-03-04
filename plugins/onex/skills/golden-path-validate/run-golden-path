@@ -76,7 +76,7 @@ decl = json.loads(decl_json)
 bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
 if not bootstrap:
     print("FATAL: KAFKA_BOOTSTRAP_SERVERS is not set.", file=sys.stderr)
-    print("Run \`bus-local\` (or \`bus-cloud\`) to configure your session, then retry.", file=sys.stderr)
+    print("Run \`bus-local\` to configure your session, then retry.", file=sys.stderr)
     sys.exit(1)
 _EXPECTED_BROKER = "localhost:19092"
 if bootstrap != _EXPECTED_BROKER:
