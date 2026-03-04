@@ -31,6 +31,7 @@ from omniclaude.services.linear_relay.verifier import (
 
 logger = logging.getLogger(__name__)
 
+
 # Entity types that trigger the epic-closed flow.
 # Defaults to {"Project"}, configurable via LINEAR_EPIC_TYPES env var.
 # Example: LINEAR_EPIC_TYPES=Project,Initiative
@@ -171,7 +172,11 @@ def create_app() -> FastAPI:
                 payload.type,
                 epic_closed_types,
             )
-            return {"status": "skipped", "reason": "type_not_matched", "type": payload.type}
+            return {
+                "status": "skipped",
+                "reason": "type_not_matched",
+                "type": payload.type,
+            }
 
         state = payload.data.get("state")
         if state != "completed":
@@ -180,7 +185,11 @@ def create_app() -> FastAPI:
                 payload.type,
                 state,
             )
-            return {"status": "skipped", "reason": "state_not_completed", "state": state}
+            return {
+                "status": "skipped",
+                "reason": "state_not_completed",
+                "state": state,
+            }
 
         # Step 5: dedup by webhookId
         dedup = _get_dedup_store()
