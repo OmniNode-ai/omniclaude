@@ -305,17 +305,13 @@ class TestPhoenixOtelExport:
 
         # Build fake modules so that the lazy import inside main() succeeds
         # without needing the real omniclaude package installed.
-        fake_handler = types.ModuleType(
-            "omniclaude.hooks.handler_context_injection"
-        )
+        fake_handler = types.ModuleType("omniclaude.hooks.handler_context_injection")
         fake_handler.inject_patterns_sync = lambda **kw: _fake_result  # type: ignore[attr-defined]
 
         fake_config = types.ModuleType("omniclaude.hooks.context_config")
         fake_config.ContextInjectionConfig = lambda **kw: None  # type: ignore[attr-defined]
 
-        fake_models = types.ModuleType(
-            "omniclaude.hooks.models_injection_tracking"
-        )
+        fake_models = types.ModuleType("omniclaude.hooks.models_injection_tracking")
 
         class _FakeEnum:
             USER_PROMPT_SUBMIT = "user_prompt_submit"
@@ -323,9 +319,7 @@ class TestPhoenixOtelExport:
         fake_models.EnumInjectionContext = _FakeEnum  # type: ignore[attr-defined]
 
         with (
-            patch.object(
-                context_injection_wrapper, "_emit_injection_span", _fake_emit
-            ),
+            patch.object(context_injection_wrapper, "_emit_injection_span", _fake_emit),
             patch.object(
                 context_injection_wrapper,
                 "_get_context_mapping",

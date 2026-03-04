@@ -257,9 +257,7 @@ def emit_injection_span(
         if start_time is not None:
             span_kwargs["start_time"] = start_time
 
-        with tracer.start_as_current_span(
-            "manifest_injection", **span_kwargs
-        ) as span:
+        with tracer.start_as_current_span("manifest_injection", **span_kwargs) as span:
             span.set_attribute("session_id", session_id)
             span.set_attribute("correlation_id", correlation_id)
             span.set_attribute("manifest_injected", manifest_injected)

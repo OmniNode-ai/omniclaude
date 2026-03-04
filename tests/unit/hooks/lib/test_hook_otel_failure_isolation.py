@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # sys.path setup: mirror how hooks/lib scripts are loaded by hook scripts
@@ -264,7 +264,6 @@ class TestPhoenixOtelSpanEnhancements:
     def test_span_created_with_internal_kind(self) -> None:
         """Span must be created with kind=SpanKind.INTERNAL."""
         import phoenix_otel_exporter as mod
-
         from opentelemetry import trace as otel_trace
 
         mock_tracer, _mock_span = self._make_mock_tracer()
