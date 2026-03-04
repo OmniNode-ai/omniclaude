@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 # Default database path — can be overridden in tests
-_DEFAULT_DB_PATH = Path("/tmp/linear_relay_dedup.db")  # noqa: S108
+_DEFAULT_DB_PATH = Path("/tmp/linear_relay_dedup.db")  # noqa: S108  # nosec B108
 
 # Entries older than this are removed on insert
 _TTL_SECONDS = 86400  # 24 hours

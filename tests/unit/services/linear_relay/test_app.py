@@ -287,9 +287,7 @@ class TestLinearRelayDedup:
             r2 = _post(client, _PROJECT_COMPLETED_PAYLOAD)
             assert r2.status_code == 409
 
-    def test_different_webhook_ids_are_independent(
-        self, client: TestClient
-    ) -> None:
+    def test_different_webhook_ids_are_independent(self, client: TestClient) -> None:
         """Two requests with different webhookIds are both published."""
         payload1 = dict(_PROJECT_COMPLETED_PAYLOAD)
         payload2 = dict(_PROJECT_COMPLETED_PAYLOAD)
@@ -328,9 +326,7 @@ class TestLinearRelayPublish:
             assert data["org_id"] == "org-xyz"
             assert data["epic_id"] == "proj-abc123"
 
-    def test_publish_helper_called_with_org_and_epic(
-        self, client: TestClient
-    ) -> None:
+    def test_publish_helper_called_with_org_and_epic(self, client: TestClient) -> None:
         """_publish is called with correct org_id and epic_id."""
         with patch(
             "omniclaude.services.linear_relay.app._publish",

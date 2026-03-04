@@ -65,9 +65,7 @@ class TestVerifySignature:
         body = b"some body"
         assert verify_signature(body, "any-signature") is False
 
-    def test_empty_secret_returns_false(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_empty_secret_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Empty LINEAR_WEBHOOK_SECRET returns False (does not raise)."""
         monkeypatch.setenv("LINEAR_WEBHOOK_SECRET", "")
         body = b"some body"

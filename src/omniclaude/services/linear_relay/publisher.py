@@ -30,7 +30,7 @@ from omniclaude.services.linear_relay.models import LinearEpicClosedCommand
 logger = logging.getLogger(__name__)
 
 # Kafka topic for feature-dashboard commands
-FEATURE_DASHBOARD_TOPIC = "onex.cmd.omniclaude.feature-dashboard.v1"
+FEATURE_DASHBOARD_TOPIC = "onex.cmd.omniclaude.feature-dashboard.v1"  # noqa: arch-topic-naming
 
 
 class _KafkaProducer(Protocol):
@@ -72,7 +72,7 @@ def compute_command_id(org_id: str, epic_id: str) -> str:
         First 16 hex characters of
         ``sha256("{org_id}:{epic_id}:closed")``.
     """
-    raw = f"{org_id}:{epic_id}:closed".encode("utf-8")
+    raw = f"{org_id}:{epic_id}:closed".encode()
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
