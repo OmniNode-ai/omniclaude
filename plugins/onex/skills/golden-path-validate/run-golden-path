@@ -9,7 +9,7 @@
 #   run-golden-path /path/to/decl.json
 #
 # Environment:
-#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (default: 192.168.86.200:29092)
+#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (required; sourced from ~/.omnibase/.env)
 #   GOLDEN_PATH_ARTIFACT_DIR Evidence artifact base dir (default: ~/.claude/golden-path)
 #
 # Exit codes:
@@ -30,7 +30,7 @@ Arguments:
   /path/to/decl.json  Path to a JSON file containing the declaration.
 
 Environment:
-  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (default: 192.168.86.200:29092)
+  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (required; source ~/.omnibase/.env)
   GOLDEN_PATH_ARTIFACT_DIR   Artifact base dir (default: ~/.claude/golden-path)
 
 Examples:
@@ -73,7 +73,17 @@ import os
 decl_json = '''${DECL_JSON}'''
 decl = json.loads(decl_json)
 
-bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+if not bootstrap:
+    print(
+        "ERROR: KAFKA_BOOTSTRAP_SERVERS is not set.\\n"
+        "Run: source ~/.omnibase/.env\\n"
+        "Expected values:\\n"
+        "  localhost:19092  (local Docker Redpanda, default)\\n"
+        "  localhost:29092  (cloud bus, activate with: bus-cloud)",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 artifact_base = os.environ.get("GOLDEN_PATH_ARTIFACT_DIR", str(__import__("pathlib").Path.home() / ".claude" / "golden-path"))
 
 from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
