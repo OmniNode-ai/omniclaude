@@ -27,6 +27,9 @@ args:
   - name: --show-resolved-only
     description: Only show resolved comments
     required: false
+  - name: --include-nits
+    description: "Include Nit-severity findings in the parallel-solve dispatch rather than deferring them for human review. Reproduces former pr-release-ready behavior."
+    required: false
 ---
 
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
@@ -176,7 +179,7 @@ MINOR (CI Failures):
 1. Take PR review issues from Step 1
 2. Take CI failures from Step 2.5 (if any)
 3. Combine under each severity heading (CRITICAL, MAJOR, MINOR)
-4. **EXCLUDE any NITPICK sections** from Step 1
+4. **EXCLUDE any NITPICK sections** from Step 1 (unless `--include-nits` is passed)
 
 **Example combined output**:
 ```
@@ -196,7 +199,9 @@ MINOR:
 - [Deploy:Bundle:Size] Bundle size warning (CI Failure)
 ```
 
-**IMPORTANT**: Do NOT include the NITPICK section in the parallel-solve dispatch.
+**IMPORTANT**: Do NOT include the NITPICK section in the parallel-solve dispatch (unless `--include-nits` is passed).
+
+**When `--include-nits` is passed:** Include NITPICK-severity findings in the parallel-solve dispatch instead of deferring them for human review. This reproduces the former `pr-release-ready` behavior where all severity levels are auto-fixed in one pass. Skip Step 4 entirely since there are no deferred nitpicks.
 
 ---
 
