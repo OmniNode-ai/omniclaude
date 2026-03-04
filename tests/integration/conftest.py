@@ -10,7 +10,8 @@ function in ``~/.zshrc``) before running integration tests.
 
 Guard behaviour
 ---------------
-* Fires only when at least one collected item lives under ``tests/integration/``
+* Fires only when at least one collected item has both ``tests`` and
+  ``integration`` as path components (OS-independent check via ``Path.parts``)
   AND the session is not explicitly filtering OUT integration tests (e.g. the
   CI ``-m "not integration"`` invocation).
 * Asserts ``KAFKA_BOOTSTRAP_SERVERS == 'localhost:19092'`` — unset is wrong.
@@ -26,8 +27,8 @@ before the run protocol starts, so ``session.items`` reflects the final
 selected set.
 
 Two conditions must both be true for the guard to activate:
-1. ``session.items`` contains at least one item whose path includes
-   ``tests/integration/`` (path-based scope check).
+1. ``session.items`` contains at least one item whose path has both ``tests``
+   and ``integration`` as ``Path.parts`` components (OS-independent check).
 2. The session's marker expression does NOT explicitly exclude the
    ``integration`` marker (e.g. ``-m "not integration"`` in CI).  When both
    conditions hold, the session intends to run integration tests.
@@ -40,6 +41,7 @@ from __future__ import annotations
 import os
 import socket
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
@@ -49,7 +51,8 @@ import pytest
 
 _EXPECTED_BROKER: str = "localhost:19092"
 _TCP_TIMEOUT_SECONDS: float = 2.0
-_INTEGRATION_MARKER: str = "tests/integration/"
+# Path segments that identify an integration test item (OS-independent)
+_INTEGRATION_PARTS: tuple[str, str] = ("tests", "integration")
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +108,11 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         return
 
     # Detect whether any collected item lives under tests/integration/
+    # Use Path.parts for OS-independent path segment matching.
     integration_items: Sequence[pytest.Item] = [
-        item for item in session.items if _INTEGRATION_MARKER in str(item.fspath)
+        item
+        for item in session.items
+        if set(_INTEGRATION_PARTS).issubset(Path(item.fspath).parts)
     ]
     if not integration_items:
         return  # unit-only run — nothing to assert
