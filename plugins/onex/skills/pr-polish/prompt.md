@@ -156,7 +156,7 @@ Skill(skill="onex:pr-review-dev", args=f"{pr_number} {no_ci_flag}")
 # pr-review-dev handles:
 # - fetching PR review comments via collate-issues-with-ci
 # - fetching CI failures (unless --no-ci)
-# - dispatching parallel-solve for Critical/Major/Minor
+# - dispatching multi-agent parallel-build for Critical/Major/Minor
 # - offering to fix nitpicks
 # - does its own push internally unless --no-push is passed
 #   (NOTE: pr-review-dev does not accept --no-push; if no_push is set,
@@ -347,7 +347,7 @@ Phase 1: PR Review + CI Fix
   pr-review-dev: Fetching PR review comments...
   pr-review-dev: Fetching CI failures...
   pr-review-dev: 3 MAJOR, 1 MINOR issues found
-  pr-review-dev: [dispatches parallel-solve]
+  pr-review-dev: [dispatches multi-agent parallel-build]
   pr-review-dev: Fixed 4 issues, 2 commits
   Phase 1: PR review + CI fix complete
 

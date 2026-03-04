@@ -183,7 +183,7 @@ When grouping orphaned tickets into a proposed epic, the grouping key is:
 ## PlanContract
 
 Canonical structure for implementation plan documents. Used by:
-- `writing-plans` (generates plan documents)
+- `design-to-plan` (generates plan documents)
 - `executing-plans` (reads and executes plan tasks)
 
 Plan documents live at: `docs/plans/YYYY-MM-DD-<feature-name>.md`
@@ -369,7 +369,7 @@ Skills MUST enforce these rules when creating or updating contracts:
 
 - `plan-ticket` skill — generates TicketContract drafts
 - `ticket-work` skill — executes against TicketContract embedded in Linear
-- `writing-plans` skill — generates PlanContract documents
+- `design-to-plan` skill — generates PlanContract documents
 - `linear-triage` skill — produces TriageReport, applies done-marking
 - `linear-epic-org` skill — consumes orphaned_tickets from TriageReport
 - `ticket-plan --sync` — reads EpicContract from Linear, updates MASTER_TICKET_PLAN.md

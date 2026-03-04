@@ -186,7 +186,7 @@ repos:
       - epic-team
       - ticket-work
       - pr-review
-      - parallel-solve
+      - multi-agent
       - omniclaude
       - epic
       - decomposer

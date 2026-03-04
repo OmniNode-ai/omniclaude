@@ -82,7 +82,7 @@ no handler mapping, and no extraction plan. This skill produces:
 **Do NOT use when:**
 - You need to implement a specific feature (use `ticket-work`)
 - You want to audit live integration health (use `gap detect`)
-- You're debugging a specific failure (use `root-cause-tracing`)
+- You're debugging a specific failure (use `systematic-debugging`)
 
 ## CLI Args
 
@@ -207,6 +207,6 @@ Run these after the skill completes to validate output integrity:
 ## See Also
 
 - `gap` skill (cross-repo integration health -- detect/fix/cycle)
-- `parallel-solve` skill (generic parallel dispatch)
+- `multi-agent` skill (generic parallel dispatch, `--mode parallel-build`)
 - `pipeline-audit` skill (end-to-end pipeline verification)
 - `decompose-epic` skill (breaking epics into tickets)

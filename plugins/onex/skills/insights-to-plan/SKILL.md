@@ -1,6 +1,6 @@
 ---
 name: insights-to-plan
-description: Parse a Claude Code insights HTML report, archive it to the registry, and generate a writing-plans-compatible action plan
+description: Parse a Claude Code insights HTML report, archive it to the registry, and generate a design-to-plan-compatible action plan
 version: 1.0.0
 level: intermediate
 debug: false
@@ -30,7 +30,7 @@ args:
 ## Overview
 
 Parse a Claude Code insights HTML report, archive it to the Ideas Registry, and generate an
-actionable `writing-plans`-compatible plan document. The skill produces two artifacts:
+actionable `design-to-plan`-compatible plan document. The skill produces two artifacts:
 
 1. **Registry archive** — `docs/registry/insights/YYYY-MM-DD.html` + one NDJSON IdeaCard line
    appended to `docs/registry/_idea_cards.ndjson`
@@ -321,7 +321,7 @@ reported counts are accurate.
 ## See Also
 
 - `curate-legacy` skill (bulk Ideas Registry canonicalization)
-- `writing-plans` skill (plan authoring conventions)
+- `design-to-plan` skill (plan authoring conventions)
 - `executing-plans` skill (step-by-step plan execution)
 - `plan-to-tickets` skill (batch Linear ticket creation from plan files)
 - `linear-insights` skill (daily work analysis reports)

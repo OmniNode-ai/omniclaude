@@ -57,14 +57,9 @@ progressions:
     to: project-status
     after_uses: 3
 
-  # writing-plans → plan-to-tickets (convert plans to Linear tickets)
-  - from: writing-plans
+  # design-to-plan → plan-to-tickets (convert plans to Linear tickets)
+  - from: design-to-plan
     to: plan-to-tickets
-    after_uses: 3
-
-  # systematic-debugging → root-cause-tracing (deeper analysis)
-  - from: systematic-debugging
-    to: root-cause-tracing
     after_uses: 3
 
   # ci-watch → ci-fix-pipeline (automated CI repair)

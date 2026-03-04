@@ -28,13 +28,13 @@ args:
     description: Only show resolved comments
     required: false
   - name: --include-nits
-    description: "Include Nit-severity findings in the parallel-solve dispatch rather than deferring them for human review. Reproduces former pr-release-ready behavior."
+    description: "Include Nit-severity findings in the multi-agent parallel-build dispatch rather than deferring them for human review. Reproduces former pr-release-ready behavior."
     required: false
 ---
 
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 
-**Workflow**: Fetch PR issues -> Fetch CI failures -> Combine -> **AUTO-RUN** parallel-solve (non-nits) -> Ask about nitpicks
+**Workflow**: Fetch PR issues -> Fetch CI failures -> Combine -> **AUTO-RUN** multi-agent parallel-build (non-nits) -> Ask about nitpicks
 
 **Announce at start:** "I'm using the pr-review-dev skill to review and fix PR issues."
 
@@ -45,13 +45,13 @@ args:
    ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
-2. **Automatically dispatch parallel-solve** with the collated output (excluding NITPICK sections)
+2. **Automatically dispatch multi-agent parallel-build** with the collated output (excluding NITPICK sections)
 
-3. **Ask about nitpicks** after parallel-solve completes
+3. **Ask about nitpicks** after multi-agent parallel-build completes
 
 ## Dispatch Contracts (Execution-Critical)
 
-You are an orchestrator. You gather and collate issues, then dispatch parallel-solve.
+You are an orchestrator. You gather and collate issues, then dispatch multi-agent parallel-build.
 You do NOT fix issues yourself.
 
 **Rule: NEVER call Edit() or Write() to fix PR issues.**
@@ -65,10 +65,10 @@ Fetch PR review comments and CI failure logs. No dispatch needed.
 Merge issues into severity-classified list: CRITICAL -> MAJOR -> MINOR -> NIT.
 Filter nitpicks by default.
 
-### Fix Phase -- dispatch via parallel-solve
+### Fix Phase -- dispatch via multi-agent parallel-build
 
 ```
-Skill(skill="onex:parallel-solve")
+Skill(skill="onex:multi-agent --mode parallel-build")
 ```
 
 Pass collated issues as context.
@@ -83,10 +83,10 @@ After fixes complete, offer to fix deferred nitpicks.
 
 ### Step 1: Fetch PR Review Issues <!-- ai-slop-ok: pre-existing step structure -->
 
-Execute the collate-issues helper to get PR review issues in parallel-solve-ready format:
+Execute the collate-issues helper to get PR review issues in multi-agent parallel-build-ready format:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --multi-agent parallel-build-format 2>&1
 ```
 
 **Save this output** - it is needed for Step 3.
@@ -108,10 +108,10 @@ The collate-issues command supports filtering issues by their resolution status:
 **Examples with resolution filtering**:
 ```bash
 # Default: show all issues
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --multi-agent parallel-build-format
 
 # Only show open issues (recommended for fixing)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --multi-agent parallel-build-format --hide-resolved
 
 # Only show resolved issues (for verification)
 ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-only
@@ -147,7 +147,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/ci-quick-review --json "${1:-}" 2>&
 
 ### Step 2.5: Parse and Format CI Failures
 
-If CI failures were found (exit code 0), parse the JSON and format for parallel-solve:
+If CI failures were found (exit code 0), parse the JSON and format for multi-agent parallel-build:
 
 ```
 # Extract from JSON:
@@ -199,22 +199,22 @@ MINOR:
 - [Deploy:Bundle:Size] Bundle size warning (CI Failure)
 ```
 
-**IMPORTANT**: Do NOT include the NITPICK section in the parallel-solve dispatch (unless `--include-nits` is passed).
+**IMPORTANT**: Do NOT include the NITPICK section in the multi-agent parallel-build dispatch (unless `--include-nits` is passed).
 
-**When `--include-nits` is passed:** Include NITPICK-severity findings in the parallel-solve dispatch instead of deferring them for human review. This reproduces the former `pr-release-ready` behavior where all severity levels are auto-fixed in one pass. Skip Step 4 entirely since there are no deferred nitpicks.
+**When `--include-nits` is passed:** Include NITPICK-severity findings in the multi-agent parallel-build dispatch instead of deferring them for human review. This reproduces the former `pr-release-ready` behavior where all severity levels are auto-fixed in one pass. Skip Step 4 entirely since there are no deferred nitpicks.
 
 ---
 
 ### Step 4: Ask About Nitpicks <!-- ai-slop-ok: pre-existing step structure -->
 
-After parallel-solve completes, check the **Step 1 output** for any NITPICK sections:
+After multi-agent parallel-build completes, check the **Step 1 output** for any NITPICK sections:
 
 - If nitpicks were found in the original collate-issues output, ask the user:
   "Critical/major/minor issues (PR review + CI failures) are being addressed. There are [N] nitpick items from the PR review. Address them now?"
 
-- If yes -> Fire another parallel-solve with just the nitpick items from the Step 1 output.
+- If yes -> Fire another multi-agent parallel-build with just the nitpick items from the Step 1 output.
 
-**Note**: Nitpicks are discovered from the Step 1 collate-issues output but excluded from Step 3's parallel-solve dispatch.
+**Note**: Nitpicks are discovered from the Step 1 collate-issues output but excluded from Step 3's multi-agent parallel-build dispatch.
 
 ---
 
@@ -234,17 +234,17 @@ This script:
 - Automatically fetches CI failures (Step 2)
 - Parses and formats CI failures (Step 2.5)
 - Combines both by severity (Step 3)
-- Outputs ready-to-use parallel-solve format
+- Outputs ready-to-use multi-agent parallel-build format
 - Gracefully handles CI fetch failures (continues with PR review only)
 
 **Manual Approach** (if you need finer control):
 
 ```bash
 # Step 1: PR review issues (all issues)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --multi-agent parallel-build-format
 
 # Step 1 (alt): PR review issues (only open issues - recommended)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --multi-agent parallel-build-format --hide-resolved
 
 # Step 1 (alt): PR review issues (only resolved - for verification)
 ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-only

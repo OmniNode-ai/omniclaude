@@ -119,7 +119,7 @@ Absorbed from: gap-analysis (v1.0.0)
 - After a refactoring that spans multiple repositories
 
 **Do NOT use when:**
-- Debugging a single known failure (use `root-cause-tracing` instead)
+- Debugging a single known failure (use `systematic-debugging` instead)
 - You need a single-repo code review (use `pr-review` or `local-review`)
 - The Epic is still In Progress (wait for it to close first, or use `pipeline-audit`)
 
@@ -505,7 +505,7 @@ uv run pytest tests/integration/skills/gap_fix/test_gap_fix_integration.py -v
 ## See Also
 
 - `pipeline-audit` skill (comprehensive end-to-end pipeline verification)
-- `root-cause-tracing` skill (debugging a single known failure)
+- `systematic-debugging` skill (debugging a single known failure; see Phase 1 Backward Tracing)
 - `create-ticket` skill (ticket creation patterns)
 - `skills/gap/suppressions.yaml` (suppression registry)
 - `skills/gap/models/` (local Pydantic models)
