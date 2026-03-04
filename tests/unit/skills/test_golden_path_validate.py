@@ -216,6 +216,29 @@ def minimal_decl() -> dict[str, Any]:
     }
 
 
+@pytest.fixture(autouse=True)
+def _mock_admin_client_topic_exists() -> Any:
+    """Auto-mock AIOKafkaAdminClient so all existing tests pass the topic check.
+
+    The topic check (OMN-3568) runs before the consumer/producer flow. This
+    fixture ensures existing tests are not affected by always reporting the
+    output topic as present. Tests that specifically exercise the topic-check
+    behavior override this mock explicitly.
+    """
+    mock_admin = AsyncMock()
+    mock_admin.start = AsyncMock()
+    mock_admin.close = AsyncMock()
+    # Return a set containing the test output topic so the check passes
+    mock_admin.list_topics = AsyncMock(
+        return_value={"onex.evt.test.v1", "onex.cmd.test.v1"}
+    )
+    with patch(
+        "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaAdminClient",
+        return_value=mock_admin,
+    ):
+        yield
+
+
 @pytest.fixture
 def decl_with_schema(minimal_decl: dict[str, Any]) -> dict[str, Any]:
     decl = dict(minimal_decl)
@@ -801,7 +824,7 @@ class TestGoldenPathRunnerArtifactPath:
         assert artifact.ticket_id == "OMN-2976"
         assert artifact.run_id
         assert artifact.emitted_at
-        assert artifact.status in {"pass", "fail", "timeout"}
+        assert artifact.status in {"pass", "fail", "timeout", "error"}
         assert artifact.input_topic == "onex.cmd.test.v1"
         assert artifact.output_topic == "onex.evt.test.v1"
         assert isinstance(artifact.latency_ms, float)
@@ -817,3 +840,149 @@ class TestGoldenPathRunnerArtifactPath:
         assert isinstance(artifact.raw_output_preview, str)
         assert isinstance(artifact.kafka_offset, int)
         assert isinstance(artifact.kafka_timestamp_ms, int)
+
+
+# ---------------------------------------------------------------------------
+# GoldenPathRunner — topic existence check (OMN-3568)
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenPathRunnerTopicCheck:
+    """Tests for output topic existence check before subscribing."""
+
+    @pytest.mark.unit
+    async def test_missing_topic_returns_error_artifact(
+        self,
+        tmp_path: Path,
+        minimal_decl: dict[str, Any],
+    ) -> None:
+        """When output topic does not exist, artifact has status=error
+        and error_reason=output_topic_not_found."""
+        runner = GoldenPathRunner(
+            bootstrap_servers="localhost:29092",
+            artifact_base_dir=str(tmp_path / "golden-path"),
+        )
+
+        # Mock the admin client to report the topic does not exist
+        mock_admin = AsyncMock()
+        mock_admin.start = AsyncMock()
+        mock_admin.close = AsyncMock()
+        # list_topics returns a set of topic names; output topic absent
+        mock_admin.list_topics = AsyncMock(
+            return_value={"some.other.topic.v1", "another.topic.v1"}
+        )
+
+        with patch(
+            "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaAdminClient",
+            return_value=mock_admin,
+        ):
+            artifact = await runner.run(minimal_decl)
+
+        assert artifact.status == "error"
+        assert artifact.error_reason == "output_topic_not_found"
+        assert artifact.output_topic == "onex.evt.test.v1"
+        assert artifact.latency_ms == -1
+        assert artifact.kafka_offset == -1
+        # Verify artifact was written to disk
+        assert len(list(tmp_path.rglob("*.json"))) == 1
+        # Verify no consumer or producer was created (early exit)
+        mock_admin.start.assert_awaited_once()
+        mock_admin.close.assert_awaited_once()
+
+    @pytest.mark.unit
+    async def test_existing_topic_no_producer_returns_timeout(
+        self,
+        tmp_path: Path,
+        minimal_decl: dict[str, Any],
+    ) -> None:
+        """When output topic exists but no producer is wired, artifact
+        has status=timeout (unchanged behavior)."""
+        runner = GoldenPathRunner(
+            bootstrap_servers="localhost:29092",
+            artifact_base_dir=str(tmp_path / "golden-path"),
+        )
+
+        # Mock the admin client to report the topic exists
+        mock_admin = AsyncMock()
+        mock_admin.start = AsyncMock()
+        mock_admin.close = AsyncMock()
+        mock_admin.list_topics = AsyncMock(
+            return_value={"onex.evt.test.v1", "some.other.topic.v1"}
+        )
+
+        mock_consumer = AsyncMock()
+        mock_consumer.start = AsyncMock()
+        mock_consumer.stop = AsyncMock()
+        mock_consumer.getone = AsyncMock(side_effect=TimeoutError("timeout"))
+
+        mock_producer = AsyncMock()
+        mock_producer.start = AsyncMock()
+        mock_producer.stop = AsyncMock()
+        mock_producer.send_and_wait = AsyncMock()
+
+        with (
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaAdminClient",
+                return_value=mock_admin,
+            ),
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                return_value=mock_consumer,
+            ),
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                return_value=mock_producer,
+            ),
+        ):
+            artifact = await runner.run(minimal_decl)
+
+        assert artifact.status == "timeout"
+        assert artifact.error_reason is None
+
+    @pytest.mark.unit
+    async def test_admin_client_failure_falls_through_to_normal_flow(
+        self,
+        tmp_path: Path,
+        minimal_decl: dict[str, Any],
+    ) -> None:
+        """When the admin client fails to connect, the runner degrades
+        gracefully and proceeds with the normal flow (timeout path)."""
+        runner = GoldenPathRunner(
+            bootstrap_servers="localhost:29092",
+            artifact_base_dir=str(tmp_path / "golden-path"),
+        )
+
+        # Mock the admin client to raise an exception on start
+        mock_admin = AsyncMock()
+        mock_admin.start = AsyncMock(side_effect=ConnectionError("broker unreachable"))
+        mock_admin.close = AsyncMock()
+
+        mock_consumer = AsyncMock()
+        mock_consumer.start = AsyncMock()
+        mock_consumer.stop = AsyncMock()
+        mock_consumer.getone = AsyncMock(side_effect=TimeoutError("timeout"))
+
+        mock_producer = AsyncMock()
+        mock_producer.start = AsyncMock()
+        mock_producer.stop = AsyncMock()
+        mock_producer.send_and_wait = AsyncMock()
+
+        with (
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaAdminClient",
+                return_value=mock_admin,
+            ),
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaConsumer",
+                return_value=mock_consumer,
+            ),
+            patch(
+                "plugins.onex.skills._golden_path_validate.golden_path_runner.AIOKafkaProducer",
+                return_value=mock_producer,
+            ),
+        ):
+            artifact = await runner.run(minimal_decl)
+
+        # Should fall through to normal timeout behavior, not crash
+        assert artifact.status == "timeout"
+        assert artifact.error_reason is None

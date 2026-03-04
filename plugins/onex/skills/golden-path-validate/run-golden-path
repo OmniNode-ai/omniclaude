@@ -13,8 +13,8 @@
 #   GOLDEN_PATH_ARTIFACT_DIR Evidence artifact base dir (default: ~/.claude/golden-path)
 #
 # Exit codes:
-#   0  Artifact written (check artifact.status for pass/fail/timeout)
-#   1  Usage or runtime error
+#   0  status=pass
+#   1  status=fail | timeout | error, or usage/runtime error
 
 set -euo pipefail
 
