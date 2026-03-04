@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """PersonalityAdapter — pure transformation from LogEvent → RenderedLog.
 
-This module contains no I/O. It is a pure transformation layer that accepts
+No I/O. It is a pure transformation layer that accepts
 a ``ModelLogEvent`` and a ``ModelPersonalityProfile`` and returns a
 ``ModelRenderedLog``.
 

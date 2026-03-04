@@ -10,7 +10,7 @@ manifest_injection_event_publisher.py. Eliminates duplication of Kafka
 configuration, envelope creation, and producer lifecycle management.
 
 DESIGN RULE: Non-Blocking Event Emission
-=========================================
+-----------------------------------------
 Event emission is BEST-EFFORT, NEVER blocks execution.
 """
 

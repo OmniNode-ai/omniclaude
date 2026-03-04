@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Local Coding Orchestrator - 100% contract-driven.
 
-This module provides the NodeLocalCodingOrchestrator class, a minimal shell
+The NodeLocalCodingOrchestrator class, a minimal shell
 that inherits from NodeOrchestrator. All orchestration logic is driven by the
 contract.yaml.
 

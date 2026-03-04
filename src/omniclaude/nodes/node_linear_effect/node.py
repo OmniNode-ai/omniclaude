@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Linear Effect - 100% contract-driven.
 
-This module provides the NodeLinearEffect class, a minimal shell
+The NodeLinearEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: linear.ticketing

@@ -3,7 +3,7 @@
 
 """
 Result Cache - Phase 1
-======================
+----------------------
 
 Simple in-memory cache with TTL for routing results.
 

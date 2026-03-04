@@ -3,7 +3,7 @@
 
 """
 Capability Index - Phase 1
-==========================
+--------------------------
 
 In-memory index of agent capabilities for fast lookup.
 

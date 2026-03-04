@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """ONEX-compliant event schemas for Claude Code hooks.
 
-This module provides ONEX-compatible event payload models for Claude Code hooks,
+ONEX-compatible event payload models for Claude Code hooks,
 following the registration events pattern from omnibase_infra. These models
 are designed for event sourcing with proper causation tracking.
 
@@ -24,7 +24,7 @@ Key Design Decisions:
     - correlation_id: Groups all events in a logical workflow for tracing.
 
 Privacy Considerations:
-    This module handles potentially sensitive data from user sessions. Key
+    Potentially sensitive data from user sessions. Key
     privacy-sensitive fields and their handling:
 
     - **prompt_preview**: User prompt content, truncated to 100 chars and

@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Pydantic backing model for the experiment cohort contract.
 
-This module provides type-safe access to the experiment cohort configuration
+Type-safe access to the experiment cohort configuration
 defined in contract_experiment_cohort.yaml. It replaces manual yaml.safe_load +
 isinstance checks with validated Pydantic models.
 

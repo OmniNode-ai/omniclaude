@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Routing Emission Effect - 100% contract-driven.
 
-This module provides the NodeRoutingEmissionEffect class, a minimal shell
+The NodeRoutingEmissionEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: routing.emission

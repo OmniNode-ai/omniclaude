@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """OmniClaude hooks - ONEX-compliant event schemas and topic definitions for Claude Code hooks.
 
-This module provides:
+Exports:
 - ONEX-compatible event payload schemas following omnibase patterns
 - Topic base names and helpers for Kafka/Redpanda integration
 - YAML contract definitions for hook events

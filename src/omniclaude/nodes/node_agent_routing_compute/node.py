@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Agent Routing Compute - 100% contract-driven.
 
-This module provides the NodeAgentRoutingCompute class, a minimal shell
+The NodeAgentRoutingCompute class, a minimal shell
 that inherits from NodeCompute. All compute logic is driven by the contract.yaml.
 
 Capability: agent.routing.compute

@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Shared JSON Schema models for hook contracts.
 
-This module provides canonical schema models for representing JSON Schema-like
+Canonical schema models for representing JSON Schema-like
 definitions within hook contracts. All hook contract files should import from
 this module rather than defining their own schema models.
 
