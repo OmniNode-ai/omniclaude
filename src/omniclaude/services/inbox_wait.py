@@ -72,7 +72,9 @@ async def register_watch(
             try:
                 import valkey.asyncio as avalkey  # type: ignore[import-not-found]
 
-                client: ValkeyClientProtocol = avalkey.Valkey(host=valkey_host, port=valkey_port)
+                client: ValkeyClientProtocol = avalkey.Valkey(
+                    host=valkey_host, port=valkey_port
+                )
             except ImportError:
                 logger.warning("valkey package not installed, using in-memory client")
                 client = InMemoryValkeyClient()
@@ -118,7 +120,9 @@ async def unregister_watch(
             try:
                 import valkey.asyncio as avalkey
 
-                client: ValkeyClientProtocol = avalkey.Valkey(host=valkey_host, port=valkey_port)
+                client: ValkeyClientProtocol = avalkey.Valkey(
+                    host=valkey_host, port=valkey_port
+                )
             except ImportError:
                 client = InMemoryValkeyClient()
 
