@@ -173,7 +173,7 @@ if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
 else
-    ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
+    ROUTING_RESULT="$(run_with_timeout 3 "$PYTHON_CMD" "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "3000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
     # Clear activity on regular prompts (no longer in a skill workflow)
     update_tab_activity ""
 fi
@@ -290,7 +290,7 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
     # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
         log "Using context_injection_wrapper.py"
-        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 1 "$PYTHON_CMD" "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
     else
         log "INFO: No pattern injector found, skipping pattern injection"
         PATTERN_RESULT='{}'
