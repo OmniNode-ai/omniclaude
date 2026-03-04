@@ -9,7 +9,7 @@
 #   run-golden-path /path/to/decl.json
 #
 # Environment:
-#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (default: 192.168.86.200:29092)
+#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (required; run `bus-local` if unset)
 #   GOLDEN_PATH_ARTIFACT_DIR Evidence artifact base dir (default: ~/.claude/golden-path)
 #
 # Exit codes:
@@ -30,7 +30,7 @@ Arguments:
   /path/to/decl.json  Path to a JSON file containing the declaration.
 
 Environment:
-  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (default: 192.168.86.200:29092)
+  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (required; run \`bus-local\` if unset)
   GOLDEN_PATH_ARTIFACT_DIR   Artifact base dir (default: ~/.claude/golden-path)
 
 Examples:
@@ -73,7 +73,16 @@ import os
 decl_json = '''${DECL_JSON}'''
 decl = json.loads(decl_json)
 
-bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+if not bootstrap:
+    print("FATAL: KAFKA_BOOTSTRAP_SERVERS is not set.", file=sys.stderr)
+    print("Run \`bus-local\` (or \`bus-cloud\`) to configure your session, then retry.", file=sys.stderr)
+    sys.exit(1)
+_EXPECTED_BROKER = "localhost:19092"
+if bootstrap != _EXPECTED_BROKER:
+    print(f"FATAL: KAFKA_BOOTSTRAP_SERVERS={bootstrap!r}, expected {_EXPECTED_BROKER!r}.", file=sys.stderr)
+    print("Run \`bus-local\` to switch to the local Docker broker, then retry.", file=sys.stderr)
+    sys.exit(1)
 artifact_base = os.environ.get("GOLDEN_PATH_ARTIFACT_DIR", str(__import__("pathlib").Path.home() / ".claude" / "golden-path"))
 
 from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner

@@ -102,11 +102,12 @@ today's runs.
 
 | Context | `KAFKA_BOOTSTRAP_SERVERS` |
 |---------|--------------------------|
-| Host scripts | `192.168.86.200:29092` <!-- onex-allow-internal-ip --> |
-| Docker services | `omnibase-infra-redpanda:9092` |
+| Host scripts | `localhost:19092` (requires `KAFKA_BOOTSTRAP_SERVERS`; run `bus-local`) |
+| Docker services | `redpanda:9092` |
 
-The runner reads `KAFKA_BOOTSTRAP_SERVERS` from the environment, defaulting to
-`192.168.86.200:29092`. <!-- onex-allow-internal-ip -->
+The runner reads `KAFKA_BOOTSTRAP_SERVERS` from the environment. If the variable
+is not set, the script exits with an actionable error directing the developer to
+run `bus-local`.
 
 ## Python API
 
@@ -114,7 +115,7 @@ The runner reads `KAFKA_BOOTSTRAP_SERVERS` from the environment, defaulting to
 from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
 
 runner = GoldenPathRunner(
-    bootstrap_servers="192.168.86.200:29092",  # onex-allow-internal-ip
+    bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],
     artifact_base_dir="/custom/artifacts",
 )
 artifact = await runner.run(decl)
