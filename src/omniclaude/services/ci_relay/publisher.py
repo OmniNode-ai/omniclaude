@@ -16,13 +16,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 from omniclaude.services.ci_relay.models import PRStatusEvent
 
 logger = logging.getLogger(__name__)
 
-# Lazy-initialized producer
-_producer: object | None = None
+# Lazy-initialized producer (typed as Any because aiokafka is optional)
+_producer: Any = None
 
 
 def _get_bootstrap_servers() -> str:
@@ -35,7 +36,7 @@ def _get_bootstrap_servers() -> str:
     return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", default)
 
 
-async def _get_producer() -> object:
+async def _get_producer() -> Any:
     """Get or create the Kafka producer.
 
     Returns:
@@ -56,7 +57,7 @@ async def _get_producer() -> object:
                 request_timeout_ms=5000,
                 acks="all",
             )
-            await _producer.start()  # type: ignore[union-attr]
+            await _producer.start()
             logger.info("Kafka producer started: %s", _get_bootstrap_servers())
         except ImportError:
             logger.error("aiokafka not installed. Install with: uv add aiokafka")
@@ -79,7 +80,7 @@ async def publish_event(topic: str, event: PRStatusEvent) -> None:
     partition_key = event.repo
     value = event.model_dump(mode="json")
 
-    await producer.send_and_wait(  # type: ignore[union-attr]
+    await producer.send_and_wait(
         topic,
         value=value,
         key=partition_key,
@@ -96,6 +97,6 @@ async def close_producer() -> None:
     """Close the Kafka producer. Call on application shutdown."""
     global _producer  # noqa: PLW0603
     if _producer is not None:
-        await _producer.stop()  # type: ignore[union-attr]
+        await _producer.stop()
         _producer = None
         logger.info("Kafka producer closed")

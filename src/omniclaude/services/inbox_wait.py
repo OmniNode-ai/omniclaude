@@ -61,6 +61,7 @@ async def register_watch(
             )
             from omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry import (
                 InMemoryValkeyClient,
+                ValkeyClientProtocol,
             )
 
             # In production, the Valkey client would be injected via ServiceRegistry.
@@ -69,14 +70,14 @@ async def register_watch(
             valkey_port = int(os.environ.get("VALKEY_PORT", "16379"))
 
             try:
-                import valkey.asyncio as avalkey
+                import valkey.asyncio as avalkey  # type: ignore[import-not-found]
 
-                client = avalkey.Valkey(host=valkey_host, port=valkey_port)
+                client: ValkeyClientProtocol = avalkey.Valkey(host=valkey_host, port=valkey_port)
             except ImportError:
                 logger.warning("valkey package not installed, using in-memory client")
-                client = InMemoryValkeyClient()  # type: ignore[assignment]
+                client = InMemoryValkeyClient()
 
-            registry = WatchRegistry(client)  # type: ignore[arg-type]
+            registry = WatchRegistry(client)
             return await registry.register_watch(agent_id, repo, pr_number)
         except Exception as exc:
             logger.warning(
@@ -108,6 +109,7 @@ async def unregister_watch(
             )
             from omniclaude.nodes.node_github_pr_watcher_effect.handlers.watch_registry import (
                 InMemoryValkeyClient,
+                ValkeyClientProtocol,
             )
 
             valkey_host = os.environ.get("VALKEY_HOST", "localhost")
@@ -116,11 +118,11 @@ async def unregister_watch(
             try:
                 import valkey.asyncio as avalkey
 
-                client = avalkey.Valkey(host=valkey_host, port=valkey_port)
+                client: ValkeyClientProtocol = avalkey.Valkey(host=valkey_host, port=valkey_port)
             except ImportError:
-                client = InMemoryValkeyClient()  # type: ignore[assignment]
+                client = InMemoryValkeyClient()
 
-            registry = WatchRegistry(client)  # type: ignore[arg-type]
+            registry = WatchRegistry(client)
             return await registry.unregister_watch(agent_id, repo, pr_number)
         except Exception as exc:
             logger.warning("Event bus watch unregistration failed: %s", exc)
