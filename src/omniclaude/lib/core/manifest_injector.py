@@ -686,7 +686,7 @@ class ManifestInjector:
         self.logger = logging.getLogger(__name__)
 
         self.kafka_brokers = kafka_brokers or os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"
+            "KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"  # kafka-fallback-ok — local Docker bus default (OMN-3431)
         )
         self.enable_intelligence = enable_intelligence
         self.query_timeout_ms = query_timeout_ms
@@ -2316,7 +2316,7 @@ class ManifestInjector:
             # Derive display info for the response regardless of DSN vs fields
             dsn = settings.omniclaude_db_url.get_secret_value().strip()
             host = settings.postgres_host or ("(via DSN)" if dsn else "")
-            port = settings.postgres_port or (0 if dsn else 0)
+            port = settings.postgres_port or 0
             database = settings.postgres_database or ("(via DSN)" if dsn else "")
 
             # Check credentials availability
