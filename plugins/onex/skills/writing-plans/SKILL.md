@@ -155,7 +155,7 @@ Mandatory mechanical checks — required, not suggested:
 - **Return types**: write the actual import path or "returns dict shaped like ModelFoo JSON" — not "returns ModelFoo type" without a path.
 - **Topics and schema names**: if a topic string is introduced, prove it matches the naming spec and is registered via the designated mechanism. If an event model is referenced, prove the module path exists or the `__init__.py` re-export exists.
 - **CLI command consistency**: for any CLI command used across multiple tasks (e.g., `pytest`, `gh pr`, `ruff`), verify all occurrences use the same explicit argument set. Flag any instance where argument substitution differs between tasks unless the difference is intentionally documented. Example: Task 2 runs `pytest tests/ -v` but Task 5 runs `pytest tests/ -v --tb=short` — flag the discrepancy or justify it.
-- **Path portability**: flag absolute paths containing machine-specific mounts (`/Volumes/`, `/Users/`, `/home/<user>/`, `C:\Users\`). Require `$(git rev-parse --show-toplevel)`, `$REPO_ROOT`, or relative paths instead. Exception: paths inside user-facing documentation that explicitly instruct the reader to substitute their own path.
+- **Path portability**: flag absolute paths containing machine-specific mounts (`/Volumes/`, `/Users/`, `/home/<user>/`, `C:\Users\`). Require `$(git rev-parse --show-toplevel)`, `$REPO_ROOT`, or relative paths instead. Exception: paths inside user-facing documentation that explicitly instruct the reader to substitute their own path. <!-- local-path-ok -->
 
 ### R5 — Idempotency
 
@@ -252,7 +252,7 @@ Run these instructions against the following known-bad mini-plan and confirm all
 > Contract module: omnibase_infra.nodes.foo.models.
 > Ticket 3: No mention of models/__init__.py.
 > Ticket 3 step 2: Run `pytest tests/ -v`. Ticket 3 step 5: Run `pytest tests/ -v --tb=short`.
-> Ticket 3 step 3: Edit `/Volumes/PRO-G40/Code/omni_home/omnibase_core/src/foo.py`.
+> Ticket 3 step 3: Edit `/Volumes/PRO-G40/Code/omni_home/omnibase_core/src/foo.py`. <!-- local-path-ok -->
 > Ticket 3 acceptance: copy `<files>` to the output directory.
 > Ticket 4a: 'Close the gap where bar handler ignores empty input' — no new tests, no error handling added.
 > Ticket 4b: New phase 'publish results' — runs `gh pr create` but does not check for auth or clean git state.
@@ -263,7 +263,7 @@ Expected catches by category: R1, R2, R3, R4, R6, R7, R8.
 - **R1**: "4 tickets" but five identifiers listed (1, 2, 3, 4a, 4b) — count mismatch, flag
 - **R2**: "pytest passes" is weak and vague — does not assert specific behavior. Also: `<files>` is an unresolved angle-bracket placeholder — flag it
 - **R3**: DB-only Ticket 2 claims Python runtime behavior (kill switch) — scope violation, move to code task
-- **R4**: Contract module path unverified, no re-export step mentioned — add re-export or full path. Also: `pytest` args differ between step 2 and step 5 (`-v` vs `-v --tb=short`) — flag inconsistency. Also: `/Volumes/PRO-G40/Code/omni_home/...` is a machine-specific absolute path — replace with `$(git rev-parse --show-toplevel)/src/foo.py` or equivalent
+- **R4**: Contract module path unverified, no re-export step mentioned — add re-export or full path. Also: `pytest` args differ between step 2 and step 5 (`-v` vs `-v --tb=short`) — flag inconsistency. Also: `/Volumes/PRO-G40/Code/omni_home/...` is a machine-specific absolute path — replace with `$(git rev-parse --show-toplevel)/src/foo.py` or equivalent <!-- local-path-ok -->
 - **R6**: "pytest passes" is weak (grade: weak) as sole proof for a DB migration — needs schema introspection. Also: "grep finds 'New Section'" proves existence but not placement — need `grep -n` to confirm line ordering (new section line < summary heading line)
 - **R7**: Ticket 4a "closes gap" but adds no new tests or error handling — under-specified functional expansion, flag
 - **R8**: Ticket 4b phase runs `gh pr create` without checking for auth token or clean git state — silent failure if conditions unmet, flag
