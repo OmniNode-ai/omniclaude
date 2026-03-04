@@ -100,61 +100,153 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ONEX routing node imports (for USE_ONEX_ROUTING_NODES feature flag).
-# Split into two independent try blocks so that a failure in HandlerRoutingLlm
-# does not mask _onex_nodes_available (or vice-versa).  Each flag reflects only
-# the availability of the symbols it actually guards.
-_onex_nodes_available = False
-try:
-    from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
-        HandlerRoutingDefault,
-    )
-    from omniclaude.nodes.node_agent_routing_compute.models import (
-        ModelAgentDefinition,
-        ModelRoutingRequest,
-    )
-    from omniclaude.nodes.node_routing_emission_effect.handler_routing_emitter import (
-        HandlerRoutingEmitter,
-    )
-    from omniclaude.nodes.node_routing_emission_effect.models import (
-        ModelEmissionRequest,
-    )
-    from omniclaude.nodes.node_routing_history_reducer.handler_history_postgres import (
-        HandlerHistoryPostgres,
-    )
+# Lazy loading for heavy imports (OMN-3645).
+# These modules are only loaded on demand when the corresponding feature flag is enabled.
+# Avoids ~4s import cost at module load time, bringing import time < 500ms.
 
-    _onex_nodes_available = True
-except ImportError:
-    logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
+# ONEX routing node lazy loader
+_onex_nodes_cache: dict[str, Any] = {}
+_onex_nodes_lock = threading.Lock()
 
-# LLM handler import (for USE_LLM_ROUTING feature flag).
-# Kept separate from the ONEX nodes block so that HandlerRoutingLlm import
-# failures do not affect _onex_nodes_available.
-_llm_handler_available = False
-# Routing prompt version sentinel — overwritten on successful import below.
-_llm_routing_prompt_version: str = "unknown"
-try:
-    from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
-        _ROUTING_PROMPT_VERSION,  # noqa: PLC2701
-        HandlerRoutingLlm,
-    )
 
-    _llm_routing_prompt_version = _ROUTING_PROMPT_VERSION
-    _llm_handler_available = True
-except ImportError:
-    logger.debug("HandlerRoutingLlm not available, USE_LLM_ROUTING ignored")
+def _get_onex_nodes() -> dict[str, Any] | None:
+    """Lazy-load ONEX routing node imports on first call.
 
-# LLM endpoint registry import (for USE_LLM_ROUTING feature flag)
-_llm_registry_available = False
-try:
-    from omniclaude.config.model_local_llm_config import (
-        LlmEndpointPurpose,
-        LocalLlmEndpointRegistry,
-    )
+    Returns a dict with keys: 'default_handler', 'llm_handler', 'registry'
+    containing the handler and registry classes. Returns None if imports fail.
 
-    _llm_registry_available = True
-except ImportError:
-    logger.debug("LLM endpoint registry not available, USE_LLM_ROUTING ignored")
+    Uses double-checked locking for thread safety and stability across multiple
+    calls. Cache is populated once and reused.
+    """
+    if _onex_nodes_cache:
+        return _onex_nodes_cache
+
+    with _onex_nodes_lock:
+        # Double-check after acquiring lock
+        if _onex_nodes_cache:
+            return _onex_nodes_cache
+
+        try:
+            from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
+                HandlerRoutingDefault,
+            )
+            from omniclaude.nodes.node_agent_routing_compute.models import (
+                ModelAgentDefinition,
+                ModelRoutingRequest,
+            )
+            from omniclaude.nodes.node_routing_emission_effect.handler_routing_emitter import (
+                HandlerRoutingEmitter,
+            )
+            from omniclaude.nodes.node_routing_emission_effect.models import (
+                ModelEmissionRequest,
+            )
+            from omniclaude.nodes.node_routing_history_reducer.handler_history_postgres import (
+                HandlerHistoryPostgres,
+            )
+
+            result = {
+                "HandlerRoutingDefault": HandlerRoutingDefault,
+                "ModelAgentDefinition": ModelAgentDefinition,
+                "ModelRoutingRequest": ModelRoutingRequest,
+                "HandlerRoutingEmitter": HandlerRoutingEmitter,
+                "ModelEmissionRequest": ModelEmissionRequest,
+                "HandlerHistoryPostgres": HandlerHistoryPostgres,
+            }
+            _onex_nodes_cache.update(result)
+            return _onex_nodes_cache
+        except ImportError:
+            logger.debug(
+                "ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored"
+            )
+            return None
+
+
+# LLM handler lazy loader
+_llm_handler_cache: dict[str, Any] = {}
+_llm_handler_lock = threading.Lock()
+
+
+def _get_llm_handler() -> dict[str, Any] | None:
+    """Lazy-load LLM handler imports on first call.
+
+    Returns a dict with keys: 'handler', 'routing_prompt_version'
+    containing the handler class and routing prompt version. Returns None if imports fail.
+
+    Uses double-checked locking for thread safety and stability.
+    """
+    if _llm_handler_cache:
+        return _llm_handler_cache
+
+    with _llm_handler_lock:
+        # Double-check after acquiring lock
+        if _llm_handler_cache:
+            return _llm_handler_cache
+
+        try:
+            from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
+                _ROUTING_PROMPT_VERSION,  # noqa: PLC2701
+                HandlerRoutingLlm,
+            )
+
+            result = {
+                "handler": HandlerRoutingLlm,
+                "routing_prompt_version": _ROUTING_PROMPT_VERSION,
+            }
+            _llm_handler_cache.update(result)
+            return _llm_handler_cache
+        except ImportError:
+            logger.debug("HandlerRoutingLlm not available, USE_LLM_ROUTING ignored")
+            return None
+
+
+# LLM endpoint registry lazy loader
+_llm_registry_cache: dict[str, Any] = {}
+_llm_registry_lock = threading.Lock()
+
+
+def _get_llm_registry() -> dict[str, Any] | None:
+    """Lazy-load LLM endpoint registry imports on first call.
+
+    Returns a dict with keys: 'LlmEndpointPurpose', 'LocalLlmEndpointRegistry'
+    containing the enum and registry class. Returns None if imports fail.
+
+    Uses double-checked locking for thread safety.
+    """
+    if _llm_registry_cache:
+        return _llm_registry_cache
+
+    with _llm_registry_lock:
+        # Double-check after acquiring lock
+        if _llm_registry_cache:
+            return _llm_registry_cache
+
+        try:
+            from omniclaude.config.model_local_llm_config import (
+                LlmEndpointPurpose,
+                LocalLlmEndpointRegistry,
+            )
+
+            result = {
+                "LlmEndpointPurpose": LlmEndpointPurpose,
+                "LocalLlmEndpointRegistry": LocalLlmEndpointRegistry,
+            }
+            _llm_registry_cache.update(result)
+            return _llm_registry_cache
+        except ImportError:
+            logger.debug("LLM endpoint registry not available, USE_LLM_ROUTING ignored")
+            return None
+
+
+def _get_llm_routing_prompt_version() -> str:
+    """Get the LLM routing prompt version from the lazy-loaded handler cache.
+
+    Returns "unknown" if the handler is not available.
+    """
+    handler_cache = _get_llm_handler()
+    if handler_cache is None:
+        return "unknown"
+    return handler_cache.get("routing_prompt_version", "unknown")
+
 
 if TYPE_CHECKING:
     from omniclaude.nodes.node_agent_routing_compute._internal import AgentRegistry
@@ -596,8 +688,11 @@ _TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
 
 
 def _use_onex_routing_nodes() -> bool:
-    """Check if ONEX routing nodes feature flag is enabled."""
-    if not _onex_nodes_available:
+    """Check if ONEX routing nodes feature flag is enabled.
+
+    Triggers lazy loading of ONEX nodes on first check.
+    """
+    if _get_onex_nodes() is None:
         return False
     return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
 
@@ -689,13 +784,13 @@ def _use_llm_routing() -> bool:
     Requires:
     - ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
     - USE_LLM_ROUTING=true                  (specific flag)
-    - HandlerRoutingLlm and LocalLlmEndpointRegistry importable
+    - HandlerRoutingLlm and LocalLlmEndpointRegistry importable (lazy-loaded)
     - LatencyGuard allows it (circuit not open, agreement rate not low)
 
     Returns:
         True only when all conditions are met.
     """
-    if not _llm_handler_available or not _llm_registry_available:
+    if _get_llm_handler() is None or _get_llm_registry() is None:
         return False
     parent = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
     if parent not in _TRUTHY:
@@ -721,9 +816,13 @@ def _get_llm_routing_url() -> tuple[str, str] | None:
     Returns:
         ``(url, model_name)`` tuple (url without trailing slash) or None.
     """
-    if not _llm_registry_available:
+    registry_cache = _get_llm_registry()
+    if registry_cache is None:
         return None
     try:
+        LocalLlmEndpointRegistry = registry_cache["LocalLlmEndpointRegistry"]
+        LlmEndpointPurpose = registry_cache["LlmEndpointPurpose"]
+
         registry = LocalLlmEndpointRegistry()
         # Try dedicated ROUTING purpose first, then GENERAL, REASONING, CODE_ANALYSIS.
         # CODE_ANALYSIS last so that a coder model (e.g. .201) is picked up
@@ -870,6 +969,20 @@ def _route_via_llm(
         cid = UUID(correlation_id)
     except (ValueError, AttributeError):
         cid = uuid4()
+
+    # Lazy-load handler and models from cache
+    llm_handler_cache = _get_llm_handler()
+    onex_nodes_cache = _get_onex_nodes()
+    if llm_handler_cache is None or onex_nodes_cache is None:
+        logger.debug(
+            "LLM handler or ONEX models unavailable, skipping LLM routing "
+            "(correlation_id=%s)",
+            correlation_id,
+        )
+        return None
+
+    HandlerRoutingLlm = llm_handler_cache["handler"]
+    ModelRoutingRequest = onex_nodes_cache["ModelRoutingRequest"]
 
     # 4. Call HandlerRoutingLlm within 100 ms (independent budget from step 2; see docstring)
     # HandlerRoutingLlm construction and ModelRoutingRequest construction are in
@@ -1043,16 +1156,26 @@ def _route_via_llm(
 
 
 def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
-    """Get or create singleton ONEX handlers (compute, emitter, history)."""
+    """Get or create singleton ONEX handlers (compute, emitter, history).
+
+    Lazily loads handler classes from ONEX nodes cache on first call.
+    """
     global _compute_handler, _emit_handler, _history_handler
     if _compute_handler is not None:
         return _compute_handler, _emit_handler, _history_handler
-    if not _onex_nodes_available:
+
+    onex_nodes = _get_onex_nodes()
+    if onex_nodes is None:
         return None
+
     with _onex_handler_lock:
         if _compute_handler is not None:
             return _compute_handler, _emit_handler, _history_handler
         try:
+            HandlerRoutingDefault = onex_nodes["HandlerRoutingDefault"]
+            HandlerRoutingEmitter = onex_nodes["HandlerRoutingEmitter"]
+            HandlerHistoryPostgres = onex_nodes["HandlerHistoryPostgres"]
+
             # Assign to locals first — only promote to globals after all
             # three handlers construct successfully, avoiding a stale
             # non-None _compute_handler when a later constructor fails.
@@ -1158,7 +1281,15 @@ def _get_cached_stats() -> Any:
 
 
 def _build_agent_definitions(registry: "AgentRegistry") -> tuple[Any, ...]:
-    """Convert AgentRouter registry to ModelAgentDefinition tuple."""
+    """Convert AgentRouter registry to ModelAgentDefinition tuple.
+
+    Lazily loads ModelAgentDefinition from ONEX nodes cache.
+    """
+    onex_nodes = _get_onex_nodes()
+    if onex_nodes is None:
+        return ()
+
+    ModelAgentDefinition = onex_nodes["ModelAgentDefinition"]
     defs: list[Any] = []
     for name, data in registry.get("agents", {}).items():
         try:
@@ -1216,6 +1347,13 @@ def _route_via_onex_nodes(
 
     stats = _get_cached_stats()
     start_time = time.time()
+
+    # Lazy-load request and emission models
+    onex_nodes = _get_onex_nodes()
+    if onex_nodes is None:
+        return None
+    ModelRoutingRequest = onex_nodes["ModelRoutingRequest"]
+    ModelEmissionRequest = onex_nodes["ModelEmissionRequest"]
 
     try:
         request = ModelRoutingRequest(
@@ -1547,7 +1685,7 @@ def route_via_events(
                         "llm_selected_candidate", llm_result.get("selected_agent")
                     ),
                     agreement=_agreement,
-                    routing_prompt_version=_llm_routing_prompt_version,
+                    routing_prompt_version=_get_llm_routing_prompt_version(),
                     model_used=llm_result.get("model_used", "unknown"),
                     fuzzy_latency_ms=_fuzzy_latency_ms,
                     fuzzy_confidence=_fuzzy_confidence,
@@ -1560,7 +1698,7 @@ def route_via_events(
                     session_id=session_id,
                     fallback_reason="LLM returned unrecognised agent; using trigger fallback",
                     llm_url=None,  # URL not surfaced through llm_result return value
-                    routing_prompt_version=_llm_routing_prompt_version,
+                    routing_prompt_version=_get_llm_routing_prompt_version(),
                 )
             return llm_result
         # OMN-2273: LLM routing returned None — emit fallback event so consumers can
@@ -1570,7 +1708,7 @@ def route_via_events(
             session_id=session_id,
             fallback_reason="LLM routing returned None",
             llm_url=None,  # always None here: _route_via_llm returns None on any failure path, discarding the URL it resolved internally; surfacing it would require significant refactoring of the return signature
-            routing_prompt_version=_llm_routing_prompt_version,
+            routing_prompt_version=_get_llm_routing_prompt_version(),
         )
         logger.debug("LLM routing returned None, falling through to fuzzy matching")
 

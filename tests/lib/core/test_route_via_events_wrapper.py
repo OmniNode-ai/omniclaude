@@ -765,14 +765,30 @@ def _make_llm_result_dict(agent: str = "agent-debugger") -> dict:
 class TestUseLlmRouting:
     """Tests for the _use_llm_routing() feature flag function."""
 
+    # Helpers for lazy-loader mocks: _get_llm_handler() returns a dict or
+    # None; _get_llm_registry() likewise.  The old boolean module-level
+    # flags (_llm_handler_available / _llm_registry_available) were replaced
+    # by these lazy-loader functions in OMN-3645.
+    _FAKE_LLM_HANDLER = {"handler": MagicMock(), "routing_prompt_version": "test"}
+    _FAKE_LLM_REGISTRY = {
+        "LlmEndpointPurpose": MagicMock(),
+        "LocalLlmEndpointRegistry": MagicMock(),
+    }
+
     def test_disabled_by_default(self, monkeypatch):
         """LLM routing should be off when flags are absent."""
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("USE_LLM_ROUTING", raising=False)
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
         ):
             assert _use_llm_routing() is False
 
@@ -782,8 +798,14 @@ class TestUseLlmRouting:
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
         ):
             assert _use_llm_routing() is False
 
@@ -793,8 +815,14 @@ class TestUseLlmRouting:
         monkeypatch.setenv("USE_LLM_ROUTING", "false")
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
         ):
             assert _use_llm_routing() is False
 
@@ -807,8 +835,14 @@ class TestUseLlmRouting:
         # This keeps the test isolated from any LatencyGuard singleton state
         # that may have been modified by other tests in the same session.
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
             patch("route_via_events_wrapper._get_latency_guard", return_value=None),
         ):
             assert _use_llm_routing() is True
@@ -827,8 +861,14 @@ class TestUseLlmRouting:
         mock_guard.is_enabled.return_value = False
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
             patch(
                 "route_via_events_wrapper._get_latency_guard",
                 return_value=mock_guard,
@@ -845,8 +885,11 @@ class TestUseLlmRouting:
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", False),
-            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch("route_via_events_wrapper._get_llm_handler", return_value=None),
+            patch(
+                "route_via_events_wrapper._get_llm_registry",
+                return_value=self._FAKE_LLM_REGISTRY,
+            ),
         ):
             assert _use_llm_routing() is False
 
@@ -856,8 +899,11 @@ class TestUseLlmRouting:
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
         with (
-            patch("route_via_events_wrapper._llm_handler_available", True),
-            patch("route_via_events_wrapper._llm_registry_available", False),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value=self._FAKE_LLM_HANDLER,
+            ),
+            patch("route_via_events_wrapper._get_llm_registry", return_value=None),
         ):
             assert _use_llm_routing() is False
 
@@ -1076,8 +1122,14 @@ class TestRouteViaLlmFallback:
                 "route_via_events_wrapper._build_agent_definitions",
                 return_value=(MagicMock(),),
             ),
-            patch("route_via_events_wrapper.HandlerRoutingLlm"),
-            patch("route_via_events_wrapper.ModelRoutingRequest"),
+            patch(
+                "route_via_events_wrapper._get_llm_handler",
+                return_value={"handler": MagicMock(), "routing_prompt_version": "test"},
+            ),
+            patch(
+                "route_via_events_wrapper._get_onex_nodes",
+                return_value={"ModelRoutingRequest": MagicMock()},
+            ),
         ):
             result = _route_via_llm("debug this", "corr-123")
 

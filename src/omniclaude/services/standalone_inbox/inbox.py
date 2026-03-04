@@ -163,7 +163,8 @@ class StandaloneInbox:
         inbox_path = self._inbox_dir / f"{safe_repo}_pr{pr_number}_run{run_id}.json"
         if inbox_path.exists():
             try:
-                return json.loads(inbox_path.read_text())
+                data: dict[str, Any] = json.loads(inbox_path.read_text())
+                return data
             except (json.JSONDecodeError, OSError) as exc:
                 logger.warning("Failed to read inbox file %s: %s", inbox_path, exc)
         return None
