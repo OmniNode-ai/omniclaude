@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import inspect
 
 import pytest
 
+from omniclaude.services.linear_relay import verifier as verifier_module
 from omniclaude.services.linear_relay.verifier import verify_signature
 
 
@@ -70,3 +72,10 @@ class TestVerifySignature:
         monkeypatch.setenv("LINEAR_WEBHOOK_SECRET", "")
         body = b"some body"
         assert verify_signature(body, "any-signature") is False
+
+    def test_uses_compare_digest_for_timing_safety(self) -> None:
+        """verify_signature source uses hmac.compare_digest (timing-safe comparison)."""
+        source = inspect.getsource(verifier_module)
+        assert "compare_digest" in source, (
+            "verify_signature must use hmac.compare_digest for constant-time comparison"
+        )
