@@ -234,7 +234,7 @@ R4: checked — [issue: added __init__.py re-export for contract module path] OR
 R5: checked — [issue: Ticket 2 creates DB table without IF NOT EXISTS] OR [clean (dedup keys: ticket=title, table=PK)]
 R6: checked — [issue: "pytest passes" was sole proof for schema — added \d+ introspection] OR [clean (strongest proof: strong; placement verified with line numbers where applicable)]
 R7: checked — [issue: Task 3 "closes gap" but adds new code path without "functional expansion" label] OR [clean (no gap-closing claims, or all labeled and reconciled)]
-R8: checked — [issue: Phase 2 runs git push without checking for clean working tree] OR [clean (all phases list prerequisites; no silent failures)]
+R8: checked — [issue: Phase 2 runs a push to remote without checking for clean working tree] OR [clean (all phases list prerequisites; no silent failures)]
 
 Summary: [N] issues found and fixed. Plan re-saved.
 ```
