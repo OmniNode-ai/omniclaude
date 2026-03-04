@@ -144,6 +144,12 @@ a session with many changes to ensure a clean state.
 | After epic sprint planning | `/linear-housekeeping --no-epic-org` — triage + sync |
 | New project start | `/linear-housekeeping --full-sync` — clean slate |
 
+**What weekly triage now catches (after OMN-3577 remediation):**
+- Tickets with a closed PR where work landed in a sibling PR → auto-closed as `mark_done_superseded`
+- Epics where all children are Done → auto-closed as `mark_done_epic`
+
+Running weekly limits zombie ticket accumulation to at most one week of drift.
+
 ---
 
 ## Example Session
