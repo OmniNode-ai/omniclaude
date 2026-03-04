@@ -37,6 +37,9 @@ args:
   - name: --no-push
     description: Make all fixes but do not push to remote
     required: false
+  - name: --no-automerge
+    description: Skip enabling GitHub automerge after all phases complete
+    required: false
 ---
 
 # PR Polish
@@ -66,6 +69,7 @@ Three-phase PR readiness workflow that takes a branch from "open PR" to "clean a
 /pr-polish 226 --skip-local-review      # Only resolve conflicts + pr-review-dev
 /pr-polish 226 --no-ci                  # Skip CI failure fetch (PR review only)
 /pr-polish 226 --no-push                # Fix everything locally, don't push
+/pr-polish 226 --no-automerge           # Polish PR but don't arm automerge
 ```
 
 ## Arguments
@@ -82,6 +86,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--skip-local-review` | false | Skip Phase 2 local-review loop |
 | `--no-ci` | false | Skip CI failures in Phase 1 (PR review only) |
 | `--no-push` | false | Apply all fixes without pushing to remote |
+| `--no-automerge` | false | Skip arming GitHub automerge after all phases complete |
 
 ## Dispatch Contracts (Execution-Critical)
 
@@ -143,6 +148,20 @@ Skill(skill="onex:local-review", args="--required-clean-runs {required_clean_run
 
 Runs until `required_clean_runs` consecutive clean passes (only nits). After clean passes, if `--no-push` is NOT set: `git push`.
 
+### Finalize: Enable Automerge — runs inline after final phase (currently Phase 2)
+
+Runs only if `--no-automerge` is NOT set and `--no-push` is NOT set.
+
+```bash
+gh auth status || { echo "ERROR: not logged into GitHub CLI"; exit 1; }
+# Use {pr_number} and {repo} from resolved skill args — no cwd-dependence
+gh pr merge --auto --squash "{pr_number}" --repo "{repo}"
+# GitHub merges when all branch protection requirements are satisfied.
+```
+
+Idempotent — safe to run even if automerge was already armed.
+Reports: `Automerge armed on PR #{pr_number}.`
+
 ---
 
 ## Phase Sequencing
@@ -155,6 +174,8 @@ Phase 1: PR Review + CI Fix (pr-review-dev)
 Phase 2: Local Review Loop (local-review --required-clean-runs N)
     ↓ (skip if --skip-local-review)
 Push (if not --no-push)
+    ↓
+Enable automerge (if not --no-automerge and not --no-push)
     ↓
 Final Report
 ```
@@ -169,7 +190,8 @@ Each phase is independent. A phase failure is reported but does not block subseq
 - `Phase 1: No issues found` — already clean
 - `Phase 2: Clean — Confirmed (N/N clean runs)` — local-review passed
 - `Phase 2: Max iterations reached` — hit limit with blocking issues remaining
-- `DONE: PR #{pr_number} is merge-ready` — all phases green
+- `DONE: PR #{pr_number} is merge-ready — automerge armed` — all phases green, automerge enabled
+- `DONE: PR #{pr_number} is merge-ready — automerge NOT enabled (--no-automerge)` — phases green, automerge skipped
 
 ## Detailed Orchestration
 
