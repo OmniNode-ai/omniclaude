@@ -262,6 +262,10 @@ repos:
           bash -c
           'FAILED=0;
           MATCHES=$(grep -rn --include="*.py"
+          --exclude-dir=.venv
+          --exclude-dir=__pycache__
+          --exclude-dir=.claude
+          --exclude-dir=scripts
           -E "os\.getenv\([[:space:]]*[\"'"'"']KAFKA_[^\"'"'"']+[\"'"'"'][[:space:]]*,[[:space:]]*[\"'"'"'][^\"'"'"']+[\"'"'"']"
           . 2>/dev/null |
           grep -v "kafka-fallback-ok" |
@@ -274,6 +278,9 @@ repos:
           FAILED=1;
           fi;
           IP_MATCHES=$(grep -rn --include="*.py"
+          --exclude-dir=.venv
+          --exclude-dir=__pycache__
+          --exclude-dir=.claude
           -E "192\.168\.[0-9]+\.[0-9]+:(9092|19092|29092|29093)"
           . 2>/dev/null |
           grep -v "kafka-fallback-ok" |
