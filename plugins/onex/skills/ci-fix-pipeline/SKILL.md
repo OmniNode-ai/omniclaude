@@ -38,6 +38,9 @@ args:
   - name: --self-heal
     description: "Enable self-healing mode: retry loop with strategy rotation and inbox-wait (default: false)"
     required: false
+  - name: --analyze-only
+    description: "Fetch and display CI failure analysis without attempting fixes. Reproduces former ci-failures behavior."
+    required: false
 composable: true
 ---
 
@@ -85,6 +88,7 @@ policy:
 /ci-fix-pipeline --max-fix-files 20           # Raise the sub-ticket threshold
 /ci-fix-pipeline --self-heal --pr 42          # Self-healing mode with retry loop
 /ci-fix-pipeline --self-heal --max-attempts 2 # Limit to 2 attempts
+/ci-fix-pipeline --analyze-only --pr 42       # Diagnose CI failures without fixing (formerly ci-failures)
 ```
 
 ## Arguments
@@ -99,6 +103,34 @@ policy:
 | `--ticket-id <id>` | none | Context ticket ID for Slack messages |
 | `--self-heal` | false | Enable self-healing retry loop with strategy rotation |
 | `--max-attempts <n>` | 3 | Maximum repair attempts (only with --self-heal) |
+| `--analyze-only` | false | Fetch and display CI failure analysis without attempting fixes |
+
+## Analyze-Only Mode (`--analyze-only`)
+
+<!-- Absorbed from ci-failures -->
+
+When `--analyze-only` is passed, the pipeline stops after the analysis phase without attempting fixes.
+This reproduces the former `ci-failures` skill behavior.
+
+**What happens:**
+1. Fetch CI failure logs (same as normal mode)
+2. Parse and categorize failures
+3. Display analysis results with categorization
+4. **Stop** -- do not enter the fix loop
+
+**Use case:** Quick CI failure diagnosis without committing to the full fix pipeline.
+
+### Tools available in analyze-only mode
+
+The underlying CI scripts remain in `${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/`:
+
+- `ci-quick-review <PR#>` -- Quick summary of all failures (Tier 1)
+- `get-ci-job-details <job_id>` -- Deep dive into specific job (Tier 2)
+- `fetch-ci-data <PR#>` -- Raw CI data in JSON format
+
+**Two-Tier Investigation Workflow:**
+1. **Tier 1**: Run `ci-quick-review` to see summary of all failures
+2. **Tier 2**: For each critical/major failure, run `get-ci-job-details <job_id>` for deep investigation
 
 ## Execution Phases
 
@@ -110,9 +142,9 @@ Dispatch to polymorphic agent:
 Task(
   subagent_type="onex:polymorphic-agent",
   description="Fetch CI failures for ci-fix-pipeline",
-  prompt="Fetch CI failures using the ci-failures skill.
+  prompt="Fetch CI failures for analysis.
 
-    Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review {N | branch_name}
+    Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/ci-quick-review {N | branch_name}
 
     Return the raw JSON from ci-quick-review (pass through unchanged).
     The response has structure:
@@ -331,7 +363,7 @@ Each attempt uses a progressively broader fix strategy:
 
 ### CI Status Extraction
 
-Self-healing mode uses `_bin/ci-status.sh` instead of the heavier `ci-failures/ci-quick-review`
+Self-healing mode uses `_bin/ci-status.sh` instead of the heavier `ci-quick-review`
 for fast, structured CI status checks between attempts:
 
 ```bash
@@ -458,7 +490,6 @@ To verify self-healing works end-to-end:
 
 ## See Also
 
-- `ci-failures` skill -- fetch and analyze CI failures (read-only)
 - `ci-watch` skill -- poll CI status and auto-fix (OMN-2523)
 - `local-review` skill -- review and fix local code changes
 - `ticket-pipeline` skill -- end-to-end ticket pipeline (Phase 4 invokes ci-watch)

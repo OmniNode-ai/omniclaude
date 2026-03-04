@@ -142,7 +142,7 @@ execution:
 
 Canonical schema for an epic (parent grouping of tickets). Used by:
 - `linear-epic-org` (creates and links epics)
-- `ticket-plan-sync` (reads for MASTER_TICKET_PLAN.md generation)
+- `ticket-plan --sync` (reads for MASTER_TICKET_PLAN.md generation)
 - `linear-triage` (identifies orphaned tickets)
 
 ### Schema
@@ -372,4 +372,4 @@ Skills MUST enforce these rules when creating or updating contracts:
 - `writing-plans` skill — generates PlanContract documents
 - `linear-triage` skill — produces TriageReport, applies done-marking
 - `linear-epic-org` skill — consumes orphaned_tickets from TriageReport
-- `ticket-plan-sync` skill — reads EpicContract from Linear, updates MASTER_TICKET_PLAN.md
+- `ticket-plan --sync` — reads EpicContract from Linear, updates MASTER_TICKET_PLAN.md

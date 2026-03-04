@@ -2420,7 +2420,7 @@ EOF
 
 **Exit conditions:**
 - **Completed:** CI passed or capped with warning
-- **Failed:** CI hard-failed and ci-failures skill could not fix it
+- **Failed:** CI hard-failed and ci-fix-pipeline skill could not fix it
 
 ---
 

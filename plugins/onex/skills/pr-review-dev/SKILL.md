@@ -129,7 +129,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-o
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json "${1:-}" 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/ci-quick-review --json "${1:-}" 2>&1
 ```
 
 **What this returns**:
@@ -250,10 +250,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-
 ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-only
 
 # Step 2: CI failures (JSON)
-${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json "${1:-}"
+${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/ci-quick-review --json "${1:-}"
 
 # Step 2 (alternative): CI failures (human-readable)
-${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review "${1:-}"
+${CLAUDE_PLUGIN_ROOT}/skills/ci-fix-pipeline/ci-quick-review "${1:-}"
 ```
 
 **Resolution Filtering** (collate-issues):

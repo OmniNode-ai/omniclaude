@@ -860,7 +860,7 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `_lib/cdqa-gate/helpers.md` (Phase 5.5 gate protocol, OMN-3189)
 - `auto-merge` skill (Phase 6, OMN-2525)
 - `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
-- `ci-failures` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
+- `ci-fix-pipeline` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
 - `decompose-epic` skill (cross-repo split, OMN-2522)
 - `epic-team` skill (receives handoff after cross-repo split)
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)

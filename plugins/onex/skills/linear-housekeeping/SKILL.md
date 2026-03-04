@@ -19,7 +19,7 @@ author: OmniClaude Team
 ## Overview
 
 Parent skill that chains `linear-triage` → human review checkpoint → `linear-epic-org`
-→ `ticket-plan-sync` into a single coherent workflow.
+→ `ticket-plan --sync` into a single coherent workflow.
 
 **Announce at start:** "I'm using the linear-housekeeping skill for a full ticket audit."
 
@@ -32,7 +32,7 @@ Parent skill that chains `linear-triage` → human review checkpoint → `linear
 /linear-housekeeping --dry-run        # preview all changes, write nothing
 /linear-housekeeping --threshold 7   # use 7-day staleness threshold (default 14)
 /linear-housekeeping --skip-triage   # skip triage, go straight to epic-org + sync
-/linear-housekeeping --sync-only     # only run ticket-plan-sync (fastest)
+/linear-housekeeping --sync-only     # only run ticket-plan --sync (fastest)
 ```
 
 ## Workflow Phases
@@ -44,7 +44,7 @@ Phase 1: linear-triage      (assess + mark done tickets)
           ↓
 Phase 2: linear-epic-org    (group orphans into epics, human gate for ambiguous)
           ↓
-Phase 3: ticket-plan-sync   (regenerate or patch MASTER_TICKET_PLAN.md)
+Phase 3: ticket-plan --sync (regenerate or patch MASTER_TICKET_PLAN.md)
           ↓
          Done
 ```
@@ -114,10 +114,10 @@ After triage and epic-org are complete (tickets marked done, epics created), the
 MASTER_TICKET_PLAN.md will be out of sync. Always run sync as the final step.
 
 ```
-Skill("ticket-plan-sync")
+Skill("ticket-plan", args="--sync")
 ```
 
-Mode is auto-selected by ticket-plan-sync based on file age. Pass `--mode full` after
+Mode is auto-selected by ticket-plan --sync based on file age. Pass `--mode full` after
 a session with many changes to ensure a clean state.
 
 ---
@@ -129,9 +129,9 @@ a session with many changes to ensure a clean state.
 | `--dry-run` | Pass through to all three sub-skills. No Linear writes, no file writes. |
 | `--threshold N` | Set staleness threshold in days (default 14). Passed to linear-triage. |
 | `--skip-triage` | Skip Phase 1. Jump to Phase 2 (epic-org) and Phase 3 (sync). |
-| `--sync-only` | Skip Phases 1 and 2. Only run ticket-plan-sync. |
+| `--sync-only` | Skip Phases 1 and 2. Only run ticket-plan --sync. |
 | `--no-epic-org` | Skip Phase 2. Run triage → sync without epic organization. |
-| `--full-sync` | Pass `--mode full` to ticket-plan-sync (force full regeneration). |
+| `--full-sync` | Pass `--mode full` to ticket-plan --sync (force full regeneration). |
 
 ---
 
@@ -175,7 +175,7 @@ Continue to Phase 2?
 Phase 2: Running linear-epic-org (7 orphans)...
 [epic-org presents groupings, user approves, 2 epics created]
 
-Phase 3: Running ticket-plan-sync (patch mode)...
+Phase 3: Running ticket-plan --sync (patch mode)...
 Updated 3 rows, added 2 new epic sections.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -200,7 +200,7 @@ Stale tickets (need your review): 4
 |---------|----------|
 | linear-triage fails | Report error, stop. Do not proceed to Phase 2. |
 | linear-epic-org fails | Report error. Skip to Phase 3 (sync still safe). |
-| ticket-plan-sync fails | Report error. Triage and epic changes already applied in Linear — just retry `--sync-only`. |
+| ticket-plan --sync fails | Report error. Triage and epic changes already applied in Linear — just retry `--sync-only`. |
 | Linear API rate limit | Pause 60s, retry once. If still failing, save state and exit with resume instructions. |
 
 ---
@@ -209,6 +209,6 @@ Stale tickets (need your review): 4
 
 - `linear-triage` skill — Phase 1: status assessment
 - `linear-epic-org` skill — Phase 2: epic organization
-- `ticket-plan-sync` skill — Phase 3: doc sync
+- `ticket-plan --sync` — Phase 3: doc sync
 - `@_lib/contracts/helpers.md` — TicketContract, EpicContract schemas
 - `docs/tracking/MASTER_TICKET_PLAN.md` — the output document
