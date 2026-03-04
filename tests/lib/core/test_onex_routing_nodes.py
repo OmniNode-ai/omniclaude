@@ -489,14 +489,18 @@ class TestOnexGracefulFallback:
         mod._emit_handler = None
         mod._history_handler = None
 
-        with (
-            patch.object(mod, "HandlerRoutingDefault", return_value=MagicMock()),
-            patch.object(
-                mod,
-                "HandlerRoutingEmitter",
+        # _get_onex_handlers gets handler classes from _get_onex_nodes() dict.
+        # We mock _get_onex_nodes to return a dict where HandlerRoutingDefault
+        # succeeds but HandlerRoutingEmitter raises, simulating partial init.
+        fake_nodes = {
+            "HandlerRoutingDefault": MagicMock(),
+            "HandlerRoutingEmitter": MagicMock(
                 side_effect=RuntimeError("Emitter init failed"),
             ),
-        ):
+            "HandlerHistoryPostgres": MagicMock(),
+        }
+
+        with patch.object(mod, "_get_onex_nodes", return_value=fake_nodes):
             result = mod._get_onex_handlers()
 
         # Should return None (not a partial tuple)
