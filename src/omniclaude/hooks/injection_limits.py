@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Injection limits configuration and pattern selection algorithm.
 
-This module implements OMN-1671 (INJECT-002): configurable injection limits
+OMN-1671 (INJECT-002): configurable injection limits
 to prevent context explosion from over-injection.
 
 The selection algorithm is deterministic and constraint-first:

@@ -469,7 +469,7 @@ class Settings(BaseSettings):
     def validate_required_services(self) -> list[str]:
         """Validate that required services are configured.
 
-        This method implements FAIL-FAST validation. When a service is enabled,
+        FAIL-FAST validation. When a service is enabled,
         ALL required configuration must be explicitly provided. There are no
         fallback defaults that could mask missing configuration.
 

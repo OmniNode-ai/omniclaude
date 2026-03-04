@@ -3,7 +3,7 @@
 
 """Database schema definitions for the Agent Trace system.
 
-This module provides:
+Exports:
 1. SQL DDL strings for all 5 agent trace tables
 2. Python dataclass representations (no SQLAlchemy dependency) for use
    in the persistence layer while migration freeze is active

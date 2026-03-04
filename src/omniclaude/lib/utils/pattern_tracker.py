@@ -5,7 +5,7 @@
 """
 Performance Pattern Tracker - Optimized pattern tracking with performance monitoring.
 
-This module provides high-performance pattern tracking with:
+High-performance pattern tracking with:
 - Connection pooling and HTTP client reuse
 - Batch processing capabilities
 - Intelligent caching mechanisms

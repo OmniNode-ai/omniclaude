@@ -3,7 +3,7 @@
 
 """
 Agent Router - Phase 1
-======================
+----------------------
 
 Main orchestration component that ties all Phase 1 features together.
 

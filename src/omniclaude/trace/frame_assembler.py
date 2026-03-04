@@ -3,7 +3,7 @@
 
 """ChangeFrame assembler for the PostToolUse hook.
 
-This module implements the core frame assembly logic that runs after
+The core frame assembly logic that runs after
 Write/Edit/Bash tool calls. It captures git diffs, runs checks, computes
 failure signatures, and assembles validated ChangeFrame records.
 

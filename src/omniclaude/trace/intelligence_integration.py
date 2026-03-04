@@ -3,7 +3,7 @@
 
 """FixTransition integration with OmniIntelligence and ContextScoring.
 
-This module provides the omniclaude-side wiring that converts FixTransitions
+The omniclaude-side wiring that converts FixTransitions
 into structured learning artifacts for OmniIntelligence:
 
 1. ContextItem construction — converts a FixTransition into a FAILURE_PATTERN

@@ -3,7 +3,7 @@
 
 """
 Confidence Scorer - Phase 1
-===========================
+---------------------------
 
 Calculates comprehensive confidence scores for agent matches.
 

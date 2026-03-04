@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Canonical JSON Schema models for hook contract definitions.
 
-This module provides the single source of truth for JSON Schema-like models
+The single source of truth for JSON Schema-like models
 used in hook contracts. These models represent a "contract-schema dialect" -
 a bounded subset of JSON Schema sufficient for describing hook event payloads.
 

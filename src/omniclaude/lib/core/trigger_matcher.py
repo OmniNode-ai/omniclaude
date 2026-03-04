@@ -3,7 +3,7 @@
 
 """
 Trigger Matcher - Phase 1
-==========================
+--------------------------
 
 Provides fuzzy matching and scoring for agent triggers.
 Uses multiple matching strategies:

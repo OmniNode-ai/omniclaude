@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Pydantic backing model for the hook tool executed contract.
 
-This module provides type-safe access to the hook tool executed configuration
+Type-safe access to the hook tool executed configuration
 defined in contract_hook_tool_executed.yaml. It replaces manual yaml.safe_load +
 isinstance checks with validated Pydantic models.
 

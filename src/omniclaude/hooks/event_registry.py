@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Event registry defining daemon routing and fan-out rules.
 
-This module provides the event registry for the emit daemon, defining how
+The event registry for the emit daemon, defining how
 hook events are routed to Kafka topics. The key feature is **fan-out support**:
 a single event type can be published to multiple topics with different
 payload transformations.

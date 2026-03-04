@@ -35,7 +35,7 @@ class IntelligenceGatherer:
     """
     Gathers contextual intelligence for node generation.
 
-    This class implements a multi-source intelligence gathering system:
+    A multi-source intelligence gathering system:
     1. Built-in pattern library (always available)
     2. Intelligence RAG integration (optional, for production examples)
     3. Codebase pattern analysis (optional, for local patterns)

@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Git Effect - 100% contract-driven.
 
-This module provides the NodeGitEffect class, a minimal shell
+The NodeGitEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: git.operations

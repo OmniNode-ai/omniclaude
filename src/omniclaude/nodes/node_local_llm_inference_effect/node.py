@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Local LLM Inference Effect - 100% contract-driven.
 
-This module provides the NodeLocalLlmInferenceEffect class, a minimal shell
+The NodeLocalLlmInferenceEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: local_llm.inference

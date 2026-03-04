@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Shared normalization helpers for hook event emission.
 
-This module provides centralized normalization utilities used by all
+Centralized normalization utilities used by all
 hook emitters to produce consistent, human-readable action descriptions.
 
 See OMN-3297 for the specification of action_description normalization.

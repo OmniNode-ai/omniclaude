@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Pydantic backing model for the hook session started contract.
 
-This module provides type-safe access to the hook session started configuration
+Type-safe access to the hook session started configuration
 defined in contract_hook_session_started.yaml. It replaces manual yaml.safe_load +
 isinstance checks with validated Pydantic models.
 

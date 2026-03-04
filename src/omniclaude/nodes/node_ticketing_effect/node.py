@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Ticketing Effect - 100% contract-driven.
 
-This module provides the NodeTicketingEffect class, a minimal shell
+The NodeTicketingEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: ticketing.base

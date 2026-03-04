@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Hook event emitter for publishing Claude Code hook events to Kafka.
 
-This module provides the core emission logic for publishing ONEX-formatted
+The core emission logic for publishing ONEX-formatted
 hook events to Kafka/Redpanda. It is designed to be called from Claude Code
 hook handlers via a CLI entry point.
 

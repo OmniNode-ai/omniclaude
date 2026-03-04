@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """CLI entry point for hook event emission.
 
-This module provides the CLI boundary for emitting Claude Code hook events
+The CLI boundary for emitting Claude Code hook events
 to Kafka. It wraps the async emission logic with asyncio.run() and a hard
 wall-clock timeout to ensure hooks never block Claude Code.
 

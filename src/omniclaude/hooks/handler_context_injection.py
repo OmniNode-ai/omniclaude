@@ -269,7 +269,7 @@ class ModelLoadPatternsResult:
 class HandlerContextInjection:
     """Handler for context injection from learned patterns.
 
-    This handler implements the full context injection workflow:
+    The full context injection workflow:
     1. Load patterns from database
     2. Filter by domain and confidence threshold
     3. Sort by confidence descending

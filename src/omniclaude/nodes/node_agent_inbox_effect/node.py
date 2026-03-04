@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Agent Inbox Effect - 100% contract-driven.
 
-This module provides the NodeAgentInboxEffect class, a minimal shell
+The NodeAgentInboxEffect class, a minimal shell
 that inherits from NodeEffect. All effect logic is driven by the contract.yaml.
 
 Capability: agent.inbox

@@ -197,7 +197,7 @@ class ProtocolSessionAggregator(Protocol[TSnapshot_co, TEvent_contra]):
     async def process_event(self, event: TEvent_contra, correlation_id: UUID) -> bool:
         """Process a single event into session state.
 
-        This method handles all event types (SessionStarted, SessionEnded,
+        All event types (SessionStarted, SessionEnded,
         PromptSubmitted, ToolExecuted) and updates the appropriate session
         snapshot accordingly.
 

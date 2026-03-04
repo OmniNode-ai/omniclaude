@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Output models for Claude Code hook effect nodes.
 
-This module provides output models for hook effect nodes that publish events
+Output models for hook effect nodes that publish events
 to Kafka. These models represent the result of publishing operations.
 
 Note:

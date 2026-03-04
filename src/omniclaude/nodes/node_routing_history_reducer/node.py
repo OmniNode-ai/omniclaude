@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Node Routing History Reducer - 100% contract-driven.
 
-This module provides the NodeRoutingHistoryReducer class, a minimal shell
+The NodeRoutingHistoryReducer class, a minimal shell
 that inherits from NodeReducer. All reducer logic is driven by the contract.yaml.
 
 Capability: routing.history
