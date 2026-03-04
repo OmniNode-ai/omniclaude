@@ -110,7 +110,63 @@ Task(
 
 ### Phase 5: User Approval -- NO dispatch
 
-Present results. Ask before ANY git operations. NEVER auto-commit.
+Present results. Show:
+- `git status --porcelain` output (exact list of changed files)
+- Test results summary (from Phase 3)
+- Proposed commit message
+
+Ask the user: "Approve committing these changes and creating a PR with automerge enabled? (yes/no)"
+
+If user says no: stop. All changes remain on disk.
+If user says yes: proceed to Phase 6.
+
+### Phase 6: Commit, Push, PR + Automerge (functional expansion — runs after user approves Phase 5)
+
+> **Prerequisite:** Must be on a named branch (not detached HEAD) inside the target git repo root.
+
+```bash
+# 0. Auth + detached HEAD guard
+gh auth status || { echo "ERROR: not logged into GitHub CLI"; exit 1; }
+HEAD_BRANCH=$(git branch --show-current)
+test -n "$HEAD_BRANCH" || { echo "ERROR: detached HEAD — cannot create PR"; exit 1; }
+
+# 1. Show and stage changes (user already approved in Phase 5)
+git status --porcelain
+git add -A
+
+# 2. Commit
+git commit -m "feat: <concise description from Phase 1 task summary>"
+
+# 3. Resolve repo and push
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+git push -u origin "$HEAD_BRANCH"
+
+# 4. Create PR — resolve number via gh pr view on the PR URL (deterministic anchor)
+PR_URL=$(gh pr create \
+  --title "<commit message title>" \
+  --repo "$REPO" \
+  --body "$(cat <<'EOF'
+## Summary
+<bullet points from Phase 1 requirements>
+
+## Test Plan
+- CI must pass
+- Changes validated by Phase 3 quality checks
+EOF
+)")
+echo "$PR_URL" | grep -qE 'https://github\.com/.*/pull/[0-9]+' \
+  || { echo "ERROR: PR_URL doesn't look like a PR URL: $PR_URL"; exit 1; }
+PR_NUMBER=$(gh pr view "$PR_URL" --json number -q .number)
+test -n "$PR_NUMBER" || { echo "ERROR: failed to resolve PR number from: $PR_URL"; exit 1; }
+
+# 5. Enable automerge
+gh pr merge --auto --squash "$PR_NUMBER" --repo "$REPO"
+
+echo "PR #$PR_NUMBER: $PR_URL"
+echo "Automerge armed. GitHub merges when all branch protection requirements are satisfied."
+```
+
+**Rule**: Phase 6 is git-only coordinator work. Do NOT dispatch to polymorphic agents.
 
 ## Task Classification
 
