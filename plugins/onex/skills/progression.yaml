@@ -27,16 +27,6 @@ progressions:
     to: pr-review-dev
     after_uses: 5
 
-  # Gap analysis → gap fix workflow
-  - from: gap-analysis
-    to: gap-fix
-    after_uses: 2
-
-  # Gap fix → gap cycle (automated loop)
-  - from: gap-fix
-    to: gap-cycle
-    after_uses: 4
-
   # Linear insights → suggest-work (use insights to drive work)
   - from: linear-insights
     to: suggest-work

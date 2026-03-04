@@ -105,7 +105,7 @@ epic-team OMN-XXXX
   → For each wave: dispatch ticket-pipeline per ticket as Task() from team-lead session
   → Await all Task() calls in wave before starting next wave
   → Collect results (status, pr_url, branch) from each Task()
-  → Post-wave integration check (OMN-3345): run gap-cycle --no-fix per repo touched
+  → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
   → Send Slack lifecycle notifications (started, ticket done, epic done)
