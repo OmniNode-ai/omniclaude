@@ -9,7 +9,7 @@ logic for all three subcommands: detect, fix, and cycle.
 
 ---
 
-## Step 0: Route by Subcommand
+## Subcommand Routing
 
 Parse the first positional argument from `$ARGUMENTS` as the subcommand:
 
