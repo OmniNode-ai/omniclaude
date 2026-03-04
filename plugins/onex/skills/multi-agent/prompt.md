@@ -128,7 +128,6 @@ DO NOT DO THIS IN COORDINATOR:
 DO NOT DO THIS IN SPAWNED AGENTS:
 - Bash: git add file.py && git commit
 - Bash: git add . && git commit -m "message"
-- Bash: git push
 - Any git operations (add, commit, push, stash, rebase, etc.)
 ```
 
