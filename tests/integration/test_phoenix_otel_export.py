@@ -254,3 +254,101 @@ class TestPhoenixOtelExport:
         assert call["injected_pattern_count"] == 2
         assert call["cohort"] == "treatment"
         assert call["selected_agent"] == "polymorphic-agent"
+
+    def test_wrapper_main_passes_start_time_to_exporter(self) -> None:
+        """context_injection_wrapper captures time_ns before injection and
+        passes it as start_time to _emit_injection_span (OMN-3612).
+
+        Strategy: patch the handler module that main() imports from, so the
+        lazy import inside main() picks up the fake. Pin time.time_ns to a
+        known value and verify it arrives as start_time in the emit call.
+        """
+        import io
+        import json as _json
+        import types
+
+        import context_injection_wrapper
+
+        emitted: list[dict[str, Any]] = []
+
+        def _fake_emit(**kwargs: Any) -> bool:
+            emitted.append(kwargs)
+            return True
+
+        # Minimal fake result from inject_patterns_sync
+        _fake_result = type(
+            "R",
+            (),
+            {
+                "success": True,
+                "pattern_count": 1,
+                "retrieval_ms": 10,
+                "cohort": "treatment",
+                "injection_id": "inj-start-time",
+                "context_markdown": "## P",
+                "source": "db",
+                "context_size_bytes": 4,
+            },
+        )()
+
+        # Pin time.time_ns to a known value so we can assert passthrough
+        pinned_ns = 1_700_000_000_000_000_000
+
+        input_payload = _json.dumps(
+            {
+                "project": "/tmp/test",
+                "domain": "general",
+                "session_id": "sess-start-time",
+                "correlation_id": "corr-start-time",
+            }
+        )
+
+        # Build fake modules so that the lazy import inside main() succeeds
+        # without needing the real omniclaude package installed.
+        fake_handler = types.ModuleType("omniclaude.hooks.handler_context_injection")
+        fake_handler.inject_patterns_sync = lambda **kw: _fake_result  # type: ignore[attr-defined]
+
+        fake_config = types.ModuleType("omniclaude.hooks.context_config")
+        fake_config.ContextInjectionConfig = lambda **kw: None  # type: ignore[attr-defined]
+
+        fake_models = types.ModuleType("omniclaude.hooks.models_injection_tracking")
+
+        class _FakeEnum:
+            USER_PROMPT_SUBMIT = "user_prompt_submit"
+
+        fake_models.EnumInjectionContext = _FakeEnum  # type: ignore[attr-defined]
+
+        with (
+            patch.object(context_injection_wrapper, "_emit_injection_span", _fake_emit),
+            patch.object(
+                context_injection_wrapper,
+                "_get_context_mapping",
+                return_value={},
+            ),
+            patch.object(
+                context_injection_wrapper,
+                "_build_tier_banner",
+                return_value="--- TEST ---",
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "omniclaude.hooks.handler_context_injection": fake_handler,
+                    "omniclaude.hooks.context_config": fake_config,
+                    "omniclaude.hooks.models_injection_tracking": fake_models,
+                },
+            ),
+            patch("time.time_ns", return_value=pinned_ns),
+            patch("sys.stdin", io.StringIO(input_payload)),
+            patch("sys.exit") as mock_exit,
+        ):
+            context_injection_wrapper.main()
+
+        # Verify _emit_injection_span was called with start_time
+        assert len(emitted) == 1, f"Expected 1 emit call, got {len(emitted)}"
+        assert emitted[0]["start_time"] == pinned_ns, (
+            f"start_time should be the pinned time_ns value {pinned_ns}, "
+            f"got {emitted[0].get('start_time')}"
+        )
+        # Confirm exit(0) for hook compat
+        mock_exit.assert_called_with(0)

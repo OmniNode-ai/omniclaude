@@ -270,6 +270,10 @@ def main() -> None:
             min_confidence=min_confidence,
         )
 
+        # Capture wall-clock start *before* the blocking injection call so
+        # the OTEL span reflects true injection duration (OMN-3612).
+        injection_start_ns = time.time_ns()
+
         # Call the handler
         result = inject_patterns_sync(
             project_root=project_path if project_path else None,
@@ -298,6 +302,7 @@ def main() -> None:
                     selected_agent=str(input_json.get("agent_name") or ""),
                     injection_latency_ms=float(result.retrieval_ms or elapsed_ms),
                     cohort=result.cohort or "treatment",
+                    start_time=injection_start_ns,
                 )
             except Exception:
                 pass  # Never propagate to hook (R2)
