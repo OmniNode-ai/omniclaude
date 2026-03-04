@@ -132,6 +132,7 @@ For each task's acceptance criteria:
 - **Missing guards**: add "no X beyond Y" where drift is likely ("no new DB extensions", "no new imports outside this module")
 - **Vague output**: "valid output" → "output contains fields [a, b, c] with types [X, Y, Z]"
 - **Subjective language ban**: every acceptance criterion must be testable without subjective qualifiers. Ban "should", "nice", "clean", "robust" unless paired with a measurable check. "Clean separation" → "no imports from module X in module Y".
+- **Unresolved placeholders**: scan for angle-bracket placeholders (`<files>`, `<module>`, `<path>`, etc.) in procedural steps and acceptance criteria. Every `<placeholder>` must be resolved to a concrete value before the plan ships. Flag any that remain unresolved.
 
 ### R3 — Scope Violations
 
@@ -153,6 +154,8 @@ Mandatory mechanical checks — required, not suggested:
 - **API signatures**: any callable invoked across a boundary — pin exact keyword argument names to a real existing call site. "publish(payload)" is wrong if the real signature is "publish(data=..., event_type=...)". Must-verify, not assumed.
 - **Return types**: write the actual import path or "returns dict shaped like ModelFoo JSON" — not "returns ModelFoo type" without a path.
 - **Topics and schema names**: if a topic string is introduced, prove it matches the naming spec and is registered via the designated mechanism. If an event model is referenced, prove the module path exists or the `__init__.py` re-export exists.
+- **CLI command consistency**: for any CLI command used across multiple tasks (e.g., `pytest`, `gh pr`, `ruff`), verify all occurrences use the same explicit argument set. Flag any instance where argument substitution differs between tasks unless the difference is intentionally documented. Example: Task 2 runs `pytest tests/ -v` but Task 5 runs `pytest tests/ -v --tb=short` — flag the discrepancy or justify it.
+- **Path portability**: flag absolute paths containing machine-specific mounts (`/Volumes/`, `/Users/`, `/home/<user>/`, `C:\Users\`). Require `$(git rev-parse --show-toplevel)`, `$REPO_ROOT`, or relative paths instead. Exception: paths inside user-facing documentation that explicitly instruct the reader to substitute their own path.
 
 ### R5 — Idempotency
 
@@ -184,6 +187,37 @@ Common failures to flag:
 - "grep finds no hits" != feature removed → also check runtime execution path
 - "log contains X" != behavior correct → also assert state or output (not log alone)
 
+**Placement verification**: when string order matters (e.g., "insert section X before section Y", "add import above existing imports"), require grep-with-context (`grep -n -A2 -B2`) or line-number ordering proof showing the before/after positions. A bare "grep finds the string" does not prove correct placement — it only proves existence. Acceptable proof: line N1 < line N2 after the edit, confirmed via `grep -n`.
+
+### R7 — Behavioral Expansion Check
+
+For any change described as "close a gap," "fix a missing case," or "align behavior":
+
+- Determine whether the change **adds behavior the skill/module previously lacked** (functional expansion) versus **correcting existing behavior** (bug fix).
+- If functional expansion: require an explicit "functional expansion" label on the task. This signals that doc references, changelog entries, and downstream consumers must be reconciled.
+- Reconciliation checklist:
+  - Does any existing documentation describe the old (narrower) behavior as intentional? If yes, update the doc or justify the expansion.
+  - Does any caller rely on the old behavior (e.g., expecting an error or empty result where the expansion now returns data)? If yes, flag as a potential breaking change.
+  - Does the expansion introduce new failure modes not covered by existing error handling? If yes, add error handling steps to the plan.
+- If a task claims to "close a gap" but the plan contains no new code paths, test cases, or error handling — flag it as under-specified.
+
+### R8 — Prerequisite Guards
+
+For any new phase, step, or task added to a skill or pipeline:
+
+- Explicitly list all required execution conditions: authentication state, clean git working tree, named branch (not detached HEAD), env vars loaded, services running, prior phase completion.
+- For each condition, specify what happens if the condition is unmet:
+  - **Fail loudly**: the step errors with a clear message (preferred).
+  - **Fail silently**: the step proceeds but produces wrong/incomplete results (must be flagged and fixed).
+  - **Skip gracefully**: the step is skipped with a logged reason.
+- Flag any new phase where failure is silent if conditions are unmet. Silent failures must be converted to loud failures or graceful skips with explicit guard checks.
+- Common prerequisite omissions to catch:
+  - Git operations without checking for uncommitted changes
+  - API calls without verifying auth tokens are set
+  - File reads without checking file existence
+  - Docker/service calls without verifying the service is running
+  - Phase N+1 that assumes Phase N succeeded without checking its output
+
 ---
 
 ### Review Output Format
@@ -194,11 +228,13 @@ Each category must be explicitly acknowledged with a minimal evidence pointer, e
 **Adversarial review complete.**
 
 R1: checked — clean (counted N tasks under section X; all numeric claims match)
-R2: checked — [issue: "superset of 7" → fixed to "exactly 7: [list]"] OR [clean (all criteria testable, no subjective language)]
+R2: checked — [issue: "superset of 7" → fixed to "exactly 7: [list]"] OR [clean (all criteria testable, no subjective language, no unresolved <placeholders>)]
 R3: checked — [issue: kill-switch criterion moved to Task 3 (DB task cannot enforce Python behavior)] OR [clean]
-R4: checked — [issue: added __init__.py re-export for contract module path] OR [clean (verified: contract module path resolves at omnibase_infra/nodes/foo/models/__init__.py)]
+R4: checked — [issue: added __init__.py re-export for contract module path] OR [clean (verified: contract module path resolves at omnibase_infra/nodes/foo/models/__init__.py; CLI args consistent; no machine-specific paths)]
 R5: checked — [issue: Ticket 2 creates DB table without IF NOT EXISTS] OR [clean (dedup keys: ticket=title, table=PK)]
-R6: checked — [issue: "pytest passes" was sole proof for schema — added \d+ introspection] OR [clean (strongest proof: strong)]
+R6: checked — [issue: "pytest passes" was sole proof for schema — added \d+ introspection] OR [clean (strongest proof: strong; placement verified with line numbers where applicable)]
+R7: checked — [issue: Task 3 "closes gap" but adds new code path without "functional expansion" label] OR [clean (no gap-closing claims, or all labeled and reconciled)]
+R8: checked — [issue: Phase 2 runs git push without checking for clean working tree] OR [clean (all phases list prerequisites; no silent failures)]
 
 Summary: [N] issues found and fixed. Plan re-saved.
 ```
@@ -209,24 +245,32 @@ Do not claim "clean" for a category that was not explicitly checked with evidenc
 
 ### Smoke Test (Verification)
 
-Run these instructions against the following known-bad mini-plan and confirm all five catches:
+Run these instructions against the following known-bad mini-plan and confirm all expected catches:
 
 > "This plan creates **4 tickets** (Tickets 1, 2, 3, 4a, 4b).
 > Ticket 2 (DB-only migration): acceptance criteria: kill switch enforced via FEATURE_FLAG env var check in Python handler. Verification: pytest passes.
 > Contract module: omnibase_infra.nodes.foo.models.
-> Ticket 3: No mention of models/__init__.py."
+> Ticket 3: No mention of models/__init__.py.
+> Ticket 3 step 2: Run `pytest tests/ -v`. Ticket 3 step 5: Run `pytest tests/ -v --tb=short`.
+> Ticket 3 step 3: Edit `/Volumes/PRO-G40/Code/omni_home/omnibase_core/src/foo.py`.
+> Ticket 3 acceptance: copy `<files>` to the output directory.
+> Ticket 4a: 'Close the gap where bar handler ignores empty input' — no new tests, no error handling added.
+> Ticket 4b: New phase 'publish results' — runs `gh pr create` but does not check for auth or clean git state.
+> Ticket 4b step 4: Insert the new section before the existing 'Summary' heading. Verification: grep finds 'New Section'."
 
-Expected catches by category: R1, R2, R3, R4, R6.
+Expected catches by category: R1, R2, R3, R4, R6, R7, R8.
 
 - **R1**: "4 tickets" but five identifiers listed (1, 2, 3, 4a, 4b) — count mismatch, flag
-- **R2**: "pytest passes" is weak and vague — does not assert specific behavior
+- **R2**: "pytest passes" is weak and vague — does not assert specific behavior. Also: `<files>` is an unresolved angle-bracket placeholder — flag it
 - **R3**: DB-only Ticket 2 claims Python runtime behavior (kill switch) — scope violation, move to code task
-- **R4**: Contract module path unverified, no re-export step mentioned — add re-export or full path
-- **R6**: "pytest passes" is weak (grade: weak) as sole proof for a DB migration — needs schema introspection
+- **R4**: Contract module path unverified, no re-export step mentioned — add re-export or full path. Also: `pytest` args differ between step 2 and step 5 (`-v` vs `-v --tb=short`) — flag inconsistency. Also: `/Volumes/PRO-G40/Code/omni_home/...` is a machine-specific absolute path — replace with `$(git rev-parse --show-toplevel)/src/foo.py` or equivalent
+- **R6**: "pytest passes" is weak (grade: weak) as sole proof for a DB migration — needs schema introspection. Also: "grep finds 'New Section'" proves existence but not placement — need `grep -n` to confirm line ordering (new section line < summary heading line)
+- **R7**: Ticket 4a "closes gap" but adds no new tests or error handling — under-specified functional expansion, flag
+- **R8**: Ticket 4b phase runs `gh pr create` without checking for auth token or clean git state — silent failure if conditions unmet, flag
 
 R5 is clean in this mini-plan (no idempotency claims without dedup keys). That is an acceptable clean result.
 
-If the review instructions do not catch all five expected items, tighten the instructions before shipping.
+If the review instructions do not catch all expected items, tighten the instructions before shipping.
 
 ## Execution Handoff
 
