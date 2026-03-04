@@ -312,5 +312,5 @@ Requires:
 
 ## Related Commands
 
-- `/ci-failures` - Check CI/CD failures for current PR
+- `/ci-fix-pipeline --analyze-only` - Check CI/CD failures for current PR
 - Linear MCP tools for backlog queries

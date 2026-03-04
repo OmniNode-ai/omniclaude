@@ -100,14 +100,16 @@ today's runs.
 
 ## Kafka Configuration
 
-| Context | `KAFKA_BOOTSTRAP_SERVERS` |
-|---------|--------------------------|
-| Host scripts | `localhost:19092` (requires `KAFKA_BOOTSTRAP_SERVERS`; run `bus-local`) |
-| Docker services | `redpanda:9092` |
+| Context | `KAFKA_BOOTSTRAP_SERVERS` | Notes |
+|---------|--------------------------|-------|
+| Host scripts (local bus, default) | `localhost:19092` | Local Docker Redpanda (always-on); required by golden-path runner |
+| Host scripts (cloud bus) | `localhost:29092` | Cloud tunnel; activate with `bus-cloud` |
+| Docker services | `redpanda:9092` | Docker-internal DNS |
 
-The runner reads `KAFKA_BOOTSTRAP_SERVERS` from the environment. If the variable
-is not set, the script exits with an actionable error directing the developer to
-run `bus-local`.
+The runner **asserts** `KAFKA_BOOTSTRAP_SERVERS=localhost:19092` and aborts if the
+variable is unset or points to a different broker. This prevents accidental
+integration-test traffic on the cloud bus. Run `bus-local` to configure your
+session, then `source ~/.omnibase/.env` before invocation.
 
 ## Python API
 
@@ -115,7 +117,7 @@ run `bus-local`.
 from plugins.onex.skills._golden_path_validate.golden_path_runner import GoldenPathRunner
 
 runner = GoldenPathRunner(
-    bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],
+    bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],  # must be localhost:19092
     artifact_base_dir="/custom/artifacts",
 )
 artifact = await runner.run(decl)

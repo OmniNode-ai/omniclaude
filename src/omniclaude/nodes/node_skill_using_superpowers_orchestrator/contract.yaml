@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the using-superpowers skill.
-  Use when starting any conversation - establishes mandatory workflows for finding and using skills, including using Skill tool before announcing usage, following brainstorming before coding, and creating TodoWrite todos for checklists
+  Use when starting any conversation - establishes mandatory workflows for finding and using skills, including using Skill tool before announcing usage, following design-to-plan before coding, and creating TodoWrite todos for checklists
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.

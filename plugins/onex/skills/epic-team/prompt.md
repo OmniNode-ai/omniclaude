@@ -767,7 +767,7 @@ write_yaml(STATE_FILE, state)
 print("Phase 5: persisted done state.")
 
 # 0. Post-wave integration check (non-blocking) [OMN-3345]
-# Run gap-cycle --no-fix per repo touched during the wave.
+# Run gap cycle --no-fix per repo touched during the wave.
 # Results are informational only — always advances to Done regardless of status.
 import re as _re
 import json as _json
@@ -782,19 +782,19 @@ _integration_check = {
 
 for _repo in _repos_touched:
     try:
-        # Invoke gap-cycle with --no-fix (not --dry-run — these are different flags)
-        _gap_result = Skill(skill="onex:gap-cycle", args=f"--repo {_repo} --no-fix")
+        # Invoke gap cycle with --no-fix (not --dry-run — these are different flags)
+        _gap_result = Skill(skill="onex:gap", args=f"cycle --repo {_repo} --no-fix")
 
         # Parse ARTIFACT: <path> from stdout
         _artifact_match = _re.search(r"ARTIFACT: (.+)", _gap_result or "")
         if not _artifact_match:
-            print(f"[integration-check] WARNING: gap-cycle for {_repo} did not emit ARTIFACT marker. Skipping.")
+            print(f"[integration-check] WARNING: gap cycle for {_repo} did not emit ARTIFACT marker. Skipping.")
             _integration_check["repos"][_repo] = {
                 "status": "RED",
                 "findings_count": -1,
                 "critical_count": -1,
                 "artifact_path": None,
-                "error": "no ARTIFACT marker in gap-cycle stdout",
+                "error": "no ARTIFACT marker in gap cycle stdout",
             }
             continue
 
@@ -855,7 +855,7 @@ for _repo in _repos_touched:
             print(f"[integration-check] WARNING: Slack post for {_repo} failed (non-fatal): {_slack_err}")
 
     except Exception as _err:
-        print(f"[integration-check] WARNING: gap-cycle for {_repo} failed (non-fatal): {_err}")
+        print(f"[integration-check] WARNING: gap cycle for {_repo} failed (non-fatal): {_err}")
         _integration_check["repos"][_repo] = {
             "status": "RED",
             "findings_count": -1,

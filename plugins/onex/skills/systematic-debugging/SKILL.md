@@ -1,6 +1,6 @@
 ---
 name: systematic-debugging
-description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - four-phase framework (root cause investigation, pattern analysis, hypothesis testing, implementation) that ensures understanding before attempting solutions
+description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - five-phase framework (backward tracing, root cause investigation, pattern analysis, hypothesis testing, implementation) that ensures understanding before attempting solutions
 version: 1.0.0
 level: basic
 debug: false
@@ -30,7 +30,7 @@ Random fixes waste time and create new bugs. Quick patches mask underlying issue
 NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
 ```
 
-If you haven't completed Phase 1, you cannot propose fixes.
+If you haven't completed Phases 1-2, you cannot propose fixes.
 
 ## When to Use
 
@@ -54,11 +54,108 @@ Use for ANY technical issue:
 - You're in a hurry (rushing guarantees rework)
 - Manager wants it fixed NOW (systematic is faster than thrashing)
 
-## The Four Phases
+## The Five Phases
 
 You MUST complete each phase before proceeding to the next.
 
-### Phase 1: Root Cause Investigation
+### Phase 1: Backward Tracing
+
+<!-- Absorbed from root-cause-tracing -->
+
+Bugs often manifest deep in the call stack (git init in wrong directory, file created in wrong location, database opened with wrong path). Your instinct is to fix where the error appears, but that's treating a symptom.
+
+**Core principle:** Trace backward through the call chain until you find the original trigger, then fix at the source.
+
+**Use this phase when:**
+- Error happens deep in execution (not at entry point)
+- Stack trace shows long call chain
+- Unclear where invalid data originated
+- Need to find which test/code triggers the problem
+
+#### 1. Observe the Symptom
+```
+Error: git init failed in /Users/jesse/project/packages/core  # local-path-ok
+```
+
+#### 2. Find Immediate Cause
+**What code directly causes this?**
+```typescript
+await execFileAsync('git', ['init'], { cwd: projectDir });
+```
+
+#### 3. Ask: What Called This?
+```typescript
+WorktreeManager.createSessionWorktree(projectDir, sessionId)
+  → called by Session.initializeWorkspace()
+  → called by Session.create()
+  → called by test at Project.create()
+```
+
+#### 4. Keep Tracing Up
+**What value was passed?**
+- `projectDir = ''` (empty string!)
+- Empty string as `cwd` resolves to `process.cwd()`
+- That's the source code directory!
+
+#### 5. Find Original Trigger
+**Where did empty string come from?**
+```typescript
+const context = setupCoreTest(); // Returns { tempDir: '' }
+Project.create('name', context.tempDir); // Accessed before beforeEach!
+```
+
+#### Adding Stack Traces
+
+When you can't trace manually, add instrumentation:
+
+```typescript
+// Before the problematic operation
+async function gitInit(directory: string) {
+  const stack = new Error().stack;
+  console.error('DEBUG git init:', {
+    directory,
+    cwd: process.cwd(),
+    nodeEnv: process.env.NODE_ENV,
+    stack,
+  });
+
+  await execFileAsync('git', ['init'], { cwd: directory });
+}
+```
+
+**Critical:** Use `console.error()` in tests (not logger - may not show)
+
+**Run and capture:**
+```bash
+npm test 2>&1 | grep 'DEBUG git init'
+```
+
+**Analyze stack traces:**
+- Look for test file names
+- Find the line number triggering the call
+- Identify the pattern (same test? same parameter?)
+
+#### Finding Which Test Causes Pollution
+
+If something appears during tests but you don't know which test:
+
+Use the bisection script: `${CLAUDE_PLUGIN_ROOT}/skills/systematic-debugging/find-polluter.sh`
+
+```bash
+./find-polluter.sh '.git' 'src/**/*.test.ts'
+```
+
+Runs tests one-by-one, stops at first polluter. See script for usage.
+
+#### Backward Tracing Tips
+
+- **In tests:** Use `console.error()` not logger - logger may be suppressed
+- **Before operation:** Log before the dangerous operation, not after it fails
+- **Include context:** Directory, cwd, environment variables, timestamps
+- **Capture stack:** `new Error().stack` shows complete call chain
+- **NEVER fix just where the error appears.** Trace back to find the original trigger.
+
+### Phase 2: Root Cause Investigation
 
 **BEFORE attempting ANY fix:**
 
@@ -119,18 +216,12 @@ You MUST complete each phase before proceeding to the next.
    **This reveals:** Which layer fails (secrets → workflow ✓, workflow → build ✗)
 
 5. **Trace Data Flow**
-
-   **WHEN error is deep in call stack:**
-
-   **REQUIRED SUB-SKILL:** Use root-cause-tracing for backward tracing technique
-
-   **Quick version:**
    - Where does bad value originate?
    - What called this with bad value?
-   - Keep tracing up until you find the source
+   - Keep tracing up until you find the source (use Phase 1 backward tracing technique)
    - Fix at source, not at symptom
 
-### Phase 2: Pattern Analysis
+### Phase 3: Pattern Analysis
 
 **Find the pattern before fixing:**
 
@@ -153,7 +244,7 @@ You MUST complete each phase before proceeding to the next.
    - What settings, config, environment?
    - What assumptions does it make?
 
-### Phase 3: Hypothesis and Testing
+### Phase 4: Hypothesis and Testing
 
 **Scientific method:**
 
@@ -168,7 +259,7 @@ You MUST complete each phase before proceeding to the next.
    - Don't fix multiple things at once
 
 3. **Verify Before Continuing**
-   - Did it work? Yes → Phase 4
+   - Did it work? Yes → Phase 5
    - Didn't work? Form NEW hypothesis
    - DON'T add more fixes on top
 
@@ -178,7 +269,7 @@ You MUST complete each phase before proceeding to the next.
    - Ask for help
    - Research more
 
-### Phase 4: Implementation
+### Phase 5: Implementation
 
 **Fix the root cause, not the symptom:**
 
@@ -187,7 +278,7 @@ You MUST complete each phase before proceeding to the next.
    - Automated test if possible
    - One-off test script if no framework
    - MUST have before fixing
-   - **REQUIRED SUB-SKILL:** Use test-driven-development for writing proper failing tests
+   - **REQUIRED SUB-SKILL:** Use test-discipline for writing proper failing tests
 
 2. **Implement Single Fix**
    - Address the root cause identified
@@ -203,7 +294,7 @@ You MUST complete each phase before proceeding to the next.
 4. **If Fix Doesn't Work**
    - STOP
    - Count: How many fixes have you tried?
-   - If < 3: Return to Phase 1, re-analyze with new information
+   - If < 3: Return to Phase 2, re-analyze with new information
    - **If ≥ 3: STOP and question the architecture (step 5 below)**
    - DON'T attempt Fix #4 without architectural discussion
 
@@ -238,9 +329,9 @@ If you catch yourself thinking:
 - **"One more fix attempt" (when already tried 2+)**
 - **Each fix reveals new problem in different place**
 
-**ALL of these mean: STOP. Return to Phase 1.**
+**ALL of these mean: STOP. Return to Phase 2.**
 
-**If 3+ fixes failed:** Question the architecture (see Phase 4.5)
+**If 3+ fixes failed:** Question the architecture (see Phase 5, step 5)
 
 ## your human partner's Signals You're Doing It Wrong
 
@@ -251,7 +342,7 @@ If you catch yourself thinking:
 - "Ultrathink this" - Question fundamentals, not just symptoms
 - "We're stuck?" (frustrated) - Your approach isn't working
 
-**When you see these:** STOP. Return to Phase 1.
+**When you see these:** STOP. Return to Phase 2.
 
 ## Common Rationalizations
 
@@ -270,10 +361,11 @@ If you catch yourself thinking:
 
 | Phase | Key Activities | Success Criteria |
 |-------|---------------|------------------|
-| **1. Root Cause** | Read errors, reproduce, check changes, gather evidence | Understand WHAT and WHY |
-| **2. Pattern** | Find working examples, compare | Identify differences |
-| **3. Hypothesis** | Form theory, test minimally | Confirmed or new hypothesis |
-| **4. Implementation** | Create test, fix, verify | Bug resolved, tests pass |
+| **1. Backward Tracing** | Trace call chain backward, add instrumentation | Identify original trigger |
+| **2. Root Cause** | Read errors, reproduce, check changes, gather evidence | Understand WHAT and WHY |
+| **3. Pattern** | Find working examples, compare | Identify differences |
+| **4. Hypothesis** | Form theory, test minimally | Confirmed or new hypothesis |
+| **5. Implementation** | Create test, fix, verify | Bug resolved, tests pass |
 
 ## When Process Reveals "No Root Cause"
 
@@ -289,12 +381,11 @@ If systematic investigation reveals issue is truly environmental, timing-depende
 ## Integration with Other Skills
 
 **This skill requires using:**
-- **root-cause-tracing** - REQUIRED when error is deep in call stack (see Phase 1, Step 5)
-- **test-driven-development** - REQUIRED for creating failing test case (see Phase 4, Step 1)
+- **test-discipline** - REQUIRED for creating failing test case (see Phase 5, Step 1)
 
 **Complementary skills:**
 - **defense-in-depth** - Add validation at multiple layers after finding root cause
-- **condition-based-waiting** - Replace arbitrary timeouts identified in Phase 2
+- **condition-based-waiting** - Replace arbitrary timeouts identified in Phase 3
 - **verification-before-completion** - Verify fix worked before claiming success
 
 ## Real-World Impact

@@ -65,6 +65,9 @@ args:
   - name: --path
     description: "Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via git worktree list. When running from a linked worktree, defaults to CWD."
     required: false
+  - name: --guided
+    description: "Interactive mode: pause at each severity bucket for human approval before applying fixes. Reproduces former review-cycle behavior."
+    required: false
 ---
 
 # Local Review
@@ -344,6 +347,43 @@ The skill runs a 3-phase loop:
 - `Report only` -- `--no-fix` mode
 - `Changes staged` -- `--no-commit` mode, fixes applied but not committed
 - `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states after retry exhaustion (manual re-invocation required)
+
+## Guided Mode (`--guided`)
+
+<!-- Absorbed from review-cycle -->
+
+When `--guided` is passed, the review loop pauses at each phase boundary for human approval instead of running autonomously.
+
+### Interactive Checkpoints
+
+1. **Issue Presentation**: After review, display a summary table grouped by severity (CRITICAL/MAJOR/MINOR/NIT) with counts and blocking status
+2. **Fix Selection**: AskUserQuestion with options:
+   - "All blocking issues (Critical+Major+Minor)"
+   - "Critical only"
+   - "Critical + Major"
+   - "Report only (no fixes)"
+3. **Per-Batch Approval**: After each severity batch is fixed, AskUserQuestion:
+   - "Apply all fixes in this batch"
+   - "Review individually" (show per-file diffs, allow per-file accept/reject)
+   - "Discard batch" (`git restore --worktree {modified_files}`)
+4. **Commit Checkpoint**: AskUserQuestion:
+   - "Commit" (default message: `fix(local-review): fix {n} {severity} issue(s)`)
+   - "Commit with custom message"
+   - "Stage only (don't commit)"
+   - "Discard current batch"
+5. **Continue Loop**: AskUserQuestion:
+   - "Run another review iteration"
+   - "Done"
+   - "Show summary"
+
+### Contrast with Default Mode
+
+| Aspect | Default (`local-review`) | Guided (`--guided`) |
+|--------|------------------------|---------------------|
+| Fix execution | Autonomous loop | Pauses per severity bucket |
+| Human input | None until complete | At every phase boundary |
+| Commit decisions | Auto-commit per iteration | User chooses commit/stage/discard |
+| Drill-down | Not available | Available per-file review |
 
 ## Retry Policy
 

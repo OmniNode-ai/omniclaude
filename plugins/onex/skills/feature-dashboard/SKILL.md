@@ -327,7 +327,7 @@ Total: {total}  Wired: {wired}  Partial: {partial}  Broken: {broken}  Unknown: {
 
 SKILL                     STATUS   CHECKS
 feature-dashboard         wired    8/8 pass
-gap-analysis              partial  6/8 pass (2 warn)
+gap                      partial  6/8 pass (2 warn)
 pipeline-audit            broken   5/8 pass (1 critical fail)
 ```
 
@@ -340,13 +340,13 @@ pipeline-audit            broken   5/8 pass (1 critical fail)
 
 - Canonical result model: `src/omniclaude/nodes/node_skill_feature_dashboard_orchestrator/models/model_result.py`
 - Node type classifier: `src/omniclaude/nodes/node_skill_feature_dashboard_orchestrator/classifier.py`
-- SKILL.md frontmatter pattern: `plugins/onex/skills/gap-analysis/SKILL.md`
+- SKILL.md frontmatter pattern: `plugins/onex/skills/gap/SKILL.md`
 - Coverage test (canonical truth): `tests/unit/nodes/test_skill_node_coverage.py`
 
 ## See Also
 
 - `pipeline-audit` skill (comprehensive end-to-end pipeline verification)
-- `gap-analysis` skill (cross-repo integration health audit)
+- `gap` skill (cross-repo integration health audit -- detect/fix/cycle)
 - `NodeSkillFeatureDashboardOrchestrator` (handles `onex.cmd.omniclaude.feature-dashboard.v1`)
 - `ModelFeatureDashboardResult` (canonical result model)
 - `docs/feature-dashboard/` (output directory)

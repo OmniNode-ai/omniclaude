@@ -2,7 +2,7 @@
 
 **Shared gate protocol for all integration verification paths.**
 
-Every integration verification path (ticket-pipeline Phase 5.75, epic-team post-wave gap-cycle
+Every integration verification path (ticket-pipeline Phase 5.75, epic-team post-wave gap cycle
 check) MUST call these helpers to verify that Kafka nodes with changed contracts have passing
 golden-path fixtures.
 
@@ -336,7 +336,7 @@ is resolved.
 
 ---
 
-## Usage in epic-team (post-wave gap-cycle)
+## Usage in epic-team (post-wave gap cycle)
 
 After a wave of per-repo tickets completes, `epic-team` runs a post-wave integration check
 by calling `get_kafka_nodes_from_pr`, `check_fixture_exists`, and `run_fixture` for each
@@ -352,6 +352,6 @@ before declaring the wave complete.
 
 - `golden-path-validate` skill (OMN-2976) — `run-golden-path` entrypoint
 - `ticket-pipeline` skill — Phase 5.75 orchestration (OMN-3344)
-- `epic-team` skill — post-wave gap-cycle integration check (OMN-3345)
+- `epic-team` skill — post-wave gap cycle integration check (OMN-3345)
 - `_lib/cdqa-gate/helpers.md` — pattern reference for this module
 - OMN-3341 — implementation ticket

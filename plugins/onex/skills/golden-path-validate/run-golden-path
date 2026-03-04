@@ -9,7 +9,7 @@
 #   run-golden-path /path/to/decl.json
 #
 # Environment:
-#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (required; run `bus-local` if unset)
+#   KAFKA_BOOTSTRAP_SERVERS  Kafka bootstrap servers (required; must be localhost:19092; run `bus-local` if unset)
 #   GOLDEN_PATH_ARTIFACT_DIR Evidence artifact base dir (default: ~/.claude/golden-path)
 #
 # Exit codes:
@@ -30,7 +30,7 @@ Arguments:
   /path/to/decl.json  Path to a JSON file containing the declaration.
 
 Environment:
-  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (required; run \`bus-local\` if unset)
+  KAFKA_BOOTSTRAP_SERVERS    Kafka bootstrap (required; must be localhost:19092; run \`bus-local\` if unset)
   GOLDEN_PATH_ARTIFACT_DIR   Artifact base dir (default: ~/.claude/golden-path)
 
 Examples:
@@ -75,8 +75,12 @@ decl = json.loads(decl_json)
 
 bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
 if not bootstrap:
-    print("FATAL: KAFKA_BOOTSTRAP_SERVERS is not set.", file=sys.stderr)
-    print("Run \`bus-local\` to configure your session, then retry.", file=sys.stderr)
+    print(
+        "FATAL: KAFKA_BOOTSTRAP_SERVERS is not set.\\n"
+        "Run: source ~/.omnibase/.env   (then bus-local if needed)\\n"
+        "Golden-path tests require localhost:19092 (local Docker Redpanda).",
+        file=sys.stderr,
+    )
     sys.exit(1)
 _EXPECTED_BROKER = "localhost:19092"
 if bootstrap != _EXPECTED_BROKER:

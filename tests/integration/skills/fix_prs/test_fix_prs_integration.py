@@ -403,11 +403,11 @@ class TestNoDirectMutationCalls:
             "Direct gh api merge found in fix-prs/prompt.md:\n" + "\n".join(matches)
         )
 
-    def test_fix_prs_delegates_to_ci_failures(self) -> None:
-        """prompt.md must delegate CI fixes to ci-failures sub-skill."""
+    def test_fix_prs_delegates_to_ci_fix_pipeline(self) -> None:
+        """prompt.md must delegate CI fixes to ci-fix-pipeline sub-skill."""
         content = _read_skill_file(_FIX_PRS_PROMPT)
-        assert "ci-failures" in content or "ci_failures" in content, (
-            "prompt.md must delegate CI fixing to ci-failures sub-skill"
+        assert "ci-fix-pipeline" in content, (
+            "prompt.md must delegate CI fixing to ci-fix-pipeline sub-skill"
         )
 
     def test_fix_prs_delegates_to_pr_review_dev(self) -> None:
@@ -420,8 +420,8 @@ class TestNoDirectMutationCalls:
     def test_skill_lists_sub_skills_used(self) -> None:
         """SKILL.md must document sub-skills under Sub-skills Used section."""
         content = _read_skill_file(_FIX_PRS_SKILL)
-        assert "ci-failures" in content and "pr-review-dev" in content, (
-            "SKILL.md must list ci-failures and pr-review-dev in Sub-skills Used"
+        assert "ci-fix-pipeline" in content and "pr-review-dev" in content, (
+            "SKILL.md must list ci-fix-pipeline and pr-review-dev in Sub-skills Used"
         )
 
 

@@ -16,7 +16,7 @@ set -euo pipefail
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CI_SCRIPT="$SCRIPT_DIR/../ci-failures/ci-quick-review"
+CI_SCRIPT="$SCRIPT_DIR/../ci-fix-pipeline/ci-quick-review"
 COLLATE_SCRIPT="$SCRIPT_DIR/collate-issues"
 
 INCLUDE_NITPICKS=false
