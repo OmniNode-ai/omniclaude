@@ -1667,16 +1667,16 @@ def format_issues_parallel_solve(
     issues: ModelCollatedIssues,
     include_nitpicks: bool = False,
 ) -> str:
-    """Format issues for /parallel-solve command consumption.
+    """Format issues for /multi-agent --mode parallel-build command consumption.
 
-    Generates a list format ready to pass to /parallel-solve.
+    Generates a list format ready to pass to /multi-agent --mode parallel-build.
 
     Args:
         issues: ModelCollatedIssues instance containing categorized issues.
         include_nitpicks: If True, include nitpick-level issues.
 
     Returns:
-        Formatted string suitable for /parallel-solve command.
+        Formatted string suitable for /multi-agent --mode parallel-build command.
     """
     lines: list[str] = []
 
@@ -1749,7 +1749,7 @@ Examples:
   python collate_issues.py 33 --show-resolved-only  # Only resolved
   python collate_issues.py 33 --show-status      # Show [RESOLVED] indicators
   python collate_issues.py 33 --json             # JSON output
-  python collate_issues.py 33 --parallel-solve-format  # For /parallel-solve
+  python collate_issues.py 33 --parallel-solve-format  # For /multi-agent --mode parallel-build
   python collate_issues.py https://github.com/OmniNode-ai/omniintelligence/pull/5  # Cross-repo
         """,
     )
@@ -1780,7 +1780,7 @@ Examples:
     parser.add_argument(
         "--parallel-solve-format",
         action="store_true",
-        help="Output in format ready for /parallel-solve command",
+        help="Output in format ready for /multi-agent --mode parallel-build command",
     )
     parser.add_argument(
         "--stats",

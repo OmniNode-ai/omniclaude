@@ -42,7 +42,7 @@ Arguments:
 
 Options:
   --include-nitpicks       Include nitpick issues in output (default: excluded)
-  --parallel-solve-format  Output in format ready for /parallel-solve command
+  --parallel-solve-format  Output in format ready for /multi-agent --mode parallel-build command
   --hide-resolved          Hide issues that have been resolved on GitHub
                            (uses GitHub's native thread resolution status)
   --show-resolved-only     Only show resolved issues (inverse of --hide-resolved)
@@ -67,7 +67,7 @@ Examples:
   collate-issues 33 --hide-resolved      # Hide resolved GitHub threads
   collate-issues 33 --show-resolved-only # Show only resolved issues
   collate-issues 33 --stats              # With statistics summary
-  collate-issues 33 --parallel-solve-format  # For /parallel-solve command
+  collate-issues 33 --parallel-solve-format  # For /multi-agent --mode parallel-build command
 
 Exit codes:
   0 - Success

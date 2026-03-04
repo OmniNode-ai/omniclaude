@@ -5,13 +5,13 @@ set -euo pipefail
 # PR Issue Collator with CI Failures - Unified Issue Aggregation
 # ============================================================================
 # Fetches both PR review issues AND CI failures, combines them by severity,
-# and outputs in /parallel-solve-ready format.
+# and outputs in /multi-agent --mode parallel-build-ready format.
 #
 # Features:
 #   - Single command: collate-issues-with-ci <PR#>
 #   - Combines PR review issues + CI failures
 #   - Automatic severity grouping (Critical > Major > Minor > Nit)
-#   - Ready for /parallel-solve (no manual parsing needed)
+#   - Ready for /multi-agent --mode parallel-build (no manual parsing needed)
 #   - Graceful degradation (continues if CI fetch fails)
 # ============================================================================
 
