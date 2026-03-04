@@ -39,9 +39,9 @@ Related: OMN-3571, OMN-3473
 from __future__ import annotations
 
 import os
+import re
 import socket
 from collections.abc import Sequence
-from pathlib import Path
 
 import pytest
 
@@ -53,6 +53,9 @@ _EXPECTED_BROKER: str = "localhost:19092"
 _TCP_TIMEOUT_SECONDS: float = 2.0
 # Path segments that identify an integration test item (OS-independent)
 _INTEGRATION_PARTS: tuple[str, str] = ("tests", "integration")
+# Word-boundary regex for "not integration" to avoid false positives with
+# markers like "integration_slow" (CodeRabbit review suggestion)
+_NOT_INTEGRATION_RE: re.Pattern[str] = re.compile(r"\bnot\s+integration\b")
 
 
 # ---------------------------------------------------------------------------
@@ -62,15 +65,13 @@ _INTEGRATION_PARTS: tuple[str, str] = ("tests", "integration")
 
 def _broker_is_reachable(host: str, port: int, timeout: float) -> bool:
     """Return True if a TCP connection to *host*:*port* succeeds within *timeout* seconds."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    try:
-        s.connect((host, port))
-        return True
-    except OSError:
-        return False
-    finally:
-        s.close()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        try:
+            s.connect((host, port))
+            return True
+        except OSError:
+            return False
 
 
 def _session_excludes_integration(session: pytest.Session) -> bool:
@@ -79,10 +80,12 @@ def _session_excludes_integration(session: pytest.Session) -> bool:
     Example: ``pytest -m "not integration"`` sets ``markexpr`` to
     ``"not integration"``.  In that case the session is intentionally NOT
     running integration tests, so the broker guard should be a no-op.
+
+    Uses a word-boundary regex to avoid false positives with markers like
+    ``integration_slow`` (i.e. ``"not integration_slow"`` does NOT match).
     """
     markexpr: str = getattr(session.config.option, "markexpr", "") or ""
-    # Covers: "not integration", "unit and not integration", etc.
-    return "not integration" in markexpr
+    return bool(_NOT_INTEGRATION_RE.search(markexpr))
 
 
 # ---------------------------------------------------------------------------
@@ -108,11 +111,11 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         return
 
     # Detect whether any collected item lives under tests/integration/
-    # Use Path.parts for OS-independent path segment matching.
+    # Use item.path (pathlib.Path) and .parts for OS-independent matching.
     integration_items: Sequence[pytest.Item] = [
         item
         for item in session.items
-        if set(_INTEGRATION_PARTS).issubset(Path(item.fspath).parts)
+        if set(_INTEGRATION_PARTS).issubset(item.path.parts)
     ]
     if not integration_items:
         return  # unit-only run — nothing to assert
