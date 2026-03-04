@@ -68,6 +68,7 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 | PR open, CI passing, not yet approved | `pr_review_loop` |
 | PR open, CI passing, approved | `auto_merge` |
 | PR already merged | skip ticket (mark Done, exit) |
+| PR closed (unmerged), sibling merged PR found mentioning ticket_id | mark Done (superseded), exit |
 | No branch, no PR | `implement` (normal fresh start) |
 
 **Behavior notes:**
@@ -81,6 +82,10 @@ pipeline probes GitHub before the phase loop and infers the correct starting pha
 - If the GitHub repo slug cannot be determined, detection is skipped entirely. If individual
   queries (PR list, CI checks) fail, detection degrades gracefully — a failed CI query defaults
   to `ci_watch` (the safe choice for any open PR).
+- When a closed PR is found with no merge, the detector performs a sibling PR search
+  (same as linear-triage Step 3c-i): queries all known repos for a merged PR mentioning
+  the ticket ID. If found: marks ticket Done with a Linear comment, exits the pipeline.
+  If not found: proceeds to `implement` (normal fresh-start behavior).
 
 ### Limitations
 
