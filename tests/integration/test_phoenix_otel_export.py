@@ -96,10 +96,17 @@ class TestPhoenixOtelExport:
     """Integration tests for Phoenix OTEL span export."""
 
     def setup_method(self) -> None:
-        """Reset phoenix_otel_exporter singleton before each test."""
+        """Reset phoenix_otel_exporter singleton and OTEL global state before each test."""
         import phoenix_otel_exporter as mod
 
         mod.reset_tracer()
+        # Reset the global OTEL TracerProvider so each test can set its own.
+        # Without this, set_tracer_provider() silently ignores subsequent calls,
+        # causing tests to export to a stale endpoint from a previous test.
+        from opentelemetry import trace as _otel_trace
+
+        _otel_trace._TRACER_PROVIDER_SET_ONCE = _otel_trace.Once()  # type: ignore[attr-defined]
+        _otel_trace._TRACER_PROVIDER = None  # type: ignore[attr-defined]
 
     def teardown_method(self) -> None:
         """Reset after each test to avoid state leakage."""
@@ -305,17 +312,13 @@ class TestPhoenixOtelExport:
 
         # Build fake modules so that the lazy import inside main() succeeds
         # without needing the real omniclaude package installed.
-        fake_handler = types.ModuleType(
-            "omniclaude.hooks.handler_context_injection"
-        )
+        fake_handler = types.ModuleType("omniclaude.hooks.handler_context_injection")
         fake_handler.inject_patterns_sync = lambda **kw: _fake_result  # type: ignore[attr-defined]
 
         fake_config = types.ModuleType("omniclaude.hooks.context_config")
         fake_config.ContextInjectionConfig = lambda **kw: None  # type: ignore[attr-defined]
 
-        fake_models = types.ModuleType(
-            "omniclaude.hooks.models_injection_tracking"
-        )
+        fake_models = types.ModuleType("omniclaude.hooks.models_injection_tracking")
 
         class _FakeEnum:
             USER_PROMPT_SUBMIT = "user_prompt_submit"
@@ -323,9 +326,7 @@ class TestPhoenixOtelExport:
         fake_models.EnumInjectionContext = _FakeEnum  # type: ignore[attr-defined]
 
         with (
-            patch.object(
-                context_injection_wrapper, "_emit_injection_span", _fake_emit
-            ),
+            patch.object(context_injection_wrapper, "_emit_injection_span", _fake_emit),
             patch.object(
                 context_injection_wrapper,
                 "_get_context_mapping",
@@ -358,3 +359,118 @@ class TestPhoenixOtelExport:
         )
         # Confirm exit(0) for hook compat
         mock_exit.assert_called_with(0)
+
+    def test_span_has_nonzero_duration_protobuf_decode(self) -> None:
+        """Regression guard: decode OTLP protobuf and assert real span duration.
+
+        Verifies at the wire-protocol level that spans have:
+        - end_time_unix_nano > start_time_unix_nano
+        - Duration >= 50ms (not 0ms shell spans)
+        - SpanKind == INTERNAL (1)
+
+        This prevents regression to 0ms spans that Phoenix cannot measure.
+        (OMN-3613)
+        """
+        import phoenix_otel_exporter as mod
+        from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+            ExportTraceServiceRequest,
+        )
+
+        # Start local OTLP server to capture raw protobuf payloads
+        server, port = _start_otlp_server()
+        endpoint = f"http://127.0.0.1:{port}/v1/traces"
+
+        # Backdate start_time by 100ms to guarantee measurable duration
+        start_time_ns = time.time_ns() - 100_000_000  # 100ms ago
+
+        try:
+            with patch.dict(
+                "os.environ",
+                {"PHOENIX_OTEL_ENDPOINT": endpoint, "PHOENIX_OTEL_ENABLED": "true"},
+            ):
+                mod.reset_tracer()
+
+                result = mod.emit_injection_span(
+                    session_id="protobuf-regression-session",
+                    correlation_id="protobuf-regression-corr",
+                    manifest_injected=True,
+                    injected_pattern_count=5,
+                    agent_matched=True,
+                    selected_agent="polymorphic-agent",
+                    injection_latency_ms=55.0,
+                    cohort="treatment",
+                    start_time=start_time_ns,
+                )
+
+                assert result is True, "emit_injection_span should return True"
+
+                # Flush the batch processor to ensure export
+                if mod._tracer_provider is not None:
+                    mod._tracer_provider.force_flush(timeout_millis=5000)
+
+                # Wait for the HTTP server to receive the payload
+                deadline = time.monotonic() + 5.0
+                while not server.received_payloads and time.monotonic() < deadline:
+                    time.sleep(0.05)
+
+                assert len(server.received_payloads) > 0, (
+                    "No OTLP payload received — cannot decode protobuf"
+                )
+
+                # Decode the protobuf payload
+                request = ExportTraceServiceRequest()
+                request.ParseFromString(server.received_payloads[0])
+
+                # Navigate: resource_spans -> scope_spans -> spans
+                assert len(request.resource_spans) > 0, (
+                    "No resource_spans in protobuf payload"
+                )
+
+                spans_found = []
+                for rs in request.resource_spans:
+                    for ss in rs.scope_spans:
+                        for span in ss.spans:
+                            spans_found.append(span)
+
+                assert len(spans_found) > 0, "No spans found in protobuf payload"
+
+                # Find our manifest_injection span
+                target_span = None
+                for span in spans_found:
+                    if span.name == "manifest_injection":
+                        target_span = span
+                        break
+
+                assert target_span is not None, (
+                    f"manifest_injection span not found. "
+                    f"Span names: {[s.name for s in spans_found]}"
+                )
+
+                # Assert SpanKind == INTERNAL (protobuf enum value 1)
+                # In OTLP protobuf, SPAN_KIND_INTERNAL = 1
+                assert target_span.kind == 1, (
+                    f"Expected SpanKind INTERNAL (1), got {target_span.kind}"
+                )
+
+                # Assert timestamps: end > start, duration >= 50ms
+                start_ns = target_span.start_time_unix_nano
+                end_ns = target_span.end_time_unix_nano
+
+                assert start_ns > 0, (
+                    f"start_time_unix_nano should be > 0, got {start_ns}"
+                )
+                assert end_ns > 0, f"end_time_unix_nano should be > 0, got {end_ns}"
+                assert end_ns > start_ns, (
+                    f"end_time ({end_ns}) must be > start_time ({start_ns})"
+                )
+
+                duration_ms = (end_ns - start_ns) / 1_000_000
+                assert duration_ms >= 50.0, (
+                    f"Span duration {duration_ms:.1f}ms is below 50ms threshold. "
+                    f"This indicates a regression to 0ms shell spans. "
+                    f"start={start_ns}, end={end_ns}"
+                )
+
+        finally:
+            server.shutdown()
+            mod.reset_tracer()
