@@ -324,4 +324,4 @@ reported counts are accurate.
 - `writing-plans` skill (plan authoring conventions)
 - `executing-plans` skill (step-by-step plan execution)
 - `plan-to-tickets` skill (batch Linear ticket creation from plan files)
-- `deep-dive` skill (daily work analysis reports)
+- `linear-insights` skill (daily work analysis reports)

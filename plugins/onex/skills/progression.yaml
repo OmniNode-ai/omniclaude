@@ -37,8 +37,8 @@ progressions:
     to: gap-cycle
     after_uses: 4
 
-  # Deep dive → suggest-work (use insights to drive work)
-  - from: deep-dive
+  # Linear insights → suggest-work (use insights to drive work)
+  - from: linear-insights
     to: suggest-work
     after_uses: 3
 
