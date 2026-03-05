@@ -1,7 +1,7 @@
 ---
 name: list-prs
 description: Dashboard view of all open (non-draft) PRs across OmniNode-ai repos — shows CI status, mergeable state, and groups PRs by readiness
-version: 1.0.0
+version: 1.1.0
 level: intermediate
 debug: false
 category: workflow
@@ -75,12 +75,16 @@ data via `gh` but makes no changes to any repo or PR.
    gh pr list \
      --repo OmniNode-ai/<repo> \
      --state open \
-     --json number,title,author,headRefName,isDraft,mergeable,reviewDecision,statusCheckRollup,createdAt,url \
+     --json number,title,author,headRefName,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,createdAt,url \
      --limit 50
    ```
    **Use ONLY the exact fields listed above** — do not add `baseRepository`, `headRepository`,
    or any other fields. The `gh` CLI available in this environment does not support all GraphQL
    fields and will fail with "Unknown JSON field" if extras are added.
+
+   **Fallback**: If the `gh` version does not support `mergeStateStatus` (returns "Unknown JSON
+   field"), retry the query without it. In that case, fall back to `mergeable == "CONFLICTING"`
+   for CONFLICTS classification (the pre-v1.1.0 behavior).
 
    If `--include-drafts` is NOT set, filter out any PR where `isDraft == true`.
 
@@ -88,9 +92,18 @@ data via `gh` but makes no changes to any repo or PR.
 
 4. **If `--ready-only`**: discard all PRs except those in the READY TO MERGE bucket.
 
-5. **Print output** using the format in the Output Format section below.
+5. **Fetch changed files for CONFLICTS PRs**: For each PR in the CONFLICTS bucket (capped
+   at the first 10 PRs), fetch changed files:
+   ```bash
+   gh pr diff --repo OmniNode-ai/<repo> --name-only <pr_number>
+   ```
+   Store the first 8 file paths per PR. If more than 8 files are changed, note the overflow
+   count (e.g., `... and 4 more files`). If `gh pr diff` fails, skip file listing for that PR
+   and continue.
 
-6. **Print summary line** at the end with totals per bucket.
+6. **Print output** using the format in the Output Format section below.
+
+7. **Print summary line** at the end with totals per bucket.
 
 ## PR Classification
 
@@ -99,10 +112,10 @@ Assign each PR to exactly one bucket (checked in this order):
 | Bucket | Condition |
 |--------|-----------|
 | **READY TO MERGE** | `mergeable == "MERGEABLE"` AND all required checks passed AND `reviewDecision` in `("APPROVED", null, "")` |
-| **CONFLICTS** | `mergeable == "CONFLICTING"` (regardless of CI state) |
-| **FAILING** | `mergeable != "CONFLICTING"` AND any required check has `conclusion == "FAILURE"` or `conclusion == "TIMED_OUT"` |
-| **PENDING** | `mergeable != "CONFLICTING"` AND at least one required check is in progress or queued (no failures) |
-| **NO CI RUN** | `statusCheckRollup` is empty or null AND not conflicting |
+| **CONFLICTS** | `mergeStateStatus == "DIRTY"` (actual merge conflicts). If `mergeStateStatus` is unavailable (fallback mode), use `mergeable == "CONFLICTING"` instead. This distinguishes real file conflicts from PRs that are merely blocked by reviews or policies. |
+| **FAILING** | Not CONFLICTS AND any required check has `conclusion == "FAILURE"` or `conclusion == "TIMED_OUT"` |
+| **PENDING** | Not CONFLICTS AND at least one required check is in progress or queued (no failures) |
+| **NO CI RUN** | `statusCheckRollup` is empty or null AND not CONFLICTS |
 
 CI status helpers (apply to required checks only — checks where `isRequired == true`):
 
@@ -145,6 +158,10 @@ If `mergeable == "UNKNOWN"`, treat as PENDING (GitHub is still computing mergeab
 
 --- CONFLICTS (1) ---
   omnibase_spi      #28   jonah/omn-2200-spi-refactor          CI: green    (no review)
+      changed files:
+        src/omnibase_spi/protocols/handler.py
+        src/omnibase_spi/protocols/registry.py
+        tests/unit/test_handler.py
 
 --- NO CI RUN (1) ---
   omnimemory        #62   jonah/omn-2290-ingestion-rewrite     CI: none     (no review)
@@ -161,6 +178,12 @@ Column widths:
 
 For FAILING PRs, print a second indented line listing the names of the failing checks
 (comma-separated). Limit to the first 5 check names; append `...` if more.
+
+For CONFLICTS PRs, print indented lines showing changed files (fetched in step 5). Format:
+- First line: `      changed files:` (6-space indent)
+- Each file: `        <filepath>` (8-space indent)
+- Show at most 8 files per PR; if more, append `        ... and N more files`
+- If file fetch failed or returned empty, print `      (files unavailable)` instead
 
 If a bucket is empty, omit its section entirely from the output.
 
