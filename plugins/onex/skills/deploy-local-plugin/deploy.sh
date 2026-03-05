@@ -157,6 +157,14 @@ _resolve_marketplace_source() {
     return 1
 }
 
+_verify_venv_integrity() {
+    # Post-deploy sanity check: ensure the venv survived all deploy operations.
+    # Current rsync targets don't overlap with lib/.venv, but this catches future
+    # regressions where deploy steps might accidentally destroy the venv.
+    local venv_dir="$1"
+    [[ -f "${venv_dir}/bin/python3" && -x "${venv_dir}/bin/python3" ]]
+}
+
 if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && "$CLAUDE_PLUGIN_ROOT" != "$CACHE_PAT"* ]]; then
     # CLAUDE_PLUGIN_ROOT points to a real dev checkout, not the installed cache
     SOURCE_ROOT="$CLAUDE_PLUGIN_ROOT"
@@ -1015,6 +1023,17 @@ if [[ "$EXECUTE" == "true" ]]; then
             # PLUGIN_PYTHON_BIN is set but not version-pinned — no rewrite needed
             echo -e "${BLUE}  PLUGIN_PYTHON_BIN already set (not version-pinned); no rewrite needed${NC}"
         fi
+    fi
+
+    # Post-deploy venv integrity check — verify the venv survived all deploy
+    # operations (rsync, prune, symlink updates). Defensive: catches regressions
+    # where future deploy steps might accidentally destroy the venv.
+    if ! _verify_venv_integrity "$VENV_DIR"; then
+        echo ""
+        echo -e "${RED}CRITICAL: venv missing or broken after deploy.${NC}"
+        echo -e "${RED}  Expected: ${VENV_DIR}/bin/python3${NC}"
+        echo -e "${RED}  Run: deploy.sh --repair-venv${NC}"
+        exit 1
     fi
 
     echo ""
