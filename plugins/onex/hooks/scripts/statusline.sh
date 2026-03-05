@@ -2,11 +2,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# ONEX Status Line - 4-line layout:
+# ONEX Status Line - 3-line layout:
 # Line 1: Model | tokens used/total | % used <fullused> | % remain <fullremain> | thinking: on/off
-# Line 2: current: <progressbar> % | weekly: <progressbar> % | extra: <progressbar> $used/$limit
-# Line 3: resets <time> | resets <datetime> | resets <date>
-# Line 4: pg:● rp:● vk:● rt:● intel:● phx:● bus:local | PRs: core·2 infra·1 dash·3
+# Line 2: current: <progressbar> % resets <time> | weekly: <progressbar> % resets <datetime> | extra: <progressbar> $used/$limit resets <date>
+# Line 3: pg:● rp:● vk:● rt:● intel:● phx:● bus:local | PRs: core·2 infra·1 dash·3
 
 set -f  # disable globbing
 
@@ -508,13 +507,10 @@ pad_column() {
 }
 
 line2=""
-line3=""
 sep=" ${dim}|${reset} "
 
 if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     bar_width=10
-    col1w=23
-    col2w=22
 
     # ---- 5-hour (current) ----
     five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
@@ -522,13 +518,10 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "time")
     five_hour_bar=$(build_bar "$five_hour_pct" "$bar_width")
 
-    col1_bar_vis_len=$(( 9 + bar_width + 1 + ${#five_hour_pct} + 1 ))
-    col1_bar="${white}current:${reset} ${five_hour_bar} ${cyan}${five_hour_pct}%${reset}"
-    col1_bar=$(pad_column "$col1_bar" "$col1_bar_vis_len" "$col1w")
-
-    col1_reset_plain="resets ${five_hour_reset}"
-    col1_reset="${white}resets ${five_hour_reset}${reset}"
-    col1_reset=$(pad_column "$col1_reset" "${#col1_reset_plain}" "$col1w")
+    col1="${white}current:${reset} ${five_hour_bar} ${cyan}${five_hour_pct}%${reset}"
+    if [ -n "$five_hour_reset" ]; then
+        col1+=" ${dim}resets${reset} ${white}${five_hour_reset}${reset}"
+    fi
 
     # ---- 7-day (weekly) ----
     seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
@@ -536,17 +529,13 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "datetime")
     seven_day_bar=$(build_bar "$seven_day_pct" "$bar_width")
 
-    col2_bar_vis_len=$(( 8 + bar_width + 1 + ${#seven_day_pct} + 1 ))
-    col2_bar="${white}weekly:${reset} ${seven_day_bar} ${cyan}${seven_day_pct}%${reset}"
-    col2_bar=$(pad_column "$col2_bar" "$col2_bar_vis_len" "$col2w")
-
-    col2_reset_plain="resets ${seven_day_reset}"
-    col2_reset="${white}resets ${seven_day_reset}${reset}"
-    col2_reset=$(pad_column "$col2_reset" "${#col2_reset_plain}" "$col2w")
+    col2="${white}weekly:${reset} ${seven_day_bar} ${cyan}${seven_day_pct}%${reset}"
+    if [ -n "$seven_day_reset" ]; then
+        col2+=" ${dim}resets${reset} ${white}${seven_day_reset}${reset}"
+    fi
 
     # ---- Extra usage ----
-    col3_bar=""
-    col3_reset=""
+    col3=""
     extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
     if [ "$extra_enabled" = "true" ]; then
         extra_pct=$(echo "$usage_data" | jq -r '.extra_usage.utilization // 0' | awk '{printf "%.0f", $1}')
@@ -557,17 +546,15 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
         # Next month 1st for reset date (macOS compatible)
         extra_reset=$(date -v+1m -v1d +"%b %-d" | tr '[:upper:]' '[:lower:]')
 
-        col3_bar="${white}extra:${reset} ${extra_bar} ${cyan}\${extra_used}/\${extra_limit}${reset}"
-        col3_reset="${white}resets ${extra_reset}${reset}"
+        col3="${white}extra:${reset} ${extra_bar} ${cyan}\${extra_used}/\${extra_limit}${reset}"
+        if [ -n "$extra_reset" ]; then
+            col3+=" ${dim}resets${reset} ${white}${extra_reset}${reset}"
+        fi
     fi
 
-    # Assemble line 2: bars row
-    line2="${col1_bar}${sep}${col2_bar}"
-    [ -n "$col3_bar" ] && line2+="${sep}${col3_bar}"
-
-    # Assemble line 3: resets row
-    line3="${col1_reset}${sep}${col2_reset}"
-    [ -n "$col3_reset" ] && line3+="${sep}${col3_reset}"
+    # Assemble line 2: bars + resets merged on one line
+    line2="${col1}${sep}${col2}"
+    [ -n "$col3" ] && line2+="${sep}${col3}"
 fi
 
 # ===== LINE 4: Health dots + PR counts (Section D) =====
@@ -686,7 +673,6 @@ fi
 # Output all lines
 printf "%b" "$line1"
 [ -n "$line2" ] && printf "\n%b" "$line2"
-[ -n "$line3" ] && printf "\n%b" "$line3"
 [ -n "$line4" ] && printf "\n%b" "$line4"
 
 exit 0
