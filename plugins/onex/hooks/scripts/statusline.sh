@@ -6,7 +6,7 @@
 # Line 1: Model | tokens used/total | % used <fullused> | % remain <fullremain> | thinking: on/off
 # Line 2: current: <progressbar> % | weekly: <progressbar> % | extra: <progressbar> $used/$limit
 # Line 3: resets <time> | resets <datetime> | resets <date>
-# Line 4: health + PR status (from background caches)
+# Line 4: pg:● rp:● vk:● rt:● intel:● phx:● bus:local | PRs: core·2 infra·1 dash·3
 
 set -f  # disable globbing
 
@@ -570,9 +570,123 @@ if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
     [ -n "$col3_reset" ] && line3+="${sep}${col3_reset}"
 fi
 
+# ===== LINE 4: Health dots + PR counts (Section D) =====
+line4=""
+
+if $HAS_JQ; then
+    # --- Health dots ---
+    health_data=""
+    health_data=$(check_cache "$HEALTH_CACHE" "$HEALTH_TTL") || true
+
+    if [ -z "$health_data" ]; then
+        # Cache stale or missing -- kick off background refresh, show placeholder
+        refresh_health_bg
+        line4+="${dim}health: ?${reset}"
+    else
+        # Core services: green=up, red=down, yellow=unknown
+        for svc in pg rp vk; do
+            val=$(echo "$health_data" | jq -r ".$svc // \"\"" 2>/dev/null)
+            case "$val" in
+                ok)   line4+="${white}${svc}:${green}●${reset} " ;;
+                down) line4+="${white}${svc}:${red}●${reset} " ;;
+                *)    line4+="${white}${svc}:${yellow}●${reset} " ;;
+            esac
+        done
+
+        # Runtime services: dim○ when absent, green● when up
+        for svc in rt intel phx; do
+            val=$(echo "$health_data" | jq -r ".$svc // \"\"" 2>/dev/null)
+            case "$val" in
+                ok) line4+="${white}${svc}:${green}●${reset} " ;;
+                *)  line4+="${dim}${svc}:○${reset} " ;;
+            esac
+        done
+
+        # Bus indicator
+        bus_val=$(echo "$health_data" | jq -r '.bus // "local"' 2>/dev/null)
+        if [ "$bus_val" = "cloud" ]; then
+            line4+="${white}bus:${cyan}cloud${reset}"
+        else
+            line4+="${dim}bus:local${reset}"
+        fi
+
+        # Re-probe in background if cache is getting old (>50% TTL)
+        local_mtime=$(stat -c %Y "$HEALTH_CACHE" 2>/dev/null || stat -f %m "$HEALTH_CACHE" 2>/dev/null)
+        local_now=$(date +%s)
+        if [ -n "$local_mtime" ]; then
+            local_age=$(( local_now - local_mtime ))
+            if [ "$local_age" -ge $(( HEALTH_TTL / 2 )) ]; then
+                refresh_health_bg
+            fi
+        fi
+    fi
+
+    line4+=" ${dim}|${reset} "
+
+    # --- PR counts ---
+    pr_data=""
+    pr_data=$(check_cache "$PR_CACHE" "$PR_TTL") || true
+
+    if [ -z "$pr_data" ]; then
+        # Cache stale or missing -- kick off background refresh
+        refresh_prs_bg
+        line4+="${dim}PRs: ?${reset}"
+    else
+        # Build per-repo counts (only repos with >0)
+        pr_summary=""
+        for repo in "${OMNI_REPOS[@]}"; do
+            count=$(echo "$pr_data" | jq -r "[.prs[] | select(.repo == \"$repo\")] | length" 2>/dev/null)
+            if [ -n "$count" ] && [ "$count" -gt 0 ]; then
+                # Short name: strip omni prefix for brevity
+                short="${repo#omni}"
+                [ "$short" = "claude" ] && short="claude"
+                [ "$short" = "base_core" ] && short="core"
+                [ "$short" = "base_infra" ] && short="infra"
+                [ "$short" = "base_spi" ] && short="spi"
+                [ "$short" = "dash" ] && short="dash"
+                [ "$short" = "intelligence" ] && short="intel"
+                [ "$short" = "memory" ] && short="mem"
+                [ "$short" = "node_infra" ] && short="node"
+                [ "$short" = "web" ] && short="web"
+                [ "$short" = "onex_change_control" ] && short="chgctl"
+                # Handle onex_change_control which doesn't start with omni
+                [ "$repo" = "onex_change_control" ] && short="chgctl"
+
+                if [ -n "$pr_summary" ]; then
+                    pr_summary+=" "
+                fi
+                pr_summary+="${white}${short}${dim}·${cyan}${count}${reset}"
+            fi
+        done
+
+        if [ -n "$pr_summary" ]; then
+            line4+="${white}PRs:${reset} ${pr_summary}"
+        else
+            line4+="${dim}PRs: none${reset}"
+        fi
+
+        # Re-fetch in background if cache is getting old (>50% TTL)
+        pr_mtime=$(stat -c %Y "$PR_CACHE" 2>/dev/null || stat -f %m "$PR_CACHE" 2>/dev/null)
+        pr_now=$(date +%s)
+        if [ -n "$pr_mtime" ]; then
+            pr_age=$(( pr_now - pr_mtime ))
+            if [ "$pr_age" -ge $(( PR_TTL / 2 )) ]; then
+                refresh_prs_bg
+            fi
+        fi
+    fi
+else
+    # No jq -- cannot parse cache JSON
+    line4="${dim}health: ? | PRs: ?${reset}"
+    # Still try to populate caches for next invocation
+    refresh_health_bg
+    refresh_prs_bg
+fi
+
 # Output all lines
 printf "%b" "$line1"
 [ -n "$line2" ] && printf "\n%b" "$line2"
 [ -n "$line3" ] && printf "\n%b" "$line3"
+[ -n "$line4" ] && printf "\n%b" "$line4"
 
 exit 0
