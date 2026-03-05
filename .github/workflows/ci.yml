@@ -1577,13 +1577,10 @@ jobs:
 
   build:
     name: Build Docker Image
-    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    # OMNINODE_SELF_HOSTED_DOCKER_V1 — always self-hosted when enabled; kill-switch fallback to ubuntu-latest
     runs-on: >-
       ${{
-        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
-         (github.event_name == 'push' ||
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'schedule'))
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true')
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
@@ -1595,6 +1592,16 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Verify Buildx driver
+        run: |
+          DRIVER=$(docker buildx inspect --bootstrap 2>/dev/null | grep -oP 'Driver:\s+\K\S+' || echo "unknown")
+          echo "Buildx driver: ${DRIVER}"
+          if [[ "${DRIVER}" != "docker" ]]; then
+            echo "::warning::Expected Buildx driver 'docker', got '${DRIVER}'"
+          fi
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
@@ -1625,8 +1632,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ steps.meta.outputs.created }}
             VCS_REF=${{ github.sha }}
@@ -1643,7 +1648,6 @@ jobs:
           file: ./deployment/Dockerfile
           load: true
           tags: ${{ steps.image-name.outputs.name }}:scan
-          cache-from: type=gha
 
       - name: Trivy vulnerability scanner (SARIF)
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # v0.34.2 (pinned 2026-03-04)
