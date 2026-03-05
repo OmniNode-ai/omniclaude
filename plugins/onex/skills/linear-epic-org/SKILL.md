@@ -30,6 +30,20 @@ outputs:
 
 # Linear Epic Organization
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Organize orphan tickets into epics",
+  prompt="Run the linear-epic-org skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Group orphaned tickets (tickets with no parent epic) into sensible epics. Auto-creates

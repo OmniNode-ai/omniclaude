@@ -79,6 +79,20 @@ args:
 
 # Redeploy
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Runtime redeploy",
+  prompt="Run the redeploy skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Full post-release runtime redeploy for the OmniNode platform. Runs after a coordinated

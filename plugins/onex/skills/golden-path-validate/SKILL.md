@@ -7,6 +7,20 @@ debug: false
 
 # golden-path-validate
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Golden path validation",
+  prompt="Run the golden-path-validate skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 **Ticket:** OMN-2976
 **Repo:** omniclaude
 

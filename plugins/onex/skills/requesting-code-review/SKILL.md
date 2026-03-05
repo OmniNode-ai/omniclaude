@@ -15,6 +15,20 @@ author: OmniClaude Team
 
 # Requesting Code Review
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Code review for <target>",
+  prompt="Run the requesting-code-review skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 Dispatch code-reviewer subagent to catch issues before they cascade.
 
 **Core principle:** Review early, review often.

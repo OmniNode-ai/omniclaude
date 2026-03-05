@@ -15,6 +15,20 @@ author: OmniClaude Team
 
 # Executing Plans
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Execute plan <plan-name>",
+  prompt="Run the executing-plans skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Load a plan file, review it critically, create Linear tickets from it, then route to the

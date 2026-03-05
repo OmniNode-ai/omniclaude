@@ -16,6 +16,20 @@ author: OmniClaude Team
 
 # Linear Housekeeping
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Linear housekeeping",
+  prompt="Run the linear-housekeeping skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Parent skill that chains `linear-triage` → human review checkpoint → `linear-epic-org`

@@ -30,6 +30,20 @@ outputs:
 
 # Linear Triage
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Linear triage scan",
+  prompt="Run the linear-triage skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Scan all non-completed tickets in Linear, determine their true status, apply updates,

@@ -21,6 +21,20 @@ author: OmniClaude Team
 
 # Pipeline Audit
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Pipeline audit for <target>",
+  prompt="Run the pipeline-audit skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 A multi-repo pipeline is only as strong as its weakest integration point. Code existing in a repository proves nothing about whether that code connects to its upstream producer or downstream consumer. This skill provides a repeatable methodology for proving -- or disproving -- every join in a distributed pipeline.

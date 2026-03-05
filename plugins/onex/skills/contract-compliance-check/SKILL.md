@@ -7,6 +7,20 @@ debug: false
 
 # contract-compliance-check skill
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Contract compliance check <ticket_id>",
+  prompt="Run the contract-compliance-check skill for <ticket_id>. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 **Skill ID**: `onex:contract-compliance-check`
 **Version**: 1.0.0
 **Owner**: omniclaude
