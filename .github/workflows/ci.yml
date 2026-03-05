@@ -1577,10 +1577,14 @@ jobs:
 
   build:
     name: Build Docker Image
-    # OMNINODE_SELF_HOSTED_DOCKER_V1 — always self-hosted when enabled; kill-switch fallback to ubuntu-latest
+    # OMNINODE_SELF_HOSTED_DOCKER_V1 — self-hosted for push/dispatch/schedule; ubuntu-latest for PRs
+    # NOTE: self-hosted runners lack Docker socket access, so PR builds must use ubuntu-latest
     runs-on: >-
       ${{
-        (vars.USE_SELF_HOSTED_RUNNERS == 'true')
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
@@ -1592,16 +1596,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
-
-      - name: Verify Buildx driver
-        run: |
-          DRIVER=$(docker buildx inspect --bootstrap 2>/dev/null | grep -oP 'Driver:\s+\K\S+' || echo "unknown")
-          echo "Buildx driver: ${DRIVER}"
-          if [[ "${DRIVER}" != "docker" ]]; then
-            echo "::warning::Expected Buildx driver 'docker', got '${DRIVER}'"
-          fi
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
