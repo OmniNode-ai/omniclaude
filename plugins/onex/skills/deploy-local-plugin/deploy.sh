@@ -376,6 +376,10 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         echo "Running smoke test..."
         if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
             _REPAIR_TRAP_REMOVE=false  # Venv is good; retain on exit
+
+            # Write sentinel timestamp (OMN-3727)
+            date -u +"%Y-%m-%dT%H:%M:%SZ" > "${REPAIR_VENV_DIR}/.omniclaude-sentinel" 2>/dev/null || true
+
             echo ""
             echo -e "${GREEN}Venv repair complete!${NC}"
 
@@ -851,6 +855,10 @@ if [[ "$EXECUTE" == "true" ]]; then
     # --- Smoke test ---
     if "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
         _TRAP_REMOVE_VENV=false  # Venv is good; retain it on normal exit
+
+        # Write sentinel timestamp (OMN-3727)
+        date -u +"%Y-%m-%dT%H:%M:%SZ" > "${VENV_DIR}/.omniclaude-sentinel" 2>/dev/null || true
+
         echo -e "${GREEN}  Bundled venv smoke test passed${NC}"
     else
         echo -e "${RED}Error: Bundled venv smoke test FAILED. Deploy aborted.${NC}"

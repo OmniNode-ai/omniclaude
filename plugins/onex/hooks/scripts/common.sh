@@ -241,6 +241,52 @@ if [[ -z "${PYTHON_CMD}" ]]; then
 fi
 export PYTHON_CMD
 
+# =============================================================================
+# Venv Sentinel Check (OMN-3727)
+# =============================================================================
+# After PYTHON_CMD is resolved, check for .omniclaude-sentinel in the venv.
+# If missing, write one and trigger background integrity verification.
+# The sentinel is a single-line ISO 8601 timestamp written by deploy.sh or
+# auto-repair. Its absence indicates the venv was not created through a
+# normal deploy path and may need verification.
+#
+# Timing: Single stat = ~0.1ms. Background verification adds zero to the
+# synchronous path.
+
+_bg_verify_venv() {
+    local venv_dir="$1"
+    local repair_log="/tmp/omniclaude-venv-repair.log"
+    local python_bin="${venv_dir}/bin/python3"
+
+    # Quick import check — if omniclaude imports cleanly, venv is healthy
+    if "$python_bin" -c "import omniclaude" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    # Import failed — attempt background pip install to repair
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Sentinel verify: import omniclaude failed, attempting background repair" >> "$repair_log" 2>/dev/null || true
+
+    local plugin_root_dir="${PLUGIN_ROOT:-}"
+    if [[ -n "$plugin_root_dir" && -f "${plugin_root_dir}/pyproject.toml" ]]; then
+        "$python_bin" -m pip install --quiet --disable-pip-version-check \
+            -e "${plugin_root_dir}" >> "$repair_log" 2>&1 || true
+    elif [[ -n "$plugin_root_dir" && -f "${plugin_root_dir}/requirements.txt" ]]; then
+        "$python_bin" -m pip install --quiet --disable-pip-version-check \
+            -r "${plugin_root_dir}/requirements.txt" >> "$repair_log" 2>&1 || true
+    fi
+
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Sentinel verify: background repair finished" >> "$repair_log" 2>/dev/null || true
+}
+
+if [[ "${PYTHON_CMD}" == *"/.venv/bin/python3" ]]; then
+    _SENTINEL="${PYTHON_CMD%/bin/python3}/.omniclaude-sentinel"
+    if [[ ! -f "${_SENTINEL}" ]]; then
+        date -u +"%Y-%m-%dT%H:%M:%SZ" > "${_SENTINEL}" 2>/dev/null || true
+        ( _bg_verify_venv "${PYTHON_CMD%/bin/python3}" ) &
+    fi
+    unset _SENTINEL
+fi
+
 # Log resolved interpreter for debugging (only if LOG_FILE is available)
 # Uses inline printf instead of log() which is defined later in this file
 if [[ -n "${LOG_FILE:-}" ]]; then
