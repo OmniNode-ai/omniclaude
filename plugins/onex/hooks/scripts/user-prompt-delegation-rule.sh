@@ -9,6 +9,8 @@
 #   2. Injects a hard delegation rule into Claude's context
 
 set -euo pipefail
+_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 if ! command -v jq >/dev/null 2>&1; then

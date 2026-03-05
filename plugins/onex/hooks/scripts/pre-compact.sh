@@ -11,6 +11,8 @@
 # See pre-compact-probe.sh for verification steps.
 
 set -euo pipefail
+_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
 # Portable Plugin Configuration
 # Resolve absolute path of this script, handling relative invocation.

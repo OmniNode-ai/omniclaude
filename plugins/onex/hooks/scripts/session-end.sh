@@ -9,6 +9,8 @@
 # NOTE: This hook is audit-only - NO context injection, NO contract mutation
 
 set -euo pipefail
+_OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
 # Ensure stable CWD before any Python invocation.
 # The session CWD may be on an external drive that disconnects/remounts;
