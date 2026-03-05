@@ -61,6 +61,20 @@ outputs:
 
 # Integration Gate
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Integration gate scan",
+  prompt="Run the integration-gate skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Composable skill that adds cross-repo ordering, lane policy, and observability on top of

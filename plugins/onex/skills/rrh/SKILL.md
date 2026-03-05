@@ -16,6 +16,20 @@ author: OmniClaude Team
 
 # Release Readiness Handshake (RRH) Skill
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="RRH preflight validation",
+  prompt="Run the rrh skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 RRH is an **opt-in preflight validation** step that proves the working environment

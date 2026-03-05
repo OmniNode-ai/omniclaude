@@ -34,6 +34,20 @@ args:
 
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="PR dev review for #<N>",
+  prompt="Run the pr-review-dev skill for PR #<N>. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 **Workflow**: Fetch PR issues -> Fetch CI failures -> Combine -> **AUTO-RUN** multi-agent parallel-build (non-nits) -> Ask about nitpicks
 
 **Announce at start:** "I'm using the pr-review-dev skill to review and fix PR issues."

@@ -26,6 +26,20 @@ args:
 
 # hostile-reviewer
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Hostile review PR #<N>",
+  prompt="Run the hostile-reviewer skill for PR #<N> in <repo>. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Description
 Adversarial code review that attempts to break the change. Output is MANDATORY — if hostile
 reviewer has no risks to flag, that itself is a finding. Cannot rubber-stamp.

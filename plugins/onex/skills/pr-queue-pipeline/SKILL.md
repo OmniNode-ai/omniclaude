@@ -69,6 +69,20 @@ outputs:
 
 # PR Queue Pipeline (v1)
 
+## Dispatch Requirement
+
+When invoked, dispatch to a polymorphic-agent:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="PR queue pipeline drain",
+  prompt="Run the pr-queue-pipeline skill. <full context>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 The daily "drain the queue" command. v1 adds `review-all-prs` as Phase 1, so the pipeline
