@@ -2,10 +2,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# ONEX Status Line - 3-line layout:
+# ONEX Status Line - 4-line layout:
 # Line 1: Model | tokens used/total | % used <fullused> | % remain <fullremain> | thinking: on/off
 # Line 2: current: <progressbar> % | weekly: <progressbar> % | extra: <progressbar> $used/$limit
 # Line 3: resets <time> | resets <datetime> | resets <date>
+# Line 4: health + PR status (from background caches)
 
 set -f  # disable globbing
 
@@ -26,6 +27,229 @@ yellow='\033[38;2;230;200;0m'
 white='\033[38;2;220;220;220m'
 dim='\033[2m'
 reset='\033[0m'
+
+# ===== Tool detection flags =====
+HAS_GH=false
+HAS_NC=false
+HAS_JQ=false
+HAS_TIMEOUT=false
+command -v gh      >/dev/null 2>&1 && HAS_GH=true
+command -v nc      >/dev/null 2>&1 && HAS_NC=true
+command -v jq      >/dev/null 2>&1 && HAS_JQ=true
+command -v timeout >/dev/null 2>&1 && HAS_TIMEOUT=true
+
+# ===== Cache & lock constants =====
+HEALTH_CACHE="/tmp/omniclaude-health-cache.json"
+PR_CACHE="/tmp/omniclaude-pr-cache.json"
+HEALTH_TTL=30    # seconds
+PR_TTL=300       # 5 minutes
+HEALTH_LOCK_DIR="/tmp/omniclaude-health.lock"
+PR_LOCK_DIR="/tmp/omniclaude-pr.lock"
+
+# 10 repos in the omni_home registry
+OMNI_REPOS=(
+    omniclaude
+    omnibase_core
+    omnibase_infra
+    omnibase_spi
+    omnidash
+    omniintelligence
+    omnimemory
+    omninode_infra
+    omniweb
+    onex_change_control
+)
+
+# ===== check_cache(file, ttl) =====
+# Reads cache file, checks freshness via mtime, validates JSON.
+# Prints cache contents to stdout if fresh and valid; returns 0.
+# Returns 1 if stale, missing, or invalid JSON.
+check_cache() {
+    local file="$1"
+    local ttl="$2"
+
+    [ -f "$file" ] || return 1
+
+    local mtime now age
+    mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null)
+    [ -z "$mtime" ] && return 1
+
+    now=$(date +%s)
+    age=$(( now - mtime ))
+    [ "$age" -ge "$ttl" ] && return 1
+
+    # Validate JSON
+    if $HAS_JQ; then
+        local data
+        data=$(jq -e . "$file" 2>/dev/null) || return 1
+        printf '%s' "$data"
+        return 0
+    else
+        # Without jq, just return contents (best-effort)
+        cat "$file" 2>/dev/null
+        return 0
+    fi
+}
+
+# ===== acquire_lock(dir) =====
+# Atomic mkdir-based locking with stale PID detection.
+# Returns 0 if lock acquired, 1 if another process holds it.
+acquire_lock() {
+    local lock_dir="$1"
+
+    if mkdir "$lock_dir" 2>/dev/null; then
+        echo $$ > "$lock_dir/pid"
+        return 0
+    fi
+
+    # Check for stale lock (PID no longer running)
+    if [ -f "$lock_dir/pid" ]; then
+        local lock_pid
+        lock_pid=$(cat "$lock_dir/pid" 2>/dev/null)
+        if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+            # Stale lock -- remove and retry once
+            rm -rf "$lock_dir"
+            if mkdir "$lock_dir" 2>/dev/null; then
+                echo $$ > "$lock_dir/pid"
+                return 0
+            fi
+        fi
+    fi
+
+    return 1
+}
+
+# ===== release_lock(dir) =====
+release_lock() {
+    local lock_dir="$1"
+    rm -rf "$lock_dir"
+}
+
+# ===== check_port(port) =====
+# TCP port probe with timeout -> nc -> /dev/tcp fallback chain.
+# Returns 0 if port is open, 1 otherwise.
+check_port() {
+    local port="$1"
+
+    # Prefer: timeout + nc (most reliable)
+    if $HAS_TIMEOUT && $HAS_NC; then
+        timeout 1 nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+        return $?
+    fi
+
+    # Fallback: nc without timeout
+    if $HAS_NC; then
+        nc -z -w 1 127.0.0.1 "$port" >/dev/null 2>&1
+        return $?
+    fi
+
+    # Last resort: bash /dev/tcp
+    (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1
+    return $?
+}
+
+# ===== refresh_health_bg() =====
+# Probes pg:5436, rp:19092, vk:16379, rt:8085, intel:8053, phx:6006 + BUS_ID.
+# Writes /tmp/omniclaude-health-cache.json. Runs in background subshell.
+refresh_health_bg() {
+    (
+        # EXIT trap for lock cleanup
+        trap 'release_lock "$HEALTH_LOCK_DIR"' EXIT
+
+        if ! acquire_lock "$HEALTH_LOCK_DIR"; then
+            return 0
+        fi
+
+        local pg="" rp="" vk="" rt="" intel="" phx=""
+
+        # Core infrastructure (expected to be running)
+        check_port 5436  && pg="ok"    || pg="down"
+        check_port 19092 && rp="ok"    || rp="down"
+        check_port 16379 && vk="ok"    || vk="down"
+
+        # Runtime services (absence is normal -- empty string when down)
+        check_port 8085  && rt="ok"    || rt=""
+        check_port 8053  && intel="ok" || intel=""
+        check_port 6006  && phx="ok"   || phx=""
+
+        # BUS_ID from environment (session-scoped, set by bus-cloud/bus-local)
+        local bus_id="${BUS_ID:-local}"
+
+        # Write JSON cache
+        if $HAS_JQ; then
+            jq -n \
+                --arg pg "$pg" \
+                --arg rp "$rp" \
+                --arg vk "$vk" \
+                --arg rt "$rt" \
+                --arg intel "$intel" \
+                --arg phx "$phx" \
+                --arg bus "$bus_id" \
+                --arg ts "$(date +%s)" \
+                '{pg:$pg, rp:$rp, vk:$vk, rt:$rt, intel:$intel, phx:$phx, bus:$bus, ts:($ts|tonumber)}' \
+                > "$HEALTH_CACHE.tmp" 2>/dev/null
+        else
+            # Fallback without jq
+            printf '{"pg":"%s","rp":"%s","vk":"%s","rt":"%s","intel":"%s","phx":"%s","bus":"%s","ts":%s}\n' \
+                "$pg" "$rp" "$vk" "$rt" "$intel" "$phx" "$bus_id" "$(date +%s)" \
+                > "$HEALTH_CACHE.tmp" 2>/dev/null
+        fi
+
+        mv -f "$HEALTH_CACHE.tmp" "$HEALTH_CACHE" 2>/dev/null
+    ) &
+}
+
+# ===== refresh_prs_bg() =====
+# Queries gh pr list for 10 repos; writes /tmp/omniclaude-pr-cache.json.
+# Stale-ok: if gh fails and cache exists, keep stale cache.
+refresh_prs_bg() {
+    $HAS_GH || return 0
+
+    (
+        # EXIT trap for lock cleanup
+        trap 'release_lock "$PR_LOCK_DIR"' EXIT
+
+        if ! acquire_lock "$PR_LOCK_DIR"; then
+            return 0
+        fi
+
+        local all_prs="[]"
+        local repo org="OmniNode-ai"
+
+        for repo in "${OMNI_REPOS[@]}"; do
+            local pr_json
+            pr_json=$(gh pr list \
+                --repo "$org/$repo" \
+                --state open \
+                --json number,title,author,headRefName,updatedAt,isDraft,reviewDecision \
+                --limit 20 \
+                2>/dev/null) || continue
+
+            # Skip empty results
+            [ -z "$pr_json" ] || [ "$pr_json" = "[]" ] && continue
+
+            # Tag each PR with its repo name
+            if $HAS_JQ; then
+                pr_json=$(echo "$pr_json" | jq --arg repo "$repo" '[.[] | . + {repo: $repo}]' 2>/dev/null) || continue
+                all_prs=$(echo "$all_prs" "$pr_json" | jq -s '.[0] + .[1]' 2>/dev/null) || continue
+            fi
+        done
+
+        # Build final cache object
+        local cache_obj
+        if $HAS_JQ; then
+            cache_obj=$(echo "$all_prs" | jq --arg ts "$(date +%s)" '{prs: ., ts: ($ts|tonumber)}' 2>/dev/null)
+        else
+            cache_obj="{\"prs\":$all_prs,\"ts\":$(date +%s)}"
+        fi
+
+        if [ -n "$cache_obj" ]; then
+            echo "$cache_obj" > "$PR_CACHE.tmp" 2>/dev/null
+            mv -f "$PR_CACHE.tmp" "$PR_CACHE" 2>/dev/null
+        fi
+        # Stale-ok: if we failed, existing cache file stays untouched
+    ) &
+}
 
 # Format token counts (e.g., 50k / 200k)
 format_tokens() {
