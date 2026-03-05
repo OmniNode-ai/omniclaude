@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Use when partner provides a complete implementation plan to execute — reviews the plan critically, creates Linear tickets via plan-to-tickets, then routes to epic-team (≥3 tickets) or ticket-pipeline (1-2 tickets)
+description: Use when partner provides a complete implementation plan to execute — reviews the plan critically, verifies live PR state against plan assumptions, creates Linear tickets via plan-to-tickets, then routes to epic-team (≥3 tickets) or ticket-pipeline (1-2 tickets)
 version: 2.0.0
 level: intermediate
 debug: false
@@ -40,7 +40,7 @@ appropriate execution skill based on ticket count.
 
 ---
 
-## The 4-Step Flow
+## The 5-Step Flow
 
 ### Step 1: Review Plan <!-- ai-slop-ok: pre-existing step structure -->
 
@@ -54,9 +54,41 @@ Load the plan file and review it critically before taking any action.
    - Missing repo label (required for architecture validation)
    - Steps that reference external systems or secrets not yet available
 3. If concerns exist: raise them with your human partner and wait for resolution before proceeding
-4. If no concerns: proceed to Step 2
+4. If no concerns: proceed to Step 1.5
 
 **Do not proceed to ticket creation if the plan has unresolved questions.**
+
+---
+
+### Step 1.5: Verify Live PR State <!-- ai-slop-ok: new verification step -->
+
+If the plan references existing PRs or branches, verify their live state before proceeding.
+Plans often assume a PR is open and mergeable, but reality may have changed since the plan
+was written.
+
+**Run for each PR referenced in the plan:**
+
+```bash
+gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup,headRefName
+```
+
+**Classification and action:**
+
+| CI/Mergeability State | Classification | Action |
+|---|---|---|
+| `PENDING` / checks still running | PENDING | Poll up to 3 times (30s interval). If still pending after 90s, report status and proceed -- do not block indefinitely. |
+| `BEHIND` (mergeable but needs rebase) | ACTIONABLE | Note in plan review; proceed. Rebase will happen during execution. |
+| `CLEAN` / `UNSTABLE` (mergeable, checks pass/flaky) | READY | Proceed normally. |
+| `CONFLICTING` (merge conflicts) | STOP | Stop and report: "PR #N has merge conflicts. Plan assumes it is mergeable. Please resolve conflicts or update the plan." |
+| Checks `FAILURE` (required checks failing) | STOP | Stop and report: "PR #N has failing required checks. Plan assumes CI is green. Please fix CI or update the plan." |
+| `MERGED` | STOP | Stop and report: "PR #N is already merged. Plan assumes it is open. Please update the plan to reflect current state." |
+| `CLOSED` (not merged) | STOP | Stop and report: "PR #N is closed without merge. Plan assumes it is open. Please update the plan." |
+
+**Rules:**
+- Only poll for PENDING state; all other states are immediately actionable or blocking.
+- Never wait more than 90 seconds total for pending checks.
+- If the plan does not reference any PRs or branches, skip this step entirely.
+- After verification, proceed to Step 2.
 
 ---
 
@@ -152,7 +184,8 @@ cat ~/.claude/pipelines/<ticket-id>/state.yaml
 ## When to Stop and Ask for Help
 
 **STOP executing immediately when:**
-- Plan has critical gaps or missing context (before Step 2)
+- Plan has critical gaps or missing context (before Step 1.5)
+- A referenced PR is CONFLICTING, FAILING, MERGED, or CLOSED (Step 1.5)
 - Dry-run output reveals structural problems (before Step 3)
 - `plan-to-tickets` fails with an architecture violation (before routing)
 - A ticket-pipeline run fails and cannot self-recover
@@ -177,6 +210,7 @@ This is an offer only — user must approve before dispatch.
 ## Remember
 
 - Review plan critically before creating any tickets
+- Verify live PR state before dry-run if the plan references existing PRs
 - Always dry-run first to preview ticket structure
 - Routing threshold is 3 tickets: `epic-team` for ≥3, `ticket-pipeline` for 1–2
 - Stop and ask if any step surfaces unexpected errors
