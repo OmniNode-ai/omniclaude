@@ -79,6 +79,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_bash_guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Task|Agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_poly_enforcer.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
