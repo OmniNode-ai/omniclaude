@@ -118,7 +118,8 @@ def applicable_checks(
     - test_coverage: All skills
     - linear_ticket: All skills
 
-    Unknown node types: only universal checks apply; topic checks are downgraded to WARN.
+    Unknown node types: universal checks apply normally; orchestrator-only and
+    event-bus-required checks are included with WARN overrides.
 
     Args:
         node_type: The ``node_type`` value from contract.yaml.
@@ -137,17 +138,7 @@ def applicable_checks(
 
     # Universal checks always apply
     for check in _UNIVERSAL_CHECKS:
-        if is_unknown and check not in {
-            AuditCheckName.SKILL_MD,
-            AuditCheckName.ORCHESTRATOR_NODE,
-            AuditCheckName.CONTRACT_YAML,
-            AuditCheckName.TEST_COVERAGE,
-            AuditCheckName.LINEAR_TICKET,
-        }:
-            # All universal checks apply even for unknown types — no status override needed
-            result[check] = None
-        else:
-            result[check] = None
+        result[check] = None
 
     # Orchestrator-only checks
     if is_orchestrator:
