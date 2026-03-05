@@ -56,12 +56,29 @@ find_python() {
     echo ""
 }
 
-# Resolve Python — hard fail if not found
+# Resolve Python — hard fail if not found (unless advisory hook)
 # NOTE: This exit 1 intentionally violates the "hooks exit 0" invariant (CLAUDE.md).
 # Rationale: running hooks against the wrong Python produces non-reproducible bugs
 # that are far worse than a visible, actionable error. See OMN-2051.
+#
+# OMN-3725: Advisory hooks (session-end, stop, pre-compact, post-tool-use-quality)
+# exit 0 gracefully when Python is missing. Critical hooks still hard-fail.
+# The advisory allowlist is checked via BASH_SOURCE[1] (the sourcing script)
+# to prevent env-var-only spoofing of OMNICLAUDE_HOOK_CRITICALITY.
 PYTHON_CMD="$(find_python)"
 if [[ -z "${PYTHON_CMD}" ]]; then
+    _hook_base="$(basename "${BASH_SOURCE[1]:-}" 2>/dev/null || echo "")"
+    _advisory_ok=false
+    case "$_hook_base" in
+        session-end.sh|stop.sh|pre-compact.sh|post-tool-use-quality.sh) _advisory_ok=true ;;
+    esac
+
+    if [[ "${OMNICLAUDE_HOOK_CRITICALITY:-critical}" == "advisory" && "$_advisory_ok" == "true" ]]; then
+        echo "WARN: No Python found. Advisory hook exiting gracefully." 1>&2
+        cat > /dev/null 2>/dev/null || true
+        exit 0
+    fi
+    # Critical hook: hard-fail with actionable error
     echo "ERROR: No valid Python found for ONEX hooks." 1>&2
     echo "  Expected one of:" 1>&2
     echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2

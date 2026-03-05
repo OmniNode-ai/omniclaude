@@ -53,6 +53,9 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
+# OMN-3725: Mark as advisory — exit 0 gracefully if Python is missing
+export OMNICLAUDE_HOOK_CRITICALITY="advisory"
+
 # Source shared functions (provides log(), KAFKA_ENABLED)
 source "${HOOKS_DIR}/scripts/common.sh"
 
