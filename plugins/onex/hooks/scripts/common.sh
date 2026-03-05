@@ -56,6 +56,129 @@ find_python() {
     echo ""
 }
 
+# =============================================================================
+# Inline Venv Auto-Repair (OMN-3726)
+# =============================================================================
+# If find_python() returns empty, attempt to create a minimal venv at
+# PLUGIN_ROOT/lib/.venv using system python3. This recovers from the common
+# failure mode where deploy.sh ran but the venv was deleted or corrupted.
+#
+# Design:
+#   - python3 -m venv is synchronous (~200ms) — creates a usable interpreter
+#   - pip install of omniclaude is fully backgrounded (logs to /tmp)
+#   - Rate-limited via /tmp/omniclaude-venv-repair-failed marker (5 min cooldown)
+#   - Writes .omniclaude-sentinel timestamp on successful venv creation
+#
+# Returns: path to the newly created python3 interpreter, or empty string
+
+_try_inline_venv_repair() {
+    local venv_dir="${PLUGIN_ROOT}/lib/.venv"
+    local repair_failed_marker="/tmp/omniclaude-venv-repair-failed"
+    local repair_log="/tmp/omniclaude-venv-repair.log"
+    local sentinel="${venv_dir}/.omniclaude-sentinel"
+
+    # Rate-limit: skip if a previous repair failed less than 5 minutes ago
+    if [[ -f "$repair_failed_marker" ]]; then
+        local marker_ts
+        marker_ts=$(stat -f '%m' "$repair_failed_marker" 2>/dev/null \
+            || stat -c '%Y' "$repair_failed_marker" 2>/dev/null \
+            || echo 0)
+        local now
+        now=$(date +%s)
+        if (( now - marker_ts < 300 )); then
+            echo ""
+            return 1
+        fi
+        # Cooldown expired, remove stale marker
+        rm -f "$repair_failed_marker" 2>/dev/null || true
+    fi
+
+    # Find system python3 (must not be inside our own broken venv)
+    local sys_python=""
+    local candidate
+    for candidate in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
+        if [[ -x "$candidate" ]]; then
+            sys_python="$candidate"
+            break
+        fi
+    done
+
+    # Fallback: search PATH but exclude PLUGIN_ROOT to avoid circular reference
+    if [[ -z "$sys_python" ]]; then
+        local IFS=':'
+        local p
+        for p in $PATH; do
+            # Skip paths inside our own plugin tree
+            [[ "$p" == "${PLUGIN_ROOT}"* ]] && continue
+            if [[ -x "${p}/python3" ]]; then
+                sys_python="${p}/python3"
+                break
+            fi
+        done
+        unset IFS
+    fi
+
+    if [[ -z "$sys_python" ]]; then
+        # No system python3 available — mark failure and bail
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    # Verify system python3 has venv module
+    if ! "$sys_python" -m venv --help >/dev/null 2>&1; then
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    # Create the venv directory tree if needed
+    mkdir -p "${PLUGIN_ROOT}/lib" 2>/dev/null || {
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    }
+
+    # Create minimal venv (~200ms synchronous)
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: creating venv at ${venv_dir}" >> "$repair_log" 2>/dev/null || true
+    if ! "$sys_python" -m venv "$venv_dir" >> "$repair_log" 2>&1; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: venv creation failed" >> "$repair_log" 2>/dev/null || true
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    local repaired_python="${venv_dir}/bin/python3"
+    if [[ ! -x "$repaired_python" ]]; then
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    # Write sentinel with creation timestamp
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$sentinel" 2>/dev/null || true
+
+    # Remove any stale failure marker (repair succeeded)
+    rm -f "$repair_failed_marker" 2>/dev/null || true
+
+    # Background: pip install omniclaude into the repaired venv
+    # This is non-blocking — the venv python3 is already usable for hooks
+    (
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background pip install starting" >> "$repair_log" 2>/dev/null || true
+        if [[ -f "${PLUGIN_ROOT}/pyproject.toml" ]]; then
+            "$repaired_python" -m pip install --quiet --disable-pip-version-check \
+                -e "${PLUGIN_ROOT}" >> "$repair_log" 2>&1 || true
+        elif [[ -f "${PLUGIN_ROOT}/requirements.txt" ]]; then
+            "$repaired_python" -m pip install --quiet --disable-pip-version-check \
+                -r "${PLUGIN_ROOT}/requirements.txt" >> "$repair_log" 2>&1 || true
+        fi
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background pip install finished" >> "$repair_log" 2>/dev/null || true
+    ) &
+
+    echo "$repaired_python"
+    return 0
+}
+
 # Resolve Python — hard fail if not found (unless advisory hook)
 # NOTE: This exit 1 intentionally violates the "hooks exit 0" invariant (CLAUDE.md).
 # Rationale: running hooks against the wrong Python produces non-reproducible bugs
@@ -67,6 +190,11 @@ find_python() {
 # to prevent env-var-only spoofing of OMNICLAUDE_HOOK_CRITICALITY.
 PYTHON_CMD="$(find_python)"
 if [[ -z "${PYTHON_CMD}" ]]; then
+    # Attempt inline venv repair before hard-failing (OMN-3726)
+    PYTHON_CMD="$(_try_inline_venv_repair 2>/dev/null)" || PYTHON_CMD=""
+fi
+if [[ -z "${PYTHON_CMD}" ]]; then
+    # OMN-3725: Advisory hooks exit gracefully when Python is missing
     _hook_base="$(basename "${BASH_SOURCE[1]:-}" 2>/dev/null || echo "")"
     _advisory_ok=false
     case "$_hook_base" in
@@ -84,6 +212,8 @@ if [[ -z "${PYTHON_CMD}" ]]; then
     echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2
     echo "    - ${PLUGIN_ROOT}/lib/.venv/bin/python3 (deploy the plugin)" 1>&2
     echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
+    echo "" 1>&2
+    echo "  Auto-repair was attempted but failed. Check /tmp/omniclaude-venv-repair.log" 1>&2
     echo "" 1>&2
     echo "  Quick fix: run the deploy skill with --repair-venv to build lib/.venv" 1>&2
     echo "  in the active cache version without a full redeploy:" 1>&2
