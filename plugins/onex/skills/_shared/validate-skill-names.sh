@@ -3,12 +3,15 @@
 #
 # Rules enforced:
 #   1. FAIL if any SKILL.md `name:` field starts with a namespace prefix (e.g., "onex:")
-#   2. FAIL if any prompt.md, SKILL.md, or commands/*.md contains Skill(skill="onex:...
-#      (lines containing "subagent_type" are excluded — onex:polymorphic-agent is allowed)
-#   3. FAIL if any shell script contains `exec claude --skill namespace:slug`
+#      (name: fields use bare slugs — the plugin system auto-prefixes from the directory)
+#   2. FAIL if any Skill() call uses a bare slug instead of "onex:<slug>"
+#      (lines containing "subagent_type" are excluded — onex:polymorphic-agent is allowed as-is)
+#   3. FAIL if any shell script contains `exec claude --skill <bare-slug>` instead of `exec claude --skill onex:<slug>`
 #
 # Exemptions:
 #   - subagent_type="onex:polymorphic-agent" is ALLOWED (agent namespace, not skill)
+#   - SKILL.md name: fields use bare slugs (Rule 1 enforces this)
+#   - This file itself and other validation scripts are excluded
 #
 # Exit codes:
 #   0 — All checks pass
@@ -34,9 +37,7 @@ fail() {
 }
 
 # --- Rule 1: SKILL.md name: fields must use bare slugs (no namespace prefix) ---
-# A namespace prefix is any identifier followed by a colon, e.g., "onex:ticket-work".
-# A bare slug like "ticket-work" or "action-logging" contains hyphens but no colon.
-# Only check frontmatter name: fields (first 20 lines of each SKILL.md).
+# The plugin system auto-prefixes from the directory name (onex/).
 echo "Checking SKILL.md name: fields for namespace prefixes..."
 while IFS= read -r filepath; do
     name_val=$(head -20 "$filepath" | grep -E '^name:[[:space:]]' | head -1 \
@@ -50,38 +51,41 @@ while IFS= read -r filepath; do
     fi
 done < <(find "$SKILLS_DIR" -maxdepth 2 -name "SKILL.md" 2>/dev/null | sort || true)
 
-# --- Rule 2: Skill(skill="namespace:slug") must use bare slugs ---
-# Use grep to find all matches at once, then filter out subagent_type lines.
-echo "Checking Skill(skill=...) references for namespace prefixes..."
+# --- Rule 2: Skill() calls must use onex: prefix ---
+# Find Skill() calls that use bare slugs (no namespace prefix).
+# Exclude: subagent_type lines, this validation script itself.
+echo "Checking Skill() references for missing onex: prefix..."
 
-# Pattern: Skill( with skill= keyword arg using a namespace prefix
-# Also matches positional: Skill("namespace:slug" or Skill('namespace:slug'
-SKILL_PATTERN='Skill\((skill=)?["\'"'"'][A-Za-z][A-Za-z0-9_-]*:[A-Za-z]'
-
-# Find all matches, filter out subagent_type lines (those use onex:polymorphic-agent legitimately)
-skill_violations=$(grep -rn --include="*.md" -E "$SKILL_PATTERN" \
+# Match Skill(skill="<bare-slug>" or Skill("<bare-slug>" — i.e., no colon in the slug
+# We look for Skill( followed by optional skill= then a quoted string without a colon before the closing quote
+bare_skill_violations=$(grep -rn --include="*.md" \
+    -E 'Skill\((skill=)?["\x27][a-z][a-z0-9_-]+["\x27]' \
     "$SKILLS_DIR" "$COMMANDS_DIR" 2>/dev/null \
     | grep -v "subagent_type" \
+    | grep -v "validate-skill-names" \
+    | grep -v 'onex:' \
     || true)
 
-if [[ -n "$skill_violations" ]]; then
+if [[ -n "$bare_skill_violations" ]]; then
     while IFS= read -r line; do
-        fail "Skill() uses namespace prefix: $line"
-    done <<< "$skill_violations"
+        fail "Skill() missing onex: prefix: $line"
+    done <<< "$bare_skill_violations"
 fi
 
-# --- Rule 3: exec claude --skill must use bare slugs ---
-echo "Checking 'exec claude --skill' for namespace prefixes..."
-claude_skill_violations=$(grep -rn --include="*.md" --include="*.sh" \
-    -E 'exec claude --skill [A-Za-z][A-Za-z0-9_-]*:' \
+# --- Rule 3: exec claude --skill must use onex: prefix ---
+echo "Checking 'exec claude --skill' for missing onex: prefix..."
+bare_claude_violations=$(grep -rn --include="*.md" --include="*.sh" \
+    -E 'exec claude --skill [a-z][a-z0-9_-]+' \
     "$SKILLS_DIR" "$COMMANDS_DIR" 2>/dev/null \
+    | grep -v 'onex:' \
+    | grep -v 'validate-skill-names' \
     | grep -v '^.*:#' \
-    || true)  # Exclude comment lines (lines where content after filename:lineno: starts with #)
+    || true)
 
-if [[ -n "$claude_skill_violations" ]]; then
+if [[ -n "$bare_claude_violations" ]]; then
     while IFS= read -r line; do
-        fail "exec claude --skill uses namespace prefix: $line"
-    done <<< "$claude_skill_violations"
+        fail "exec claude --skill missing onex: prefix: $line"
+    done <<< "$bare_claude_violations"
 fi
 
 # --- Summary ---
@@ -92,8 +96,9 @@ if [[ $VIOLATIONS -eq 0 ]]; then
 else
     echo "validate-skill-names: $VIOLATIONS violation(s) found." >&2
     echo "" >&2
-    echo "Fix: Remove namespace prefixes from Skill() calls and SKILL.md name: fields." >&2
-    echo "     Bare slug examples: 'ticket-work', 'local-review', 'ci-fix-pipeline'" >&2
+    echo "Fix: Add onex: prefix to Skill() calls and exec claude --skill invocations." >&2
+    echo "     Examples: Skill(skill=\"onex:ticket-work\"), exec claude --skill onex:ci-watch" >&2
+    echo "     Note: SKILL.md name: fields use bare slugs (plugin auto-prefixes)." >&2
     echo "     Note: subagent_type=\"onex:polymorphic-agent\" is ALLOWED (agent, not skill)." >&2
     exit 1
 fi

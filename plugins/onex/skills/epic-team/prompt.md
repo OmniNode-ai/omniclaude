@@ -1139,10 +1139,10 @@ def execute_ticket(task):
 
         if is_triage:
             # Triage tickets: analyze and create sub-tickets, no implementation
-            result = Skill("triage-ticket", args=ticket_id, cwd=worktree_path)
+            result = Skill("onex:triage-ticket", args=ticket_id, cwd=worktree_path)
         else:
             # Normal ticket: invoke ticket-work skill
-            result = Skill("ticket-work", args=ticket_id, cwd=worktree_path)
+            result = Skill("onex:ticket-work", args=ticket_id, cwd=worktree_path)
 
         # Extract PR URL if present in result
         pr_url = extract_pr_url(result)

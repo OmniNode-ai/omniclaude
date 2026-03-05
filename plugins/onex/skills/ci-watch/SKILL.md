@@ -297,7 +297,7 @@ if [[ -z "$PR" ]]; then
   exit 1
 fi
 
-exec claude --skill ci-watch \
+exec claude --skill onex:ci-watch \
   --arg "pr_number=${PR}" \
   --arg "ticket_id=${TICKET_ID}" \
   --arg "policy.timeout_minutes=${TIMEOUT_MINUTES}" \
