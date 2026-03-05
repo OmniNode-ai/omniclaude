@@ -204,7 +204,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@99bb2caf247dfd9f03cf984373bc6043d4e32ebf  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@f99709f8ccc3496220c987b7d8729653237c23dc  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
@@ -219,7 +219,7 @@ jobs:
           sarif_file: 'checkov-results.sarif'
 
       - name: Run Terrascan
-        uses: tenable/terrascan-action@3a6e87da8e244513bd77b631e624552643f794c6  # v1.4.1 (pinned 2026-03-04)
+        uses: tenable/terrascan-action@dd7e921056c6f25b25bff3cf791e063ed7fc3a78  # v1.4.1 (pinned 2026-03-04)
         with:
           iac_type: 'docker'
           iac_dir: '.'
