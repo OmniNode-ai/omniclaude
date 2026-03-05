@@ -1573,6 +1573,8 @@ jobs:
 
   # ============================================================================
   # BUILD (downstream of all gates)
+  # On PRs and merge_group: build-only validation (no push, no Trivy scan)
+  # On push to main: full build + push to GHCR + Trivy vulnerability scan
   # ============================================================================
 
   build:
@@ -1588,7 +1590,7 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [quality-gate, tests-gate, security-gate]
     steps:
       - name: Checkout code
@@ -1598,7 +1600,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -1623,7 +1625,7 @@ jobs:
         with:
           context: .
           file: ./deployment/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -1636,6 +1638,7 @@ jobs:
         run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Export image for scanning
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -1644,6 +1647,7 @@ jobs:
           tags: ${{ steps.image-name.outputs.name }}:scan
 
       - name: Trivy vulnerability scanner (SARIF)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
@@ -1654,11 +1658,12 @@ jobs:
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         with:
           sarif_file: 'trivy-results.sarif'
 
       - name: Trivy vulnerability scanner (table)
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
