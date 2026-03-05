@@ -34,7 +34,7 @@ Tier:          FULL_ONEX
 Probe age:     42s (fresh)
 
 Services:
-  Kafka        ✓ reachable   (broker-host:29092)
+  Kafka        ✓ reachable   (broker-host:19092)
   Intelligence ✓ healthy     (http://localhost:8053/health)
 
 Probe file:    ~/.claude/.onex_capabilities

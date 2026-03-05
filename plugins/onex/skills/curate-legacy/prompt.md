@@ -230,7 +230,7 @@ Group files into slices for parallel agents:
       "port_notes": "Wrap existing producer/consumer classes in NodeEffect contract. Add ONEX error codes."
     }
   ],
-  "dependencies": ["Redpanda running on 192.168.86.200:29092"],  <!-- onex-allow-internal-ip -->
+  "dependencies": ["Redpanda running on localhost:19092"],  <!-- onex-allow-internal-ip -->
   "risk_notes": "Archive code uses older omnibase patterns — needs adapter to current NodeEffect base class",
   "effort_band": "S",
   "status": "partial",

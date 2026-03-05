@@ -531,7 +531,7 @@ action_logging_integration:
 
   infrastructure_requirements:
     kafka_topic: "onex.evt.omniclaude.agent-actions.v1"
-    kafka_bootstrap_servers: "<kafka-bootstrap-servers>:29092"
+    kafka_bootstrap_servers: "<kafka-bootstrap-servers>:19092"
     consumer_service: "agent_actions_consumer.py"
     database_table: "agent_actions (PostgreSQL)"
     correlation_tracking: "Links to agent_routing_decisions and agent_manifest_injections"

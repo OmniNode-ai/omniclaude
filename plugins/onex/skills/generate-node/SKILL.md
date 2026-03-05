@@ -250,7 +250,7 @@ When regenerating nodes without README.md files, the skill uses **Z.ai LLM API**
 
 **Required Infrastructure** (running on your configured host):
 - PostgreSQL (port 5436) - For workflow state persistence
-- Kafka/Redpanda (port 9092/29092) - For event-driven orchestration
+- Kafka/Redpanda (port 9092/19092) - For event-driven orchestration
 - Consul (port 28500) - For service discovery
 
 **Environment Variables** (in `~/.omnibase/.env`):

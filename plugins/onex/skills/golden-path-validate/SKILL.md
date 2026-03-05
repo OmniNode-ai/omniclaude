@@ -116,14 +116,12 @@ today's runs.
 
 | Context | `KAFKA_BOOTSTRAP_SERVERS` | Notes |
 |---------|--------------------------|-------|
-| Host scripts (local bus, default) | `localhost:19092` | Local Docker Redpanda (always-on); required by golden-path runner |
-| Host scripts (cloud bus) | `localhost:29092` | Cloud tunnel; activate with `bus-cloud` |
+| Host scripts (default) | `localhost:19092` | Local Docker Redpanda (always-on); required by golden-path runner |
 | Docker services | `redpanda:9092` | Docker-internal DNS |
 
 The runner **asserts** `KAFKA_BOOTSTRAP_SERVERS=localhost:19092` and aborts if the
-variable is unset or points to a different broker. This prevents accidental
-integration-test traffic on the cloud bus. Run `bus-local` to configure your
-session, then `source ~/.omnibase/.env` before invocation.
+variable is unset or points to a different broker. Run `source ~/.omnibase/.env`
+before invocation.
 
 ## Python API
 

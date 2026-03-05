@@ -59,7 +59,7 @@ Assess code quality and ONEX compliance:
 | `--timeout-ms` | No | Request timeout in milliseconds (default: 10000) |
 | `--include-metrics` | No | Include detailed metrics in response (default: false) |
 | `--correlation-id` | No | Correlation ID for tracking (auto-generated if not provided) |
-| `--kafka-brokers` | No | Kafka bootstrap servers (default: localhost:29092) |
+| `--kafka-brokers` | No | Kafka bootstrap servers (default: localhost:19092) |
 
 ## Response Format
 
@@ -87,7 +87,7 @@ Assess code quality and ONEX compliance:
 
 ## Requirements
 
-- Kafka broker running on localhost:29092 (or configured via --kafka-brokers)
+- Kafka broker running on localhost:19092 (or configured via --kafka-brokers)
 - Omni Archon intelligence adapter service running and healthy
 - OMNICLAUDE_PATH environment variable set (or defaults to script's project root)
 

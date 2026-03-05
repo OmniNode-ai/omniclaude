@@ -234,18 +234,16 @@ class HookEventAdapter:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - Default: KAFKA_BOOTSTRAP_SERVERS env var or localhost:19092 (bus_local)
-                - bus_local: localhost:19092 (local Docker Redpanda, always-on, OMN-3431)
-                - bus_cloud: localhost:29092 (cloud Kafka via launchd tunnel)
+                - Default: KAFKA_BOOTSTRAP_SERVERS env var or localhost:19092
+                - localhost:19092 (local Docker Redpanda, always-on, OMN-3431)
             enable_events: Enable event publishing (feature flag)
         """
         resolved = bootstrap_servers or os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
         if not resolved:
             _BUS_LOCAL_DEFAULT = "localhost:19092"
             logging.getLogger(__name__).warning(
-                "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s (bus_local). "
-                "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (bus_local) or "
-                "localhost:29092 (bus_cloud).",
+                "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s. "
+                "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (local Docker Redpanda).",
                 _BUS_LOCAL_DEFAULT,
             )
             warnings.warn(

@@ -29,9 +29,7 @@ Environment Variable Priority:
     3. KAFKA_BROKERS (legacy compatibility)
     4. Default: localhost:19092 (bus_local — local Docker Redpanda, OMN-3431)
 
-Two-bus policy (OMN-3431):
-    bus_local (default): localhost:19092  — local Docker Redpanda, always-on
-    bus_cloud:           localhost:29092  — cloud Kafka via launchd tunnel
+Default broker: localhost:19092 — local Docker Redpanda, always-on (OMN-3431)
 
 Created: 2025-10-28
 Version: 1.1.0
@@ -73,17 +71,11 @@ def get_kafka_bootstrap_servers() -> str:
         >>> get_kafka_bootstrap_servers()
         'localhost:19092'
 
-        >>> # Cloud bus (activate with: bus-cloud in shell)
-        >>> os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'localhost:29092'
-        >>> get_kafka_bootstrap_servers()
-        'localhost:29092'
-
     Notes:
         - Returns a string suitable for both kafka-python and confluent-kafka
         - For list format, use get_kafka_bootstrap_servers_list()
         - Logs a warning when falling back to the default (bus_local)
-        - bus_local: localhost:19092 (local Docker Redpanda, always-on)
-        - bus_cloud: localhost:29092 (cloud Kafka via launchd tunnel, activate with bus-cloud)
+        - Default: localhost:19092 (local Docker Redpanda, always-on)
     """
     result = (
         os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
@@ -94,9 +86,8 @@ def get_kafka_bootstrap_servers() -> str:
         return result
     default = _BUS_LOCAL_DEFAULT
     _log.warning(
-        "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s (bus_local). "
-        "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (bus_local) or "
-        "localhost:29092 (bus_cloud).",
+        "KAFKA_BOOTSTRAP_SERVERS not set — defaulting to %s. "
+        "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 (local Docker Redpanda).",
         default,
     )
     warnings.warn(

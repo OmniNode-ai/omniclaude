@@ -108,18 +108,15 @@ def get_kafka_bootstrap_servers() -> str:
     Raises OnexError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
 
     Returns:
-        Bootstrap server address (e.g., "localhost:19092" for bus_local
-        or "localhost:29092" for bus_cloud)
+        Bootstrap server address (e.g., "localhost:19092")
 
     Raises:
         OnexError: If KAFKA_BOOTSTRAP_SERVERS is not set in environment
             (code: CONFIGURATION_ERROR)
 
     Note:
-        Configuration context matters:
-        - bus_local (default): Use "localhost:19092" (local Docker Redpanda, OMN-3431)
-        - bus_cloud: Use "localhost:29092" (cloud Kafka via launchd tunnel)
-        Set via KAFKA_BOOTSTRAP_SERVERS in .env file
+        Default: "localhost:19092" (local Docker Redpanda, OMN-3431).
+        Set via KAFKA_BOOTSTRAP_SERVERS in .env file.
     """
     bootstrap = settings.get_effective_kafka_bootstrap_servers()
 
@@ -128,15 +125,13 @@ def get_kafka_bootstrap_servers() -> str:
             code=EnumCoreErrorCode.CONFIGURATION_ERROR,
             message=(
                 "KAFKA_BOOTSTRAP_SERVERS not configured. "
-                "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
-                "Use 'localhost:19092' for bus_local (local Docker Redpanda, OMN-3431) "
-                "or 'localhost:29092' for bus_cloud (launchd tunnel). "
+                "Set KAFKA_BOOTSTRAP_SERVERS=localhost:19092 in .env file "
+                "(local Docker Redpanda, OMN-3431). "
                 "See CLAUDE.md for deployment context details."
             ),
             details={
                 "setting": "KAFKA_BOOTSTRAP_SERVERS",
-                "bus_local_value": "localhost:19092",
-                "bus_cloud_value": "localhost:29092",
+                "default_value": "localhost:19092",
             },
         )
 

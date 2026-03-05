@@ -148,7 +148,7 @@ check_port() {
 }
 
 # ===== refresh_health_bg() =====
-# Probes pg:5436, rp:19092, vk:16379, rt:8085, intel:8053, phx:6006 + BUS_ID.
+# Probes pg:5436, rp:19092, vk:16379, rt:8085, intel:8053, phx:6006.
 # Writes /tmp/omniclaude-health-cache.json. Runs in background subshell.
 refresh_health_bg() {
     (
@@ -171,9 +171,6 @@ refresh_health_bg() {
         check_port 8053  && intel="ok" || intel=""
         check_port 6006  && phx="ok"   || phx=""
 
-        # BUS_ID from environment (session-scoped, set by bus-cloud/bus-local)
-        local bus_id="${BUS_ID:-local}"
-
         # Write JSON cache
         if $HAS_JQ; then
             jq -n \
@@ -183,14 +180,13 @@ refresh_health_bg() {
                 --arg rt "$rt" \
                 --arg intel "$intel" \
                 --arg phx "$phx" \
-                --arg bus "$bus_id" \
                 --arg ts "$(date +%s)" \
-                '{pg:$pg, rp:$rp, vk:$vk, rt:$rt, intel:$intel, phx:$phx, bus:$bus, ts:($ts|tonumber)}' \
+                '{pg:$pg, rp:$rp, vk:$vk, rt:$rt, intel:$intel, phx:$phx, ts:($ts|tonumber)}' \
                 > "$HEALTH_CACHE.tmp" 2>/dev/null
         else
             # Fallback without jq
-            printf '{"pg":"%s","rp":"%s","vk":"%s","rt":"%s","intel":"%s","phx":"%s","bus":"%s","ts":%s}\n' \
-                "$pg" "$rp" "$vk" "$rt" "$intel" "$phx" "$bus_id" "$(date +%s)" \
+            printf '{"pg":"%s","rp":"%s","vk":"%s","rt":"%s","intel":"%s","phx":"%s","ts":%s}\n' \
+                "$pg" "$rp" "$vk" "$rt" "$intel" "$phx" "$(date +%s)" \
                 > "$HEALTH_CACHE.tmp" 2>/dev/null
         fi
 
@@ -588,14 +584,6 @@ if $HAS_JQ; then
                 *)  line4+="${dim}${svc}:○${reset} " ;;
             esac
         done
-
-        # Bus indicator
-        bus_val=$(echo "$health_data" | jq -r '.bus // "local"' 2>/dev/null)
-        if [ "$bus_val" = "cloud" ]; then
-            line4+="${white}bus:${cyan}cloud${reset}"
-        else
-            line4+="${dim}bus:local${reset}"
-        fi
 
         # Re-probe in background if cache is getting old (>50% TTL)
         local_mtime=$(stat -c %Y "$HEALTH_CACHE" 2>/dev/null || stat -f %m "$HEALTH_CACHE" 2>/dev/null)

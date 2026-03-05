@@ -199,7 +199,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Connection failures** (`"status": "unreachable"`):
 - Verify Kafka is running: `docker ps | grep kafka`
 - Check bootstrap servers: `echo $KAFKA_BOOTSTRAP_SERVERS`
-- Test connectivity: `nc -zv <kafka-bootstrap-servers> 29092`
+- Test connectivity: `nc -zv <kafka-bootstrap-servers> 19092`
 
 **Stats query failures** (`"error": "Stats query failed"`):
 - Verify `kafkacat`/`kcat` is installed: `which kcat`
