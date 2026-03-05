@@ -845,7 +845,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Runner sanity check
-        if: runner.environment == 'self-hosted'
+        if: "!startsWith(runner.name, 'GitHub Actions')"
         run: |
           echo "Runner: ${{ runner.name }}"
           uv --version
