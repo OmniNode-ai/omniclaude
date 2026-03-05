@@ -41,6 +41,24 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# =============================================================================
+# Venv Verification Helper (OMN-3729)
+# =============================================================================
+# Reusable guard for any script that copies files near or inside the venv.
+# Returns 0 when the venv looks healthy, 1 with a warning on stderr otherwise.
+#
+# Usage:
+#   verify_venv_or_warn "/path/to/.venv"  || return 1
+
+verify_venv_or_warn() {
+    local venv_dir="$1"
+    if [[ ! -f "${venv_dir}/bin/python3" || ! -x "${venv_dir}/bin/python3" ]]; then
+        echo "WARN: Venv missing or broken at ${venv_dir}. Run: deploy.sh --repair-venv" 1>&2
+        return 1
+    fi
+    return 0
+}
+
 # Parse arguments
 EXECUTE=false
 NO_VERSION_BUMP=true
