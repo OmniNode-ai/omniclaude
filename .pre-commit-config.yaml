@@ -351,6 +351,15 @@ repos:
         always_run: true
         stages: [pre-commit]
 
+      # OMN-3777: Block cloud bus references in source code
+      - id: no-cloud-bus
+        name: Block cloud bus references
+        entry: bash scripts/check_no_cloud_bus_wrapper.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: no-env-file
         name: Reject committed .env files (except .env.example)
         entry: >
@@ -378,5 +387,5 @@ ci:
   autoupdate_branch: ''
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
-  skip: []
+  skip: [no-cloud-bus]  # Pre-existing 29092 violations — cleanup tracked separately
   submodules: false
