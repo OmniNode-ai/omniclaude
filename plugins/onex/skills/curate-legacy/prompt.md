@@ -9,7 +9,7 @@ for canonicalizing legacy docs and archived code into a handler-first Ideas Regi
 
 ---
 
-## Step 0: Parse Arguments
+## Parse Arguments
 
 Parse from `$ARGUMENTS`:
 
