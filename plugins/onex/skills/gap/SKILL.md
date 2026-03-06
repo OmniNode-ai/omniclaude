@@ -77,6 +77,15 @@ args:
   - name: --auto-only
     description: "Skip GATE findings in fix phase (cycle mode)"
     required: false
+  - name: --skip-infra-probes
+    description: "Skip infrastructure probes (projection_lag, env_activation, migration_parity) that require live services"
+    required: false
+  - name: --include-auth-probes
+    description: "Include auth_config probes (disabled by default as they require Infisical access)"
+    required: false
+  - name: --lag-threshold
+    description: "Consumer group lag threshold for projection_lag probe (default: 10000)"
+    required: false
 ---
 
 # Gap
@@ -132,6 +141,8 @@ Absorbed from: gap-analysis (v1.0.0)
 /gap detect --epic OMN-2500 --output json
 /gap detect --severity-threshold CRITICAL
 /gap detect --max-best-effort 20
+/gap detect --epic OMN-2500 --skip-infra-probes
+/gap detect --epic OMN-2500 --include-auth-probes --lag-threshold 5000
 ```
 
 | Arg | Default | Description |
@@ -144,6 +155,9 @@ Absorbed from: gap-analysis (v1.0.0)
 | `--max-best-effort` | 50 | Cap on BEST_EFFORT findings |
 | `--dry-run` | false | Skip ticket creation/commenting |
 | `--output` | md | Output format: `json` or `md` |
+| `--skip-infra-probes` | false | Skip probes 2.7-2.8, 2.10 (env_activation, projection_lag, migration_parity) that require live infrastructure |
+| `--include-auth-probes` | false | Include probe 2.9 (auth_config); disabled by default as it requires Infisical access |
+| `--lag-threshold` | 10000 | Consumer group lag threshold for projection_lag probe (probe 2.8) |
 
 ### Gating Rules (Hard -- Never Violate)
 
@@ -170,10 +184,13 @@ Full orchestration logic is in `prompt.md`. Summary:
 **Phase 1 -- Intake**: Fetch Epic(s) from Linear, canonicalize repo names, build
 `repos_in_scope`. Emit `status=blocked` if no repo evidence found.
 
-**Phase 2 -- Probe**: Run the 5 probe categories (Kafka topic drift, model type mismatch,
-FK reference drift, API contract drift, DB boundary violation) against each repo in scope.
+**Phase 2 -- Probe**: Run the 11 probe categories against each repo in scope:
+1. Kafka topic drift, 2. Model type mismatch, 3. FK reference drift, 4. API contract drift,
+5. DB boundary violation, 6. Topic registry drift, 7. Env activation drift,
+8. Projection lag, 9. Auth config drift, 10. Migration parity, 11. Legacy config patterns.
 Apply scan-root filtering (skip tests/docs/generated code). Compute fingerprints and apply
-suppressions.
+suppressions. Topic registry auto-fix is LOCAL-ONLY (enum member addition only).
+Legacy config auto-fix uses deterministic search-replace from the denylist.
 
 **Phase 3 -- Report**: Dedup against existing Linear tickets, create/comment tickets,
 write report artifacts to `~/.claude/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
@@ -326,8 +343,15 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 | `kafka_topic` | `topic_name_mismatch` | YES |
 | `db_url_drift` | `legacy_db_name_in_tests` | YES |
 | `db_url_drift` | `legacy_env_var` | YES |
+| `topic_registry` | `topic_registry_missing_member` | YES (LOCAL-ONLY: adds enum member to local TopicRegistry only) |
+| `legacy_config` | `legacy_denylist_match` | YES (search-replace from denylist) |
 | `kafka_topic` | `producer_only_no_consumer` | NO -- gate |
 | `api_contract` | `missing_openapi` | NO -- gate |
+| `env_activation` | `env_var_not_activated` | NO -- gate |
+| `projection_lag` | `consumer_group_lag_exceeded` | NO -- gate |
+| `auth_config` | `auth_client_config_drift` | NO -- gate |
+| `migration_parity` | `migration_head_mismatch` | NO -- gate |
+| `db_boundary` | `upstream_db_access` | NO -- gate |
 | Any `BEST_EFFORT` with multiple resolutions | -- | NO -- gate |
 
 ### Key Invariants
@@ -508,6 +532,9 @@ uv run pytest tests/integration/skills/gap_fix/test_gap_fix_integration.py -v
 - `systematic-debugging` skill (debugging a single known failure; see Phase 1 Backward Tracing)
 - `create-ticket` skill (ticket creation patterns)
 - `skills/gap/suppressions.yaml` (suppression registry)
+- `skills/gap/legacy-denylist.yaml` (legacy config patterns for probe 2.11)
 - `skills/gap/models/` (local Pydantic models)
+- `skills/gap/docs/FAILURE_TAXONOMY.md` (11 failure class reference)
+- `skills/gap/docs/POST_MERGE_STABILIZATION.md` (6-step post-merge workflow)
 - `~/.claude/gap-analysis/` (report output directory)
 - `~/.claude/gap-cycle/` (cycle summary output directory)

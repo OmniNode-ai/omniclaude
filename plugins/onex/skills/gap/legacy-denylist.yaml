@@ -1,0 +1,30 @@
+# Legacy Denylist
+#
+# Patterns that must not appear in any active configuration or source file.
+# Each entry represents a deprecated endpoint, env var, or path that has been
+# superseded. The gap skill's legacy_config probe (2.11) scans for these
+# patterns and emits findings when matches are found.
+#
+# Used by: probe 2.11 (legacy_config / ARCHITECTURE_VIOLATION)
+# Auto-fix: YES (search-replace) -- the skill can apply deterministic replacements.
+
+patterns:
+  - pattern: "OLLAMA_BASE_URL"
+    reason: "Ollama endpoint decommissioned; use LLM_CODER_URL, LLM_EMBEDDING_URL, or LLM_DEEPSEEK_R1_URL"
+    replacement_hint: "Select the appropriate LLM_*_URL based on task type (see ~/.claude/CLAUDE.md)"
+
+  - pattern: "192.168.86.200:29092"
+    reason: "M2 Ultra Redpanda decommissioned (OMN-3431); local bus is localhost:19092, cloud bus is localhost:29092 via tunnel"
+    replacement_hint: "Use localhost:19092 for local Docker or localhost:29092 for cloud bus"
+
+  - pattern: "omninode_bridge"
+    reason: "Legacy database name replaced by omnibase_infra"
+    replacement_hint: "Replace with omnibase_infra"
+
+  - pattern: "OMNIBASE_BRIDGE_DB_URL"
+    reason: "Legacy env var replaced by OMNIBASE_INFRA_DB_URL"
+    replacement_hint: "Replace with OMNIBASE_INFRA_DB_URL"
+
+  - pattern: "~/.claude/.env"
+    reason: "Symlink removed; single source of truth is ~/.omnibase/.env"
+    replacement_hint: "Replace with ~/.omnibase/.env"

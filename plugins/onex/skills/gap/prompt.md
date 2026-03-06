@@ -126,7 +126,7 @@ Do NOT silently fail. Add to report and move on to next Epic.
 
 ## Phase 2 -- Probe
 
-Run all 5 probe categories for each repo in `repos_in_scope`.
+Run all 11 probe categories for each repo in `repos_in_scope`.
 Apply `--repo` filter if provided.
 
 ### Scan Root Rules (Apply Before Any Probe)
@@ -220,7 +220,171 @@ marker stripped, then take the base name). Example: `prompt-submitted` from
 
 **Severity**: CRITICAL for `no_upstream_db_repos` violation; WARNING otherwise.
 
-### 2.6 Apply Suppressions
+### 2.6 Probe: Topic Registry Drift
+
+**Category**: `CONTRACT_DRIFT` | **boundary_kind**: `topic_registry`
+**rule_name**: `topic_registry_missing_member`
+
+**Method**:
+1. Load contract YAML files from each repo's `src/**/contracts/` directories
+2. Extract all declared Kafka topic strings from contract `topics` fields
+3. Find the local `TopicRegistry` or `TopicBase` enum (AST parse)
+4. Compare: every contract-declared topic must have a corresponding enum member
+5. Optionally query the broker (`rpk topic list`) to confirm topic exists on the bus
+
+**Confidence**: DETERMINISTIC if both contract YAML and enum are found; SKIP if either is absent.
+
+**Auto-fix**: LOCAL-ONLY. The skill can add the missing enum member to the local `TopicRegistry`.
+It cannot create the topic on the broker or modify remote repos.
+
+**Proof blob schema**:
+```json
+{
+  "expected_topic": "onex.evt.omniclaude.gate-decision.v1",
+  "source": "src/omniclaude/hooks/contracts/gate_decision.yaml",
+  "broker_queried": true
+}
+```
+
+**Fingerprint** `seam_id_suffix`: the topic string suffix (after last `.v` version marker stripped, then base name).
+
+### 2.7 Probe: Env Activation Drift
+
+**Category**: `ARCHITECTURE_VIOLATION` | **boundary_kind**: `env_activation`
+**rule_name**: `env_var_not_activated`
+
+**Method**:
+1. Load contract YAML files and extract `config.required_env` fields
+2. For each required env var, check if it is present in:
+   a. `~/.omnibase/.env` (primary source of truth)
+   b. Infisical (if `INFISICAL_ADDR` is set)
+3. If a required env var is absent from all sources: emit finding
+
+**Confidence**: DETERMINISTIC (contract declares the requirement; env is inspectable).
+
+**Severity**: CRITICAL (missing env var causes runtime crash on node startup).
+
+**Proof blob schema**:
+```json
+{
+  "env_var": "KAFKA_BOOTSTRAP_SERVERS",
+  "contract_path": "src/omnibase_infra/nodes/node_kafka_effect/contract.yaml",
+  "node_name": "NodeKafkaEffect"
+}
+```
+
+**Fingerprint** `seam_id_suffix`: the env var name.
+
+### 2.8 Probe: Projection Lag
+
+**Category**: `ARCHITECTURE_VIOLATION` | **boundary_kind**: `projection_lag`
+**rule_name**: `consumer_group_lag_exceeded`
+
+**Method**:
+1. Query Redpanda/Kafka for consumer group lag via `rpk group describe <group>`
+2. For each partition, compare current lag against `--lag-threshold` (default: 10000)
+3. If lag exceeds threshold: emit finding
+
+**Confidence**: DETERMINISTIC if broker is reachable; SKIP if broker unreachable.
+
+**Severity**: WARNING by default. Upgrade to CRITICAL if lag exceeds 10x the threshold.
+
+**Proof blob schema**:
+```json
+{
+  "consumer_group": "omniintelligence-intent-classifier",
+  "topic": "onex.cmd.omniintelligence.claude-hook-event.v1",
+  "partition": 0,
+  "lag": 15234,
+  "threshold": 10000
+}
+```
+
+**Fingerprint** `seam_id_suffix`: `{consumer_group}/{topic}`.
+
+### 2.9 Probe: Auth Config Drift
+
+**Category**: `CONTRACT_DRIFT` | **boundary_kind**: `auth_config`
+**rule_name**: `auth_client_config_drift`
+
+**Method**:
+1. Load expected auth configuration from contract YAMLs (Infisical client IDs, service identity fields)
+2. Query Infisical or local config for actual values
+3. Compare: if any drift field differs between expected and actual, emit finding
+
+**Confidence**: DETERMINISTIC if Infisical is reachable and contract declares auth fields; SKIP otherwise.
+
+**Severity**: CRITICAL (auth drift can cause service authentication failures).
+
+**Proof blob schema**:
+```json
+{
+  "client_id": "omnibase-infra-runtime",
+  "drift_fields": ["client_secret_hash", "project_id"],
+  "expected": {"project_id": "proj-abc123"},
+  "actual": {"project_id": "proj-def456"}
+}
+```
+
+**Fingerprint** `seam_id_suffix`: the `client_id`.
+
+### 2.10 Probe: Migration Parity
+
+**Category**: `ARCHITECTURE_VIOLATION` | **boundary_kind**: `migration_parity`
+**rule_name**: `migration_head_mismatch`
+
+**Method**:
+1. For each repo with Alembic migrations, run `alembic heads` (or check `alembic/versions/`)
+2. Compare the migration head revision against the expected head declared in a release manifest or the last known-good state
+3. If the head does not match: emit finding
+4. If Alembic is not present or check command fails: SKIP
+
+**Confidence**: DETERMINISTIC if Alembic is present and check command succeeds; SKIP otherwise.
+
+**Severity**: WARNING.
+
+**Proof blob schema**:
+```json
+{
+  "repo": "omnibase_infra",
+  "check_command": "alembic heads",
+  "exit_code": 0,
+  "stderr": ""
+}
+```
+
+**Fingerprint** `seam_id_suffix`: the repo name.
+
+### 2.11 Probe: Legacy Config Patterns
+
+**Category**: `ARCHITECTURE_VIOLATION` | **boundary_kind**: `legacy_config`
+**rule_name**: `legacy_denylist_match`
+
+**Method**:
+1. Load `skills/gap/legacy-denylist.yaml` -- contains patterns with reasons and replacement hints
+2. For each pattern, grep across all repos in scope (respecting scan root rules)
+3. For each match: emit finding with file path, line number, and the denylist reason
+
+**Confidence**: DETERMINISTIC (literal string match).
+
+**Auto-fix**: YES (search-replace). The skill can apply the replacement hint from the denylist
+entry as a deterministic search-and-replace operation.
+
+**Severity**: WARNING.
+
+**Proof blob schema**:
+```json
+{
+  "pattern": "OLLAMA_BASE_URL",
+  "file_path": "src/omnibase_infra/config/settings.py",
+  "line_number": 42,
+  "reason": "Ollama endpoint decommissioned; use LLM_CODER_URL, LLM_EMBEDDING_URL, or LLM_DEEPSEEK_R1_URL"
+}
+```
+
+**Fingerprint** `seam_id_suffix`: the pattern string.
+
+### 2.12 Apply Suppressions
 
 After collecting all raw findings:
 
@@ -230,7 +394,7 @@ After collecting all raw findings:
 4. If matched AND expired: do NOT suppress, add fingerprint to `expired_suppressions_warned`
 5. Emit warning: "Suppression for {fingerprint[:8]} expired on {expires}. Finding NOT suppressed."
 
-### 2.7 Fingerprint Computation
+### 2.13 Fingerprint Computation
 
 ```python
 import hashlib, json
@@ -258,7 +422,7 @@ def compute_fingerprint(
 
 No timestamps, run IDs, or line numbers. Stable across runs.
 
-### 2.8 Severity and Best-Effort Caps
+### 2.14 Severity and Best-Effort Caps
 
 After suppressions:
 1. Apply `--severity-threshold` filter (drop findings below threshold)
