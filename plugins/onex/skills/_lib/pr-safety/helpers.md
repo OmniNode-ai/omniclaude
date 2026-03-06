@@ -979,6 +979,77 @@ def validate_legacy_gate_token(token: str, run_id: str) -> bool:
 
 ---
 
+## check_merge_state(repo_full, pr_number)
+
+Check the merge state of a PR via the GitHub REST API. Returns `mergeable_state` and
+`rebaseable` fields. Used by merge-sweep Step 6a to detect BEHIND branches.
+
+```python
+def check_merge_state(repo_full: str, pr_number: int) -> dict:
+    """
+    Fetch PR merge state via `gh api repos/{repo}/pulls/{N}`.
+
+    Returns:
+        {"mergeable_state": str, "rebaseable": bool}
+        mergeable_state values: "clean", "behind", "has_hooks", "dirty", "unknown"
+
+    Raises:
+        subprocess.CalledProcessError — gh command failed
+    """
+    result = subprocess.run(
+        [
+            "gh", "api",
+            f"repos/{repo_full}/pulls/{pr_number}",
+            "--jq", "{mergeable_state, rebaseable}",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr,
+        )
+    return json.loads(result.stdout)
+```
+
+---
+
+## update_pr_branch(repo_full, pr_number)
+
+Update a PR branch by merging the base branch into the PR head. Used by merge-sweep
+Step 6a for PRs with `mergeable_state == "behind"`.
+
+```python
+def update_pr_branch(repo_full: str, pr_number: int) -> dict:
+    """
+    Update PR branch via `gh api -X PUT repos/{repo}/pulls/{N}/update-branch`.
+
+    This merges the base branch (typically main) into the PR head branch.
+
+    Returns:
+        {"status": "updated"} on success.
+
+    Raises:
+        subprocess.CalledProcessError — gh command failed (e.g., 403 rate limit,
+        422 conflicts, 404 not found).
+    """
+    result = subprocess.run(
+        [
+            "gh", "api", "-X", "PUT",
+            f"repos/{repo_full}/pulls/{pr_number}/update-branch",
+        ],
+        capture_output=True, text=True, timeout=60,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr,
+        )
+    return {"status": "updated"}
+```
+
+---
+
 ## Usage Pattern
 
 Every PR-mutating skill follows this pattern:

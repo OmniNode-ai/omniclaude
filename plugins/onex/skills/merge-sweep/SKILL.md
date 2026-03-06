@@ -203,10 +203,10 @@ Draft PRs — skip silently.
 
 6a. UPDATE BEHIND BRANCHES (after enabling auto-merge, sequential):
     For each candidate where auto-merge was successfully enabled:
-      gh api repos/{owner}/{repo}/pulls/{N} --jq '{mergeable_state, rebaseable}'
+      check_merge_state(repo, N)  — via @_lib/pr-safety/helpers.md
       IF mergeable_state == "behind":
         IF rebaseable:
-          gh api -X PUT repos/{owner}/{repo}/pulls/{N}/update-branch
+          update_pr_branch(repo, N)  — via @_lib/pr-safety/helpers.md
           log "updated branch for PR #{N} (was behind)"
         ELSE:
           log "WARNING: PR #{N} is behind but not rebaseable (manual resolution needed)"

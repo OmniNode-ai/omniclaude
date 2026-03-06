@@ -398,6 +398,9 @@ even with auto-merge enabled — the merge queue requires branch currency.
 Process sequentially (not parallel) to respect GitHub API rate limits.
 
 ```python
+# Uses check_merge_state() and update_pr_branch() from @_lib/pr-safety/helpers.md
+from plugins.onex.skills._lib.pr_safety.helpers import check_merge_state, update_pr_branch
+
 branches_updated = 0
 branch_update_warnings = []
 
@@ -409,41 +412,17 @@ for result in auto_merge_results:
     pr_number = result["pr"]
 
     try:
-        # Check merge state via GitHub REST API
-        merge_state = run([
-            "gh", "api",
-            f"repos/{repo_full}/pulls/{pr_number}",
-            "--jq", "{mergeable_state, rebaseable}",
-        ], capture_output=True, text=True)
-
-        if merge_state.returncode != 0:
-            print(f"  WARNING: Failed to check merge state for {repo_full}#{pr_number}: {merge_state.stderr.strip()}")
-            branch_update_warnings.append({
-                "repo": repo_full, "pr": pr_number, "error": merge_state.stderr.strip()
-            })
-            continue
-
-        import json
-        state_data = json.loads(merge_state.stdout)
+        # Check merge state via pr-safety helper (wraps gh api repos/.../pulls/...)
+        state_data = check_merge_state(repo_full, pr_number)
         mergeable_state = state_data.get("mergeable_state", "")
         rebaseable = state_data.get("rebaseable", False)
 
         if mergeable_state == "behind":
             if rebaseable:
-                # Update branch — merges main into the PR branch
-                update_result = run([
-                    "gh", "api", "-X", "PUT",
-                    f"repos/{repo_full}/pulls/{pr_number}/update-branch",
-                ], capture_output=True, text=True)
-
-                if update_result.returncode == 0:
-                    branches_updated += 1
-                    print(f"  ↑ updated branch: {repo_full}#{pr_number} (was behind main)")
-                else:
-                    print(f"  WARNING: Failed to update branch for {repo_full}#{pr_number}: {update_result.stderr.strip()}")
-                    branch_update_warnings.append({
-                        "repo": repo_full, "pr": pr_number, "error": update_result.stderr.strip()
-                    })
+                # Update branch via pr-safety helper (wraps gh api -X PUT .../update-branch)
+                update_pr_branch(repo_full, pr_number)
+                branches_updated += 1
+                print(f"  ↑ updated branch: {repo_full}#{pr_number} (was behind main)")
             else:
                 print(f"  WARNING: {repo_full}#{pr_number} is behind but not rebaseable (manual resolution needed)")
                 branch_update_warnings.append({
@@ -451,6 +430,11 @@ for result in auto_merge_results:
                 })
         # else: mergeable_state is "clean" or "has_hooks" — no action needed
 
+    except subprocess.CalledProcessError as e:
+        print(f"  WARNING: Failed to check/update merge state for {repo_full}#{pr_number}: {e.stderr.strip() if e.stderr else str(e)}")
+        branch_update_warnings.append({
+            "repo": repo_full, "pr": pr_number, "error": e.stderr.strip() if e.stderr else str(e)
+        })
     except Exception as e:
         print(f"  WARNING: Exception checking merge state for {repo_full}#{pr_number}: {e}")
         branch_update_warnings.append({
