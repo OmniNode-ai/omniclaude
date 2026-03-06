@@ -137,11 +137,21 @@ LAST_TAG=$(git -C "${REPO_PATH}" describe --tags --abbrev=0 --match "v*" 2>/dev/
 # If no tag exists, use the initial commit
 if [ -z "$LAST_TAG" ]; then
   LAST_TAG=$(git -C "${REPO_PATH}" rev-list --max-parents=0 HEAD | head -1)
-  CURRENT_VERSION="0.0.0"
+  TAG_VERSION="0.0.0"
 else
   # Extract version from tag: v1.5.0 -> 1.5.0
-  CURRENT_VERSION=$(echo "$LAST_TAG" | sed 's|^v||')
+  TAG_VERSION=$(echo "$LAST_TAG" | sed 's|^v||')
 fi
+
+# Read pyproject.toml version (may have been bumped manually between releases)
+PYPROJECT_VERSION=$(grep -m1 '^version' "${REPO_PATH}/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
+
+# Use the higher of tag version and pyproject version as the base.
+# This prevents downgrades when pyproject.toml was bumped without cutting a tag.
+CURRENT_VERSION=$(python3 -c "
+from packaging.version import Version
+print(max(Version('${TAG_VERSION}'), Version('${PYPROJECT_VERSION}')))" 2>/dev/null \
+  || echo "${TAG_VERSION}")
 
 # Count commits since last tag
 COMMIT_COUNT=$(git -C "${REPO_PATH}" rev-list --count "${LAST_TAG}..HEAD")
@@ -237,7 +247,7 @@ def drift_guard(scanned_repos: list[str]) -> None:
 ```
 
 **IMPORTANT**: Only scan repos that have a `pyproject.toml` with OmniNode dependencies.
-Repos like `omnidash` (Node.js) or `omniweb` (PHP) are excluded from the Python release
+Repos like `omnidash` (Node.js) or `omniweb` (Node.js/pnpm) are excluded from the Python release
 pipeline. The drift guard only checks repos that appear in `TIER_GRAPH`.
 
 ### Step 0.5: Resume Plan Reconstruction (--resume only)

@@ -1,7 +1,7 @@
 ---
 name: release
 description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
-version: 1.0.0
+version: 1.2.0
 level: advanced
 debug: false
 category: workflow
@@ -129,14 +129,17 @@ and optional PyPI availability confirmation). This ensures that when a tier N re
 2. SCAN (sequential, per tier order):
    For each repo:
      a. Find last git tag matching <repo>/vX.Y.Z pattern
-     b. Count commits since last tag
-     c. Infer bump level from conventional commit prefixes:
+     b. Read pyproject.toml version (may differ from tag if manually bumped)
+     c. Use max(tag_version, pyproject_version) as base version
+        (prevents downgrades when pyproject was bumped without a tag)
+     d. Count commits since last tag
+     e. Infer bump level from conventional commit prefixes:
         - feat:     → minor
         - fix:      → patch
         - BREAKING CHANGE / feat!: / fix!: → major
         - No unreleased commits → skip (NOTHING_TO_RELEASE for this repo)
-     d. Apply --bump override if set (overrides inference for all repos)
-     e. Compute new version
+     f. Apply --bump override if set (overrides inference for all repos)
+     g. Compute new version from base version + bump level
 
 3. DRIFT GUARD:
    Compare scanned repo set against hardcoded tier graph.
@@ -587,6 +590,9 @@ This is HIGH_RISK — silence will NOT auto-advance.
 
 ## Changelog
 
+- **v1.2.0**: Fix version base computation — use `max(tag_version, pyproject_version)` to
+  prevent downgrades when `pyproject.toml` was bumped without cutting a release tag.
+  Also fix omniweb tech stack reference (Node.js/pnpm, not PHP).
 - **v1.1.0** (OMN-3207): omnibase_infra BUMP automation — auto-slide VERSION_MATRIX bounds
   in `version_compatibility.py` and validate `Dockerfile.runtime` plugin pins as part of
   Sub-Step 2 (BUMP). Adds Per-Repo Notes section and smoke test documentation.
