@@ -186,6 +186,22 @@ Runtime state is persisted to `~/.claude/epics/{epic_id}/state.yaml`:
 epic_id: OMN-XXXX
 run_id: f084b6c3
 status: monitoring  # queued | monitoring | done | failed
+checkpoint:
+  schema_version: 1
+  last_completed_wave: 0
+  waves:
+    - wave_id: 0
+      tickets: [OMN-2001, OMN-2002]
+      status: completed  # pending | in_progress | completed | failed
+      completed_at: "2026-03-06T..."
+    - wave_id: 1
+      tickets: [OMN-2003]
+      status: pending
+  open_prs:
+    OMN-2001: {pr_number: 45, repo: "omniclaude", branch: "jonah/omn-2001-..."}
+  failures:
+    OMN-2003: {class: "ci_failure_ruff", attempts: 1, last_error: "..."}
+  last_update_utc: "2026-03-06T..."
 workers:
   - repo: omniclaude
     tickets: [OMN-2001, OMN-2002]

@@ -105,6 +105,16 @@ After ticket-pipeline completes, report back:
     return result
 ```
 
+### Context Budgeting for Sub-Agent Prompts
+
+Before dispatching a wave, sub-agent prompts include ONLY:
+- Ticket title + description (from Linear)
+- File paths from ticket contract (if available)
+- Architecture constraints (from CLAUDE.md)
+- NOT the full epic context or plan document
+
+This keeps sub-agent context minimal, preventing context window exhaustion on large epics.
+
 ### Wave Execution Loop
 
 ```python
@@ -243,6 +253,18 @@ if all(v in terminal for v in ticket_status_map.values()):
 print_status_table(ticket_status_map)
 goto Phase4_MonitoringLoop()
 ```
+
+### Enhanced Resume Logic (Checkpoint-Aware)
+
+On `--resume`:
+1. Read `state.yaml`, find `checkpoint.last_completed_wave`
+2. Skip all waves where `status == "completed"`
+3. For partially completed waves (`status == "in_progress"`):
+   - Check each ticket's status in `ticket_status`
+   - Re-dispatch only tickets that are NOT `merged` or `done`
+4. For tickets in `checkpoint.failures` with `attempts < 2`: retry in current wave
+5. For tickets with `attempts >= 2`: skip with warning, report at end
+6. Update `checkpoint.last_update_utc` after each wave completes
 
 ---
 
