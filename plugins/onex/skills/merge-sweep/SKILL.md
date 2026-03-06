@@ -201,6 +201,19 @@ Draft PRs — skip silently.
      gh pr merge <N> --repo <repo> --<merge_method> --auto
      release claim
 
+6a. UPDATE BEHIND BRANCHES (after enabling auto-merge, sequential):
+    For each candidate where auto-merge was successfully enabled:
+      gh api repos/{owner}/{repo}/pulls/{N} --jq '{mergeable_state, rebaseable}'
+      IF mergeable_state == "behind":
+        IF rebaseable:
+          gh api -X PUT repos/{owner}/{repo}/pulls/{N}/update-branch
+          log "updated branch for PR #{N} (was behind)"
+        ELSE:
+          log "WARNING: PR #{N} is behind but not rebaseable (manual resolution needed)"
+      Respect GitHub rate limits — process sequentially, not parallel.
+      Note: cascading updates (updating one PR may make others BEHIND again)
+      are expected; subsequent sweeps handle them.
+
 7. PHASE B — pr-polish queue (parallel, up to --max-parallel-polish):
    Skip if --skip-polish or polish_queue is empty.
    For each PR in polish_queue[]:
@@ -259,6 +272,7 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 [merge-sweep] run <run_id> complete
 
 Track A (auto-merge enabled):  N queued | K failed
+  Branch updates:              B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
 
 Auto-merge enabled:
@@ -290,6 +304,7 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
   "candidates_found": 3,
   "polish_queue_found": 2,
   "auto_merge_set": 4,
+  "branches_updated": 2,
   "polished": 1,
   "polish_partial": 0,
   "polish_blocked": 1,
@@ -340,6 +355,9 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | Claim race condition | Record `result: failed, error: claim_race_condition` |
 | `--since` parse error | Immediate error in Step 1; show format hint |
 | Slack notification fails | Log warning only; do NOT fail skill result |
+| PR is BEHIND but not rebaseable | Skip branch update with warning; PR stays in auto-merge queue (may need manual rebase or Track B) |
+| `update-branch` API fails | Log warning, continue to next PR; GitHub auto-merge remains armed |
+| Cascading BEHIND after branch update | Expected; subsequent sweeps handle remaining BEHIND PRs |
 
 ## Sub-skills Used
 

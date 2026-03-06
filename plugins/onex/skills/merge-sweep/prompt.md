@@ -389,6 +389,85 @@ for pr in candidates:
 
 ---
 
+## Step 6a — Update BEHIND Branches (Sequential)
+
+After enabling auto-merge on Track A candidates, check each successfully armed PR for
+`mergeStateStatus == "behind"`. PRs that are behind `main` will stall in the merge queue
+even with auto-merge enabled — the merge queue requires branch currency.
+
+Process sequentially (not parallel) to respect GitHub API rate limits.
+
+```python
+branches_updated = 0
+branch_update_warnings = []
+
+for result in auto_merge_results:
+    if result["result"] != "auto_merge_set":
+        continue  # only check PRs where auto-merge was successfully enabled
+
+    repo_full = result["repo"]
+    pr_number = result["pr"]
+
+    try:
+        # Check merge state via GitHub REST API
+        merge_state = run([
+            "gh", "api",
+            f"repos/{repo_full}/pulls/{pr_number}",
+            "--jq", "{mergeable_state, rebaseable}",
+        ], capture_output=True, text=True)
+
+        if merge_state.returncode != 0:
+            print(f"  WARNING: Failed to check merge state for {repo_full}#{pr_number}: {merge_state.stderr.strip()}")
+            branch_update_warnings.append({
+                "repo": repo_full, "pr": pr_number, "error": merge_state.stderr.strip()
+            })
+            continue
+
+        import json
+        state_data = json.loads(merge_state.stdout)
+        mergeable_state = state_data.get("mergeable_state", "")
+        rebaseable = state_data.get("rebaseable", False)
+
+        if mergeable_state == "behind":
+            if rebaseable:
+                # Update branch — merges main into the PR branch
+                update_result = run([
+                    "gh", "api", "-X", "PUT",
+                    f"repos/{repo_full}/pulls/{pr_number}/update-branch",
+                ], capture_output=True, text=True)
+
+                if update_result.returncode == 0:
+                    branches_updated += 1
+                    print(f"  ↑ updated branch: {repo_full}#{pr_number} (was behind main)")
+                else:
+                    print(f"  WARNING: Failed to update branch for {repo_full}#{pr_number}: {update_result.stderr.strip()}")
+                    branch_update_warnings.append({
+                        "repo": repo_full, "pr": pr_number, "error": update_result.stderr.strip()
+                    })
+            else:
+                print(f"  WARNING: {repo_full}#{pr_number} is behind but not rebaseable (manual resolution needed)")
+                branch_update_warnings.append({
+                    "repo": repo_full, "pr": pr_number, "error": "not_rebaseable"
+                })
+        # else: mergeable_state is "clean" or "has_hooks" — no action needed
+
+    except Exception as e:
+        print(f"  WARNING: Exception checking merge state for {repo_full}#{pr_number}: {e}")
+        branch_update_warnings.append({
+            "repo": repo_full, "pr": pr_number, "error": str(e)
+        })
+
+if branches_updated:
+    print(f"\n  Updated {branches_updated} behind branch(es). Subsequent sweeps will handle cascading updates.")
+```
+
+**Edge cases:**
+- `rebaseable: false` — skip with warning (PR has conflicts that prevent automatic update; may need Track B)
+- Rate limiting — sequential processing avoids burst; if `update-branch` returns 403/429, log and continue
+- Cascading updates — when multiple PRs target the same repo, updating one may push `main` forward and make others BEHIND again. This is expected; subsequent sweeps handle it.
+
+---
+
 ## Step 7 — Phase B: Polish PRs with Blocking Issues (Parallel)
 
 Skip this entire phase if `--skip-polish` is set or `polish_queue` is empty.
@@ -503,6 +582,7 @@ skipped_count = (
 )
 
 total_auto_merge_set = auto_merge_set_count + polish_auto_merged_count
+total_branches_updated = branches_updated  # from Step 6a
 total_failed = auto_merge_failed_count + polish_blocked_count
 
 if total_auto_merge_set > 0 and total_failed == 0:
@@ -531,6 +611,7 @@ source ~/.omnibase/.env 2>/dev/null || true
 summary_lines = [
     f"*[merge-sweep]* run {run_id} complete\n",
     f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {auto_merge_failed_count} failed",
+    f"  Branch updates:              {total_branches_updated} behind → updated",
     f"Track B (pr-polish):           {polish_done_count} fixed → {polish_auto_merged_count} queued | "
     f"{polish_partial_count} partial | {polish_blocked_count} blocked",
 ]
@@ -593,6 +674,7 @@ except Exception as e:
   "candidates_found": <N>,
   "polish_queue_found": <M>,
   "auto_merge_set": <count>,
+  "branches_updated": <total_branches_updated>,
   "polished": <polish_done_count>,
   "polish_partial": <polish_partial_count>,
   "polish_blocked": <polish_blocked_count>,
@@ -620,6 +702,7 @@ Print summary:
 Merge Sweep Complete — run <run_id>
 
   Track A (auto-merge enabled):  <auto_merge_set_count> queued | <auto_merge_failed_count> failed
+    Branch updates:              <total_branches_updated> behind → updated
   Track B (pr-polish):           <polish_done_count> fixed → <polish_auto_merged_count> queued
                                  <polish_partial_count> partial | <polish_blocked_count> blocked
   Skipped:                       <skipped_count> PRs
