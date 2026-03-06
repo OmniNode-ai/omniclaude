@@ -46,6 +46,9 @@ appropriate execution skill based on ticket count.
 
 Load the plan file and review it critically before taking any action.
 
+**Plan file**: If a plan path was passed as a positional argument (e.g., from design-to-plan Phase 3),
+use it directly. Do not re-discover or re-summarize the plan.
+
 1. Read the plan file in full
 2. Identify any concerns:
    - Missing acceptance criteria or definition of done
@@ -133,9 +136,19 @@ After creation, record:
 
 ### Step 4: Route to Execution <!-- ai-slop-ok: pre-existing step structure -->
 
-Route based on ticket count:
+Compute routing from the plan file content, not just ticket count:
 
-#### 3 or more tickets → `/epic-team`
+| Condition | Route | Why |
+|-----------|-------|-----|
+| Multiple repos touched | `/epic-team` | Cross-repo needs orchestration |
+| Migrations or deploy steps present | `/epic-team` | Infrastructure changes need coordination |
+| 3+ distinct subsystems affected | `/epic-team` | Broad blast radius |
+| 3+ tickets (fallback) | `/epic-team` | Parallel execution needed |
+| 1-2 tickets, single repo, no migrations | `/ticket-pipeline` | Lightweight |
+
+Log the routing decision: "Routing to {skill} because: {reason}"
+
+#### epic-team route
 
 ```bash
 /epic-team <epic-id>
@@ -144,7 +157,7 @@ Route based on ticket count:
 `epic-team` orchestrates a team of parallel worker agents, one per repo. It handles
 ticket assignment, worktree creation, and lifecycle notifications automatically.
 
-#### 1 or 2 tickets → `/ticket-pipeline` (per ticket)
+#### ticket-pipeline route
 
 ```bash
 /ticket-pipeline <ticket-id>
@@ -152,15 +165,6 @@ ticket assignment, worktree creation, and lifecycle notifications automatically.
 
 Run `/ticket-pipeline` for each ticket sequentially. Each pipeline handles the full
 implement → review → PR → CI → merge workflow autonomously.
-
----
-
-## Routing Decision
-
-| Ticket Count | Skill | Why |
-|---|---|---|
-| ≥ 3 | `/epic-team <epic-id>` | Parallel execution across repos; team lead + worker topology |
-| 1–2 | `/ticket-pipeline <ticket-id>` (per ticket) | Lightweight; no team overhead needed |
 
 ---
 

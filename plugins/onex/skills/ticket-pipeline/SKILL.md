@@ -420,6 +420,12 @@ If PR was just created (Phase 3), run the mergeability gate once immediately aft
 
 ### Phase 3: create_pr
 
+**Pre-PR Gate**: Before creating the PR, verify:
+- [ ] Local tests pass (pytest/pnpm test ran successfully)
+- [ ] Linting passes (ruff check or eslint)
+- [ ] Environment variables match expected patterns
+If any check fails, fix the issue first. Do NOT create the PR.
+
 - Runs inline in orchestrator (lightweight git/gh operations)
 - Idempotent: skips creation if PR already exists on branch
 - Pre-checks: clean tree, branch tracks remote, branch name pattern, gh auth, realm/topic invariant

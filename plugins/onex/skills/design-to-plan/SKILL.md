@@ -18,6 +18,9 @@ args:
   - name: --plan-path
     description: "Path to existing plan file (skip to Phase 2 or 3)"
     required: false
+  - name: --no-launch
+    description: "Stop after plan save — do not prompt for launch"
+    required: false
 ---
 
 # Design to Plan
@@ -171,11 +174,28 @@ git commit -m "feat: add specific feature"
 - Reference relevant skills with @ syntax
 - DRY, YAGNI, TDD, frequent commits
 
-### Adversarial Review Pass
+### Adversarial Review Loop (Phase 2b)
 
-After the draft plan is generated and staged (file write completed or draft text assembled), run this structured review BEFORE presenting the final output. Fix all issues inline, re-save if writing to file, then present the corrected plan.
+After draft plan is generated, run structured R1-R6 review in rounds until convergence.
 
-**Announce:** "Draft staged. Running adversarial review..."
+**Convergence criteria**: No new CRITICAL or MAJOR findings. MINOR and NIT are acceptable.
+
+**Hard cap**: 3 rounds maximum. After round 3, if CRITICAL/MAJOR persist, present the unresolved list to the user and STOP -- do not continue reviewing internally.
+
+**Per-round flow**:
+1. Run R1-R6 checks against the current plan draft
+2. Classify each finding: CRITICAL / MAJOR / MINOR / NIT
+3. If CRITICAL or MAJOR exist: fix inline, re-save plan, increment round counter
+4. If only MINOR/NIT: converged -- announce and proceed to Phase 3
+
+**Round output format**:
+```
+Review round N/3:
+R1: [result]  R2: [result]  R3: [result]  R4: [result]  R5: [result]  R6: [result]
+Findings: X CRITICAL, Y MAJOR, Z MINOR, W NIT
+[if CRITICAL/MAJOR: fixing and re-reviewing...]
+[if only MINOR/NIT: converged -- proceeding to Phase 3]
+```
 
 Review posture: default to finding problems. Journal-critique format. No praise. No qualifiers. Name each failure by category.
 
@@ -296,23 +316,43 @@ If the review instructions do not catch all five expected items, tighten the ins
 
 ---
 
+### Stop Conditions
+
+- After adversarial review converges (or caps at 3 rounds), proceed to Phase 3. Do not re-review.
+- If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
+- After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
+
+---
+
 ## Phase 3: Launch
 
-After plan saved and approved:
+Phase 3 flows automatically from Phase 2b convergence. It is not optional.
+
+**Pre-launch checklist** (all must be true before launching):
+- [ ] Plan file written to disk (not just assembled in memory)
+- [ ] Adversarial review converged (or capped at round 3 with user-acknowledged unresolved issues)
+- [ ] Plan contains an acceptance criteria section
 
 **Routing decision** (output as structured `routing:` block at end of plan file):
 - Single repo, sequential, no external deps -> ticket-pipeline
 - Multiple repos or parallel work -> plan-to-tickets + epic-team
 
-**Offer:** "Launch executing-plans now? [Y/n]"
+**Default behavior: auto-launch.** After the pre-launch checklist passes, immediately invoke
+`/executing-plans` with the exact plan file path. No prompt, no confirmation gate. The entire
+chain — planning -> plan-to-tickets -> epic-team or ticket-pipeline — runs autonomously.
 
-If Y: invoke executing-plans with plan path and routing decision.
+- With `--no-launch`: stop after plan save (opt-out from autonomous execution)
 
 ### Execution Handoff
 
-**"Plan complete and saved to `docs/plans/<filename>.md`.**
+Forward plan path as positional argument:
 
-**REQUIRED SUB-SKILL:** Use executing-plans to implement this plan phase-by-phase."
+```
+/executing-plans docs/plans/YYYY-MM-DD-<feature-name>.md
+```
+
+**"Plan complete and saved to `docs/plans/<filename>.md`. Launching execution."**
 
 - **REQUIRED SUB-SKILL:** Use executing-plans (v2 flow)
+- executing-plans receives the exact plan file path (no re-summarization)
 - executing-plans drives phase-by-phase execution via the epic-team / ticket-pipeline routing
