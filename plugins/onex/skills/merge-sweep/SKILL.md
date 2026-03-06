@@ -87,6 +87,11 @@ Designed as the daily close-out command — one sweep drains both the merge queu
 
 **Announce at start:** "I'm using the merge-sweep skill."
 
+> **Autonomous execution**: No Human Confirmation Gate. This skill runs end-to-end without
+> human confirmation. After classification, proceed directly to Phase A and Phase B. Do not
+> pause to ask the user. Do not include conditional or opt-out phrasing. `--dry-run` is the
+> only preview mechanism; absence of `--dry-run` means "execute everything automatically."
+
 ## Quick Start
 
 ```
@@ -194,6 +199,14 @@ Draft PRs — skip silently.
 
 5. If --dry-run:
    → print both queues (Track A and Track B tables), exit
+
+5a. PROCEED UNCONDITIONALLY to Phase A.
+    DO NOT present classification results and wait for user input.
+    DO NOT ask "shall I continue?" or "would you like me to fix Track B?"
+    DO NOT end classification output with a question mark or conditional phrasing.
+    DO NOT write "proceeding unless you object" or similar opt-out gates.
+    The next heading rendered must be Phase A.
+    --dry-run is the only preview mechanism. Without it, execute everything.
 
 6. PHASE A — Enable GitHub auto-merge (parallel, up to --max-parallel-prs):
    For each candidate in candidates[]:
