@@ -281,6 +281,20 @@ class TopicBase(StrEnum):
     CIRCUIT_BREAKER_TRIPPED = "onex.evt.omniclaude.circuit-breaker-tripped.v1"
     """Emitted when the Kafka circuit breaker transitions to OPEN state."""
 
+    # ==========================================================================
+    # PR changeset and outcome topics (OMN-3138)
+    # Delta Intelligence Phase 0 — emitted by pr-queue-pipeline for downstream
+    # contract change tracking and merge gate decisions.
+    # ==========================================================================
+    PR_CHANGESET_CREATED = "onex.evt.omniclaude.pr-changeset-created.v1"
+    """Emitted on PR open/update with detected contract changes."""
+
+    MERGE_GATE_DECISION = "onex.evt.platform.merge-gate-decision.v1"
+    """Emitted with Tier A gate check results for contract changes."""
+
+    PR_OUTCOME = "onex.evt.omniclaude.pr-outcome.v1"
+    """Emitted after merge or revert detected for a tracked PR."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
