@@ -13,7 +13,7 @@ Analytics and reporting skills for Linear project management. Provides comprehen
 
 1. **deep-dive** - Generate a comprehensive daily work analysis (like DECEMBER_9_2025_DEEP_DIVE.md)
 2. **velocity-estimate** - Calculate velocity and estimate milestone completion dates
-3. **estimation-accuracy** - Track how accurate your estimates have been over time
+3. **estimation-accuracy** - Three-layer factory telemetry (deep dive archive + GitHub PRs + Linear)
 4. **project-status** - Quick health dashboard; supports `--emit` to relay snapshots to Kafka
 
 ## When to Use
@@ -255,47 +255,74 @@ Week of 12/09: ██████████ 2.3/day (current)
 
 ---
 
-## Estimation Accuracy
+## Estimation Accuracy (Factory Telemetry)
 
-Tracks historical estimation accuracy to improve future estimates.
+Three-layer factory telemetry that parses the deep dive archive for historical velocity, effectiveness, PR throughput, and fix-vs-feature trends. Requires `python3`.
+
+### Three Data Layers
+
+**Layer 1 (Deep Dive Archive):** Parsed at script time from `$OMNI_HOME/docs/deep-dives/`. Handles three format eras (Dec 2025, Feb 2026, Mar 2026) with null-not-zero for missing data. This is the primary data source.
+
+**Layer 2 (GitHub PRs):** The script outputs `gh pr list` commands with date-window filtering. The agent executes these to collect merged PR data for reconciliation.
+
+**Layer 3 (Linear Done):** The script outputs Linear MCP call instructions (`state="Done"`). The agent executes these to compare archive evidence against Linear's Done state.
 
 ### Usage
 
 ```bash
-# Show accuracy for completed milestones
+# All data + agent instructions
 ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy
 
-# Track specific project
-${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy --project "MVP"
+# Last 7 days
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy --week
+
+# Date range
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy --from 2026-03-01 --to 2026-03-05
+
+# Graphable JSON output
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy --json
+
+# Step-by-step agent instructions
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy --generate
 ```
 
-### Metrics
+### CLI Flags
 
-- **Estimate vs Actual**: How close were predictions?
-- **Optimism Bias**: Do you consistently underestimate?
-- **Accuracy Trend**: Are estimates improving over time?
-- **Best/Worst Predictions**: Learn from outliers
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--days N` | all | Last N days of deep dive data |
+| `--from DATE` | earliest | Start date (YYYY-MM-DD) |
+| `--to DATE` | today | End date (YYYY-MM-DD) |
+| `--week` | -- | Shorthand for `--days 7` |
+| `--json` | off | Output structured JSON (graphable) |
+| `--generate` | off | Output step-by-step agent instructions |
+| `--deep-dive-dir DIR` | `$OMNI_HOME/docs/deep-dives` | Deep dive archive path |
 
----
+### Fix-vs-Feature Tracking
 
-## Projects Tracked
+PRs are classified by deep dive category: capability/governance/observability count as **feature**, correctness/churn count as **fix**, docs are excluded from both. Weekly aggregation computes fix ratio per ISO week. Trend analysis requires >= 4 weeks of data; labels are `declining`, `stable`, `increasing`, or `insufficient_data`.
 
-The following projects are available for tracking:
+### JSON Output Keys
 
-| Project | Milestone | Description |
-|---------|-----------|-------------|
-| MVP - OmniNode Platform Foundation | MVP | Core infrastructure, DI container, node implementations |
-| Beta - OmniNode Platform Hardening | Beta | Security, observability, tooling standardization |
-| Production - OmniNode Platform Scale | Production | Scaling, analytics, A/B testing, visualization |
-| NodeReducer v1.0 - Contract-Driven FSM | MVP (sub) | FSM-driven NodeReducer with 71 tickets |
+- `meta` -- period, deep dive count, generation timestamp
+- `time_series` -- per-day entries with velocity, effectiveness, prs_merged, categories, parse_quality
+- `fix_vs_feature` -- weekly aggregation with trend_slope and trend_label
+- `throughput_by_repo` -- per-repo PR totals and daily averages (Era B/C only)
+- `reconciliation` -- extracted ticket IDs and instructions for agent to fill GitHub/Linear data
+
+See script header comments for full schema.
+
+### Reconciliation
+
+The reconciliation view computes a three-way set comparison using ticket identifiers (OMN-XXXX): archive IDs (A), Linear Done IDs (B), and GitHub PR IDs (C). The script computes set A; the agent fills B and C after executing the Layer 2/3 instructions, then computes overlap, gap ratio, and tickets shipped but not closed in Linear.
 
 ---
 
 ## Data Sources
 
-All data is fetched from Linear via MCP:
-
-- `mcp__linear-server__list_issues` - Issue data
+- **Deep dive archive**: `$OMNI_HOME/docs/deep-dives/*_DEEP_DIVE.md` (Layer 1, parsed by script)
+- **GitHub CLI**: `gh pr list` commands (Layer 2, agent-executed)
+- **Linear MCP**: `mcp__linear-server__list_issues` (Layer 3, agent-executed)
 - `mcp__linear-server__list_projects` - Project metadata
 - `mcp__linear-server__get_project` - Project details
 
@@ -416,7 +443,7 @@ It must never be called from production code or skills. Use `--emit` (which call
 **Executables**:
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive` - Daily deep dive generator
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate` - Velocity and ETA calculator
-- `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy` - Estimation tracking
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/estimation-accuracy` - Three-layer factory telemetry (requires python3)
 - `${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status` - Quick health dashboard with Kafka emission support
 
 ---
