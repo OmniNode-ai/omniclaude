@@ -153,6 +153,8 @@ def is_green(pr) -> bool:
 `mergeable == "UNKNOWN"` — skip with warning (GitHub still computing merge state).
 `REVIEW_REQUIRED` — skip (needs human approval; not fixable by automation).
 Draft PRs — skip silently.
+`BLOCKED` + all checks green — warn as potential branch protection drift (BRANCH_PROTECTION_DRIFT).
+These PRs are not added to Track B; they require `/gap detect` or `audit-branch-protection.py` to fix.
 
 ## Arguments
 
