@@ -506,3 +506,131 @@ class TestCIEnforcementGrep:
         assert result.returncode == 0 and result.stdout.strip() != "", (
             "prompt.md must contain 'gh pr merge --auto' — the GitHub auto-merge mechanism"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test class: Proactive branch update (v3.1.0, OMN-3818)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestProactiveBranchUpdate:
+    """v3.1.0 adds proactive detection and update of stale (BEHIND/UNKNOWN) branches.
+
+    PRs with mergeStateStatus BEHIND or UNKNOWN are updated BEFORE auto-merge is
+    attempted (Step 5b), preventing the chicken-and-egg deadlock with strict branch
+    protection.
+    """
+
+    def test_prompt_documents_needs_branch_update_predicate(self) -> None:
+        """prompt.md must document needs_branch_update() classification predicate."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "needs_branch_update" in content, (
+            "prompt.md must document needs_branch_update() predicate for Track A-update"
+        )
+
+    def test_skill_documents_needs_branch_update_predicate(self) -> None:
+        """SKILL.md must document needs_branch_update() classification predicate."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "needs_branch_update" in content, (
+            "SKILL.md must document needs_branch_update() predicate for Track A-update"
+        )
+
+    def test_prompt_includes_merge_state_status_in_scan_fields(self) -> None:
+        """prompt.md must include mergeStateStatus in the JSON fields fetched during scan."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "mergeStateStatus" in content, (
+            "prompt.md must include mergeStateStatus in scan JSON fields"
+        )
+
+    def test_skill_documents_track_a_update(self) -> None:
+        """SKILL.md must document Track A-update for stale branch handling."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "Track A-update" in content, (
+            "SKILL.md must document Track A-update (proactive branch updates)"
+        )
+
+    def test_prompt_documents_step_5b_before_step_6(self) -> None:
+        """Step 5b (proactive branch update) must appear before Step 6 (auto-merge)."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        lines = content.splitlines()
+        step_5b_idx = next(
+            (i for i, line in enumerate(lines) if "Step 5b" in line or "Phase A-update" in line),
+            None,
+        )
+        step_6_idx = next(
+            (i for i, line in enumerate(lines) if "## Step 6" in line),
+            None,
+        )
+        assert step_5b_idx is not None, "prompt.md must contain Step 5b (proactive branch update)"
+        assert step_6_idx is not None, "prompt.md must contain Step 6 (Phase A)"
+        assert step_5b_idx < step_6_idx, (
+            "Step 5b (proactive branch update) must appear before Step 6 (Phase A auto-merge)"
+        )
+
+    def test_prompt_documents_branch_updated_result(self) -> None:
+        """prompt.md must document branch_updated as a result value."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "branch_updated" in content, (
+            "prompt.md must document 'branch_updated' result value for proactive updates"
+        )
+
+    def test_skill_documents_branch_updated_result(self) -> None:
+        """SKILL.md must document branch_updated as a result value."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "branch_updated" in content, (
+            "SKILL.md must document 'branch_updated' result value"
+        )
+
+    def test_skill_documents_proactive_branch_counter(self) -> None:
+        """SKILL.md ModelSkillResult must include branches_updated_proactive counter."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "branches_updated_proactive" in content, (
+            "SKILL.md ModelSkillResult must include branches_updated_proactive counter"
+        )
+
+    def test_prompt_documents_branch_update_queue(self) -> None:
+        """prompt.md must document branch_update_queue for stale PRs."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "branch_update_queue" in content, (
+            "prompt.md must document branch_update_queue[] for stale PRs"
+        )
+
+    def test_prompt_documents_classification_order(self) -> None:
+        """prompt.md must specify that needs_branch_update is checked BEFORE is_merge_ready."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "first match wins" in content.lower() or "checked BEFORE" in content, (
+            "prompt.md must document classification order "
+            "(needs_branch_update checked BEFORE is_merge_ready)"
+        )
+
+    def test_prompt_uses_check_merge_state_helper(self) -> None:
+        """prompt.md Step 5b must use check_merge_state() from pr-safety helpers."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "check_merge_state" in content, (
+            "prompt.md must use check_merge_state() from @_lib/pr-safety/helpers.md"
+        )
+
+    def test_prompt_uses_update_pr_branch_helper(self) -> None:
+        """prompt.md Step 5b must use update_pr_branch() from pr-safety helpers."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "update_pr_branch" in content, (
+            "prompt.md must use update_pr_branch() from @_lib/pr-safety/helpers.md"
+        )
+
+    def test_skill_documents_behind_unknown_handling(self) -> None:
+        """SKILL.md failure table must document BEHIND/UNKNOWN handling."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "BEHIND" in content and "UNKNOWN" in content, (
+            "SKILL.md failure handling must document BEHIND and UNKNOWN mergeStateStatus"
+        )
+
+    def test_pr_scan_sh_includes_merge_state_status(self) -> None:
+        """_bin/pr-scan.sh must include mergeStateStatus in default JSON fields."""
+        pr_scan_path = _REPO_ROOT / "plugins" / "onex" / "_bin" / "pr-scan.sh"
+        if not pr_scan_path.exists():
+            pytest.skip("_bin/pr-scan.sh not found")
+        content = pr_scan_path.read_text(encoding="utf-8")
+        assert "mergeStateStatus" in content, (
+            "_bin/pr-scan.sh must include mergeStateStatus in default JSON fields"
+        )

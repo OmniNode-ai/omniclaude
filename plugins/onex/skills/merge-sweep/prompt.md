@@ -128,7 +128,8 @@ request = ModelGitRequest(
     operation=GitOperation.PR_LIST,
     repo=f"{GITHUB_ORG}/{repo}",
     json_fields=[
-        "number", "title", "mergeable", "statusCheckRollup",
+        "number", "title", "mergeable", "mergeStateStatus",
+        "statusCheckRollup",
         "reviewDecision", "headRefName", "baseRefName",
         "baseRepository", "headRepository", "headRefOid",
         "author", "labels", "updatedAt", "isDraft",
@@ -164,11 +165,11 @@ If neither `node_git_effect` nor `_bin/pr-scan.sh` is available, fall back to ra
 gh pr list \
   --repo <repo> \
   --state open \
-  --json number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
+  --json number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
   --limit 100
 ```
 
-**IMPORTANT**: `labels`, `updatedAt`, and `isDraft` are required JSON fields.
+**IMPORTANT**: `labels`, `updatedAt`, `isDraft`, and `mergeStateStatus` are required JSON fields.
 
 For each PR returned, apply classification:
 
@@ -211,6 +212,17 @@ def needs_polish(pr, require_approval=True):
         return True
     return False  # other cases (e.g., REVIEW_REQUIRED — needs human, not automation)
 
+def needs_branch_update(pr):
+    """PR is merge-ready except its branch is behind main (or state unknown).
+    These PRs need `update-branch` before auto-merge can proceed.
+    mergeStateStatus values: BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    """
+    if pr["isDraft"]:
+        return False
+    if pr["mergeable"] != "MERGEABLE":
+        return False
+    return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
+
 def pr_state_unknown(pr):
     return pr["mergeable"] == "UNKNOWN"
 
@@ -232,12 +244,18 @@ def passes_label_filter(pr, filter_labels):
     return bool(pr_labels & set(filter_labels))
 ```
 
-Classification results:
+Classification results (evaluated in order — first match wins):
+- `needs_branch_update()` AND passes filters → add to `branch_update_queue_pre_claim[]` (Track A-update)
 - `is_merge_ready()` AND passes filters → add to `candidates_pre_claim[]` (Track A)
 - `needs_polish()` AND passes filters → add to `polish_queue_pre_claim[]` (Track B)
 - `pr_state_unknown()` → add to `skipped_unknown[]` with warning
 - Draft PRs → ignore silently
 - Otherwise (e.g., `REVIEW_REQUIRED`) → ignore silently
+
+**Note**: `needs_branch_update()` is checked BEFORE `is_merge_ready()`. A PR that is MERGEABLE
+but BEHIND/UNKNOWN on `mergeStateStatus` needs its branch updated before auto-merge can
+proceed. Arming auto-merge on such PRs creates a chicken-and-egg deadlock when strict branch
+protection (`strict: true`) is enabled.
 
 ### Claim Registry Check (after filter classification)
 
@@ -249,11 +267,12 @@ from plugins.onex.hooks.lib.pr_claim_registry import (
 )
 
 registry = ClaimRegistry()
+branch_update_queue = []
 candidates = []
 polish_queue = []
 hard_failed_claims = []
 
-for pr in candidates_pre_claim + polish_queue_pre_claim:
+for pr in branch_update_queue_pre_claim + candidates_pre_claim + polish_queue_pre_claim:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
 
@@ -270,6 +289,8 @@ for pr in candidates_pre_claim + polish_queue_pre_claim:
             f"Excluding from candidates.",
             flush=True,
         )
+    elif pr in branch_update_queue_pre_claim:
+        branch_update_queue.append(pr)
     elif pr in candidates_pre_claim:
         candidates.append(pr)
     else:
@@ -293,7 +314,7 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 ## 4. Empty Check
 
 ```
-IF candidates is empty AND polish_queue is empty (or --skip-polish):
+IF candidates is empty AND branch_update_queue is empty AND polish_queue is empty (or --skip-polish):
   → Print: "No actionable PRs found across <N> repos."
   → If applicable, explain filters
   → If skipped_unknown is not empty: print warning about UNKNOWN state PRs
@@ -316,8 +337,14 @@ IF --dry-run:
 ### Dry Run Output Format
 
 ```
-MERGE-READY PRs — Track A: Enable GitHub auto-merge (<count>):
+STALE BRANCHES — Track A-update: Update branch before merge (<count>):
 Filters: since=<since_date> | labels=<labels> | authors=<authors>
+
+  OmniNode-ai/omniclaude
+    #260  feat: new validator              BEHIND         5 checks ✓  APPROVED  SHA: e4f5a678  updated: 2026-03-06
+    #263  fix: routing edge case           UNKNOWN        3 checks ✓  APPROVED  SHA: b1c2d3e4  updated: 2026-03-06
+
+MERGE-READY PRs — Track A: Enable GitHub auto-merge (<count>):
 
   OmniNode-ai/omniclaude
     #247  feat: auto-detect [OMN-2xxx]     5 checks ✓  APPROVED       SHA: cbca770e  updated: 2026-02-23
@@ -338,7 +365,7 @@ BLOCKING ISSUES — Track B: pr-polish queue (<count>):
 SKIPPED (UNKNOWN merge state — GitHub computing):
     OmniNode-ai/omnidash#20
 
-Total: <N> ready to auto-merge, <M> need polishing, <K> skipped
+Total: <N> stale (branch update needed), <M> ready to auto-merge, <P> need polishing, <K> skipped
 ```
 
 ---
@@ -365,10 +392,120 @@ The v3.0.0 design intentionally removed all human gates. Absence of `--dry-run` 
 
 ---
 
+## Step 5b — Phase A-update: Proactive Branch Updates (Sequential)
+
+**Before enabling auto-merge**, update branches that are BEHIND or UNKNOWN. PRs with stale
+branches will deadlock in the merge queue when strict branch protection (`strict: true`) is
+enabled -- auto-merge waits for the branch to be current, but does NOT trigger branch updates.
+
+Process `branch_update_queue[]` sequentially (not parallel) to respect GitHub API rate limits
+and avoid cascading staleness.
+
+```python
+# Uses check_merge_state() and update_pr_branch() from @_lib/pr-safety/helpers.md
+from plugins.onex.skills._lib.pr_safety.helpers import check_merge_state, update_pr_branch
+
+branches_updated = 0
+branch_update_results = []
+branch_update_warnings = []
+
+for pr in branch_update_queue:
+    base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    repo_full = f"{base_owner}/{base_repo_name}"
+    pr_number = pr["number"]
+    merge_state = pr.get("mergeStateStatus", "UNKNOWN").upper()
+
+    try:
+        # Live-check merge state via pr-safety helper to confirm stale status
+        state_data = check_merge_state(repo_full, pr_number)
+        mergeable_state = state_data.get("mergeable_state", "")
+        rebaseable = state_data.get("rebaseable", False)
+
+        if mergeable_state in ("behind", "unknown"):
+            if rebaseable:
+                # Update branch via pr-safety helper (wraps gh api -X PUT .../update-branch)
+                update_pr_branch(repo_full, pr_number)
+                branches_updated += 1
+                branch_update_results.append({
+                    "repo": repo_full, "pr": pr_number,
+                    "result": "branch_updated",
+                    "head_sha": pr["headRefOid"][:8],
+                    "prior_state": merge_state,
+                })
+                print(f"  ↑ updated branch: {repo_full}#{pr_number} (was {merge_state} — CI will re-run)")
+            else:
+                print(f"  WARNING: {repo_full}#{pr_number} is {merge_state} but not rebaseable (manual resolution needed)")
+                branch_update_results.append({
+                    "repo": repo_full, "pr": pr_number,
+                    "result": "skipped",
+                    "skip_reason": "not_rebaseable",
+                    "prior_state": merge_state,
+                })
+                branch_update_warnings.append({
+                    "repo": repo_full, "pr": pr_number, "error": "not_rebaseable"
+                })
+        elif mergeable_state == "clean":
+            # Race condition: branch was updated between scan and execution.
+            # Promote to candidates[] for auto-merge in Step 6.
+            print(f"  ✓ {repo_full}#{pr_number} is now CLEAN (updated between scan and execution) — promoting to auto-merge")
+            candidates.append(pr)
+        else:
+            # dirty, has_hooks, blocked, etc. — skip with info
+            print(f"  — {repo_full}#{pr_number} mergeable_state={mergeable_state} — skipping branch update")
+            branch_update_results.append({
+                "repo": repo_full, "pr": pr_number,
+                "result": "skipped",
+                "skip_reason": f"mergeable_state_{mergeable_state}",
+                "prior_state": merge_state,
+            })
+
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        print(f"  WARNING: Failed to check/update merge state for {repo_full}#{pr_number}: {error_msg}")
+        branch_update_results.append({
+            "repo": repo_full, "pr": pr_number,
+            "result": "failed", "error": error_msg,
+        })
+        branch_update_warnings.append({
+            "repo": repo_full, "pr": pr_number, "error": error_msg
+        })
+    except Exception as e:
+        print(f"  WARNING: Exception checking merge state for {repo_full}#{pr_number}: {e}")
+        branch_update_results.append({
+            "repo": repo_full, "pr": pr_number,
+            "result": "failed", "error": str(e),
+        })
+        branch_update_warnings.append({
+            "repo": repo_full, "pr": pr_number, "error": str(e)
+        })
+
+if branches_updated:
+    print(f"\n  Updated {branches_updated} stale branch(es). Next sweep pass will handle them after CI completes.")
+```
+
+**Why update BEFORE auto-merge (not after)?**
+- With `strict: true` branch protection, auto-merge deadlocks on BEHIND PRs: it waits for
+  the branch to be current, but never triggers the update itself.
+- Updating first lets CI re-run on the fresh merge commit. The NEXT sweep pass will find
+  these PRs in CLEAN state and arm auto-merge normally.
+- This avoids wasting GitHub auto-merge slots on PRs that cannot proceed.
+
+**Edge cases:**
+- `rebaseable: false` — skip with warning (PR has conflicts that prevent automatic update; may need Track B)
+- Rate limiting — sequential processing avoids burst; if `update-branch` returns 403/429, log and continue
+- Cascading updates — when multiple PRs target the same repo, updating one may push `main` forward and make others BEHIND again. This is expected; subsequent sweeps handle it.
+- Race condition (CLEAN at execution time) — if the branch was updated between scan and execution, promote the PR to `candidates[]` for normal auto-merge processing.
+
+---
+
 ## Step 6 — Phase A: Enable GitHub Auto-Merge (Parallel)
 
 For each PR in `candidates[]`, acquire a claim and enable GitHub auto-merge.
 Run up to `--max-parallel-prs` concurrently.
+
+**Note**: PRs that were BEHIND/UNKNOWN at scan time have already been handled in Step 5b.
+Only PRs with `mergeStateStatus` of CLEAN/HAS_HOOKS/UNSTABLE (or promoted from Step 5b
+race conditions) reach this step.
 
 ```python
 from plugins.onex.hooks.lib.pr_claim_registry import ClaimRegistry, canonical_pr_key
@@ -415,11 +552,11 @@ for pr in candidates:
 
 ---
 
-## Step 6a — Update BEHIND Branches (Sequential)
+## Step 6a — Post-Merge Safety: Update Remaining BEHIND Branches (Sequential)
 
-After enabling auto-merge on Track A candidates, check each successfully armed PR for
-`mergeStateStatus == "behind"`. PRs that are behind `main` will stall in the merge queue
-even with auto-merge enabled — the merge queue requires branch currency.
+Safety net for PRs that were CLEAN at scan time but became BEHIND between scan and
+auto-merge (e.g., another PR merged to main during this sweep). This is a fallback;
+most BEHIND detection now happens proactively in Step 5b.
 
 Process sequentially (not parallel) to respect GitHub API rate limits.
 
@@ -427,8 +564,7 @@ Process sequentially (not parallel) to respect GitHub API rate limits.
 # Uses check_merge_state() and update_pr_branch() from @_lib/pr-safety/helpers.md
 from plugins.onex.skills._lib.pr_safety.helpers import check_merge_state, update_pr_branch
 
-branches_updated = 0
-branch_update_warnings = []
+post_merge_branches_updated = 0
 
 for result in auto_merge_results:
     if result["result"] != "auto_merge_set":
@@ -438,23 +574,21 @@ for result in auto_merge_results:
     pr_number = result["pr"]
 
     try:
-        # Check merge state via pr-safety helper (wraps gh api repos/.../pulls/...)
         state_data = check_merge_state(repo_full, pr_number)
         mergeable_state = state_data.get("mergeable_state", "")
         rebaseable = state_data.get("rebaseable", False)
 
         if mergeable_state == "behind":
             if rebaseable:
-                # Update branch via pr-safety helper (wraps gh api -X PUT .../update-branch)
                 update_pr_branch(repo_full, pr_number)
+                post_merge_branches_updated += 1
                 branches_updated += 1
-                print(f"  ↑ updated branch: {repo_full}#{pr_number} (was behind main)")
+                print(f"  ↑ updated branch (post-merge): {repo_full}#{pr_number} (became behind during sweep)")
             else:
                 print(f"  WARNING: {repo_full}#{pr_number} is behind but not rebaseable (manual resolution needed)")
                 branch_update_warnings.append({
                     "repo": repo_full, "pr": pr_number, "error": "not_rebaseable"
                 })
-        # else: mergeable_state is "clean" or "has_hooks" — no action needed
 
     except subprocess.CalledProcessError as e:
         print(f"  WARNING: Failed to check/update merge state for {repo_full}#{pr_number}: {e.stderr.strip() if e.stderr else str(e)}")
@@ -467,13 +601,11 @@ for result in auto_merge_results:
             "repo": repo_full, "pr": pr_number, "error": str(e)
         })
 
-if branches_updated:
-    print(f"\n  Updated {branches_updated} behind branch(es). Subsequent sweeps will handle cascading updates.")
+if post_merge_branches_updated:
+    print(f"\n  Updated {post_merge_branches_updated} branch(es) that became stale during sweep.")
 ```
 
 **Edge cases:**
-- `rebaseable: false` — skip with warning (PR has conflicts that prevent automatic update; may need Track B)
-- Rate limiting — sequential processing avoids burst; if `update-branch` returns 403/429, log and continue
 - Cascading updates — when multiple PRs target the same repo, updating one may push `main` forward and make others BEHIND again. This is expected; subsequent sweeps handle it.
 
 ---
@@ -577,9 +709,15 @@ Wait for all polish agents to complete. Collect results into `polish_results[]`.
 ## 8. Collect Results
 
 ```python
+# Step 5b results
+proactive_branch_updated_count = sum(1 for r in branch_update_results if r["result"] == "branch_updated")
+proactive_branch_failed_count = sum(1 for r in branch_update_results if r["result"] == "failed")
+
+# Step 6 results
 auto_merge_set_count = sum(1 for r in auto_merge_results if r["result"] == "auto_merge_set")
 auto_merge_failed_count = sum(1 for r in auto_merge_results if r["result"] == "failed")
 
+# Step 7 results
 polish_done_count = sum(1 for r in polish_results if r.get("polish_status") == "DONE")
 polish_partial_count = sum(1 for r in polish_results if r.get("polish_status") == "PARTIAL")
 polish_blocked_count = sum(1 for r in polish_results if r.get("polish_status") == "BLOCKED")
@@ -588,17 +726,20 @@ polish_auto_merged_count = sum(1 for r in polish_results if r.get("auto_merge_se
 skipped_count = (
     len(skipped_unknown) + len(skipped_filtered)
     + sum(1 for r in polish_results if r.get("result") == "skipped")
+    + sum(1 for r in branch_update_results if r.get("result") == "skipped")
     + len(hard_failed_claims)
 )
 
 total_auto_merge_set = auto_merge_set_count + polish_auto_merged_count
-total_branches_updated = branches_updated  # from Step 6a
-total_failed = auto_merge_failed_count + polish_blocked_count
+total_branches_updated = branches_updated  # from Step 5b + Step 6a
+total_failed = auto_merge_failed_count + polish_blocked_count + proactive_branch_failed_count
 
 if total_auto_merge_set > 0 and total_failed == 0:
     status = "queued"
 elif total_auto_merge_set > 0 and total_failed > 0:
     status = "partial"
+elif total_branches_updated > 0 and total_auto_merge_set == 0 and total_failed == 0:
+    status = "queued"  # branch updates are progress — next sweep will merge
 elif total_auto_merge_set == 0 and total_failed > 0:
     status = "error"
 else:
@@ -620,8 +761,9 @@ source ~/.omnibase/.env 2>/dev/null || true
 ```python
 summary_lines = [
     f"*[merge-sweep]* run {run_id} complete\n",
+    f"Branch updates (proactive):    {proactive_branch_updated_count} stale → updated (CI re-running)",
     f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {auto_merge_failed_count} failed",
-    f"  Branch updates:              {total_branches_updated} behind → updated",
+    f"  Post-merge branch updates:   {post_merge_branches_updated} behind → updated",
     f"Track B (pr-polish):           {polish_done_count} fixed → {polish_auto_merged_count} queued | "
     f"{polish_partial_count} partial | {polish_blocked_count} blocked",
 ]
@@ -682,9 +824,12 @@ except Exception as e:
     "repos": ["<repo1>"]
   },
   "candidates_found": <N>,
+  "branch_update_queue_found": <B>,
   "polish_queue_found": <M>,
   "auto_merge_set": <count>,
   "branches_updated": <total_branches_updated>,
+  "branches_updated_proactive": <proactive_branch_updated_count>,
+  "branches_updated_post_merge": <post_merge_branches_updated>,
   "polished": <polish_done_count>,
   "polish_partial": <polish_partial_count>,
   "polish_blocked": <polish_blocked_count>,
@@ -695,10 +840,11 @@ except Exception as e:
       "repo": "<repo>",
       "pr": <pr_number>,
       "head_sha": "<sha>",
-      "track": "A | B",
-      "result": "auto_merge_set | polished_and_queued | polished_partial | blocked | failed | skipped",
+      "track": "A-update | A | B",
+      "result": "branch_updated | auto_merge_set | polished_and_queued | polished_partial | blocked | failed | skipped",
       "merge_method": "<method>",
-      "skip_reason": null | "UNKNOWN_state" | "since_filter" | "label_filter" | "active_claim" | "draft"
+      "prior_state": null | "BEHIND" | "UNKNOWN",
+      "skip_reason": null | "UNKNOWN_state" | "since_filter" | "label_filter" | "active_claim" | "draft" | "not_rebaseable"
     }
   ]
 }
@@ -711,8 +857,9 @@ Print summary:
 ```
 Merge Sweep Complete — run <run_id>
 
+  Branch updates (proactive):    <proactive_branch_updated_count> stale → updated (CI re-running)
   Track A (auto-merge enabled):  <auto_merge_set_count> queued | <auto_merge_failed_count> failed
-    Branch updates:              <total_branches_updated> behind → updated
+    Post-merge branch updates:   <post_merge_branches_updated> behind → updated
   Track B (pr-polish):           <polish_done_count> fixed → <polish_auto_merged_count> queued
                                  <polish_partial_count> partial | <polish_blocked_count> blocked
   Skipped:                       <skipped_count> PRs
@@ -729,13 +876,19 @@ Merge Sweep Complete — run <run_id>
 | `--since` parse failure | Immediate error in Step 1, show format hint |
 | `gh pr list` network failure for a repo | Log warning, skip repo, continue others |
 | All repos fail to scan | Return `status: error` |
+| PR is BEHIND/UNKNOWN at scan time | Step 5b: update branch proactively, skip auto-merge (CI needs to re-run) |
+| PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge in Step 6 |
+| PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
+| `update-branch` API fails (403/429) | Log warning, record `result: failed`, continue others |
 | `gh pr merge --auto` fails for a PR | Record `result: failed` in details, continue others |
+| PR becomes BEHIND after auto-merge armed (Step 6a) | Safety net: update branch post-merge |
 | pr-polish BLOCKED (conflicts unresolvable) | Record `result: blocked`, skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`, skip auto-merge |
 | Worktree creation fails | Record `result: failed`, release claim, continue others |
 | Worktree cleanup fails | Log warning, do NOT fail the skill result |
 | Slack summary post fails | Log warning only; do NOT fail skill result |
 | Claim race condition | Record `result: failed, error: claim_race_condition` |
+| Cascading BEHIND after branch update | Expected; subsequent sweeps handle remaining BEHIND PRs |
 
 ---
 

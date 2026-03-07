@@ -1,7 +1,7 @@
 ---
 name: merge-sweep
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
-version: 3.0.0
+version: 3.1.0
 level: advanced
 debug: false
 category: workflow
@@ -72,11 +72,17 @@ outputs:
 
 ## Overview
 
-Composable skill that scans all repos in `omni_home` for open PRs and handles them in two tracks:
+Composable skill that scans all repos in `omni_home` for open PRs and handles them in three tracks:
 
-**Track A — GitHub Auto-Merge**: PRs that are already merge-ready get `gh pr merge --auto` enabled
-immediately. GitHub merges them automatically when all required checks pass — no polling, no
-waiting, no human gate required.
+**Track A-update — Proactive Branch Updates**: PRs that are merge-ready but have stale branches
+(`mergeStateStatus` BEHIND or UNKNOWN) get their branches updated via `gh api -X PUT .../update-branch`
+BEFORE auto-merge is attempted. This prevents the chicken-and-egg deadlock where strict branch
+protection requires branches to be current but auto-merge does not trigger updates. Updated PRs
+are picked up on the next sweep pass after CI re-runs.
+
+**Track A — GitHub Auto-Merge**: PRs that are already merge-ready with current branches get
+`gh pr merge --auto` enabled immediately. GitHub merges them automatically when all required
+checks pass — no polling, no waiting, no human gate required.
 
 **Track B — Polish**: PRs with fixable blocking issues get dispatched to `pr-polish` in a
 temporary worktree. pr-polish resolves conflicts, fixes CI failures, addresses review comments,
@@ -113,8 +119,19 @@ Designed as the daily close-out command — one sweep drains both the merge queu
 ## PR Classification Predicates
 
 ```python
+def needs_branch_update(pr) -> bool:
+    """Track A-update: PR is merge-ready but branch is stale (BEHIND/UNKNOWN).
+    Checked BEFORE is_merge_ready() — first match wins.
+    mergeStateStatus values: BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    """
+    if pr["isDraft"]:
+        return False
+    if pr["mergeable"] != "MERGEABLE":
+        return False
+    return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
+
 def is_merge_ready(pr, require_approval=True) -> bool:
-    """Track A: PR is safe to auto-merge immediately."""
+    """Track A: PR is safe to auto-merge immediately (branch is current)."""
     if pr["isDraft"]:
         return False
     if pr["mergeable"] != "MERGEABLE":
@@ -150,9 +167,12 @@ def is_green(pr) -> bool:
     return all(c.get("conclusion") == "SUCCESS" for c in required_checks)
 ```
 
-`mergeable == "UNKNOWN"` — skip with warning (GitHub still computing merge state).
-`REVIEW_REQUIRED` — skip (needs human approval; not fixable by automation).
-Draft PRs — skip silently.
+**Classification order** (first match wins):
+1. `needs_branch_update()` -- Track A-update (branch stale, update before merge)
+2. `is_merge_ready()` -- Track A (branch current, auto-merge immediately)
+3. `needs_polish()` -- Track B (fixable blocking issues)
+4. `mergeable == "UNKNOWN"` -- skip with warning (GitHub still computing)
+5. Draft / `REVIEW_REQUIRED` -- skip silently
 
 ## Arguments
 
@@ -182,11 +202,13 @@ Draft PRs — skip silently.
 2. SCAN (parallel, up to --max-parallel-repos):
    For each repo:
      gh pr list --repo <repo> --state open --json \
-       number,title,mergeable,statusCheckRollup,reviewDecision, \
-       headRefName,baseRefName,baseRepository,headRepository,headRefOid,
-       author,labels,updatedAt,isDraft
+       number,title,mergeable,mergeStateStatus,statusCheckRollup, \
+       reviewDecision,headRefName,baseRefName,baseRepository, \
+       headRepository,headRefOid,author,labels,updatedAt,isDraft
 
-3. CLASSIFY (apply all filters including --authors, --since, --label):
+3. CLASSIFY (apply all filters including --authors, --since, --label;
+   first match wins per PR):
+   - needs_branch_update() + passes filters → branch_update_queue[] (Track A-update)
    - is_merge_ready() + passes filters → candidates[] (Track A)
    - needs_polish() + passes filters → polish_queue[] (Track B)
    - mergeable == UNKNOWN → skipped_unknown[] (warn)
@@ -194,19 +216,28 @@ Draft PRs — skip silently.
    Check claim registry; exclude PRs with active claims from other runs.
    Apply --max-total-merges cap to candidates[].
 
-4. If candidates[] and polish_queue[] are both empty:
+4. If branch_update_queue[], candidates[], and polish_queue[] are all empty:
    → emit ModelSkillResult(status=nothing_to_merge), exit
 
 5. If --dry-run:
-   → print both queues (Track A and Track B tables), exit
+   → print all queues (Track A-update, Track A, and Track B tables), exit
 
-5a. PROCEED UNCONDITIONALLY to Phase A.
+5a. PROCEED UNCONDITIONALLY to Phase A-update.
     DO NOT present classification results and wait for user input.
-    DO NOT ask "shall I continue?" or "would you like me to fix Track B?"
-    DO NOT end classification output with a question mark or conditional phrasing.
-    DO NOT write "proceeding unless you object" or similar opt-out gates.
-    The next heading rendered must be Phase A.
     --dry-run is the only preview mechanism. Without it, execute everything.
+
+5b. PHASE A-update — Proactive branch updates (sequential):
+    For each PR in branch_update_queue[]:
+      check_merge_state(repo, N)  — via @_lib/pr-safety/helpers.md
+      IF mergeable_state in ("behind", "unknown"):
+        IF rebaseable:
+          update_pr_branch(repo, N)  — via @_lib/pr-safety/helpers.md
+          record as "branch_updated" (CI will re-run; next sweep handles merge)
+        ELSE:
+          log WARNING — may need Track B or manual resolution
+      ELIF mergeable_state == "clean":
+        promote to candidates[] (race: branch was updated between scan and execution)
+    Sequential processing respects GitHub rate limits.
 
 6. PHASE A — Enable GitHub auto-merge (parallel, up to --max-parallel-prs):
    For each candidate in candidates[]:
@@ -214,18 +245,14 @@ Draft PRs — skip silently.
      gh pr merge <N> --repo <repo> --<merge_method> --auto
      release claim
 
-6a. UPDATE BEHIND BRANCHES (after enabling auto-merge, sequential):
+6a. POST-MERGE SAFETY — Update remaining BEHIND branches (sequential):
+    Safety net for PRs that became BEHIND between scan and auto-merge (e.g.,
+    another PR merged to main during this sweep). Most BEHIND detection now
+    happens proactively in Step 5b.
     For each candidate where auto-merge was successfully enabled:
-      check_merge_state(repo, N)  — via @_lib/pr-safety/helpers.md
-      IF mergeable_state == "behind":
-        IF rebaseable:
-          update_pr_branch(repo, N)  — via @_lib/pr-safety/helpers.md
-          log "updated branch for PR #{N} (was behind)"
-        ELSE:
-          log "WARNING: PR #{N} is behind but not rebaseable (manual resolution needed)"
-      Respect GitHub rate limits — process sequentially, not parallel.
-      Note: cascading updates (updating one PR may make others BEHIND again)
-      are expected; subsequent sweeps handle them.
+      check_merge_state(repo, N)
+      IF mergeable_state == "behind" AND rebaseable:
+        update_pr_branch(repo, N)
 
 7. PHASE B — pr-polish queue (parallel, up to --max-parallel-polish):
    Skip if --skip-polish or polish_queue is empty.
@@ -284,9 +311,14 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 ```
 [merge-sweep] run <run_id> complete
 
+Branch updates (proactive):    P stale → updated (CI re-running)
 Track A (auto-merge enabled):  N queued | K failed
-  Branch updates:              B behind → updated
+  Post-merge branch updates:   B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
+
+Branches updated (CI re-running — next sweep will merge):
+  • OmniNode-ai/omniclaude#260 (was BEHIND)
+  • OmniNode-ai/omniclaude#263 (was UNKNOWN)
 
 Auto-merge enabled:
   • OmniNode-ai/omniclaude#247 — feat: auto-detect
@@ -315,15 +347,27 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
     "repos": ["OmniNode-ai/omniclaude"]
   },
   "candidates_found": 3,
+  "branch_update_queue_found": 2,
   "polish_queue_found": 2,
   "auto_merge_set": 4,
-  "branches_updated": 2,
+  "branches_updated": 4,
+  "branches_updated_proactive": 2,
+  "branches_updated_post_merge": 0,
   "polished": 1,
   "polish_partial": 0,
   "polish_blocked": 1,
   "skipped": 1,
   "failed": 0,
   "details": [
+    {
+      "repo": "OmniNode-ai/omniclaude",
+      "pr": 260,
+      "head_sha": "e4f5a678",
+      "track": "A-update",
+      "result": "branch_updated",
+      "prior_state": "BEHIND",
+      "skip_reason": null
+    },
     {
       "repo": "OmniNode-ai/omniclaude",
       "pr": 247,
@@ -347,20 +391,27 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
 ```
 
 Status values:
-- `queued` — all candidates had auto-merge enabled (Track A and/or Track B)
+- `queued` — all candidates had auto-merge enabled and/or branches updated (Track A-update/A/B)
 - `nothing_to_merge` — no actionable PRs found (after all filters)
-- `partial` — some queued, some failed or blocked
-- `error` — no PRs successfully queued
+- `partial` — some queued/updated, some failed or blocked
+- `error` — no PRs successfully queued or updated
 
+Track A-update `result` values: `branch_updated` | `failed` | `skipped`
+Track A `result` values: `auto_merge_set` | `failed` | `skipped`
 Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
 
 ## Failure Handling
 
 | Error | Behavior |
 |-------|----------|
-| PR mergeable state UNKNOWN | Skip with warning; include in `skipped` count |
+| PR `mergeable` state UNKNOWN | Skip with warning; include in `skipped` count |
+| PR `mergeStateStatus` BEHIND/UNKNOWN (scan) | Step 5b: update branch proactively; record `branch_updated`; CI re-runs; next sweep merges |
+| PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge |
+| PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
+| `update-branch` API fails (403/429/422) | Log warning, record `result: failed`, continue others |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
 | `gh pr merge --auto` fails for a PR | Record `result: failed`; continue others |
+| PR becomes BEHIND after auto-merge armed (Step 6a) | Safety net: update branch post-merge |
 | pr-polish BLOCKED (unresolvable conflicts) | Record `result: blocked`; skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`; skip auto-merge |
 | Worktree creation fails | Record `result: failed`; release claim; continue others |
@@ -368,8 +419,6 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | Claim race condition | Record `result: failed, error: claim_race_condition` |
 | `--since` parse error | Immediate error in Step 1; show format hint |
 | Slack notification fails | Log warning only; do NOT fail skill result |
-| PR is BEHIND but not rebaseable | Skip branch update with warning; PR stays in auto-merge queue (may need manual rebase or Track B) |
-| `update-branch` API fails | Log warning, continue to next PR; GitHub auto-merge remains armed |
 | Cascading BEHIND after branch update | Expected; subsequent sweeps handle remaining BEHIND PRs |
 
 ## Sub-skills Used
@@ -393,6 +442,12 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.1.0** (OMN-3818): Proactive stale branch detection and update. Add `needs_branch_update()`
+  predicate using `mergeStateStatus` field. PRs that are BEHIND or UNKNOWN get their branches
+  updated BEFORE auto-merge is attempted (Step 5b), preventing the chicken-and-egg deadlock with
+  strict branch protection. Add `branch_updated` result value, `branch_update_queue_found`,
+  `branches_updated_proactive`, and `branches_updated_post_merge` counters to ModelSkillResult.
+  Existing Step 6a retained as post-merge safety net. Add `mergeStateStatus` to scan fields.
 - **v3.0.0**: Replace HIGH_RISK Slack gate with GitHub native auto-merge (`gh pr merge --auto`).
   Add Track B: dispatch `pr-polish` on PRs with CI failures, conflicts, or changes-requested.
   PRs polished to merge-ready also get auto-merge enabled. Remove `--gate-attestation` and
@@ -417,7 +472,7 @@ PR scanning uses tier-aware backend selection:
 Tier detection: see `@_lib/tier-routing/helpers.md`.
 
 The scan output format is identical across all tiers -- downstream classification
-(`is_merge_ready`, `needs_polish`) works unchanged regardless of backend.
+(`needs_branch_update`, `is_merge_ready`, `needs_polish`) works unchanged regardless of backend.
 
 ## See Also
 

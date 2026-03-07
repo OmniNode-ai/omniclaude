@@ -20,7 +20,7 @@ LIMIT="100"
 AUTHOR=""
 LABEL=""
 SINCE=""
-JSON_FIELDS="number,title,mergeable,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft"
+JSON_FIELDS="number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
