@@ -2,117 +2,92 @@
 set -euo pipefail
 
 # ============================================================================
-# Estimation Accuracy Tracker
+# Factory Telemetry — Three-Layer Estimation Accuracy
 # ============================================================================
-# Tracks historical estimation accuracy to improve future estimates.
-# Compares predicted ETAs with actual completion dates.
+# Parses the deep dive archive to extract historical velocity, effectiveness,
+# PR counts, fix-vs-feature ratio, and ticket IDs. Outputs graphable JSON
+# via --json, or prints analysis + agent instructions for GitHub/Linear
+# reconciliation layers.
+#
+# Requires: python3
+# Optional: gh CLI (only for Layer 2 GitHub reconciliation)
 # ============================================================================
+
+# --- Startup checks ---
+command -v python3 &>/dev/null || { echo "Error: python3 is required for estimation-accuracy" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TRACKING_FILE="${SCRIPT_DIR}/.estimation_history.json"
 
 usage() {
-    cat << EOF
-Usage: $(basename "$0") [OPTIONS]
+    cat << 'EOF'
+Usage: estimation-accuracy [OPTIONS]
 
-Track and analyze estimation accuracy over time.
+Three-layer factory telemetry: parse the deep dive archive for historical
+velocity, effectiveness, PR throughput, and fix-vs-feature trends.
+
+Requires: python3
+Optional: gh CLI (only needed if agent follows Layer 2 GitHub instructions)
 
 Options:
-  --project PROJECT     Filter by project (MVP, Beta, Production)
-  --record              Record a new estimate (requires --remaining, --velocity, --eta)
-  --remaining COUNT     Number of remaining issues (for --record)
-  --velocity RATE       Velocity rate (for --record)
-  --eta DATE            Predicted ETA in YYYY-MM-DD format (for --record)
-  --show                Show estimation history
-  --analyze             Analyze accuracy trends
-  --json                Output as JSON
+  --days N              Last N days of deep dive data
+  --from DATE           Start date (YYYY-MM-DD)
+  --to DATE             End date (YYYY-MM-DD)
+  --week                Shorthand for --days 7
+  --json                Output structured JSON (graphable)
+  --generate            Output step-by-step agent instructions
+  --deep-dive-dir DIR   Deep dive archive path
+                        (default: $OMNI_HOME/docs/deep-dives)
   -h, --help            Show this help
 
 Examples:
-  # Show accuracy history for all projects
-  $(basename "$0") --show
-
-  # Show history as JSON
-  $(basename "$0") --show --json
-
-  # Record a new estimate
-  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18
-
-  # Analyze MVP estimation accuracy
-  $(basename "$0") --project MVP --analyze
-
-Metrics Tracked:
-  - Predicted completion date
-  - Actual completion date (when reached)
-  - Variance in days (predicted - actual)
-  - Optimism bias (do you consistently underestimate?)
-  - Accuracy trend (are estimates improving?)
-
-How It Works:
-  1. Record estimates with --record when you create velocity estimates
-  2. When milestone completes, update with actual date
-  3. Compare predictions vs actuals to measure accuracy
-  4. Identify patterns (optimism bias, improving accuracy)
+  estimation-accuracy                          # All data + agent instructions
+  estimation-accuracy --week                   # Last 7 days
+  estimation-accuracy --from 2026-03-01 --to 2026-03-05
+  estimation-accuracy --json                   # Graphable JSON output
+  estimation-accuracy --json | python3 -m json.tool
+  estimation-accuracy --generate               # Step-by-step instructions
 EOF
     exit 0
 }
 
-# Initialize tracking file if it doesn't exist
-init_tracking_file() {
-    if [[ ! -f "$TRACKING_FILE" ]]; then
-        echo '{"estimates":[]}' > "$TRACKING_FILE"
-    fi
-}
-
-# Get current date in ISO format
-get_today() {
-    date +%Y-%m-%d
-}
-
-# Default values
-PROJECT=""
-RECORD=false
-SHOW=false
-ANALYZE=false
+# --- Defaults ---
+DAYS=""
+FROM_DATE=""
+TO_DATE=""
 JSON_OUTPUT=false
-REMAINING=""
-VELOCITY=""
-ETA=""
+GENERATE=false
+DEEP_DIVE_DIR="${OMNI_HOME:-${HOME}/Code/omni_home}/docs/deep-dives"
 
-# Parse arguments
+# --- Parse arguments ---
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --project)
-            PROJECT="$2"
+        --days)
+            DAYS="$2"
             shift 2
             ;;
-        --remaining)
-            REMAINING="$2"
+        --from)
+            FROM_DATE="$2"
             shift 2
             ;;
-        --velocity)
-            VELOCITY="$2"
+        --to)
+            TO_DATE="$2"
             shift 2
             ;;
-        --eta)
-            ETA="$2"
-            shift 2
-            ;;
-        --record)
-            RECORD=true
-            shift
-            ;;
-        --show)
-            SHOW=true
-            shift
-            ;;
-        --analyze)
-            ANALYZE=true
+        --week)
+            DAYS=7
             shift
             ;;
         --json)
             JSON_OUTPUT=true
             shift
+            ;;
+        --generate)
+            GENERATE=true
+            shift
+            ;;
+        --deep-dive-dir)
+            DEEP_DIVE_DIR="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -124,369 +99,600 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Handle --show command
-if [[ "$SHOW" == "true" ]]; then
-    if [[ ! -f "$TRACKING_FILE" ]]; then
-        if [[ "$JSON_OUTPUT" == "true" ]]; then
-            cat << EOF
-{
-  "tracking_file": "$TRACKING_FILE",
-  "estimates": [],
-  "summary": {
-    "total_estimates": 0,
-    "projects_tracked": []
-  },
-  "message": "No estimation history found. Use --record to start tracking."
-}
-EOF
-        else
-            echo "============================================================"
-            echo "Estimation Accuracy Tracker"
-            echo "============================================================"
-            echo ""
-            echo "Tracking file: $TRACKING_FILE"
-            echo ""
-            echo "No estimation history found."
-            echo "Use --record to start tracking estimates."
-            echo ""
-            echo "Example:"
-            echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
-        fi
-        exit 0
-    fi
-
-    # File exists, show contents
-    if [[ "$JSON_OUTPUT" == "true" ]]; then
-        # Build JSON output with summary
-        ESTIMATES=$(cat "$TRACKING_FILE")
-
-        # Count estimates and get unique projects using bash
-        TOTAL_COUNT=0
-        PROJECTS_JSON="[]"
-
-        # Check if jq is available for proper JSON processing
-        if command -v jq &> /dev/null; then
-            TOTAL_COUNT=$(echo "$ESTIMATES" | jq '.estimates | length')
-            PROJECTS_JSON=$(echo "$ESTIMATES" | jq '[.estimates[].project] | unique')
-            ESTIMATES_ARRAY=$(echo "$ESTIMATES" | jq '.estimates')
-
-            # Filter by project if specified
-            if [[ -n "$PROJECT" ]]; then
-                ESTIMATES_ARRAY=$(echo "$ESTIMATES" | jq --arg proj "$PROJECT" '[.estimates[] | select(.project == $proj)]')
-                TOTAL_COUNT=$(echo "$ESTIMATES_ARRAY" | jq 'length')
-            fi
-
-            cat << EOF
-{
-  "tracking_file": "$TRACKING_FILE",
-  "estimates": $ESTIMATES_ARRAY,
-  "summary": {
-    "total_estimates": $TOTAL_COUNT,
-    "projects_tracked": $PROJECTS_JSON
-  }
-}
-EOF
-        else
-            # Fallback without jq - use Python for reliable JSON handling
-            python3 << PYEOF
+# --- Run the Python parser on the deep dive archive ---
+RESULT=$(
+    _EA_DEEP_DIVE_DIR="$DEEP_DIVE_DIR" \
+    _EA_DAYS="${DAYS:-}" \
+    _EA_FROM="${FROM_DATE:-}" \
+    _EA_TO="${TO_DATE:-}" \
+    python3 << 'PYEOF'
 import json
+import os
+import re
 import sys
+from datetime import datetime, timedelta
+from pathlib import Path
 
-try:
-    with open("$TRACKING_FILE", "r") as f:
-        data = json.load(f)
+# ---- Configuration from environment ----
+deep_dive_dir = os.environ.get("_EA_DEEP_DIVE_DIR", "")
+days_str = os.environ.get("_EA_DAYS", "")
+from_date_str = os.environ.get("_EA_FROM", "")
+to_date_str = os.environ.get("_EA_TO", "")
 
-    estimates = data.get("estimates", [])
-    project_filter = "$PROJECT"
-
-    # Filter by project if specified
-    if project_filter:
-        estimates = [e for e in estimates if e.get("project") == project_filter]
-
-    # Get unique projects
-    projects_tracked = list(set(e.get("project", "") for e in data.get("estimates", []) if e.get("project")))
-
-    output = {
-        "tracking_file": "$TRACKING_FILE",
-        "estimates": estimates,
-        "summary": {
-            "total_estimates": len(estimates),
-            "projects_tracked": projects_tracked
-        }
-    }
-    print(json.dumps(output, indent=2))
-except Exception as e:
-    # If Python parsing fails, output error as valid JSON
-    error_output = {
-        "tracking_file": "$TRACKING_FILE",
-        "estimates": [],
-        "summary": {
-            "total_estimates": 0,
-            "projects_tracked": []
-        },
-        "error": str(e)
-    }
-    print(json.dumps(error_output, indent=2))
+if not deep_dive_dir:
+    print(json.dumps({"error": "No deep dive directory specified"}))
     sys.exit(1)
-PYEOF
-        fi
-    else
-        echo "============================================================"
-        echo "Estimation Accuracy Tracker - History"
-        echo "============================================================"
-        echo ""
-        echo "Tracking file: $TRACKING_FILE"
-        echo ""
 
-        if command -v jq &> /dev/null; then
-            # Get estimates, optionally filtered by project
-            if [[ -n "$PROJECT" ]]; then
-                ESTIMATES=$(cat "$TRACKING_FILE" | jq -r --arg proj "$PROJECT" '.estimates[] | select(.project == $proj)')
-            else
-                ESTIMATES=$(cat "$TRACKING_FILE" | jq -r '.estimates[]')
-            fi
+dd_path = Path(deep_dive_dir)
 
-            COUNT=$(cat "$TRACKING_FILE" | jq '.estimates | length')
+# ---- Date range computation ----
+today = datetime.now().date()
 
-            if [[ "$COUNT" -eq 0 ]]; then
-                echo "No estimates recorded yet."
-                echo ""
-                echo "Use --record to start tracking:"
-                echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
-            else
-                # Print table header
-                printf "%-12s %-30s %10s %10s %-12s\n" "Date" "Project" "Remaining" "Velocity" "Predicted ETA"
-                printf "%-12s %-30s %10s %10s %-12s\n" "----" "-------" "---------" "--------" "-------------"
+if from_date_str:
+    from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+else:
+    from_date = None
 
-                # Print each estimate
-                if [[ -n "$PROJECT" ]]; then
-                    cat "$TRACKING_FILE" | jq -r --arg proj "$PROJECT" \
-                        '.estimates[] | select(.project == $proj) | "\(.date)\t\(.project)\t\(.remaining_issues)\t\(.velocity)\t\(.predicted_eta)"' | \
-                    while IFS=$'\t' read -r date proj remaining vel eta; do
-                        # Truncate project name if too long
-                        proj_short="${proj:0:28}"
-                        if [[ ${#proj} -gt 28 ]]; then
-                            proj_short="${proj_short}.."
-                        fi
-                        printf "%-12s %-30s %10s %10s %-12s\n" "$date" "$proj_short" "$remaining" "$vel" "$eta"
-                    done
-                else
-                    cat "$TRACKING_FILE" | jq -r \
-                        '.estimates[] | "\(.date)\t\(.project)\t\(.remaining_issues)\t\(.velocity)\t\(.predicted_eta)"' | \
-                    while IFS=$'\t' read -r date proj remaining vel eta; do
-                        # Truncate project name if too long
-                        proj_short="${proj:0:28}"
-                        if [[ ${#proj} -gt 28 ]]; then
-                            proj_short="${proj_short}.."
-                        fi
-                        printf "%-12s %-30s %10s %10s %-12s\n" "$date" "$proj_short" "$remaining" "$vel" "$eta"
-                    done
-                fi
+if to_date_str:
+    to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+else:
+    to_date = today
 
-                echo ""
-                echo "Total estimates: $COUNT"
+if days_str and not from_date_str:
+    from_date = to_date - timedelta(days=int(days_str) - 1)
 
-                # Show unique projects
-                UNIQUE_PROJECTS=$(cat "$TRACKING_FILE" | jq -r '[.estimates[].project] | unique | join(", ")')
-                echo "Projects tracked: $UNIQUE_PROJECTS"
-            fi
-        else
-            echo "Warning: jq not installed. Showing raw JSON:"
-            echo ""
-            cat "$TRACKING_FILE"
-        fi
-    fi
-    exit 0
-fi
-
-# Handle --record command
-if [[ "$RECORD" == "true" ]]; then
-    # Validate required parameters
-    if [[ -z "$PROJECT" ]]; then
-        echo "Error: --project is required for --record" >&2
-        echo "Example: $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18" >&2
-        exit 1
-    fi
-    if [[ -z "$REMAINING" ]]; then
-        echo "Error: --remaining is required for --record" >&2
-        exit 1
-    fi
-    if [[ -z "$VELOCITY" ]]; then
-        echo "Error: --velocity is required for --record" >&2
-        exit 1
-    fi
-    if [[ -z "$ETA" ]]; then
-        echo "Error: --eta is required for --record (format: YYYY-MM-DD)" >&2
-        exit 1
-    fi
-
-    # Validate ETA format
-    if ! echo "$ETA" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
-        echo "Error: --eta must be in YYYY-MM-DD format" >&2
-        exit 1
-    fi
-
-    # Initialize tracking file if needed
-    init_tracking_file
-
-    TODAY=$(get_today)
-
-    if command -v jq &> /dev/null; then
-        # Create new estimate object
-        NEW_ESTIMATE=$(cat << EOF
-{
-  "date": "$TODAY",
-  "project": "$PROJECT",
-  "remaining_issues": $REMAINING,
-  "velocity": $VELOCITY,
-  "predicted_eta": "$ETA",
-  "actual_completion": null
+# ---- Month name mapping ----
+MONTH_NAMES = {
+    "JANUARY": 1, "FEBRUARY": 2, "MARCH": 3, "APRIL": 4,
+    "MAY": 5, "JUNE": 6, "JULY": 7, "AUGUST": 8,
+    "SEPTEMBER": 9, "OCTOBER": 10, "NOVEMBER": 11, "DECEMBER": 12,
 }
-EOF
+
+def parse_filename_date(fname: str):
+    """Extract date from MONTH_DAY_YEAR_DEEP_DIVE.md or MONTH_DD_YEAR_DEEP_DIVE.md."""
+    m = re.match(r"([A-Z]+)_(\d+)_(\d{4})_DEEP_DIVE\.md$", fname)
+    if not m:
+        return None
+    month_name, day_str, year_str = m.group(1), m.group(2), m.group(3)
+    month_num = MONTH_NAMES.get(month_name)
+    if not month_num:
+        return None
+    try:
+        return datetime(int(year_str), month_num, int(day_str)).date()
+    except ValueError:
+        return None
+
+# ---- Category canonicalization ----
+CATEGORY_CANONICAL = {
+    "capability (net-new)": "capability",
+    "capability": "capability",
+    "correctness / hardening": "correctness",
+    "correctness": "correctness",
+    "governance / safety rails": "governance",
+    "governance": "governance",
+    "observability": "observability",
+    "documentation": "docs",
+    "docs": "docs",
+    "churn / maintenance": "churn",
+    "churn": "churn",
+    "churn / investigation": "churn",
+}
+
+def canonicalize_category(raw_label: str):
+    return CATEGORY_CANONICAL.get(raw_label.strip().lower())
+
+def clean_num(s: str) -> str:
+    """Strip markdown bold, tildes, commas from a numeric cell."""
+    return re.sub(r'[~,*]', '', s).strip()
+
+# ---- Score extraction (all eras) ----
+VEL_PATTERNS = [
+    re.compile(r'[Vv]elocity\s+[Ss]core[^0-9]*(\d+)\s*/\s*100'),
+    re.compile(r'\*\*[Vv]elocity\s+[Ss]core\*\*:\s*(\d+)\s*/\s*100'),
+]
+EFF_PATTERNS = [
+    re.compile(r'[Ee]ffectiveness[^0-9]*(\d+)\s*/\s*100'),
+    re.compile(r'\*\*[Ee]ffectiveness\s+[Ss]core\*\*:\s*(\d+)\s*/\s*100'),
+]
+
+def extract_score(content: str, patterns):
+    for pat in patterns:
+        m = pat.search(content)
+        if m:
+            return int(m.group(1))
+    return None
+
+# ---- Era detection ----
+def detect_era(content: str):
+    if re.search(r'\|\s*Repository\s*\|\s*Commits\s*\|\s*PRs\s+Merged', content):
+        return "C"
+    if re.search(r'\*\*([\w\s/()]+?)\s*PRs?\*\*:\s*\d+', content):
+        return "B"
+    return "A"
+
+# ---- Era C extraction ----
+def extract_era_c(content: str):
+    result = {"prs_merged": None, "repos": {}, "tickets": [], "categories": None,
+              "additions": None, "deletions": None}
+
+    # Repository table
+    table_match = re.search(
+        r'\|\s*Repository\s*\|\s*Commits\s*\|\s*PRs\s+Merged.*?\n'
+        r'(?:\|[-:\s|]+\n)?'
+        r'((?:\|.*\n)*)',
+        content
+    )
+    if table_match:
+        for row in table_match.group(1).strip().split("\n"):
+            cols = [c.strip() for c in row.split("|")]
+            # Remove empty strings from split
+            cols = [c for c in cols if c]
+            if len(cols) < 3:
+                continue
+            if cols[0].startswith("--") or cols[0].startswith(":-"):
+                continue
+            repo_name = re.sub(r'\*+', '', cols[0]).strip()
+            if not repo_name or repo_name.lower() == "repository":
+                continue
+            try:
+                commits = int(clean_num(cols[1]))
+            except (ValueError, IndexError):
+                commits = 0
+            try:
+                prs = int(clean_num(cols[2]))
+            except (ValueError, IndexError):
+                prs = 0
+            adds = None
+            dels = None
+            if len(cols) >= 4:
+                try:
+                    adds = int(clean_num(cols[3]))
+                except (ValueError, IndexError):
+                    pass
+            if len(cols) >= 5:
+                try:
+                    dels = int(clean_num(cols[4]))
+                except (ValueError, IndexError):
+                    pass
+
+            if "total" in repo_name.lower():
+                result["prs_merged"] = prs
+                if adds is not None:
+                    result["additions"] = adds
+                if dels is not None:
+                    result["deletions"] = dels
+            else:
+                result["repos"][repo_name] = {"prs": prs, "commits": commits}
+
+    # Ticket extraction from structured PR|Ticket|Summary tables
+    ticket_set = set()
+    pr_table_rows = re.findall(r'\|\s*\w+\s+#\d+\s*\|\s*(OMN-\d+)\s*\|', content)
+    if pr_table_rows:
+        ticket_set.update(pr_table_rows)
+    else:
+        # Fallback: global OMN-\d+ regex
+        ticket_set.update(re.findall(r'\b(OMN-\d+)\b', content))
+
+    result["tickets"] = sorted(ticket_set)
+    return result
+
+# ---- Era B extraction ----
+def extract_era_b(content: str):
+    result = {"prs_merged": None, "repos": {}, "tickets": [], "categories": {},
+              "additions": None, "deletions": None}
+
+    # Category counts
+    total_prs = 0
+    for m in re.finditer(r'\*\*([\w\s/()\-]+?)\s*PRs?\*\*:\s*(\d+)', content):
+        raw_label = m.group(1)
+        count = int(m.group(2))
+        canon = canonicalize_category(raw_label)
+        if canon:
+            result["categories"][canon] = result["categories"].get(canon, 0) + count
+            total_prs += count
+
+    if total_prs > 0:
+        result["prs_merged"] = total_prs
+
+    # PR rows from structured tables: | repo | #NNN | ...
+    pr_set = set()
+    ticket_set = set()
+    for m in re.finditer(r'\|\s*(\w+)\s*\|\s*#(\d+)\s*\|([^|]*)\|', content):
+        repo = m.group(1).strip()
+        pr_num = m.group(2).strip()
+        title_or_rest = m.group(3).strip()
+        pr_set.add((repo, pr_num))
+        # Extract tickets from the row
+        for t in re.findall(r'(OMN-\d+)', title_or_rest):
+            ticket_set.add(t)
+        full_row = m.group(0)
+        for t in re.findall(r'(OMN-\d+)', full_row):
+            ticket_set.add(t)
+
+    # Repo stats from PR rows
+    repo_prs = {}
+    for repo, pr_num in pr_set:
+        repo_prs[repo] = repo_prs.get(repo, 0) + 1
+    for repo, count in repo_prs.items():
+        result["repos"][repo] = {"prs": count}
+
+    result["tickets"] = sorted(ticket_set)
+
+    if not result["categories"]:
+        result["categories"] = None
+
+    return result
+
+# ---- Era A extraction ----
+def extract_era_a(content: str):
+    result = {"prs_merged": None, "repos": {}, "tickets": [], "categories": None,
+              "additions": None, "deletions": None}
+
+    # PR references: "PR references in commits: #352, #353, #354"
+    pr_set = set()
+    for block in re.finditer(
+        r'###\s+(\w+)\s*\n-\s*PR references in commits:\s*(.*)',
+        content
+    ):
+        working_copy = block.group(1).strip()
+        pr_refs = re.findall(r'#(\d+)', block.group(2))
+        for pr_num in pr_refs:
+            pr_set.add((working_copy, pr_num))
+
+    if pr_set:
+        result["prs_merged"] = len(pr_set)
+
+    # Tickets: global regex (Era A lacks structured tables)
+    ticket_set = set(re.findall(r'\b(OMN-\d+)\b', content))
+    result["tickets"] = sorted(ticket_set)
+
+    return result
+
+# ---- Fix-vs-feature classification ----
+FEATURE_CATS = {"capability", "governance", "observability"}
+FIX_CATS = {"correctness", "churn"}
+
+def classify_from_categories(categories):
+    if not categories:
+        return None, None
+    feature = sum(categories.get(c, 0) for c in FEATURE_CATS)
+    fix = sum(categories.get(c, 0) for c in FIX_CATS)
+    return feature, fix
+
+# ---- Scan files ----
+time_series = []
+all_tickets = set()
+throughput_by_repo = {}
+
+if dd_path.is_dir():
+    for f in sorted(dd_path.iterdir()):
+        if not f.name.endswith("_DEEP_DIVE.md"):
+            continue
+        file_date = parse_filename_date(f.name)
+        if file_date is None:
+            continue
+        if from_date and file_date < from_date:
+            continue
+        if file_date > to_date:
+            continue
+
+        content = f.read_text(errors="replace")
+        velocity = extract_score(content, VEL_PATTERNS)
+        effectiveness = extract_score(content, EFF_PATTERNS)
+        era = detect_era(content)
+
+        if era == "C":
+            extracted = extract_era_c(content)
+        elif era == "B":
+            extracted = extract_era_b(content)
+        else:
+            extracted = extract_era_a(content)
+
+        prs_merged = extracted["prs_merged"]
+        categories = extracted.get("categories")
+        tickets = extracted.get("tickets", [])
+        additions = extracted.get("additions")
+        deletions = extracted.get("deletions")
+        repos = extracted.get("repos", {})
+
+        all_tickets.update(tickets)
+
+        # Throughput by repo (Era B/C only)
+        if era in ("B", "C"):
+            for repo_name, stats in repos.items():
+                if repo_name not in throughput_by_repo:
+                    throughput_by_repo[repo_name] = {"total_prs": 0, "days": 0}
+                throughput_by_repo[repo_name]["total_prs"] += stats.get("prs", 0)
+                throughput_by_repo[repo_name]["days"] += 1
+
+        core_found = velocity is not None and effectiveness is not None and prs_merged is not None
+        parse_quality = "full" if core_found else "partial"
+        repos_active = len(repos) if repos else None
+
+        entry = {
+            "date": str(file_date),
+            "velocity": velocity,
+            "effectiveness": effectiveness,
+            "prs_merged": prs_merged,
+            "tickets_referenced": len(tickets),
+            "repos_active": repos_active,
+            "additions": additions,
+            "deletions": deletions,
+            "parse_quality": parse_quality,
+            "categories": categories if categories else None,
+        }
+        time_series.append(entry)
+
+# Sort by date ascending
+time_series.sort(key=lambda e: e["date"])
+
+# ---- Fix-vs-feature weekly aggregation ----
+weekly = {}
+for entry in time_series:
+    d = datetime.strptime(entry["date"], "%Y-%m-%d").date()
+    iso_year, iso_week, _ = d.isocalendar()
+    week_key = f"{iso_year}-W{iso_week:02d}"
+
+    cats = entry.get("categories")
+    if cats:
+        feat, fix = classify_from_categories(cats)
+    else:
+        feat, fix = None, None
+
+    if feat is not None and fix is not None:
+        if week_key not in weekly:
+            weekly[week_key] = {"feature_prs": 0, "fix_prs": 0}
+        weekly[week_key]["feature_prs"] += feat
+        weekly[week_key]["fix_prs"] += fix
+
+weekly_list = []
+for wk in sorted(weekly.keys()):
+    w = weekly[wk]
+    total = w["feature_prs"] + w["fix_prs"]
+    fix_ratio = w["fix_prs"] / max(1, total)
+    weekly_list.append({
+        "week": wk,
+        "feature_prs": w["feature_prs"],
+        "fix_prs": w["fix_prs"],
+        "fix_ratio": round(fix_ratio, 3),
+        "total": total,
+    })
+
+# Trend calculation
+non_zero_weeks = [w for w in weekly_list if w["total"] > 0]
+if len(non_zero_weeks) >= 4:
+    n = len(non_zero_weeks)
+    x_vals = list(range(n))
+    y_vals = [w["fix_ratio"] for w in non_zero_weeks]
+    x_mean = sum(x_vals) / n
+    y_mean = sum(y_vals) / n
+    num = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_vals, y_vals))
+    den = sum((x - x_mean) ** 2 for x in x_vals)
+    slope = round(num / den, 4) if den != 0 else 0.0
+    if slope < -0.01:
+        trend_label = "declining"
+    elif slope > 0.01:
+        trend_label = "increasing"
+    else:
+        trend_label = "stable"
+else:
+    slope = None
+    trend_label = "insufficient_data"
+
+# ---- Throughput by repo summary ----
+throughput_summary = {}
+for repo_name, stats in sorted(throughput_by_repo.items()):
+    tp = stats["total_prs"]
+    d = stats["days"]
+    throughput_summary[repo_name] = {
+        "total_prs": tp,
+        "daily_avg": round(tp / max(1, d), 1),
+    }
+
+# ---- Compute date range for output ----
+if time_series:
+    actual_from = time_series[0]["date"]
+    actual_to = time_series[-1]["date"]
+else:
+    actual_from = str(from_date) if from_date else str(today)
+    actual_to = str(to_date)
+
+# ---- Build output ----
+output = {
+    "meta": {
+        "generated_at": datetime.now().isoformat(),
+        "period": {"from": actual_from, "to": actual_to},
+        "deep_dive_count": len(time_series),
+        "days_with_data": len(time_series),
+    },
+    "time_series": time_series,
+    "fix_vs_feature": {
+        "weekly": weekly_list,
+        "trend_slope": slope,
+        "trend_label": trend_label,
+    },
+    "throughput_by_repo": throughput_summary,
+    "reconciliation": {
+        "status": "requires_agent",
+        "_note": "Layer 1 (archive) is computed. Layers 2 (GitHub) and 3 (Linear) are instructions only.",
+        "deep_dive_ticket_ids": sorted(all_tickets),
+        "deep_dive_ticket_count": len(all_tickets),
+    },
+}
+
+print(json.dumps(output))
+PYEOF
 )
 
-        # Append to estimates array
-        UPDATED=$(cat "$TRACKING_FILE" | jq --argjson new "$NEW_ESTIMATE" '.estimates += [$new]')
-        echo "$UPDATED" > "$TRACKING_FILE"
-
-        if [[ "$JSON_OUTPUT" == "true" ]]; then
-            cat << EOF
-{
-  "status": "success",
-  "message": "Estimate recorded successfully",
-  "estimate": $NEW_ESTIMATE,
-  "tracking_file": "$TRACKING_FILE"
-}
-EOF
-        else
-            echo "============================================================"
-            echo "Estimation Accuracy Tracker"
-            echo "============================================================"
-            echo ""
-            echo "Estimate recorded successfully!"
-            echo ""
-            echo "  Date:           $TODAY"
-            echo "  Project:        $PROJECT"
-            echo "  Remaining:      $REMAINING issues"
-            echo "  Velocity:       $VELOCITY issues/day"
-            echo "  Predicted ETA:  $ETA"
-            echo ""
-            echo "Tracking file: $TRACKING_FILE"
-            echo ""
-            echo "Use --show to view all estimates."
-        fi
-    else
-        echo "Error: jq is required for --record functionality" >&2
-        echo "Install jq: brew install jq (macOS) or apt-get install jq (Linux)" >&2
-        exit 1
-    fi
+# --- JSON mode: output and exit ---
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    echo "$RESULT"
     exit 0
 fi
 
-# Handle --analyze command
-if [[ "$ANALYZE" == "true" ]]; then
-    if [[ ! -f "$TRACKING_FILE" ]]; then
-        echo "No estimation history found. Record some estimates first." >&2
-        exit 1
-    fi
+# --- Extract summary values for text display ---
+DEEP_DIVE_COUNT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['meta']['deep_dive_count'])")
+TICKET_COUNT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['reconciliation']['deep_dive_ticket_count'])")
+TREND_LABEL=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['fix_vs_feature']['trend_label'])")
+PERIOD_FROM=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['meta']['period']['from'])")
+PERIOD_TO=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['meta']['period']['to'])")
 
-    if ! command -v jq &> /dev/null; then
-        echo "Error: jq is required for --analyze functionality" >&2
-        exit 1
-    fi
+# --- Compute score averages ---
+SCORE_SUMMARY=$(echo "$RESULT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+ts = d['time_series']
+vels = [e['velocity'] for e in ts if e['velocity'] is not None]
+effs = [e['effectiveness'] for e in ts if e['effectiveness'] is not None]
+prs = [e['prs_merged'] for e in ts if e['prs_merged'] is not None]
+partial = sum(1 for e in ts if e['parse_quality'] == 'partial')
+print(f'vel_avg={sum(vels)/len(vels):.1f}' if vels else 'vel_avg=N/A')
+print(f'eff_avg={sum(effs)/len(effs):.1f}' if effs else 'eff_avg=N/A')
+print(f'pr_total={sum(prs)}' if prs else 'pr_total=N/A')
+print(f'partial_count={partial}')
+")
 
+# Parse score summary
+VEL_AVG=$(echo "$SCORE_SUMMARY" | grep '^vel_avg=' | cut -d= -f2)
+EFF_AVG=$(echo "$SCORE_SUMMARY" | grep '^eff_avg=' | cut -d= -f2)
+PR_TOTAL=$(echo "$SCORE_SUMMARY" | grep '^pr_total=' | cut -d= -f2)
+PARTIAL_COUNT=$(echo "$SCORE_SUMMARY" | grep '^partial_count=' | cut -d= -f2)
+
+# --- Text output ---
+echo "============================================================"
+echo "Factory Telemetry — Three-Layer Estimation Accuracy"
+echo "============================================================"
+echo ""
+echo "Period: ${PERIOD_FROM} to ${PERIOD_TO}"
+echo "Deep dives analyzed: ${DEEP_DIVE_COUNT}"
+echo "Unique ticket IDs extracted: ${TICKET_COUNT}"
+echo ""
+echo "--- Layer 1: Deep Dive Archive (computed) ---"
+echo ""
+echo "  Avg velocity score:      ${VEL_AVG}/100"
+echo "  Avg effectiveness score: ${EFF_AVG}/100"
+echo "  Total PRs merged:        ${PR_TOTAL}"
+echo "  Fix-vs-feature trend:    ${TREND_LABEL}"
+echo "  Entries with partial data: ${PARTIAL_COUNT}"
+echo ""
+
+# --- Fix-vs-feature weekly breakdown ---
+echo "$RESULT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+weekly = d['fix_vs_feature']['weekly']
+if weekly:
+    print('--- Fix vs Feature (weekly) ---')
+    print('')
+    print(f'  {\"Week\":<12} {\"Feature\":>8} {\"Fix\":>6} {\"Total\":>7} {\"Fix%\":>6}')
+    print(f'  {\"----\":<12} {\"-------\":>8} {\"---\":>6} {\"-----\":>7} {\"----\":>6}')
+    for w in weekly[-8:]:  # Last 8 weeks
+        print(f'  {w[\"week\"]:<12} {w[\"feature_prs\"]:>8} {w[\"fix_prs\"]:>6} {w[\"total\"]:>7} {w[\"fix_ratio\"]*100:>5.1f}%')
+    print('')
+    slope = d['fix_vs_feature']['trend_slope']
+    label = d['fix_vs_feature']['trend_label']
+    if slope is not None:
+        print(f'  Trend slope: {slope:.4f} ({label})')
+    else:
+        print(f'  Trend: {label}')
+    print('')
+"
+
+# --- Agent instructions for Layer 2 + Layer 3 ---
+print_agent_instructions() {
     echo "============================================================"
-    echo "Estimation Accuracy Analysis"
+    echo "Layer 2: GitHub PR Reconciliation (agent executes)"
     echo "============================================================"
     echo ""
+    echo "Run these commands to collect GitHub PR data for reconciliation."
+    echo "Extract ticket IDs (OMN-XXXX) from PR titles."
+    echo ""
 
-    if [[ -n "$PROJECT" ]]; then
-        ESTIMATES=$(cat "$TRACKING_FILE" | jq --arg proj "$PROJECT" '[.estimates[] | select(.project == $proj)]')
-        echo "Project: $PROJECT"
-    else
-        ESTIMATES=$(cat "$TRACKING_FILE" | jq '.estimates')
-        echo "All Projects"
+    # Get unique repos from the result
+    REPOS_LIST=$(echo "$RESULT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+repos = set()
+for r in d.get('throughput_by_repo', {}):
+    repos.add(r)
+# Also extract from time_series repos_active entries
+for e in d['time_series']:
+    pass  # repos are in throughput_by_repo
+for r in sorted(repos):
+    print(r)
+")
+
+    if [[ -z "$REPOS_LIST" ]]; then
+        REPOS_LIST="omnibase_core omnibase_infra omniclaude omniintelligence omnidash omnimemory omninode_infra omniweb"
     fi
 
-    COUNT=$(echo "$ESTIMATES" | jq 'length')
-
-    if [[ "$COUNT" -eq 0 ]]; then
+    for repo in $REPOS_LIST; do
+        echo "# ${repo}"
+        echo '```bash'
+        echo "gh pr list --repo OmniNode-ai/${repo} --state merged \\"
+        echo "  --search \"merged:${PERIOD_FROM}..${PERIOD_TO}\" \\"
+        echo "  --json number,title,mergedAt --limit 500"
+        echo '```'
         echo ""
-        echo "No estimates found for analysis."
-        exit 0
-    fi
+    done
 
-    echo "Total estimates: $COUNT"
-    echo ""
-
-    # Calculate basic stats
-    echo "Velocity Statistics:"
-    echo "-------------------"
-
-    # Get min, max, avg velocity
-    MIN_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | min')
-    MAX_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | max')
-    AVG_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | add / length')
-
-    echo "  Min velocity:  $MIN_VEL issues/day"
-    echo "  Max velocity:  $MAX_VEL issues/day"
-    echo "  Avg velocity:  $AVG_VEL issues/day"
-    echo ""
-
-    echo "Remaining Issues Trend:"
-    echo "----------------------"
-
-    # Show first and last remaining count
-    FIRST_REMAINING=$(echo "$ESTIMATES" | jq '.[0].remaining_issues')
-    LAST_REMAINING=$(echo "$ESTIMATES" | jq '.[-1].remaining_issues')
-    FIRST_DATE=$(echo "$ESTIMATES" | jq -r '.[0].date')
-    LAST_DATE=$(echo "$ESTIMATES" | jq -r '.[-1].date')
-
-    echo "  First ($FIRST_DATE): $FIRST_REMAINING issues"
-    echo "  Last  ($LAST_DATE): $LAST_REMAINING issues"
-
-    if [[ "$FIRST_REMAINING" != "null" && "$LAST_REMAINING" != "null" ]]; then
-        DIFF=$((FIRST_REMAINING - LAST_REMAINING))
-        echo "  Progress:       $DIFF issues completed"
-    fi
-
-    echo ""
-    echo "ETA Trend:"
-    echo "---------"
-
-    # Show first and last ETA
-    FIRST_ETA=$(echo "$ESTIMATES" | jq -r '.[0].predicted_eta')
-    LAST_ETA=$(echo "$ESTIMATES" | jq -r '.[-1].predicted_eta')
-
-    echo "  First prediction: $FIRST_ETA"
-    echo "  Latest prediction: $LAST_ETA"
-
-    echo ""
+    echo "============================================================"
+    echo "Layer 3: Linear Done Issues (agent executes via MCP)"
     echo "============================================================"
     echo ""
-    echo "For detailed analysis, use the polymorphic agent with:"
-    echo "  estimation-accuracy --show --json | pbcopy"
-    echo "Then ask Claude to analyze the estimation patterns."
+    echo "Call this MCP tool to get Linear Done issues:"
+    echo ""
+    echo '```python'
+    echo "mcp__linear-server__list_issues("
+    echo "    assignee=\"me\","
+    echo "    state=\"Done\","
 
-    exit 0
+    # Compute days for the updatedAt filter
+    PERIOD_DAYS=$(python3 -c "
+from datetime import datetime
+d1 = datetime.strptime('${PERIOD_FROM}', '%Y-%m-%d')
+d2 = datetime.strptime('${PERIOD_TO}', '%Y-%m-%d')
+print((d2 - d1).days + 1)
+")
+    echo "    updatedAt=\"-P${PERIOD_DAYS}D\","
+    echo "    limit=250"
+    echo ")"
+    echo '```'
+    echo ""
+    echo "Fields needed from response: identifier, title, completedAt, url"
+    echo ""
+    echo "============================================================"
+    echo "Reconciliation"
+    echo "============================================================"
+    echo ""
+    echo "Three-way set comparison using ticket identifiers (OMN-XXXX):"
+    echo ""
+    echo "- A = deep dive ticket IDs (structured extraction from archive): ${TICKET_COUNT} IDs"
+    echo "- B = Linear Done ticket IDs (from MCP response): [agent fills]"
+    echo "- C = GitHub PR ticket IDs (from commit/PR titles): [agent fills]"
+    echo ""
+    echo "Compute:"
+    echo "- Overlap (A n B): tickets confirmed done in both sources"
+    echo "- Shipped, not closed (A - B): archive evidence but Linear not Done"
+    echo "- Closed, no archive evidence (B - A): Linear Done but not in deep dives"
+    echo "- Gap ratio: |A - B| / max(1, |A|)"
+    echo ""
+    echo "Present as:"
+    echo ""
+    echo "| Metric | Count |"
+    echo "|--------|-------|"
+    echo "| Archive ticket IDs (A) | ${TICKET_COUNT} |"
+    echo "| Linear Done IDs (B) | [agent fills] |"
+    echo "| Overlap (A n B) | [agent fills] |"
+    echo "| Shipped, not closed (A - B) | [agent fills] |"
+    echo "| Closed, no evidence (B - A) | [agent fills] |"
+    echo "| Gap ratio | [agent fills] |"
+    echo ""
+}
+
+if [[ "$GENERATE" == "true" ]]; then
+    print_agent_instructions
+else
+    # Default mode: summary + instructions
+    print_agent_instructions
 fi
-
-# Default behavior - show help
-echo "============================================================"
-echo "Estimation Accuracy Tracker"
-echo "============================================================"
-echo ""
-echo "Tracking file: $TRACKING_FILE"
-echo ""
-echo "Commands:"
-echo "  --show              View estimation history"
-echo "  --show --json       View history as JSON"
-echo "  --record            Record a new estimate"
-echo "  --analyze           Analyze accuracy trends"
-echo ""
-echo "Examples:"
-echo "  $(basename "$0") --show"
-echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
-echo "  $(basename "$0") --project MVP --analyze"
-echo ""
-echo "Use -h or --help for full documentation."
