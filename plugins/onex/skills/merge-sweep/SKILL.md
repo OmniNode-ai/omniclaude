@@ -212,6 +212,9 @@ Draft PRs — skip silently.
    For each candidate in candidates[]:
      acquire claim
      gh pr merge <N> --repo <repo> --<merge_method> --auto
+     IF fails with "Pull request is in clean status":
+       gh pr merge <N> --repo <repo> --<merge_method>   (direct merge, no --auto)
+       record result as "merged_directly"
      release claim
 
 6a. UPDATE BEHIND BRANCHES (after enabling auto-merge, sequential):
@@ -236,6 +239,7 @@ Draft PRs — skip silently.
        - Skill(skill="onex:pr-polish", args="<N> --required-clean-runs <polish_clean_runs>")
        - re-check mergeable state after polish
        - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
+         (if "Pull request is in clean status" error: retry without --auto as direct merge)
        - remove worktree
      release claim
 
@@ -284,7 +288,7 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 ```
 [merge-sweep] run <run_id> complete
 
-Track A (auto-merge enabled):  N queued | K failed
+Track A (auto-merge enabled):  N queued | D merged directly | K failed
   Branch updates:              B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
 
@@ -317,6 +321,7 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
   "candidates_found": 3,
   "polish_queue_found": 2,
   "auto_merge_set": 4,
+  "merged_directly": 1,
   "branches_updated": 2,
   "polished": 1,
   "polish_partial": 0,
@@ -352,6 +357,7 @@ Status values:
 - `partial` — some queued, some failed or blocked
 - `error` — no PRs successfully queued
 
+Track A `result` values: `auto_merge_set` | `merged_directly` | `failed` | `skipped`
 Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
 
 ## Failure Handling
@@ -360,7 +366,8 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 |-------|----------|
 | PR mergeable state UNKNOWN | Skip with warning; include in `skipped` count |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
-| `gh pr merge --auto` fails for a PR | Record `result: failed`; continue others |
+| `gh pr merge --auto` fails with "clean status" | Fall back to direct merge (no `--auto`); record `result: merged_directly` |
+| `gh pr merge --auto` fails for other reasons | Record `result: failed`; continue others |
 | pr-polish BLOCKED (unresolvable conflicts) | Record `result: blocked`; skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`; skip auto-merge |
 | Worktree creation fails | Record `result: failed`; release claim; continue others |

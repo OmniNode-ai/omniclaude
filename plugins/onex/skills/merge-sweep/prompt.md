@@ -403,6 +403,27 @@ for pr in candidates:
                 "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
             })
             print(f"  ✓ auto-merge enabled: {repo_full}#{pr['number']} — {pr['title'][:60]}")
+        elif "Pull request is in clean status" in (result.stderr or ""):
+            # Repo has no merge queue and PR is immediately mergeable —
+            # GitHub rejects --auto because there's nothing to wait for.
+            # Fall back to direct merge (no --auto).
+            direct_result = run([
+                "gh", "pr", "merge", str(pr["number"]),
+                "--repo", repo_full,
+                f"--{merge_method}",
+            ])
+            if direct_result.returncode == 0:
+                auto_merge_results.append({
+                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                    "result": "merged_directly", "head_sha": pr["headRefOid"][:8]
+                })
+                print(f"  ✓ merged directly: {repo_full}#{pr['number']} — {pr['title'][:60]} (auto-merge unavailable, PR was clean)")
+            else:
+                auto_merge_results.append({
+                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                    "result": "failed", "error": direct_result.stderr.strip()
+                })
+                print(f"  ✗ direct merge also failed: {repo_full}#{pr['number']} — {direct_result.stderr.strip()}")
         else:
             auto_merge_results.append({
                 "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
@@ -551,6 +572,11 @@ Steps:
    ```bash
    gh pr merge {pr_number} --repo {repo_full} --{merge_method} --auto
    ```
+   If this fails with "Pull request is in clean status", fall back to direct merge:
+   ```bash
+   gh pr merge {pr_number} --repo {repo_full} --{merge_method}
+   ```
+   Record `"merged_directly": true` instead of `"auto_merge_set": true` in the result.
 
 5. Clean up the worktree:
    ```bash
@@ -563,6 +589,7 @@ Return a JSON result:
   "repo": "{repo_full}",
   "polish_status": "DONE | PARTIAL | BLOCKED",
   "auto_merge_set": true | false,
+  "merged_directly": true | false,
   "error": null | "<error message>"
 }}"""
         )
@@ -578,6 +605,7 @@ Wait for all polish agents to complete. Collect results into `polish_results[]`.
 
 ```python
 auto_merge_set_count = sum(1 for r in auto_merge_results if r["result"] == "auto_merge_set")
+merged_directly_count = sum(1 for r in auto_merge_results if r["result"] == "merged_directly")
 auto_merge_failed_count = sum(1 for r in auto_merge_results if r["result"] == "failed")
 
 polish_done_count = sum(1 for r in polish_results if r.get("polish_status") == "DONE")
@@ -592,14 +620,16 @@ skipped_count = (
 )
 
 total_auto_merge_set = auto_merge_set_count + polish_auto_merged_count
+total_merged_directly = merged_directly_count
 total_branches_updated = branches_updated  # from Step 6a
 total_failed = auto_merge_failed_count + polish_blocked_count
 
-if total_auto_merge_set > 0 and total_failed == 0:
+total_successful = total_auto_merge_set + total_merged_directly
+if total_successful > 0 and total_failed == 0:
     status = "queued"
-elif total_auto_merge_set > 0 and total_failed > 0:
+elif total_successful > 0 and total_failed > 0:
     status = "partial"
-elif total_auto_merge_set == 0 and total_failed > 0:
+elif total_successful == 0 and total_failed > 0:
     status = "error"
 else:
     status = "nothing_to_merge"  # all candidates were skipped or blocked
@@ -620,7 +650,7 @@ source ~/.omnibase/.env 2>/dev/null || true
 ```python
 summary_lines = [
     f"*[merge-sweep]* run {run_id} complete\n",
-    f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {auto_merge_failed_count} failed",
+    f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {merged_directly_count} merged directly | {auto_merge_failed_count} failed",
     f"  Branch updates:              {total_branches_updated} behind → updated",
     f"Track B (pr-polish):           {polish_done_count} fixed → {polish_auto_merged_count} queued | "
     f"{polish_partial_count} partial | {polish_blocked_count} blocked",
@@ -636,11 +666,16 @@ if filters.get("since") or filters.get("labels") or filters.get("authors"):
         filter_parts.append(f"authors={','.join(filters['authors'])}")
     summary_lines.append(f"Filters: {' | '.join(filter_parts)}")
 
-queued_prs = [r for r in auto_merge_results + polish_results if r.get("result") == "auto_merge_set" or r.get("auto_merge_set")]
+queued_prs = [r for r in auto_merge_results + polish_results if r.get("result") in ("auto_merge_set", "merged_directly") or r.get("auto_merge_set")]
 if queued_prs:
-    summary_lines.append("\nAuto-merge enabled:")
+    summary_lines.append("\nAuto-merge enabled / merged directly:")
     for r in queued_prs:
-        origin = " (after polish)" if r.get("auto_merge_set") and r not in auto_merge_results else ""
+        if r.get("result") == "merged_directly":
+            origin = " (merged directly — no merge queue)"
+        elif r.get("auto_merge_set") and r not in auto_merge_results:
+            origin = " (after polish)"
+        else:
+            origin = ""
         summary_lines.append(f"  • {r['repo']}#{r['pr']}{origin}")
 
 blocked_prs = [r for r in polish_results if r.get("polish_status") == "BLOCKED"]
@@ -684,6 +719,7 @@ except Exception as e:
   "candidates_found": <N>,
   "polish_queue_found": <M>,
   "auto_merge_set": <count>,
+  "merged_directly": <total_merged_directly>,
   "branches_updated": <total_branches_updated>,
   "polished": <polish_done_count>,
   "polish_partial": <polish_partial_count>,
@@ -696,7 +732,7 @@ except Exception as e:
       "pr": <pr_number>,
       "head_sha": "<sha>",
       "track": "A | B",
-      "result": "auto_merge_set | polished_and_queued | polished_partial | blocked | failed | skipped",
+      "result": "auto_merge_set | merged_directly | polished_and_queued | polished_partial | blocked | failed | skipped",
       "merge_method": "<method>",
       "skip_reason": null | "UNKNOWN_state" | "since_filter" | "label_filter" | "active_claim" | "draft"
     }
@@ -711,7 +747,7 @@ Print summary:
 ```
 Merge Sweep Complete — run <run_id>
 
-  Track A (auto-merge enabled):  <auto_merge_set_count> queued | <auto_merge_failed_count> failed
+  Track A (auto-merge enabled):  <auto_merge_set_count> queued | <merged_directly_count> merged directly | <auto_merge_failed_count> failed
     Branch updates:              <total_branches_updated> behind → updated
   Track B (pr-polish):           <polish_done_count> fixed → <polish_auto_merged_count> queued
                                  <polish_partial_count> partial | <polish_blocked_count> blocked
@@ -729,7 +765,8 @@ Merge Sweep Complete — run <run_id>
 | `--since` parse failure | Immediate error in Step 1, show format hint |
 | `gh pr list` network failure for a repo | Log warning, skip repo, continue others |
 | All repos fail to scan | Return `status: error` |
-| `gh pr merge --auto` fails for a PR | Record `result: failed` in details, continue others |
+| `gh pr merge --auto` fails with "clean status" | Fall back to direct `gh pr merge` (no `--auto`); record `result: merged_directly` |
+| `gh pr merge --auto` fails for other reasons | Record `result: failed` in details, continue others |
 | pr-polish BLOCKED (conflicts unresolvable) | Record `result: blocked`, skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`, skip auto-merge |
 | Worktree creation fails | Record `result: failed`, release claim, continue others |
