@@ -963,8 +963,8 @@ class QualityEnforcer:
             violations: List of violations found
             file_path: Path to the file being checked
             mode: Enforcement mode. Valid values:
-                - "warn": Warnings only, write proceeds
-                - "block" or "blocking": Write blocked until violations fixed
+                - "advisory": Warnings only, write proceeds
+                - "blocking": Write blocked until violations fixed
 
         Returns a formatted string that will be displayed to the user via
         the systemMessage field in the hook's JSON output.
@@ -972,7 +972,7 @@ class QualityEnforcer:
         lines = []
         lines.append("=" * 70)
 
-        if mode in {"block", "blocking"}:
+        if mode == "blocking":
             lines.append("🚫 NAMING CONVENTION VIOLATIONS - WRITE BLOCKED")
         else:
             lines.append("⚠️  NAMING CONVENTION WARNINGS")
@@ -1008,7 +1008,7 @@ class QualityEnforcer:
 
         # Footer with guidance based on mode
         lines.append("─" * 70)
-        if mode in {"block", "blocking"}:
+        if mode == "blocking":
             lines.append("🚫 WRITE BLOCKED: Please fix violations before saving")
             lines.append("   Fix the violations above and try again.")
         else:
@@ -1275,8 +1275,7 @@ async def main() -> int:
         # Check if we have violations
         if enforcer.system_message:
             # Choose permission decision based on enforcement mode
-            # Valid blocking modes: "block" or "blocking" (both accepted for consistency)
-            if ENFORCEMENT_MODE in {"block", "blocking"}:
+            if ENFORCEMENT_MODE == "blocking":
                 # Block mode: prevent write execution
                 permission_decision = "deny"
                 exit_code = 1  # Bash wrapper converts to exit 2
