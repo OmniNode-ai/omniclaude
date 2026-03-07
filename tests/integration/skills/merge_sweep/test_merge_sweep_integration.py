@@ -555,14 +555,20 @@ class TestProactiveBranchUpdate:
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
         step_5b_idx = next(
-            (i for i, line in enumerate(lines) if "Step 5b" in line or "Phase A-update" in line),
+            (
+                i
+                for i, line in enumerate(lines)
+                if "Step 5b" in line or "Phase A-update" in line
+            ),
             None,
         )
         step_6_idx = next(
             (i for i, line in enumerate(lines) if "## Step 6" in line),
             None,
         )
-        assert step_5b_idx is not None, "prompt.md must contain Step 5b (proactive branch update)"
+        assert step_5b_idx is not None, (
+            "prompt.md must contain Step 5b (proactive branch update)"
+        )
         assert step_6_idx is not None, "prompt.md must contain Step 6 (Phase A)"
         assert step_5b_idx < step_6_idx, (
             "Step 5b (proactive branch update) must appear before Step 6 (Phase A auto-merge)"
