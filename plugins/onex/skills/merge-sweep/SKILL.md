@@ -243,6 +243,9 @@ def is_green(pr) -> bool:
    For each candidate in candidates[]:
      acquire claim
      gh pr merge <N> --repo <repo> --<merge_method> --auto
+     IF fails with "Pull request is in clean status":
+       gh pr merge <N> --repo <repo> --<merge_method>   (direct merge, no --auto)
+       record result as "merged_directly"
      release claim
 
 6a. POST-MERGE SAFETY — Update remaining BEHIND branches (sequential):
@@ -263,6 +266,7 @@ def is_green(pr) -> bool:
        - Skill(skill="onex:pr-polish", args="<N> --required-clean-runs <polish_clean_runs>")
        - re-check mergeable state after polish
        - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
+         (if "Pull request is in clean status" error: retry without --auto as direct merge)
        - remove worktree
      release claim
 
@@ -312,7 +316,7 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 [merge-sweep] run <run_id> complete
 
 Branch updates (proactive):    P stale → updated (CI re-running)
-Track A (auto-merge enabled):  N queued | K failed
+Track A (auto-merge enabled):  N queued | D merged directly | K failed
   Post-merge branch updates:   B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
 
@@ -350,6 +354,7 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
   "branch_update_queue_found": 2,
   "polish_queue_found": 2,
   "auto_merge_set": 4,
+  "merged_directly": 1,
   "branches_updated": 4,
   "branches_updated_proactive": 2,
   "branches_updated_post_merge": 0,
@@ -397,7 +402,7 @@ Status values:
 - `error` — no PRs successfully queued or updated
 
 Track A-update `result` values: `branch_updated` | `failed` | `skipped`
-Track A `result` values: `auto_merge_set` | `failed` | `skipped`
+Track A `result` values: `auto_merge_set` | `merged_directly` | `failed` | `skipped`
 Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
 
 ## Failure Handling
@@ -410,7 +415,8 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
 | `update-branch` API fails (403/429/422) | Log warning, record `result: failed`, continue others |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
-| `gh pr merge --auto` fails for a PR | Record `result: failed`; continue others |
+| `gh pr merge --auto` fails with "clean status" | Fall back to direct merge (no `--auto`); record `result: merged_directly` |
+| `gh pr merge --auto` fails for other reasons | Record `result: failed`; continue others |
 | PR becomes BEHIND after auto-merge armed (Step 6a) | Safety net: update branch post-merge |
 | pr-polish BLOCKED (unresolvable conflicts) | Record `result: blocked`; skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`; skip auto-merge |
