@@ -348,3 +348,31 @@ allowed_extras:
     lifecycle: integration
     reason: Agent routing EVT topic; predates contract governance.
     ticket: OMN-3294
+
+  # ---------------------------------------------------------------------------
+  # PR changeset and outcome topics (OMN-3138)
+  # Delta Intelligence Phase 0 — emitted by pr-queue-pipeline for downstream
+  # contract change tracking and merge gate decisions.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.pr-changeset-created.v1"
+    lifecycle: integration
+    reason: >
+      PR changeset event emitted on PR open/update with contract changes.
+      New topic for Delta Intelligence (OMN-3138); contract governance to
+      follow in a later phase.
+    ticket: OMN-3138
+
+  - topic: "onex.evt.platform.merge-gate-decision.v1"
+    lifecycle: integration
+    reason: >
+      Merge gate decision event emitted with Tier A gate check results.
+      Cross-domain topic (platform namespace); contract governance to follow.
+    ticket: OMN-3138
+
+  - topic: "onex.evt.omniclaude.pr-outcome.v1"
+    lifecycle: integration
+    reason: >
+      PR outcome event emitted after merge or revert detected for tracked PRs.
+      New topic for Delta Intelligence (OMN-3138); contract governance to follow.
+    ticket: OMN-3138
