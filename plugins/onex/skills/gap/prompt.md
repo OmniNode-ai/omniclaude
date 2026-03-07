@@ -126,7 +126,7 @@ Do NOT silently fail. Add to report and move on to next Epic.
 
 ## Phase 2 -- Probe
 
-Run all 11 probe categories for each repo in `repos_in_scope`.
+Run all 12 probe categories for each repo in `repos_in_scope`.
 Apply `--repo` filter if provided.
 
 ### Scan Root Rules (Apply Before Any Probe)
@@ -384,7 +384,55 @@ entry as a deterministic search-and-replace operation.
 
 **Fingerprint** `seam_id_suffix`: the pattern string.
 
-### 2.12 Apply Suppressions
+### 2.12 Probe: Branch Protection Drift
+
+**Category**: `INTEGRATION_HEALTH` | **boundary_kind**: `branch_protection`
+**rule_name**: `required_check_name_stale`
+
+**Method**:
+1. For each repo in `repos_in_scope`, query GitHub branch protection required status checks:
+   ```bash
+   gh api repos/{ORG}/{repo}/branches/main/protection/required_status_checks --jq ".contexts"
+   ```
+2. Get actual check names from the most recent PR:
+   ```bash
+   gh pr list --repo {ORG}/{repo} --state all --limit 1 --json number
+   gh pr checks {pr_number} --repo {ORG}/{repo}
+   ```
+3. Parse check names from the `gh pr checks` output (tab-delimited, first column is the check name)
+4. Compare: any required check name that does not appear in the actual check names = drift
+5. If branch protection API returns 404 (no protection configured): no finding (skip)
+6. If no PRs exist to compare against: `confidence = SKIP`, add to `skipped_probes`
+
+**Confidence**: DETERMINISTIC if both branch protection and recent PR checks are available; SKIP if either is absent.
+
+**Severity**: CRITICAL (stale required checks silently block all merges).
+
+**Auto-fix**: YES (gh api). Remove stale check names from the required checks list via:
+```bash
+gh api -X PATCH repos/{ORG}/{repo}/branches/main/protection/required_status_checks \
+  --input - <<< '{"strict": true, "contexts": [<valid_checks>]}'
+```
+Only removes stale checks; keeps all valid checks intact. If no valid checks remain after
+removing stale ones, do NOT apply the fix (requires manual intervention).
+
+**Proof blob schema**:
+```json
+{
+  "repo": "omniweb",
+  "branch": "main",
+  "required_checks": ["Quality Gate", "Tests Gate", "Security Gate"],
+  "actual_checks": ["Quality Gate", "Security Gate"],
+  "stale_checks": ["Tests Gate"],
+  "valid_checks": ["Quality Gate", "Security Gate"]
+}
+```
+
+**Fingerprint** `seam_id_suffix`: `{repo}/main` (the repo and protected branch).
+
+**Reference implementation**: `omni_home/scripts/audit-branch-protection.py`
+
+### 2.13 Apply Suppressions
 
 After collecting all raw findings:
 
@@ -394,7 +442,7 @@ After collecting all raw findings:
 4. If matched AND expired: do NOT suppress, add fingerprint to `expired_suppressions_warned`
 5. Emit warning: "Suppression for {fingerprint[:8]} expired on {expires}. Finding NOT suppressed."
 
-### 2.13 Fingerprint Computation
+### 2.14 Fingerprint Computation
 
 ```python
 import hashlib, json
@@ -422,7 +470,7 @@ def compute_fingerprint(
 
 No timestamps, run IDs, or line numbers. Stable across runs.
 
-### 2.14 Severity and Best-Effort Caps
+### 2.15 Severity and Best-Effort Caps
 
 After suppressions:
 1. Apply `--severity-threshold` filter (drop findings below threshold)
@@ -715,6 +763,8 @@ For each finding, determine `dispatch_class`:
 | `kafka_topic` | `topic_name_mismatch` | `AUTO` |
 | `db_url_drift` | `legacy_db_name_in_tests` | `AUTO` |
 | `db_url_drift` | `legacy_env_var` | `AUTO` |
+| `legacy_config` | `legacy_denylist_match` | `AUTO` (search-replace from denylist) |
+| `branch_protection` | `required_check_name_stale` | `AUTO` (removes stale checks via `gh api`; `GATE` if no valid checks remain) |
 | `kafka_topic` | `producer_only_no_consumer` | `GATE` |
 | `api_contract` | `missing_openapi` | `GATE` |
 | Any `BEST_EFFORT` confidence with multiple resolutions | -- | `GATE` |

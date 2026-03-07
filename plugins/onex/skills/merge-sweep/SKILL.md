@@ -172,7 +172,9 @@ def is_green(pr) -> bool:
 2. `is_merge_ready()` -- Track A (branch current, auto-merge immediately)
 3. `needs_polish()` -- Track B (fixable blocking issues)
 4. `mergeable == "UNKNOWN"` -- skip with warning (GitHub still computing)
-5. Draft / `REVIEW_REQUIRED` -- skip silently
+5. `BLOCKED` + all checks green -- warn as potential branch protection drift (BRANCH_PROTECTION_DRIFT).
+   These PRs are not added to Track B; they require `/gap detect` or `audit-branch-protection.py` to fix.
+6. Draft / `REVIEW_REQUIRED` -- skip silently
 
 ## Arguments
 

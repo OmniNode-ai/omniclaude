@@ -257,6 +257,39 @@ but BEHIND/UNKNOWN on `mergeStateStatus` needs its branch updated before auto-me
 proceed. Arming auto-merge on such PRs creates a chicken-and-egg deadlock when strict branch
 protection (`strict: true`) is enabled.
 
+### Branch Protection Drift Pre-Scan
+
+After classification, detect PRs that are BLOCKED despite all visible checks passing.
+This is a symptom of branch protection drift (required check names that no longer match
+actual CI job names).
+
+```python
+def detect_branch_protection_drift(pr):
+    """Flag PRs that are BLOCKED + all checks green as potential branch protection drift."""
+    if pr["mergeable"] == "BLOCKED" and is_green(pr):
+        return True
+    return False
+
+blocked_green_prs = [pr for pr in all_prs if detect_branch_protection_drift(pr)]
+```
+
+If `blocked_green_prs` is non-empty, emit a diagnostic warning:
+
+```
+WARNING: {len(blocked_green_prs)} PR(s) are BLOCKED with all checks green.
+This is likely caused by branch protection required check names that no longer
+match actual CI job names (BRANCH_PROTECTION_DRIFT).
+
+Affected PRs:
+  - {repo}#{number}: {title}
+
+Run `/gap detect --repo {repo}` or `python3 omni_home/scripts/audit-branch-protection.py`
+to diagnose and auto-fix.
+```
+
+These PRs are NOT added to Track B (pr-polish cannot fix branch protection drift).
+They remain in the "otherwise ignore" bucket but with an explicit warning.
+
 ### Claim Registry Check (after filter classification)
 
 For each PR in `candidates_pre_claim[]` and `polish_queue_pre_claim[]`, check the global claim registry:

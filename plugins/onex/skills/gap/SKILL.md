@@ -95,7 +95,7 @@ Cross-repo integration health audit. Consolidated from gap-analysis, gap-fix, an
 ## Overview
 
 Unified cross-repo integration health audit. Three subcommands:
-- **detect**: Audit closed epics for Kafka topic drift, model mismatches, FK drift, API contract drift, and DB boundary violations
+- **detect**: Audit closed epics for Kafka topic drift, model mismatches, FK drift, API contract drift, DB boundary violations, and branch protection drift
 - **fix**: Auto-fix loop for gap-analysis findings with decision gates
 - **cycle**: Full detect->fix->verify loop with artifact chaining
 
@@ -184,13 +184,15 @@ Full orchestration logic is in `prompt.md`. Summary:
 **Phase 1 -- Intake**: Fetch Epic(s) from Linear, canonicalize repo names, build
 `repos_in_scope`. Emit `status=blocked` if no repo evidence found.
 
-**Phase 2 -- Probe**: Run the 11 probe categories against each repo in scope:
+**Phase 2 -- Probe**: Run the 12 probe categories against each repo in scope:
 1. Kafka topic drift, 2. Model type mismatch, 3. FK reference drift, 4. API contract drift,
 5. DB boundary violation, 6. Topic registry drift, 7. Env activation drift,
-8. Projection lag, 9. Auth config drift, 10. Migration parity, 11. Legacy config patterns.
+8. Projection lag, 9. Auth config drift, 10. Migration parity, 11. Legacy config patterns,
+12. Branch protection drift.
 Apply scan-root filtering (skip tests/docs/generated code). Compute fingerprints and apply
 suppressions. Topic registry auto-fix is LOCAL-ONLY (enum member addition only).
 Legacy config auto-fix uses deterministic search-replace from the denylist.
+Branch protection auto-fix removes stale required check names via the GitHub API.
 
 **Phase 3 -- Report**: Dedup against existing Linear tickets, create/comment tickets,
 write report artifacts to `~/.claude/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
@@ -345,6 +347,7 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 | `db_url_drift` | `legacy_env_var` | YES |
 | `topic_registry` | `topic_registry_missing_member` | YES (LOCAL-ONLY: adds enum member to local TopicRegistry only) |
 | `legacy_config` | `legacy_denylist_match` | YES (search-replace from denylist) |
+| `branch_protection` | `required_check_name_stale` | YES (removes stale checks via `gh api`; gate if no valid checks remain) |
 | `kafka_topic` | `producer_only_no_consumer` | NO -- gate |
 | `api_contract` | `missing_openapi` | NO -- gate |
 | `env_activation` | `env_var_not_activated` | NO -- gate |
