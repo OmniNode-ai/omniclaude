@@ -27,7 +27,7 @@ class ModelGapFinding(BaseModel):
     category: EnumGapCategory
     boundary_kind: str = Field(
         description=(
-            "e.g. kafka_topic, model_field, fk_reference, api_contract, db_boundary"
+            "e.g. kafka_topic, model_field, fk_reference, api_contract, db_boundary, branch_protection"
         )
     )
     rule_name: str = Field(description="e.g. topic_name_mismatch, field_type_drift")
@@ -40,7 +40,9 @@ class ModelGapFinding(BaseModel):
     # Severity and confidence
     severity: Literal["CRITICAL", "WARNING", "INFO"]
     confidence: Literal["DETERMINISTIC", "BEST_EFFORT", "SKIP"]
-    evidence_method: Literal["registry", "ast", "grep", "schema_json", "openapi"]
+    evidence_method: Literal[
+        "registry", "ast", "grep", "schema_json", "openapi", "gh_api"
+    ]
 
     # Location
     repo_relative_path: str = Field(
