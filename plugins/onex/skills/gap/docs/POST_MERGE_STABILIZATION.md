@@ -17,7 +17,7 @@ resolve integration gaps before they reach production.
 
 ## Workflow
 
-### Step 1: Detect Integration Gaps
+### 1. Detect Integration Gaps
 
 Run the gap detection probe across all repos touched by the epic.
 
@@ -32,7 +32,7 @@ confidence levels, and severity ratings.
 **Expected output**: A summary listing DETERMINISTIC and BEST_EFFORT findings, skipped
 probes, and a link to the full report.
 
-### Step 2: Review Findings
+### 2. Review Findings
 
 Open the markdown report and review each finding:
 
@@ -43,7 +43,7 @@ Open the markdown report and review each finding:
 
 Identify which findings can be auto-fixed and which require human decisions (GATE).
 
-### Step 3: Auto-Fix Eligible Findings
+### 3. Auto-Fix Eligible Findings
 
 Run the fix subcommand to auto-dispatch fixes for eligible findings.
 
@@ -55,9 +55,9 @@ This classifies findings into AUTO and GATE categories, dispatches `ticket-pipel
 for AUTO findings, and creates PRs. GATE findings emit decision blocks for human input.
 
 **If all findings are GATE**: The skill returns `status: gate_pending`. Provide decisions
-via `--choose` and re-run (see Step 4).
+via `--choose` and re-run (see phase 4).
 
-### Step 4: Resolve GATE Findings
+### 4. Resolve GATE Findings
 
 For each GATE finding, review the decision options and provide choices:
 
@@ -73,7 +73,7 @@ Use `--force-decide` to re-open a previously decided finding.
 - **Option B**: Add to `suppressions.yaml` (intentional divergence, document the reason).
 - **Option C**: Skip this run (defer to a future stabilization cycle).
 
-### Step 5: Verify Fixes
+### 5. Verify Fixes
 
 Run the cycle subcommand with `--resume` and `--verify` to re-probe fixed findings
 and optionally run the golden-path verification.
@@ -87,9 +87,9 @@ are gone, then runs `golden-path-validate` to verify end-to-end routing still wo
 
 **If re-probe fails**: The finding is marked `still_open` and must be addressed manually.
 
-### Step 6: Ticket Remaining Failures
+### 6. Ticket Remaining Failures
 
-Any findings that remain after Steps 3-5 (re-probe failures, deferred GATE decisions,
+Any findings that remain after phases 3-5 (re-probe failures, deferred GATE decisions,
 infra blockers) become Linear tickets for manual resolution.
 
 The gap skill automatically creates tickets for unresolved findings during the fix phase.
