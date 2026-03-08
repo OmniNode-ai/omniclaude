@@ -15,17 +15,30 @@ pending OMN-3867 / omnibase_core PR #617).
 Until then it falls back to the legacy local definition so that existing
 callers continue to work without changes.
 
-Migration note for callers that import ``SkillResultStatus``:
-  - After OMN-3867 lands, ``SkillResultStatus`` is an alias for
-    ``omnibase_core.enums.EnumSkillResultStatus``.
-  - The string values (``"success"``, ``"failed"``, ``"partial"``) are
-    identical; the new enum adds additional values
-    (``"error"``, ``"blocked"``, ``"skipped"``, ``"dry_run"``,
-    ``"pending"``, ``"gated"``).
-  - Comparisons against ``SkillResultStatus.SUCCESS`` / ``.FAILED`` /
-    ``.PARTIAL`` continue to work after the migration because both enums
-    are ``StrEnum`` subclasses with the same string values for those three
-    members.
+Migration notes for callers
+---------------------------
+
+**SkillResultStatus**: After OMN-3867 lands, ``SkillResultStatus`` is an
+alias for ``omnibase_core.enums.EnumSkillResultStatus``.  The string values
+``"success"``, ``"failed"``, and ``"partial"`` are identical in both enums
+(``StrEnum`` subclasses), so equality comparisons continue to work.  The
+new enum adds six additional values: ``"error"``, ``"blocked"``,
+``"skipped"``, ``"dry_run"``, ``"pending"``, ``"gated"``.
+
+**correlation_id field — BREAKING on migration** (OMN-3877): The legacy
+local ``ModelSkillResult`` has a required ``correlation_id: UUID`` field.
+The omnibase_core ``ModelSkillResult`` does NOT include this field
+(``extra="forbid"``).  Any caller that constructs
+``ModelSkillResult(correlation_id=...)`` will raise ``ValidationError``
+the moment omnibase_core >= 0.25.0 is installed.
+
+Affected call sites (must be updated before omnibase_core bump):
+  - ``handler_skill_requested.py`` (2 call sites)
+  - ``node_claude_code_session_effect/backends/backend_subprocess.py`` (7 call sites)
+
+A follow-up task must audit all ``ModelSkillResult(...)`` constructors and
+remove ``correlation_id`` from each before bumping the omnibase_core
+constraint.  Track as a blocker on the omnibase_core version-bump ticket.
 
 Dependency: OMN-3867 (omnibase_core PR #617)
 """
@@ -41,7 +54,7 @@ try:
         SkillResult,
     )
 
-    __all__ = ["ModelSkillResult", "SkillResult", "SkillResultStatus"]
+    _USING_CORE = True
 
 except ImportError:
     # OMN-3867 not yet merged / released.  Fall back to the legacy local
@@ -80,6 +93,8 @@ except ImportError:
             output: Raw output text from the skill (None if not available).
             error: Error detail, typically populated when status is FAILED or PARTIAL.
             correlation_id: Correlation ID carried through from the request.
+                REMOVED in omnibase_core ModelSkillResult — callers must
+                drop this field before omnibase_core >= 0.25.0 is installed.
         """
 
         model_config = ConfigDict(frozen=True, extra="forbid")
@@ -103,11 +118,18 @@ except ImportError:
         )
         correlation_id: UUID = Field(
             ...,
-            description="Correlation ID carried through from the request",
+            description=(
+                "Correlation ID carried through from the request. "
+                "DEPRECATED: removed in omnibase_core ModelSkillResult. "
+                "Drop this field before bumping omnibase_core >= 0.25.0."
+            ),
         )
 
     #: Alias matching omnibase_core naming; will be the real
     #: ``ModelSkillResult`` once OMN-3867 lands.
     SkillResult = ModelSkillResult
 
-    __all__ = ["ModelSkillResult", "SkillResult", "SkillResultStatus"]
+    _USING_CORE = False
+
+
+__all__ = ["ModelSkillResult", "SkillResult", "SkillResultStatus"]
