@@ -178,6 +178,52 @@ All sub-skills write their output to `~/.claude/skill-results/{context_id}/`:
 | `pr-watch` | `pr-watch.json` | status, fix_cycles_used |
 | `auto-merge` | `auto-merge.json` | status, merge_commit |
 
+## Skill Result Input Contract
+
+**Input contract:** All sub-skill result files conform to `ModelSkillResult` from `omnibase_core.models.skill`.
+
+> **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
+
+Load result files and check outcomes as follows:
+
+```python
+result = ModelSkillResult.from_json(path.read_text())
+
+# Check if the sub-skill completed successfully (success, partial, or dry_run)
+if result.is_success_like:
+    # Proceed with next wave or action
+    pass
+
+# Check for hard failure
+elif result.status == EnumSkillResultStatus.FAILED:
+    # Record failure, apply circuit breaker (max 2 retries per ticket)
+    pass
+
+# Check for blocking states
+elif result.status == EnumSkillResultStatus.GATED:
+    # Human approval is pending — do not advance wave
+    pass
+
+# Access skill-specific fields via extra dict (not direct attribute access)
+created_tickets = result.extra["created_tickets"]   # decompose-epic result
+iterations_run = result.extra["iterations_run"]     # local-review result
+```
+
+**Behaviorally significant `extra_status` values by sub-skill:**
+
+| Sub-Skill | `extra_status` | Orchestrator action |
+|-----------|---------------|---------------------|
+| `decompose-epic` | `null` | Normal — read `extra["created_tickets"]` |
+| `slack-gate` | `"accepted"` | Silence-proceed gate passed — continue |
+| `slack-gate` | `"rejected"` | Gate rejected — stop (cancel orchestration) |
+| `slack-gate` | `"timeout"` | Gate timed out — apply configured timeout policy |
+| `ticket-pipeline` | `"merged"` | Ticket fully merged — record as done |
+| `ticket-pipeline` | `"held"` | Merge gate open — non-terminal, do not retry yet |
+| `auto-merge` | `"merged"` | PR merged — record wave ticket as complete |
+| `auto-merge` | `"timeout"` | Merge gate expired — retryable with new pipeline run |
+
+**Promotion rule for `extra` fields:** If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted to a first-class field in `ModelSkillResult`. `extra` is a migration bridge, not a permanent schema extension mechanism.
+
 ## State Persistence
 
 Runtime state is persisted to `~/.claude/epics/{epic_id}/state.yaml`:
