@@ -12,6 +12,7 @@ Exported Components:
     Models:
         ModelSkillRequest - Input to any skill dispatch node
         ModelSkillResult  - Output from any skill dispatch node
+        SkillResult       - Alias for ModelSkillResult (omnibase_core naming)
         SkillResultStatus - Enum of possible skill result statuses
 
     Handler:
@@ -19,12 +20,13 @@ Exported Components:
 """
 
 from .handler_skill_requested import handle_skill_requested
-from .models import ModelSkillRequest, ModelSkillResult, SkillResultStatus
+from .models import ModelSkillRequest, ModelSkillResult, SkillResult, SkillResultStatus
 
 __all__ = [
     # Models
     "ModelSkillRequest",
     "ModelSkillResult",
+    "SkillResult",
     "SkillResultStatus",
     # Handler
     "handle_skill_requested",

@@ -15,7 +15,7 @@ from .model_pr_outcome import ModelPROutcome
 from .model_skill_completion_event import ModelSkillCompletionEvent
 from .model_skill_node_contract import ModelSkillNodeContract, ModelSkillNodeExecution
 from .model_skill_request import ModelSkillRequest
-from .model_skill_result import ModelSkillResult, SkillResultStatus
+from .model_skill_result import ModelSkillResult, SkillResult, SkillResultStatus
 
 __all__ = [
     "CHANGESET_UUID_NAMESPACE",
@@ -29,6 +29,7 @@ __all__ = [
     "ModelSkillNodeExecution",
     "ModelSkillRequest",
     "ModelSkillResult",
+    "SkillResult",
     "SkillResultStatus",
     "build_changeset_id",
 ]
