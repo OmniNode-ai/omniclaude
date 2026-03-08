@@ -55,6 +55,10 @@ dry_run: false                  # true if --dry-run mode
 policy_version: "5.0"
 slack_thread_ts: null           # Placeholder for P0 (threading deferred)
 
+attribution:
+  model_id: "claude-sonnet-4-20250514"  # populated from ONEX_MODEL_ID env var
+  producer_kind: "agent"                 # derived from started_by, constrained to agent|human|unknown
+
 policy:
   auto_advance: true
   auto_commit: true
@@ -295,6 +299,10 @@ if state_path.exists() and not force_run:
     print(f"Resuming pipeline for {ticket_id} (run_id: {run_id})")
 else:
     # Create new state
+    # Resolve producer_kind from started_by with validation
+    _started_by = "user"  # default; overridden to "agent" by team-pipeline callers
+    _producer_kind = _started_by if _started_by in ("agent", "human") else "unknown"
+
     state = {
         "pipeline_state_version": "3.0",
         "run_id": run_id,
@@ -303,6 +311,10 @@ else:
         "dry_run": dry_run,
         "policy_version": "5.0",
         "slack_thread_ts": None,
+        "attribution": {
+            "model_id": os.environ.get("ONEX_MODEL_ID", "unknown"),
+            "producer_kind": _producer_kind,
+        },
         "policy": {
             "auto_advance": True,
             "auto_commit": True,
