@@ -1469,6 +1469,16 @@ for phase_name in PHASE_ORDER:
         update_linear_pipeline_summary(ticket_id, state, dry_run, slack_notifier=slack_notifier)
 
         print(f"\nPipeline stopped at {phase_name}: {result.get('reason')}")
+
+        # Emit partial PR validation rollup on terminal blocked/failed state
+        try:
+            from plugins.onex.hooks.lib.rollup_aggregator import build_pr_validation_rollup
+            from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+            rollup = build_pr_validation_rollup(state, [])
+            emit_event("pr.validation.rollup", rollup)
+        except Exception as _rollup_err:
+            print(f"Warning: Failed to emit partial PR validation rollup: {_rollup_err}")
+
         # Do NOT release lock on block/fail - preserves state for resume
         exit(1)
 
@@ -2831,6 +2841,14 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
                "reason": None,
                "block_kind": None,
            }
+           # Emit PR validation rollup (final) on successful merge
+           try:
+               from plugins.onex.hooks.lib.rollup_aggregator import build_pr_validation_rollup
+               from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+               rollup = build_pr_validation_rollup(state, all_phase_checkpoints if 'all_phase_checkpoints' in dir() else [])
+               emit_event("pr.validation.rollup", rollup)
+           except Exception as _rollup_err:
+               print(f"Warning: Failed to emit PR validation rollup: {_rollup_err}")
            return result
    except Exception as _e:
        print(f"Warning: Could not check PR state: {_e}. Delegating to pr-watch for merge observation.")
