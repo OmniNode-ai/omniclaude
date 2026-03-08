@@ -9,7 +9,7 @@ Captures the results of linter_contract.py validation and other structural
 checks.
 
 Topic:
-    onex.evt.platform.merge-gate-decision.v1
+    onex.evt.omniclaude.merge-gate-decision.v1
 
 Storage semantics:
     Event table (append-only, keyed by gate_run_id). Consumers may filter

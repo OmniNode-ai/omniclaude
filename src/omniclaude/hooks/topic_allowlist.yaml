@@ -363,11 +363,11 @@ allowed_extras:
       follow in a later phase.
     ticket: OMN-3138
 
-  - topic: "onex.evt.platform.merge-gate-decision.v1"
+  - topic: "onex.evt.omniclaude.merge-gate-decision.v1"
     lifecycle: integration
     reason: >
       Merge gate decision event emitted with Tier A gate check results.
-      Cross-domain topic (platform namespace); contract governance to follow.
+      Produced by omniclaude pr-queue-pipeline; contract governance to follow.
     ticket: OMN-3138
 
   - topic: "onex.evt.omniclaude.pr-outcome.v1"

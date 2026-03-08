@@ -289,7 +289,7 @@ class TopicBase(StrEnum):
     PR_CHANGESET_CREATED = "onex.evt.omniclaude.pr-changeset-created.v1"
     """Emitted on PR open/update with detected contract changes."""
 
-    MERGE_GATE_DECISION = "onex.evt.platform.merge-gate-decision.v1"
+    MERGE_GATE_DECISION = "onex.evt.omniclaude.merge-gate-decision.v1"
     """Emitted with Tier A gate check results for contract changes."""
 
     PR_OUTCOME = "onex.evt.omniclaude.pr-outcome.v1"
