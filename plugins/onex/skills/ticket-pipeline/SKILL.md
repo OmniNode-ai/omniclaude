@@ -639,7 +639,9 @@ merge_commit = result.extra.get("merge_commit")             # auto-merge (None i
 ticket_close = result.extra.get("ticket_close_status")     # auto-merge (None if not reached)
 ```
 
-**Behaviorally significant `extra_status` values by sub-skill:**
+**Behaviorally significant `extra_status` values by sub-skill (ModelSkillResult consumers only):**
+
+The following sub-skills have adopted `ModelSkillResult`. Use `result.extra_status` to read their domain-specific outcome:
 
 | Sub-Skill | `extra_status` | Orchestrator action |
 |-----------|---------------|---------------------|
@@ -648,23 +650,24 @@ ticket_close = result.extra.get("ticket_close_status")     # auto-merge (None if
 | `local-review` | `"max_iterations_reached"` | Max iterations reached without clean — post advisory, continue to PR with warning |
 | `ci-watch` | `"passed"` | CI passed — advance to pr_review_loop |
 | `ci-watch` | `"capped"` | Max fix cycles reached — advance to pr_review_loop with warning |
-| `pr-watch` | `"approved"` | PR approved — advance to integration_verification_gate |
-| `pr-watch` | `"capped"` | Max review cycles reached — post MEDIUM_RISK Slack, stop pipeline |
-| `pr-watch` | `"timeout"` | Review timed out — post MEDIUM_RISK Slack, stop pipeline |
 | `auto-merge` | `"merged"` | PR merged — clear ledger, update Linear to Done |
 | `auto-merge` | `"held"` | HIGH_RISK gate open — pipeline exits with `held` state (non-terminal); resume on human "merge" reply |
 | `auto-merge` | `"timeout"` | Merge gate expired — retryable with new pipeline run |
 
-> **Note on pr-watch:** `pr-watch` has not yet been updated to `ModelSkillResult` format (OMN-3874 scope excluded it). Until that migration lands, read the raw JSON directly — do NOT attempt `ModelSkillResult.from_json()`:
-> ```python
-> raw = json.loads(path.read_text())
-> pr_watch_status = raw.get("status")  # "approved" | "capped" | "timeout" | "error"
-> if pr_watch_status == "approved":
->     advance_to_integration_verification_gate()
-> elif pr_watch_status in ("capped", "timeout", "error"):
->     post_medium_risk_slack_and_stop()
-> ```
-> After pr-watch adopts `ModelSkillResult`, replace this with `result.is_success_like` / `extra_status` checks per the table above.
+**Pre-migration sub-skills (raw JSON schema — NOT ModelSkillResult):**
+
+`pr-watch` has not yet adopted `ModelSkillResult` (OMN-3874 scope excluded it). Its result file uses a raw JSON schema where outcome is a top-level `status` string — do NOT use `ModelSkillResult.from_json()` or `result.extra_status` for this sub-skill:
+
+```python
+raw = json.loads(path.read_text())
+pr_watch_status = raw.get("status")  # raw string: "approved" | "capped" | "timeout" | "error"
+if pr_watch_status == "approved":
+    advance_to_integration_verification_gate()
+elif pr_watch_status in ("capped", "timeout", "error"):
+    post_medium_risk_slack_and_stop()
+```
+
+After pr-watch adopts `ModelSkillResult`, replace with `result.is_success_like` / `result.extra_status` checks per the table above.
 
 ### Reading pipeline state
 
