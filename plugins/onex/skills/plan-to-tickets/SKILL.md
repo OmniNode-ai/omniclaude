@@ -122,6 +122,7 @@ If none match → fail fast: `"Plans must use ## Task N: headings. Use design-to
 ```python
 import re
 from omnibase_core.models.plan import ModelPlanDocument
+from omnibase_core.enums import EnumPlanStructureType
 
 def detect_structure(content: str, source_path: str | None = None) -> ModelPlanDocument:
     """Detect plan structure and parse into a ModelPlanDocument.
@@ -135,7 +136,12 @@ def detect_structure(content: str, source_path: str | None = None) -> ModelPlanD
     """
     # Note: This contract reference is behavioral guidance for the LLM. Runtime validation not yet implemented.
     def _extract_numbered_entries(matches, keyword: str, structure_type: str):
-        """Shared extraction logic for ## Task N: and ## Phase N: headings."""
+        """Shared extraction logic for ## Task N: and ## Phase N: headings.
+
+        Note: This is a closure — it captures `source_path` from the enclosing
+        detect_structure() scope. Must remain a nested function, not hoisted to
+        module level.
+        """
         entries = []
         for i, match in enumerate(matches):
             num = match.group(1)
@@ -173,7 +179,7 @@ def detect_structure(content: str, source_path: str | None = None) -> ModelPlanD
             seen_ids[entry['id']] = entry['title']
 
         return ModelPlanDocument(
-            structure_type=structure_type,
+            structure_type=EnumPlanStructureType(structure_type),
             entries=entries,
             source_path=source_path,
         )
@@ -229,7 +235,7 @@ def detect_structure(content: str, source_path: str | None = None) -> ModelPlanD
                 })
 
             return ModelPlanDocument(
-                structure_type='milestone_table',
+                structure_type=EnumPlanStructureType('milestone_table'),
                 entries=entries,
                 source_path=source_path,
             )
@@ -285,13 +291,17 @@ def detect_structure(content: str, source_path: str | None = None) -> ModelPlanD
             seen_ids[entry['id']] = entry['title']
 
         return ModelPlanDocument(
-            structure_type='priority_labels',
+            structure_type=EnumPlanStructureType('priority_labels'),
             entries=entries,
             source_path=source_path,
         )
 
     # No valid structure found - fail fast
-    return ModelPlanDocument(structure_type='none', entries=[], source_path=source_path)
+    return ModelPlanDocument(
+        structure_type=EnumPlanStructureType('none'),
+        entries=[],
+        source_path=source_path,
+    )
 
 
 def parse_dependencies(content: str) -> list[str]:
@@ -1045,15 +1055,15 @@ content = read_plan_file(args.plan_file)
 # Step 2: Detect structure -> ModelPlanDocument
 doc = detect_structure(content, source_path=args.plan_file)
 
-if doc.structure_type == 'none' or not doc.entries:
+if doc.structure_type.value == 'none' or not doc.entries:
     # Fail fast with clear error
     print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use design-to-plan.")
     raise SystemExit(1)
 
 print(f"[structure_detected] type={doc.structure_type.value} entries={len(doc.entries)}")
 
-# Step 3: Extract epic title from document
-epic_title = args.epic_title or doc.title
+# Step 3: Extract epic title from document (or fall back to extract_epic_title)
+epic_title = args.epic_title or doc.title or extract_epic_title(content, None)
 print(f"Epic title: {epic_title}")
 
 # Step 4: Resolve or create epic (even in dry-run mode for preview)
