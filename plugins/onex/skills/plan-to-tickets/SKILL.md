@@ -121,21 +121,27 @@ If none match → fail fast: `"Plans must use ## Task N: headings. Use design-to
 
 ```python
 import re
+from omnibase_core.models.plan import ModelPlanDocument
+from omnibase_core.enums import EnumPlanStructureType
 
-def detect_structure(content: str) -> tuple[str, list[dict]]:
-    """Detect plan structure and extract entries.
+def detect_structure(content: str, source_path: str | None = None) -> ModelPlanDocument:
+    """Detect plan structure and parse into a ModelPlanDocument.
 
-    Returns:
-        (structure_type, entries) where structure_type is one of:
-          'task_sections'  — ## Task N: Title headings (canonical)
-          'phase_sections' — ## Phase N: Title headings (legacy alias)
-          'numbered_h2'    — generic ## N. Title headings
-          'step_sections'  — ## Step N: Title headings
-          'flat_tasks'     — flat checklist items
-        entries is list of {id, title, content, dependencies}
+    Uses omnibase_core.models.plan.ModelPlanDocument as the return contract.
+    Replaces the ad-hoc (structure_type, entries) tuple.
+
+    Raises:
+        ValueError: If no valid structure detected or validation fails
+            (duplicate IDs, circular dependencies, empty content).
     """
+    # Note: This contract reference is behavioral guidance for the LLM. Runtime validation not yet implemented.
     def _extract_numbered_entries(matches, keyword: str, structure_type: str):
-        """Shared extraction logic for ## Task N: and ## Phase N: headings."""
+        """Shared extraction logic for ## Task N: and ## Phase N: headings.
+
+        Note: This is a closure — it captures `source_path` from the enclosing
+        detect_structure() scope. Must remain a nested function, not hoisted to
+        module level.
+        """
         entries = []
         for i, match in enumerate(matches):
             num = match.group(1)
@@ -172,7 +178,11 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                 )
             seen_ids[entry['id']] = entry['title']
 
-        return (structure_type, entries)
+        return ModelPlanDocument(
+            structure_type=EnumPlanStructureType(structure_type),
+            entries=entries,
+            source_path=source_path,
+        )
 
     # Try Task sections first (canonical)
     # Captures decimal tasks: "## Task 1.5: Title" -> num = "1.5"
@@ -224,7 +234,11 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                     'dependencies': deps
                 })
 
-            return ('milestone_table', entries)
+            return ModelPlanDocument(
+                structure_type=EnumPlanStructureType('milestone_table'),
+                entries=entries,
+                source_path=source_path,
+            )
 
     # Try priority labels (third fallback)
     # Matches bold P-prefixed labels used in ## Implementation Priority sections:
@@ -276,10 +290,18 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                 )
             seen_ids[entry['id']] = entry['title']
 
-        return ('priority_labels', entries)
+        return ModelPlanDocument(
+            structure_type=EnumPlanStructureType('priority_labels'),
+            entries=entries,
+            source_path=source_path,
+        )
 
     # No valid structure found - fail fast
-    return ('none', [])
+    return ModelPlanDocument(
+        structure_type=EnumPlanStructureType('none'),
+        entries=[],
+        source_path=source_path,
+    )
 
 
 def parse_dependencies(content: str) -> list[str]:
@@ -643,7 +665,7 @@ def validate_plan_dependencies(
 plan_repo = args.repo  # May be None if not specified
 
 should_proceed, arch_violation_override = validate_plan_dependencies(
-    entries=entries,
+    entries=doc.entries,
     plan_repo=plan_repo,
     allow_override=args.allow_arch_violation,
     dry_run=args.dry_run
@@ -1030,18 +1052,18 @@ manual commit banner.
 # Step 1: Read plan file
 content = read_plan_file(args.plan_file)
 
-# Step 2: Detect structure
-structure_type, entries = detect_structure(content)
+# Step 2: Detect structure -> ModelPlanDocument
+doc = detect_structure(content, source_path=args.plan_file)
 
-if structure_type == 'none' or not entries:
+if doc.structure_type.value == 'none' or not doc.entries:
     # Fail fast with clear error
     print("Plans must use ## Task N: headings (or ## Phase N: for legacy plans). Use design-to-plan.")
     raise SystemExit(1)
 
-print(f"[structure_detected] type={structure_type} entries={len(entries)}")
+print(f"[structure_detected] type={doc.structure_type.value} entries={len(doc.entries)}")
 
-# Step 3: Extract epic title
-epic_title = extract_epic_title(content, args.epic_title)
+# Step 3: Extract epic title from document (or fall back to extract_epic_title)
+epic_title = args.epic_title or doc.title or extract_epic_title(content, None)
 print(f"Epic title: {epic_title}")
 
 # Step 4: Resolve or create epic (even in dry-run mode for preview)
@@ -1054,18 +1076,18 @@ except ValueError as e:
 
 # Step 5-8: Create tickets
 results = create_tickets_batch(
-    entries=entries,
+    entries=doc.entries,
     epic=epic,
     team=args.team,
     project=args.project,
-    structure_type=structure_type,
+    structure_type=doc.structure_type.value,
     skip_existing=args.skip_existing,
     dry_run=args.dry_run,
     arch_violation_override=arch_violation_override  # Add warning to tickets if violations were overridden
 )
 
 # Step 9: Report summary
-report_summary(results, epic, structure_type, args.dry_run)
+report_summary(results, epic, doc.structure_type.value, args.dry_run)
 ```
 
 ---
