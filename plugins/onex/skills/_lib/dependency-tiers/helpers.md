@@ -19,6 +19,7 @@ Repos are organized into tiers where tier N depends only on tiers < N.
 # Dependency tier graph: tier -> [repos]
 # Tier N depends only on tiers < N
 TIER_GRAPH: dict[int, list[str]] = {
+    0: ["omnibase_compat"],
     1: ["omnibase_spi"],
     2: ["omnibase_core"],
     3: ["omnibase_infra", "omniintelligence", "omnimemory"],
@@ -27,6 +28,7 @@ TIER_GRAPH: dict[int, list[str]] = {
 
 # All repos in tier order (flattened)
 ALL_REPOS: list[str] = [
+    "omnibase_compat",
     "omnibase_spi",
     "omnibase_core",
     "omnibase_infra",
@@ -37,6 +39,7 @@ ALL_REPOS: list[str] = [
 
 # Known inter-repo dependencies (downstream -> upstream list)
 DEPENDENCY_MAP: dict[str, list[str]] = {
+    "omnibase_compat": [],
     "omnibase_spi": [],
     "omnibase_core": ["omnibase_spi"],
     "omnibase_infra": ["omnibase_core", "omnibase_spi"],

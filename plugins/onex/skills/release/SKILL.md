@@ -101,6 +101,7 @@ Repos are released in strict tier order. Within a tier, repos are released seque
 (not in parallel) to avoid race conditions on shared CI runners.
 
 ```
+Tier 0: omnibase_compat       (zero OmniNode deps — releases independently)
 Tier 1: omnibase_spi          (no internal deps)
 Tier 2: omnibase_core         (depends on: omnibase_spi)
 Tier 3: omnibase_infra        (depends on: omnibase_core, omnibase_spi)

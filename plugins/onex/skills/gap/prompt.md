@@ -98,7 +98,7 @@ ALIAS_MAP = {
 }
 
 KNOWN_REPOS = [
-    "omniclaude", "omniintelligence", "omnibase_core", "omnibase_infra",
+    "omnibase_compat", "omniclaude", "omniintelligence", "omnibase_core", "omnibase_infra",
     "omnimemory", "omnidash", "omnidash2", "omniweb",
 ]
 

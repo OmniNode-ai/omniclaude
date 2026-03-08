@@ -50,6 +50,7 @@ STATE_DIR = os.path.expanduser("~/.claude/state/post-release-redeploy")
 GITHUB_ORG = "OmniNode-ai"
 
 ALL_REPOS: list[str] = [
+    "omnibase_compat",
     "omnibase_spi",
     "omnibase_core",
     "omnibase_infra",
@@ -60,6 +61,7 @@ ALL_REPOS: list[str] = [
 
 # Repos with pyproject.toml (excluded: omninode_infra which is infra-only)
 PYTHON_REPOS: list[str] = [
+    "omnibase_compat",
     "omnibase_spi",
     "omnibase_core",
     "omnibase_infra",
@@ -247,7 +249,7 @@ IF --skip-merge-gate:
 
 ```bash
 BATCH_LABEL="${batch_label}"
-REPOS_TO_CHECK=(omnibase_infra omnibase_spi omniintelligence omnimemory omnibase_core omniclaude)
+REPOS_TO_CHECK=(omnibase_compat omnibase_infra omnibase_spi omniintelligence omnimemory omnibase_core omniclaude)
 STILL_OPEN=""
 
 for repo in "${REPOS_TO_CHECK[@]}"; do

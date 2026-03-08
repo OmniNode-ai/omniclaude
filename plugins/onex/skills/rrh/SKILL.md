@@ -204,6 +204,6 @@ audit artifacts.
 ## See Also
 
 - `ticket-pipeline` skill (primary consumer of RRH)
-- `ContractRRHResult` in `omnibase_spi.contracts.pipeline`
-- `ContractVerdict` in `omnibase_spi.contracts.shared`
+- `ContractRRHResult` in `omnibase_spi.contracts.pipeline` (candidate for migration to `omnibase_compat` if promoted as a shared structural contract)
+- `ContractVerdict` in `omnibase_spi.contracts.shared` (candidate for migration to `omnibase_compat` if promoted as a shared structural contract)
 - `ModelTicketContract` in `omnibase_core.models.ticket`
