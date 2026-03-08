@@ -655,7 +655,16 @@ ticket_close = result.extra.get("ticket_close_status")     # auto-merge (None if
 | `auto-merge` | `"held"` | HIGH_RISK gate open — pipeline exits with `held` state (non-terminal); resume on human "merge" reply |
 | `auto-merge` | `"timeout"` | Merge gate expired — retryable with new pipeline run |
 
-> **Note on pr-watch:** `pr-watch` has not yet been updated to `ModelSkillResult` format (OMN-3874 scope excluded it). Until that migration lands, `status` values (`"approved"`, `"capped"`, `"timeout"`) appear as top-level JSON fields, not in `extra_status`. Check `pr-watch/SKILL.md` for the current schema.
+> **Note on pr-watch:** `pr-watch` has not yet been updated to `ModelSkillResult` format (OMN-3874 scope excluded it). Until that migration lands, read the raw JSON directly — do NOT attempt `ModelSkillResult.from_json()`:
+> ```python
+> raw = json.loads(path.read_text())
+> pr_watch_status = raw.get("status")  # "approved" | "capped" | "timeout" | "error"
+> if pr_watch_status == "approved":
+>     advance_to_integration_verification_gate()
+> elif pr_watch_status in ("capped", "timeout", "error"):
+>     post_medium_risk_slack_and_stop()
+> ```
+> After pr-watch adopts `ModelSkillResult`, replace this with `result.is_success_like` / `extra_status` checks per the table above.
 
 ### Reading pipeline state
 

@@ -214,7 +214,7 @@ iterations_run = result.extra.get("iterations_run", 0)      # local-review resul
 
 | Sub-Skill | `extra_status` | Orchestrator action |
 |-----------|---------------|---------------------|
-| `decompose-epic` | `null` | Normal — read `extra["created_tickets"]` |
+| `decompose-epic` | `null` | Normal — read `extra.get("created_tickets", [])` |
 | `slack-gate` | `"accepted"` | Silence-proceed gate passed — continue |
 | `slack-gate` | `"rejected"` | Gate rejected — stop (cancel orchestration) |
 | `slack-gate` | `"timeout"` | Gate timed out — apply configured timeout policy |
