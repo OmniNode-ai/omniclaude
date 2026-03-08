@@ -11,8 +11,8 @@ composable: false
 inputs:
   - name: versions
     type: str
-    description: "Comma-separated plugin version pins: omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
-    required: true
+    description: "Comma-separated plugin version pins: omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1. If omitted, auto-detected from the latest git tags in bare clones."
+    required: false
   - name: skip_sync
     type: bool
     description: Skip SYNC phase (bare clones already current)
@@ -52,8 +52,8 @@ outputs:
       - pins_applied: "dict[str, str] | null"
 args:
   - name: --versions
-    description: "Comma-separated plugin pins: pkg=version,pkg2=version2"
-    required: true
+    description: "Comma-separated plugin pins: pkg=version,pkg2=version2. If omitted, auto-detected from latest git tags."
+    required: false
   - name: --skip-sync
     description: Skip SYNC phase
     required: false
@@ -105,10 +105,11 @@ and verify that health endpoints and pinned package versions match expectations.
 ## Quick Start
 
 ```
+/redeploy                                          # auto-detect latest versions from git tags
 /redeploy --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
 /redeploy --versions "omniintelligence=0.8.0" --skip-sync --dry-run
 /redeploy --verify-only --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
-/redeploy --resume redeploy-20260301-abc123 --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
+/redeploy --resume redeploy-20260301-abc123
 ```
 
 ## Phase Sequence
@@ -221,7 +222,6 @@ Written to `~/.claude/skill-results/{context_id}/redeploy.json`:
 
 ## v1 Constraints
 
-- `--versions` is required; no PyPI auto-detection of latest versions
 - No `--no-deps` inference; existing Dockerfile install flags are preserved as-is
 - `--cleanup` flag not implemented in v1 (worktree retained after success)
 
