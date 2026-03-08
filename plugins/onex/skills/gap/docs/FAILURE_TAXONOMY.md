@@ -15,7 +15,7 @@ Reference document for the 12 failure classes detected by the gap skill's probe 
 | NO (GATE) | Requires human decision before any change is made. The skill emits a decision gate and waits for `--choose`. |
 | LOCAL-ONLY auto-fix | The skill can fix the local repo's registry file automatically, but cannot mutate the broker or remote registries. |
 | YES (search-replace) | The skill can apply a deterministic search-and-replace fix without human review. |
-| YES (gh api) | The skill can fix the issue via the GitHub API (e.g., removing stale branch protection check names). |
+| YES (GitHub API) | The skill can fix the issue via the GitHub API (e.g., removing stale branch protection check names). |
 
 ## Failure Classes
 
@@ -32,7 +32,7 @@ Reference document for the 12 failure classes detected by the gap skill's probe 
 | 9 | auth_config | CONTRACT_DRIFT | NO (GATE) | An Infisical or service-identity client configuration has drifted from the expected values declared in the contract. |
 | 10 | migration_parity | ARCHITECTURE_VIOLATION | NO (GATE) | A repo's migration state (Alembic head, schema checksum) does not match the expected state after a cross-repo release. |
 | 11 | legacy_config | ARCHITECTURE_VIOLATION | YES (search-replace) | A file contains a pattern from the legacy denylist (deprecated env vars, decommissioned endpoints, removed paths). |
-| 12 | branch_protection | INTEGRATION_HEALTH | YES (gh api) | A branch protection required status check name does not match any actual CI job name, silently blocking all merges. |
+| 12 | branch_protection | INTEGRATION_HEALTH | YES (GitHub API) | A branch protection required status check name does not match any actual CI job name, silently blocking all PR merges. |
 
 ## Probe-to-Class Mapping
 
