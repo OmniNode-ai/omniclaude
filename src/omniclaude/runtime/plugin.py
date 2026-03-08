@@ -191,10 +191,18 @@ class PluginClaude:
             return ModelDomainPluginResult(
                 plugin_id=_PLUGIN_ID,
                 success=True,
-                message="Handler contracts published",
+                message=(
+                    "Contract publisher ran against "
+                    f"OMNICLAUDE_CONTRACTS_ROOT={contracts_root}"
+                ),
                 services_registered=["wire_omniclaude_services"],
             )
         except Exception as exc:
+            logger.exception(
+                "Plugin '%s' wire_handlers failed (contracts_root=%s)",
+                _PLUGIN_ID,
+                contracts_root,
+            )
             return ModelDomainPluginResult.failed(
                 plugin_id=_PLUGIN_ID,
                 error_message=str(exc),

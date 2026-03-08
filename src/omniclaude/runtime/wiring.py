@@ -186,9 +186,33 @@ async def wire_omniclaude_services(
                 mode="env_var",
                 missing_field="OMNICLAUDE_CONTRACTS_ROOT",
             )
+        # allow_zero_contracts=True: omniclaude ships node contracts (ONEX
+        # contract.yaml), not handler contracts (ModelHandlerContract).  The
+        # ServiceContractPublisher validates against ModelHandlerContract which
+        # will reject all node contracts.  Setting allow_zero_contracts=True
+        # prevents a NoContractsFoundError crash while still logging per-
+        # contract validation errors for diagnostics.
+        # Ticket: OMN-3906
         config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=Path(contracts_root),
+            allow_zero_contracts=True,
         )
 
-    await publish_handler_contracts(container, config)
+    result = await publish_handler_contracts(container, config)
+
+    # Log diagnostic summary so that validation failures are visible
+    # without requiring code-level debugging.
+    if result.contract_errors:
+        logger.warning(
+            "Contract validation: %d/%d contracts failed ModelHandlerContract "
+            "validation (expected for node contracts). First error: %s",
+            len(result.contract_errors),
+            len(result.contract_errors) + len(result.published),
+            result.contract_errors[0].message if result.contract_errors else "N/A",
+        )
+    if result.published:
+        logger.info(
+            "Published %d handler contracts to Kafka",
+            len(result.published),
+        )
