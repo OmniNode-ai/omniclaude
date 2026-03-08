@@ -22,10 +22,9 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/decompose-epic.json"
     fields:
-      - status: created | dry_run | error
-      - epic_id: str
-      - created_tickets: list[{id, title, repo_hint}]
-      - count: int
+      - status: "success" | "dry_run" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "created" | null  # domain-specific granularity
+      - extra: "{epic_id, created_tickets, count}"
 args:
   - name: epic_id
     description: Linear epic ID (e.g., OMN-2000)

@@ -34,9 +34,9 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/local-review.json"
     fields:
-      - status: clean | clean_with_nits | max_iterations_reached | report_only | changes_staged | error
-      - iterations_run: int
-      - issues_remaining: dict (critical/major/minor/nit counts)
+      - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "clean" | "clean_with_nits" | "max_iterations_reached" | null  # domain-specific granularity
+      - extra: "{iterations_run, issues_remaining}"
 args:
   - name: --uncommitted
     description: Only review uncommitted changes (ignore committed)

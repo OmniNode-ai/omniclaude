@@ -27,11 +27,10 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/ticket-work.json"
     fields:
-      - status: done | blocked | error | questions_pending
+      - status: "success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "done" | "questions_pending" | null  # domain-specific granularity
       - ticket_id: str
-      - pr_url: str | null
-      - phase_reached: str (intake|research|questions|spec|implementation|review|done)
-      - commits: list[str]
+      - extra: "{pr_url, phase_reached, commits}"
 args:
   - name: ticket_id
     description: Linear ticket ID (e.g., OMN-1807)

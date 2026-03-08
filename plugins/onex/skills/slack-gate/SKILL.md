@@ -38,11 +38,9 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/slack-gate.json"
     fields:
-      - status: accepted | rejected | timeout
-      - risk_level: str
-      - reply: str | null
-      - thread_ts: str | null
-      - elapsed_minutes: int
+      - status: "success" | "failed" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "accepted" | "rejected" | "timeout"  # domain-specific granularity
+      - extra: "{risk_level, reply, thread_ts, elapsed_minutes}"
 args:
   - name: risk_level
     description: "Gate tier: LOW_RISK|MEDIUM_RISK|HIGH_RISK"

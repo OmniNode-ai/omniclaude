@@ -34,12 +34,11 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/ci-watch.json"
     fields:
-      - status: passed | capped | timeout | error
+      - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "passed" | "capped" | "timeout" | null  # domain-specific granularity
       - pr_number: int
       - repo: str
-      - fix_cycles_used: int
-      - elapsed_minutes: int
-      - preexisting_fixes_dispatched: int
+      - extra: "{fix_cycles_used, elapsed_minutes, preexisting_fixes_dispatched}"
 args:
   - name: pr_number
     description: GitHub PR number to watch

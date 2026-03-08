@@ -38,13 +38,12 @@ outputs:
     type: ModelSkillResult
     description: "Written to ~/.claude/skill-results/{context_id}/auto-merge.json"
     fields:
-      - status: merged | held | timeout | error
+      - status: "success" | "gated" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "merged" | "held" | "timeout" | null  # domain-specific granularity
       - pr_number: int
       - repo: str
-      - merge_commit: str | null
-      - strategy: str
       - ticket_id: str | null
-      - ticket_close_status: "closed" | "skipped" | "failed" | null
+      - extra: "{merge_commit, strategy, ticket_close_status}"
 args:
   - name: pr_number
     description: GitHub PR number to merge
