@@ -229,38 +229,65 @@ Gate expires in {gate_timeout_hours}h.
 
 ## Skill Result Output
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/auto-merge.json` on exit.
+**Output contract:** `ModelSkillResult` from `omnibase_core.models.skill`
+
+> **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
+
+Write to: `~/.claude/skill-results/{context_id}/auto-merge.json`
+
+| Field | Value |
+|-------|-------|
+| `skill_name` | `"auto-merge"` |
+| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
+| `extra_status` | Domain-specific status string |
+| `run_id` | Correlation ID |
+| `repo` | Repository slug (org/repo) |
+| `pr_number` | PR number |
+| `ticket_id` | Linear ticket ID (e.g. `"OMN-3262"`) or `null` |
+| `extra` | `{"merge_commit": str, "strategy": str, "ticket_close_status": str}` |
+
+**Status mapping:**
+
+| Current status | Canonical `status` | `extra_status` |
+|----------------|-------------------|----------------|
+| `merged` | `EnumSkillResultStatus.SUCCESS` | `"merged"` |
+| `held` | `EnumSkillResultStatus.GATED` | `"held"` |
+| `timeout` | `EnumSkillResultStatus.ERROR` | `"timeout"` |
+| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+
+**Behaviorally significant `extra_status` values:**
+- `"merged"` → ticket-pipeline treats as SUCCESS; clears ledger, updates Linear to Done
+- `"held"` → ticket-pipeline treats as GATED; pipeline exits with `held` state (non-terminal), awaits human "merge" reply to resume
+- `"timeout"` → ticket-pipeline treats as ERROR; merge gate expired — retryable with a new pipeline run
+
+**Promotion rule for `extra` fields:** If a field appears in 3+ producer skills, open a ticket to evaluate promotion to a first-class field. If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted.
+
+Example result:
 
 ```json
 {
-  "skill": "auto-merge",
-  "status": "merged",
+  "skill_name": "auto-merge",
+  "status": "success",
+  "extra_status": "merged",
   "pr_number": 123,
   "repo": "org/repo",
-  "merge_commit": "abc1234",
-  "strategy": "squash",
-  "context_id": "{context_id}",
   "ticket_id": "OMN-3262",
-  "ticket_close_status": "closed"
+  "run_id": "pipeline-1709856000-OMN-3262",
+  "extra": {
+    "merge_commit": "abc1234",
+    "strategy": "squash",
+    "ticket_close_status": "closed"
+  }
 }
 ```
 
-**Status values**: `merged` | `held` | `timeout` | `error`
-
-- `merged`: PR successfully merged
-- `held`: Human explicitly replied with a hold/reject word
-- `timeout`: `gate_timeout_hours` elapsed — either CI readiness poll never reached CLEAN, or Slack gate received no "merge" reply
-- `error`: Merge failed — includes:
-  - `mergeStateStatus == "DIRTY"`: message "PR has merge conflicts — resolve before retrying"
-  - Permissions error, API failure, or other terminal failure
-
 **`ticket_id`**: The Linear ticket identifier closed in Step 6 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
 
-**`ticket_close_status`** values:
+**`extra["ticket_close_status"]`** values:
 - `"closed"`: `mcp__linear-server__save_issue` succeeded; ticket marked Done
 - `"skipped"`: No `ticket_id` could be resolved — explicit arg absent and branch-name extraction returned empty
 - `"failed"`: `save_issue` call raised an exception; merge still succeeded (non-blocking)
-- `null`: Step 6 was not reached (skill exited before merge — `status` is `held`, `timeout`, or `error`)
+- `null`: Step 6 was not reached (skill exited before merge — `status` is `gated`, `error`)
 
 ## Executable Scripts
 

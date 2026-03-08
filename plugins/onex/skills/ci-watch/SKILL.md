@@ -234,25 +234,58 @@ Task(
 
 ## Skill Result Output
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/ci-watch.json` on exit.
+**Output contract:** `ModelSkillResult` from `omnibase_core.models.skill`
+
+> **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
+
+Write to: `~/.claude/skill-results/{context_id}/ci-watch.json`
+
+| Field | Value |
+|-------|-------|
+| `skill_name` | `"ci-watch"` |
+| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
+| `extra_status` | Domain-specific status string |
+| `run_id` | Correlation ID |
+| `repo` | Repository slug (org/repo) |
+| `pr_number` | PR number |
+| `extra` | `{"fix_cycles_used": int, "elapsed_minutes": int, "preexisting_fixes_dispatched": int}` |
+
+**Status mapping:**
+
+| Current status | Canonical `status` | `extra_status` |
+|----------------|-------------------|----------------|
+| `passed` | `EnumSkillResultStatus.SUCCESS` | `"passed"` |
+| `capped` | `EnumSkillResultStatus.PARTIAL` | `"capped"` |
+| `timeout` | `EnumSkillResultStatus.ERROR` | `"timeout"` |
+| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+
+**Behaviorally significant `extra_status` values:**
+- `"passed"` → ticket-pipeline treats as SUCCESS; auto-merge continues unblocked
+- `"capped"` → ticket-pipeline treats as PARTIAL; CI fix cycles exhausted but PR is not blocked — human may choose to merge with known CI debt
+- `"timeout"` → ticket-pipeline treats as ERROR; CI watch timed out — retryable
+
+**Promotion rule for `extra` fields:** If a field appears in 3+ producer skills, open a ticket to evaluate promotion to a first-class field. If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted.
+
+Example result:
 
 ```json
 {
-  "skill": "ci-watch",
-  "status": "passed",
+  "skill_name": "ci-watch",
+  "status": "success",
+  "extra_status": "passed",
   "pr_number": 123,
   "repo": "org/repo",
-  "fix_cycles_used": 1,
-  "preexisting_fixes_dispatched": 1,
-  "elapsed_minutes": 12,
-  "context_id": "{context_id}"
+  "run_id": "pipeline-1709856000-OMN-1234",
+  "extra": {
+    "fix_cycles_used": 1,
+    "preexisting_fixes_dispatched": 1,
+    "elapsed_minutes": 12
+  }
 }
 ```
 
-**Status values**: `passed` | `capped` | `timeout` | `error`
-
-> **Note**: `status: passed` means the **current PR's branch** is clean. If
-> `preexisting_fixes_dispatched > 0`, background fix PRs were opened for pre-existing
+> **Note**: `extra_status: "passed"` means the **current PR's branch** is clean. If
+> `extra["preexisting_fixes_dispatched"] > 0`, background fix PRs were opened for pre-existing
 > failures found on the base branch. Those PRs are independent and do not block this result.
 
 | Error | Behavior |

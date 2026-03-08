@@ -129,23 +129,54 @@ repos:
 
 ## Skill Result Output
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/decompose-epic.json` on exit.
+**Output contract:** `ModelSkillResult` from `omnibase_core.models.skill`
+
+> **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
+
+Write to: `~/.claude/skill-results/{context_id}/decompose-epic.json`
+
+| Field | Value |
+|-------|-------|
+| `skill_name` | `"decompose-epic"` |
+| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
+| `extra_status` | Domain-specific status string |
+| `run_id` | Correlation ID |
+| `extra` | `{"epic_id": str, "created_tickets": list[{"id": str, "title": str, "repo_hint": str}], "count": int}` |
+
+**Status mapping:**
+
+| Current status | Canonical `status` | `extra_status` |
+|----------------|-------------------|----------------|
+| `created` | `EnumSkillResultStatus.SUCCESS` | `"created"` |
+| `dry_run` | `EnumSkillResultStatus.DRY_RUN` | `null` |
+| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+
+**Behaviorally significant `extra_status` values:**
+- `"created"` → ticket-pipeline (cross-repo split path) proceeds to invoke epic-team with parent epic ID; the `extra["created_tickets"]` list contains the sub-ticket IDs passed to epic-team
+- `null` (dry_run) → ticket-pipeline does not advance; decomposition plan is logged for human review only
+
+**Promotion rule for `extra` fields:** If a field appears in 3+ producer skills, open a ticket to evaluate promotion to a first-class field. If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted. Note: ticket-pipeline already branches on `extra["created_tickets"]` — evaluate promotion.
+
+Example result:
 
 ```json
 {
-  "skill": "decompose-epic",
-  "status": "created",
-  "epic_id": "OMN-2000",
-  "created_tickets": [
-    {"id": "OMN-2001", "title": "Implement X", "repo_hint": "omniclaude"},
-    {"id": "OMN-2002", "title": "Add node Y", "repo_hint": "omnibase_core"}
-  ],
-  "count": 2,
-  "context_id": "{context_id}"
+  "skill_name": "decompose-epic",
+  "status": "success",
+  "extra_status": "created",
+  "run_id": "pipeline-1709856000-OMN-2000",
+  "extra": {
+    "epic_id": "OMN-2000",
+    "created_tickets": [
+      {"id": "OMN-2001", "title": "Implement X", "repo_hint": "omniclaude"},
+      {"id": "OMN-2002", "title": "Add node Y", "repo_hint": "omnibase_core"}
+    ],
+    "count": 2
+  }
 }
 ```
 
-**Status values**: `created` | `dry_run` | `error`
+**Status values**: `success` (`extra_status: "created"`) | `dry_run` | `error`
 
 ## See Also
 
