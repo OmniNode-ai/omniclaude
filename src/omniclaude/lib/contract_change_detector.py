@@ -27,7 +27,7 @@ from typing import Literal
 
 import yaml
 
-from omniclaude.nodes.shared.models.model_pr_changeset import ModelContractChange
+from omniclaude.shared.models.model_pr_changeset import ModelContractChange
 
 logger = logging.getLogger(__name__)
 

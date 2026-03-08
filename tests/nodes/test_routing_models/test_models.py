@@ -28,7 +28,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.nodes.routing_models import (
+from omniclaude.routing_models import (
     ModelAgentDefinition,
     ModelAgentRoutingStats,
     ModelAgentStatsEntry,

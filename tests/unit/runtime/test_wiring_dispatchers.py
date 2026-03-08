@@ -29,11 +29,6 @@ import pytest
 import yaml
 from omnibase_core.enums import EnumMessageCategory
 
-from omniclaude.nodes.shared.models.model_skill_node_contract import (
-    ModelSkillNodeContract,
-    ModelSkillNodeExecution,
-)
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
 from omniclaude.runtime.wiring_dispatchers import (
     ContractLoadError,
     QuirkFindingDispatcher,
@@ -45,6 +40,11 @@ from omniclaude.runtime.wiring_dispatchers import (
     wire_quirk_finding_subscription,
     wire_skill_dispatchers,
 )
+from omniclaude.shared.models.model_skill_node_contract import (
+    ModelSkillNodeContract,
+    ModelSkillNodeExecution,
+)
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -8,7 +8,7 @@ This package contains Pydantic models for Claude Code session management:
 
 - ModelClaudeCodeSessionRequest: Input model for session operation requests
 
-Output model is ModelSkillResult from omniclaude.nodes.shared.models.
+Output model is ModelSkillResult from omniclaude.shared.models.
 
 Model Ownership:
     These models are PRIVATE to omniclaude.

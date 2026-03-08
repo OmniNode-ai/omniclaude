@@ -38,7 +38,7 @@ class TestModelEpicRunUpdatedEvent:
     """Tests for ModelEpicRunUpdatedEvent."""
 
     def test_basic_construction(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelEpicRunUpdatedEvent,
         )
 
@@ -62,7 +62,7 @@ class TestModelEpicRunUpdatedEvent:
         assert event.session_id is None
 
     def test_frozen(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelEpicRunUpdatedEvent,
         )
 
@@ -77,7 +77,7 @@ class TestModelEpicRunUpdatedEvent:
             event.status = "failed"  # type: ignore[misc]
 
     def test_all_statuses_valid(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelEpicRunUpdatedEvent,
         )
 
@@ -92,7 +92,7 @@ class TestModelEpicRunUpdatedEvent:
             assert event.status == status
 
     def test_json_round_trip(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelEpicRunUpdatedEvent,
         )
 
@@ -115,7 +115,7 @@ class TestModelEpicRunUpdatedEvent:
         assert restored.tickets_total == 5
 
     def test_event_id_auto_generated(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelEpicRunUpdatedEvent,
         )
 
@@ -145,7 +145,7 @@ class TestModelPrWatchUpdatedEvent:
     """Tests for ModelPrWatchUpdatedEvent."""
 
     def test_basic_construction(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelPrWatchUpdatedEvent,
         )
 
@@ -167,7 +167,7 @@ class TestModelPrWatchUpdatedEvent:
         assert event.watch_duration_hours == 0.0
 
     def test_frozen(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelPrWatchUpdatedEvent,
         )
 
@@ -184,7 +184,7 @@ class TestModelPrWatchUpdatedEvent:
             event.status = "failed"  # type: ignore[misc]
 
     def test_all_statuses_valid(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelPrWatchUpdatedEvent,
         )
 
@@ -210,7 +210,7 @@ class TestModelGateDecisionEvent:
     """Tests for ModelGateDecisionEvent."""
 
     def test_accepted(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelGateDecisionEvent,
         )
 
@@ -226,7 +226,7 @@ class TestModelGateDecisionEvent:
         assert event.responder is None
 
     def test_rejected(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelGateDecisionEvent,
         )
 
@@ -242,7 +242,7 @@ class TestModelGateDecisionEvent:
         assert event.responder == "U1234567"
 
     def test_timeout(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelGateDecisionEvent,
         )
 
@@ -258,7 +258,7 @@ class TestModelGateDecisionEvent:
         assert event.wait_seconds == 3600.0
 
     def test_frozen(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelGateDecisionEvent,
         )
 
@@ -282,7 +282,7 @@ class TestModelBudgetCapHitEvent:
     """Tests for ModelBudgetCapHitEvent."""
 
     def test_basic_construction(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelBudgetCapHitEvent,
         )
 
@@ -299,7 +299,7 @@ class TestModelBudgetCapHitEvent:
         assert event.cap_reason == "max_tokens_injected exceeded"
 
     def test_frozen(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelBudgetCapHitEvent,
         )
 
@@ -323,7 +323,7 @@ class TestModelCircuitBreakerTrippedEvent:
     """Tests for ModelCircuitBreakerTrippedEvent."""
 
     def test_basic_construction(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelCircuitBreakerTrippedEvent,
         )
 
@@ -342,7 +342,7 @@ class TestModelCircuitBreakerTrippedEvent:
         assert event.last_error is None
 
     def test_with_last_error(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelCircuitBreakerTrippedEvent,
         )
 
@@ -358,7 +358,7 @@ class TestModelCircuitBreakerTrippedEvent:
         assert "ConnectionRefusedError" in event.last_error  # type: ignore[operator]
 
     def test_frozen(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelCircuitBreakerTrippedEvent,
         )
 
@@ -374,7 +374,7 @@ class TestModelCircuitBreakerTrippedEvent:
             event.failure_count = 99  # type: ignore[misc]
 
     def test_json_round_trip(self) -> None:
-        from omniclaude.nodes.shared.models.model_pipeline_events import (
+        from omniclaude.shared.models.model_pipeline_events import (
             ModelCircuitBreakerTrippedEvent,
         )
 

@@ -37,16 +37,16 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from omniclaude.nodes.shared.handler_skill_requested import (
+from omniclaude.shared.handler_skill_requested import (
     _build_args_string,
     handle_skill_requested,
 )
-from omniclaude.nodes.shared.models.model_skill_lifecycle_events import (
+from omniclaude.shared.models.model_skill_lifecycle_events import (
     ModelSkillCompletedEvent,
     ModelSkillStartedEvent,
 )
-from omniclaude.nodes.shared.models.model_skill_request import ModelSkillRequest
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_request import ModelSkillRequest
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 # ---------------------------------------------------------------------------
 # Helpers

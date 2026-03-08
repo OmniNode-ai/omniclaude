@@ -38,15 +38,15 @@ from omnibase_core.enums import EnumMessageCategory
 from omnibase_core.models.dispatch.model_dispatch_route import ModelDispatchRoute
 
 from omniclaude.hooks.topics import TopicBase
-from omniclaude.nodes.shared.handler_skill_requested import handle_skill_requested
-from omniclaude.nodes.shared.models.model_skill_completion_event import (
+from omniclaude.shared.handler_skill_requested import handle_skill_requested
+from omniclaude.shared.models.model_skill_completion_event import (
     ModelSkillCompletionEvent,
 )
-from omniclaude.nodes.shared.models.model_skill_node_contract import (
+from omniclaude.shared.models.model_skill_node_contract import (
     ModelSkillNodeContract,
 )
-from omniclaude.nodes.shared.models.model_skill_request import ModelSkillRequest
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_request import ModelSkillRequest
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 if TYPE_CHECKING:
     from omnibase_core.models.events.model_event_envelope import ModelEventEnvelope

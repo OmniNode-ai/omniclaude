@@ -37,7 +37,7 @@ from omniclaude.nodes.node_claude_code_session_effect.models import (
     ClaudeCodeSessionOperation,
     ModelClaudeCodeSessionRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
