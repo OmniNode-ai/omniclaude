@@ -272,19 +272,19 @@ Node counts are identical. No node directories move.
 
 The execute ticket (OMN-3991) should perform the following steps in order:
 
-### Step 1: Move routing_models/
+**11.1 — Move routing_models/**
 
 ```bash
 git mv src/omniclaude/nodes/routing_models src/omniclaude/routing_models
 ```
 
-### Step 2: Move shared/
+**11.2 — Move shared/**
 
 ```bash
 git mv src/omniclaude/nodes/shared src/omniclaude/shared
 ```
 
-### Step 3: Update Python import statements in src/
+**11.3 — Update Python import statements in src/**
 
 Files to update (9 files):
 - `src/omniclaude/runtime/wiring_dispatchers.py` — 5 import lines
@@ -302,7 +302,7 @@ find src/ -name "*.py" -exec sed -i '' \
    s/omniclaude\.nodes\.routing_models/omniclaude.routing_models/g' {} \;
 ```
 
-### Step 4: Update test import statements (8 test files)
+**11.4 — Update test import statements (8 test files)**
 
 Same sed transform applied to tests/:
 ```bash
@@ -311,14 +311,14 @@ find tests/ -name "*.py" -exec sed -i '' \
    s/omniclaude\.nodes\.routing_models/omniclaude.routing_models/g' {} \;
 ```
 
-### Step 5: Update 81 contract.yaml files
+**11.5 — Update 81 contract.yaml files**
 
 ```bash
 find src/omniclaude/nodes -name "contract.yaml" -exec sed -i '' \
   's/module: omniclaude\.nodes\.shared/module: omniclaude.shared/g' {} \;
 ```
 
-### Step 6: Update the contract template
+**11.6 — Update the contract template**
 
 File: `docs/templates/skill_node_contract.yaml.template`
 
@@ -326,7 +326,7 @@ Lines 44, 48, 94:
 - `module: omniclaude.nodes.shared.models` → `module: omniclaude.shared.models`
 - `module: omniclaude.nodes.shared` → `module: omniclaude.shared`
 
-### Step 7: Update the string assertion in test_integration_gate_node.py
+**11.7 — Update the string assertion in test_integration_gate_node.py**
 
 File: `tests/unit/nodes/node_skill_integration_gate_orchestrator/test_integration_gate_node.py`
 
@@ -334,7 +334,7 @@ Line 272:
 - `assert handler_dep["module"] == "omniclaude.nodes.shared"` →
 - `assert handler_dep["module"] == "omniclaude.shared"`
 
-### Step 8: Verify
+**11.8 — Verify**
 
 ```bash
 # Confirm no remaining references to old paths
