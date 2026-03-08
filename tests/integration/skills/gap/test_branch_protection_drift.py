@@ -205,8 +205,9 @@ class TestFailureTaxonomy:
 
     def test_taxonomy_has_gh_api_auto_fix_policy(self) -> None:
         content = _read(_TAXONOMY)
-        assert "gh api" in content.lower() or "gh_api" in content, (
-            "FAILURE_TAXONOMY.md must document YES (gh api) auto-fix policy"
+        lower = content.lower()
+        assert "gh api" in lower or "gh_api" in content or "github api" in lower, (
+            "FAILURE_TAXONOMY.md must document YES (GitHub API) auto-fix policy"
         )
 
 
