@@ -34,7 +34,7 @@ from omniclaude.nodes.node_local_llm_inference_effect.backends.backend_vllm impo
 from omniclaude.nodes.node_local_llm_inference_effect.models import (
     ModelLocalLlmInferenceRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 # ---------------------------------------------------------------------------
 # Fixtures

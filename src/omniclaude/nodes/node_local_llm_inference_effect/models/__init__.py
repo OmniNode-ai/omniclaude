@@ -8,7 +8,7 @@ This package contains Pydantic models for local LLM inference:
 
 - ModelLocalLlmInferenceRequest: Input model for inference requests
 
-Output model is ModelSkillResult from omniclaude.nodes.shared.models.
+Output model is ModelSkillResult from omniclaude.shared.models.
 
 Model Ownership:
     These models are PRIVATE to omniclaude.

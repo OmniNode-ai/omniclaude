@@ -14,7 +14,7 @@ from typing import Protocol, runtime_checkable
 from omniclaude.nodes.node_local_llm_inference_effect.models import (
     ModelLocalLlmInferenceRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import ModelSkillResult
+from omniclaude.shared.models.model_skill_result import ModelSkillResult
 
 
 @runtime_checkable

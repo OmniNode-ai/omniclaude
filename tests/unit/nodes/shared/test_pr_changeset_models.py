@@ -21,17 +21,17 @@ from uuid import UUID
 
 import pytest
 
-from omniclaude.nodes.shared.models.model_merge_gate_result import (
+from omniclaude.shared.models.model_merge_gate_result import (
     ModelGateCheckResult,
     ModelMergeGateResult,
 )
-from omniclaude.nodes.shared.models.model_pr_changeset import (
+from omniclaude.shared.models.model_pr_changeset import (
     CHANGESET_UUID_NAMESPACE,
     ModelContractChange,
     ModelPRChangeSet,
     build_changeset_id,
 )
-from omniclaude.nodes.shared.models.model_pr_outcome import ModelPROutcome
+from omniclaude.shared.models.model_pr_outcome import ModelPROutcome
 
 # ---------------------------------------------------------------------------
 # Fixtures

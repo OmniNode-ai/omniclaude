@@ -269,7 +269,7 @@ class TestDependencies:
         assert handler_dep is not None
         assert handler_dep["type"] == "handler"
         assert handler_dep["function"] == "handle_skill_requested"
-        assert handler_dep["module"] == "omniclaude.nodes.shared"
+        assert handler_dep["module"] == "omniclaude.shared"
 
 
 # ---------------------------------------------------------------------------

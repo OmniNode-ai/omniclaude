@@ -41,11 +41,11 @@ description: >
 # Strongly typed I/O models (shared across all skill nodes)
 input_model:
   name: ModelSkillRequest
-  module: omniclaude.nodes.shared.models
+  module: omniclaude.shared.models
 
 output_model:
   name: ModelSkillResult
-  module: omniclaude.nodes.shared.models
+  module: omniclaude.shared.models
 
 # Execution backend configuration
 execution:
@@ -98,7 +98,7 @@ dependencies:
   - name: handler_skill_requested
     type: handler
     function: handle_skill_requested
-    module: omniclaude.nodes.shared
+    module: omniclaude.shared
     pluggable: false
 
 # Error handling

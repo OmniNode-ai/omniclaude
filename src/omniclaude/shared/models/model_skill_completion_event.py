@@ -17,7 +17,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from omniclaude.nodes.shared.models.model_skill_result import SkillResultStatus
+from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 
 class ModelSkillCompletionEvent(BaseModel):

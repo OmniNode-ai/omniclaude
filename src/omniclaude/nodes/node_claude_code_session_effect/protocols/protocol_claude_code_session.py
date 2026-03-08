@@ -14,7 +14,7 @@ from typing import Protocol, runtime_checkable
 from omniclaude.nodes.node_claude_code_session_effect.models import (
     ModelClaudeCodeSessionRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import ModelSkillResult
+from omniclaude.shared.models.model_skill_result import ModelSkillResult
 
 
 @runtime_checkable

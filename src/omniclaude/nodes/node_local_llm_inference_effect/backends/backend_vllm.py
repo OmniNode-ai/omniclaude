@@ -32,7 +32,7 @@ from omniclaude.config.model_local_llm_config import (
 from omniclaude.nodes.node_local_llm_inference_effect.models import (
     ModelLocalLlmInferenceRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import (
+from omniclaude.shared.models.model_skill_result import (
     ModelSkillResult,
     SkillResultStatus,
 )

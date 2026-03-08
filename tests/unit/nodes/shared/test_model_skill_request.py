@@ -16,7 +16,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.nodes.shared.models.model_skill_request import ModelSkillRequest
+from omniclaude.shared.models.model_skill_request import ModelSkillRequest
 
 # ---------------------------------------------------------------------------
 # Helpers

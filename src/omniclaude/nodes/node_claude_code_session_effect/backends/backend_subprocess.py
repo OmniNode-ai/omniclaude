@@ -32,7 +32,7 @@ from asyncio.subprocess import PIPE
 from omniclaude.nodes.node_claude_code_session_effect.models import (
     ModelClaudeCodeSessionRequest,
 )
-from omniclaude.nodes.shared.models.model_skill_result import (
+from omniclaude.shared.models.model_skill_result import (
     ModelSkillResult,
     SkillResultStatus,
 )
