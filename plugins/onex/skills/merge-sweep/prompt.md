@@ -18,7 +18,7 @@ When `/merge-sweep [args]` is invoked:
    - `--merge-method <method>` — default: squash
    - `--require-approval <bool>` — default: true
    - `--require-up-to-date <policy>` — default: repo
-   - `--max-total-merges <n>` — default: 10
+   - `--max-total-merges <n>` — default: 0 (unlimited; set positive to cap)
    - `--max-parallel-prs <n>` — default: 5
    - `--max-parallel-repos <n>` — default: 3
    - `--max-parallel-polish <n>` — default: 2
@@ -199,8 +199,9 @@ def needs_polish(pr, require_approval=True):
     """PR has fixable blocking issues: CI failures, conflicts, or changes requested."""
     if pr["isDraft"]:
         return False  # draft PRs are intentionally incomplete
+    # Note: UNKNOWN mergeable PRs are caught by needs_branch_update() first (first-match-wins)
     if pr["mergeable"] == "UNKNOWN":
-        return False  # can't determine state — skip
+        return False  # should not reach here — needs_branch_update() handles UNKNOWN
     if is_merge_ready(pr, require_approval=require_approval):
         return False  # already ready — goes to auto-merge track
     # Fixable if: conflicting (resolvable), CI failing (fixable), or changes requested (addressable)
@@ -213,18 +214,19 @@ def needs_polish(pr, require_approval=True):
     return False  # other cases (e.g., REVIEW_REQUIRED — needs human, not automation)
 
 def needs_branch_update(pr):
-    """PR is merge-ready except its branch is behind main (or state unknown).
-    These PRs need `update-branch` before auto-merge can proceed.
+    """PR needs branch update before merge can proceed.
+    Catches two cases:
+    1. mergeable=MERGEABLE but mergeStateStatus is BEHIND/UNKNOWN (stale branch)
+    2. mergeable=UNKNOWN (GitHub hasn't computed state — update forces recomputation)
     mergeStateStatus values: BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
     """
     if pr["isDraft"]:
         return False
-    if pr["mergeable"] != "MERGEABLE":
-        return False
-    return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
-
-def pr_state_unknown(pr):
-    return pr["mergeable"] == "UNKNOWN"
+    if pr["mergeable"] == "MERGEABLE":
+        return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
+    if pr["mergeable"] == "UNKNOWN":
+        return True  # stale PR — update branch to force GitHub recomputation
+    return False
 
 def passes_since_filter(pr, since):
     """Return True if PR was updated at or after the since datetime."""
@@ -245,10 +247,9 @@ def passes_label_filter(pr, filter_labels):
 ```
 
 Classification results (evaluated in order — first match wins):
-- `needs_branch_update()` AND passes filters → add to `branch_update_queue_pre_claim[]` (Track A-update)
+- `needs_branch_update()` AND passes filters → add to `branch_update_queue_pre_claim[]` (Track A-update; includes UNKNOWN mergeable PRs)
 - `is_merge_ready()` AND passes filters → add to `candidates_pre_claim[]` (Track A)
 - `needs_polish()` AND passes filters → add to `polish_queue_pre_claim[]` (Track B)
-- `pr_state_unknown()` → add to `skipped_unknown[]` with warning
 - Draft PRs → ignore silently
 - Otherwise (e.g., `REVIEW_REQUIRED`) → ignore silently
 
@@ -339,7 +340,7 @@ if hard_failed_claims:
 Apply `--authors` filter: if set, only include PRs where `pr["author"]["login"]` is in the authors list.
 (Apply before claim check, as part of `passes_*_filter` calls above.)
 
-Apply `--max-total-merges` cap: truncate `candidates[]` to the cap.
+Apply `--max-total-merges` cap: if > 0, truncate `candidates[]` to the cap. If 0, no cap applied.
 The polish queue is NOT capped (polishing is best-effort and additive).
 
 ---
@@ -350,7 +351,6 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 IF candidates is empty AND branch_update_queue is empty AND polish_queue is empty (or --skip-polish):
   → Print: "No actionable PRs found across <N> repos."
   → If applicable, explain filters
-  → If skipped_unknown is not empty: print warning about UNKNOWN state PRs
   → Emit ModelSkillResult(status=nothing_to_merge, filters=filters)
   → EXIT
 ```
@@ -395,10 +395,7 @@ BLOCKING ISSUES — Track B: pr-polish queue (<count>):
   OmniNode-ai/omniclaude
     #255  refactor: session handler        CHANGES_REQUESTED          SHA: 1a2b3c4d  updated: 2026-02-21
 
-SKIPPED (UNKNOWN merge state — GitHub computing):
-    OmniNode-ai/omnidash#20
-
-Total: <N> stale (branch update needed), <M> ready to auto-merge, <P> need polishing, <K> skipped
+Total: <N> stale (branch update needed, includes UNKNOWN), <M> ready to auto-merge, <P> need polishing
 ```
 
 ---
@@ -785,7 +782,7 @@ polish_blocked_count = sum(1 for r in polish_results if r.get("polish_status") =
 polish_auto_merged_count = sum(1 for r in polish_results if r.get("auto_merge_set"))
 
 skipped_count = (
-    len(skipped_unknown) + len(skipped_filtered)
+    len(skipped_filtered)
     + sum(1 for r in polish_results if r.get("result") == "skipped")
     + sum(1 for r in branch_update_results if r.get("result") == "skipped")
     + len(hard_failed_claims)

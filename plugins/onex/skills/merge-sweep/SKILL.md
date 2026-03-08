@@ -31,7 +31,7 @@ args:
     description: "Branch update policy: always | never | repo (default: repo — respect branch protection)"
     required: false
   - name: --max-total-merges
-    description: Hard cap on auto-merge candidates per run (default: 10)
+    description: "Hard cap on auto-merge candidates per run (default: 0 = unlimited). Set to a positive number to limit."
     required: false
   - name: --max-parallel-prs
     description: Concurrent auto-merge enable operations (default: 5)
@@ -75,7 +75,8 @@ outputs:
 Composable skill that scans all repos in `omni_home` for open PRs and handles them in three tracks:
 
 **Track A-update — Proactive Branch Updates**: PRs that are merge-ready but have stale branches
-(`mergeStateStatus` BEHIND or UNKNOWN) get their branches updated via `gh api -X PUT .../update-branch`
+(`mergeStateStatus` BEHIND or UNKNOWN), or PRs where GitHub hasn't computed mergeable state
+(`mergeable` UNKNOWN), get their branches updated via `gh api -X PUT .../update-branch`
 BEFORE auto-merge is attempted. This prevents the chicken-and-egg deadlock where strict branch
 protection requires branches to be current but auto-merge does not trigger updates. Updated PRs
 are picked up on the next sweep pass after CI re-runs.
@@ -106,7 +107,7 @@ Designed as the daily close-out command — one sweep drains both the merge queu
 /merge-sweep --repos omniclaude,omnibase_core      # Limit to specific repos
 /merge-sweep --skip-polish                         # Only enable auto-merge on ready PRs
 /merge-sweep --authors jonahgabriel                # Only PRs by this author
-/merge-sweep --max-total-merges 5                  # Cap auto-merge queue at 5
+/merge-sweep --max-total-merges 5                  # Cap auto-merge queue at 5 (default: unlimited)
 /merge-sweep --merge-method merge                  # Use merge commit (not squash)
 /merge-sweep --since 2026-02-01                    # Only PRs updated after Feb 1, 2026
 /merge-sweep --since 2026-02-23T00:00:00Z          # Only PRs updated after midnight UTC
@@ -120,15 +121,20 @@ Designed as the daily close-out command — one sweep drains both the merge queu
 
 ```python
 def needs_branch_update(pr) -> bool:
-    """Track A-update: PR is merge-ready but branch is stale (BEHIND/UNKNOWN).
+    """Track A-update: PR needs branch update before merge can proceed.
+    Catches two cases:
+    1. mergeable=MERGEABLE but mergeStateStatus is BEHIND/UNKNOWN (stale branch)
+    2. mergeable=UNKNOWN (GitHub hasn't computed state — update forces recomputation)
     Checked BEFORE is_merge_ready() — first match wins.
     mergeStateStatus values: BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
     """
     if pr["isDraft"]:
         return False
-    if pr["mergeable"] != "MERGEABLE":
-        return False
-    return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
+    if pr["mergeable"] == "MERGEABLE":
+        return pr.get("mergeStateStatus", "").upper() in ("BEHIND", "UNKNOWN")
+    if pr["mergeable"] == "UNKNOWN":
+        return True  # stale PR — update branch to force GitHub recomputation
+    return False
 
 def is_merge_ready(pr, require_approval=True) -> bool:
     """Track A: PR is safe to auto-merge immediately (branch is current)."""
@@ -147,8 +153,9 @@ def needs_polish(pr, require_approval=True) -> bool:
     """Track B: PR has fixable blocking issues."""
     if pr["isDraft"]:
         return False  # draft PRs are intentionally incomplete
+    # Note: UNKNOWN mergeable PRs are caught by needs_branch_update() first (classification is first-match-wins)
     if pr["mergeable"] == "UNKNOWN":
-        return False  # can't determine state — skip
+        return False  # should not reach here — needs_branch_update() handles UNKNOWN
     if is_merge_ready(pr, require_approval=require_approval):
         return False  # already ready — goes to Track A
     # Fixable: conflicts (resolvable), CI failing (fixable), changes requested (addressable)
@@ -168,13 +175,12 @@ def is_green(pr) -> bool:
 ```
 
 **Classification order** (first match wins):
-1. `needs_branch_update()` -- Track A-update (branch stale, update before merge)
+1. `needs_branch_update()` -- Track A-update (stale branch OR unknown mergeable state — update forces recomputation)
 2. `is_merge_ready()` -- Track A (branch current, auto-merge immediately)
 3. `needs_polish()` -- Track B (fixable blocking issues)
-4. `mergeable == "UNKNOWN"` -- skip with warning (GitHub still computing)
-5. `BLOCKED` + all checks green -- warn as potential branch protection drift (BRANCH_PROTECTION_DRIFT).
+4. `BLOCKED` + all checks green -- warn as potential branch protection drift (BRANCH_PROTECTION_DRIFT).
    These PRs are not added to Track B; they require `/gap detect` or `audit-branch-protection.py` to fix.
-6. Draft / `REVIEW_REQUIRED` -- skip silently
+5. Draft / `REVIEW_REQUIRED` -- skip silently
 
 ## Arguments
 
@@ -186,7 +192,7 @@ def is_green(pr) -> bool:
 | `--merge-method` | `squash` | `squash` \| `merge` \| `rebase` |
 | `--require-approval` | true | Require at least one GitHub APPROVED review |
 | `--require-up-to-date` | `repo` | `always` \| `never` \| `repo` (respect branch protection) |
-| `--max-total-merges` | 10 | Hard cap on Track A candidates per run |
+| `--max-total-merges` | 0 (unlimited) | Hard cap on Track A candidates per run. 0 = no cap. |
 | `--max-parallel-prs` | 5 | Concurrent auto-merge enable operations |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel |
 | `--max-parallel-polish` | 2 | Concurrent pr-polish agents (resource-intensive) |
@@ -210,13 +216,12 @@ def is_green(pr) -> bool:
 
 3. CLASSIFY (apply all filters including --authors, --since, --label;
    first match wins per PR):
-   - needs_branch_update() + passes filters → branch_update_queue[] (Track A-update)
+   - needs_branch_update() + passes filters → branch_update_queue[] (Track A-update; includes UNKNOWN mergeable PRs)
    - is_merge_ready() + passes filters → candidates[] (Track A)
    - needs_polish() + passes filters → polish_queue[] (Track B)
-   - mergeable == UNKNOWN → skipped_unknown[] (warn)
    - draft / REVIEW_REQUIRED / else → ignore silently
    Check claim registry; exclude PRs with active claims from other runs.
-   Apply --max-total-merges cap to candidates[].
+   Apply --max-total-merges cap to candidates[] (skip if 0).
 
 4. If branch_update_queue[], candidates[], and polish_queue[] are all empty:
    → emit ModelSkillResult(status=nothing_to_merge), exit
@@ -411,7 +416,7 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 
 | Error | Behavior |
 |-------|----------|
-| PR `mergeable` state UNKNOWN | Skip with warning; include in `skipped` count |
+| PR `mergeable` state UNKNOWN | Route to Track A-update; branch update forces GitHub to recompute mergeable state. Next sweep handles the result. |
 | PR `mergeStateStatus` BEHIND/UNKNOWN (scan) | Step 5b: update branch proactively; record `branch_updated`; CI re-runs; next sweep merges |
 | PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge |
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
