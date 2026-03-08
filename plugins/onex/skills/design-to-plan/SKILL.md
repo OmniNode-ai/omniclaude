@@ -101,6 +101,8 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Every implementation item MUST be a `## Task N:` heading (H2 level).** This is non-negotiable — `plan-to-tickets` parses this exact format. Plans that use any other structure (numbered lists, `### Phase` sub-headings, bullet items, `## Phase N:`) will fail downstream ticketization.
 
+**Validation contract:** `ModelPlanDocument` from `omnibase_core.models.plan` is the validation target for every plan produced by this skill. A plan that cannot be parsed into a `ModelPlanDocument` is a failure — regenerate the offending sections before proceeding.
+
 - **DO**: `## Task 1: Create autopilot SKILL.md specification`
 - **DO**: `## Task 2: Implement state management`
 - **DON'T**: `### Phase 1:` with numbered items inside
@@ -109,7 +111,16 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 If the design has phases (e.g., "Phase 1: Core", "Phase 2: Dashboard"), flatten them into sequential `## Task N:` headings. Use the task title to indicate the phase if helpful: `## Task 15: [Phase 2] Register Kafka topics`.
 
-**Post-plan validation**: After writing the plan, scan it and confirm every implementation item uses `## Task N:` format. If any items use a different structure, rewrite them before proceeding to the adversarial review.
+**Post-plan validation**: After writing the plan, parse it through `ModelPlanDocument` (from `omnibase_core.models.plan`). If parsing fails, regenerate the offending sections before proceeding to the adversarial review. Specifically:
+
+- Every implementation item must be a `## Task N:` heading (detected as `task_sections` by `ModelPlanDocument`)
+- No duplicate task IDs
+- No circular dependencies between tasks
+- No empty-content tasks
+
+If any of these checks fail, rewrite the offending sections and re-validate before continuing.
+
+**Note:** This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation of plan files against `ModelPlanDocument` is not yet implemented. The model serves as the source of truth for the required plan structure. Real enforcement at the file I/O boundary is a follow-up task.
 
 ### Bite-Sized Task Granularity
 
