@@ -108,11 +108,20 @@ def _get_db_config() -> dict[str, Any]:
                         )
         else:
             # Fallback to individual POSTGRES_* settings
+            _pg_user = settings.postgres_user
+            if not _pg_user:
+                # Guard against OS-user fallback: psycopg2 uses the OS username when
+                # user="" is passed, which causes "role 'root' does not exist" on CI
+                # runners that run as root.  Raise a clear error instead.
+                raise ValueError(
+                    "POSTGRES_USER is not set. Set POSTGRES_USER (or OMNICLAUDE_DB_URL) "
+                    "in the environment to avoid OS-user fallback in psycopg2."
+                )
             DB_CONFIG = {
                 "host": settings.postgres_host,
                 "port": settings.postgres_port,
                 "database": settings.postgres_database,
-                "user": settings.postgres_user,
+                "user": _pg_user,
                 "password": settings.get_effective_postgres_password(),
             }
 

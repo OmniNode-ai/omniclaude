@@ -1177,6 +1177,12 @@ jobs:
       - name: Run hooks tests
         env:
           DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+          OMNICLAUDE_DB_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DATABASE: hooks_test_db
           SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then

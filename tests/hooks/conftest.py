@@ -233,3 +233,33 @@ def integration_test_marker():
     if os.getenv("KAFKA_INTEGRATION_TESTS") != "1":
         pytest.skip("Integration tests disabled. Set KAFKA_INTEGRATION_TESTS=1 to run.")
     return True
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Fast-fail guard: detect missing POSTGRES_USER when a DB URL is present.
+
+    When DATABASE_URL or OMNICLAUDE_DB_URL is set but POSTGRES_USER is not,
+    psycopg2 falls back to the OS username (e.g. ``root`` on self-hosted CI
+    runners), producing the opaque error ``role "root" does not exist``.
+
+    This hook fires before any tests run and emits a clear error message so
+    the developer knows exactly which variable to add.
+
+    The check is skipped when neither DB URL var is set (unit-only run with no
+    real database required).
+    """
+    has_db_url = bool(
+        os.environ.get("DATABASE_URL") or os.environ.get("OMNICLAUDE_DB_URL")
+    )
+    has_postgres_user = bool(os.environ.get("POSTGRES_USER"))
+
+    if has_db_url and not has_postgres_user:
+        import warnings
+
+        warnings.warn(
+            "[OMN-4048] POSTGRES_USER is not set but DATABASE_URL/OMNICLAUDE_DB_URL is. "
+            "psycopg2 will fall back to the OS username (e.g. 'root' on CI runners), "
+            "causing 'role does not exist' errors. "
+            "Set POSTGRES_USER in the test environment to fix this.",
+            stacklevel=1,
+        )
