@@ -97,6 +97,20 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
 
+### HARD FORMAT REQUIREMENT
+
+**Every implementation item MUST be a `## Task N:` heading (H2 level).** This is non-negotiable — `plan-to-tickets` parses this exact format. Plans that use any other structure (numbered lists, `### Phase` sub-headings, bullet items, `## Phase N:`) will fail downstream ticketization.
+
+- **DO**: `## Task 1: Create autopilot SKILL.md specification`
+- **DO**: `## Task 2: Implement state management`
+- **DON'T**: `### Phase 1:` with numbered items inside
+- **DON'T**: `1. Create SKILL.md` as a flat numbered list
+- **DON'T**: `## Implementation Sequence` with sub-sections
+
+If the design has phases (e.g., "Phase 1: Core", "Phase 2: Dashboard"), flatten them into sequential `## Task N:` headings. Use the task title to indicate the phase if helpful: `## Task 15: [Phase 2] Register Kafka topics`.
+
+**Post-plan validation**: After writing the plan, scan it and confirm every implementation item uses `## Task N:` format. If any items use a different structure, rewrite them before proceeding to the adversarial review.
+
 ### Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
