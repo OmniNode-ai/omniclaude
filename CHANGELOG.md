@@ -3,6 +3,20 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.5.1] - 2026-03-08
+
+### Fixed
+- **Contract validation crash** [OMN-3906] (#577): Prevent `NoContractsFoundError` crash in `PluginClaude.wire_handlers` when no contracts are found during plugin initialization
+- **USE_EVENT_ROUTING env warning** [OMN-3894] (#576): Warn when `USE_EVENT_ROUTING` is absent from environment
+- **Merge-sweep unknown-mergeable** [OMN-3864] (#575): Remove PR cap default and handle UNKNOWN-mergeable PRs
+- **Auto-detect versions in /redeploy** (#573): Detect versions from latest git tags instead of hardcoding
+- **Design-to-plan heading format** (#574): Enforce `## Task N:` heading format in design-to-plan skill
+- **Estimation-accuracy rewrite** (#566): Rewrite estimation-accuracy with three-layer factory telemetry
+- **Branch protection drift** [OMN-3787] (#563): Add `BRANCH_PROTECTION_DRIFT` failure class
+- **Post-release-redeploy skill** [OMN-2911] (#568): Add `/post-release-redeploy` skill
+- **PR event models** [OMN-3138] (#570): Add `ModelPRChangeSet`, `ModelPROutcome`, `ModelMergeGateResult`
+- **Merge-sweep direct merge fallback** (#562): Fallback to direct merge when auto-merge fails on clean PRs
+
 ## [0.5.0] - 2026-03-07
 
 ### Added
