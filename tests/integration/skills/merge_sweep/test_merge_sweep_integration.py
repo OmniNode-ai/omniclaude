@@ -475,14 +475,27 @@ class TestCIEnforcementGrep:
         """prompt.md must not contain 'gh pr merge' without '--auto' flag.
 
         gh pr merge --auto (enable GitHub auto-merge) is allowed and expected.
-        gh pr merge without --auto (immediate force-merge) is banned.
+        gh pr merge without --auto (immediate force-merge) is banned UNLESS it is
+        the documented fallback for when --auto fails with "clean status" error.
+        The fallback is identified by nearby context mentioning "clean status" or
+        "Fall back to direct merge" within a 5-line window.
         """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
         violations = []
         for line_num, line in enumerate(lines, 1):
             if re.search(r"\bgh pr merge\b", line) and "--auto" not in line:
-                violations.append(f"line {line_num}: {line.strip()}")
+                # Check surrounding context (5 lines before/after) for fallback pattern
+                context_start = max(0, line_num - 6)
+                context_end = min(len(lines), line_num + 5)
+                context = "\n".join(lines[context_start:context_end]).lower()
+                is_fallback = (
+                    "clean status" in context
+                    or "fall back to direct merge" in context
+                    or "merged_directly" in context
+                )
+                if not is_fallback:
+                    violations.append(f"line {line_num}: {line.strip()}")
 
         assert violations == [], (
             "Direct 'gh pr merge' without '--auto' found in merge-sweep/prompt.md. "
