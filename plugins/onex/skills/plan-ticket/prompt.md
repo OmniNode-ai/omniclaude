@@ -122,7 +122,7 @@ This skill does NOT use AskUserQuestion. It outputs a single copyable block and 
 
 ---
 
-## Step 3: Generate Contract
+## Generate Contract
 
 After outputting the YAML template block, call `generate-ticket-contract` for every ticket:
 

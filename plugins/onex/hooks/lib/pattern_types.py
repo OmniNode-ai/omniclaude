@@ -4,8 +4,7 @@
 
 """Shared types for pattern injection - used by both CLI and handler.
 
-This module contains the canonical definitions for pattern-related data types,
-ensuring consistency between:
+Canonical definitions for pattern-related data types, ensuring consistency between:
 - plugins/onex/hooks/lib/context_injection_wrapper.py (CLI module)
 - src/omniclaude/hooks/handler_context_injection.py (handler module)
 

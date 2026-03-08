@@ -5,11 +5,11 @@
 CI check: Block hardcoded Kafka broker URL fallbacks. (OMN-3555)
 
 Root cause of the OMN-3534 bus split: code had stale fallback addresses like
-  os.getenv("KAFKA_BROKERS", "localhost:29092")
+  os.getenv("KAFKA_BROKERS", "localhost:<port>")  # cloud-bus-ok OMN-3555
 When the M2 Ultra Redpanda was decommissioned (OMN-3431), omnidash silently
 defaulted to the old cloud bus address instead of the local Docker bus.
 
-This check flags broker port literals (:29092, :19092) that appear as:
+Flags broker port literals that appear as:  # cloud-bus-ok OMN-3555
   - Default/fallback values in os.getenv() calls
   - Standalone string assignments where the LHS name contains "broker", "kafka", or "bootstrap"
   - Any string that looks like a broker address (host:port) containing these ports
@@ -22,7 +22,7 @@ Suppression:
 
 Two-bus policy (OMN-3431):
   localhost:19092  — local Docker Redpanda (bus_local, always-on)
-  localhost:29092  — cloud Kafka via launchd tunnel (bus_cloud, session-scoped)
+  cloud Kafka via launchd tunnel (bus_cloud, session-scoped)  # cloud-bus-ok OMN-3555
 
 Neither should appear hardcoded as a fallback in source code. Broker addresses
 must always come from environment variables (KAFKA_BOOTSTRAP_SERVERS or equivalent).
@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 # Broker ports that must not appear as hardcoded fallbacks
-BROKER_PORT_PATTERN = re.compile(r":\b(19092|29092)\b")
+BROKER_PORT_PATTERN = re.compile(r":\b(19092|29092)\b")  # cloud-bus-ok OMN-3555
 
 # Pattern to detect broker-related variable names on the LHS of assignments
 BROKER_VAR_PATTERN = re.compile(r"(kafka|broker|bootstrap)", re.IGNORECASE)
@@ -253,7 +253,7 @@ def main() -> int:
         print(f"  {v}")
     print(
         "\nKafka broker addresses must come from environment variables only."
-        "\nNever hardcode :19092, :29092 as default/fallback values in source."
+        "\nNever hardcode broker ports as default/fallback values in source."  # cloud-bus-ok OMN-3555
         "\n"
         "\nCorrect pattern:"
         '\n  brokers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")  # no fallback'

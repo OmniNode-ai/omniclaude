@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Tests for TaskClassifier and related models.
 
-This module contains comprehensive tests for:
+Comprehensive tests for:
 - TaskIntent enum values
 - TaskContext dataclass fields and instantiation
 - TaskClassifier.classify() method for intent detection

@@ -21,8 +21,7 @@ Common secret patterns detected:
 Uses AST parsing for reliable detection of secret patterns and their values.
 
 STANDALONE JUSTIFICATION (OMN-1558):
-====================================
-This script is intentionally standalone and does NOT import from omnibase_core.
+Standalone script; does NOT import from omnibase_core.
 
 omnibase_core.validation does NOT provide a secret detection validator.
 Security-focused validation is outside omnibase_core's scope, which focuses on:

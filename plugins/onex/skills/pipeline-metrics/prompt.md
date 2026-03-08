@@ -25,7 +25,7 @@ Parse from the invocation args string:
 
 Compute `--until` as today (UTC).
 
-## Step 1: Resolve time window
+## Resolve time window
 
 ```python
 from datetime import UTC, datetime, timedelta
@@ -34,7 +34,7 @@ until = datetime.now(UTC).date()
 since = until - timedelta(days=7)  # override if --since provided
 ```
 
-## Step 2: Collect pipeline state.yaml files
+## Collect pipeline state.yaml files
 
 Scan `~/.claude/pipelines/*/state.yaml`. For each file in the time window
 (started_at >= since AND started_at <= until):
@@ -60,7 +60,7 @@ rework = max(0, local_review_iters - 1) + ci_fix_cycles + pr_review_cycles
 
 If no state.yaml files exist in window → mark section "insufficient data".
 
-## Step 3: Collect GitHub PR data
+## Collect GitHub PR data
 
 Use the `gh` CLI. Determine repo slug(s) from:
 1. `--repo` filter if given → `OmniNode-ai/{repo}`
@@ -108,7 +108,7 @@ prs_per_week = len(merged_prs_in_window) / window_weeks
 If `gh` is not available or returns error → mark cycle time and velocity
 sections "data unavailable".
 
-## Step 4: Collect skill duration from PostgreSQL
+## Collect skill duration from PostgreSQL
 
 Check whether ``skill_execution_logs`` exists (OMN-2778 projection consumer).
 If it exists, query it directly; otherwise fall back to ``agent_execution_logs``
@@ -167,7 +167,7 @@ In the output header, emit one of:
 - (nothing extra) when reading from ``skill_execution_logs``
 - ``  * Skill duration sourced from agent_execution_logs (proxy)`` when falling back
 
-## Step 5: Collect story point estimates from Linear
+## Collect story point estimates from Linear
 
 For each linked ticket_id found in Step 2, call:
 
@@ -186,7 +186,7 @@ accuracy = story_points / (cycle_time_h / avg_h_per_point)
 # Values near 1.0 = accurate; >1 = underestimated; <1 = overestimated
 ```
 
-## Step 6: Render output
+## Render output
 
 ### Table format (default)
 

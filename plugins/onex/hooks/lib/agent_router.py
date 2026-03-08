@@ -4,7 +4,6 @@
 
 """
 Agent Router - Standalone Routing Module
-========================================
 
 Local agent routing with trigger matching and confidence scoring.
 Works standalone without external service dependencies.

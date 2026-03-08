@@ -4,7 +4,7 @@
 
 """OmniClaude Investor Demo Runner - Pre-flight checks and event verification.
 
-This script provides three modes for the investor demo:
+Three modes for the investor demo:
 
   --check   Pre-flight: verify emit daemon health and Kafka connectivity.
   --verify  Post-demo: consume recent events and display them.

@@ -4,8 +4,8 @@
 """
 Environment variable validation for production environments.
 
-This module provides functions to detect production environments and
-validate that required environment variables are set.
+Functions to detect production environments and validate that required
+environment variables are set.
 """
 
 import os

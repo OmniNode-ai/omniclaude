@@ -157,7 +157,7 @@ If `--cleanup-orphans` is set:
 
 ---
 
-## Step 1: Determine Repo Scope
+## Determine Repo Scope
 
 If `--repos` is provided, use that list. Otherwise use canonical omni_home repos:
 - `OmniNode-ai/omniclaude`
@@ -177,7 +177,7 @@ Skip any repo where file count > `--large-repo-file-threshold`. Log: "Skipping <
 
 ---
 
-## Step 2: Scan Phase (Parallel)
+## Scan Phase (Parallel)
 
 Scan up to `--max-parallel-repos` repos concurrently (default: 3). For each repo:
 
@@ -236,7 +236,7 @@ Scan Complete:
 
 ---
 
-## Step 3: Empty Check
+## Empty Check
 
 ```
 IF work_queue is empty:
@@ -256,7 +256,7 @@ IF dry_run:
 
 ---
 
-## Step 4: Create Worktrees (Before Dispatch)
+## Create Worktrees (Before Dispatch)
 
 Before creating each worktree, **acquire a claim** from the global claim registry.
 A worktree creation is a PR mutation commitment — the claim must be held before any
@@ -331,7 +331,7 @@ cleaned manually. Marker-first guarantees the sweeper can find and remove it.
 
 ---
 
-## Step 5: Dispatch Review Agents (Parallel)
+## Dispatch Review Agents (Parallel)
 
 Dispatch up to `--max-parallel-prs` agents concurrently. For each PR with a successfully created
 worktree:
@@ -393,7 +393,7 @@ Wait for all agents to complete (with timeout enforcement). Collect results.
 
 ---
 
-## Step 6: Cleanup Worktrees
+## Cleanup Worktrees
 
 For each PR (whether the agent succeeded, failed, or timed out), in a `finally` block:
 
@@ -425,7 +425,7 @@ Run with --cleanup-orphans to retry cleanup.
 
 ---
 
-## Step 7: Update Ledger
+## Update Ledger
 
 For each PR result, update the run ledger at
 `~/.claude/pr-queue/<date>/review-all-prs_<run_id>.json`:
@@ -445,7 +445,7 @@ Write atomically (write to temp file, then rename).
 
 ---
 
-## Step 8: Collect Results and Emit
+## Collect Results and Emit
 
 Aggregate per-PR results:
 

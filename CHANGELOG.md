@@ -3,6 +3,79 @@
 All notable changes to OmniClaude are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [0.5.0] - 2026-03-07
+
+### Added
+- **Insights-driven skill chain** [OMN-3698] (#558): Autonomous planning-to-execution pipeline from insights
+- **Integration gap workflow** [OMN-3771] (#557): Formalize integration gap workflow with 6 new failure classes
+- **PreToolUse poly enforcer hook** [OMN-3742] (#554): Enforce polymorphic dispatch policy at tool-use time
+- **PR verification in executing-plans** [OMN-3743] (#553): Add Step 1.5 PR verification to executing-plans skill
+- **List-prs changed files** [OMN-3744] (#552): Surface changed files for CONFLICTS bucket
+- **Venv sentinel file** [OMN-3727] (#548): Add .omniclaude-sentinel file for venv integrity tracking
+- **Statusline health dots** [OMN-3731] (#547): Add Line 4 with health dots and PR counts
+- **Shared verify_venv_or_warn helper** [OMN-3729] (#546): Reusable venv integrity check for hooks
+- **Statusline health probe and PR cache** [OMN-3730] (#543): Health probe and PR cache helpers
+- **Global error guard** [OMN-3724] (#544): Global error guard for all hook scripts
+- **Auto-repair venv** [OMN-3726] (#541): Auto-repair venv in find_python()
+- **Post-merge hook** [OMN-3509] (#512): Post-merge hook with 5 skip conditions and rate limiting
+- **Linear relay service** [OMN-3502] (#508): Dedup, verifier, publisher, and app
+- **Linear relay tests** [OMN-3504] (#511): Webhook payload fixtures, filter logic, timing-safe verification
+- **Idempotency verification** [OMN-3508] (#510): Byte-stable stable.json verification
+- **Feature-dashboard skill** [OMN-3503] (#498): Full SKILL.md for feature-dashboard skill
+- **Feature-dashboard node** [OMN-3505] (#501): Skill node, contract, and golden path fixture
+- **Feature-dashboard tests** [OMN-3506] (#502), [OMN-3501] (#503), [OMN-3507] (#507): Coverage, model validation, smoke-test
+- **Kafka broker URL guards** [OMN-3554] (#506), [OMN-3555] (#505): Pre-commit guards against hardcoded Kafka fallbacks
+- **Automerge in skills** (#517): Enable automerge in parallel-solve, finishing-a-development-branch, pr-polish
+- **Zombie-ticket detection** [OMN-3577] (#516): Close zombie-ticket gap with superseded-PR and epic-completion detection
+- **Phoenix OTEL improvements** [OMN-3611] (#521): Add start_time, kind, status to Phoenix exporter
+- **Emit-daemon self-healing** [OMN-3647] (#532): Self-healing with fail counter and restart logic
+- **Cloud bus guard hook** [OMN-3777] (#559): Pre-commit hook to guard cloud bus references
+- **No-planning-docs hook** [OMN-3615] (#522): Pre-commit hook to prevent planning docs in repo
+- **No-env-file hook** (#538): Pre-commit hook to prevent .env files
+- **Statusline merge** [OMN-3608] (#523): Merge repo context, usage meters, and tab bar into 3-line statusline
+
+### Fixed
+- **Enforcement mode strings** [OMN-1487] (#569): Standardize enforcement mode strings on "blocking"
+- **Merge-sweep stale branches** [OMN-3818] (#567): Auto-update stale branches before merge attempt
+- **CI pin actions** [OMN-3809] (#564): Pin actions/checkout@v4 and actions/setup-python@v5
+- **AI-slop step-narration** [OMN-3807] (#565): Remove step-narration patterns from skill docs
+- **Merge-sweep autonomous directives** (#556): Prevent LLM confirmation pauses
+- **Release version base** (#561): Use max(tag, pyproject) as version base to prevent downgrades
+- **Merge-sweep auto-update BEHIND branches** [OMN-3779] (#560): Auto-update BEHIND branches after enabling auto-merge
+- **Statusline bugs** (#537): Colored bars, correct API fields, no model duplication
+- **ONEX version bounds** [OMN-3710] (#540): Relax ONEX version bounds
+- **Statusline layout** (#551): Merge bars + resets into single line (4-to-3 line layout)
+- **onex: prefix in Skill() calls** [OMN-2612] (#550): Restore onex: prefix and update validator
+- **Deploy venv integrity** [OMN-3728] (#545): Post-sync venv integrity check
+- **Graceful hook degradation** [OMN-3725] (#542): Graceful degradation for advisory hooks
+- **Extraction event emitter** [OMN-3251] (#504): Fix silent failure in user-prompt-submit hook
+- **Blocked Slack notifications** [OMN-3642] (#528): Show real agent/session identity
+- **Golden-path missing topic** [OMN-3568] (#520): Detect missing output topic before subscribing
+- **Golden-path broker fallback** [OMN-3569] (#518): Remove decommissioned M2 Ultra broker fallback
+- **Dead HTTP classify call** [OMN-2877] (#529): Remove dead HTTP classify call from intent classifier
+- **Trivy CI** [OMN-3566] (#530): Bump trivy-action to 0.34.2, fix Dockerfile path
+- **Routing timeout** [OMN-3646] (#531): Wrap routing call with run_with_timeout
+
+### Changed
+- **Skills consolidation** (#526): Consolidate 102 skills to 79 with pipeline improvements
+- **Adversarial review strengthening** [OMN-3594] (#519): CLI consistency, behavioral expansion, prerequisite guards
+- **Poly dispatch** (#536): Replace statusline with usage-bar version and add poly dispatch to 17 skills
+- **Migration freeze format** [OMN-3533] (#495): Update .migration_freeze to structured format
+- **Cloud bus purge** [OMN-3753] (#555): Purge cloud bus (29092) references from omniclaude
+- **Mypy fixes** [OMN-3472] (#527): Fix 11 pre-existing mypy errors in services and runtime
+- **AI-slop strict mode** [OMN-3669] (#534): Fix pre-existing AI-slop violations for strict mode
+- **Self-hosted docker build** [OMN-3717] (#539): Switch build job to SELF_HOSTED_DOCKER_V1
+- **CI resilience** [OMN-3662] (#533): CI resilience fixes
+- **Bus_local broker assertion** [OMN-3571] (#514): Add bus_local broker assertion to integration test suite
+
+### Dependencies
+- `omnibase-core` pinned to `==0.24.0` (was `>=0.23.0,<0.25.0`)
+- `omnibase-spi` pinned to `==0.15.1` (was `>=0.15.0,<0.17.0`)
+- `omnibase-infra` pinned to `==0.16.0` (was `>=0.15.0,<0.17.0`)
+- `omninode-intelligence` pinned to `==0.10.0` (was `>=0.8.0,<0.10.0`)
+- Actions group bumped with 5 updates (#535)
+- Lychee link checker GitHub/StackOverflow excludes (#515)
+
 ## [0.4.2] - 2026-03-03
 
 ### Fixed

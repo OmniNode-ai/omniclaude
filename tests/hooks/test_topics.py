@@ -4,8 +4,8 @@
 # Copyright (c) 2025 OmniNode Team
 """Tests for OmniClaude topic names and helpers.
 
-This module contains comprehensive tests for the build_topic() function
-and TopicBase enum, including edge cases for invalid input types.
+Comprehensive tests for the build_topic() function and TopicBase enum,
+including edge cases for invalid input types.
 """
 
 from __future__ import annotations

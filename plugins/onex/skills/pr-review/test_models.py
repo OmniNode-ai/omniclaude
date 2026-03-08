@@ -5,7 +5,7 @@
 """
 Tests for PR review models and collate_issues module.
 
-This module provides comprehensive test coverage for:
+Comprehensive test coverage for:
 - models.py: Pydantic models (ModelPRIssue, ModelCollatedIssues, CommentSeverity, CommentStatus)
 - collate_issues.py: Issue collation logic
 

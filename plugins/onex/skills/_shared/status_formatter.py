@@ -228,7 +228,7 @@ def format_percentage(value: float, decimals: int = 1) -> str:
     """
     Format a value as percentage.
 
-    This function handles two input formats:
+    Handles two input formats:
     - Fractional values (0.0-1.0): Treated as decimal fractions and multiplied by 100
     - Whole percentages (>1.0): Treated as already-converted percentages
 

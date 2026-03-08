@@ -6,8 +6,8 @@
 Timeframe Helper - Shared timeframe parsing logic
 
 Provides utilities for converting shorthand timeframe codes to PostgreSQL intervals.
-This module provides SQL-safe timeframe parsing with whitelist-based validation
-to prevent SQL injection attacks.
+SQL-safe timeframe parsing with whitelist-based validation to prevent
+SQL injection attacks.
 
 Created: 2025-11-16
 Updated: 2025-11-21 - Added get_valid_timeframes() and is_valid_timeframe()
@@ -32,8 +32,8 @@ def parse_timeframe(timeframe: str) -> str:
     """
     Validate and convert timeframe to SQL-safe interval string.
 
-    This function implements SQL injection protection by validating user input
-    against a whitelist of allowed timeframe values before using them in SQL queries.
+    SQL injection protection: validates user input against a whitelist of allowed
+    timeframe values before using them in SQL queries.
 
     Args:
         timeframe: User-provided timeframe string (e.g., "5m", "1h", "7d")

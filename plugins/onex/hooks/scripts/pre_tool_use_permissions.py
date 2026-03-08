@@ -5,8 +5,7 @@
 """
 Pre-Tool-Use Permission Hook for Claude Code (OMN-94/OMN-95)
 
-This script provides intelligent permission management for Claude Code hooks,
-implementing:
+Intelligent permission management for Claude Code hooks, implementing:
 - Destructive command detection with improved regex patterns
 - Sensitive path detection for credential/system files
 - Safe temp path validation

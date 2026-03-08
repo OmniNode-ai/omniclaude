@@ -17,7 +17,7 @@ Do not skip any probe for a declared surface. Do not add probes for surfaces not
 
 ---
 
-## Step 1: Parse arguments
+## Parse arguments
 
 Extract from the invocation arguments:
 - `ticket_id`: required (e.g. `OMN-1234`)
@@ -25,7 +25,7 @@ Extract from the invocation arguments:
 
 ---
 
-## Step 2: Load contract
+## Load contract
 
 **If `--contract-path` is provided:**
 - Read the YAML file at that path
@@ -48,7 +48,7 @@ Parse the YAML into the contract fields. Extract:
 
 ---
 
-## Step 3: Determine changed files
+## Determine changed files
 
 Run:
 ```bash
@@ -64,7 +64,7 @@ Store the list as `changed_files`.
 
 ---
 
-## Step 4: Check emergency_bypass
+## Check emergency_bypass
 
 Before running probes, evaluate the bypass:
 
@@ -88,7 +88,7 @@ If emergency_bypass.enabled == true:
 
 ---
 
-## Step 5: Run probes
+## Run probes
 
 Run one probe per surface listed in `interfaces_touched`. If `interfaces_touched` is empty
 and `is_seam_ticket` is false, skip all probes and output:
@@ -200,7 +200,7 @@ Apply the same BLOCK (required field removed) / WARN (optional field added) logi
 
 ---
 
-## Step 6: Apply emergency_bypass
+## Apply emergency_bypass
 
 After all probes have run, collect results:
 - `blocks`: list of BLOCK findings (probe name + detail)
@@ -216,7 +216,7 @@ If `bypass_active == true`:
 
 ---
 
-## Step 7: Determine overall verdict
+## Determine overall verdict
 
 ```
 If any BLOCK findings remain after bypass processing: verdict = BLOCK
@@ -231,7 +231,7 @@ Map to emoji:
 
 ---
 
-## Step 8: Emit output
+## Emit output
 
 Print the following format exactly:
 

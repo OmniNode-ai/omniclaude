@@ -11,7 +11,7 @@ plugin). They can also be referenced by agents and commands.
 
 ---
 
-## Step 1: Create the Skill Directory
+## Create the Skill Directory
 
 ```bash
 mkdir -p plugins/onex/skills/my-skill
@@ -21,7 +21,7 @@ Each skill must have a directory under `plugins/onex/skills/`.
 
 ---
 
-## Step 2: Create SKILL.md
+## Create SKILL.md
 
 Create `plugins/onex/skills/my-skill/SKILL.md`:
 
@@ -93,7 +93,7 @@ Description of what the skill produces (files, annotations, reports, etc.).
 
 ---
 
-## Step 3: Add Supporting Files (Optional)
+## Add Supporting Files (Optional)
 
 Skills can include:
 
@@ -116,7 +116,7 @@ chmod +x plugins/onex/skills/my-skill/scripts/run.sh
 
 ---
 
-## Step 4: Invoke the Skill
+## Invoke the Skill
 
 After deploying (`/deploy-local-plugin`), invoke the skill in Claude Code:
 

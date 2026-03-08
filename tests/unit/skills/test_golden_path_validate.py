@@ -264,7 +264,7 @@ class TestGoldenPathRunnerTimeout:
     ) -> None:
         """When no matching event arrives within timeout, artifact status=timeout."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -325,7 +325,7 @@ class TestGoldenPathRunnerCorrelation:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -388,7 +388,7 @@ class TestGoldenPathRunnerCorrelation:
         mock_producer.send_and_wait = AsyncMock()
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -446,7 +446,7 @@ class TestGoldenPathRunnerSuccess:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -512,7 +512,7 @@ class TestGoldenPathRunnerSuccess:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -566,7 +566,7 @@ class TestGoldenPathRunnerSchemaHandling:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -612,7 +612,7 @@ class TestGoldenPathRunnerSchemaHandling:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -662,7 +662,7 @@ class TestGoldenPathRunnerSchemaHandling:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -716,7 +716,7 @@ class TestGoldenPathRunnerSchemaHandling:
         mock_producer.send_and_wait = capture_send
 
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -753,7 +753,7 @@ class TestGoldenPathRunnerArtifactPath:
     ) -> None:
         """Artifact is stored under YYYY-MM-DD from emitted_at, not creation time."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -793,7 +793,7 @@ class TestGoldenPathRunnerArtifactPath:
     ) -> None:
         """Evidence artifact contains all required fields."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -859,7 +859,7 @@ class TestGoldenPathRunnerTopicCheck:
         """When output topic does not exist, artifact has status=error
         and error_reason=output_topic_not_found."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -898,7 +898,7 @@ class TestGoldenPathRunnerTopicCheck:
         """When output topic exists but no producer is wired, artifact
         has status=timeout (unchanged behavior)."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 
@@ -948,7 +948,7 @@ class TestGoldenPathRunnerTopicCheck:
         """When the admin client fails to connect, the runner degrades
         gracefully and proceeds with the normal flow (timeout path)."""
         runner = GoldenPathRunner(
-            bootstrap_servers="localhost:29092",
+            bootstrap_servers="localhost:19092",
             artifact_base_dir=str(tmp_path / "golden-path"),
         )
 

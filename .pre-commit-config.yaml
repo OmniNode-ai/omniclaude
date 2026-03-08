@@ -154,7 +154,7 @@ repos:
           echo "ERROR - Planning docs must live in omni_home/docs/plans/, not in this repo";
           echo "$PLAN_FILES";
           echo "";
-          echo "Move your file to /Volumes/PRO-G40/Code/omni_home/docs/plans/";
+          echo "Move your file to the omni_home docs/plans/ directory";
           exit 1;
           fi'
         language: system
@@ -303,7 +303,7 @@ repos:
           --exclude-dir=.venv
           --exclude-dir=__pycache__
           --exclude-dir=.claude
-          -E "192\.168\.[0-9]+\.[0-9]+:(9092|19092|29092|29093)"
+          -E "192\.168\.[0-9]+\.[0-9]+:[0-9]{4,5}"
           . 2>/dev/null |
           grep -v "kafka-fallback-ok" |
           grep -v "noqa" |
@@ -341,7 +341,7 @@ repos:
       # Kafka broker URL fallback guard (OMN-3555)
       # Prevents bus split regressions caused by stale hardcoded broker addresses
       # in os.getenv() default/fallback strings (root cause of OMN-3534).
-      # Flags: :19092, :29092 as hardcoded fallback values in source.
+      # Flags: :19092, :29092 as hardcoded fallback values in source.  # cloud-bus-ok OMN-3777
       # Suppression: add `# onex-allow-kafka-broker` to the flagged line.
       - id: no-hardcoded-kafka-broker
         name: Block hardcoded Kafka broker URL fallbacks
@@ -387,5 +387,5 @@ ci:
   autoupdate_branch: ''
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
-  skip: [no-cloud-bus]  # Pre-existing 29092 violations — cleanup tracked separately
+  skip: [no-cloud-bus]  # Pre-existing 29092 violations — cleanup tracked separately  # cloud-bus-ok OMN-3777
   submodules: false

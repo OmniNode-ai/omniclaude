@@ -5,9 +5,9 @@
 """
 Pydantic models for PR review data structures.
 
-This module provides type-safe data models for parsing, validating, and
-manipulating PR review data from GitHub. It ensures that no comments are
-ever lost, with special attention to bot comments (especially Claude Code).
+Type-safe data models for parsing, validating, and manipulating PR review data
+from GitHub. Ensures that no comments are ever lost, with special attention to
+bot comments (especially Claude Code).
 
 Usage:
     from models import ModelPRData, ModelPRComment, EnumPRCommentSource, BotType

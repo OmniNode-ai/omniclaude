@@ -9,7 +9,7 @@ Claude's context so it can apply the agent's domain expertise.
 
 ---
 
-## Step 1: Create the YAML File
+## Create the YAML File
 
 Create `plugins/onex/agents/configs/my-agent.yaml`:
 
@@ -58,7 +58,7 @@ constraints:
 
 ---
 
-## Step 2: Define Activation Patterns
+## Define Activation Patterns
 
 Good activation patterns are the difference between an agent that routes
 correctly and one that never gets selected.
@@ -92,7 +92,7 @@ Tips:
 
 ---
 
-## Step 3: Test Routing
+## Test Routing
 
 Verify the agent appears in the candidate list for expected prompts:
 
@@ -125,7 +125,7 @@ If your agent does not appear, check:
 
 ---
 
-## Step 4: Verify in Candidate List
+## Verify in Candidate List
 
 The routing system returns a ranked candidate list that Claude uses to select
 the active agent. Confirm your agent:
@@ -139,7 +139,7 @@ higher than generic single words.
 
 ---
 
-## Step 5: Deploy
+## Deploy
 
 Deploy the plugin to the Claude Code plugin cache:
 

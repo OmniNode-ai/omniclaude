@@ -112,8 +112,8 @@ def find_handshake(project_path: str | Path | None = None) -> Path | None:
         Path to the handshake file if found, None otherwise.
 
     Note:
-        This function handles all errors gracefully and will never raise.
-        On any error, it returns None.
+        Handles all errors gracefully and will never raise.
+        On any error, returns None.
     """
     try:
         if project_path is None:
@@ -153,8 +153,8 @@ def read_handshake(handshake_path: Path) -> str:
         Content of the handshake file, or empty string on error.
 
     Note:
-        This function handles all errors gracefully and will never raise.
-        On any error, it returns an empty string.
+        Handles all errors gracefully and will never raise.
+        On any error, returns an empty string.
     """
     try:
         if not handshake_path.exists():

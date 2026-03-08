@@ -5,7 +5,7 @@ session with events flowing to Kafka and agent routing active.
 
 ---
 
-## Step 1: Clone and Install (2 min)
+## Clone and Install (2 min)
 
 ```bash
 git clone <repo-url> omniclaude
@@ -23,7 +23,7 @@ uv run python --version
 
 ---
 
-## Step 2: Configure Environment (2 min)
+## Configure Environment (2 min)
 
 ```bash
 cp .env.example .env
@@ -58,7 +58,7 @@ USE_EVENT_ROUTING=true
 
 ---
 
-## Step 3: Deploy the Plugin (1 min)
+## Deploy the Plugin (1 min)
 
 The plugin hooks are only active when deployed to Claude Code's plugin cache.
 From within a Claude Code session in this project:
@@ -79,7 +79,7 @@ jq . plugins/onex/hooks/hooks.json
 
 ---
 
-## Step 4: Start a Claude Code Session
+## Start a Claude Code Session
 
 Open Claude Code in the `omniclaude` directory. The `SessionStart` hook runs
 automatically. It:
@@ -92,7 +92,7 @@ The daemon persists across hook invocations for the lifetime of the session.
 
 ---
 
-## Step 5: Verify Events are Flowing
+## Verify Events are Flowing
 
 ### Check the daemon
 
@@ -155,7 +155,7 @@ Look for messages on:
 
 ---
 
-## Step 6: Try Agent Routing
+## Try Agent Routing
 
 Type a prompt in Claude Code that matches a specific agent. For example:
 
@@ -181,7 +181,7 @@ If routing times out (5 s), the hook falls back to `polymorphic-agent` and exits
 
 ---
 
-## Step 7: What to Do Next
+## What to Do Next
 
 | Goal | Where to go |
 |------|------------|

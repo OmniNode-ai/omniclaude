@@ -134,7 +134,7 @@ class TestDryRunSuccess:
         """Exits 0 with expected output lines when environment is valid."""
         nodes_dir = _make_valid_contracts(tmp_path, 5)
         env = {
-            "KAFKA_BOOTSTRAP_SERVERS": "localhost:29092",
+            "KAFKA_BOOTSTRAP_SERVERS": "localhost:19092",
             "OMNICLAUDE_CONTRACTS_ROOT": str(nodes_dir),
         }
         with patch.dict(os.environ, env, clear=False):
@@ -180,7 +180,7 @@ class TestDryRunMissingContractsRoot:
     ) -> None:
         """Exits 1 with clear error when OMNICLAUDE_CONTRACTS_ROOT is unset."""
         with patch.dict(
-            os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "localhost:29092"}, clear=False
+            os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "localhost:19092"}, clear=False
         ):
             os.environ.pop("OMNICLAUDE_CONTRACTS_ROOT", None)
             rc = main(["start", "--dry-run"])
@@ -201,7 +201,7 @@ class TestDryRunContractThreshold:
         # 7/10 = 70% < 80% threshold
         nodes_dir = _make_contracts(tmp_path, total=10, valid=7)
         env = {
-            "KAFKA_BOOTSTRAP_SERVERS": "localhost:29092",
+            "KAFKA_BOOTSTRAP_SERVERS": "localhost:19092",
             "OMNICLAUDE_CONTRACTS_ROOT": str(nodes_dir),
         }
         with patch.dict(os.environ, env, clear=False):

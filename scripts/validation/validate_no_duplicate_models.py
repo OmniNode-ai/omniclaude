@@ -29,8 +29,7 @@ Exit Codes:
     1 - Duplicate filenames detected
 
 STANDALONE JUSTIFICATION (OMN-1558):
-====================================
-This script is intentionally standalone and does NOT import from omnibase_core.
+Standalone script; does NOT import from omnibase_core.
 
 omnibase_core.validation does NOT provide an equivalent validator for:
 - Detecting duplicate filenames across directories

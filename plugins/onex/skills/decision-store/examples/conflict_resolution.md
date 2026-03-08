@@ -26,7 +26,7 @@ An operator now records a new decision:
 
 ---
 
-## Step 1: Conflict Detection
+## Conflict Detection
 
 The structural check runs against all existing entries in the `infrastructure` domain.
 
@@ -69,7 +69,7 @@ Pipeline paused. Waiting for Slack resolution.
 
 ---
 
-## Step 2: Slack Gate Notification
+## Slack Gate Notification
 
 The `slack-gate` skill posts to the `#engineering-decisions` channel:
 

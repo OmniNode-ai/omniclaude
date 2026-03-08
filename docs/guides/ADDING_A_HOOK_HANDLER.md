@@ -11,7 +11,7 @@ maps to one or more shell scripts, which in turn call Python handler modules.
 
 ---
 
-## Step 1: Create the Python Module
+## Create the Python Module
 
 Create `plugins/onex/hooks/lib/handler_my_feature.py`:
 
@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 ---
 
-## Step 2: Wire to hooks.json
+## Wire to hooks.json
 
 In `plugins/onex/hooks/hooks.json`, add your handler to the appropriate hook.
 The file uses `${CLAUDE_PLUGIN_ROOT}` to reference the plugin root, which
@@ -88,7 +88,7 @@ python "$PLUGIN_LIB/handler_my_feature.py" < /dev/stdin
 
 ---
 
-## Step 3: Write a Unit Test
+## Write a Unit Test
 
 Create `tests/unit/hooks/lib/test_handler_my_feature.py`:
 
@@ -120,7 +120,7 @@ uv run pytest tests/unit/hooks/lib/test_handler_my_feature.py -v
 
 ---
 
-## Step 4: Deploy and Verify
+## Deploy and Verify
 
 Deploy the plugin to the Claude Code plugin cache:
 
@@ -133,7 +133,7 @@ lifecycle event.
 
 ---
 
-## Step 5: Check Logs
+## Check Logs
 
 Hook failures are logged to `~/.claude/hooks.log` when `LOG_FILE` is set.
 

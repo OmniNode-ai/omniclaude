@@ -23,16 +23,15 @@ Exclusions:
 - Files in lib/, _archive/ directories
 
 STANDALONE JUSTIFICATION (OMN-1558):
-====================================
-This script is intentionally standalone and does NOT import from omnibase_core.
+Standalone script; does NOT import from omnibase_core.
 
-omnibase_core provides `ValidatorArchitecture` which enforces STRICT rules:
+omnibase_core ValidatorArchitecture enforces STRICT rules:
 - Single model per file (no multiple BaseModel subclasses)
 - Single enum per file (no multiple Enum subclasses)
 - Single protocol per file
 - NO mixing of models, enums, and protocols
 
-This script provides FLEXIBLE rules with companion type support:
+FLEXIBLE rules with companion type support:
 - Allows private classes alongside one public class
 - Allows enums as companion types (related constants)
 - Allows exceptions as companion types

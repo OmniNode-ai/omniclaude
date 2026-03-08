@@ -15,8 +15,7 @@ Validates that Pydantic models follow established conventions:
 Uses AST parsing for reliable detection without importing modules.
 
 STANDALONE JUSTIFICATION (OMN-1558):
-====================================
-This script is intentionally standalone and does NOT import from omnibase_core.
+Standalone script; does NOT import from omnibase_core.
 
 omnibase_core provides `checker_pydantic_pattern.py` which validates:
 - Model naming conventions (must start with "Model")

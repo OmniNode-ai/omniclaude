@@ -11,7 +11,7 @@ exactly. Do not skip validation.
 
 ---
 
-## Step 1: Gather ticket context
+## Gather ticket context
 
 1. Fetch the ticket from Linear using `mcp__linear-server__get_issue` with the provided ticket ID.
 2. Extract: `title`, `description`, `labels`, parent epic (if any).
@@ -19,7 +19,7 @@ exactly. Do not skip validation.
 
 ---
 
-## Step 2: Seam detection
+## Seam detection
 
 Scan the ticket title + description (case-insensitive) for the signals below.
 Set `is_seam_ticket: true` if ANY signal is found, OR if more than one repository name
@@ -41,7 +41,7 @@ Collect all detected interface names into `interfaces_touched: [...]`.
 
 ---
 
-## Step 3: Draft the YAML
+## Draft the YAML
 
 Generate a complete YAML block conforming to `ModelTicketContract`. Use the field reference below.
 
@@ -93,7 +93,7 @@ Use `stub_ok: true` only if the ticket explicitly states the interface is not ye
 
 ---
 
-## Step 4: Validate the YAML
+## Validate the YAML
 
 After drafting, call `validate_contract.py` to validate the YAML:
 
@@ -112,7 +112,7 @@ If exit code is 1, read the error output, fix the YAML, and re-validate. Repeat 
 
 ---
 
-## Step 5: ONEX_CC_REPO_PATH preflight
+## ONEX_CC_REPO_PATH preflight
 
 ```bash
 if [ -n "$ONEX_CC_REPO_PATH" ]; then
@@ -133,7 +133,7 @@ fi
 
 ---
 
-## Step 6: Output
+## Output
 
 Report to the user:
 1. Whether `is_seam_ticket` was detected and which interfaces were found.

@@ -13,7 +13,6 @@ Exit codes:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import time
@@ -38,7 +37,11 @@ def _get_changed_files(repo_root: Path) -> list[str]:
         # Get the upstream tracking branch
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-            capture_output=True, text=True, cwd=repo_root, timeout=5,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=5,
+            check=False,
         )
         if result.returncode != 0:
             # No upstream; diff against HEAD
@@ -48,7 +51,11 @@ def _get_changed_files(repo_root: Path) -> list[str]:
 
         result = subprocess.run(
             ["git", "diff", "--name-only", upstream],
-            capture_output=True, text=True, cwd=repo_root, timeout=5,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             return [f for f in result.stdout.strip().split("\n") if f]
@@ -57,7 +64,9 @@ def _get_changed_files(repo_root: Path) -> list[str]:
     return []
 
 
-def _run_check(cmd: list[str], cwd: Path, label: str, deadline: float) -> tuple[bool, str]:
+def _run_check(
+    cmd: list[str], cwd: Path, label: str, deadline: float
+) -> tuple[bool, str]:
     """Run a check command with timeout. Returns (passed, message)."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
@@ -66,7 +75,12 @@ def _run_check(cmd: list[str], cwd: Path, label: str, deadline: float) -> tuple[
     timeout = min(COMMAND_TIMEOUT_SECONDS, remaining)
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout,
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=timeout,
+            check=False,
         )
         if result.returncode == 0:
             return True, f"  {label}: PASS"
@@ -82,7 +96,9 @@ def _run_check(cmd: list[str], cwd: Path, label: str, deadline: float) -> tuple[
         return True, f"  {label}: SKIPPED (command not found)"
 
 
-def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) -> tuple[bool, list[str]]:
+def _detect_and_run(
+    repo_root: Path, changed_files: list[str], deadline: float
+) -> tuple[bool, list[str]]:
     """Detect repo tooling and run appropriate checks."""
     messages: list[str] = []
     all_passed = True
@@ -92,6 +108,7 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
     if custom_config.exists():
         try:
             import yaml  # noqa: F811
+
             with open(custom_config) as f:
                 config = yaml.safe_load(f)
             pre_push = config.get("pre_push", {})
@@ -101,7 +118,10 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
                     files_str = " ".join(changed_files) if changed_files else "."
                     cmd_str = cmd_template.replace("{changed_files}", files_str)
                     passed, msg = _run_check(
-                        ["bash", "-c", cmd_str], repo_root, key, deadline,
+                        ["bash", "-c", cmd_str],
+                        repo_root,
+                        key,
+                        deadline,
                     )
                     messages.append(msg)
                     if not passed:
@@ -118,7 +138,10 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
     if (repo_root / "pyproject.toml").exists() and py_files:
         if time.monotonic() < deadline:
             passed, msg = _run_check(
-                ["uv", "run", "ruff", "check"] + py_files, repo_root, "ruff check", deadline,
+                ["uv", "run", "ruff", "check"] + py_files,
+                repo_root,
+                "ruff check",
+                deadline,
             )
             messages.append(msg)
             if not passed:
@@ -126,7 +149,10 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
 
         if time.monotonic() < deadline:
             passed, msg = _run_check(
-                ["uv", "run", "ruff", "format", "--check"] + py_files, repo_root, "ruff format", deadline,
+                ["uv", "run", "ruff", "format", "--check"] + py_files,
+                repo_root,
+                "ruff format",
+                deadline,
             )
             messages.append(msg)
             if not passed:
@@ -149,7 +175,10 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
 
                 if time.monotonic() < deadline:
                     passed, msg = _run_check(
-                        [pm, "run", "lint"], repo_root, f"{pm} run lint", deadline,
+                        [pm, "run", "lint"],
+                        repo_root,
+                        f"{pm} run lint",
+                        deadline,
                     )
                     messages.append(msg)
                     if not passed:
@@ -160,7 +189,10 @@ def _detect_and_run(repo_root: Path, changed_files: list[str], deadline: float) 
     # Universal: whitespace check
     if time.monotonic() < deadline:
         passed, msg = _run_check(
-            ["git", "diff", "--check", "HEAD"], repo_root, "whitespace check", deadline,
+            ["git", "diff", "--check", "HEAD"],
+            repo_root,
+            "whitespace check",
+            deadline,
         )
         messages.append(msg)
         if not passed:

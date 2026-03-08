@@ -71,7 +71,7 @@ If any check fails, see the Troubleshooting section below.
 
 ## Demo Walkthrough
 
-### Step 1: Start Claude Code
+### Start Claude Code
 
 Open a terminal and start Claude Code in this repository:
 
@@ -95,7 +95,7 @@ claude
 
 ---
 
-### Step 2: Submit a Prompt
+### Submit a Prompt
 
 Type any prompt in Claude Code, for example:
 
@@ -119,7 +119,7 @@ What files are in the src/ directory?
 
 ---
 
-### Step 3: Use a Tool
+### Use a Tool
 
 Claude Code will use tools to answer your prompt. For example, it might use `Bash`, `Read`, `Glob`, or `Grep`.
 
@@ -141,7 +141,7 @@ Claude Code will use tools to answer your prompt. For example, it might use `Bas
 
 ---
 
-### Step 4: End the Session
+### End the Session
 
 Exit Claude Code by typing `/clear` or pressing Ctrl+C.
 
@@ -160,7 +160,7 @@ Exit Claude Code by typing `/clear` or pressing Ctrl+C.
 
 ---
 
-### Step 5: Verify Events Arrived
+### Verify Events Arrived
 
 After the demo session, verify that events were published to Kafka:
 

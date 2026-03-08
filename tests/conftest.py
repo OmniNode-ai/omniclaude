@@ -692,7 +692,7 @@ def _cleanup_all_kafka_producers_sync():
     """
     Synchronously cleanup ALL global Kafka producers.
 
-    This function handles cleanup of all 5 Kafka producer singletons in the codebase:
+    Cleanup all 5 Kafka producer singletons in the codebase:
     - action_event_publisher._kafka_producer
     - transformation_event_publisher._kafka_producer
     - confidence_scoring_publisher._kafka_producer

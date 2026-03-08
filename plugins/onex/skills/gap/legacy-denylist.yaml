@@ -13,9 +13,9 @@ patterns:
     reason: "Ollama endpoint decommissioned; use LLM_CODER_URL, LLM_EMBEDDING_URL, or LLM_DEEPSEEK_R1_URL"
     replacement_hint: "Select the appropriate LLM_*_URL based on task type (see ~/.claude/CLAUDE.md)"
 
-  - pattern: "192.168.86.200:29092"
-    reason: "M2 Ultra Redpanda decommissioned (OMN-3431); local bus is localhost:19092, cloud bus is localhost:29092 via tunnel"
-    replacement_hint: "Use localhost:19092 for local Docker or localhost:29092 for cloud bus"
+  - pattern: "192.168.86.200:29092"  # cloud-bus-ok OMN-3431 onex-allow-internal-ip
+    reason: "M2 Ultra Redpanda decommissioned (OMN-3431); local bus is localhost:19092, cloud bus via tunnel"  # cloud-bus-ok OMN-3431
+    replacement_hint: "Use localhost:19092 for local Docker bus"  # cloud-bus-ok OMN-3431
 
   - pattern: "omninode_bridge"
     reason: "Legacy database name replaced by omnibase_infra"

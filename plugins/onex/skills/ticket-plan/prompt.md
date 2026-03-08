@@ -10,7 +10,7 @@ When `/ticket-plan [team]` is invoked:
 
 2. **Announce:** "I'm using the ticket-plan skill to generate a prioritized backlog."
 
-## Step 1: Fetch All Active Tickets
+## Fetch All Active Tickets
 
 ```
 mcp__linear-server__list_issues({
@@ -23,7 +23,7 @@ mcp__linear-server__list_issues({
 Filter OUT tickets in these states (case-insensitive): Done, Completed, Closed, Canceled,
 Cancelled, Duplicate.
 
-## Step 2: Resolve Blocking Relationships
+## Resolve Blocking Relationships
 
 For each remaining ticket, check its `relations` field. If `includeRelations` data is not
 already present, fetch it:
@@ -35,13 +35,13 @@ mcp__linear-server__get_issue({ id: "<ticket_id>", includeRelations: true })
 A ticket is **blocked** if it has `blockedBy` relations whose referenced tickets are NOT in a
 terminal state (Done / Completed / Closed / Canceled / Cancelled / Duplicate).
 
-## Step 3: Categorize
+## Categorize
 
 - **In Review**: state name contains "review" or "in review"
 - **Blocked**: has one or more active blockers (from Step 2)
 - **Available Now**: everything else (no active blockers, not in review)
 
-## Step 4: Sort Within Each Category
+## Sort Within Each Category
 
 Sort by Linear `priority` field ascending (1=URGENT first, then 2, 3, 4, 0/null last).
 
@@ -52,7 +52,7 @@ Map priority numbers to labels:
 - 4 → LOW
 - 0 or null → NONE
 
-## Step 5: Infer Repository
+## Infer Repository
 
 For each ticket, infer the repo from title, description, or labels using these keywords:
 `omniclaude`, `omnibase_core`, `omnibase_infra`, `omnibase_spi`, `omnidash`,
@@ -60,7 +60,7 @@ For each ticket, infer the repo from title, description, or labels using these k
 
 If unclear, mark as `TBD`.
 
-## Step 6: Output
+## Output
 
 Print the following markdown to the screen (do NOT write to a file):
 

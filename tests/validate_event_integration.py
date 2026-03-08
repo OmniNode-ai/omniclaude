@@ -26,7 +26,9 @@ except ImportError:
 
 
 # Configuration
-BOOTSTRAP_SERVERS = "localhost:29092"  # Redpanda external port mapping
+BOOTSTRAP_SERVERS = (
+    "localhost:19092"  # Redpanda external port mapping (local Docker bus)
+)
 REQUEST_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
 COMPLETED_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
 FAILED_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-failed.v1"

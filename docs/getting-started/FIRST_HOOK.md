@@ -28,7 +28,7 @@ same or a narrower tool matcher.
 
 ---
 
-## Step 1: Create a Python Module in `plugins/onex/hooks/lib/`
+## Create a Python Module in `plugins/onex/hooks/lib/`
 
 Create `plugins/onex/hooks/lib/my_tool_observer.py`:
 
@@ -119,7 +119,7 @@ Key points in this skeleton:
 
 ---
 
-## Step 2: Invoke the Module from the Hook Script
+## Invoke the Module from the Hook Script
 
 You have two options:
 
@@ -194,7 +194,7 @@ existing quality hook. Option A is preferred for independent handlers.
 
 ---
 
-## Step 3: Write a Unit Test
+## Write a Unit Test
 
 Place the test in `tests/unit/hooks/lib/test_my_tool_observer.py`. The project
 `conftest.py` adds `plugins/onex/hooks/lib` to `sys.path` automatically, so
@@ -331,7 +331,7 @@ tests/unit/hooks/lib/test_my_tool_observer.py::TestObserveToolExecution::test_lo
 
 ---
 
-## Step 4: Deploy and Verify in a Live Session
+## Deploy and Verify in a Live Session
 
 ### Deploy
 
@@ -371,7 +371,7 @@ during development, then remove it before committing.
 
 ---
 
-## Step 5: What to Do if the Hook Does Not Trigger
+## What to Do if the Hook Does Not Trigger
 
 Work through this checklist in order:
 
