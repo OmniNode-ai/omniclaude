@@ -13,7 +13,7 @@ When `/redeploy [args]` is invoked:
 1. **Announce**: "I'm using the redeploy skill."
 
 2. **Parse arguments** from `$ARGUMENTS`:
-   - `--versions` (required) — comma-separated `pkg=version` pairs
+   - `--versions` (optional) — comma-separated `pkg=version` pairs. If omitted, auto-detected from latest git tags.
    - `--skip-sync` — skip SYNC phase (default: false)
    - `--skip-dockerfile-update` — skip PIN_UPDATE phase (default: false)
    - `--skip-infisical` — skip INFISICAL phase unconditionally (default: false)
@@ -30,6 +30,46 @@ When `/redeploy [args]` is invoked:
    ```bash
    source ~/.omnibase/.env
    ```
+
+5. **Auto-detect versions** (if `--versions` not provided):
+   If the user did not supply `--versions`, detect versions from the latest git tags
+   in the bare clones. This runs **after SYNC** (if SYNC is enabled), so tags are current.
+   If `--skip-sync` is set, tags reflect whatever state the bare clones are in.
+
+   ```python
+   # Package-to-repo mapping for Dockerfile.runtime plugin pins
+   PLUGIN_REPO_MAP: dict[str, str] = {
+       "omninode-claude": "omniclaude",
+       "omninode-memory": "omnimemory",
+       "omninode-intelligence": "omniintelligence",
+   }
+
+   def auto_detect_versions() -> dict[str, str]:
+       """Read latest v* git tag from each plugin repo's bare clone."""
+       versions: dict[str, str] = {}
+       for pkg_name, repo_name in PLUGIN_REPO_MAP.items():
+           repo_path = f"{OMNI_HOME}/{repo_name}"
+           # Prefer git describe (reachable from HEAD), fall back to sorted tag list
+           tag = run(
+               f'git -C {repo_path} describe --tags --abbrev=0 --match "v*" 2>/dev/null',
+               capture=True,
+           ).stdout.strip()
+           if not tag:
+               tag = run(
+                   f'git -C {repo_path} tag -l "v*" --sort=-v:refname | head -1',
+                   capture=True,
+               ).stdout.strip()
+           if not tag:
+               print(f"ERROR: No v* tag found for {repo_name}")
+               EXIT 1
+           version = tag.lstrip("v")
+           versions[pkg_name] = version
+           print(f"AUTO_DETECT: {pkg_name} -> {version} (from {repo_name} tag {tag})")
+       return versions
+   ```
+
+   **When to call**: After SYNC completes (or is skipped), before state initialization.
+   If `--versions` is provided, skip auto-detection entirely.
 
 ---
 
@@ -51,6 +91,13 @@ HEALTH_ENDPOINTS: dict[str, str] = {
 }
 
 CONTAINER_FOR_VERSION_CHECK = "omninode-runtime"
+
+# Package name -> bare clone repo name (for auto-detection from git tags)
+PLUGIN_REPO_MAP: dict[str, str] = {
+    "omninode-claude": "omniclaude",
+    "omninode-memory": "omnimemory",
+    "omninode-intelligence": "omniintelligence",
+}
 ```
 
 ---
@@ -130,7 +177,7 @@ Output format:
 ```
 IF --verify-only:
   -> Skip SYNC, ENV_CHECK, WORKTREE, PIN_UPDATE, DEPLOY, INFISICAL, NOTIFY
-  -> --versions is still required (used to check running container versions)
+  -> If --versions not provided, auto-detect from git tags (used to check running container versions)
   -> Execute VERIFY phase inline
   -> Write ModelSkillResult with VERIFY phase status
   -> EXIT
@@ -160,6 +207,10 @@ Fetching omnibase_core...
   -> success (exit 0): mark_phase(state, "SYNC", "completed")
   -> failure (exit non-zero): mark_phase(state, "SYNC", "failed"); print resume hint; EXIT 1
 ```
+
+**Post-SYNC auto-detection**: If `--versions` was not provided, call `auto_detect_versions()`
+now (after SYNC ensures bare clones have latest tags). Print the detected versions and use
+them for the remainder of the pipeline. Store in `state["versions_requested"]`.
 
 ### Phase 2: ENV_CHECK <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
@@ -444,7 +495,8 @@ IF --resume <run_id>:
 On any phase failure:
 1. Call `mark_phase(state, phase, "failed", error=...)` — writes state atomically
 2. Print: `ERROR in {phase}: {error_message}`
-3. Print: `Resume with: /redeploy --resume {run_id} --versions "{versions_str}" [other flags]`
+3. Print: `Resume with: /redeploy --resume {run_id} [other flags]`
+   (versions are stored in the state file; `--versions` override is optional on resume)
 4. Exit 1
 
 ---
@@ -481,11 +533,12 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/redeploy.json`
 ## Full Execution Sequence (Quick Reference)
 
 ```
-/redeploy --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
+/redeploy   # auto-detects latest versions from git tags after SYNC
   |
   +- Initialize: parse args, generate run_id, source ~/.omnibase/.env
   |
   +- Phase 1: SYNC       bash pull-all.sh (ff-only)
+  +- Auto-detect:         read latest v* tags -> version pins (if --versions not provided)
   +- Phase 2: ENV_CHECK  verify POSTGRES_PASSWORD, KAFKA_BOOTSTRAP_SERVERS, optional INFISICAL creds
   +- Phase 3: WORKTREE   create or reuse omni_worktrees/<ticket>/omnibase_infra
   +- Phase 4: PIN_UPDATE update-plugin-pins.py -> Dockerfile.runtime version pins
