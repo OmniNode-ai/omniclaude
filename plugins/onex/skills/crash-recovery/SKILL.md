@@ -110,36 +110,28 @@ Columns:
 |--------|--------|
 | `Ticket` | `ticket_id` field from state file |
 | `Title` | `title` field (or Linear issue title if state file omits it) |
-| `Phase` | `current_phase` (newer schema) or `status` (older schema) |
+| `Phase` | `current_phase` field from state file |
 | `Branch` | `branch_name` field |
 | `Age` | Human-readable elapsed time since file mtime |
 
-## Schema Notes
+## Pipeline State Contract
 
-Pipeline state files (`~/.claude/pipelines/*/state.yaml`) may follow one of two schemas:
+Pipeline state files (`~/.claude/pipelines/*/state.yaml`) should be parsed as
+`ModelPipelineState` from `omnibase_core.models.pipeline`:
 
-**Newer schema** (preferred):
-```yaml
-ticket_id: OMN-2371
-current_phase: ready_for_merge
-phase_history:
-  - phase: implement
-    completed_at: "2026-02-19T10:00:00Z"
-  - phase: local_review
-    completed_at: "2026-02-19T10:30:00Z"
-branch_name: omn-2371-fix-session-end
-title: "fix: session-end feedback loop is no-op"
+```python
+state = ModelPipelineState.from_yaml(path.read_text())
+# ModelPipelineState uses extra="allow" to tolerate legacy fields
+# Both "newer" and "older" schemas parse successfully
 ```
 
-**Older schema** (legacy, still supported):
-```yaml
-pipeline_state_version: "1.0.0"
-status: ready_for_merge
-ticket_id: OMN-2371
-branch_name: omn-2371-fix-session-end
-```
+**Write safety:** Producers MUST use atomic write (temp file + `os.rename()`) to prevent
+consumers from reading partial files. Consumers SHOULD retry once on `yaml.YAMLError`
+(transient partial-read during atomic rename window).
 
-The `list-pipelines` script handles both schemas gracefully. If a required field is absent from an older file, the column is shown as `—`.
+> **Note:** This contract reference is behavioral guidance for the LLM executing this skill.
+> Runtime validation not yet implemented. The model serves as the source of truth for field
+> names, types, and semantics. Real enforcement at the file I/O boundary is a follow-up task.
 
 ## See Also
 
