@@ -632,10 +632,11 @@ elif not result.status.is_terminal:
     # status is pending, gated, or blocked — do not advance
     pass
 
-# Access skill-specific fields via extra dict (not direct attribute access)
-fix_cycles = result.extra["fix_cycles_used"]          # ci-watch, pr-watch
-merge_commit = result.extra["merge_commit"]           # auto-merge
-ticket_close = result.extra["ticket_close_status"]    # auto-merge
+# Access skill-specific fields via extra dict (not direct attribute access).
+# Use .get() with a default — extra may be empty on non-success paths.
+fix_cycles = result.extra.get("fix_cycles_used", 0)        # ci-watch
+merge_commit = result.extra.get("merge_commit")             # auto-merge (None if not merged)
+ticket_close = result.extra.get("ticket_close_status")     # auto-merge (None if not reached)
 ```
 
 **Behaviorally significant `extra_status` values by sub-skill:**
@@ -644,8 +645,8 @@ ticket_close = result.extra["ticket_close_status"]    # auto-merge
 |-----------|---------------|---------------------|
 | `local-review` | `"clean"` | Passes clean check — counts toward 2-consecutive-clean requirement |
 | `local-review` | `"clean_with_nits"` | Passes clean check (nits do not reset counter) — counts toward 2-consecutive-clean |
-| `local-review` | `"capped"` | Max iterations reached without clean — post MEDIUM_RISK Slack, stop pipeline |
-| `ci-watch` | `"green"` | CI passed — advance to pr_review_loop |
+| `local-review` | `"max_iterations_reached"` | Max iterations reached without clean — post advisory, continue to PR with warning |
+| `ci-watch` | `"passed"` | CI passed — advance to pr_review_loop |
 | `ci-watch` | `"capped"` | Max fix cycles reached — advance to pr_review_loop with warning |
 | `pr-watch` | `"approved"` | PR approved — advance to integration_verification_gate |
 | `pr-watch` | `"capped"` | Max review cycles reached — post MEDIUM_RISK Slack, stop pipeline |
@@ -653,6 +654,8 @@ ticket_close = result.extra["ticket_close_status"]    # auto-merge
 | `auto-merge` | `"merged"` | PR merged — clear ledger, update Linear to Done |
 | `auto-merge` | `"held"` | HIGH_RISK gate open — pipeline exits with `held` state (non-terminal); resume on human "merge" reply |
 | `auto-merge` | `"timeout"` | Merge gate expired — retryable with new pipeline run |
+
+> **Note on pr-watch:** `pr-watch` has not yet been updated to `ModelSkillResult` format (OMN-3874 scope excluded it). Until that migration lands, `status` values (`"approved"`, `"capped"`, `"timeout"`) appear as top-level JSON fields, not in `extra_status`. Check `pr-watch/SKILL.md` for the current schema.
 
 ### Reading pipeline state
 

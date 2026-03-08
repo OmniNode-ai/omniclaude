@@ -204,9 +204,10 @@ elif result.status == EnumSkillResultStatus.GATED:
     # Human approval is pending — do not advance wave
     pass
 
-# Access skill-specific fields via extra dict (not direct attribute access)
-created_tickets = result.extra["created_tickets"]   # decompose-epic result
-iterations_run = result.extra["iterations_run"]     # local-review result
+# Access skill-specific fields via extra dict (not direct attribute access).
+# Use .get() with a default — extra may be empty on non-success paths.
+created_tickets = result.extra.get("created_tickets", [])   # decompose-epic result
+iterations_run = result.extra.get("iterations_run", 0)      # local-review result
 ```
 
 **Behaviorally significant `extra_status` values by sub-skill:**
