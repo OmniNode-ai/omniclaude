@@ -51,6 +51,7 @@ To disable a service entirely, set its enable flag to false:
 """
 
 import logging
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -576,10 +577,21 @@ class Settings(BaseSettings):
             )
 
         if not self.use_event_routing:
-            logger.info(
-                "Kafka event routing is disabled (USE_EVENT_ROUTING=false). "
-                "Set USE_EVENT_ROUTING=true and configure KAFKA_* variables to enable."
-            )
+            # OMN-3894: Distinguish between "absent from env" (likely .env drift)
+            # and "explicitly set to false" (intentional opt-out).
+            if os.environ.get("USE_EVENT_ROUTING") is None:
+                logger.warning(
+                    "USE_EVENT_ROUTING is not set in the environment. "
+                    "Defaulting to false. If running in Docker, ensure "
+                    "USE_EVENT_ROUTING is listed in x-runtime-env in "
+                    "docker-compose.infra.yml. Add USE_EVENT_ROUTING=true "
+                    "to ~/.omnibase/.env to enable event-based routing."
+                )
+            else:
+                logger.info(
+                    "Kafka event routing is disabled (USE_EVENT_ROUTING=false). "
+                    "Set USE_EVENT_ROUTING=true and configure KAFKA_* variables to enable."
+                )
 
         if not self.enable_qdrant:
             logger.info(
