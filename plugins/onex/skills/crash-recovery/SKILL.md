@@ -116,8 +116,8 @@ Columns:
 
 ## Pipeline State Contract
 
-Pipeline state files (`~/.claude/pipelines/*/state.yaml`) are parsed as `ModelPipelineState`
-from `omnibase_core.models.pipeline`:
+Pipeline state files (`~/.claude/pipelines/*/state.yaml`) should be parsed as
+`ModelPipelineState` from `omnibase_core.models.pipeline`:
 
 ```python
 state = ModelPipelineState.from_yaml(path.read_text())
