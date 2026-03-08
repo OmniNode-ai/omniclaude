@@ -319,18 +319,20 @@ Write to: `~/.claude/skill-results/{context_id}/slack-gate.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"slack-gate"` |
-| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
-| `extra_status` | Domain-specific status string |
+| `status` | One of the canonical string values: `"success"`, `"failed"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `extra` | `{"risk_level": str, "reply": str, "thread_ts": str, "elapsed_minutes": int}` |
 
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/slack-gate.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
 **Status mapping:**
 
-| Current status | Canonical `status` | `extra_status` |
-|----------------|-------------------|----------------|
-| `accepted` | `EnumSkillResultStatus.SUCCESS` | `"accepted"` |
-| `rejected` | `EnumSkillResultStatus.FAILED` | `"rejected"` |
-| `timeout` | `EnumSkillResultStatus.ERROR` | `"timeout"` |
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `accepted` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"accepted"` |
+| `rejected` | `"failed"` (`EnumSkillResultStatus.FAILED`) | `"rejected"` |
+| `timeout` | `"error"` (`EnumSkillResultStatus.ERROR`) | `"timeout"` |
 
 **Behaviorally significant `extra_status` values:**
 - `"accepted"` → caller orchestrator proceeds with the gated action (e.g., merge, deploy, cross-repo handoff)

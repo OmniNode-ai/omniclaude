@@ -238,22 +238,24 @@ Write to: `~/.claude/skill-results/{context_id}/auto-merge.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"auto-merge"` |
-| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
-| `extra_status` | Domain-specific status string |
+| `status` | One of the canonical string values: `"success"`, `"gated"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `repo` | Repository slug (org/repo) |
 | `pr_number` | PR number |
 | `ticket_id` | Linear ticket ID (e.g. `"OMN-3262"`) or `null` |
 | `extra` | `{"merge_commit": str, "strategy": str, "ticket_close_status": str}` |
 
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/auto-merge.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
 **Status mapping:**
 
-| Current status | Canonical `status` | `extra_status` |
-|----------------|-------------------|----------------|
-| `merged` | `EnumSkillResultStatus.SUCCESS` | `"merged"` |
-| `held` | `EnumSkillResultStatus.GATED` | `"held"` |
-| `timeout` | `EnumSkillResultStatus.ERROR` | `"timeout"` |
-| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `merged` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"merged"` |
+| `held` | `"gated"` (`EnumSkillResultStatus.GATED`) | `"held"` |
+| `timeout` | `"error"` (`EnumSkillResultStatus.ERROR`) | `"timeout"` |
+| `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
 
 **Behaviorally significant `extra_status` values:**
 - `"merged"` → ticket-pipeline treats as SUCCESS; clears ledger, updates Linear to Done

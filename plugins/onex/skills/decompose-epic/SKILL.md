@@ -138,18 +138,20 @@ Write to: `~/.claude/skill-results/{context_id}/decompose-epic.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"decompose-epic"` |
-| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
-| `extra_status` | Domain-specific status string |
+| `status` | One of the canonical string values: `"success"`, `"dry_run"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `extra` | `{"epic_id": str, "created_tickets": list[{"id": str, "title": str, "repo_hint": str}], "count": int}` |
 
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/decompose-epic.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
 **Status mapping:**
 
-| Current status | Canonical `status` | `extra_status` |
-|----------------|-------------------|----------------|
-| `created` | `EnumSkillResultStatus.SUCCESS` | `"created"` |
-| `dry_run` | `EnumSkillResultStatus.DRY_RUN` | `null` |
-| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `created` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"created"` |
+| `dry_run` | `"dry_run"` (`EnumSkillResultStatus.DRY_RUN`) | `null` |
+| `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
 
 **Behaviorally significant `extra_status` values:**
 - `"created"` → ticket-pipeline (cross-repo split path) proceeds to invoke epic-team with parent epic ID; the `extra["created_tickets"]` list contains the sub-ticket IDs passed to epic-team

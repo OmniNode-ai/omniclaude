@@ -243,21 +243,23 @@ Write to: `~/.claude/skill-results/{context_id}/ci-watch.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"ci-watch"` |
-| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
-| `extra_status` | Domain-specific status string |
+| `status` | One of the canonical string values: `"success"`, `"partial"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `repo` | Repository slug (org/repo) |
 | `pr_number` | PR number |
 | `extra` | `{"fix_cycles_used": int, "elapsed_minutes": int, "preexisting_fixes_dispatched": int}` |
 
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/ci-watch.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
 **Status mapping:**
 
-| Current status | Canonical `status` | `extra_status` |
-|----------------|-------------------|----------------|
-| `passed` | `EnumSkillResultStatus.SUCCESS` | `"passed"` |
-| `capped` | `EnumSkillResultStatus.PARTIAL` | `"capped"` |
-| `timeout` | `EnumSkillResultStatus.ERROR` | `"timeout"` |
-| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `passed` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"passed"` |
+| `capped` | `"partial"` (`EnumSkillResultStatus.PARTIAL`) | `"capped"` |
+| `timeout` | `"error"` (`EnumSkillResultStatus.ERROR`) | `"timeout"` |
+| `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
 
 **Behaviorally significant `extra_status` values:**
 - `"passed"` → ticket-pipeline treats as SUCCESS; auto-merge continues unblocked

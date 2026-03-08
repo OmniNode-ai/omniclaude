@@ -355,20 +355,22 @@ write to: `~/.claude/skill-results/{context_id}/ticket-work.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"ticket-work"` |
-| `status` | `EnumSkillResultStatus.{CANONICAL}` (see mapping below) |
-| `extra_status` | Domain-specific status string |
+| `status` | One of the canonical string values: `"success"`, `"blocked"`, `"pending"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `ticket_id` | Linear ticket ID (e.g. `"OMN-1234"`) |
 | `extra` | `{"pr_url": str, "phase_reached": str, "commits": list[str]}` |
 
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/ticket-work.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
 **Status mapping:**
 
-| Current status | Canonical `status` | `extra_status` |
-|----------------|-------------------|----------------|
-| `done` | `EnumSkillResultStatus.SUCCESS` | `"done"` |
-| `blocked` | `EnumSkillResultStatus.BLOCKED` | `null` |
-| `questions_pending` | `EnumSkillResultStatus.PENDING` | `"questions_pending"` |
-| `error` | `EnumSkillResultStatus.ERROR` | `null` |
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `done` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"done"` |
+| `blocked` | `"blocked"` (`EnumSkillResultStatus.BLOCKED`) | `null` |
+| `questions_pending` | `"pending"` (`EnumSkillResultStatus.PENDING`) | `"questions_pending"` |
+| `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
 
 **Behaviorally significant `extra_status` values:**
 - `"done"` → ticket-pipeline treats as SUCCESS; advances to local_review phase
