@@ -181,7 +181,6 @@ class TaskClassifier:
         "postgres",
         "qdrant",
         "docker",
-        "consul",
         "vault",
         "onex",
     ]

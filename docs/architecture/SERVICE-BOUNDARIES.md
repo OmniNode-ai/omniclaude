@@ -435,12 +435,10 @@ When running scripts/commands on the host machine (outside Docker), add these en
 # /etc/hosts entries (required for host scripts accessing Kafka/PostgreSQL)
 # Replace IP address with value from your .env POSTGRES_HOST/KAFKA_REMOTE_HOST
 <your_remote_server_ip> omninode-bridge-redpanda
-<your_remote_server_ip> omninode-bridge-consul
 <your_remote_server_ip> omninode-bridge-postgres
 
 # Example (if remote server is <your-infrastructure-host>):
 # <your-infrastructure-host> omninode-bridge-redpanda
-# <your-infrastructure-host> omninode-bridge-consul
 # <your-infrastructure-host> omninode-bridge-postgres
 ```
 
