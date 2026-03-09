@@ -1593,6 +1593,9 @@ def execute_phase(phase_name, state):
 
 2. **Run pre-commit hooks:**
    ```bash
+   # MANDATORY: pre-commit hooks are not inherited by worktrees.
+   # Always run pre-commit install before the first pre-commit run in a worktree.
+   pre-commit install
    pre-commit run --all-files 2>&1
    ```
    Capture output. Classify failures as AUTO-FIX (<=10 files, same subsystem, low-risk) or DEFER.

@@ -52,6 +52,11 @@ NEVER mix pre-existing fixes with the feature branch changes.
 
 ```
 Phase 0: Pre-existing issue scan
+  0. MANDATORY: Ensure pre-commit hooks are installed in this worktree before running any check.
+     Pre-commit hooks are not inherited by git worktrees — run `pre-commit install` first:
+     ```bash
+     pre-commit install
+     ```
   1. Run pre-commit run --all-files from {repo_path or CWD} against the current HEAD state
      (i.e. before any uncommitted fixes are applied; do NOT stash or alter the working tree)
   2. Run mypy src/ --strict from {repo_path or CWD} (or repo-equivalent detected from pyproject.toml)

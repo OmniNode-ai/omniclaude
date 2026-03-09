@@ -41,6 +41,19 @@ if pr_number is None:
 
 ---
 
+## Precondition: pre-commit Install
+
+Before any phase runs, ensure pre-commit hooks are installed in this worktree.
+Pre-commit hooks are **not inherited by git worktrees** — without this step, hook violations
+bypass local validation silently and cause CI failures.
+
+```bash
+# MANDATORY: run once per worktree before the first commit
+pre-commit install
+```
+
+---
+
 ## Phase 0: Conflict Resolution
 
 ### 0.1 — Detect conflicts
