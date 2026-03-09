@@ -43,7 +43,7 @@ Intent text = "{title}\n{description}"
 Apply keyword matching against repo_manifest:
 - `omnibase_compat`: shared enum, wire DTO, event envelope, structural primitive, experimental schema, EnumNodeKind, EnumExecutionStatus, EnumMessageCategory, EventEnvelopeV1Minimal, ArtifactStatus, TransitionalMeta, cross-repo import
 - `omnibase_core`: routing, registry, models, validators, contracts, FK, foreign key
-- `omnibase_infra`: kafka, redpanda, postgres, valkey, consul, session, config
+- `omnibase_infra`: kafka, redpanda, postgres, valkey, session, config
 - `omniintelligence`: intent, pattern, scoring, embedding, RAG, semantic
 - `omnimemory`: memory, ingestion, retrieval, document
 - `omniclaude`: skill, hook, plugin, agent, worktree

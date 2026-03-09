@@ -149,7 +149,7 @@ Cross-check: does any ticket in the epic touch a capability dependency that its 
 declares as required but is not registered in the known handler registry?
 
 Known capabilities (from `omnibase_infra` handler_registry.py):
-`database.relational`, `cache.keyvalue`, `messaging.kafka`, `consul`, `grpc`, `http`, `mcp`
+`database.relational`, `cache.keyvalue`, `messaging.kafka`, `grpc`, `http`, `mcp`
 
 Unresolvable capability → add to `invariants[]` with `status: unresolved`
 
