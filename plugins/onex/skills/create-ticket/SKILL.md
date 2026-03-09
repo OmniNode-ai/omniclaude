@@ -540,7 +540,7 @@ if args.blocked_by:
 | application | foundation | VALID |
 | foundation | foundation | VALID |
 
-**Foundation repos**: omnibase_core, omnibase_spi, omnibase_infra
+**Foundation repos**: omnibase_compat, omnibase_core, omnibase_spi, omnibase_infra
 
 ### Step 5: Create Ticket <!-- ai-slop-ok: pre-existing step structure -->
 

@@ -112,7 +112,7 @@ Detect repo from:
 2. Current working directory
 3. Default to "omniclaude" if unknown
 
-Valid repos: `omnibase_core`, `omniclaude`, `omnibase_infra`, `omnidash`, `omniintelligence`, `omnimemory`, `omninode_infra`
+Valid repos: `omnibase_compat`, `omnibase_core`, `omniclaude`, `omnibase_infra`, `omnidash`, `omniintelligence`, `omnimemory`, `omninode_infra`
 
 ---
 

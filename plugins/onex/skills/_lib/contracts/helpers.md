@@ -30,7 +30,7 @@ Canonical YAML schema for a single ticket. Used by:
 id: "OMN-XXXX"           # Linear ticket ID. null when drafting (pre-creation).
 title: "..."             # Human-readable title (required)
 repo: "omniclaude"       # Target repo slug. Options:
-                         #   omnibase_core | omniclaude | omnibase_infra
+                         #   omnibase_compat | omnibase_core | omniclaude | omnibase_infra
                          #   omnidash | omniintelligence | omnimemory
                          #   omninode_infra | omnibase_spi | onex_change_control
                          #   cross-repo (for work spanning multiple repos)
@@ -334,7 +334,7 @@ Skills MUST enforce these rules when creating or updating contracts:
 
 ### TicketContract
 - `id` must match `/^OMN-\d+$/` or be `null` (draft)
-- `repo` must be one of the listed repo slugs
+- `repo` must be one of the listed repo slugs (omnibase_compat, omnibase_core, omniclaude, omnibase_infra, omnidash, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control, cross-repo)
 - `priority` must be 1, 2, 3, or 4
 - `state` must be one of: `Backlog | In Progress | In Review | Done | Cancelled`
 - `phase` must be one of: `intake | research | questions | spec | implementation | review | done`

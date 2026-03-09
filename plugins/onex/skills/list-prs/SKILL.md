@@ -54,6 +54,7 @@ data via `gh` but makes no changes to any repo or PR.
 
 | Short name | GitHub slug |
 |------------|-------------|
+| omnibase_compat | OmniNode-ai/omnibase_compat |
 | omniclaude | OmniNode-ai/omniclaude |
 | omnibase_core | OmniNode-ai/omnibase_core |
 | omnibase_infra | OmniNode-ai/omnibase_infra |

@@ -126,7 +126,7 @@ def extract_repo(ticket):
     return None  # unknown repo — cannot PR-check
 
 KNOWN_REPOS = [
-    "omnibase_core", "omniclaude", "omnibase_infra",
+    "omnibase_compat", "omnibase_core", "omniclaude", "omnibase_infra",
     "omnidash", "omniintelligence", "omnimemory",
     "omninode_infra", "omnibase_spi", "onex_change_control",
 ]
@@ -176,7 +176,7 @@ When a PR is found closed (not merged), search all known repos for any merged PR
 mentions the same ticket ID:
 
 ```bash
-for REPO in omnibase_core omniclaude omnibase_infra omnidash omniintelligence \
+for REPO in omnibase_compat omnibase_core omniclaude omnibase_infra omnidash omniintelligence \
             omnimemory omninode_infra omnibase_spi onex_change_control; do
   gh pr list \
     --repo OmniNode-ai/$REPO \

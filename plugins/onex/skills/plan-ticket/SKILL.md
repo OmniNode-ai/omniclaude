@@ -86,6 +86,7 @@ context:
 
 | Repo | Description |
 |------|-------------|
+| `omnibase_compat` | Thin shared structural package: shared enums, wire DTOs, event envelopes, primitives. Zero upstream runtime deps. |
 | `omnibase_core` | Core runtime, models, and validation |
 | `omniclaude` | Claude Code plugin and hooks |
 | `omnibase_infra` | Infrastructure and deployment |
