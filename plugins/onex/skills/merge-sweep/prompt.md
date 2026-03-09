@@ -716,6 +716,10 @@ Steps:
    git -C {omni_home}/{repo_name} worktree add \
      {worktree_path} {branch}
    cd {worktree_path}
+
+   # MANDATORY: pre-commit hooks are not inherited by worktrees.
+   # Run this before any commit; without it hooks are silently skipped.
+   pre-commit install
    ```
 
 2. Run pr-polish from inside the worktree:

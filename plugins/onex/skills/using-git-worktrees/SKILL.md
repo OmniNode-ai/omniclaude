@@ -121,6 +121,10 @@ esac
 # Create worktree with new branch
 git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
+
+# MANDATORY: pre-commit hooks are not inherited by worktrees.
+# Run this immediately after creation, before any commit attempt.
+pre-commit install
 ```
 
 ### 3. Run Project Setup

@@ -235,6 +235,10 @@ hardening_tickets: []
        BRANCH_CREATED=true
    fi
    # Example: git checkout -b jonah/omn-1830-m4-hook-integration-session-continuity
+
+   # MANDATORY: pre-commit hooks are not inherited by worktrees.
+   # Run this before any commit; without it hooks are silently skipped.
+   pre-commit install
    ```
    Track `BRANCH_CREATED` for rollback safety.
 
