@@ -16,6 +16,21 @@ author: OmniClaude Team
 
 # Systematic Debugging
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run systematic-debugging",
+  prompt="Run the systematic-debugging skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Random fixes waste time and create new bugs. Quick patches mask underlying issues.

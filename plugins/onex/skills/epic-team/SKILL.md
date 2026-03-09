@@ -17,6 +17,21 @@ args:
 
 # Epic Team Orchestration
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run epic-team for <epic_id>",
+  prompt="Run the epic-team skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 > **Session lifetime**: The monitoring phase is alive only while this session runs. Use `/epic-team {epic_id} --resume` to re-enter after a disconnection.
 
 > **Architecture note (v2.0.0)**: epic-team is a thin orchestrator. All business logic lives in

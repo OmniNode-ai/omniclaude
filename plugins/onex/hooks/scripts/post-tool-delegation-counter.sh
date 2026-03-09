@@ -4,17 +4,21 @@
 
 # PostToolUse: Delegation Counter
 #
-# Tracks work-tool calls per turn. After THRESHOLD calls without an Agent
-# spawn, injects a single mid-execution warning into Claude's context.
+# Tracks write/modify-tool calls per turn. After BLOCK_THRESHOLD write/edit/bash
+# calls without an Agent spawn, exits 2 (hard-block) to prevent inline execution.
+# Read-only tools are tracked separately and never trigger a block.
 #
-# Work tools counted: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch
+# Write/modify tools counted (trigger block): Write, Edit, Bash, MultiEdit
+# Read-only tools counted (advisory only, never block): Read, Glob, Grep, WebFetch, WebSearch
 # Delegation detected: Task tool (what Agent() maps to at hook level)
-# Warning fires once per turn (WARNED_FILE prevents spamming)
+# Advisory warning fires once per turn at WARN_THRESHOLD (WARNED_FILE prevents spamming)
+# Hard block fires on every write/modify call above BLOCK_THRESHOLD (no delegation)
 #
 # State files (keyed by session ID, reset by UserPromptSubmit hook):
-#   /tmp/omniclaude-work-count-{session}   — integer count
+#   /tmp/omniclaude-write-count-{session}  — integer count of write/modify tools
+#   /tmp/omniclaude-read-count-{session}   — integer count of read-only tools
 #   /tmp/omniclaude-delegated-{session}    — touch file: agent was spawned
-#   /tmp/omniclaude-warned-{session}       — touch file: warning already sent
+#   /tmp/omniclaude-warned-{session}       — touch file: advisory warning already sent
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -36,18 +40,20 @@ if [[ -z "$SESSION_ID" ]]; then
     exit 0
 fi
 
-COUNTER_FILE="/tmp/omniclaude-work-count-${SESSION_ID}"
+WRITE_COUNTER_FILE="/tmp/omniclaude-write-count-${SESSION_ID}"
+READ_COUNTER_FILE="/tmp/omniclaude-read-count-${SESSION_ID}"
 DELEGATED_FILE="/tmp/omniclaude-delegated-${SESSION_ID}"
 WARNED_FILE="/tmp/omniclaude-warned-${SESSION_ID}"
 
-# Task = Agent() was called — mark delegated, no warning needed
+# Task = Agent() was called — mark delegated, reset write counter, pass through
 if [[ "$TOOL_NAME" == "Task" ]]; then
     touch "$DELEGATED_FILE" 2>/dev/null || true
+    echo "0" > "$WRITE_COUNTER_FILE" 2>/dev/null || true
     printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
-# Non-work tools (meta/conversational) — skip counting
+# Meta/conversational tools — skip counting entirely
 case "$TOOL_NAME" in
     Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList)
         printf '%s\n' "$TOOL_INFO"
@@ -55,33 +61,77 @@ case "$TOOL_NAME" in
         ;;
 esac
 
-# Work tool — increment counter
-CURRENT_COUNT=0
-if [[ -f "$COUNTER_FILE" ]]; then
-    CURRENT_COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
-    [[ "$CURRENT_COUNT" =~ ^[0-9]+$ ]] || CURRENT_COUNT=0
-fi
-CURRENT_COUNT=$((CURRENT_COUNT + 1))
-echo "$CURRENT_COUNT" > "$COUNTER_FILE" 2>/dev/null || true
+# Classify tool: write/modify vs read-only
+IS_WRITE_TOOL=0
+case "$TOOL_NAME" in
+    Write|Edit|MultiEdit|Bash)
+        IS_WRITE_TOOL=1
+        ;;
+    Read|Glob|Grep|WebFetch|WebSearch)
+        IS_WRITE_TOOL=0
+        ;;
+esac
 
-THRESHOLD=3
+WARN_THRESHOLD=3    # advisory warning fires at this many write calls
+BLOCK_THRESHOLD=5   # hard block fires at this many write calls (no delegation)
 
-# No warning if: not over threshold, already delegated, or already warned this turn
-if [[ "$CURRENT_COUNT" -lt "$THRESHOLD" ]] || [[ -f "$DELEGATED_FILE" ]] || [[ -f "$WARNED_FILE" ]]; then
+if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
+    # Write/modify tool — increment write counter
+    WRITE_COUNT=0
+    if [[ -f "$WRITE_COUNTER_FILE" ]]; then
+        WRITE_COUNT=$(cat "$WRITE_COUNTER_FILE" 2>/dev/null || echo "0")
+        [[ "$WRITE_COUNT" =~ ^[0-9]+$ ]] || WRITE_COUNT=0
+    fi
+    WRITE_COUNT=$((WRITE_COUNT + 1))
+    echo "$WRITE_COUNT" > "$WRITE_COUNTER_FILE" 2>/dev/null || true
+
+    # If delegation already happened, allow write tools freely
+    if [[ -f "$DELEGATED_FILE" ]]; then
+        printf '%s\n' "$TOOL_INFO"
+        exit 0
+    fi
+
+    # Hard block: write tools above BLOCK_THRESHOLD without any delegation
+    if [[ "$WRITE_COUNT" -gt "$BLOCK_THRESHOLD" ]]; then
+        jq -n \
+            --argjson count "$WRITE_COUNT" \
+            --arg tool "$TOOL_NAME" \
+            --argjson threshold "$BLOCK_THRESHOLD" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " write/modify tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                }
+            }'
+        exit 2
+    fi
+
+    # Advisory warning: fire once at WARN_THRESHOLD
+    if [[ "$WRITE_COUNT" -ge "$WARN_THRESHOLD" ]] && [[ ! -f "$WARNED_FILE" ]]; then
+        touch "$WARNED_FILE" 2>/dev/null || true
+        jq -n \
+            --argjson count "$WRITE_COUNT" \
+            --arg tool "$TOOL_NAME" \
+            --argjson block_threshold "$BLOCK_THRESHOLD" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " write tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
+                }
+            }'
+    fi
+
+    printf '%s\n' "$TOOL_INFO"
+    exit 0
+
+else
+    # Read-only tool — increment read counter (advisory tracking only, never blocks)
+    READ_COUNT=0
+    if [[ -f "$READ_COUNTER_FILE" ]]; then
+        READ_COUNT=$(cat "$READ_COUNTER_FILE" 2>/dev/null || echo "0")
+        [[ "$READ_COUNT" =~ ^[0-9]+$ ]] || READ_COUNT=0
+    fi
+    READ_COUNT=$((READ_COUNT + 1))
+    echo "$READ_COUNT" > "$READ_COUNTER_FILE" 2>/dev/null || true
+
     printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
-
-# Inject warning — fires exactly once per turn at threshold
-touch "$WARNED_FILE" 2>/dev/null || true
-
-jq -n \
-    --argjson count "$CURRENT_COUNT" \
-    --arg tool "$TOOL_NAME" \
-    '{
-        hookSpecificOutput: {
-            additionalContext: ("DELEGATION ENFORCER: " + ($count | tostring) + " work tool calls (" + $tool + " just now) without delegating. STOP. Choose one: multiple independent subtasks -> Skill(onex:parallel-solve) | single workflow -> Agent(subagent_type=onex:polymorphic-agent). Continuing inline fills the context window.")
-        }
-    }'
-
-exit 0

@@ -72,6 +72,21 @@ args:
 
 # Local Review
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run local-review",
+  prompt="Run the local-review skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Review local changes, fix issues, commit fixes, and iterate until clean or max iterations reached.

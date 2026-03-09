@@ -42,6 +42,21 @@ args:
 
 # Contract-Driven Ticket Execution
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run ticket-work for <ticket_id>",
+  prompt="Run the ticket-work skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Orchestrate ticket execution through structured phases with Linear as the single source of truth. The contract YAML block in the ticket description tracks all state.
