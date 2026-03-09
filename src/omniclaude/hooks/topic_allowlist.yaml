@@ -376,3 +376,10 @@ allowed_extras:
       PR outcome event emitted after merge or revert detected for tracked PRs.
       New topic for Delta Intelligence (OMN-3138); contract governance to follow.
     ticket: OMN-3138
+
+  - topic: "onex.evt.omniclaude.pr-validation-rollup.v1"
+    lifecycle: observability
+    reason: >
+      PR validation rollup with aggregated validation tax metrics and VTS score.
+      Emitted at pipeline completion (OMN-3930, MEI); contract governance to follow.
+    ticket: OMN-3930

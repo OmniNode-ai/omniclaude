@@ -786,6 +786,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "failure_count", "threshold"],
     ),
+    # =========================================================================
+    # PR Validation Rollup (OMN-3930 - MEI pipeline measurement)
+    # =========================================================================
+    "pr.validation.rollup": EventRegistration(
+        event_type="pr.validation.rollup",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PR_VALIDATION_ROLLUP,
+                transform=None,  # Passthrough — no sensitive data in rollup metrics
+                description="PR validation rollup with VTS at pipeline completion",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "ticket_id", "model_id", "metric_version"],
+    ),
 }
 
 

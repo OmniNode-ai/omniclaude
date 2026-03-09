@@ -295,6 +295,12 @@ class TopicBase(StrEnum):
     PR_OUTCOME = "onex.evt.omniclaude.pr-outcome.v1"
     """Emitted after merge or revert detected for a tracked PR."""
 
+    # ==========================================================================
+    # PR validation rollup topics (OMN-3930 - MEI pipeline measurement)
+    # ==========================================================================
+    PR_VALIDATION_ROLLUP = "onex.evt.omniclaude.pr-validation-rollup.v1"
+    """Emitted at pipeline completion with aggregated validation tax metrics and VTS."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

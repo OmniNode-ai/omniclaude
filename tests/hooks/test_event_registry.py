@@ -786,6 +786,8 @@ class TestEventRegistryIntegration:
             "circuit.breaker.tripped",
             # Stop hook lifecycle events
             "response.stopped",
+            # PR validation rollup with VTS at pipeline completion (OMN-3930)
+            "pr.validation.rollup",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

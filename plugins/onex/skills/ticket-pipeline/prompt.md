@@ -55,6 +55,10 @@ dry_run: false                  # true if --dry-run mode
 policy_version: "5.0"
 slack_thread_ts: null           # Placeholder for P0 (threading deferred)
 
+attribution:
+  model_id: "claude-sonnet-4-20250514"  # populated from ONEX_MODEL_ID env var
+  producer_kind: "agent"                 # derived from started_by, constrained to agent|human|unknown
+
 policy:
   auto_advance: true
   auto_commit: true
@@ -295,6 +299,10 @@ if state_path.exists() and not force_run:
     print(f"Resuming pipeline for {ticket_id} (run_id: {run_id})")
 else:
     # Create new state
+    # Resolve producer_kind from started_by with validation
+    _started_by = "user"  # default; overridden to "agent" by team-pipeline callers
+    _producer_kind = _started_by if _started_by in ("agent", "human") else "unknown"
+
     state = {
         "pipeline_state_version": "3.0",
         "run_id": run_id,
@@ -303,6 +311,10 @@ else:
         "dry_run": dry_run,
         "policy_version": "5.0",
         "slack_thread_ts": None,
+        "attribution": {
+            "model_id": os.environ.get("ONEX_MODEL_ID", "unknown"),
+            "producer_kind": _producer_kind,
+        },
         "policy": {
             "auto_advance": True,
             "auto_commit": True,
@@ -1469,6 +1481,16 @@ for phase_name in PHASE_ORDER:
         update_linear_pipeline_summary(ticket_id, state, dry_run, slack_notifier=slack_notifier)
 
         print(f"\nPipeline stopped at {phase_name}: {result.get('reason')}")
+
+        # Emit partial PR validation rollup on terminal blocked/failed state
+        try:
+            from plugins.onex.hooks.lib.rollup_aggregator import build_pr_validation_rollup
+            from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+            rollup = build_pr_validation_rollup(state, [])
+            emit_event("pr.validation.rollup", rollup)
+        except Exception as _rollup_err:
+            print(f"Warning: Failed to emit partial PR validation rollup: {_rollup_err}")
+
         # Do NOT release lock on block/fail - preserves state for resume
         exit(1)
 
@@ -2831,6 +2853,14 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
                "reason": None,
                "block_kind": None,
            }
+           # Emit PR validation rollup (final) on successful merge
+           try:
+               from plugins.onex.hooks.lib.rollup_aggregator import build_pr_validation_rollup
+               from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+               rollup = build_pr_validation_rollup(state, all_phase_checkpoints if 'all_phase_checkpoints' in dir() else [])
+               emit_event("pr.validation.rollup", rollup)
+           except Exception as _rollup_err:
+               print(f"Warning: Failed to emit PR validation rollup: {_rollup_err}")
            return result
    except Exception as _e:
        print(f"Warning: Could not check PR state: {_e}. Delegating to pr-watch for merge observation.")

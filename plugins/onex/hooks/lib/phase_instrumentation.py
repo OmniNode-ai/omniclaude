@@ -231,6 +231,8 @@ def build_metrics_from_result(
     completed_at: datetime,
     phase_result: PhaseResult,
     instance_id: str = "",
+    model_id: str = "unknown",
+    producer_kind: str = "unknown",
 ) -> ContractPhaseMetrics:
     """Build a ContractPhaseMetrics from a PhaseResult.
 
@@ -247,6 +249,10 @@ def build_metrics_from_result(
         completed_at: Phase completion timestamp.
         phase_result: The structured phase result.
         instance_id: Optional instance identifier.
+        model_id: LLM model identifier (e.g. "claude-sonnet-4-20250514").
+            Defaults to "unknown" for backwards compatibility with legacy runs.
+        producer_kind: Producer classification ("agent", "human", or "unknown").
+            Defaults to "unknown" for backwards compatibility with legacy runs.
 
     Returns:
         A fully populated ContractPhaseMetrics.
@@ -279,6 +285,10 @@ def build_metrics_from_result(
         repo_id=repo_id,
         toolchain="claude-code",
         strictness="default",
+        extensions={
+            "model_id": model_id,
+            "producer_kind": producer_kind,
+        },
     )
 
     producer = ContractProducer(
@@ -377,6 +387,8 @@ def build_error_metrics(
     error: Exception,
     instance_id: str = "",
     completed_at: datetime,
+    model_id: str = "unknown",
+    producer_kind: str = "unknown",
 ) -> ContractPhaseMetrics:
     """Build a ContractPhaseMetrics for an error case.
 
@@ -393,6 +405,8 @@ def build_error_metrics(
         instance_id: Optional instance identifier.
         completed_at: Phase completion timestamp (required — repository
             invariant: no ``datetime.now()`` defaults).
+        model_id: LLM model identifier. Defaults to "unknown".
+        producer_kind: Producer classification. Defaults to "unknown".
 
     Returns:
         A ContractPhaseMetrics with ERROR classification.
@@ -422,6 +436,10 @@ def build_error_metrics(
         repo_id=repo_id,
         toolchain="claude-code",
         strictness="default",
+        extensions={
+            "model_id": model_id,
+            "producer_kind": producer_kind,
+        },
     )
 
     producer = ContractProducer(
@@ -471,6 +489,8 @@ def build_skipped_metrics(
     skip_reason: str,
     skip_reason_code: str,
     instance_id: str = "",
+    model_id: str = "unknown",
+    producer_kind: str = "unknown",
 ) -> ContractPhaseMetrics:
     """Build a ContractPhaseMetrics for a skipped phase.
 
@@ -486,6 +506,8 @@ def build_skipped_metrics(
         skip_reason: Human-readable skip reason.
         skip_reason_code: Machine-stable skip reason code.
         instance_id: Optional instance identifier.
+        model_id: LLM model identifier. Defaults to "unknown".
+        producer_kind: Producer classification. Defaults to "unknown".
 
     Returns:
         A ContractPhaseMetrics with SKIPPED classification.
@@ -513,6 +535,10 @@ def build_skipped_metrics(
         repo_id=repo_id,
         toolchain="claude-code",
         strictness="default",
+        extensions={
+            "model_id": model_id,
+            "producer_kind": producer_kind,
+        },
     )
 
     producer = ContractProducer(
@@ -564,6 +590,8 @@ def instrumented_phase(
     instance_id: str = "",
     started_at: datetime,
     completed_at: datetime | None = None,
+    model_id: str = "unknown",
+    producer_kind: str = "unknown",
 ) -> PhaseResult:
     """Execute a pipeline phase with full instrumentation.
 
@@ -590,6 +618,8 @@ def instrumented_phase(
             default, so it is exempt from the "no implicit timestamps"
             repository invariant. Inject an explicit value in tests for
             deterministic assertions.
+        model_id: LLM model identifier. Defaults to "unknown".
+        producer_kind: Producer classification. Defaults to "unknown".
 
     Returns:
         The PhaseResult from phase_fn.
@@ -630,6 +660,8 @@ def instrumented_phase(
             completed_at=_completed,
             phase_result=result,
             instance_id=instance_id,
+            model_id=model_id,
+            producer_kind=producer_kind,
         )
 
     except Exception as e:
@@ -650,6 +682,8 @@ def instrumented_phase(
                 error=e,
                 instance_id=instance_id,
                 completed_at=_completed,
+                model_id=model_id,
+                producer_kind=producer_kind,
             )
             # Emit and persist even on error
             emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
