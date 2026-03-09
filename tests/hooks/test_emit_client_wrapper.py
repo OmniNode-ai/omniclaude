@@ -86,6 +86,7 @@ class TestModuleImport:
             "budget.cap.hit",  # OMN-2922 - Wave 2: Pipeline budget cap hit
             "circuit.breaker.tripped",  # OMN-2922 - Wave 2: Circuit breaker tripped
             "response.stopped",  # Stop hook lifecycle event
+            "pr.validation.rollup",  # OMN-3930 - PR validation rollup with VTS at pipeline completion
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
