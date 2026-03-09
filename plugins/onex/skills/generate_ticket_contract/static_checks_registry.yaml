@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# static_checks_registry.yaml
+#
+# Source of truth for registered static check validator IDs.
+# Referenced by ModelProofRequirement.ref when kind: static_check.
+# Keep in sync with omnibase_core/.pre-commit-config.yaml hook IDs.
+
+version: "1.0.0"
+checks:
+  - id: no_any_types
+    description: "Detects bare Any type annotations"
+    script: omnibase_core/scripts/validation/validator_any_type.py
+  - id: no_union_soup
+    description: "Detects primitive_soup and overly_broad union type patterns"
+    script: omnibase_core/scripts/validation/validate-union-usage.py
+  - id: no_stub_implementations
+    description: "Detects pass-only, NotImplementedError, and TODO stub patterns"
+    script: omnibase_core/scripts/validation/check_stub_implementations.py
+  - id: no_dict_str_any
+    description: "Detects dict[str, Any] usage without @allow_dict_str_any decorator"
+    script: omnibase_core/scripts/validation/validate-dict-any-usage.py
+  - id: no_old_style_optional
+    description: "Detects Optional[X] and Union[X, Y] instead of X | None / X | Y"
+    script: omnibase_core/scripts/validation/validate-typing-syntax.py
