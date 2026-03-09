@@ -65,6 +65,7 @@ def _json_default_serializer(obj: Any) -> str:
     # Fallback for any other non-serializable type
     return str(obj)
 
+
 from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,9 @@ class IntelligenceUsageRecord:
     agent_name: str = "unknown"
 
     # Intelligence source
-    intelligence_type: str = "pattern"  # pattern, schema, debug_intelligence, model, infrastructure
+    intelligence_type: str = (
+        "pattern"  # pattern, schema, debug_intelligence, model, infrastructure
+    )
     intelligence_source: str = "qdrant"  # qdrant, memgraph, postgres, onex-intelligence
 
     # Intelligence identification
@@ -93,7 +96,9 @@ class IntelligenceUsageRecord:
     collection_name: str | None = None
 
     # Usage details
-    usage_context: str = "reference"  # reference, implementation, inspiration, validation
+    usage_context: str = (
+        "reference"  # reference, implementation, inspiration, validation
+    )
     usage_count: int = 1
     confidence_score: float | None = None
 
@@ -187,7 +192,9 @@ class IntelligenceUsageTracker:
         self.db_port: int = db_port or settings.postgres_port
         self.db_name: str = db_name or settings.postgres_database
         self.db_user: str = db_user or settings.postgres_user
-        self.db_password: str | None = db_password or settings.get_effective_postgres_password()
+        self.db_password: str | None = (
+            db_password or settings.get_effective_postgres_password()
+        )
 
         # Connection pool for async database operations
         self._pool: asyncpg.Pool | None = None
@@ -196,7 +203,7 @@ class IntelligenceUsageTracker:
         if not all([self.db_host, self.db_port, self.db_name, self.db_user]):
             logger.warning(
                 "Database configuration incomplete. Required: POSTGRES_HOST, POSTGRES_PORT, "
-                "POSTGRES_DATABASE, POSTGRES_USER. Intelligence usage tracking disabled."
+                "OMNICLAUDE_POSTGRES_DATABASE, POSTGRES_USER. Intelligence usage tracking disabled."
             )
             self.enable_tracking = False
             return
@@ -204,7 +211,9 @@ class IntelligenceUsageTracker:
         self.enable_tracking = enable_tracking
 
         if not self.db_password:
-            logger.warning("POSTGRES_PASSWORD not set. Intelligence usage tracking disabled.")
+            logger.warning(
+                "POSTGRES_PASSWORD not set. Intelligence usage tracking disabled."
+            )
             self.enable_tracking = False
             return
 
@@ -389,7 +398,9 @@ class IntelligenceUsageTracker:
             return success
 
         except Exception as e:
-            logger.error(f"Failed to track intelligence application: {e}", exc_info=True)
+            logger.error(
+                f"Failed to track intelligence application: {e}", exc_info=True
+            )
             return False
 
     async def _store_record(self, record: IntelligenceUsageRecord) -> bool:
@@ -403,7 +414,9 @@ class IntelligenceUsageTracker:
             # Prepare JSON data (asyncpg accepts json strings directly)
             # Use _json_default_serializer to handle UUIDs, datetimes, and other non-serializable types
             intelligence_snapshot_json = (
-                json.dumps(record.intelligence_snapshot, default=_json_default_serializer)
+                json.dumps(
+                    record.intelligence_snapshot, default=_json_default_serializer
+                )
                 if record.intelligence_snapshot
                 else None
             )
@@ -455,7 +468,11 @@ class IntelligenceUsageTracker:
                     """,
                     str(record.correlation_id),
                     str(record.execution_id) if record.execution_id else None,
-                    (str(record.manifest_injection_id) if record.manifest_injection_id else None),
+                    (
+                        str(record.manifest_injection_id)
+                        if record.manifest_injection_id
+                        else None
+                    ),
                     str(record.prompt_id) if record.prompt_id else None,
                     record.agent_name,
                     record.intelligence_type,
@@ -596,7 +613,9 @@ class IntelligenceUsageTracker:
                 where_clauses.append(f"intelligence_type = ${len(params) + 1}")
                 params.append(intelligence_type)
 
-            where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+            where_clause = (
+                "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+            )
 
             async with pool.acquire() as conn:
                 # nosec B608 - where_clause only contains hardcoded columns and $N placeholders, user values passed via params

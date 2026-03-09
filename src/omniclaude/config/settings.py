@@ -30,7 +30,8 @@ Required environment variables when services are enabled:
     # Option B: Individual fields (used when OMNICLAUDE_DB_URL is not set)
     POSTGRES_HOST=localhost
     POSTGRES_PORT=5432
-    POSTGRES_DATABASE=mydb
+    OMNICLAUDE_POSTGRES_DATABASE=omnibase_infra  # preferred (avoids collision with omnidash)
+    # POSTGRES_DATABASE=mydb  # legacy fallback only — collides with omnidash_analytics
     POSTGRES_USER=postgres
     POSTGRES_PASSWORD=your_password
 
@@ -57,7 +58,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import Field, HttpUrl, PrivateAttr, SecretStr
+from pydantic import AliasChoices, Field, HttpUrl, PrivateAttr, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -143,8 +144,17 @@ class Settings(BaseSettings):
     )
     postgres_database: str = Field(
         default="",
+        validation_alias=AliasChoices(
+            "OMNICLAUDE_POSTGRES_DATABASE",
+            "POSTGRES_DATABASE",
+        ),
         description=(
-            "PostgreSQL database name. REQUIRED when ENABLE_POSTGRES=true. "
+            "PostgreSQL database name for omniclaude. REQUIRED when ENABLE_POSTGRES=true "
+            "and OMNICLAUDE_DB_URL is not set. "
+            "Reads from OMNICLAUDE_POSTGRES_DATABASE first (preferred), "
+            "falling back to POSTGRES_DATABASE for backwards compatibility. "
+            "Use OMNICLAUDE_POSTGRES_DATABASE to avoid collision with other services "
+            "that set POSTGRES_DATABASE (e.g. omnidash sets it to 'omnidash_analytics'). "
             "No default to prevent connecting to wrong database."
         ),
     )
@@ -519,8 +529,9 @@ class Settings(BaseSettings):
                     )
                 if not self.postgres_database:
                     errors.append(
-                        "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
-                        "Set POSTGRES_DATABASE or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                        "OMNICLAUDE_POSTGRES_DATABASE is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set OMNICLAUDE_POSTGRES_DATABASE (preferred) or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false. "
+                        "Do not use POSTGRES_DATABASE — it collides with omnidash which sets it to 'omnidash_analytics'."
                     )
                 if not self.postgres_user:
                     errors.append(
