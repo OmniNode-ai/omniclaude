@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import importlib
 import sys
-from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
