@@ -12,7 +12,6 @@ import pytest
 from plugins.onex.skills.generate_ticket_contract.proof_validation import (
     EnumRefStatus,
     ProofReferenceResolver,
-    RefResolutionResult,
 )
 
 
@@ -93,7 +92,9 @@ def test_artifact_missing_fails(resolver: ProofReferenceResolver) -> None:
 
 
 @pytest.mark.unit
-def test_manual_warns_and_mentions_traceability(resolver: ProofReferenceResolver) -> None:
+def test_manual_warns_and_mentions_traceability(
+    resolver: ProofReferenceResolver,
+) -> None:
     result = resolver.resolve("manual", "Verify in staging")
     assert result.status == EnumRefStatus.WARN
     assert "traceability" in result.message.lower()
