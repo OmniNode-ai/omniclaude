@@ -6,12 +6,9 @@
 Exports:
 1. SQL DDL strings for all 5 agent trace tables
 2. Python dataclass representations (no SQLAlchemy dependency) for use
-   in the persistence layer while migration freeze is active
+   in the persistence layer
 
-MIGRATION FREEZE NOTICE (OMN-2055):
-A migration freeze is active (.migration_freeze). The Alembic migration
-for these tables (TRACE_MIGRATION_DDL below) must be applied once the freeze
-lifts. Do not create an alembic migration file until OMN-2055 is resolved.
+Migration applied via omnibase_infra migration 041_create_agent_trace_tables.sql (OMN-4080).
 
 Stage 7 of DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md
 """
@@ -24,7 +21,7 @@ from __future__ import annotations
 
 TRACE_MIGRATION_DDL = """
 -- Agent Trace System Tables
--- MIGRATION FREEZE: Do not apply until OMN-2055 is resolved.
+-- Applied by: omnibase_infra migration 041_create_agent_trace_tables.sql (OMN-4080)
 -- Created by: OMN-2406 TRACE-02
 
 -- Failure signatures must be created first (referenced by change_frames)
@@ -111,7 +108,7 @@ DROP TABLE IF EXISTS failure_signatures;
 
 # ---------------------------------------------------------------------------
 # Python dataclass table definitions (no SQLAlchemy dependency)
-# Used by persistence layer until migration freeze lifts and ORM is added.
+# Used by persistence layer alongside the SQL migration in omnibase_infra.
 # ---------------------------------------------------------------------------
 
 from dataclasses import dataclass, field  # noqa: E402
