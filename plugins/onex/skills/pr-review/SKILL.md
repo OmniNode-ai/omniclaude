@@ -5,6 +5,21 @@ level: basic
 debug: false
 ---
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run pr-review for PR #<pr_number>",
+  prompt="Run the pr-review skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 <!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
 <!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
 Apply the persona profile above when generating outputs.

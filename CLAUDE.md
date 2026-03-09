@@ -172,7 +172,8 @@ Hook changes deploy via the plugin cache (`~/.claude/plugins/cache/`). Test loca
 
 ### Automated Workflows (`/parallel-solve`)
 
-Prefer dispatching to `polymorphic-agent`:
+Always dispatch to `polymorphic-agent` for skill-driven work. The ONLY exception is pure
+conversational responses (zero tool calls — e.g., answering a question).
 
 ```python
 Task(
@@ -184,12 +185,8 @@ Task(
 
 This ensures ONEX capabilities, intelligence integration, and observability.
 
-### Human Developers
-
-Run tools directly. The polymorphic-agent pattern is for automated workflows, not a repository invariant.
-
 ```bash
-# These are fine for humans
+# Human developers running CLI tools directly (not agent workflows):
 pytest tests/ -v
 ruff check src/
 mypy src/omniclaude/

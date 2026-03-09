@@ -59,6 +59,21 @@ args:
 
 # CI Watch
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run ci-watch for PR #<pr_number>",
+  prompt="Run the ci-watch skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Poll GitHub Actions CI status for a pull request. Auto-fix test/lint failures and re-push. Exit

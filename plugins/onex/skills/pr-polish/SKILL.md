@@ -44,6 +44,21 @@ args:
 
 # PR Polish
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run pr-polish for PR #<pr_number>",
+  prompt="Run the pr-polish skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 ## Overview
 
 Three-phase PR readiness workflow that takes a branch from "open PR" to "clean and ready to merge":

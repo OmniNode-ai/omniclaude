@@ -43,6 +43,21 @@ args:
 
 # Ticket Pipeline
 
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run ticket-pipeline for <ticket_id>",
+  prompt="Run the ticket-pipeline skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
 > **Authoritative behavior is defined in `prompt.md`; `SKILL.md` is descriptive. When docs
 > conflict, `prompt.md` wins.**
 
