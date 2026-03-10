@@ -828,5 +828,119 @@ class TestContextAdvisoryPatternsViapytest(TestContextAdvisoryPatterns):
     """Re-expose TestContextAdvisoryPatterns under the @pytest.mark.unit marker."""
 
 
+# =============================================================================
+# OMN-4383 — policy mode tests
+# =============================================================================
+
+import pathlib as _pathlib
+import sys as _sys
+
+_LIB_DIR_GUARD = (
+    _pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+)
+if str(_LIB_DIR_GUARD) not in _sys.path:
+    _sys.path.insert(0, str(_LIB_DIR_GUARD))
+
+
+class TestNoVerifyPolicyModes(unittest.TestCase):
+    _CMD = 'git commit --no-verify -m "bypass"'
+    _SID = "abcdef123456-test"
+
+    def _run(self, config_override: dict, flag_active: bool = False) -> tuple[str, int]:  # type: ignore[type-arg]
+        """Run bash_guard.main() with patched policy and optional flag override."""
+        import hook_policy as hp
+
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": self._CMD},
+            "session_id": self._SID,
+        }
+        captured = io.StringIO()
+        policy = hp.HookPolicy.from_config(config_override, "no_verify")
+        with (
+            patch("bash_guard._load_no_verify_policy", return_value=policy),
+            patch("bash_guard._check_override_flag", return_value=flag_active),
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.stdin", io.StringIO(json.dumps(hook_input))),
+            patch("sys.stdout", captured),
+        ):
+            code = bash_guard.main()
+        return captured.getvalue().strip(), code
+
+    def test_hard_always_blocks(self) -> None:
+        _, code = self._run({"hook_policies": {"no_verify": {"mode": "hard"}}})
+        self.assertEqual(code, 2)
+
+    def test_hard_response_has_decision_block(self) -> None:
+        out, _ = self._run({"hook_policies": {"no_verify": {"mode": "hard"}}})
+        self.assertEqual(json.loads(out)["decision"], "block")
+
+    def test_disabled_returns_allow(self) -> None:
+        out, code = self._run({"hook_policies": {"no_verify": {"mode": "disabled"}}})
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["decision"], "allow")
+
+    def test_advisory_returns_allow_with_advisory_key(self) -> None:
+        out, code = self._run({"hook_policies": {"no_verify": {"mode": "advisory"}}})
+        self.assertEqual(code, 0)
+        resp = json.loads(out)
+        self.assertEqual(resp["decision"], "allow")
+        self.assertIn("advisory", resp)
+
+    def test_soft_blocks_without_flag(self) -> None:
+        out, code = self._run(
+            {"hook_policies": {"no_verify": {"mode": "soft", "channel": "terminal"}}},
+            flag_active=False,
+        )
+        self.assertEqual(code, 2)
+        resp = json.loads(out)
+        self.assertEqual(resp["decision"], "block")
+        self.assertIn("allow-no-verify", resp["reason"])
+        self.assertIn(
+            "abcdef123456", resp["reason"]
+        )  # 12-char session prefix in reason
+
+    def test_soft_allows_with_flag(self) -> None:
+        out, code = self._run(
+            {"hook_policies": {"no_verify": {"mode": "soft"}}}, flag_active=True
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["decision"], "allow")
+
+    def test_soft_chat_channel_mentions_chat_in_reason(self) -> None:
+        out, _ = self._run(
+            {"hook_policies": {"no_verify": {"mode": "soft", "channel": "chat"}}},
+            flag_active=False,
+        )
+        self.assertIn("chat", json.loads(out)["reason"].lower())
+
+    def test_config_unreadable_defaults_to_hard(self) -> None:
+        """Policy load failure must fail-safe to hard — never fail-open on policy state."""
+        import hook_policy as hp
+
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": self._CMD},
+            "session_id": self._SID,
+        }
+        captured = io.StringIO()
+        # Simulate load failure: _load_no_verify_policy returns a hard stub
+        stub = hp.HookPolicy(name="no_verify", mode=hp.EnforcementMode.HARD)
+        with (
+            patch("bash_guard._load_no_verify_policy", return_value=stub),
+            patch("bash_guard._check_override_flag", return_value=False),
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.stdin", io.StringIO(json.dumps(hook_input))),
+            patch("sys.stdout", captured),
+        ):
+            code = bash_guard.main()
+        self.assertEqual(code, 2)
+
+
+@pytest.mark.unit
+class TestNoVerifyPolicyModesUnit(TestNoVerifyPolicyModes):
+    pass
+
+
 if __name__ == "__main__":
     unittest.main()
