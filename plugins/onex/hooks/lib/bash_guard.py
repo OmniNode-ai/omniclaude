@@ -76,6 +76,61 @@ import threading
 import urllib.request
 
 # ---------------------------------------------------------------------------
+# Policy integration (OMN-4383)
+# Fail-safe rule: policy-load failures → HARD mode. Never fail-open on policy.
+# ---------------------------------------------------------------------------
+
+
+def _load_no_verify_policy() -> object:
+    """Load the no_verify HookPolicy from config.yaml.
+
+    Returns a HookPolicy in HARD mode on any failure (fail-safe, not fail-open).
+    This is a policy boundary — not an infra notification — so fail-open is wrong.
+    """
+    try:
+        import hook_policy  # type: ignore[import-not-found]
+
+        return hook_policy.HookPolicy.from_config(
+            hook_policy.load_config(), "no_verify"
+        )
+    except Exception:  # noqa: BLE001
+        # Return a real HookPolicy if possible, else a minimal stand-in
+        try:
+            import hook_policy as _hp  # type: ignore[import-not-found]
+
+            return _hp.HookPolicy(name="no_verify", mode=_hp.EnforcementMode.HARD)
+        except Exception:  # noqa: BLE001
+            return _PolicyHardFallback()
+
+
+def _check_override_flag(policy: object, session_id: str) -> bool:
+    """Check for one-time override flag. Returns False on any error (fail-safe)."""
+    try:
+        return policy.is_override_active(session_id)  # type: ignore[union-attr]
+    except Exception:  # noqa: BLE001
+        return False
+
+
+class _PolicyHardFallback:
+    """Minimal stand-in when hook_policy.py is entirely unimportable.
+
+    Uses plain string attributes — mode_value and channel_value are what
+    bash_guard.py actually reads (via getattr defensively). No nested class tricks.
+    """
+
+    name = "no_verify"
+    mode_value = "hard"
+    channel_value = "terminal"
+
+    def is_override_active(self, session_id: str) -> bool:  # noqa: ARG002
+        return False
+
+    def terminal_command(self, session_id: str, reason: str = "") -> str:  # noqa: ARG002
+        prefix = session_id[:12]
+        return f'allow-no-verify "{reason}" {prefix}'
+
+
+# ---------------------------------------------------------------------------
 # Re-exported helpers from the existing permissions module (scripts/ layer).
 # Import lazily inside functions so that import errors don't crash the hook
 # when the scripts/ directory is not on sys.path.
@@ -352,23 +407,93 @@ def main() -> int:
     # Tier 1 — HARD_BLOCK
     # ------------------------------------------------------------------
     if matches_any(command, HARD_BLOCK_PATTERNS):
-        # Provide a specific, actionable reason for --no-verify blocks.
-        _no_verify_pattern = re.compile(
+        _no_verify_re = re.compile(
             r"\bgit\b[^;|&\n]*--no-verify\b", re.IGNORECASE | re.MULTILINE
         )
-        if _no_verify_pattern.search(command):
-            block_reason = (
-                "--no-verify is forbidden in agent sessions (CLAUDE.md policy). "
-                "Fix the pre-commit violations in your code instead of bypassing "
-                "the hook. If a hook itself is broken, create a ticket to fix it "
-                "(see OMN-3201). Human operators retain an emergency bypass via "
-                "direct terminal access outside Claude Code."
-            )
+        if _no_verify_re.search(command):
+            # Load policy — fail-safe to HARD on any failure
+            policy = _load_no_verify_policy()
+            # Normalize values immediately; defensive getattr handles both HookPolicy
+            # (mode.value) and _PolicyHardFallback (mode_value plain string).
+            mode_val: str = getattr(
+                getattr(policy, "mode", None), "value", None
+            ) or getattr(policy, "mode_value", "hard")
+            channel_val: str = getattr(
+                getattr(policy, "channel", None), "value", None
+            ) or getattr(policy, "channel_value", "terminal")
+
+            # DISABLED: command passes through
+            if mode_val == "disabled":
+                print(json.dumps({"decision": "allow"}))
+                return 0
+
+            # ADVISORY: allow with advisory message
+            if mode_val == "advisory":
+                print(
+                    json.dumps(
+                        {
+                            "decision": "allow",
+                            "advisory": (
+                                "--no-verify detected (advisory mode). "
+                                "Discouraged in agent sessions per CLAUDE.md. "
+                                "Fix pre-commit violations instead of bypassing hooks."
+                            ),
+                        }
+                    )
+                )
+                return 0
+
+            # SOFT: check one-time override flag before blocking
+            if mode_val == "soft":
+                if _check_override_flag(policy, session_id):
+                    print(
+                        json.dumps(
+                            {
+                                "decision": "allow",
+                                "advisory": (
+                                    "--no-verify allowed via one-time override. "
+                                    "Override consumed — next attempt will be blocked again."
+                                ),
+                            }
+                        )
+                    )
+                    return 0
+                # No override — build block reason with recovery instructions
+                terminal_cmd = policy.terminal_command(  # type: ignore[union-attr]
+                    session_id=session_id, reason="emergency bypass"
+                )
+                # channel_val already resolved above via getattr
+                if channel_val == "chat":
+                    override_msg = (
+                        "Procedural: reply 'approve' in this chat. "
+                        "You (or the agent) must then manually run `allow_flag.py` to create the flag. "
+                        "Agent-side automatic wiring is not yet implemented. "
+                        f"For immediate access, use terminal: {terminal_cmd}"
+                    )
+                elif channel_val == "slack_poll":
+                    override_msg = (
+                        "Slack polling is not yet implemented (stub only). "
+                        f"Use terminal instead:\n  {terminal_cmd}"
+                    )
+                else:  # terminal (default)
+                    override_msg = f"Run in your terminal:\n  {terminal_cmd}"
+                block_reason = (
+                    f"--no-verify is blocked (CLAUDE.md policy, soft mode). "
+                    f"Fix pre-commit violations instead of bypassing hooks. "
+                    f"Session: {session_id[:16]}...\n\n"
+                    f"To grant a ONE-TIME override: {override_msg}"
+                )
+            else:
+                # HARD (default and fail-safe) — same as current behavior
+                block_reason = (
+                    "--no-verify is forbidden in agent sessions (CLAUDE.md policy). "
+                    "Fix the pre-commit violation in your code. "
+                    "If the hook itself is broken, create a ticket (see OMN-3201). "
+                    "Human operators retain an emergency bypass via direct terminal access."
+                )
         else:
-            block_reason = (
-                "Destructive command blocked by bash_guard: matches hard-block "
-                f"pattern. Command: {command[:200]}"
-            )
+            block_reason = f"Destructive command blocked by bash_guard: {command[:200]}"
+
         block_response: dict[str, str] = {
             "decision": "block",
             "reason": block_reason,

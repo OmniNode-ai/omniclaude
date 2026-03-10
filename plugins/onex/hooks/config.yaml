@@ -30,3 +30,23 @@ pattern_enforcement:
   budget_ms: 300
   min_confidence: 0.7
   max_patterns: 10
+
+# Hook policy approval-gating (OMN-4383)
+# Controls enforcement behavior for forbidden commands.
+#
+# mode options:
+#   hard     - block unconditionally, no override possible (default, fail-safe)
+#   soft     - block but allow one-time human override via approval channel
+#   advisory - allow but include advisory message in response
+#   disabled - fully disabled, command passes through
+#
+# channel options (only meaningful when mode: soft):
+#   terminal   - FULLY IMPLEMENTED: human runs allow-no-verify "reason" <session_prefix>
+#   chat       - PROCEDURALLY DEFINED: agent calls allow_flag.py after user approves in chat
+#                (agent-side approval wiring requires a future implementation ticket)
+#   slack_poll - STUB ONLY: background Slack listener daemon (follow-up ticket required)
+
+hook_policies:
+  no_verify:
+    mode: hard        # Change to 'soft' to enable override path; default stays hard
+    channel: terminal # terminal | chat | slack_poll (see maturity notes above)
