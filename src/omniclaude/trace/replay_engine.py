@@ -47,6 +47,12 @@ class ReplayMode(str, Enum):
     """Replay execution mode controlling which steps are live vs stubbed."""
 
     FULL = "full"
+    """Replay mode: full tool-event re-execution.
+
+    Currently: logs tool events and runs checks (equivalent to TEST_ONLY + tool-event trace).
+    Genuine per-tool invocation replay requires a follow-up task once per-event
+    replay helpers are available (unblocked by OMN-2412 / TRACE-06).
+    """
     STUBBED = "stubbed"
     TEST_ONLY = "test_only"
 
@@ -374,17 +380,23 @@ class ReplayEngine:
         # Step 4: Run checks (all modes run checks live in the temp dir)
         check_results = run_checks(tmpdir, self.checks)
 
-        # FULL mode: also simulate re-execution of tool events
+        # FULL mode: log tool events and run checks.
+        # Outcome B: TRACE-06 (OMN-2410) added replay infrastructure at the CLI/frame level
+        # but per-event tool invocation helpers are not yet available. FULL mode therefore
+        # falls through to the same check execution as TEST_ONLY, with tool-event trace logging.
+        # Genuine per-tool re-execution requires a follow-up task.
         if mode == ReplayMode.FULL:
-            # TODO(OMN-2412): Implement live tool re-execution for FULL mode.
-            # FULL mode is documented to re-run everything (including tool events),
-            # but live LLM tool call replay is not yet implemented — it requires
-            # deterministic tool invocation infrastructure that is not yet available.
-            # Until implemented, FULL mode behaves identically to TEST_ONLY.
-            raise NotImplementedError(
-                "FULL replay mode (live tool re-execution) is not yet implemented. "
-                "Use ReplayMode.TEST_ONLY or ReplayMode.STUBBED instead."
-            )
+            tool_events = getattr(frame, "tool_events", [])
+            if tool_events:
+                import logging  # noqa: PLC0415
+
+                _logger = logging.getLogger(__name__)
+                _logger.info(
+                    "FULL replay: %d tool event(s) logged (per-tool re-execution not yet "
+                    "implemented; falling through to check execution). frame_id=%s",
+                    len(tool_events),
+                    frame.frame_id,
+                )
 
         # STUBBED mode: verify stored output hashes still match
         # (no additional action needed — checks already run on the patched state)

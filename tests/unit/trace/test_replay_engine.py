@@ -459,8 +459,13 @@ class TestReplayEngine:
         assert result.divergence_reason == REASON_ENV_CHANGED
         assert result.diverged is True
 
-    def test_full_mode_raises_not_implemented(self) -> None:
-        """FULL mode raises NotImplementedError until live tool re-execution is built."""
+    def test_full_mode_does_not_raise(self) -> None:
+        """FULL mode no longer raises NotImplementedError — it falls through to check execution.
+
+        Outcome B (OMN-4485): TRACE-06 added frame-level replay infrastructure but per-event
+        tool invocation helpers are not yet available. FULL mode logs tool events and falls
+        through to the same check execution as TEST_ONLY.
+        """
         engine = self._make_engine()
         frame = make_change_frame(outcome_status="pass")
 
@@ -472,8 +477,10 @@ class TestReplayEngine:
             return m
 
         with patch("subprocess.run", side_effect=fake_subprocess):
-            with pytest.raises(NotImplementedError, match="FULL replay mode"):
-                engine.replay(frame, mode=ReplayMode.FULL)
+            result = engine.replay(frame, mode=ReplayMode.FULL)
+
+        assert isinstance(result, ReplayResult)
+        assert result.mode == ReplayMode.FULL
 
     def test_stubbed_mode(self) -> None:
         """STUBBED mode: workspace succeeds and checks pass → no divergence."""
