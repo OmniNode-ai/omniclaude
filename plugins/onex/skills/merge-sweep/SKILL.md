@@ -1,7 +1,7 @@
 ---
 name: merge-sweep
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
-version: 3.1.0
+version: 3.2.0
 level: advanced
 debug: false
 category: workflow
@@ -208,11 +208,21 @@ def is_green(pr) -> bool:
 1. VALIDATE: parse and validate --since date if provided
 
 2. SCAN (parallel, up to --max-parallel-repos):
+   Initialize: repo_scan_results = {repo: None for repo in repo_list}
    For each repo:
      gh pr list --repo <repo> --state open --json \
        number,title,mergeable,mergeStateStatus,statusCheckRollup, \
        reviewDecision,headRefName,baseRefName,baseRepository, \
        headRepository,headRefOid,author,labels,updatedAt,isDraft
+     On success: repo_scan_results[repo] = prs (even if [])
+     On failure: leave repo_scan_results[repo] = None
+
+2a. POST-SCAN COVERAGE ASSERTION:
+   After all parallel scans complete, assert every configured repo returned a result.
+   repos_scanned = count of repos with non-None result
+   repos_failed = count of repos where result is still None (silent miss)
+   Log WARNING for each failed repo; include in ModelSkillResult as result: scan_failed
+   Scan failures do NOT abort the run — successfully scanned repos are still processed.
 
 3. CLASSIFY (apply all filters including --authors, --since, --label;
    first match wins per PR):
@@ -322,10 +332,15 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 ```
 [merge-sweep] run <run_id> complete
 
+Repos scanned: R ok | F failed
 Branch updates (proactive):    P stale → updated (CI re-running)
 Track A (auto-merge enabled):  N queued | D merged directly | K failed
   Post-merge branch updates:   B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
+
+⚠️ Scan failures (F repo(s) not scanned — check gh auth/network):  [only if F > 0]
+  • OmniNode-ai/omnimemory — scan never returned (silent miss in parallel fan-out)
+  • OmniNode-ai/omninode_infra — scan never returned (silent miss in parallel fan-out)
 
 Branches updated (CI re-running — next sweep will merge):
   • OmniNode-ai/omniclaude#260 (was BEHIND)
@@ -357,6 +372,8 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
     "authors": ["jonahgabriel"],
     "repos": ["OmniNode-ai/omniclaude"]
   },
+  "repos_scanned": 9,
+  "repos_failed": 2,
   "candidates_found": 3,
   "branch_update_queue_found": 2,
   "polish_queue_found": 2,
@@ -371,6 +388,14 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
   "skipped": 1,
   "failed": 0,
   "details": [
+    {
+      "repo": "OmniNode-ai/omnimemory",
+      "pr": null,
+      "head_sha": null,
+      "track": null,
+      "result": "scan_failed",
+      "error": "scan never returned (silent miss in parallel fan-out)"
+    },
     {
       "repo": "OmniNode-ai/omniclaude",
       "pr": 260,
@@ -408,6 +433,7 @@ Status values:
 - `partial` — some queued/updated, some failed or blocked
 - `error` — no PRs successfully queued or updated
 
+Scan `result` values (per repo): `scan_failed` (repo scan never returned — silent miss)
 Track A-update `result` values: `branch_updated` | `failed` | `skipped`
 Track A `result` values: `auto_merge_set` | `merged_directly` | `failed` | `skipped`
 Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
@@ -416,6 +442,8 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 
 | Error | Behavior |
 |-------|----------|
+| `gh pr list` returns no output / silent failure for a repo | Post-scan coverage assertion detects `None` in `repo_scan_results`; logs WARNING; records `result: scan_failed` in ModelSkillResult details; skips repo for this run |
+| Repo scan dropped in async fan-out | Same as silent failure — detected by coverage assertion via `repo_scan_results[repo] == None` |
 | PR `mergeable` state UNKNOWN | Route to Track A-update; branch update forces GitHub to recompute mergeable state. Next sweep handles the result. |
 | PR `mergeStateStatus` BEHIND/UNKNOWN (scan) | Step 5b: update branch proactively; record `branch_updated`; CI re-runs; next sweep merges |
 | PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge |
@@ -455,6 +483,14 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.2.0** (OMN-4517): Post-scan repo coverage assertion. Distinguishes repos with zero PRs
+  (confirmed empty scan) from repos that silently missed in the parallel fan-out. All configured
+  repos are initialized to `None` before scanning; successful scans (even empty) set their entry
+  to a list. After all parallel scans complete, a post-scan assertion logs `WARNING` and records
+  `result: scan_failed` in `ModelSkillResult.details` for any repo still at `None`. Adds
+  `repos_scanned` and `repos_failed` counters to `ModelSkillResult`. Sweep summary Slack message
+  includes scan failure warnings when `repos_failed > 0`. Fixes observed silent misses of
+  `omnimemory` (3 open PRs) and `omninode_infra` (1 open PR) on 2026-03-10.
 - **v3.1.0** (OMN-3818): Proactive stale branch detection and update. Add `needs_branch_update()`
   predicate using `mergeStateStatus` field. PRs that are BEHIND or UNKNOWN get their branches
   updated BEFORE auto-merge is attempted (Step 5b), preventing the chicken-and-egg deadlock with

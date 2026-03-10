@@ -655,3 +655,134 @@ class TestProactiveBranchUpdate:
         assert "mergeStateStatus" in content, (
             "_bin/pr-scan.sh must include mergeStateStatus in default JSON fields"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test class: Post-scan coverage assertion (v3.2.0, OMN-4517)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPostScanCoverageAssertion:
+    """v3.2.0 adds a post-scan coverage assertion to detect repos silently missed.
+
+    The parallel scan fan-out must be validated: every configured repo must have
+    returned a result (even an empty list). A repo with zero PRs is distinct from
+    a repo that silently failed to return any result.
+    """
+
+    def test_prompt_initializes_repo_scan_results_dict(self) -> None:
+        """prompt.md must initialize repo_scan_results before scanning."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "repo_scan_results" in content, (
+            "prompt.md must initialize repo_scan_results dict before scan phase"
+        )
+
+    def test_prompt_distinguishes_zero_prs_from_scan_failure(self) -> None:
+        """prompt.md must distinguish between zero-PRs (confirmed empty) and scan failure."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        # Both None sentinel and empty list concept must be documented
+        assert "None" in content and (
+            "[]" in content or "empty list" in content.lower()
+        ), "prompt.md must distinguish scan_failure (None) from zero-PRs (empty list)"
+
+    def test_prompt_documents_post_scan_assertion(self) -> None:
+        """prompt.md must document the post-scan coverage assertion after scan phase."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert (
+            "Post-Scan Coverage Assertion" in content or "post-scan" in content.lower()
+        ), "prompt.md must document the post-scan coverage assertion (OMN-4517)"
+
+    def test_prompt_logs_warning_for_scan_failures(self) -> None:
+        """prompt.md must log WARNING for repos that did not return scan results."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "WARNING" in content and "scan" in content.lower(), (
+            "prompt.md must log WARNING for repos that silently missed the scan"
+        )
+
+    def test_prompt_records_scan_failed_result(self) -> None:
+        """prompt.md must record result: scan_failed for repos that never returned."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "scan_failed" in content, (
+            "prompt.md must record 'result: scan_failed' in ModelSkillResult details"
+        )
+
+    def test_skill_documents_repos_scanned_counter(self) -> None:
+        """SKILL.md ModelSkillResult must include repos_scanned counter."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "repos_scanned" in content, (
+            "SKILL.md ModelSkillResult must include repos_scanned counter (OMN-4517)"
+        )
+
+    def test_skill_documents_repos_failed_counter(self) -> None:
+        """SKILL.md ModelSkillResult must include repos_failed counter."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "repos_failed" in content, (
+            "SKILL.md ModelSkillResult must include repos_failed counter (OMN-4517)"
+        )
+
+    def test_prompt_documents_repos_scanned_counter(self) -> None:
+        """prompt.md ModelSkillResult must include repos_scanned counter."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "repos_scanned" in content, (
+            "prompt.md ModelSkillResult must include repos_scanned counter (OMN-4517)"
+        )
+
+    def test_prompt_documents_repos_failed_counter(self) -> None:
+        """prompt.md ModelSkillResult must include repos_failed counter."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "repos_failed" in content, (
+            "prompt.md ModelSkillResult must include repos_failed counter (OMN-4517)"
+        )
+
+    def test_skill_documents_scan_failed_in_failure_table(self) -> None:
+        """SKILL.md failure handling table must document scan_failed case."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "scan_failed" in content, (
+            "SKILL.md failure handling table must document scan_failed result (OMN-4517)"
+        )
+
+    def test_skill_documents_scan_failed_result_value(self) -> None:
+        """SKILL.md must list scan_failed as a result value."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        # Result values section or details section must include scan_failed
+        assert "scan_failed" in content, (
+            "SKILL.md must document scan_failed as a result value for repos that missed the scan"
+        )
+
+    def test_prompt_slack_summary_includes_scan_failure_warning(self) -> None:
+        """prompt.md Slack summary must include scan failure warning when repos_failed > 0."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "scan_failure_details" in content or "repos_failed" in content, (
+            "prompt.md Slack summary must include scan failure warning (OMN-4517)"
+        )
+
+    def test_skill_slack_summary_documents_scan_failure_line(self) -> None:
+        """SKILL.md Slack summary format must show scan failure count."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert (
+            "Scan failures" in content
+            or "repos_failed" in content
+            or "repos scanned" in content.lower()
+        ), "SKILL.md Slack summary must document scan failure info (OMN-4517)"
+
+    def test_scan_failure_does_not_abort_run(self) -> None:
+        """prompt.md must document that scan failures do NOT abort the run."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert (
+            "do NOT abort" in content
+            or "NOT abort" in content
+            or "not abort" in content.lower()
+        ), "prompt.md must document that scan failures do not abort the run (OMN-4517)"
+
+    def test_prompt_version_updated_to_v320(self) -> None:
+        """SKILL.md version must be bumped to 3.2.0 for OMN-4517 changes."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "3.2.0" in content, "SKILL.md version must be bumped to 3.2.0 (OMN-4517)"
+
+    def test_prompt_documents_all_details_merge(self) -> None:
+        """prompt.md must merge scan_failure_details into the final details list."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "scan_failure_details" in content, (
+            "prompt.md must include scan_failure_details in the collected results/details list"
+        )

@@ -115,6 +115,24 @@ current ONEX tier (see `@_lib/tier-routing/helpers.md`):
 tier = detect_onex_tier()
 ```
 
+**Initialize per-repo result tracking before scanning:**
+
+```python
+# repo_scan_results maps repo_full_name → list of PRs (empty list = zero open PRs)
+#                                        or None = scan failed / never returned
+# Initialize ALL configured repos to None so silent misses are detectable.
+repo_scan_results: dict[str, list | None] = {repo: None for repo in repo_list}
+```
+
+This distinguishes three states:
+- `None` (initial, never updated) — scan never returned (silent failure or dropped in fan-out)
+- `[]` (empty list) — scanned successfully, confirmed zero open PRs
+- `[...prs]` — scanned successfully, returned one or more PRs
+
+On successful scan of a repo, set `repo_scan_results[repo] = prs` (even if `prs == []`).
+On scan failure (exception, non-zero exit, empty/null output), set `repo_scan_results[repo]`
+to a sentinel `scan_failed` marker (see post-scan coverage assertion below).
+
 ### FULL_ONEX Path
 
 Use `node_git_effect.pr_list()` for typed, structured output:
@@ -137,6 +155,7 @@ request = ModelGitRequest(
     list_filters=ModelPRListFilters(state="open", limit=100),
 )
 result = await handler.pr_list(request)
+repo_scan_results[repo] = result.prs  # always set — even if empty list
 ```
 
 ### STANDALONE / EVENT_BUS Path
@@ -157,6 +176,9 @@ The script wraps `gh pr list` with consistent field selection and optional `--si
 date filtering (applied via `jq` post-filter). Output format is identical to the raw
 `gh pr list` JSON array.
 
+On success: `repo_scan_results[repo] = parsed_json_array` (always set, even if `[]`).
+On non-zero exit or exception: log warning, do NOT update `repo_scan_results[repo]` (leaves `None`).
+
 ### Fallback (Legacy)
 
 If neither `node_git_effect` nor `_bin/pr-scan.sh` is available, fall back to raw `gh`:
@@ -171,7 +193,52 @@ gh pr list \
 
 **IMPORTANT**: `labels`, `updatedAt`, `isDraft`, and `mergeStateStatus` are required JSON fields.
 
-For each PR returned, apply classification:
+On success: `repo_scan_results[repo] = parsed_json_array`.
+On failure: leave `repo_scan_results[repo] = None`.
+
+### Post-Scan Coverage Assertion
+
+After ALL parallel scan tasks complete, assert that every configured repo has an entry:
+
+```python
+# Post-scan coverage assertion (OMN-4517)
+repos_scanned = 0
+repos_failed = 0
+scan_failure_details = []
+
+for repo, scan_result in repo_scan_results.items():
+    if scan_result is None:
+        # Repo never returned — silent miss detected
+        repos_failed += 1
+        scan_failure_details.append({
+            "repo": repo,
+            "result": "scan_failed",
+            "error": "scan never returned (silent miss in parallel fan-out)",
+        })
+        print(
+            f"WARNING: [merge-sweep] Repo scan did not return: {repo}. "
+            f"This repo is excluded from this run. Check gh auth and network.",
+            file=sys.stderr,
+        )
+    else:
+        repos_scanned += 1
+
+if repos_failed > 0:
+    print(
+        f"WARNING: [merge-sweep] {repos_failed} repo(s) failed to scan and will be "
+        f"excluded: {[d['repo'] for d in scan_failure_details]}",
+        file=sys.stderr,
+    )
+```
+
+**Behavior**:
+- Missing repos are logged as `WARNING` and recorded in `ModelSkillResult.details` with
+  `result: scan_failed`.
+- Scan failures do NOT abort the run — successfully scanned repos are still processed.
+- The `repos_scanned` and `repos_failed` counters are included in `ModelSkillResult`.
+- The Slack sweep summary includes a scan failure warning when `repos_failed > 0`.
+
+For each PR returned from successfully scanned repos, apply classification:
 
 ### PR Classification Logic
 
@@ -808,6 +875,10 @@ elif total_successful == 0 and total_failed > 0:
     status = "error"
 else:
     status = "nothing_to_merge"  # all candidates were skipped or blocked
+
+# Merge scan_failure_details into the details list
+# scan_failure_details populated by the post-scan coverage assertion in Step 3
+all_details = scan_failure_details + branch_update_results + auto_merge_results + polish_results
 ```
 
 ---
@@ -825,6 +896,7 @@ source ~/.omnibase/.env 2>/dev/null || true
 ```python
 summary_lines = [
     f"*[merge-sweep]* run {run_id} complete\n",
+    f"Repos scanned: {repos_scanned} ok | {repos_failed} failed",
     f"Branch updates (proactive):    {proactive_branch_updated_count} stale → updated (CI re-running)",
     f"Track A (auto-merge enabled):  {auto_merge_set_count} PRs queued | {merged_directly_count} merged directly | {auto_merge_failed_count} failed",
     f"  Post-merge branch updates:   {post_merge_branches_updated} behind → updated",
@@ -866,6 +938,11 @@ if failed_auto:
     for r in failed_auto:
         summary_lines.append(f"  • {r['repo']}#{r['pr']} — {r.get('error', 'unknown error')}")
 
+if scan_failure_details:
+    summary_lines.append(f"\n⚠️ Scan failures ({repos_failed} repo(s) not scanned — check gh auth/network):")
+    for d in scan_failure_details:
+        summary_lines.append(f"  • {d['repo']} — {d['error']}")
+
 summary_lines.append(f"\nStatus: {status} | Run: {run_id}")
 
 summary_message = "\n".join(summary_lines)
@@ -892,6 +969,8 @@ except Exception as e:
     "authors": ["<author1>"],
     "repos": ["<repo1>"]
   },
+  "repos_scanned": <repos_scanned>,
+  "repos_failed": <repos_failed>,
   "candidates_found": <N>,
   "branch_update_queue_found": <B>,
   "polish_queue_found": <M>,
@@ -906,6 +985,14 @@ except Exception as e:
   "skipped": <count>,
   "failed": <count>,
   "details": [
+    {
+      "repo": "<repo>",
+      "pr": null,
+      "head_sha": null,
+      "track": null,
+      "result": "scan_failed",
+      "error": "scan never returned (silent miss in parallel fan-out)"
+    },
     {
       "repo": "<repo>",
       "pr": <pr_number>,
