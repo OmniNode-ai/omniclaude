@@ -264,10 +264,28 @@ SOFT_ALERT_PATTERNS: list[re.Pattern[str]] = [
 # the operator.  The hook exits 0 (allow) but includes an ``"advisory"`` key
 # in the JSON response so the caller can surface the message.
 
+# Module-level compiled pattern for raw git worktree add detection.
+# Used in both CONTEXT_ADVISORY_PATTERNS and the advisory body generation.
+_WORKTREE_ADD_RE: re.Pattern[str] = re.compile(
+    r"\bgit\b[^;|&\n]*\bworktree\s+add\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+
 CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"^\s*uv\s+lock\b", re.IGNORECASE),
         "ADVISORY: uv lock detected. Before modifying uv.lock, verify the CI-pinned uv version matches your local version to prevent lock-file drift between environments.",
+    ),
+    (
+        _WORKTREE_ADD_RE,
+        (
+            "Managed worktree creation via `WorktreeManager.create()` installs pre-commit hooks automatically. "
+            "Raw `git worktree add` does not — this is a bypass of the managed path. "
+            "If you bypass WorktreeManager, run "
+            "`pre-commit install --hook-type pre-commit --hook-type pre-push` "
+            "in the new worktree before committing. "
+            "Skipping this causes silent CI failures (ruff, SPDX, contract validation all bypass)."
+        ),
     ),
 ]
 

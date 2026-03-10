@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -184,6 +185,50 @@ def _parse_worktree_list(output: str) -> list[Worktree]:
     return worktrees
 
 
+def _install_precommit_hooks(worktree_path: Path) -> None:
+    """Attempt pre-commit install in a newly created worktree. Fail-open.
+
+    Installs both pre-commit and pre-push hook types to match
+    .pre-commit-config.yaml's default_install_hook_types: [pre-commit, pre-push].
+
+    Hook installation uses the ambient ``pre-commit`` executable from PATH,
+    matching the operator or agent environment that invoked worktree creation.
+    This is best-effort — if pre-commit is unavailable or install fails, a warning
+    is emitted and the function returns without raising. Worktree creation must
+    succeed even if hook install fails.
+
+    Args:
+        worktree_path: Absolute path to the new worktree directory.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "pre-commit",
+                "install",
+                "--hook-type",
+                "pre-commit",
+                "--hook-type",
+                "pre-push",
+            ],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode != 0:
+            print(
+                f"[WorktreeManager] pre-commit install failed in {worktree_path}: "
+                f"{result.stderr.strip()}",
+                file=sys.stderr,
+            )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(
+            f"[WorktreeManager] could not install pre-commit hooks in {worktree_path}: {exc}",
+            file=sys.stderr,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -238,6 +283,9 @@ class WorktreeManager:
             raise WorktreeError(
                 f"git worktree add failed (exit {result.returncode}): {stderr}"
             )
+
+        # Attempt pre-commit hook install — fail-open, never blocks worktree creation
+        _install_precommit_hooks(Path(path).resolve())
 
         # Retrieve the newly-created worktree so callers get a typed object
         worktree = self.get(branch=branch)

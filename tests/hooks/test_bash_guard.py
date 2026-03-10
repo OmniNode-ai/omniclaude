@@ -942,5 +942,72 @@ class TestNoVerifyPolicyModesUnit(TestNoVerifyPolicyModes):
     pass
 
 
+# =============================================================================
+# OMN-4508/OMN-4509 — git worktree add CONTEXT_ADVISORY tests
+# =============================================================================
+
+
+class TestWorktreeAddAdvisory(unittest.TestCase):
+    """Raw git worktree add surfaces advisory distinguishing bypass from managed path."""
+
+    def _run(self, command: str) -> tuple[str, int]:
+        hook_input = {
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "session_id": "test-session-123",
+        }
+        captured = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO(json.dumps(hook_input))),
+            patch("sys.stdout", captured),
+        ):
+            code = bash_guard.main()
+        return captured.getvalue().strip(), code
+
+    def test_worktree_add_returns_advisory(self) -> None:
+        out, code = self._run("git worktree add /path/to/wt feat/my-branch")
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertIn("advisory", data)
+
+    def test_advisory_mentions_precommit_install(self) -> None:
+        out, _ = self._run("git worktree add /path/to/wt feat/my-branch")
+        data = json.loads(out)
+        self.assertIn("pre-commit install", data["advisory"])
+
+    def test_advisory_mentions_bypass_path(self) -> None:
+        """Advisory should distinguish raw git worktree add from the managed path."""
+        out, _ = self._run("git worktree add /path/to/wt feat/my-branch")
+        msg = json.loads(out)["advisory"].lower()
+        self.assertTrue(
+            "worktreemanager" in msg
+            or "bypass" in msg
+            or "raw" in msg
+            or "not install" in msg,
+            msg=f"Advisory does not explain bypass context: {msg}",
+        )
+
+    def test_worktree_list_no_advisory(self) -> None:
+        out, code = self._run("git worktree list")
+        self.assertEqual(code, 0)
+        data: dict[str, Any] = json.loads(out) if out else {}
+        self.assertNotIn("advisory", data)
+
+    def test_worktree_remove_no_advisory(self) -> None:
+        out, code = self._run("git worktree remove /path/to/wt")
+        self.assertEqual(code, 0)
+        data = json.loads(out) if out else {}
+        self.assertNotIn("advisory", data)
+
+    def test_advisory_exit_code_is_0(self) -> None:
+        _, code = self._run("git -C /some/repo worktree add /wt branch")
+        self.assertEqual(code, 0)
+
+
+@pytest.mark.unit
+class TestWorktreeAddAdvisoryUnit(TestWorktreeAddAdvisory):
+    """Re-expose TestWorktreeAddAdvisory under the @pytest.mark.unit marker."""
+
+
 if __name__ == "__main__":
     unittest.main()

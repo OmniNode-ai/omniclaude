@@ -354,3 +354,126 @@ class TestGitNotFound:
         mgr = WorktreeManager()
         with pytest.raises(WorktreeError, match="timed out"):
             mgr.list()
+
+
+# ---------------------------------------------------------------------------
+# WorktreeManager.create — pre-commit hook auto-install (OMN-4508)
+# ---------------------------------------------------------------------------
+
+
+import io as _io
+import unittest as _unittest
+
+
+class TestWorktreeManagerPrecommitInstall(_unittest.TestCase):
+    """WorktreeManager.create() must attempt pre-commit install after git worktree add."""
+
+    def _make_manager(self) -> WorktreeManager:
+        return WorktreeManager(repo_path="/fake/repo")
+
+    def test_precommit_install_called_after_create(self) -> None:
+        """pre-commit install attempt runs immediately after successful git worktree add."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            mock_run.assert_called_once()
+            cmd = mock_run.call_args[0][0]
+            assert "pre-commit" in cmd
+            assert "install" in cmd
+
+    def test_precommit_install_runs_in_worktree_path(self) -> None:
+        """pre-commit install cwd is the new worktree path, not the repo root."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            kwargs = mock_run.call_args[1]
+            assert str(kwargs["cwd"]).startswith("/fake/worktrees")
+
+    def test_install_includes_both_hook_types(self) -> None:
+        """Both pre-commit and pre-push hook types are installed."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            cmd = mock_run.call_args[0][0]
+            assert "--hook-type" in cmd
+            assert "pre-push" in cmd
+
+    def test_install_failure_does_not_raise(self) -> None:
+        """pre-commit install failure is fail-open — worktree creation succeeds anyway."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.side_effect = FileNotFoundError("pre-commit not found")
+            result = manager.create(
+                branch="feat/test", path="/fake/worktrees/feat-test"
+            )
+            assert result is not None
+
+    def test_install_not_found_emits_stderr_warning(self) -> None:
+        """FileNotFoundError emits a warning to stderr — visibility contract."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+            patch("worktree_manager.sys.stderr", new_callable=_io.StringIO) as mock_err,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.side_effect = FileNotFoundError("pre-commit not found")
+            manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            assert "pre-commit" in mock_err.getvalue()
+
+    def test_nonzero_install_exit_emits_stderr_warning(self) -> None:
+        """Non-zero pre-commit install exit emits a warning — visibility contract."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+            patch("worktree_manager.sys.stderr", new_callable=_io.StringIO) as mock_err,
+        ):
+            mock_git.return_value = MagicMock(returncode=0, stderr="")
+            manager.get = MagicMock(return_value=None)
+            mock_run.return_value = MagicMock(
+                returncode=1, stderr="hook type not found"
+            )
+            manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            assert "pre-commit" in mock_err.getvalue()
+
+    def test_install_not_called_when_git_worktree_fails(self) -> None:
+        """pre-commit install must NOT be attempted if git worktree add failed."""
+        manager = self._make_manager()
+        with (
+            patch("worktree_manager._run_git") as mock_git,
+            patch("worktree_manager.subprocess.run") as mock_run,
+        ):
+            mock_git.return_value = MagicMock(returncode=1, stderr="already exists")
+            with pytest.raises(WorktreeError):
+                manager.create(branch="feat/test", path="/fake/worktrees/feat-test")
+            mock_run.assert_not_called()
+
+
+@pytest.mark.unit
+class TestWorktreeManagerPrecommitInstallUnit(TestWorktreeManagerPrecommitInstall):
+    """Re-expose under pytest.mark.unit."""
