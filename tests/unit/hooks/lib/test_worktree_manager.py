@@ -275,8 +275,11 @@ class TestWorktreeManagerDelete:
 
 
 class TestWorktreeManagerCreate:
+    @patch("worktree_manager._install_precommit_hooks")
     @patch("worktree_manager.subprocess.run")
-    def test_create_calls_add_then_get(self, mock_run: MagicMock) -> None:
+    def test_create_calls_add_then_get(
+        self, mock_run: MagicMock, _mock_install: MagicMock
+    ) -> None:
         # First call: worktree add; second call: worktree list (via get)
         mock_run.side_effect = [
             _make_process(returncode=0),  # worktree add
@@ -304,8 +307,11 @@ class TestWorktreeManagerCreate:
         with pytest.raises(WorktreeError, match="git worktree add failed"):
             mgr.create(branch="feat/my-feature", path="/tmp/wt-feat")
 
+    @patch("worktree_manager._install_precommit_hooks")
     @patch("worktree_manager.subprocess.run")
-    def test_create_fallback_when_get_returns_none(self, mock_run: MagicMock) -> None:
+    def test_create_fallback_when_get_returns_none(
+        self, mock_run: MagicMock, _mock_install: MagicMock
+    ) -> None:
         # add succeeds but the branch is not in the list output (edge case)
         porcelain_main_only = (
             "worktree /repo\n"
