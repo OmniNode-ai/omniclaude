@@ -30,10 +30,10 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -79,12 +79,12 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: TruffleHog Secret Scanning
-        uses: trufflesecurity/trufflehog@c3e599b7163e8198a55467f3133db0e7b2a492cb  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -118,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -151,13 +151,13 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build Docker image
         run: docker build -f deployment/Dockerfile -t omniclaude:scan .
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # v0.34.2 (pinned 2026-03-04)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: 'omniclaude:scan'
           format: 'sarif'
@@ -170,7 +170,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Run Trivy filesystem scanner
-        uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # v0.34.2 (pinned 2026-03-04)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.34.2 (pinned 2026-03-04)
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -201,10 +201,10 @@ jobs:
       }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@f99709f8ccc3496220c987b7d8729653237c23dc  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@f9b0a2206b0401cad02ac0a66be2a7934a5be838  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions
