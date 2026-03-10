@@ -571,10 +571,15 @@ fi
 # Runs in background to keep SessionStart under <50ms budget.
 
 if [[ -f "${HOOKS_LIB}/capability_probe.py" ]]; then
+    # Redirect stdout to /dev/null: capability_probe.py prints "tier=<value>" to
+    # stdout, which can race with the hook's JSON output and corrupt it.
+    # Claude Code reads the hook's stdout pipe and fails JSON parsing when
+    # "tier=event_bus" arrives after (or interleaved with) the JSON body,
+    # causing the "UserPromptSubmit hook error" on every session restart.
     ( "$PYTHON_CMD" "${HOOKS_LIB}/capability_probe.py" \
         --kafka "${KAFKA_BOOTSTRAP_SERVERS:-}" \
         --intelligence "${INTELLIGENCE_SERVICE_URL:-http://localhost:8053}" \
-        2>>"${LOG_FILE:-/dev/null}" & )
+        >/dev/null 2>>"${LOG_FILE:-/dev/null}" & )
     log "Tier detection probe started in background"
 fi
 

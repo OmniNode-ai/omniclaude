@@ -170,6 +170,10 @@ def _get_tracer() -> Any:
                 max_queue_size=queue_max,
                 # Drop oldest when queue is full (non-blocking)
                 max_export_batch_size=min(512, queue_max),
+                # Cap flush timeout so atexit shutdown does not block the hook
+                # process for longer than the hook's own run_with_timeout alarm.
+                # Default is 30s; hooks have a 1s budget so we use 500ms.
+                export_timeout_millis=500,
             )
 
             _tracer_provider = TracerProvider(resource=resource)
