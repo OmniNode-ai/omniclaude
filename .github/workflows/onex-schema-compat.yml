@@ -142,7 +142,10 @@ jobs:
           import tomllib
           with open('onex_change_control/pyproject.toml', 'rb') as f:
               d = tomllib.load(f)
-          print(d['tool']['poetry']['version'])
+          if 'project' in d:
+              print(d['project']['version'])
+          else:
+              print(d['tool']['poetry']['version'])
           ")
           echo "onex_change_control upstream version: $OCC_VERSION"
 

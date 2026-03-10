@@ -220,6 +220,7 @@ class TestAllowFlagCLI(unittest.TestCase):
                 ],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             self.assertEqual(r.returncode, 0, msg=r.stderr)
             # Path must match HookPolicy.flag_file_path() semantics exactly
@@ -228,7 +229,9 @@ class TestAllowFlagCLI(unittest.TestCase):
             self.assertIn("urgent hotfix", flag.read_text())
 
     def test_exits_1_without_required_args(self) -> None:
-        r = subprocess.run([sys.executable, str(self._SCRIPT)], capture_output=True)
+        r = subprocess.run(
+            [sys.executable, str(self._SCRIPT)], capture_output=True, check=False
+        )
         self.assertNotEqual(r.returncode, 0)
 
     def test_output_confirms_path(self) -> None:
@@ -248,6 +251,7 @@ class TestAllowFlagCLI(unittest.TestCase):
                 ],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             self.assertIn("onex-allow-no_verify-abcdef123456.flag", r.stdout)
 
@@ -274,7 +278,7 @@ class TestSlackApprovalListenerStub(unittest.TestCase):
 
     def test_start_raises_not_implemented(self) -> None:
         mod = self._import()
-        with self.assertRaises(NotImplementedError):
+        with pytest.raises(NotImplementedError):
             mod.SlackApprovalListener(policy="no_verify", channel_id="C123").start()  # type: ignore[union-attr]
 
     def test_not_implemented_message_mentions_follow_up(self) -> None:
