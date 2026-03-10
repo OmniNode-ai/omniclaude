@@ -87,7 +87,7 @@ design-to-plan  →  ticket-pipeline  →  auto-merge
   (brainstorm)     (implement + PR)    (when CI green)
 ```
 
-### Step 1: Turn an idea into a plan
+### Turn an idea into a plan
 
 ```
 /design-to-plan --topic "Add rate limiting to the API"
@@ -95,7 +95,7 @@ design-to-plan  →  ticket-pipeline  →  auto-merge
 
 Claude will brainstorm approaches, ask clarifying questions, and produce a structured implementation plan.
 
-### Step 2: Run the autonomous pipeline
+### Run the autonomous pipeline
 
 ```
 /ticket-pipeline OMN-1234

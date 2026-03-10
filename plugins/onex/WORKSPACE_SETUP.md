@@ -35,7 +35,7 @@ my_worktrees/               ← all feature branches live here (separate directo
 
 ---
 
-## Step 1: Create the Workspace Root
+## Create the Workspace Root
 
 ```bash
 mkdir ~/Code/my_home
@@ -46,7 +46,7 @@ mkdir ~/Code/my_worktrees
 
 ---
 
-## Step 2: Clone Repos as Children
+## Clone Repos as Children
 
 ```bash
 cd ~/Code/my_home
@@ -65,7 +65,7 @@ done
 
 ---
 
-## Step 3: Write the Root CLAUDE.md
+## Write the Root CLAUDE.md
 
 Generate and write a `CLAUDE.md` at `~/Code/my_home/CLAUDE.md` with the following sections populated for the user's specific project:
 
@@ -80,7 +80,7 @@ Keep the root CLAUDE.md focused on cross-repo concerns. Anything relevant to onl
 
 ---
 
-## Step 4: Write Per-Repo CLAUDE.md Files
+## Write Per-Repo CLAUDE.md Files
 
 For each child repo, write a `CLAUDE.md` that includes:
 
@@ -94,7 +94,7 @@ Do not repeat shared standards — Claude loads both the root and the repo-speci
 
 ---
 
-## Step 5: Create pull-all.sh
+## Create pull-all.sh
 
 Write the following to `~/Code/my_home/docs/tools/pull-all.sh` and make it executable:
 
@@ -154,7 +154,7 @@ Replace `repo-a`, `repo-b`, `repo-c` with the actual repo names.
 
 ---
 
-## Step 6: Commit the Workspace Root
+## Commit the Workspace Root
 
 ```bash
 cd ~/Code/my_home
