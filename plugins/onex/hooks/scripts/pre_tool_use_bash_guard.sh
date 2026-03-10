@@ -80,7 +80,8 @@ if [ $EXIT_CODE -eq 0 ]; then
     echo "$RESULT"
 elif [ $EXIT_CODE -eq 2 ]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash command BLOCKED by guard" >> "$LOG_FILE"
-    echo "$RESULT"
+    printf '\a' >&2   # BEL to stderr — audible/visual alert in terminal emulators
+    echo "$RESULT"    # JSON response to stdout (not mixed with bell)
     exit 2
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: Bash guard failed with code $EXIT_CODE, failing open" >> "$LOG_FILE"

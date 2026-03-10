@@ -1578,6 +1578,26 @@ jobs:
           echo "Security Gate PASSED"
 
   # ============================================================================
+  # CI SUMMARY (OMN-4501) — single branch-protection check
+  # Aggregates quality-gate, tests-gate, security-gate into one status context.
+  # build is excluded: it is post-gate artifact packaging, not a gating requirement.
+  # ============================================================================
+
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [quality-gate, tests-gate, security-gate]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled"
+            exit 1
+          fi
+          echo "All required jobs passed"
+
+  # ============================================================================
   # BUILD (downstream of all gates)
   # On PRs and merge_group: build-only validation (no push, no Trivy scan)
   # On push to main: full build + push to GHCR + Trivy vulnerability scan
