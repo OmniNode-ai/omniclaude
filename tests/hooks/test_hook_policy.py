@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Tests for HookPolicy — reusable approval-gating abstraction."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -13,7 +14,9 @@ from unittest.mock import patch
 
 import pytest
 
-_LIB_DIR = pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+_LIB_DIR = (
+    pathlib.Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+)
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
@@ -71,7 +74,9 @@ class TestFlagFileOverride(unittest.TestCase):
     def test_true_when_flag_exists(self) -> None:
         policy = hook_policy.HookPolicy(name="no_verify")
         with tempfile.TemporaryDirectory() as tmp:
-            (pathlib.Path(tmp) / "onex-allow-no_verify-abcdef123456.flag").write_text("ok\n")
+            (pathlib.Path(tmp) / "onex-allow-no_verify-abcdef123456.flag").write_text(
+                "ok\n"
+            )
             with patch.object(hook_policy, "_FLAG_DIR", tmp):
                 self.assertTrue(policy.is_override_active("abcdef123456-rest"))
 
@@ -124,25 +129,32 @@ class TestFromConfig(unittest.TestCase):
 
     def test_malformed_policy_entry_type_fails_closed(self) -> None:
         # policy entry is a string, not a dict
-        p = hook_policy.HookPolicy.from_config({"hook_policies": {"no_verify": "bad"}}, "no_verify")
+        p = hook_policy.HookPolicy.from_config(
+            {"hook_policies": {"no_verify": "bad"}}, "no_verify"
+        )
         self.assertEqual(p.mode, hook_policy.EnforcementMode.HARD)
 
     def test_list_mode_value_fails_closed(self) -> None:
         # mode is a list — coerced via str() → fails enum lookup → HARD
-        p = hook_policy.HookPolicy.from_config({"hook_policies": {"no_verify": {"mode": []}}}, "no_verify")
+        p = hook_policy.HookPolicy.from_config(
+            {"hook_policies": {"no_verify": {"mode": []}}}, "no_verify"
+        )
         self.assertEqual(p.mode, hook_policy.EnforcementMode.HARD)
 
     def test_dict_channel_value_defaults_terminal(self) -> None:
         # channel is a dict — coerced via str() → fails enum lookup → TERMINAL
         p = hook_policy.HookPolicy.from_config(
-            {"hook_policies": {"no_verify": {"mode": "soft", "channel": {"bad": 1}}}}, "no_verify"
+            {"hook_policies": {"no_verify": {"mode": "soft", "channel": {"bad": 1}}}},
+            "no_verify",
         )
         self.assertEqual(p.channel, hook_policy.ApprovalChannel.TERMINAL)
 
 
 class TestLoadConfig(unittest.TestCase):
     def test_returns_empty_dict_when_file_missing(self) -> None:
-        with patch("hook_policy._CONFIG_PATH", pathlib.Path("/nonexistent/config.yaml")):
+        with patch(
+            "hook_policy._CONFIG_PATH", pathlib.Path("/nonexistent/config.yaml")
+        ):
             cfg = hook_policy.load_config()
         self.assertIsInstance(cfg, dict)
         self.assertEqual(cfg, {})
@@ -169,12 +181,16 @@ class TestLoadConfig(unittest.TestCase):
 
 class TestTerminalCommand(unittest.TestCase):
     def test_includes_session_prefix(self) -> None:
-        cmd = hook_policy.HookPolicy(name="no_verify").terminal_command("abcdef123456-xyz")
+        cmd = hook_policy.HookPolicy(name="no_verify").terminal_command(
+            "abcdef123456-xyz"
+        )
         self.assertIn("abcdef123456", cmd)
         self.assertIn("allow-no-verify", cmd)
 
     def test_includes_reason(self) -> None:
-        cmd = hook_policy.HookPolicy(name="no_verify").terminal_command("abcdef123456-xyz", reason="CI failure")
+        cmd = hook_policy.HookPolicy(name="no_verify").terminal_command(
+            "abcdef123456-xyz", reason="CI failure"
+        )
         self.assertIn("CI failure", cmd)
 
 
@@ -279,7 +295,11 @@ class TestConfigYamlHasPolicies(unittest.TestCase):
 
     def test_hook_policies_key_exists(self) -> None:
         cfg = hook_policy.load_config()
-        self.assertIn("hook_policies", cfg, msg="config.yaml must have 'hook_policies' top-level key")
+        self.assertIn(
+            "hook_policies",
+            cfg,
+            msg="config.yaml must have 'hook_policies' top-level key",
+        )
 
     def test_no_verify_policy_exists(self) -> None:
         cfg = hook_policy.load_config()
