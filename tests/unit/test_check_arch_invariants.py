@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for scripts/check_arch_invariants.py (OMN-2977 / CDQA-07).
 
 Tests exercise the AST-based import scanner in isolation, without requiring a

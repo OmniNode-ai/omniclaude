@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 OMNI_HOME="${OMNI_HOME:-${HOME}/Code/omni_home}"
 if [[ ! -f "$OMNI_HOME/scripts/check_no_cloud_bus.sh" ]]; then
   echo "SKIP: check_no_cloud_bus.sh not found at OMNI_HOME=$OMNI_HOME" >&2

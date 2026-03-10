@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Decision record subscriber — audit-log consumer for Decision Provenance (OMN-2720).
 
 Subscribes to ``onex.cmd.omniintelligence.decision-recorded.v1``, deserializes

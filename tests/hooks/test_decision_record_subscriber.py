@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for the decision record subscriber (OMN-2720).
 
 Tests the full pipeline from raw Kafka payload → JSONL audit log append:

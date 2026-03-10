@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2026 OmniNode Team
 #
 # Wrapper: run topic-naming-lint against Python source files. (OMN-3259)

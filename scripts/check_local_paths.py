@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Wrapper for omnibase_core.validation.validator_local_paths.
 
 Gracefully skips the check when omnibase_core.validation.validator_local_paths

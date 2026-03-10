@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # headless-merge-sweep.sh — Scan repos for mergeable PRs and auto-merge
 #
 # Usage:

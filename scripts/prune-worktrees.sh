@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # prune-worktrees.sh — Detect and remove stale git worktrees
 #
 # A worktree is considered stale when its branch's PR has been merged

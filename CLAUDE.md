@@ -662,5 +662,16 @@ What "done" means for changes to this repo:
 
 ---
 
+## SPDX Headers
+
+All source files in `src/`, `tests/`, `scripts/`, `examples/` require MIT SPDX headers.
+Canonical spec: `omnibase_core/docs/conventions/FILE_HEADERS.md`
+
+- Stamp missing headers: `onex spdx fix src tests scripts examples`
+- Check without writing: `onex spdx fix --check src tests scripts examples`
+- Bypass a file: add `# spdx-skip: <reason>` in the first 10 lines
+
+---
+
 **Last Updated**: 2026-02-13
 **Version**: 0.3.0

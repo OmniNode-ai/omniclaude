@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Add level: and debug: frontmatter metadata to all skill SKILL.md files.
 
 Reads existing frontmatter, adds level: and debug: after version: (or after description:

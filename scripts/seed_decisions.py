@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Seed architectural decisions into the decision_store table.
 
 Seeds 4 decisions from the Insights report (OMN-2822) into the decision_store

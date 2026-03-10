@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """Unit tests for scripts/seed_decisions.py (OMN-2822).
 
 Tests the seed script's decision definitions, stable ID generation,

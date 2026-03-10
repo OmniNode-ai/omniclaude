@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # topic_registry.yaml — Canonical event_type → topic mapping for omniclaude (OMN-2922)
 #
 # SINGLE SOURCE OF TRUTH for all omniclaude event type to Kafka topic mappings.

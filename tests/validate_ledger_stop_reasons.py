@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 """validate_ledger_stop_reasons.py
 
 CI validation script for ledger stop_reason fields.

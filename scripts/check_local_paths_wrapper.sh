@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
 # Wrapper for the check-local-paths pre-commit hook.
 # Gracefully skips if omnibase_core.validation.validator_local_paths is not yet published.
 # TODO: Remove this wrapper once validator_local_paths is in a released omnibase_core package
