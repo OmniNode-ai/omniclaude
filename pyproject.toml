@@ -10,7 +10,7 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core==0.24.0",
+    "omnibase-core==0.24.1",
     "omnibase-spi==0.15.1",
     "omnibase-infra==0.16.0",
     "omninode-intelligence==0.10.0",
