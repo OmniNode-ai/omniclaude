@@ -64,7 +64,9 @@ class ProofReferenceResolver:
             self._registry = _load_registry(self._registry_path)
         return self._registry
 
-    def resolve(self, kind: str, ref: str, criterion_id: str = "") -> RefResolutionResult:
+    def resolve(
+        self, kind: str, ref: str, criterion_id: str = ""
+    ) -> RefResolutionResult:
         if kind in ("unit_test", "integration_test"):
             return self._resolve_test(kind, ref, criterion_id)
         if kind == "static_check":
@@ -83,14 +85,20 @@ class ProofReferenceResolver:
             kind, criterion_id, ref, EnumRefStatus.FAIL, f"Unknown kind: {kind!r}"
         )
 
-    def _resolve_test(self, kind: str, ref: str, criterion_id: str) -> RefResolutionResult:
+    def _resolve_test(
+        self, kind: str, ref: str, criterion_id: str
+    ) -> RefResolutionResult:
         parts = ref.split("::")
         file_path = parts[0]
         symbol = parts[1] if len(parts) > 1 else None
         full = self.repo_root / file_path
         if not full.exists():
             return RefResolutionResult(
-                kind, criterion_id, ref, EnumRefStatus.FAIL, f"Test file not found: {file_path}"
+                kind,
+                criterion_id,
+                ref,
+                EnumRefStatus.FAIL,
+                f"Test file not found: {file_path}",
             )
         if symbol and symbol not in full.read_text():
             return RefResolutionResult(
@@ -109,7 +117,11 @@ class ProofReferenceResolver:
     def _resolve_check(self, ref: str, criterion_id: str) -> RefResolutionResult:
         if ref in self.registry:
             return RefResolutionResult(
-                "static_check", criterion_id, ref, EnumRefStatus.RESOLVED, f"Check registered: {ref}"
+                "static_check",
+                criterion_id,
+                ref,
+                EnumRefStatus.RESOLVED,
+                f"Check registered: {ref}",
             )
         return RefResolutionResult(
             "static_check",
@@ -123,10 +135,18 @@ class ProofReferenceResolver:
         full = self.repo_root / ref
         if full.exists():
             return RefResolutionResult(
-                "artifact", criterion_id, ref, EnumRefStatus.RESOLVED, f"Artifact found: {ref}"
+                "artifact",
+                criterion_id,
+                ref,
+                EnumRefStatus.RESOLVED,
+                f"Artifact found: {ref}",
             )
         return RefResolutionResult(
-            "artifact", criterion_id, ref, EnumRefStatus.FAIL, f"Artifact not found: {ref}"
+            "artifact",
+            criterion_id,
+            ref,
+            EnumRefStatus.FAIL,
+            f"Artifact not found: {ref}",
         )
 
 

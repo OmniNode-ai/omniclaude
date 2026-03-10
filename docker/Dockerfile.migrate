@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 OmniNode Team
+#
+# Dockerfile.migrate — omniclaude database migration image
+#
+# Ownership: omniclaude repo owns all migration SQL artifacts.
+# This image is pulled by the k8s/migrations/omniclaude-migrate.yaml
+# initContainer and used by the omniclaude migration Job.
+#
+# Build context: repo root (docker build -f docker/Dockerfile.migrate .)
+#
+# Active migrations: sql/migrations/ (forward only — excludes *_down.sql rollbacks)
+# Frozen migrations: docs/db/ — NOT included; apply separately when freeze lifts (OMN-2073)
+#
+# Filename convention: 001_<description>.sql (3-digit prefix)
+# Job manifest regex was updated in PR #163 to accept ^[0-9]{3,8}_ format.
+
+FROM alpine:3.19
+
+# Copy forward migrations only (exclude *_down.sql rollback files)
+COPY sql/migrations/001_create_claude_session_tables.sql /migrations/

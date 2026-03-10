@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 OmniNode Team
+name: Build and push migration image to ECR
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/Dockerfile.migrate'
+      - 'sql/migrations/**'
+      - '.github/workflows/build-and-push-migrate-image.yml'
+  workflow_dispatch:
+concurrency:
+  group: build-migrate-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  id-token: write
+  contents: read
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: omniclaude-migrate
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/omninode-github-actions-role
+          role-session-name: gha-build-migrate-omniclaude
+          aws-region: ${{ env.AWS_REGION }}
+      - run: aws sts get-caller-identity
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push
+        env:
+          IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          docker build -f docker/Dockerfile.migrate -t "${IMAGE_URI}:${COMMIT_SHA}" -t "${IMAGE_URI}:latest" .
+          docker push "${IMAGE_URI}:${COMMIT_SHA}"
+          docker push "${IMAGE_URI}:latest"
