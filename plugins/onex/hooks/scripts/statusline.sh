@@ -354,7 +354,14 @@ if [ "$HAS_JQ" -eq 1 ]; then
   #   2. Filter out entries for closed tabs (GUID has no live match)
   LIVE_POSITIONS=""
   if [ "$(uname)" = "Darwin" ] && command -v osascript >/dev/null 2>&1; then
-    LIVE_POSITIONS=$(osascript 2>/dev/null <<'APPLESCRIPT'
+    # Write AppleScript to a temp file so we can exec osascript with a file argument.
+    # This lets perl's alarm(3) bound the call — osascript reading from /dev/stdin
+    # does not work with exec because perl consumes stdin before exec.
+    # Without a timeout the osascript call can block indefinitely when iTerm2 is
+    # unresponsive or when statusline runs outside an iTerm2 session.
+    _OSASCRIPT_TMP=$(mktemp /tmp/omniclaude-statusline-XXXXXX.scpt 2>/dev/null) || _OSASCRIPT_TMP=""
+    if [ -n "$_OSASCRIPT_TMP" ]; then
+      cat > "$_OSASCRIPT_TMP" <<'APPLESCRIPT'
 tell application "iTerm2"
     tell current window
         set output to ""
@@ -370,7 +377,9 @@ tell application "iTerm2"
     end tell
 end tell
 APPLESCRIPT
-    ) || LIVE_POSITIONS=""
+      LIVE_POSITIONS=$(perl -e 'alarm 3; exec @ARGV' osascript "$_OSASCRIPT_TMP" 2>/dev/null) || LIVE_POSITIONS=""
+      rm -f "$_OSASCRIPT_TMP"
+    fi
   fi
 
   # Self-register/update: ensure this tab's registry entry matches the current project.

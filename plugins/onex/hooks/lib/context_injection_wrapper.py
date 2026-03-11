@@ -51,6 +51,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+# Capture process wall-clock start time immediately so we can measure total
+# elapsed time including all module-level imports.  Python's module import
+# machinery runs before main() is invoked, so setting start_time inside
+# main() measures only the function body — not import overhead.
+# We record this here (after stdlib imports but before heavy local imports)
+# so the budget guard in main() can account for import-time cost.
+_PROCESS_START_MS: float = time.monotonic() * 1000
+
 from pattern_types import (
     InjectorInput,
     InjectorOutput,
@@ -245,7 +253,26 @@ def main() -> None:
         )
         include_footer = bool(input_json.get("include_footer", False))
 
-        # Import handler here to avoid import errors if dependencies missing
+        # Pre-import budget check: if the module-level imports (pattern_types,
+        # phoenix_otel_exporter, etc.) already consumed most of the 1s hook budget,
+        # skip the heavy handler import entirely.  The handler import (omniclaude.hooks.*)
+        # can take 3-4s when omniclaude is installed as an editable package via
+        # _omninode_claude.pth, because it pulls in omnibase_core/omnibase_infra
+        # Pydantic model compilation chains.  Skipping the import here ensures we
+        # return valid JSON before the run_with_timeout SIGALRM fires (exit 142).
+        _pre_import_ms = time.monotonic() * 1000 - _PROCESS_START_MS
+        if _pre_import_ms > 300:
+            logger.warning(
+                f"context_injection_wrapper: pre-import budget exceeded "
+                f"({_pre_import_ms:.0f}ms > 300ms) — skipping handler import to avoid "
+                f"SIGALRM. Root cause: omniclaude installed as editable source "
+                f"(check _omninode_claude.pth in site-packages)."
+            )
+            output = create_empty_output()
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # Import handler here to avoid import errors if dependencies missing.
         try:
             from omniclaude.hooks.context_config import ContextInjectionConfig
             from omniclaude.hooks.handler_context_injection import inject_patterns_sync
@@ -255,6 +282,20 @@ def main() -> None:
             # Handler import failed - return empty output for graceful degradation
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             output = create_error_output(retrieval_ms=elapsed_ms)
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # Post-import budget guard: if the handler import itself was slow (editable
+        # install path), bail with empty output before calling inject_patterns_sync.
+        _total_elapsed_ms = time.monotonic() * 1000 - _PROCESS_START_MS
+        if _total_elapsed_ms > 700:
+            logger.warning(
+                f"context_injection_wrapper: budget exceeded after handler import "
+                f"({_total_elapsed_ms:.0f}ms > 700ms) — skipping injection to avoid "
+                f"SIGALRM. Root cause: omniclaude installed as editable source "
+                f"(check _omninode_claude.pth in site-packages)."
+            )
+            output = create_empty_output()
             print(json.dumps(output))
             sys.exit(0)
 
