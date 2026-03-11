@@ -117,6 +117,26 @@ POST_READ_INPUT='{"session_id":"test-abc-123","tool_name":"Read","tool_input":{"
 POST_WRITE_INPUT='{"session_id":"test-abc-123","tool_name":"Write","tool_input":{"file_path":"/tmp/test.py"},"tool_response":{"output":"written"}}'
 POST_AGENT_INPUT='{"session_id":"test-abc-123","tool_name":"Task","tool_input":{},"tool_response":{"output":"done"}}'
 
+SESSION_START_INPUT='{"session_id":"test-abc-123","hook_event_name":"SessionStart","cwd":"/tmp","source":"startup","model":"claude-sonnet-4-6","transcript_path":"/tmp/test.jsonl"}'
+
+# ─── SessionStart hooks ──────────────────────────────────────────────────────
+
+section "SessionStart: session-start.sh"
+
+# Regression test for OMN-4566: capability_probe.py used to print "tier=event_bus" to stdout,
+# which prepended to the JSON output and broke Claude Code's hook JSON parser.
+# This test catches that class of bug: stdout must start with '{' (be pure JSON).
+run_test "startup → valid JSON output (no stdout pollution)" \
+    "${SCRIPT_DIR}/session-start.sh" \
+    "$SESSION_START_INPUT" \
+    '.hookSpecificOutput.hookEventName == "SessionStart"'
+
+run_test "startup → stdout does not contain tier= (regression: OMN-4566)" \
+    "${SCRIPT_DIR}/session-start.sh" \
+    "$SESSION_START_INPUT"
+# Note: the second test validates JSON-only stdout via the run_test framework's
+# jq parse check — any "tier=..." prefix would fail the JSON parse check.
+
 # ─── UserPromptSubmit hooks ──────────────────────────────────────────────────
 
 section "UserPromptSubmit: user-prompt-submit.sh"
