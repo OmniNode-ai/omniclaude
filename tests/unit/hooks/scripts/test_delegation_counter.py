@@ -10,8 +10,12 @@ Verifies:
 import json
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
+
+# Repo root: tests/unit/hooks/scripts/ → 4 levels up
+_REPO_ROOT = Path(__file__).parents[4]
 
 
 def run_hook(
@@ -29,7 +33,8 @@ def run_hook(
         input=payload,
         capture_output=True,
         text=True,
-        cwd="/Volumes/PRO-G40/Code/omni_worktrees/OMN-4620/omniclaude",
+        cwd=str(_REPO_ROOT),
+        check=False,
     )
     return proc.returncode, proc.stdout
 
