@@ -1062,6 +1062,23 @@ if [[ "$EXECUTE" == "true" ]]; then
         exit 1
     fi
 
+    # Hook smoke tests — gate deploy on all hooks passing (OMN-4383)
+    # Runs AFTER venv integrity check so Python is guaranteed present.
+    SMOKE_TEST_SCRIPT="${TARGET}/skills/deploy-local-plugin/smoke-test-hooks.sh"
+    if [[ -x "$SMOKE_TEST_SCRIPT" ]]; then
+        echo ""
+        echo "Running hook smoke tests..."
+        if ! bash "$SMOKE_TEST_SCRIPT"; then
+            echo ""
+            echo -e "${RED}CRITICAL: Hook smoke tests FAILED. Deploy aborted.${NC}"
+            echo -e "${RED}  Fix the failing hooks before the deployment is considered successful.${NC}"
+            echo -e "${RED}  Re-run: ${SMOKE_TEST_SCRIPT}${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}  Warning: smoke-test-hooks.sh not found at ${SMOKE_TEST_SCRIPT} — skipping hook smoke tests${NC}"
+    fi
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
