@@ -336,9 +336,7 @@ async def handle_skill_requested(
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.FAILED,
-            output=None,
-            error="task_dispatcher raised an exception",
-            correlation_id=request.correlation_id,
+            extra={"error": "task_dispatcher raised an exception"},
         )
 
     duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -366,7 +364,12 @@ async def handle_skill_requested(
     return ModelSkillResult(
         skill_name=request.skill_name,
         status=status,
-        output=output_str if output_str else None,
-        error=error,
-        correlation_id=request.correlation_id,
+        extra={
+            k: v
+            for k, v in {
+                "output": output_str if output_str else None,
+                "error": error,
+            }.items()
+            if v is not None
+        },
     )
