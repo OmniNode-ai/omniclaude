@@ -333,241 +333,108 @@ if [ "$HAS_JQ" -eq 1 ]; then
 fi  # HAS_JQ for Section C
 
 ###############################################################################
-# Section D: Line 3 — Tab bar (from current statusline, stable/tested)
+# Section D: Line 3 — Service health, bus status, open PRs
+# NOTE: All probes are lightweight UI hints for local operator use.
+# They are NOT authoritative deployment health semantics and must never
+# block prompt flow or be treated as production health indicators.
 ###############################################################################
 
-TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
+# tcp_up HOST PORT — 🟢 if TCP port open within 1s, 🔴 otherwise.
+tcp_up() {
+  local h="$1" p="$2" rc=1
+  if command -v nc >/dev/null 2>&1; then
+    nc -z -w 1 "$h" "$p" 2>/dev/null && rc=0
+  else
+    ( echo >/dev/tcp/"$h"/"$p" ) 2>/dev/null && rc=0
+  fi
+  [ $rc -eq 0 ] && printf '🟢' || printf '🔴'
+}
+
+# http_up URL — 🟢 for 2xx/3xx within 1s, 🔴 otherwise.
+http_up() {
+  local code
+  code=$(curl -s -o /dev/null -w "%{http_code}" \
+    --connect-timeout 0.5 --max-time 1 "$1" 2>/dev/null) || code="000"
+  [[ "$code" =~ ^[23] ]] && printf '🟢' || printf '🔴'
+}
+
+# bus_status — bus:local | bus:cloud(🟢) | bus:cloud(🔴)
+bus_status() {
+  local bid="${BUS_ID:-local}"
+  if [[ "$bid" == "cloud" ]]; then
+    local dot; dot=$(tcp_up localhost 29092)
+    printf "bus:cloud(%s)" "$dot"
+  else
+    printf "bus:local"
+  fi
+}
+
+LINE3=""
 
 if [ "$HAS_JQ" -eq 1 ]; then
-  mkdir -p "$TAB_REGISTRY_DIR" 2>/dev/null
+  # Run all probes in parallel — capture output via temp files
+  _TMP_PG=$(mktemp) _TMP_RP=$(mktemp) _TMP_VK=$(mktemp)
+  _TMP_RT=$(mktemp) _TMP_IN=$(mktemp) _TMP_PH=$(mktemp) _TMP_BUS=$(mktemp)
 
-  # Determine current tab's iTerm GUID for highlighting
-  # ITERM_SESSION_ID format: w{W}t{T}p{P}:{GUID} - extract just the GUID
-  CURRENT_ITERM=""
-  if [ -n "${ITERM_SESSION_ID:-}" ]; then
-    CURRENT_ITERM="${ITERM_SESSION_ID#*:}"  # Strip prefix up to colon = GUID only
+  ( tcp_up  localhost 5436  > "$_TMP_PG"  ) &
+  ( tcp_up  localhost 19092 > "$_TMP_RP"  ) &
+  ( tcp_up  localhost 16379 > "$_TMP_VK"  ) &
+  ( http_up http://localhost:8085/health > "$_TMP_RT"  ) &
+  ( http_up http://localhost:8053/health > "$_TMP_IN"  ) &
+  ( tcp_up  localhost 6006  > "$_TMP_PH"  ) &
+  ( bus_status             > "$_TMP_BUS" ) &
+  wait
+
+  PG_DOT=$(cat "$_TMP_PG");   RP_DOT=$(cat "$_TMP_RP"); VK_DOT=$(cat "$_TMP_VK")
+  RT_DOT=$(cat "$_TMP_RT");   INTEL_DOT=$(cat "$_TMP_IN"); PHX_DOT=$(cat "$_TMP_PH")
+  BUS_STR=$(cat "$_TMP_BUS")
+  rm -f "$_TMP_PG" "$_TMP_RP" "$_TMP_VK" "$_TMP_RT" "$_TMP_IN" "$_TMP_PH" "$_TMP_BUS"
+
+  # PR cache — populated in background (first run may be empty; subsequent runs use cache).
+  # Cache is best-effort: stale/missing/invalid JSON must never break rendering.
+  PR_CACHE="/tmp/omniclaude-pr-cache.json"
+  PR_FRESH=0
+  if [ -f "$PR_CACHE" ]; then
+    PR_MTIME=$(stat -f %m "$PR_CACHE" 2>/dev/null || stat -c %Y "$PR_CACHE" 2>/dev/null || echo 0)
+    PR_AGE=$((NOW - PR_MTIME))
+    [ "$PR_AGE" -le 300 ] && PR_FRESH=1
+  fi
+  if [ "$PR_FRESH" -eq 0 ] && command -v gh >/dev/null 2>&1; then
+    (
+      result='{'
+      first=1
+      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra"; do
+        short="${pair%%:*}"; repo="${pair##*:}"
+        cnt=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json number --jq 'length' 2>/dev/null || echo "0")
+        [ "$first" -eq 1 ] || result="${result},"
+        result="${result}\"${short}\":${cnt}"
+        first=0
+      done
+      result="${result}}"
+      printf '%s' "$result" > "$PR_CACHE" 2>/dev/null
+    ) &
   fi
 
-  # Query live tab positions from iTerm2 via single AppleScript call.
-  # Returns "pos|GUID" per line. Used to:
-  #   1. Show current visual positions (not stale registration-time positions)
-  #   2. Filter out entries for closed tabs (GUID has no live match)
-  LIVE_POSITIONS=""
-  if [ "$(uname)" = "Darwin" ] && command -v osascript >/dev/null 2>&1; then
-    # Write AppleScript to a temp file so we can exec osascript with a file argument.
-    # This lets perl's alarm(3) bound the call — osascript reading from /dev/stdin
-    # does not work with exec because perl consumes stdin before exec.
-    # Without a timeout the osascript call can block indefinitely when iTerm2 is
-    # unresponsive or when statusline runs outside an iTerm2 session.
-    _OSASCRIPT_TMP=$(mktemp /tmp/omniclaude-statusline-XXXXXX.scpt 2>/dev/null) || _OSASCRIPT_TMP=""
-    if [ -n "$_OSASCRIPT_TMP" ]; then
-      cat > "$_OSASCRIPT_TMP" <<'APPLESCRIPT'
-tell application "iTerm2"
-    tell current window
-        set output to ""
-        repeat with i from 1 to count of tabs
-            tell tab i
-                repeat with s in sessions
-                    set uid to unique ID of s
-                    set output to output & i & "|" & uid & linefeed
-                end repeat
-            end tell
-        end repeat
-        return output
-    end tell
-end tell
-APPLESCRIPT
-      LIVE_POSITIONS=$(perl -e 'alarm 3; exec @ARGV' osascript "$_OSASCRIPT_TMP" 2>/dev/null) || LIVE_POSITIONS=""
-      rm -f "$_OSASCRIPT_TMP"
+  PR_LINE=""
+  if [ -f "$PR_CACHE" ]; then
+    PR_DATA=$(cat "$PR_CACHE" 2>/dev/null) || PR_DATA='{}'
+    # Guard against invalid JSON in cache file
+    if ! printf '%s' "$PR_DATA" | jq empty 2>/dev/null; then
+      PR_DATA='{}'
     fi
+    PR_PARTS=""
+    for short in core infra spi claude node; do
+      cnt=$(printf '%s' "$PR_DATA" | jq -r ".${short} // 0" 2>/dev/null) || cnt=0
+      [[ "$cnt" =~ ^[1-9] ]] && PR_PARTS="${PR_PARTS}${short}·${cnt} "
+    done
+    [ -n "$PR_PARTS" ] && PR_LINE="${SEP}${DIM}PRs:${RESET} ${PR_PARTS% }"
   fi
 
-  # Self-register/update: ensure this tab's registry entry matches the current project.
-  # Handles: new sessions, resumed sessions, same tab switching repos.
-  # Keyed by GUID so each iTerm tab has exactly one entry.
-  if [ -n "$CURRENT_ITERM" ]; then
-    NEEDS_UPDATE=0
-    EXISTING=$(grep -rl "$CURRENT_ITERM" "$TAB_REGISTRY_DIR"/ 2>/dev/null | head -1)
-    if [ -z "$EXISTING" ]; then
-      NEEDS_UPDATE=1
-    elif [ -n "$FOLDER_NAME" ]; then
-      # Check if repo changed (same tab, different session)
-      EXISTING_REPO=$(jq -r '.repo // ""' "$EXISTING" 2>/dev/null)
-      [ "$EXISTING_REPO" != "$FOLDER_NAME" ] && NEEDS_UPDATE=1
-    fi
-    if [ "$NEEDS_UPDATE" -eq 1 ]; then
-      # Remove old entry for this GUID if it exists under a different session ID
-      [ -n "$EXISTING" ] && rm -f "$EXISTING" 2>/dev/null
-      ( "$HOME/.claude/register-tab.sh" "auto-${CURRENT_ITERM}" "$PROJECT_DIR" >/dev/null 2>&1 ) &
-    elif [ -n "$EXISTING" ]; then
-      # Keep mtime fresh to prevent staleness eviction
-      touch "$EXISTING" 2>/dev/null
-    fi
-  fi
-
-  # Stale threshold: skip entries older than 24 hours (86400 seconds)
-  # Only applied when live position data is unavailable (non-macOS/non-iTerm).
-  # When live data IS available, GUID matching filters dead entries instead.
-  STALE_THRESHOLD=$((NOW - 86400))
-
-  # Read all registry files, parse with single jq invocation
-  # Output: tab_pos|repo|ticket|iterm_guid|project_path (one per line, sorted by tab_pos)
-  ENTRIES=""
-  set +f  # re-enable globbing for tab file discovery
-  for f in "$TAB_REGISTRY_DIR"/*.json; do
-    [ -f "$f" ] || continue
-    # Skip stale files only when we lack live position data to verify liveness
-    if [ -z "$LIVE_POSITIONS" ]; then
-      FILE_MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "0")
-      [ "$FILE_MTIME" -lt "$STALE_THRESHOLD" ] && continue
-    fi
-    ENTRIES="${ENTRIES}$(cat "$f" 2>/dev/null)
-"
-  done
-  set -f  # restore noglob
-
-  TAB_LINE=""
-  if [ -n "$ENTRIES" ]; then
-    # Single jq call: parse all entries, sort by tab_pos, output pipe-delimited
-    # Includes project_path so we can read live branch from git
-    FORMATTED=$(echo "$ENTRIES" | jq -sr '
-      [.[] | select(.repo != null)] |
-      sort_by(.tab_pos // 999) |
-      .[] | "\(.tab_pos // "?")|\(.repo // "?")|\(.ticket // "-")|\(.iterm_guid // "-")|\(.project_path // "-")"
-    ' 2>/dev/null)
-
-    if [ -n "$FORMATTED" ]; then
-      # Apply live tab positions and filter closed tabs BEFORE rendering.
-      # This ensures correct sort order after tab moves.
-      if [ -n "$LIVE_POSITIONS" ]; then
-        RESOLVED=""
-        while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
-          [ -z "$tab_pos" ] && continue
-          entry_guid="${iterm_guid#*:}"
-          live_pos=$(echo "$LIVE_POSITIONS" | grep -F "$entry_guid" | head -1 | cut -d'|' -f1)
-          if [ -n "$live_pos" ]; then
-            RESOLVED="${RESOLVED}${live_pos}|${repo}|${ticket}|${iterm_guid}|${project_path}
-"
-          fi
-          # No live match -> tab closed since registration, skip
-        done <<< "$FORMATTED"
-        FORMATTED=$(echo "$RESOLVED" | sort -t'|' -k1 -n)
-      fi
-
-      # Pre-scan: detect tabs sharing the same WORKTREE (collision warning)
-      # Only flag paths under omni_worktrees -- multiple tabs in omni_home is expected.
-      DUPE_PATHS=""
-      _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" && $5 ~ /omni_worktrees/ {print $5}' | sort)
-      [ -n "$_paths" ] && DUPE_PATHS=$(echo "$_paths" | uniq -d)
-
-      # Pre-scan: detect same (ticket + mode) pair across multiple tabs -- true collision.
-      # Same ticket in different modes (e.g. planning vs pr-review) is intentional, not a dupe.
-      DUPE_TICKET_MODES=""
-      _ticket_mode_pairs=""
-      while IFS='|' read -r _p _r _tkt _guid _path; do
-        [ -z "$_p" ] && continue
-        [ "$_tkt" = "-" ] && continue; [ -z "$_tkt" ] && continue
-        _eg="${_guid#*:}"
-        _mf="${TAB_REGISTRY_DIR}/${_eg}.mode"
-        _m=""; [ -f "$_mf" ] && _m=$(cat "$_mf" 2>/dev/null | tr -d '\n\r\t')
-        [ -z "$_m" ] && continue
-        _ticket_mode_pairs="${_ticket_mode_pairs}${_tkt}|${_m}"$'\n'
-      done <<< "$FORMATTED"
-      [ -n "$_ticket_mode_pairs" ] && DUPE_TICKET_MODES=$(printf '%s' "$_ticket_mode_pairs" | sort | uniq -d)
-
-      TAB_NUM=0
-      while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
-        [ -z "$tab_pos" ] && continue
-        TAB_NUM=$((TAB_NUM + 1))
-        [ "$TAB_NUM" -gt 1 ] && TAB_LINE="${TAB_LINE}${GRAY}|  ${RESET}"
-        # Convert placeholders back to empty
-        [ "$ticket" = "-" ] && ticket=""
-        [ "$iterm_guid" = "-" ] && iterm_guid=""
-        [ "$project_path" = "-" ] && project_path=""
-
-        # Normalize GUID: strip "w{W}t{T}p{P}:" prefix if present
-        entry_guid="${iterm_guid#*:}"
-
-        # Read live branch from git if project_path is available (keeps ticket current after merges)
-        if [ -n "$project_path" ] && [ -d "$project_path" ]; then
-          live_branch=$(git -C "$project_path" branch --show-current 2>/dev/null || echo "")
-          if [ -n "$live_branch" ]; then
-            # Match known Linear team prefixes (add new prefixes here as teams are created)
-            ticket=$(echo "$live_branch" | grep -oiE '(omn|eng|dev|inf|ops|dash)-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
-          fi
-        fi
-
-        # Read .mode file (written by post-tool-use hook on Skill calls)
-        mode=""
-        mode_file="${TAB_REGISTRY_DIR}/${entry_guid}.mode"
-        [ -f "$mode_file" ] && mode=$(cat "$mode_file" 2>/dev/null | tr -d '\n\r\t')
-
-        # Read .ticket file (written by session-start for omni_home tabs without a git branch)
-        if [ -z "$ticket" ] && [ -n "$entry_guid" ]; then
-          ticket_file="${TAB_REGISTRY_DIR}/${entry_guid}.ticket"
-          [ -f "$ticket_file" ] && ticket=$(cat "$ticket_file" 2>/dev/null | tr -d '\n\r\t')
-        fi
-
-        # Read tab activity color (ANSI 256-color code written by hooks)
-        activity_color=""
-        activity_file="${TAB_REGISTRY_DIR}/${entry_guid}.activity"
-        if [ -f "$activity_file" ]; then
-          activity_color=$(cat "$activity_file" 2>/dev/null | tr -d '[:cntrl:][:space:]')
-          # Validate: must be a number (ANSI 256-color code)
-          [[ "$activity_color" =~ ^[0-9]+$ ]] || activity_color=""
-        fi
-
-        # Build label: T{n}·{ticket|repo}[·{mode}]
-        # mode present  -> show ticket (or repo fallback) + mode; branch is dropped (mode is more useful)
-        # no mode       -> fall back to repo[·ticket] (legacy behavior for tabs with no skill history)
-        if [ -n "$mode" ]; then
-          if [ -n "$ticket" ]; then
-            label="T${TAB_NUM}·${ticket}·${mode}"
-          else
-            label="T${TAB_NUM}·${repo}·${mode}"
-          fi
-        else
-          label="T${TAB_NUM}·${repo}"
-          [ -n "$ticket" ] && label="${label}·${ticket}"
-        fi
-
-        # Collision detection: same project_path OR same (ticket + mode) pair.
-        # Same ticket in different modes = intentional parallel work, no warning.
-        is_dupe=0
-        if [ -n "$DUPE_PATHS" ] && [ -n "$project_path" ] && [ "$project_path" != "-" ]; then
-          echo "$DUPE_PATHS" | grep -qxF "$project_path" && is_dupe=1
-        fi
-        if [ "$is_dupe" -eq 0 ] && [ -n "$DUPE_TICKET_MODES" ] && [ -n "$ticket" ] && [ -n "$mode" ]; then
-          echo "$DUPE_TICKET_MODES" | grep -qxF "${ticket}|${mode}" && is_dupe=1
-        fi
-
-        # Activity indicator: colored dot per-skill (color from activity file)
-        activity_dot=""
-        [ -n "$activity_color" ] && activity_dot="\033[38;5;${activity_color}m●\033[0m"
-
-        # Highlight current tab (match by iTerm GUID)
-        if [ -n "$CURRENT_ITERM" ] && [ "$entry_guid" = "$CURRENT_ITERM" ]; then
-          if [ "$is_dupe" -eq 1 ]; then
-            # DUPLICATE FOLDER: bright white on red bg -- unmissable collision warning
-            TAB_LINE="${TAB_LINE}\033[97;41m !! ${label} \033[0m${activity_dot} "
-          else
-            # Current tab: black text on cyan background
-            TAB_LINE="${TAB_LINE}\033[30;46m ${label} \033[0m${activity_dot} "
-          fi
-        else
-          if [ "$is_dupe" -eq 1 ]; then
-            # DUPLICATE FOLDER: bright red text -- collision warning
-            TAB_LINE="${TAB_LINE}\033[91m!! ${label}\033[0m${activity_dot} "
-          else
-            # Other tabs: white text
-            TAB_LINE="${TAB_LINE}\033[37m${label}\033[0m${activity_dot} "
-          fi
-        fi
-      done <<< "$FORMATTED"
-    fi
-  fi
-
-  [ -n "$TAB_LINE" ] && LINE3="${TAB_LINE}${RESET}" || LINE3="(no tabs)${RESET}"
+  SVC="${DIM}pg:${RESET}${PG_DOT} ${DIM}rp:${RESET}${RP_DOT} ${DIM}vk:${RESET}${VK_DOT} ${DIM}rt:${RESET}${RT_DOT} ${DIM}intel:${RESET}${INTEL_DOT} ${DIM}phx:${RESET}${PHX_DOT}"
+  LINE3="${SVC}${SEP}${BUS_STR}${PR_LINE}${RESET}"
+else
+  # jq absent: render degraded line rather than bare "(no jq)"
+  LINE3="(health unavailable: install jq)${RESET}"
 fi  # HAS_JQ for Section D
 
 ###############################################################################
