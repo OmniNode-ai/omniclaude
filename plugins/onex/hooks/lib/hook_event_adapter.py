@@ -95,27 +95,18 @@ except ImportError:
     from omniclaude.hooks.topics import TopicBase, build_topic
 
 
-# Use kafka-python for synchronous publishing (simpler for hooks)
-# Graceful degradation: if kafka-python is not installed, we skip Kafka operations
-# but don't crash the hook. This is defense-in-depth - the hooks venv should have
-# the package, but we handle the case where it doesn't gracefully.
+# confluent-kafka is the platform standard (kafka-python is not installed).
+# Delivery semantics: produce()+flush() is best-effort fire-and-flush.
+# This is intentionally acceptable for hook telemetry — hooks must never
+# block on stronger Kafka delivery guarantees.
 KAFKA_AVAILABLE = False
-KafkaProducer = None  # noqa: N806 - intentional PascalCase for class reference placeholder
+_ConfluentProducer: type | None = None  # confluent_kafka.Producer class
 
 try:
-    from kafka import KafkaProducer as _KafkaProducer
-
-    KafkaProducer = _KafkaProducer
+    from confluent_kafka import Producer as _ConfluentProducer  # noqa: N816
     KAFKA_AVAILABLE = True
 except ImportError:
-    # Log warning but don't crash - hooks will continue without Kafka
-    import sys
-
-    print(
-        "WARNING: kafka-python not installed. Kafka event publishing disabled. "
-        "Run: ~/.claude/hooks/setup-venv.sh",
-        file=sys.stderr,
-    )
+    pass  # Kafka publishing disabled — hook continues without events
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +246,7 @@ class HookEventAdapter:
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
 
-        self._producer: object | None = None  # KafkaProducer or None
+        self._producer: object | None = None  # confluent_kafka.Producer or None
         self._initialized = False
         self._kafka_available = KAFKA_AVAILABLE
 
@@ -286,7 +277,7 @@ class HookEventAdapter:
             OnexError: If Kafka is not available (EXTERNAL_SERVICE_ERROR)
             KafkaProducerError: If producer creation fails
         """
-        if not self._kafka_available or KafkaProducer is None:
+        if not self._kafka_available or _ConfluentProducer is None:
             raise OnexError(
                 code=EnumCoreErrorCode.EXTERNAL_SERVICE_ERROR,
                 message="Kafka is not available. Run: ~/.claude/hooks/setup-venv.sh",
@@ -306,24 +297,19 @@ class HookEventAdapter:
                 )
                 max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
 
-                self._producer = KafkaProducer(
-                    bootstrap_servers=self.bootstrap_servers.split(","),
-                    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                    # Performance settings
-                    compression_type="gzip",
-                    linger_ms=10,  # Batch messages for 10ms
-                    batch_size=16384,  # 16KB batches
-                    # Reliability settings
-                    acks=1,  # Wait for leader acknowledgment
-                    retries=2,  # Reduced from 3 for faster failure
-                    max_in_flight_requests_per_connection=5,
-                    # Configurable timeout settings to prevent hangs
-                    request_timeout_ms=request_timeout_ms,
-                    connections_max_idle_ms=connections_max_idle_ms,
-                    metadata_max_age_ms=metadata_max_age_ms,
-                    max_block_ms=max_block_ms,
-                    api_version_auto_timeout_ms=1000,  # 1s for API version detection
-                )
+                self._producer = _ConfluentProducer({
+                    "bootstrap.servers": self.bootstrap_servers,
+                    "compression.type": "gzip",
+                    "linger.ms": 10,
+                    "batch.size": 16384,
+                    "acks": "1",
+                    "retries": 2,
+                    "request.timeout.ms": request_timeout_ms,
+                    "connections.max.idle.ms": connections_max_idle_ms,
+                    "metadata.max.age.ms": metadata_max_age_ms,
+                    # socket.timeout.ms approximates max_block_ms behavior
+                    "socket.timeout.ms": max_block_ms,
+                })
                 self._initialized = True
                 self.logger.debug(
                     f"Initialized Kafka producer (brokers: {self.bootstrap_servers})"
@@ -359,11 +345,14 @@ class HookEventAdapter:
             # Use correlation_id for partitioning (maintains ordering per correlation)
             partition_key = event.get("correlation_id", "").encode("utf-8")
 
-            # Publish sync (simpler for hooks)
-            future = producer.send(topic, value=event, key=partition_key)
-
-            # Wait up to 1 second for send to complete
-            future.get(timeout=1.0)
+            # Fire-and-flush: best-effort publish for hook telemetry.
+            # No delivery future — must never block hook execution path.
+            producer.produce(
+                topic,
+                value=json.dumps(event).encode("utf-8"),
+                key=partition_key,
+            )
+            producer.flush(timeout=1.0)
 
             self.logger.debug(
                 f"Published event to {topic} (correlation_id: {event.get('correlation_id')})"
