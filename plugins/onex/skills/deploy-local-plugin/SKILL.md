@@ -181,6 +181,17 @@ After running `/deploy-local-plugin --execute`:
 2. Verify with `/help` to see new commands
 3. Old version directories are removed automatically
 
+### Hook Smoke Test Gate (OMN-4383)
+
+Every `--execute` deploy runs `smoke-test-hooks.sh` as a mandatory gate after files are copied
+and the venv is built. If any hook fails, the deploy exits non-zero and reports which hook(s)
+failed — the deployment is not considered successful until all hooks pass.
+
+To run the smoke tests manually:
+```bash
+bash ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/smoke-test-hooks.sh
+```
+
 ### Version-Agnostic `current/` Symlink
 
 Every `--execute` deploy creates or updates a stable symlink:
