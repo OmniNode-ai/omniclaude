@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: rrh
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.rrh.v1
+  - onex.evt.omniclaude.rrh-completed.v1
+  - onex.evt.omniclaude.rrh-failed.v1

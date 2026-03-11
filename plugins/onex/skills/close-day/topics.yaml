@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: close-day
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.close-day.v1
+  - onex.evt.omniclaude.close-day-completed.v1
+  - onex.evt.omniclaude.close-day-failed.v1

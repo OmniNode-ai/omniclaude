@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: pr-review-dev
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.pr-review-dev.v1
+  - onex.evt.omniclaude.pr-review-dev-completed.v1
+  - onex.evt.omniclaude.pr-review-dev-failed.v1

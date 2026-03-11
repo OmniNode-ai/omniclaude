@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: design-to-plan
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.design-to-plan.v1
+  - onex.evt.omniclaude.design-to-plan-completed.v1
+  - onex.evt.omniclaude.design-to-plan-failed.v1

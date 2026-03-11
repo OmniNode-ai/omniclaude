@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: sharing-skills
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.sharing-skills.v1
+  - onex.evt.omniclaude.sharing-skills-completed.v1
+  - onex.evt.omniclaude.sharing-skills-failed.v1

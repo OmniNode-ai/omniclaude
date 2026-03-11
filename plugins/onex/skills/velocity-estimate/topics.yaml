@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: velocity-estimate
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.velocity-estimate.v1
+  - onex.evt.omniclaude.velocity-estimate-completed.v1
+  - onex.evt.omniclaude.velocity-estimate-failed.v1

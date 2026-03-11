@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: gather-github-stats
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.gather-github-stats.v1
+  - onex.evt.omniclaude.gather-github-stats-completed.v1
+  - onex.evt.omniclaude.gather-github-stats-failed.v1

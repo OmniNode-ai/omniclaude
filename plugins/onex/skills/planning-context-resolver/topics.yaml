@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: planning-context-resolver
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.planning-context-resolver.v1
+  - onex.evt.omniclaude.planning-context-resolver-completed.v1
+  - onex.evt.omniclaude.planning-context-resolver-failed.v1

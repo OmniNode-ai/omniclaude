@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: decompose-epic
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.decompose-epic.v1
+  - onex.evt.omniclaude.decompose-epic-completed.v1
+  - onex.evt.omniclaude.decompose-epic-failed.v1

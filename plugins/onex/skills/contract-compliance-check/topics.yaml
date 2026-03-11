@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: contract-compliance-check
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.contract-compliance-check.v1
+  - onex.evt.omniclaude.contract-compliance-check-completed.v1
+  - onex.evt.omniclaude.contract-compliance-check-failed.v1

@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: create-ticket
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.create-ticket.v1
+  - onex.evt.omniclaude.create-ticket-completed.v1
+  - onex.evt.omniclaude.create-ticket-failed.v1

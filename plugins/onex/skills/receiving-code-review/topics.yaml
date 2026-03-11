@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: receiving-code-review
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.receiving-code-review.v1
+  - onex.evt.omniclaude.receiving-code-review-completed.v1
+  - onex.evt.omniclaude.receiving-code-review-failed.v1

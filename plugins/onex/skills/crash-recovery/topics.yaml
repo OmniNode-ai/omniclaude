@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: crash-recovery
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.crash-recovery.v1
+  - onex.evt.omniclaude.crash-recovery-completed.v1
+  - onex.evt.omniclaude.crash-recovery-failed.v1

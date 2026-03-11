@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: mergeability-gate
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.mergeability-gate.v1
+  - onex.evt.omniclaude.mergeability-gate-completed.v1
+  - onex.evt.omniclaude.mergeability-gate-failed.v1

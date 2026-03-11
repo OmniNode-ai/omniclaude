@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: writing-skills
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.writing-skills.v1
+  - onex.evt.omniclaude.writing-skills-completed.v1
+  - onex.evt.omniclaude.writing-skills-failed.v1

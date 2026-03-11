@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: requesting-code-review
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.requesting-code-review.v1
+  - onex.evt.omniclaude.requesting-code-review-completed.v1
+  - onex.evt.omniclaude.requesting-code-review-failed.v1

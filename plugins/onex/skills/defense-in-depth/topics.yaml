@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: defense-in-depth
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.defense-in-depth.v1
+  - onex.evt.omniclaude.defense-in-depth-completed.v1
+  - onex.evt.omniclaude.defense-in-depth-failed.v1

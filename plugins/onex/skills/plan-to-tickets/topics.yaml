@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: plan-to-tickets
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.plan-to-tickets.v1
+  - onex.evt.omniclaude.plan-to-tickets-completed.v1
+  - onex.evt.omniclaude.plan-to-tickets-failed.v1

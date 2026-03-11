@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: slack-gate
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.slack-gate.v1
+  - onex.evt.omniclaude.slack-gate-completed.v1
+  - onex.evt.omniclaude.slack-gate-failed.v1

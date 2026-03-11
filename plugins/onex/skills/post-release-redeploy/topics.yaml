@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: post-release-redeploy
+# Source of truth for this skill's Kafka topics.
+# After initial generation, edit intentionally when skill topic requirements change.
+
+topics:
+  - onex.cmd.omniclaude.post-release-redeploy.v1
+  - onex.evt.omniclaude.post-release-redeploy-completed.v1
+  - onex.evt.omniclaude.post-release-redeploy-failed.v1
