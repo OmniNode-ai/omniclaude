@@ -13,12 +13,15 @@ import sys
 
 import pytest
 
+_ADAPTER_PATH = "plugins/onex/hooks/lib"
+
 
 def _reload_adapter() -> object:
     for mod in list(sys.modules.keys()):
         if "hook_event_adapter" in mod:
             del sys.modules[mod]
-    sys.path.insert(0, "plugins/onex/hooks/lib")
+    if _ADAPTER_PATH not in sys.path:
+        sys.path.insert(0, _ADAPTER_PATH)
     return importlib.import_module("hook_event_adapter")
 
 
