@@ -362,7 +362,7 @@ http_up() {
 bus_status() {
   local bid="${BUS_ID:-local}"
   if [[ "$bid" == "cloud" ]]; then
-    local dot; dot=$(tcp_up localhost 29092)
+    local dot; dot=$(tcp_up localhost 29092)  # cloud-bus-ok OMN-4620
     printf "bus:cloud(%s)" "$dot"
   else
     printf "bus:local"

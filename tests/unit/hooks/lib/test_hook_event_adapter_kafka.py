@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
-# ONEX_COMPONENT: omniclaude
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Tests for hook_event_adapter.py confluent-kafka migration (OMN-4620).
 
 Verifies:

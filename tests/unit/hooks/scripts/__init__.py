@@ -1,2 +1,2 @@
-# SPDX-License-Identifier: Apache-2.0
-# ONEX_COMPONENT: omniclaude
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT

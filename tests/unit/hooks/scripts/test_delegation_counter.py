@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
-# ONEX_COMPONENT: omniclaude
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Tests for post-tool-delegation-counter.sh read-only Bash classification (OMN-4620).
 
 Verifies:
@@ -17,11 +17,13 @@ import pytest
 def run_hook(
     tool_name: str, cmd: str = "", session_id: str = "test-sess"
 ) -> tuple[int, str]:
-    payload = json.dumps({
-        "tool_name": tool_name,
-        "session_id": session_id,
-        "tool_input": {"command": cmd},
-    })
+    payload = json.dumps(
+        {
+            "tool_name": tool_name,
+            "session_id": session_id,
+            "tool_input": {"command": cmd},
+        }
+    )
     proc = subprocess.run(
         ["bash", "plugins/onex/hooks/scripts/post-tool-delegation-counter.sh"],
         input=payload,
@@ -36,6 +38,7 @@ def run_hook(
 def test_readonly_bash_does_not_increment_write_counter(tmp_path: object) -> None:
     """Known read-only Bash commands should NOT count toward write threshold."""
     import hashlib
+
     sid = f"test-ro-{hashlib.md5(str(tmp_path).encode()).hexdigest()[:8]}"  # noqa: S324
     read_only_cmds = [
         "ls -la",
@@ -60,12 +63,15 @@ def test_readonly_bash_does_not_increment_write_counter(tmp_path: object) -> Non
 def test_mutating_bash_still_increments_write_counter(tmp_path: object) -> None:
     """Mutating Bash commands must still count toward write threshold."""
     import hashlib
+
     sid = f"test-mut-{hashlib.md5(str(tmp_path).encode()).hexdigest()[:8]}"  # noqa: S324
     mutating_cmds = ["touch /tmp/x", "git checkout -b foo", "docker compose up"]
     for cmd in mutating_cmds:
         run_hook("Bash", cmd, session_id=sid)
     counter_file = f"/tmp/omniclaude-write-count-{sid}"
-    assert os.path.exists(counter_file), "Write counter file must exist after mutating Bash calls"
+    assert os.path.exists(counter_file), (
+        "Write counter file must exist after mutating Bash calls"
+    )
     count = int(open(counter_file).read().strip())  # noqa: SIM115
     assert count >= len(mutating_cmds), (
         f"Expected >={len(mutating_cmds)} writes, got {count}"
