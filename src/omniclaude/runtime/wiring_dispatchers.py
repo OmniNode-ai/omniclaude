@@ -429,7 +429,7 @@ class SkillCommandDispatcher:
             error_code=None
             if result.status == SkillResultStatus.SUCCESS
             else "DISPATCH_ERROR",
-            error_message=result.error,
+            error_message=result.extra.get("error") if result.extra else None,
             correlation_id=correlation_id,
         )
 

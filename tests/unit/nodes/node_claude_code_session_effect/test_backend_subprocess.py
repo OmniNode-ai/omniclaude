@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
-import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -43,8 +42,6 @@ from omniclaude.shared.models.model_skill_result import SkillResultStatus
 # Helpers
 # ---------------------------------------------------------------------------
 
-_CORRELATION_ID = uuid.uuid4()
-
 
 def _make_request(
     operation: ClaudeCodeSessionOperation = ClaudeCodeSessionOperation.SESSION_QUERY,
@@ -55,7 +52,6 @@ def _make_request(
         operation=operation,
         prompt=prompt,
         working_directory=working_directory,
-        correlation_id=_CORRELATION_ID,
     )
 
 
@@ -95,8 +91,7 @@ async def test_session_query_success() -> None:
         result = await backend.session_query(_make_request(prompt="hi"))
 
     assert result.status == SkillResultStatus.SUCCESS
-    assert result.output == "Hello from Claude"
-    assert result.correlation_id == _CORRELATION_ID
+    assert result.extra["output"] == "Hello from Claude"
 
 
 # ---------------------------------------------------------------------------
@@ -115,9 +110,9 @@ async def test_session_query_nonzero_exit() -> None:
         result = await backend.session_query(_make_request())
 
     assert result.status == SkillResultStatus.FAILED
-    assert result.error is not None
-    assert "SUBPROCESS_ERROR" in result.error
-    assert "some error" in result.error
+    assert "error" in result.extra
+    assert "SUBPROCESS_ERROR" in result.extra["error"]
+    assert "some error" in result.extra["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -141,8 +136,8 @@ async def test_session_query_timeout() -> None:
         result = await backend.session_query(_make_request())
 
     assert result.status == SkillResultStatus.FAILED
-    assert result.error is not None
-    assert "TIMEOUT" in result.error
+    assert "error" in result.extra
+    assert "TIMEOUT" in result.extra["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +156,8 @@ async def test_unavailable_backend_returns_error() -> None:
         method = getattr(backend, method_name)
         result = await method(request)
         assert result.status == SkillResultStatus.FAILED
-        assert result.error is not None
-        assert "BACKEND_UNAVAILABLE" in result.error
+        assert "error" in result.extra
+        assert "BACKEND_UNAVAILABLE" in result.extra["error"]
 
 
 @pytest.mark.unit
@@ -233,10 +228,10 @@ async def test_session_query_stdout_truncated() -> None:
         result = await backend.session_query(_make_request())
 
     assert result.status == SkillResultStatus.SUCCESS
-    assert result.output is not None
-    assert result.output.endswith(_TRUNCATION_MARKER)
+    assert "output" in result.extra
+    assert result.extra["output"].endswith(_TRUNCATION_MARKER)
     # The decoded content before the marker should be exactly _MAX_OUTPUT_BYTES chars
-    content_before_marker = result.output[: -len(_TRUNCATION_MARKER)]
+    content_before_marker = result.extra["output"][: -len(_TRUNCATION_MARKER)]
     assert len(content_before_marker) == _MAX_OUTPUT_BYTES
 
 
@@ -258,11 +253,11 @@ async def test_session_query_stderr_tail() -> None:
         result = await backend.session_query(_make_request())
 
     assert result.status == SkillResultStatus.FAILED
-    assert result.error is not None
+    assert "error" in result.extra
     # Error should contain the tail of stderr (all B's)
-    assert "B" * _STDERR_TAIL_BYTES in result.error
+    assert "B" * _STDERR_TAIL_BYTES in result.extra["error"]
     # Should NOT contain the leading A's
-    assert "A" * 100 not in result.error
+    assert "A" * 100 not in result.extra["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -329,8 +324,8 @@ async def test_session_start_noop() -> None:
     result = await backend.session_start(request)
 
     assert result.status == SkillResultStatus.SUCCESS
-    assert result.output is not None
-    assert "no-op" in result.output
+    assert "output" in result.extra
+    assert "no-op" in result.extra["output"]
 
 
 @pytest.mark.unit
@@ -343,5 +338,5 @@ async def test_session_end_noop() -> None:
     result = await backend.session_end(request)
 
     assert result.status == SkillResultStatus.SUCCESS
-    assert result.output is not None
-    assert "no-op" in result.output
+    assert "output" in result.extra
+    assert "no-op" in result.extra["output"]

@@ -26,7 +26,6 @@ import asyncio
 import logging
 import os
 import subprocess
-import uuid
 from asyncio.subprocess import PIPE
 
 from omniclaude.nodes.node_claude_code_session_effect.models import (
@@ -164,8 +163,7 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.SUCCESS,
-            output="session_start is a no-op in subprocess backend",
-            correlation_id=request.correlation_id or uuid.uuid4(),
+            extra={"output": "session_start is a no-op in subprocess backend"},
         )
 
     async def session_query(
@@ -180,8 +178,6 @@ class SubprocessClaudeCodeSessionBackend:
         """
         if not self._available:
             return self._unavailable_result(request)
-
-        correlation_id = request.correlation_id or uuid.uuid4()
 
         async with self._semaphore:
             try:
@@ -198,8 +194,7 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error=f"SUBPROCESS_LAUNCH_ERROR: {exc}",
-                    correlation_id=correlation_id,
+                    extra={"error": f"SUBPROCESS_LAUNCH_ERROR: {exc}"},
                 )
             try:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -216,8 +211,9 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error=f"TIMEOUT: claude process exceeded {self._TIMEOUT_S}s",
-                    correlation_id=correlation_id,
+                    extra={
+                        "error": f"TIMEOUT: claude process exceeded {self._TIMEOUT_S}s"
+                    },
                 )
 
             stdout_text = self._truncate_output(stdout_bytes)
@@ -227,19 +223,19 @@ class SubprocessClaudeCodeSessionBackend:
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error=(
-                        f"SUBPROCESS_ERROR: claude exited with code "
-                        f"{proc.returncode}"
-                        f"{f' -- stderr: {stderr_tail}' if stderr_tail else ''}"
-                    ),
-                    correlation_id=correlation_id,
+                    extra={
+                        "error": (
+                            f"SUBPROCESS_ERROR: claude exited with code "
+                            f"{proc.returncode}"
+                            f"{f' -- stderr: {stderr_tail}' if stderr_tail else ''}"
+                        )
+                    },
                 )
 
             return ModelSkillResult(
                 skill_name=request.skill_name,
                 status=SkillResultStatus.SUCCESS,
-                output=stdout_text,
-                correlation_id=correlation_id,
+                extra={"output": stdout_text},
             )
 
     async def session_end(
@@ -256,8 +252,7 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.SUCCESS,
-            output="session_end is a no-op in subprocess backend",
-            correlation_id=request.correlation_id or uuid.uuid4(),
+            extra={"output": "session_end is a no-op in subprocess backend"},
         )
 
     # ------------------------------------------------------------------
@@ -288,6 +283,5 @@ class SubprocessClaudeCodeSessionBackend:
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.FAILED,
-            error="BACKEND_UNAVAILABLE: claude CLI is not available",
-            correlation_id=request.correlation_id or uuid.uuid4(),
+            extra={"error": "BACKEND_UNAVAILABLE: claude CLI is not available"},
         )

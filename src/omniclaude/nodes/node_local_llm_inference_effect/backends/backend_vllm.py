@@ -21,7 +21,6 @@ import asyncio
 import logging
 import os
 from typing import Any
-from uuid import uuid4
 
 import httpx
 
@@ -96,8 +95,6 @@ class VllmInferenceBackend:
             ModelSkillResult with status SUCCESS and the LLM output, or
             status FAILED with an appropriate error string.
         """
-        correlation_id = request.correlation_id or uuid4()
-
         # Resolve purpose string to LlmEndpointPurpose enum.
         purpose_key = request.model_purpose or "CODE_ANALYSIS"
         purpose = _MAP_PURPOSE.get(purpose_key)
@@ -105,22 +102,21 @@ class VllmInferenceBackend:
             return ModelSkillResult(
                 skill_name=request.skill_name,
                 status=SkillResultStatus.FAILED,
-                error=f"Unknown model_purpose: {purpose_key!r}",
-                correlation_id=correlation_id,
+                extra={"error": f"Unknown model_purpose: {purpose_key!r}"},
             )
 
         endpoint = self._registry.get_endpoint(purpose)
         if endpoint is None:
             logger.warning(
-                "No endpoint configured for purpose=%s (correlation_id=%s)",
+                "No endpoint configured for purpose=%s",
                 purpose_key,
-                correlation_id,
             )
             return ModelSkillResult(
                 skill_name=request.skill_name,
                 status=SkillResultStatus.FAILED,
-                error=f"BACKEND_UNAVAILABLE: no endpoint for purpose={purpose_key}",
-                correlation_id=correlation_id,
+                extra={
+                    "error": f"BACKEND_UNAVAILABLE: no endpoint for purpose={purpose_key}"
+                },
             )
 
         url = f"{endpoint.url}v1/chat/completions"
@@ -137,37 +133,26 @@ class VllmInferenceBackend:
             try:
                 response = await self._client.post(url, json=payload)
             except httpx.TimeoutException:
-                logger.warning(
-                    "vLLM inference timed out (correlation_id=%s)", correlation_id
-                )
+                logger.warning("vLLM inference timed out")
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error="TIMEOUT",
-                    correlation_id=correlation_id,
+                    extra={"error": "TIMEOUT"},
                 )
             except httpx.NetworkError as exc:
-                logger.warning(
-                    "vLLM network error: %s (correlation_id=%s)", exc, correlation_id
-                )
+                logger.warning("vLLM network error: %s", exc)
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error="BACKEND_UNAVAILABLE",
-                    correlation_id=correlation_id,
+                    extra={"error": "BACKEND_UNAVAILABLE"},
                 )
 
             if response.status_code != 200:
-                logger.warning(
-                    "vLLM returned HTTP %d (correlation_id=%s)",
-                    response.status_code,
-                    correlation_id,
-                )
+                logger.warning("vLLM returned HTTP %d", response.status_code)
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error=f"HTTP {response.status_code}",
-                    correlation_id=correlation_id,
+                    extra={"error": f"HTTP {response.status_code}"},
                 )
 
             data = response.json()
@@ -175,23 +160,19 @@ class VllmInferenceBackend:
             try:
                 content: str = data["choices"][0]["message"]["content"]
             except (KeyError, IndexError, TypeError) as exc:
-                logger.warning(
-                    "vLLM response missing choices: %s (correlation_id=%s)",
-                    exc,
-                    correlation_id,
-                )
+                logger.warning("vLLM response missing choices: %s", exc)
                 return ModelSkillResult(
                     skill_name=request.skill_name,
                     status=SkillResultStatus.FAILED,
-                    error="BACKEND_UNAVAILABLE: malformed response (missing choices)",
-                    correlation_id=correlation_id,
+                    extra={
+                        "error": "BACKEND_UNAVAILABLE: malformed response (missing choices)"
+                    },
                 )
 
         return ModelSkillResult(
             skill_name=request.skill_name,
             status=SkillResultStatus.SUCCESS,
-            output=content,
-            correlation_id=correlation_id,
+            extra={"output": content},
         )
 
     async def aclose(self) -> None:
