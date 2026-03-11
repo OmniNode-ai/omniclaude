@@ -364,7 +364,11 @@ if [[ -f "${_CLAUDE_GLOBAL_ENV}" ]]; then
     # shellcheck disable=SC1090
     if ! source "${_CLAUDE_GLOBAL_ENV}" 2>/dev/null; then
         if [[ -n "${LOG_FILE:-}" ]]; then
-            log "WARN: Failed to source ${_CLAUDE_GLOBAL_ENV} - check file syntax"
+            # Use printf instead of log() — log() function is defined later in this file
+            # and may not be available at this point in the source order.
+            printf "[%s] WARN: Failed to source %s - check file syntax\n" \
+                "$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo 'unknown')" \
+                "${_CLAUDE_GLOBAL_ENV}" >> "${LOG_FILE}" 2>/dev/null || true
         fi
     fi
     set +a
@@ -381,7 +385,11 @@ if [[ -f "${PROJECT_ROOT}/.env" ]]; then
     if ! source "${PROJECT_ROOT}/.env" 2>/dev/null; then
         # Only log if LOG_FILE is set (caller script responsibility)
         if [[ -n "${LOG_FILE:-}" ]]; then
-            log "WARN: Failed to source ${PROJECT_ROOT}/.env - check file syntax"
+            # Use printf instead of log() — log() function is defined later in this file
+            # and may not be available at this point in the source order.
+            printf "[%s] WARN: Failed to source %s - check file syntax\n" \
+                "$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo 'unknown')" \
+                "${PROJECT_ROOT}/.env" >> "${LOG_FILE}" 2>/dev/null || true
         fi
     fi
     set +a
