@@ -72,6 +72,20 @@ case "$TOOL_NAME" in
         ;;
 esac
 
+# For Bash: sub-classify as read-only if the command matches known-safe observation patterns.
+# This is a best-effort classifier — intentionally conservative.
+# Ambiguous or compound commands (&&, ;, echo, sed, awk, gh api) remain counted as write-like.
+if [[ "$TOOL_NAME" == "Bash" && "$IS_WRITE_TOOL" -eq 1 ]]; then
+    BASH_CMD=$(printf '%s' "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null) || BASH_CMD=""
+    if printf '%s' "$BASH_CMD" | grep -qE '^(ls |cat |head |tail |grep |find |wc |diff |stat |file |ps |df |du |which |whoami |date |uname |pwd$)' 2>/dev/null \
+       || printf '%s' "$BASH_CMD" | grep -qE '^git (log|diff|status|show|branch|tag|remote|stash list)' 2>/dev/null \
+       || printf '%s' "$BASH_CMD" | grep -qE '^gh (pr list|pr view|issue list|issue view|run list|run view|auth status)' 2>/dev/null \
+       || printf '%s' "$BASH_CMD" | grep -qE '^docker (ps|logs |inspect |images)' 2>/dev/null \
+       || printf '%s' "$BASH_CMD" | grep -qE '^(infra-status|infra-path|bus-status)$' 2>/dev/null; then
+        IS_WRITE_TOOL=0
+    fi
+fi
+
 WARN_THRESHOLD=3    # advisory warning fires at this many write calls
 BLOCK_THRESHOLD=5   # hard block fires at this many write calls (no delegation)
 
