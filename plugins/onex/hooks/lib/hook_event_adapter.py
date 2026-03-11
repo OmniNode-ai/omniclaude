@@ -104,6 +104,7 @@ _ConfluentProducer: type | None = None  # confluent_kafka.Producer class
 
 try:
     from confluent_kafka import Producer as _ConfluentProducer  # noqa: N816
+
     KAFKA_AVAILABLE = True
 except ImportError:
     pass  # Kafka publishing disabled — hook continues without events
@@ -297,19 +298,21 @@ class HookEventAdapter:
                 )
                 max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
 
-                self._producer = _ConfluentProducer({
-                    "bootstrap.servers": self.bootstrap_servers,
-                    "compression.type": "gzip",
-                    "linger.ms": 10,
-                    "batch.size": 16384,
-                    "acks": "1",
-                    "retries": 2,
-                    "request.timeout.ms": request_timeout_ms,
-                    "connections.max.idle.ms": connections_max_idle_ms,
-                    "metadata.max.age.ms": metadata_max_age_ms,
-                    # socket.timeout.ms approximates max_block_ms behavior
-                    "socket.timeout.ms": max_block_ms,
-                })
+                self._producer = _ConfluentProducer(
+                    {
+                        "bootstrap.servers": self.bootstrap_servers,
+                        "compression.type": "gzip",
+                        "linger.ms": 10,
+                        "batch.size": 16384,
+                        "acks": "1",
+                        "retries": 2,
+                        "request.timeout.ms": request_timeout_ms,
+                        "connections.max.idle.ms": connections_max_idle_ms,
+                        "metadata.max.age.ms": metadata_max_age_ms,
+                        # socket.timeout.ms approximates max_block_ms behavior
+                        "socket.timeout.ms": max_block_ms,
+                    }
+                )
                 self._initialized = True
                 self.logger.debug(
                     f"Initialized Kafka producer (brokers: {self.bootstrap_servers})"
