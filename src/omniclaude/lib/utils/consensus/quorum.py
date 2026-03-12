@@ -31,9 +31,10 @@ except ImportError:
 class ModelProvider(Enum):
     """Supported AI model providers."""
 
-    OLLAMA = "ollama"
+    OPENAI_COMPATIBLE = "openai_compatible"
     GEMINI = "gemini"
     OPENAI = "openai"
+    # OLLAMA = "ollama"  # Decommissioned 2026-03-03 (OMN-4798). Use OPENAI_COMPATIBLE.
 
 
 # Minimum percentage of configured models that must participate (0.0-1.0)
@@ -54,8 +55,12 @@ class ModelConfig:
     def __post_init__(self) -> None:
         """Validate and set defaults."""
         if self.endpoint is None:
-            if self.provider == ModelProvider.OLLAMA:
-                self.endpoint = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            if self.provider == ModelProvider.OPENAI_COMPATIBLE:
+                # Uses vLLM-hosted Qwen3-Coder-30B-A3B (RTX 5090, 64K context).
+                # See CLAUDE.md: LLM_CODER_URL. Ollama endpoint decommissioned (OMN-4798).
+                self.endpoint = os.getenv(
+                    "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
+                )
             elif self.provider == ModelProvider.GEMINI:
                 self.endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -106,9 +111,10 @@ class AIQuorum:
 
     DEFAULT_MODELS = [
         ModelConfig(
-            name="codestral:22b-v0.1-q4_K_M",
-            provider=ModelProvider.OLLAMA,
+            name="qwen3-coder-30b",
+            provider=ModelProvider.OPENAI_COMPATIBLE,
             weight=1.5,  # Higher weight for code-specialized model
+            # Endpoint: LLM_CODER_URL (Qwen3-Coder-30B-A3B AWQ-4bit, RTX 5090, 64K ctx)
         ),
         ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
     ]
@@ -189,7 +195,7 @@ class AIQuorum:
                 if not model_data.get("enabled", False):
                     continue
 
-                provider_str = model_data.get("type", "ollama")
+                provider_str = model_data.get("type", "openai_compatible")
                 try:
                     provider = ModelProvider(provider_str)
                 except ValueError:
@@ -203,14 +209,13 @@ class AIQuorum:
                 endpoint = None
                 if provider == ModelProvider.OPENAI and "base_url" in model_data:
                     endpoint = model_data["base_url"]
-                elif provider == ModelProvider.OLLAMA:
-                    # Allow per-model Ollama endpoint override
+                elif provider == ModelProvider.OPENAI_COMPATIBLE:
+                    # Allow per-model endpoint override; fall back to LLM_CODER_URL
                     if "base_url" in model_data:
                         endpoint = model_data["base_url"]
                     else:
-                        ollama_config = quorum_config.get("ollama", {})
-                        endpoint = ollama_config.get(
-                            "base_url", "http://localhost:11434"
+                        endpoint = os.getenv(
+                            "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
                         )
 
                 model_config = ModelConfig(
@@ -450,8 +455,8 @@ Provide your evaluation:"""
         Returns:
             Tuple of (model, score_dict)
         """
-        if model.provider == ModelProvider.OLLAMA:
-            return await self._score_with_ollama(model, scoring_prompt)
+        if model.provider == ModelProvider.OPENAI_COMPATIBLE:
+            return await self._score_with_openai_compatible(model, scoring_prompt)
         elif model.provider == ModelProvider.GEMINI:
             return await self._score_with_gemini(model, scoring_prompt)
         elif model.provider == ModelProvider.OPENAI:
@@ -459,35 +464,45 @@ Provide your evaluation:"""
         else:
             raise ValueError(f"Unsupported model provider: {model.provider}")
 
-    async def _score_with_ollama(
+    async def _score_with_openai_compatible(
         self, model: ModelConfig, scoring_prompt: str
     ) -> tuple[ModelConfig, dict[str, Any]]:
-        """
-        Score using Ollama model.
+        """Score using an OpenAI-compatible endpoint (vLLM, etc.).
+
+        The default endpoint is LLM_CODER_URL (Qwen3-Coder-30B-A3B AWQ-4bit,
+        RTX 5090, 64K context window). Replaces the decommissioned Ollama
+        endpoint (OMN-4798).
 
         Args:
-            model: Ollama model configuration
-            scoring_prompt: Prompt for scoring
+            model: Model configuration with OPENAI_COMPATIBLE provider.
+            scoring_prompt: Prompt for scoring.
 
         Returns:
-            Tuple of (model, score_dict)
+            Tuple of (model, score_dict).
         """
-        url = f"{model.endpoint}/api/generate"
+        url = f"{model.endpoint}/v1/chat/completions"
 
         payload = {
             "model": model.name,
-            "prompt": scoring_prompt,
-            "stream": False,
-            "format": "json",
+            "messages": [{"role": "user", "content": scoring_prompt}],
+            "max_tokens": 512,
+            "temperature": 0.1,
         }
 
         try:
             async with httpx.AsyncClient(timeout=model.timeout) as client:
-                response = await client.post(url, json=payload)
+                headers = {}
+                if model.api_key:
+                    headers["Authorization"] = f"Bearer {model.api_key}"
+                response = await client.post(url, json=payload, headers=headers)
                 response.raise_for_status()
 
                 result = response.json()
-                response_text = result.get("response", "{}")
+                response_text = (
+                    result.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "{}")
+                )
 
                 # Parse JSON response
                 try:
@@ -502,7 +517,10 @@ Provide your evaluation:"""
                 return (model, score_data)
 
         except Exception as e:
-            print(f"Error scoring with Ollama {model.name}: {e}", file=sys.stderr)
+            print(
+                f"Error scoring with OpenAI-compatible endpoint {model.name}: {e}",
+                file=sys.stderr,
+            )
             return (
                 model,
                 {
