@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 """Tests for session-start.sh environment guards."""
+
 from __future__ import annotations
 
 import os
