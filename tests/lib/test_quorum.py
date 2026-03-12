@@ -49,7 +49,9 @@ class TestModelConfigDefaultEndpoint:
     """Test ModelConfig endpoint defaults for OPENAI_COMPATIBLE."""
 
     @pytest.mark.unit
-    def test_openai_compatible_default_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_openai_compatible_default_endpoint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint."""
         # GPU server host:port used via env var — not a Kafka address.  # onex-allow-internal-ip
         expected_host = "8000"
@@ -96,13 +98,18 @@ class TestAIQuorumDefaultModels:
     def test_default_models_use_openai_compatible(self) -> None:
         """No default model uses OLLAMA provider."""
         for model in AIQuorum.DEFAULT_MODELS:
-            assert model.provider != ModelProvider("ollama") if hasattr(ModelProvider, "OLLAMA") else True  # noqa: SIM210
+            assert (
+                model.provider != ModelProvider("ollama")
+                if hasattr(ModelProvider, "OLLAMA")
+                else True
+            )  # noqa: SIM210
 
     @pytest.mark.unit
     def test_default_models_have_code_model(self) -> None:
         """At least one default model is an OPENAI_COMPATIBLE code model."""
         code_models = [
-            m for m in AIQuorum.DEFAULT_MODELS
+            m
+            for m in AIQuorum.DEFAULT_MODELS
             if m.provider == ModelProvider.OPENAI_COMPATIBLE
         ]
         assert len(code_models) >= 1, (

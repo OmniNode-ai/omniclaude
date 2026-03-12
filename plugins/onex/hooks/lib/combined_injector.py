@@ -25,18 +25,16 @@ Always exits 0 — callers treat this as fire-and-forget.
 from __future__ import annotations
 
 import json
-import sys
-import time
 
 # ---------------------------------------------------------------------------
 # Inline the two modules rather than importing them so this script remains
 # self-contained even if the lib directory is not on PYTHONPATH.
 # ---------------------------------------------------------------------------
-
 # ── architecture_handshake_injector logic ───────────────────────────────────
-
 import logging
 import os
+import sys
+import time
 from pathlib import Path
 
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
