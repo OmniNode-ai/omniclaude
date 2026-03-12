@@ -116,13 +116,17 @@ and verify that health endpoints and pinned package versions match expectations.
 
 | # | Phase | Core Action | Idempotency |
 |---|-------|-------------|-------------|
+| 0 | `PREFLIGHT` | `preflight-check.sh` — env var gate, bus tunnel, VirtioFS check | Read-only; exit 1 halts pipeline, exit 2 advisory |
 | 1 | `SYNC` | `pull-all.sh` — fast-forward all bare clones on `main` | Safe: ff-only is a no-op if already current |
 | 2 | `ENV_CHECK` | Per-phase env validation | Read-only, always safe |
 | 3 | `WORKTREE` | Create `omni_worktrees/<ticket>/omnibase_infra` from main HEAD | Skip if path exists and branch matches |
 | 4 | `PIN_UPDATE` | Run `update-plugin-pins.py` to rewrite `Dockerfile.runtime` version pins | Skip if already at target versions |
 | 5 | `DEPLOY` | `deploy-runtime.sh --execute --restart` from worktree | Safe: rsync + rebuild + `--force-recreate` |
+| 5b | `SCHEMA_SYNC` | `check_schema_fingerprint.py verify` — auto-stamp if stale | Idempotent: verify-then-stamp pattern |
 | 6 | `INFISICAL` | Seed new contract keys to Infisical | `seed-infisical.py` is idempotent |
 | 7 | `VERIFY` | curl health endpoints + in-container version checks | Read-only, always safe |
+| 7b | `K8S_VERIFY` | `k8s-pod-readiness-check.sh` — SSM-based cloud k8s pod READY gate | Read-only; exit 2 advisory when SSM unreachable |
+| 7c | `OMNIDASH_VERIFY` | `verify-omnidash-health.sh` — >= 3 live data sources at localhost:3000 | Read-only; exit 2 advisory when omnidash offline |
 | 8 | `NOTIFY` | Slack via `node_slack_alerter_effect` (FULL_ONEX only) | Idempotent (run_id in message) |
 
 ## ENV_CHECK: Required Variables per Phase
@@ -154,14 +158,18 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
   "worktree_ref": "main",
   "versions_requested": {"omniintelligence": "0.8.0", "omninode-claude": "0.4.0"},
   "phases": {
-    "SYNC":       {"status": "completed", "ts": "2026-03-01T10:00:00Z"},
-    "ENV_CHECK":  {"status": "completed", "ts": "2026-03-01T10:00:01Z"},
-    "WORKTREE":   {"status": "completed", "ts": "2026-03-01T10:00:05Z", "path": "..."},
-    "PIN_UPDATE": {"status": "completed", "ts": "2026-03-01T10:00:10Z", "pins_applied": {"omniintelligence": "0.8.0"}},
-    "DEPLOY":     {"status": "pending"},
-    "INFISICAL":  {"status": "pending"},
-    "VERIFY":     {"status": "pending"},
-    "NOTIFY":     {"status": "pending"}
+    "PREFLIGHT":       {"status": "completed", "ts": "2026-03-01T09:59:58Z"},
+    "SYNC":            {"status": "completed", "ts": "2026-03-01T10:00:00Z"},
+    "ENV_CHECK":       {"status": "completed", "ts": "2026-03-01T10:00:01Z"},
+    "WORKTREE":        {"status": "completed", "ts": "2026-03-01T10:00:05Z", "path": "..."},
+    "PIN_UPDATE":      {"status": "completed", "ts": "2026-03-01T10:00:10Z", "pins_applied": {"omniintelligence": "0.8.0"}},
+    "DEPLOY":          {"status": "pending"},
+    "SCHEMA_SYNC":     {"status": "pending"},
+    "INFISICAL":       {"status": "pending"},
+    "VERIFY":          {"status": "pending"},
+    "K8S_VERIFY":      {"status": "pending"},
+    "OMNIDASH_VERIFY": {"status": "pending"},
+    "NOTIFY":          {"status": "pending"}
   }
 }
 ```
@@ -201,13 +209,17 @@ Written to `~/.claude/skill-results/{context_id}/redeploy.json`:
   "status": "success",
   "run_id": "redeploy-20260301-abc123",
   "phases": {
+    "PREFLIGHT": "completed",
     "SYNC": "completed",
     "ENV_CHECK": "completed",
     "WORKTREE": "completed",
     "PIN_UPDATE": "completed",
     "DEPLOY": "completed",
+    "SCHEMA_SYNC": "completed",
     "INFISICAL": "skipped_no_infisical",
     "VERIFY": "completed",
+    "K8S_VERIFY": "completed",
+    "OMNIDASH_VERIFY": "completed",
     "NOTIFY": "completed"
   },
   "pins_applied": {

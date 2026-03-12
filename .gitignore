@@ -40,6 +40,8 @@ src/omniclaude/hooks/lib/**/__pycache__/
 plugins/onex/hooks/lib/__pycache__/
 tests/lib/__pycache__/
 tests/lib/**/__pycache__/
+tests/unit/hooks/lib/__pycache__/
+tests/unit/hooks/lib/**/__pycache__/
 plugins/onex/hooks/lib/**/__pycache__/
 lib64/
 parts/

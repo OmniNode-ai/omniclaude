@@ -1,7 +1,33 @@
 ---
 name: bus-audit
 description: Run OmniClaude bus health audit (Layer 2 domain validation)
-tags: [diagnostics, kafka, event-bus]
+version: "1.0.0"
+level: advanced
+category: diagnostics
+tags:
+  - diagnostics
+  - kafka
+  - event-bus
+author: omninode
+args:
+  - name: --json
+    description: "Output results in JSON format for dashboard integration"
+    required: false
+  - name: --failures-only
+    description: "Show only failed checks"
+    required: false
+  - name: --verbose
+    description: "Include sample payloads for failed checks"
+    required: false
+  - name: --skip-daemon
+    description: "Skip emit daemon health check"
+    required: false
+  - name: --broker
+    description: "Override Kafka broker address (default: reads $KAFKA_BOOTSTRAP_SERVERS)"
+    required: false
+  - name: --sample-count
+    description: "Number of messages to sample per topic (default: 20)"
+    required: false
 ---
 
 # Bus Audit
