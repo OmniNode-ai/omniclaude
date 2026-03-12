@@ -1398,6 +1398,47 @@ jobs:
             .coverage
           if-no-files-found: ignore
 
+  # ---------------------------------------------------------------------------
+  # Version Pin Compliance Check (OMN-4810)
+  # ---------------------------------------------------------------------------
+  # Verifies that this repo's dependency pins are compliant with the shared
+  # version matrix defined in omni_home/standards/version-matrix.yaml.
+  # Depends on OMN-4803 (check_version_pins.py must exist in omni_home main).
+  version-pin-check:
+    name: Version Pin Compliance
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Checkout omni_home standards
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omni_home
+          path: omni_home
+          sparse-checkout: |
+            standards/
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check version pin compliance
+        run: python omni_home/standards/check_version_pins.py --repo omniclaude --root omni_home
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1441,6 +1482,8 @@ jobs:
       - arch-no-compact-cmd-topic
       # CDQA-07 (OMN-2977)
       - arch-invariants
+      # Version pin compliance (OMN-4810)
+      - version-pin-check
     if: always()
     steps:
       - name: Check quality results
@@ -1468,7 +1511,8 @@ jobs:
             "arch-no-direct-kafka-producer=${{ needs.arch-no-direct-kafka-producer.result }}" \
             "arch-no-utcnow=${{ needs.arch-no-utcnow.result }}" \
             "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}" \
-            "arch-invariants=${{ needs.arch-invariants.result }}"; do
+            "arch-invariants=${{ needs.arch-invariants.result }}" \
+            "version-pin-check=${{ needs.version-pin-check.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
