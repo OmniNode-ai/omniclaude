@@ -481,6 +481,29 @@ seed-infisical.py: complete
 ```python
 versions_requested: dict[str, str] = state["versions_requested"]
 
+# 0. Cluster prerequisite preflight — assert PriorityClasses exist (OMN-4761)
+# Missing PriorityClasses cause pods with priorityClassName set to remain 0/1 AVAILABLE
+# indefinitely without a clear error. Check before pod readiness so we fail fast.
+REQUIRED_PRIORITY_CLASSES = [
+    "omninode-data-plane",
+    "omninode-critical",
+    "omninode-standard",
+]
+missing_pcs: list[str] = []
+for pc in REQUIRED_PRIORITY_CLASSES:
+    result = run(f"kubectl get priorityclass {pc}", capture=True)
+    if result.returncode != 0:
+        missing_pcs.append(pc)
+
+if missing_pcs:
+    print(
+        f"PREFLIGHT FAILED: PriorityClass(es) missing from cluster: {missing_pcs}\n"
+        f"Fix: kubectl apply -k k8s/base/ from omninode_infra repo root\n"
+        f"Then re-run: /redeploy --resume {state['run_id']}"
+    )
+    mark_phase(state, "VERIFY", "failed", missing_priority_classes=missing_pcs)
+    EXIT 1
+
 # 1. Health endpoint checks
 failed_health: list[str] = []
 for service, url in HEALTH_ENDPOINTS.items():
@@ -489,8 +512,11 @@ for service, url in HEALTH_ENDPOINTS.items():
         failed_health.append(service)
 ```
 
-Expected output pattern per endpoint:
+Expected output pattern (preflight + endpoints):
 ```
+VERIFY: omninode-data-plane PriorityClass -> present
+VERIFY: omninode-critical PriorityClass -> present
+VERIFY: omninode-standard PriorityClass -> present
 VERIFY: omninode-runtime http://localhost:8085/health -> 200 OK
 VERIFY: intelligence-api http://localhost:8053/health -> 200 OK
 VERIFY: omninode-contract-resolver http://localhost:8091/health -> 200 OK
