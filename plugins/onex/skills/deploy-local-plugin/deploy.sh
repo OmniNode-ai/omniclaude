@@ -297,62 +297,49 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         echo ""
 
         echo "Building lib/.venv at ${REPAIR_VENV_DIR}..."
-        REPAIR_LOCKED_REQS=$(mktemp /tmp/omniclaude-repair-reqs.XXXXXX)
-        REPAIR_UV_STDERR="$(mktemp /tmp/omniclaude-repair-uv-err.XXXXXX)"
         _REPAIR_TRAP_REMOVE=false
-        trap '[[ "${_REPAIR_TRAP_REMOVE:-false}" == "true" ]] && rm -rf "${REPAIR_VENV_DIR:-}"; rm -f "${REPAIR_LOCKED_REQS:-}" "${REPAIR_UV_STDERR:-}"' EXIT
+        trap '[[ "${_REPAIR_TRAP_REMOVE:-false}" == "true" ]] && rm -rf "${REPAIR_VENV_DIR:-}"' EXIT
+
+        # Validate uv is available (required for the locked non-editable install).
+        if ! command -v uv &>/dev/null; then
+            echo -e "${RED}Error: uv not found in PATH. uv is required to build the plugin venv.${NC}"
+            echo "  Install uv: https://docs.astral.sh/uv/getting-started/installation/"
+            exit 1
+        fi
+        if [[ ! -f "${REPAIR_PROJECT_ROOT}/uv.lock" ]]; then
+            echo -e "${RED}Error: uv.lock not found at ${REPAIR_PROJECT_ROOT}/uv.lock. Cannot do a locked install.${NC}"
+            exit 1
+        fi
 
         mkdir -p "${ACTIVE_INSTALL_PATH}/lib"
-        "$REPAIR_PYTHON_BIN" -m venv "$REPAIR_VENV_DIR"
-        _REPAIR_TRAP_REMOVE=true
-        echo -e "${GREEN}  Venv created${NC}"
 
-        if ! "${REPAIR_VENV_DIR}/bin/python3" -m ensurepip --upgrade 2>&1; then
-            echo -e "${RED}Error: ensurepip failed.${NC}"
+        # --- Install project using uv sync (locked, non-editable) ---
+        echo "  Installing project from ${REPAIR_PROJECT_ROOT} (locked, non-editable)..."
+        if ! (cd "${REPAIR_PROJECT_ROOT}" && UV_PROJECT_ENVIRONMENT="${REPAIR_VENV_DIR}" uv sync \
+                --python "${REPAIR_PYTHON_BIN}" \
+                --no-editable \
+                --frozen \
+                --no-dev \
+                2>&1); then
+            echo -e "${RED}Error: uv sync failed. Venv repair aborted.${NC}"
             rm -rf "$REPAIR_VENV_DIR"
             exit 1
         fi
-        "${REPAIR_VENV_DIR}/bin/pip" install --upgrade pip wheel --quiet
-        echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
+        _REPAIR_TRAP_REMOVE=true
+        echo -e "${GREEN}  Project installed (locked, non-editable via uv sync)${NC}"
 
-        echo "  Installing project from ${REPAIR_PROJECT_ROOT} (locked versions)..."
-        _REPAIR_USE_LOCKED=false
-        if command -v uv &>/dev/null && [[ -f "${REPAIR_PROJECT_ROOT}/uv.lock" ]]; then
-            if (cd "${REPAIR_PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$REPAIR_LOCKED_REQS" 2>"$REPAIR_UV_STDERR"); then
-                if [ ! -s "$REPAIR_LOCKED_REQS" ]; then
-                    echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install${NC}"
-                    rm -f "$REPAIR_LOCKED_REQS"
-                else
-                    _REPAIR_USE_LOCKED=true
-                fi
-            else
-                if [ -s "$REPAIR_UV_STDERR" ]; then
-                    echo -e "${YELLOW}  WARNING: uv export failed: $(head -3 "$REPAIR_UV_STDERR")${NC}"
-                fi
-                rm -f "$REPAIR_LOCKED_REQS"
-            fi
+        # --- Verify no editable .pth was installed ---
+        REPAIR_EDITABLE_PTH=$(find "${REPAIR_VENV_DIR}/lib" -name "*.pth" \
+          ! -name "distutils-precedence.pth" \
+          ! -name "_virtualenv.pth" \
+          -print 2>/dev/null | head -1)
+        if [[ -n "$REPAIR_EDITABLE_PTH" ]]; then
+            echo -e "${RED}Error: Unexpected .pth file found after install: ${REPAIR_EDITABLE_PTH}${NC}"
+            echo "  This indicates an editable install was created. Venv repair aborted."
+            rm -rf "$REPAIR_VENV_DIR"
+            exit 1
         fi
-        rm -f "$REPAIR_UV_STDERR"
-
-        if [[ "$_REPAIR_USE_LOCKED" == "true" ]]; then
-            if ! (cd "${REPAIR_PROJECT_ROOT}" && "${REPAIR_VENV_DIR}/bin/pip" install --no-cache-dir -r "$REPAIR_LOCKED_REQS" --quiet); then
-                echo -e "${RED}Error: pip install from locked requirements failed.${NC}"
-                rm -f "$REPAIR_LOCKED_REQS"
-                rm -rf "$REPAIR_VENV_DIR"
-                exit 1
-            fi
-            rm -f "$REPAIR_LOCKED_REQS"
-            echo -e "${GREEN}  Project installed (locked versions from uv.lock)${NC}"
-        else
-            echo -e "${YELLOW}  uv not found or uv.lock missing — falling back to pip install (versions may drift)${NC}"
-            rm -f "$REPAIR_LOCKED_REQS"
-            if ! "${REPAIR_VENV_DIR}/bin/pip" install --no-cache-dir "${REPAIR_PROJECT_ROOT}" --quiet; then
-                echo -e "${RED}Error: pip install failed.${NC}"
-                rm -rf "$REPAIR_VENV_DIR"
-                exit 1
-            fi
-            echo -e "${GREEN}  Project installed${NC}"
-        fi
+        echo -e "${GREEN}  Verified: no editable .pth in venv${NC}"
 
         # --- Write venv manifest ---
         REPAIR_MANIFEST="${ACTIVE_INSTALL_PATH}/lib/venv_manifest.txt"
@@ -362,12 +349,12 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
             echo "# Repair version: ${ACTIVE_VERSION} (repaired, not redeployed)"
             echo ""
             echo "python_version: $("${REPAIR_VENV_DIR}/bin/python3" --version 2>&1)"
-            echo "pip_version: $("${REPAIR_VENV_DIR}/bin/pip" --version 2>&1)"
+            echo "pip_version: (uv-managed venv — pip not installed)"
             echo "source_root: ${REPAIR_PROJECT_ROOT}"
             echo "git_sha: $(cd "${REPAIR_PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
             echo ""
             echo "# Installed packages:"
-            "${REPAIR_VENV_DIR}/bin/pip" freeze 2>/dev/null
+            uv pip list --python "${REPAIR_VENV_DIR}/bin/python3" 2>/dev/null
         } > "$REPAIR_MANIFEST"
         echo -e "${GREEN}  Manifest written to ${REPAIR_MANIFEST}${NC}"
 
@@ -654,7 +641,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     # (zero skills, zero commands, zero agents).
     #
     # This path is used for:
-    #   1. pip install (needs pyproject.toml)
+    #   1. uv pip install --no-editable (needs pyproject.toml + uv.lock)
     #   2. known_marketplaces.json installLocation (needs marketplace.json)
     #   3. git SHA in venv manifest
     #
@@ -761,79 +748,66 @@ if [[ "$EXECUTE" == "true" ]]; then
     fi
     echo -e "${GREEN}  Python ${PY_MAJOR}.${PY_MINOR} validated${NC}"
 
-    # --- Create venv (clean state) ---
+    # --- Create venv via uv sync (locked, non-editable) ---
     VENV_DIR="${TARGET}/lib/.venv"
-    LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
-    _uv_stderr="$(mktemp /tmp/omniclaude-uv-export-err.XXXXXX)"
-    # Register EXIT trap BEFORE setting _TRAP_REMOVE_VENV=true so that any
-    # SIGINT/SIGTERM between venv creation and successful completion is caught.
-    # _TRAP_REMOVE_VENV starts false (no venv yet); set true right after creation;
+    # Register EXIT trap BEFORE the install so that any SIGINT/SIGTERM is caught.
+    # _TRAP_REMOVE_VENV starts false (no venv yet); set true right after install;
     # reset to false after the smoke test passes so a successful deploy retains the venv.
     _TRAP_REMOVE_VENV=false
-    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"; rm -f "${LOCKED_REQS_FILE:-}" "${_uv_stderr:-}"' EXIT
+    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"' EXIT
     rm -rf "$VENV_DIR"
     mkdir -p "${TARGET}/lib"
-    "$PYTHON_BIN" -m venv "$VENV_DIR"
-    _TRAP_REMOVE_VENV=true  # Venv now exists; signal EXIT trap to clean up if interrupted hereafter
-    echo -e "${GREEN}  Venv created at ${VENV_DIR}${NC}"
 
-    # --- Bootstrap pip toolchain ---
-    if ! "$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>&1; then
-        echo -e "${RED}Error: ensurepip failed. Python may lack the ensurepip module (common on minimal installs).${NC}"
+    # Validate uv is available (required for the locked non-editable install).
+    # uv sync --no-editable prevents _omninode_claude.pth from appearing in
+    # site-packages, which would scan the source tree on every Python startup.
+    if ! command -v uv &>/dev/null; then
+        echo -e "${RED}Error: uv not found in PATH. uv is required to build the plugin venv.${NC}"
+        echo "  Install uv: https://docs.astral.sh/uv/getting-started/installation/"
+        exit 1
+    fi
+    if [[ ! -f "${PROJECT_ROOT}/uv.lock" ]]; then
+        echo -e "${RED}Error: uv.lock not found at ${PROJECT_ROOT}/uv.lock. Cannot do a locked install.${NC}"
+        exit 1
+    fi
+
+    # --- Install project using uv sync (locked, non-editable) ---
+    # UV_PROJECT_ENVIRONMENT directs uv sync to create the venv at VENV_DIR instead
+    # of the project's default .venv directory.
+    # --no-editable: forces wheel installation even though uv.lock records the workspace
+    #   member as editable. This prevents _omninode_claude.pth from appearing in
+    #   site-packages, which would scan the source tree on every Python startup.
+    # --frozen: pins exact versions from uv.lock, preventing version drift between deploys
+    #   (e.g. qdrant-client 1.17.0 introduced a runtime TypeError that breaks the smoke test).
+    # --no-dev: excludes dev-only dependency groups.
+    echo "  Installing project from ${PROJECT_ROOT} (locked, non-editable)..."
+    if ! (cd "${PROJECT_ROOT}" && UV_PROJECT_ENVIRONMENT="${VENV_DIR}" uv sync \
+            --python "${PYTHON_BIN}" \
+            --no-editable \
+            --frozen \
+            --no-dev \
+            2>&1); then
+        echo -e "${RED}Error: uv sync failed. Deploy aborted.${NC}"
         rm -rf "$VENV_DIR"
         exit 1
     fi
-    "$VENV_DIR/bin/pip" install --upgrade pip wheel --quiet
-    echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
+    _TRAP_REMOVE_VENV=true  # Venv now exists; signal EXIT trap to clean up if interrupted hereafter
+    echo -e "${GREEN}  Project installed into venv (locked, non-editable via uv sync)${NC}"
 
-    # --- Install project using locked dependencies from uv.lock ---
-    # Use 'uv export --frozen' to pin exact versions from uv.lock, preventing
-    # version drift between deploys (e.g. qdrant-client 1.17.0 introduced a
-    # runtime TypeError with grpcio's EnumTypeWrapper that breaks the smoke test).
-    echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
-    _USE_LOCKED=false
-    if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]]; then
-        if (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>"$_uv_stderr"); then
-            # Validate the requirements file is non-empty (uv export can produce an empty
-            # file in degenerate cases; pip install on an empty file silently succeeds).
-            if [ ! -s "$LOCKED_REQS_FILE" ]; then
-                echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install (versions may drift)${NC}"
-                rm -f "$LOCKED_REQS_FILE"
-            else
-                _USE_LOCKED=true
-            fi
-        else
-            # uv export failed — show why so users aren't left wondering
-            if [ -s "$_uv_stderr" ]; then
-                echo -e "${YELLOW}  WARNING: uv export failed: $(head -3 "$_uv_stderr")${NC}"
-            fi
-            rm -f "$LOCKED_REQS_FILE"
-        fi
+    # --- Verify no editable .pth was installed ---
+    # _virtualenv.pth and distutils-precedence.pth are expected venv internals.
+    # _omninode_claude.pth (or any other package .pth) indicates a stale editable install.
+    EDITABLE_PTH=$(find "${VENV_DIR}/lib" -name "*.pth" \
+      ! -name "distutils-precedence.pth" \
+      ! -name "_virtualenv.pth" \
+      -print 2>/dev/null | head -1)
+    if [[ -n "$EDITABLE_PTH" ]]; then
+        echo -e "${RED}Error: Unexpected .pth file found after install: ${EDITABLE_PTH}${NC}"
+        echo "  This indicates an editable install was created. Deploy aborted."
+        rm -rf "$VENV_DIR"
+        exit 1
     fi
-    rm -f "$_uv_stderr"
-
-    if [[ "$_USE_LOCKED" == "true" ]]; then
-        # Run pip install from PROJECT_ROOT so that the '-e .' editable entry in the
-        # requirements file (produced by 'uv export') resolves to PROJECT_ROOT rather
-        # than the script's current working directory.
-        if ! (cd "${PROJECT_ROOT}" && "$VENV_DIR/bin/pip" install --no-cache-dir -r "$LOCKED_REQS_FILE" --quiet); then
-            echo -e "${RED}Error: pip install from locked requirements failed. Deploy aborted.${NC}"
-            rm -f "$LOCKED_REQS_FILE"
-            rm -rf "$VENV_DIR"
-            exit 1
-        fi
-        rm -f "$LOCKED_REQS_FILE"
-        echo -e "${GREEN}  Project installed into venv (locked versions from uv.lock)${NC}"
-    else
-        echo -e "${YELLOW}  uv not found or uv.lock missing — falling back to pip install (versions may drift)${NC}"
-        rm -f "$LOCKED_REQS_FILE"
-        if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT}" --quiet; then
-            echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT}. Deploy aborted.${NC}"
-            rm -rf "$VENV_DIR"
-            exit 1
-        fi
-        echo -e "${GREEN}  Project installed into venv${NC}"
-    fi
+    echo -e "${GREEN}  Verified: no editable .pth in venv${NC}"
 
     # --- Write venv manifest ---
     MANIFEST="${TARGET}/lib/venv_manifest.txt"
@@ -843,12 +817,12 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo "# Deploy version: ${NEW_VERSION}"
         echo ""
         echo "python_version: $("$VENV_DIR/bin/python3" --version 2>&1)"
-        echo "pip_version: $("$VENV_DIR/bin/pip" --version 2>&1)"
+        echo "pip_version: (uv-managed venv — pip not installed)"
         echo "source_root: ${PROJECT_ROOT}"
         echo "git_sha: $(cd "${PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
         echo ""
         echo "# Installed packages:"
-        "$VENV_DIR/bin/pip" freeze 2>/dev/null
+        uv pip list --python "${VENV_DIR}/bin/python3" 2>/dev/null
     } > "$MANIFEST"
     echo -e "${GREEN}  Venv manifest written to ${MANIFEST}${NC}"
 
