@@ -150,6 +150,7 @@ fi
 _TMPDIR="${TMPDIR:-/tmp}"
 _TMPDIR="${_TMPDIR%/}"  # Remove trailing slash (macOS TMPDIR often ends with /)
 EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${_TMPDIR}/omniclaude-emit.sock}"
+EMIT_DAEMON_PID_FILE="${_TMPDIR}/omniclaude-emit.pid"
 
 # Check if daemon is responsive via real protocol ping.
 #
@@ -171,7 +172,18 @@ check_socket_responsive() {
 start_emit_daemon_if_needed() {
     # Check if publisher already running via socket
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        # Verify publisher is responsive with quick ping
+        # Fast path: PID file check via kill -0 (<1ms, no Python spawn).
+        # If the PID file exists and the process is alive, skip the expensive
+        # Python socket ping entirely (~75-215ms saved on every session start).
+        if [[ -f "$EMIT_DAEMON_PID_FILE" ]]; then
+            local _pid
+            _pid=$(cat "$EMIT_DAEMON_PID_FILE" 2>/dev/null)
+            if [[ -n "$_pid" ]] && kill -0 "$_pid" 2>/dev/null; then
+                log "Publisher already running (PID $_pid, fast-path skip)"
+                return 0
+            fi
+        fi
+        # Slow path: PID file missing or process dead — fall back to Python ping
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
             log "Publisher already running and responsive"
             return 0
@@ -179,6 +191,7 @@ start_emit_daemon_if_needed() {
             # Socket exists but publisher not responsive - remove stale socket
             log "Removing stale publisher socket"
             rm -f "$EMIT_DAEMON_SOCKET" 2>/dev/null || true
+            rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
         fi
     fi
 
@@ -272,6 +285,8 @@ except Exception as e:
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.2; then
                 log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
+                # Write PID file so future sessions can skip the Python ping via kill -0
+                echo "$daemon_pid" > "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
                 write_daemon_status "running"
                 mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
                 rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
@@ -995,21 +1010,24 @@ else
 fi
 
 # -----------------------------
-# Architecture Handshake Injection (OMN-1860)
+# Combined Injector (OMN-4383)
 # -----------------------------
-# Inject architecture handshake from .claude/architecture-handshake.md
-# Runs SYNCHRONOUSLY because it's purely local filesystem (fast).
-# Combined with ticket context in additionalContext (handshake first, then ticket).
+# Runs architecture_handshake_injector + skill_suggestion_injector in a single
+# Python subprocess, saving ~64ms cold-start vs two sequential invocations.
+# Both features are controlled by their original env-var flags; if either is
+# disabled the combined script still runs (skipping that feature internally
+# would require more complexity than the flag check below).
 
 HANDSHAKE_INJECTION_ENABLED="${OMNICLAUDE_HANDSHAKE_INJECTION_ENABLED:-true}"
 HANDSHAKE_INJECTION_ENABLED=$(_normalize_bool "$HANDSHAKE_INJECTION_ENABLED")
+SKILL_SUGGESTIONS_ENABLED="${OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED:-true}"
+SKILL_SUGGESTIONS_ENABLED=$(_normalize_bool "$SKILL_SUGGESTIONS_ENABLED")
+
 HANDSHAKE_CONTEXT=""
+SKILL_SUGGESTIONS=""
 
-if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/architecture_handshake_injector.py" ]]; then
-    log "Checking for architecture handshake"
-
+if [[ -f "${HOOKS_LIB}/combined_injector.py" ]]; then
     # Build input JSON with project path (prefer repo root over CWD)
-    # PROJECT_PATH is set from hook input, PROJECT_ROOT is detected from .env location
     HANDSHAKE_PROJECT="${PROJECT_PATH:-}"
     if [[ -z "$HANDSHAKE_PROJECT" ]]; then
         HANDSHAKE_PROJECT="${PROJECT_ROOT:-}"
@@ -1017,60 +1035,71 @@ if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/archi
     if [[ -z "$HANDSHAKE_PROJECT" ]]; then
         HANDSHAKE_PROJECT="$CWD"
     fi
-    HANDSHAKE_INPUT=$(jq -n --arg project "$HANDSHAKE_PROJECT" '{"project_path": $project}' 2>/dev/null) || HANDSHAKE_INPUT='{}'
+    COMBINED_INPUT=$(jq -n --arg project "$HANDSHAKE_PROJECT" '{"project_path": $project}' 2>/dev/null) || COMBINED_INPUT='{}'
 
-    # Run architecture handshake injection synchronously via CLI (fast, local-only)
-    HANDSHAKE_OUTPUT=$(echo "$HANDSHAKE_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/architecture_handshake_injector.py" 2>>"$LOG_FILE") || HANDSHAKE_OUTPUT='{}'
+    # Single Python invocation for both injectors (OMN-4383: saves ~64ms cold-start)
+    COMBINED_OUTPUT=$(echo "$COMBINED_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/combined_injector.py" "${SESSION_ID:-}" 2>>"$LOG_FILE") || COMBINED_OUTPUT='{}'
 
-    # Parse CLI output using jq
-    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-        HANDSHAKE_PATH=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.handshake_path // empty' 2>/dev/null) || HANDSHAKE_PATH=""
-        HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.handshake_context // empty' 2>/dev/null) || HANDSHAKE_CONTEXT=""
-        HANDSHAKE_RETRIEVAL_MS=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || HANDSHAKE_RETRIEVAL_MS=0
-
-        if [[ -n "$HANDSHAKE_PATH" ]] && [[ -n "$HANDSHAKE_CONTEXT" ]]; then
-            log "Architecture handshake found: $HANDSHAKE_PATH (retrieved in ${HANDSHAKE_RETRIEVAL_MS}ms)"
-            log "Handshake context generated (${#HANDSHAKE_CONTEXT} chars)"
+    # Parse handshake fields
+    if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]]; then
+        if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+            HANDSHAKE_PATH=$(echo "$COMBINED_OUTPUT" | jq -r '.handshake_path // empty' 2>/dev/null) || HANDSHAKE_PATH=""
+            HANDSHAKE_CONTEXT=$(echo "$COMBINED_OUTPUT" | jq -r '.handshake_context // empty' 2>/dev/null) || HANDSHAKE_CONTEXT=""
+            HANDSHAKE_RETRIEVAL_MS=$(echo "$COMBINED_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || HANDSHAKE_RETRIEVAL_MS=0
+            if [[ -n "$HANDSHAKE_PATH" ]] && [[ -n "$HANDSHAKE_CONTEXT" ]]; then
+                log "Architecture handshake found: $HANDSHAKE_PATH (retrieved in ${HANDSHAKE_RETRIEVAL_MS}ms)"
+                log "Handshake context generated (${#HANDSHAKE_CONTEXT} chars)"
+            else
+                log "No architecture handshake found"
+            fi
         else
-            log "No architecture handshake found"
+            # Fallback: extract handshake_context using Python
+            HANDSHAKE_CONTEXT=$(echo "$COMBINED_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('handshake_context',''))" 2>/dev/null) || HANDSHAKE_CONTEXT=""
+            log "Handshake check completed (jq unavailable for detailed parsing)"
         fi
     else
-        # Fallback: extract handshake_context using Python
-        HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('handshake_context',''))" 2>/dev/null) || HANDSHAKE_CONTEXT=""
-        log "Handshake check completed (jq unavailable for detailed parsing)"
+        log "Architecture handshake injection disabled (HANDSHAKE_INJECTION_ENABLED=false)"
     fi
-elif [[ "${HANDSHAKE_INJECTION_ENABLED}" != "true" ]]; then
-    log "Architecture handshake injection disabled (HANDSHAKE_INJECTION_ENABLED=false)"
-else
-    log "Architecture handshake injection skipped (architecture_handshake_injector.py not found)"
-fi
 
-# -----------------------------
-# Skill Suggestion Injection (OMN-3455)
-# -----------------------------
-# Reads ~/.claude/onex-skill-usage.log and injects 1-2 "next skill" suggestions
-# based on the static progression graph (skills/progression.yaml).
-# Runs SYNCHRONOUSLY (local filesystem only, ~5ms) so suggestions are available
-# immediately in additionalContext for the very first prompt.
-#
-# Privacy: suggestions contain only skill names — no prompt content, no personal data.
-
-SKILL_SUGGESTIONS_ENABLED="${OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED:-true}"
-SKILL_SUGGESTIONS_ENABLED=$(_normalize_bool "$SKILL_SUGGESTIONS_ENABLED")
-SKILL_SUGGESTIONS=""
-
-if [[ "${SKILL_SUGGESTIONS_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/skill_suggestion_injector.py" ]]; then
-    _sugg_output=$("$PYTHON_CMD" "${HOOKS_LIB}/skill_suggestion_injector.py" "${SESSION_ID:-}" 2>>"$LOG_FILE") || _sugg_output=""
-    if [[ -n "$_sugg_output" ]]; then
-        SKILL_SUGGESTIONS="$_sugg_output"
-        log "Skill suggestions injected (${#SKILL_SUGGESTIONS} chars)"
+    # Parse skill suggestions field
+    if [[ "${SKILL_SUGGESTIONS_ENABLED}" == "true" ]]; then
+        if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+            _sugg_output=$(echo "$COMBINED_OUTPUT" | jq -r '.skill_suggestions // empty' 2>/dev/null) || _sugg_output=""
+        else
+            _sugg_output=$(echo "$COMBINED_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('skill_suggestions',''))" 2>/dev/null) || _sugg_output=""
+        fi
+        if [[ -n "$_sugg_output" ]]; then
+            SKILL_SUGGESTIONS="$_sugg_output"
+            log "Skill suggestions injected (${#SKILL_SUGGESTIONS} chars)"
+        else
+            log "Skill suggestions: no suggestions available"
+        fi
     else
-        log "Skill suggestions: no suggestions available"
+        log "Skill suggestion injection disabled (OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED=false)"
     fi
-elif [[ "${SKILL_SUGGESTIONS_ENABLED}" != "true" ]]; then
-    log "Skill suggestion injection disabled (OMNICLAUDE_SKILL_SUGGESTIONS_ENABLED=false)"
 else
-    log "Skill suggestion injection skipped (skill_suggestion_injector.py not found)"
+    log "Combined injector not found — falling back to individual scripts"
+
+    # Fallback: architecture handshake
+    if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/architecture_handshake_injector.py" ]]; then
+        HANDSHAKE_PROJECT="${PROJECT_PATH:-${PROJECT_ROOT:-$CWD}}"
+        HANDSHAKE_INPUT=$(jq -n --arg project "$HANDSHAKE_PROJECT" '{"project_path": $project}' 2>/dev/null) || HANDSHAKE_INPUT='{}'
+        HANDSHAKE_OUTPUT=$(echo "$HANDSHAKE_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/architecture_handshake_injector.py" 2>>"$LOG_FILE") || HANDSHAKE_OUTPUT='{}'
+        if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+            HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.handshake_context // empty' 2>/dev/null) || HANDSHAKE_CONTEXT=""
+        else
+            HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('handshake_context',''))" 2>/dev/null) || HANDSHAKE_CONTEXT=""
+        fi
+    fi
+
+    # Fallback: skill suggestions
+    if [[ "${SKILL_SUGGESTIONS_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/skill_suggestion_injector.py" ]]; then
+        _sugg_output=$("$PYTHON_CMD" "${HOOKS_LIB}/skill_suggestion_injector.py" "${SESSION_ID:-}" 2>>"$LOG_FILE") || _sugg_output=""
+        if [[ -n "$_sugg_output" ]]; then
+            SKILL_SUGGESTIONS="$_sugg_output"
+            log "Skill suggestions injected via fallback (${#SKILL_SUGGESTIONS} chars)"
+        fi
+    fi
 fi
 
 # Performance tracking

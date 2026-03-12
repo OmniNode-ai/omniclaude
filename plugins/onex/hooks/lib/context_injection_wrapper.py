@@ -254,17 +254,24 @@ def main() -> None:
         include_footer = bool(input_json.get("include_footer", False))
 
         # Pre-import budget check: if the module-level imports (pattern_types,
-        # phoenix_otel_exporter, etc.) already consumed most of the 1s hook budget,
+        # phoenix_otel_exporter, etc.) already consumed most of the hook budget,
         # skip the heavy handler import entirely.  The handler import (omniclaude.hooks.*)
         # can take 3-4s when omniclaude is installed as an editable package via
         # _omninode_claude.pth, because it pulls in omnibase_core/omnibase_infra
         # Pydantic model compilation chains.  Skipping the import here ensures we
         # return valid JSON before the run_with_timeout SIGALRM fires (exit 142).
+        #
+        # Budget calibration (SESSION_INJECTION_TIMEOUT_MS default = 8000ms):
+        #   - Pre-import threshold: 2000ms — stdlib+local imports on a cold/heavy venv
+        #     (e.g., torch in site-packages) can take 500-700ms; 2000ms leaves 6s for
+        #     the handler import chain (~2600ms) and actual injection work.
+        #   - Post-import threshold: 5000ms — handler import takes ~2600ms; 5000ms
+        #     leaves ~3s for inject_patterns_sync before the 8s SIGALRM fires.
         _pre_import_ms = time.monotonic() * 1000 - _PROCESS_START_MS
-        if _pre_import_ms > 300:
+        if _pre_import_ms > 2000:
             logger.warning(
                 f"context_injection_wrapper: pre-import budget exceeded "
-                f"({_pre_import_ms:.0f}ms > 300ms) — skipping handler import to avoid "
+                f"({_pre_import_ms:.0f}ms > 2000ms) — skipping handler import to avoid "
                 f"SIGALRM. Root cause: omniclaude installed as editable source "
                 f"(check _omninode_claude.pth in site-packages)."
             )
@@ -288,10 +295,10 @@ def main() -> None:
         # Post-import budget guard: if the handler import itself was slow (editable
         # install path), bail with empty output before calling inject_patterns_sync.
         _total_elapsed_ms = time.monotonic() * 1000 - _PROCESS_START_MS
-        if _total_elapsed_ms > 700:
+        if _total_elapsed_ms > 5000:
             logger.warning(
                 f"context_injection_wrapper: budget exceeded after handler import "
-                f"({_total_elapsed_ms:.0f}ms > 700ms) — skipping injection to avoid "
+                f"({_total_elapsed_ms:.0f}ms > 5000ms) — skipping injection to avoid "
                 f"SIGALRM. Root cause: omniclaude installed as editable source "
                 f"(check _omninode_claude.pth in site-packages)."
             )
