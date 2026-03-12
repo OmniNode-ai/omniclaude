@@ -32,6 +32,34 @@
 # =============================================================================
 
 set -euo pipefail
+
+# --guard-check-only: run environment guards and exit without starting daemon.
+# Used by tests to verify guard behavior in isolation.
+# Must run BEFORE error-guard.sh is sourced (error-guard converts exit 1 → exit 0).
+_GUARD_CHECK_ONLY=0
+for _arg in "$@"; do
+  if [ "$_arg" = "--guard-check-only" ]; then
+    _GUARD_CHECK_ONLY=1
+    break
+  fi
+done
+
+# HARD GUARD: ONEX_EVENT_BUS_TYPE=inmemory is FORBIDDEN in runtime sessions.
+# The emit daemon requires Kafka. This setting silently drops all events.
+# Fail loudly so the operator knows to fix it, rather than losing all observability.
+# This guard runs BEFORE error-guard.sh so the exit 1 is not swallowed.
+if [ "${ONEX_EVENT_BUS_TYPE:-}" = "inmemory" ]; then
+    echo "FATAL: ONEX_EVENT_BUS_TYPE=inmemory is forbidden in runtime sessions." >&2
+    echo "Unset the variable from your runtime environment and check ~/.omnibase/.env." >&2
+    echo "The emit daemon always requires Kafka. Remove or unset ONEX_EVENT_BUS_TYPE." >&2
+    exit 1
+fi
+
+# Guard check only: exit 0 after all guards pass (test hook, no daemon start)
+if [ "$_GUARD_CHECK_ONLY" = "1" ]; then
+    exit 0
+fi
+
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
@@ -259,6 +287,7 @@ except Exception as e:
     # Start publisher in background, detached from this process (OMN-1944)
     nohup "$PYTHON_CMD" -m omniclaude.publisher start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        ${KAFKA_SECONDARY_BOOTSTRAP_SERVERS:+--secondary-kafka-servers "$KAFKA_SECONDARY_BOOTSTRAP_SERVERS"} \
         --socket-path "$EMIT_DAEMON_SOCKET" \
         >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
 
