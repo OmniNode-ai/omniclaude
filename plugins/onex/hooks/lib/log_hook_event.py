@@ -314,9 +314,11 @@ def main():
 
     if event_id:
         print(f"Event logged: {event_id}")
-    else:
-        # Non-fatal: hook logging failures must not propagate errors
-        print("Failed to log event (non-fatal)", file=sys.stderr)
+    # else: silent no-op — hook logging is best-effort.
+    # When the logger is unavailable (missing config, missing psycopg2, or DB
+    # unreachable) the None return is expected and must not produce stderr noise
+    # on every hook invocation.  Callers never read this script's exit code or
+    # stdout for the failure case, so suppressing the message is safe.
     sys.exit(0)
 
 
