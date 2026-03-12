@@ -1,7 +1,14 @@
 ---
 name: deauthorize
 description: Revoke work authorization for Edit/Write operations in this session
-tags: [security, authorization, workflow]
+version: "1.0.0"
+level: basic
+category: security
+tags:
+  - security
+  - authorization
+  - workflow
+author: omninode
 ---
 
 # Deauthorize
@@ -28,4 +35,4 @@ rm -f "/tmp/omniclaude-auth/${SESSION_ID}.json"
 
 - Only affects the current session
 - Other sessions' authorizations are unaffected
-- Run `/authorize [reason]` to re-grant
+- Run the `authorize` skill to re-grant

@@ -13,8 +13,7 @@
 # --bump-version: Increment patch version before deploying
 # --repair-venv: Build lib/.venv in the currently-active deployed version (no file sync, no version bump)
 #                Use this when hooks fail with "No valid Python found" after a deploy.
-# Deploys to plugin cache: skills, commands, agents, hooks. Commands synced to cache so
-# they are discovered via the direct installPath (no sub-plugin prefix in autocomplete).
+# Deploys to plugin cache ONLY. Skills/commands/agents discovered via plugin installPath.
 
 set -euo pipefail
 
@@ -542,10 +541,11 @@ if [[ "$_LEVEL_EXPLICIT" == "true" ]]; then
 else
     echo "  skills/:        $(count_skills) directories"
 fi
-echo "  commands/:      $(find "${SOURCE_ROOT}/commands" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ') files"
 echo "  agents/configs: $(count_agents) files"
 echo "  hooks/:         $(count_hooks) items"
 echo "  .claude-plugin: plugin.json + metadata"
+echo ""
+echo -e "${BLUE}Note: Commands are discovered via installPath, not synced to cache.${NC}"
 echo ""
 
 # Check if target exists
@@ -555,7 +555,7 @@ if [[ -d "$TARGET" ]]; then
 fi
 
 # Validate required source directories exist
-REQUIRED_DIRS=("commands" "skills" "agents" "hooks" ".claude-plugin")
+REQUIRED_DIRS=("skills" "agents" "hooks" ".claude-plugin")
 MISSING_DIRS=()
 
 for dir in "${REQUIRED_DIRS[@]}"; do
@@ -705,9 +705,6 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Created target directory${NC}"
 
     # Sync components
-    echo "  Syncing commands..."
-    rsync -a --delete "${SOURCE_ROOT}/commands/" "${TARGET}/commands/"
-
     echo "  Syncing skills (level: ${LEVEL_FILTER}, include-debug: ${INCLUDE_DEBUG})..."
     sync_skills_filtered "${SOURCE_ROOT}/skills" "${TARGET}/skills"
 
