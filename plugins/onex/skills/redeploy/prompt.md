@@ -82,7 +82,20 @@ OMNI_HOME = os.environ.get("OMNI_HOME", "/Volumes/PRO-G40/Code/omni_home")  # lo
 WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
 STATE_DIR = os.path.expanduser("~/.claude/state/redeploy")
 
-PHASES = ["SYNC", "ENV_CHECK", "WORKTREE", "PIN_UPDATE", "DEPLOY", "INFISICAL", "VERIFY", "NOTIFY"]
+PHASES = [
+    "PREFLIGHT",       # Phase 0 — env var gate, bus tunnel, VirtioFS check
+    "SYNC",            # Phase 1
+    "ENV_CHECK",       # Phase 2
+    "WORKTREE",        # Phase 3
+    "PIN_UPDATE",      # Phase 4
+    "DEPLOY",          # Phase 5
+    "SCHEMA_SYNC",     # Phase 5b — detect and stamp stale schema fingerprints
+    "INFISICAL",       # Phase 6
+    "VERIFY",          # Phase 7
+    "K8S_VERIFY",      # Phase 7b — cloud k8s pod READY gate
+    "OMNIDASH_VERIFY", # Phase 7c — omnidash data-source health gate
+    "NOTIFY",          # Phase 8
+]
 
 HEALTH_ENDPOINTS: dict[str, str] = {
     "omninode-runtime": "http://localhost:8085/health",
@@ -186,6 +199,41 @@ IF --verify-only:
 ---
 
 ## Phase Execution
+
+### Phase 0: PREFLIGHT <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+# Run before any other phase. Fail fast on missing required vars or unreachable bus tunnel.
+result = run(
+    f"bash {worktree_path}/scripts/preflight-check.sh",
+    capture=True,
+)
+if result.returncode == 1:
+    print(f"PREFLIGHT FAILED:\n{result.stdout}")
+    mark_phase(state, "PREFLIGHT", "failed", output=result.stdout)
+    EXIT 1
+elif result.returncode == 2:
+    print(f"PREFLIGHT WARNINGS (non-blocking):\n{result.stdout}")
+    mark_phase(state, "PREFLIGHT", "completed_with_warnings", output=result.stdout)
+else:
+    mark_phase(state, "PREFLIGHT", "completed")
+```
+
+Expected output pattern:
+```
+PREFLIGHT OK: POSTGRES_PASSWORD=***
+PREFLIGHT OK: KAFKA_BOOTSTRAP_SERVERS=localhost:29092
+PREFLIGHT OK: OMNI_HOME=/Volumes/PRO-G40/Code/omni_home  # local-path-ok
+PREFLIGHT OK: ENABLE_ENV_SYNC_PROBE=true
+PREFLIGHT OK: cloud bus tunnel reachable (localhost:29092)
+PREFLIGHT OK: all checks passed
+```
+
+```
+  -> exit 0: mark_phase(state, "PREFLIGHT", "completed")
+  -> exit 1: mark_phase(state, "PREFLIGHT", "failed"); EXIT 1
+  -> exit 2: mark_phase(state, "PREFLIGHT", "completed_with_warnings"); CONTINUE
+```
 
 ### Phase 1: SYNC <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
@@ -336,6 +384,65 @@ Expected output pattern:
   -> failure (exit non-zero): mark_phase(state, "DEPLOY", "failed", error=stderr); print resume hint; EXIT 1
 ```
 
+### Phase 5b: SCHEMA_SYNC <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+worktree_path = state["worktree_path"]
+
+# Run verify first to see if fingerprint is current
+verify_result = run(
+    f"uv run python {worktree_path}/scripts/check_schema_fingerprint.py verify",
+    capture=True,
+    cwd=worktree_path,
+)
+
+if verify_result.returncode == 0:
+    print("SCHEMA_SYNC: fingerprint current — no stamp needed")
+    mark_phase(state, "SCHEMA_SYNC", "completed", action="verify_passed")
+elif verify_result.returncode == 2:
+    # Stale fingerprint — auto-stamp and update deployment artifact
+    print("SCHEMA_SYNC: fingerprint stale — auto-stamping")
+    stamp_result = run(
+        f"uv run python {worktree_path}/scripts/check_schema_fingerprint.py stamp",
+        capture=True,
+        cwd=worktree_path,
+    )
+    if stamp_result.returncode != 0:
+        print(f"SCHEMA_SYNC FAILED: stamp returned non-zero\n{stamp_result.stderr}")
+        mark_phase(state, "SCHEMA_SYNC", "failed", error=stamp_result.stderr)
+        EXIT 1
+    # Copy updated artifact to the active deployment root (deploy-runtime.sh rsync already ran)
+    deploy_root = run(
+        "cat ~/.omnibase/infra/registry.json | python3 -c \"import sys,json; print(json.load(sys.stdin)['deploy_path'])\"",
+        capture=True,
+    ).stdout.strip()
+    artifact_src = f"{worktree_path}/docker/migrations/schema_fingerprint.sha256"
+    artifact_dst = f"{deploy_root}/docker/migrations/schema_fingerprint.sha256"
+    run(f"cp {artifact_src} {artifact_dst}")
+    mark_phase(state, "SCHEMA_SYNC", "completed", action="stamped")
+    print("SCHEMA_SYNC: fingerprint stamped and deployment artifact updated")
+else:
+    print(f"SCHEMA_SYNC FAILED: unexpected error\n{verify_result.stderr}")
+    mark_phase(state, "SCHEMA_SYNC", "failed", error=verify_result.stderr)
+    EXIT 1
+```
+
+Expected output pattern:
+```
+SCHEMA_SYNC: fingerprint current — no stamp needed
+```
+or if stale:
+```
+SCHEMA_SYNC: fingerprint stale — auto-stamping
+SCHEMA_SYNC: fingerprint stamped and deployment artifact updated
+```
+
+```
+  -> fingerprint current: mark_phase(state, "SCHEMA_SYNC", "completed", action="verify_passed")
+  -> fingerprint stale + stamp OK: mark_phase(state, "SCHEMA_SYNC", "completed", action="stamped")
+  -> stamp failure: mark_phase(state, "SCHEMA_SYNC", "failed"); EXIT 1
+```
+
 ### Phase 6: INFISICAL <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
 ```
@@ -374,6 +481,29 @@ seed-infisical.py: complete
 ```python
 versions_requested: dict[str, str] = state["versions_requested"]
 
+# 0. Cluster prerequisite preflight — assert PriorityClasses exist (OMN-4761)
+# Missing PriorityClasses cause pods with priorityClassName set to remain 0/1 AVAILABLE
+# indefinitely without a clear error. Check before pod readiness so we fail fast.
+REQUIRED_PRIORITY_CLASSES = [
+    "omninode-data-plane",
+    "omninode-critical",
+    "omninode-standard",
+]
+missing_pcs: list[str] = []
+for pc in REQUIRED_PRIORITY_CLASSES:
+    result = run(f"kubectl get priorityclass {pc}", capture=True)
+    if result.returncode != 0:
+        missing_pcs.append(pc)
+
+if missing_pcs:
+    print(
+        f"PREFLIGHT FAILED: PriorityClass(es) missing from cluster: {missing_pcs}\n"
+        f"Fix: kubectl apply -k k8s/base/ from omninode_infra repo root\n"
+        f"Then re-run: /redeploy --resume {state['run_id']}"
+    )
+    mark_phase(state, "VERIFY", "failed", missing_priority_classes=missing_pcs)
+    EXIT 1
+
 # 1. Health endpoint checks
 failed_health: list[str] = []
 for service, url in HEALTH_ENDPOINTS.items():
@@ -382,8 +512,11 @@ for service, url in HEALTH_ENDPOINTS.items():
         failed_health.append(service)
 ```
 
-Expected output pattern per endpoint:
+Expected output pattern (preflight + endpoints):
 ```
+VERIFY: omninode-data-plane PriorityClass -> present
+VERIFY: omninode-critical PriorityClass -> present
+VERIFY: omninode-standard PriorityClass -> present
 VERIFY: omninode-runtime http://localhost:8085/health -> 200 OK
 VERIFY: intelligence-api http://localhost:8053/health -> 200 OK
 VERIFY: omninode-contract-resolver http://localhost:8091/health -> 200 OK
@@ -424,6 +557,78 @@ if failed_versions:
     EXIT 1
 
 mark_phase(state, "VERIFY", "completed")
+```
+
+### Phase 7b: K8S_VERIFY <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+worktree_path = state["worktree_path"]
+
+result = run(
+    f"bash {worktree_path}/scripts/k8s-pod-readiness-check.sh",
+    capture=True,
+)
+if result.returncode == 0:
+    print("K8S_VERIFY: all deployments READY")
+    mark_phase(state, "K8S_VERIFY", "completed")
+elif result.returncode == 2:
+    # Advisory — SSM not reachable (cloud infra may be down or AWS session expired)
+    print(f"K8S_VERIFY WARNING (advisory):\n{result.stdout}")
+    mark_phase(state, "K8S_VERIFY", "completed_with_warnings", output=result.stdout)
+else:
+    print(f"K8S_VERIFY FAILED:\n{result.stdout}")
+    mark_phase(state, "K8S_VERIFY", "failed", output=result.stdout)
+    EXIT 1
+```
+
+Expected output pattern:
+```
+K8S_VERIFY OK: omninode-runtime 1/1 READY
+K8S_VERIFY OK: omninode-runtime-effects 1/1 READY
+K8S_VERIFY OK: omnibase-intelligence-api 1/1 READY
+K8S_VERIFY OK: omninode-agent-actions-consumer 1/1 READY
+K8S_VERIFY OK: all 4 deployments READY in onex-dev
+```
+
+```
+  -> exit 0: mark_phase(state, "K8S_VERIFY", "completed")
+  -> exit 1: mark_phase(state, "K8S_VERIFY", "failed"); EXIT 1
+  -> exit 2 (SSM advisory): mark_phase(state, "K8S_VERIFY", "completed_with_warnings"); CONTINUE
+```
+
+### Phase 7c: OMNIDASH_VERIFY <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+worktree_path = state["worktree_path"]
+
+result = run(
+    f"bash {worktree_path}/scripts/verify-omnidash-health.sh",
+    capture=True,
+)
+if result.returncode == 0:
+    print("OMNIDASH_VERIFY: live data sources OK")
+    mark_phase(state, "OMNIDASH_VERIFY", "completed")
+elif result.returncode == 2:
+    # Advisory — omnidash not running locally
+    print(f"OMNIDASH_VERIFY WARNING (advisory — omnidash not running):\n{result.stdout}")
+    mark_phase(state, "OMNIDASH_VERIFY", "completed_with_warnings", output=result.stdout)
+else:
+    print(f"OMNIDASH_VERIFY FAILED:\n{result.stdout}")
+    mark_phase(state, "OMNIDASH_VERIFY", "failed", output=result.stdout)
+    EXIT 1
+```
+
+Expected output pattern:
+```
+OMNIDASH_VERIFY: omnidash reachable at http://localhost:3000
+OMNIDASH_VERIFY: data-source counts: live=4 mock=0 offline=0 probe_disabled=0 total=4
+OMNIDASH_VERIFY OK: 4 live sources >= threshold 3
+```
+
+```
+  -> exit 0: mark_phase(state, "OMNIDASH_VERIFY", "completed")
+  -> exit 1: mark_phase(state, "OMNIDASH_VERIFY", "failed"); EXIT 1
+  -> exit 2 (omnidash not running): mark_phase(state, "OMNIDASH_VERIFY", "completed_with_warnings"); CONTINUE
 ```
 
 ### Phase 8: NOTIFY <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->

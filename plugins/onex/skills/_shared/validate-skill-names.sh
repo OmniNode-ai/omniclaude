@@ -13,6 +13,8 @@
 #   - SKILL.md name: fields use bare slugs (Rule 1 enforces this)
 #   - This file itself and other validation scripts are excluded
 #
+# Note: commands/ directory has been removed — all slash commands live in skills/.
+#
 # Exit codes:
 #   0 — All checks pass
 #   1 — One or more violations found
@@ -20,13 +22,11 @@
 set -euo pipefail
 
 SKILLS_DIR="${1:-plugins/onex/skills}"
-COMMANDS_DIR="${2:-plugins/onex/commands}"
 
 # Canonicalize to repo root if running from a subdirectory
 if [[ ! -d "$SKILLS_DIR" ]]; then
     REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo ".")"
     SKILLS_DIR="${REPO_ROOT}/plugins/onex/skills"
-    COMMANDS_DIR="${REPO_ROOT}/plugins/onex/commands"
 fi
 
 VIOLATIONS=0
@@ -60,7 +60,7 @@ echo "Checking Skill() references for missing onex: prefix..."
 # We look for Skill( followed by optional skill= then a quoted string without a colon before the closing quote
 bare_skill_violations=$(grep -rn --include="*.md" \
     -E 'Skill\((skill=)?["\x27][a-z][a-z0-9_-]+["\x27]' \
-    "$SKILLS_DIR" "$COMMANDS_DIR" 2>/dev/null \
+    "$SKILLS_DIR" 2>/dev/null \
     | grep -v "subagent_type" \
     | grep -v "validate-skill-names" \
     | grep -v 'onex:' \
@@ -76,7 +76,7 @@ fi
 echo "Checking 'exec claude --skill' for missing onex: prefix..."
 bare_claude_violations=$(grep -rn --include="*.md" --include="*.sh" \
     -E 'exec claude --skill [a-z][a-z0-9_-]+' \
-    "$SKILLS_DIR" "$COMMANDS_DIR" 2>/dev/null \
+    "$SKILLS_DIR" 2>/dev/null \
     | grep -v 'onex:' \
     | grep -v 'validate-skill-names' \
     | grep -v '^.*:#' \

@@ -1,7 +1,18 @@
 ---
 name: authorize
 description: Grant work authorization for Edit/Write operations in this session
-tags: [security, authorization, workflow]
+version: "1.0.0"
+level: basic
+category: security
+tags:
+  - security
+  - authorization
+  - workflow
+author: omninode
+args:
+  - name: reason
+    description: "Reason for requesting authorization (optional)"
+    required: false
 ---
 
 # Authorize
@@ -46,5 +57,5 @@ EOF
 ## Notes
 
 - Authorization is scoped to the current session
-- Expires after 4 hours (non-renewable -- run /authorize again to refresh)
-- Use `/deauthorize` to revoke early
+- Expires after 4 hours (non-renewable -- run `/authorize` again to refresh)
+- Use the `deauthorize` skill to revoke early

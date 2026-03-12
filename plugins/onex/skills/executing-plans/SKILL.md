@@ -104,7 +104,7 @@ Call `/plan-to-tickets` with `--dry-run` to preview what tickets would be create
 ```
 
 Review the dry-run output:
-- Confirm the detected structure (phase_sections, milestone_table, or priority_labels)
+- Confirm the detected structure — expect `task_sections` for plans produced by design-to-plan (`## Task N:` headers); other valid types: `phase_sections` (legacy `## Phase N:`), `numbered_h2`, `step_sections`, `milestone_table`, `priority_labels`. If dry-run reports `task_sections`, that is correct — do NOT ask the user to reformat.
 - Confirm the epic title that would be used
 - Confirm the list of tickets that would be created
 - Check that dependencies are correctly detected
