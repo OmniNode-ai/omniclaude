@@ -1,3 +1,15 @@
+## v0.7.0 (2026-03-12)
+
+### Features
+- feat(topics): add topics.yaml manifests to all omniclaude skills [OMN-4592] (#620)
+
+### Bug Fixes
+- fix(omniclaude): migrate hook_event_adapter kafka-python→confluent-kafka + statusline health redesign [OMN-4620] (#621)
+- fix(hooks): gate deploy on smoke tests; fix log() pre-definition crash [OMN-4566] (#619)
+
+### Tests
+- test(hooks): add SessionStart test coverage and smoke-test-hooks.sh [OMN-4566] (#617)
+
 # Changelog
 
 All notable changes to OmniClaude are documented here.
