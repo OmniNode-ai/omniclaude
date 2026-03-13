@@ -1,16 +1,24 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for SkillBootstrapper lifecycle management.
+"""Unit tests for SkillBootstrapper lifecycle management and invoke().
 
 Tests:
-    1. Wiring called on init (handlers registered in container)
-    2. Event bus started and healthy
-    3. GitHub handler resolvable after init
-    4. Clean shutdown (bus stopped, registry cleared)
-    5. Partial-init failure: bus started, wiring fails -> shutdown closes bus, re-init succeeds
-    6. initialize() -> shutdown() -> initialize() cycle
-    7. ONEX_EVENT_BUS_TYPE=kafka raises NotImplementedError
+    Lifecycle (OMN-4989):
+        1. Wiring called on init (handlers registered in container)
+        2. Event bus started and healthy
+        3. GitHub handler resolvable after init
+        4. Clean shutdown (bus stopped, registry cleared)
+        5. Partial-init failure: bus started, wiring fails -> shutdown closes bus
+        6. initialize() -> shutdown() -> initialize() cycle
+        7. ONEX_EVENT_BUS_TYPE=kafka raises NotImplementedError
+        8. Double initialize raises
+
+    Invoke (OMN-4990):
+        9. invoke_skill_not_found -> SkillNotFoundError
+        10. invoke_input_validation_error -> SkillInputValidationError
+        11. invoke_success -> SkillResult(success=True)
+        12. invoke_unsupported_runtime -> SkillConfigurationError
 """
 
 from __future__ import annotations
@@ -20,6 +28,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from plugins.onex.runtime.handlers.handler_github import HandlerGitHub
+from plugins.onex.runtime.models import (
+    SkillConfigurationError,
+    SkillContext,
+    SkillNotFoundError,
+)
 from plugins.onex.runtime.skill_bootstrapper import SkillBootstrapper
 
 # ---------------------------------------------------------------------------
@@ -150,5 +163,85 @@ async def test_double_initialize_raises() -> None:
     try:
         with pytest.raises(RuntimeError, match="already initialized"):
             await bootstrapper.initialize()
+    finally:
+        await bootstrapper.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Invoke tests (OMN-4990)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_invoke_skill_not_found() -> None:
+    """invoke() must raise SkillNotFoundError for unregistered skills."""
+    bootstrapper = SkillBootstrapper()
+    await bootstrapper.initialize()
+    try:
+        with pytest.raises(SkillNotFoundError, match="not found in registry"):
+            await bootstrapper.invoke("nonexistent-skill", {})
+    finally:
+        await bootstrapper.shutdown()
+
+
+@pytest.mark.unit
+async def test_invoke_input_validation_error() -> None:
+    """invoke() must raise SkillInputValidationError for missing required inputs."""
+    from plugins.onex.runtime.models import SkillInputValidationError
+
+    bootstrapper = SkillBootstrapper()
+    await bootstrapper.initialize()
+    try:
+        bootstrapper.register_skill(
+            "test-skill",
+            runtime="skill-bootstrapper",
+            schema={"required": ["pr_number", "repo"]},
+        )
+        with pytest.raises(SkillInputValidationError, match="Missing required inputs"):
+            await bootstrapper.invoke("test-skill", {"pr_number": 42})
+    finally:
+        await bootstrapper.shutdown()
+
+
+@pytest.mark.unit
+async def test_invoke_success() -> None:
+    """invoke() must return SkillResult(success=True) for valid invocation."""
+    bootstrapper = SkillBootstrapper()
+    await bootstrapper.initialize()
+    try:
+        bootstrapper.register_skill(
+            "test-skill",
+            runtime="skill-bootstrapper",
+            handler_name="HandlerGitHub",
+        )
+        ctx = SkillContext(
+            session_id="test",
+            skill_name="test-skill",
+            invocation_id="inv-001",
+            working_directory="/tmp",
+        )
+        result = await bootstrapper.invoke("test-skill", {}, context=ctx)
+        assert result.success is True
+        assert result.skill_name == "test-skill"
+        assert result.invocation_id == "inv-001"
+        assert result.runtime_mode == "skill-bootstrapper"
+        assert result.handler_used == "HandlerGitHub"
+        assert result.duration_ms >= 0
+    finally:
+        await bootstrapper.shutdown()
+
+
+@pytest.mark.unit
+async def test_invoke_unsupported_runtime() -> None:
+    """invoke() must raise SkillConfigurationError for unsupported runtime."""
+    bootstrapper = SkillBootstrapper()
+    await bootstrapper.initialize()
+    try:
+        bootstrapper.register_skill(
+            "bad-runtime-skill",
+            runtime="quantum-computer",
+        )
+        with pytest.raises(SkillConfigurationError, match="Unsupported runtime"):
+            await bootstrapper.invoke("bad-runtime-skill", {})
     finally:
         await bootstrapper.shutdown()
