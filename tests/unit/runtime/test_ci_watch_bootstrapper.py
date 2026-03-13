@@ -27,7 +27,14 @@ from plugins.onex.runtime.skill_bootstrapper import (
 @pytest.fixture
 def ci_watch_skill_path() -> Path:
     """Return the path to ci-watch SKILL.md."""
-    return Path(__file__).resolve().parents[3] / "plugins" / "onex" / "skills" / "ci-watch" / "SKILL.md"
+    return (
+        Path(__file__).resolve().parents[3]
+        / "plugins"
+        / "onex"
+        / "skills"
+        / "ci-watch"
+        / "SKILL.md"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +48,9 @@ def test_ci_watch_has_runtime_metadata(ci_watch_skill_path: Path) -> None:
     content = ci_watch_skill_path.read_text()
     # Parse YAML front-matter between --- delimiters
     parts = content.split("---", 2)
-    assert len(parts) >= 3, "SKILL.md must have YAML front-matter between --- delimiters"
+    assert len(parts) >= 3, (
+        "SKILL.md must have YAML front-matter between --- delimiters"
+    )
     # Front-matter contains non-standard YAML (pipe chars in field specs),
     # so we check for the runtime field via string matching
     front_matter_text = parts[1]
