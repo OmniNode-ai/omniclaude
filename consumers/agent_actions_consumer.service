@@ -15,7 +15,7 @@ Environment="PATH=/opt/omniclaude/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONPATH=/opt/omniclaude"
 
 # Kafka configuration
-Environment="KAFKA_BROKERS=localhost:9092"
+Environment="KAFKA_BROKERS=localhost:19092"
 Environment="KAFKA_GROUP_ID=agent-actions-postgres"
 
 # PostgreSQL configuration

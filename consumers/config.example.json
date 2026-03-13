@@ -1,5 +1,5 @@
 {
-  "kafka_brokers": "localhost:9092",
+  "kafka_brokers": "localhost:19092",
   "group_id": "agent-actions-postgres",
   "topic": "agent-actions",
   "batch_size": 100,

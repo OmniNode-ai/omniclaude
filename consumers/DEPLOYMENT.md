@@ -4,7 +4,7 @@ Quick deployment guide for the production Kafka consumer.
 
 ## Prerequisites Checklist
 
-- [ ] Kafka/Redpanda running on localhost:9092
+- [ ] Kafka/Redpanda running on localhost:19092
 - [ ] PostgreSQL running on localhost:5436
 - [ ] Database migration 005 applied
 - [ ] Python 3.9+ installed
@@ -22,7 +22,7 @@ psql -h localhost -p 5436 -U postgres -d omniclaude -c "SELECT COUNT(*) FROM age
 rpk topic list
 
 # Or using kafka-console tools
-kafka-topics.sh --bootstrap-server localhost:9092 --list
+kafka-topics.sh --bootstrap-server localhost:19092 --list
 ```
 
 ### 2. Install Dependencies
@@ -38,7 +38,7 @@ Create `.env` file:
 
 ```bash
 cat > .env << 'EOF'
-KAFKA_BROKERS=localhost:9092
+KAFKA_BROKERS=localhost:19092
 KAFKA_GROUP_ID=agent-actions-postgres
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5436
@@ -69,7 +69,7 @@ Expected output:
 ```
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - AgentActionsConsumer initialized with config: {...}
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Setting up Kafka consumer...
-2025-10-20 18:45:32 - agent_actions_consumer - INFO - Kafka consumer connected to brokers: ['localhost:9092'], group: agent-actions-postgres, topic: agent-actions
+2025-10-20 18:45:32 - agent_actions_consumer - INFO - Kafka consumer connected to brokers: ['localhost:19092'], group: agent-actions-postgres, topic: agent-actions
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Setting up DLQ producer...
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - DLQ producer initialized
 2025-10-20 18:45:32 - agent_actions_consumer - INFO - Setting up database connection...
@@ -215,7 +215,7 @@ docker build -f deployment/Dockerfile.consumer -t agent-actions-consumer:latest 
 docker run -d \
   --name agent-actions-consumer \
   --network host \
-  -e KAFKA_BROKERS=localhost:9092 \
+  -e KAFKA_BROKERS=localhost:19092 \
   -e POSTGRES_HOST=localhost \
   -e POSTGRES_PORT=5436 \
   -e POSTGRES_DATABASE=omniclaude \
@@ -470,12 +470,12 @@ Consumer offsets are managed by Kafka. To reset:
 
 ```bash
 # Reset to earliest
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
   --group agent-actions-postgres --reset-offsets --to-earliest \
   --topic agent-actions --execute
 
 # Reset to specific offset
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
   --group agent-actions-postgres --reset-offsets --to-offset 1000 \
   --topic agent-actions --execute
 ```
