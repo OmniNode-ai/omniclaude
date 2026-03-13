@@ -35,7 +35,7 @@ def test_poison_message_handling():
 
     # Initialize Kafka producer
     producer = KafkaProducer(
-        bootstrap_servers=["localhost:9092"],
+        bootstrap_servers=["localhost:19092"],
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
@@ -182,7 +182,7 @@ def main():
     print("WORK PACKAGE 2: Kafka Consumer Reliability & Health Check Safety")
     print("=" * 70)
     print("\nPrerequisites:")
-    print("  1. Kafka broker running on localhost:9092")
+    print("  1. Kafka broker running on localhost:19092")
     print("  2. PostgreSQL running on localhost:5436")
     print("  3. agent_actions_consumer.py running with WP2 fixes")
     print("  4. Consumer health check on http://localhost:8080/health")

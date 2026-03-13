@@ -26,7 +26,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Repository path
-REPO_PATH="/Volumes/PRO-G40/Code/omninode_bridge"
+REPO_PATH="/Volumes/PRO-G40/Code/omni_home"
 
 # Function to print colored messages
 print_error() {
@@ -50,22 +50,22 @@ check_prerequisites() {
     # Check if repository exists
     if [[ ! -d "$REPO_PATH" ]]; then
         print_error "Repository not found: $REPO_PATH"
-        print_info "Please ensure omninode_bridge is cloned at this location"
+        print_info "Please ensure omni_home is available at this location"
         exit 1
     fi
 
-    # Check if poetry is available
-    if ! command -v poetry &> /dev/null; then
-        print_error "Poetry not found. Please install poetry first."
-        print_info "Install with: curl -sSL https://install.python-poetry.org | python3 -"
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        print_error "uv not found. Please install uv first."
+        print_info "Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
         exit 1
     fi
 
-    # Check if .env file exists
-    if [[ ! -f "$REPO_PATH/.env" ]]; then
-        print_warning ".env file not found in $REPO_PATH"
-        print_info "Some features may not work without proper configuration"
-        print_info "Copy .env.example to .env and configure it"
+    # Validate OMNIBASE_INFRA_DB_URL is set (required for DB operations)
+    if [[ -z "${OMNIBASE_INFRA_DB_URL:-}" ]]; then
+        print_error "OMNIBASE_INFRA_DB_URL is not set."
+        print_info "Run: source ~/.omnibase/.env"
+        exit 1
     fi
 }
 
@@ -147,11 +147,11 @@ main() {
     echo ""
 
     # Execute omninode-generate
-    print_info "Executing: poetry run omninode-generate..."
+    print_info "Executing: uv run omninode-generate..."
     echo ""
 
     # Run the command and capture exit code
-    if poetry run omninode-generate "$prompt" "$@"; then
+    if uv run omninode-generate "$prompt" "$@"; then
         echo ""
         print_success "Node generation completed successfully!"
         exit 0
@@ -161,9 +161,9 @@ main() {
         print_error "Node generation failed with exit code: $exit_code"
         echo ""
         print_info "Troubleshooting:"
-        echo "  1. Check Kafka connection: curl http://192.168.86.200:8080"
-        echo "  2. Check PostgreSQL: psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge"
-        echo "  3. Check environment: source $REPO_PATH/.env && env | grep -E '(POSTGRES|KAFKA|OPENAI)'"
+        echo "  1. Check Kafka connection: kcat -L -b localhost:19092"
+        echo "  2. Check PostgreSQL: source ~/.omnibase/.env && psql -h localhost -p 5436 -U postgres -d omnibase_infra"
+        echo "  3. Check environment: source ~/.omnibase/.env && env | grep -E '(POSTGRES|KAFKA|OPENAI)'"
         echo "  4. Check logs for correlation ID and search in Kafka/PostgreSQL"
         echo ""
         exit "$exit_code"

@@ -11,7 +11,7 @@
 #   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate <NODE_DIR> [OPTIONS]
 #
 # Examples:
-#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omnibase_core/nodes/llm_effect/v1_0_0/llm_effect_llm
 #   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/my_custom_node --output-dir ./regenerated
 #
 
@@ -26,7 +26,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Repository path
-REPO_PATH="/Volumes/PRO-G40/Code/omninode_bridge"
+REPO_PATH="/Volumes/PRO-G40/Code/omni_home"
 
 # Function to print colored messages
 print_error() {
@@ -64,20 +64,19 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Check if .env file exists and has ZAI_API_KEY
-    if [[ ! -f "$REPO_PATH/.env" ]]; then
-        print_error ".env file not found in $REPO_PATH"
+    # Source canonical env file
+    if [[ -f "$HOME/.omnibase/.env" ]]; then
+        set -a
+        source "$HOME/.omnibase/.env"
+        set +a
+    else
+        print_error "~/.omnibase/.env not found"
         exit 1
     fi
 
-    # Source .env and check for ZAI_API_KEY
-    set -a
-    source "$REPO_PATH/.env"
-    set +a
-
     if [[ -z "${ZAI_API_KEY:-}" ]]; then
-        print_error "ZAI_API_KEY not set in .env file"
-        print_info "Add ZAI_API_KEY=your-key-here to $REPO_PATH/.env"
+        print_error "ZAI_API_KEY not set in ~/.omnibase/.env"
+        print_info "Add ZAI_API_KEY=your-key-here to ~/.omnibase/.env"
         exit 1
     fi
 }
@@ -215,7 +214,7 @@ main() {
         echo "  --timeout INTEGER               Timeout in seconds (default: 300)"
         echo ""
         echo "Examples:"
-        echo "  $0 src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm"
+        echo "  $0 src/omnibase_core/nodes/llm_effect/v1_0_0/llm_effect_llm"
         echo "  $0 nodes/my_node --output-dir ./regenerated"
         echo "  $0 ../other_repo/nodes/custom_node --interactive"
         echo ""

@@ -48,7 +48,7 @@ Production-ready Kafka consumer that reads agent action events from the `agent-a
 
 ### Prerequisites
 - Python 3.9+
-- Kafka/Redpanda running (localhost:9092)
+- Kafka/Redpanda running (localhost:19092)
 - PostgreSQL (localhost:5436)
 - Database migration applied (`005_create_agent_actions_table.sql`)
 
@@ -82,7 +82,7 @@ psql -h localhost -p 5436 -U postgres -d omniclaude \
 
 ```bash
 # Kafka Configuration
-export KAFKA_BROKERS="localhost:9092"
+export KAFKA_BROKERS="localhost:19092"
 export KAFKA_GROUP_ID="agent-actions-postgres"
 
 # PostgreSQL Configuration
@@ -107,7 +107,7 @@ Create `config.json`:
 
 ```json
 {
-  "kafka_brokers": "localhost:9092",
+  "kafka_brokers": "localhost:19092",
   "group_id": "agent-actions-postgres",
   "batch_size": 100,
   "batch_timeout_ms": 1000,
@@ -232,7 +232,7 @@ Monitor Kafka consumer lag:
 
 ```bash
 # Using Kafka tools
-kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+kafka-consumer-groups.sh --bootstrap-server localhost:19092 \
   --describe --group agent-actions-postgres
 
 # Using rpk (Redpanda)
