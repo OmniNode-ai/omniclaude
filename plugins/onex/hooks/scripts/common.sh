@@ -683,7 +683,7 @@ _try_restart_emit_daemon() {
         return 1
     fi
 
-    nohup "$PYTHON_CMD" -m omniclaude.publisher start \
+    nohup "${PLUGIN_ROOT}/lib/.venv/bin/python" -m omniclaude.publisher start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
         --socket-path "$socket_path" \
         >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
@@ -702,6 +702,7 @@ _try_restart_emit_daemon() {
     if [[ -S "$socket_path" ]]; then
         log "Emit daemon: Socket created successfully, resetting failure counter"
         echo "0 0 $now unknown" > "$fail_count_file" 2>/dev/null || true
+        rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
         return 0
     else
         log "Emit daemon: Socket not created after restart (PID: $daemon_pid)"

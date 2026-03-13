@@ -104,7 +104,7 @@ DEFAULT_TIMEOUT_MS = 50
 
 # Default client timeout (seconds) - controls EmitClient socket timeout
 # Can be overridden via OMNICLAUDE_EMIT_TIMEOUT environment variable
-DEFAULT_CLIENT_TIMEOUT_SECONDS = 5.0
+DEFAULT_CLIENT_TIMEOUT_SECONDS = 0.2
 
 # Supported event types (must match daemon's EventRegistry)
 SUPPORTED_EVENT_TYPES = frozenset(
