@@ -1423,6 +1423,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Checkout omni_home standards
+        continue-on-error: true
         uses: actions/checkout@v6
         with:
           repository: OmniNode-ai/omni_home
@@ -1438,7 +1439,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check version pin compliance
-        run: python omni_home/standards/check_version_pins.py --repo omniclaude --root omni_home
+        run: |
+          SCRIPT="omni_home/standards/check_version_pins.py"
+          if [ ! -f "$SCRIPT" ]; then
+            echo "::warning::$SCRIPT not found in omni_home main — skipping until OMN-4803 lands"
+            exit 0
+          fi
+          python "$SCRIPT" --repo omniclaude --root omni_home
 
   # ============================================================================
   # GATE AGGREGATORS
