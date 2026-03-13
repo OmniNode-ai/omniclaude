@@ -44,6 +44,23 @@ for _arg in "$@"; do
   fi
 done
 
+# Early .env sourcing: load project-level env BEFORE the inmemory guard so that
+# ONEX_EVENT_BUS_TYPE set in the repo .env is caught (CodeRabbit #628 fix).
+# This mirrors the full PROJECT_ROOT detection at lines 84-92 but runs before
+# error-guard.sh to ensure the guard's exit 1 is not swallowed.
+_EARLY_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)}"
+_EARLY_PROJECT_ROOT="${_EARLY_PLUGIN_ROOT}/../.."
+if [[ -f "${_EARLY_PROJECT_ROOT}/.env" ]]; then
+    set -a
+    source "${_EARLY_PROJECT_ROOT}/.env" 2>/dev/null || true
+    set +a
+elif [[ -n "${CLAUDE_PROJECT_DIR:-}" && -f "${CLAUDE_PROJECT_DIR}/.env" ]]; then
+    set -a
+    source "${CLAUDE_PROJECT_DIR}/.env" 2>/dev/null || true
+    set +a
+fi
+unset _EARLY_PLUGIN_ROOT _EARLY_PROJECT_ROOT
+
 # HARD GUARD: ONEX_EVENT_BUS_TYPE=inmemory is FORBIDDEN in runtime sessions.
 # The emit daemon requires Kafka. This setting silently drops all events.
 # Fail loudly so the operator knows to fix it, rather than losing all observability.
