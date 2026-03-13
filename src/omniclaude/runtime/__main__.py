@@ -83,7 +83,7 @@ def _check_contracts(contracts_root: str) -> tuple[bool, str, int, int]:
                 data = yaml.safe_load(fh)
             if isinstance(data, dict) and data.get("name"):
                 parsed += 1
-        except Exception:
+        except Exception:  # noqa: BLE001  # nosec B110
             pass  # count as failed
 
     threshold = 0.80

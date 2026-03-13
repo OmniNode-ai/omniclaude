@@ -179,8 +179,7 @@ def violations_to_advisories(
             }
             advisories.append(advisory)
 
-        except Exception:
-            # Per design: individual entry failures are silent
+        except Exception:  # nosec B112 - individual entry failures are silent by design
             continue
 
     return advisories
@@ -384,7 +383,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:
+        except Exception:  # nosec B110 - cleanup must not raise
             pass
         logger.info("Compliance-evaluated subscriber stopped")
 

@@ -404,8 +404,8 @@ def cmd_verify(lookback_minutes: int = 10) -> int:
                 events.append(msg)
                 if len(events) >= 10:
                     break
-        except Exception:
-            pass  # consumer_timeout_ms will break the loop
+        except Exception:  # nosec B110 - timeout-based consumer loop
+            pass
 
         print(f"{_BOLD}{topic}{_RESET}:")
         if events:

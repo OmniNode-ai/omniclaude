@@ -301,7 +301,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
 
         # Template v1.0.0 — matches contract.yaml prompt_template.template
         prompt = (
-            "You are a graph navigation classifier. Your task is to select the single\n"
+            "You are a graph navigation classifier. Your task is to select the single\n"  # nosec B608
             "best transition from a bounded set of typed options.\n"
             "\n"
             "## Current State\n"

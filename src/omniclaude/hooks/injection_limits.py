@@ -78,7 +78,7 @@ def _emit_budget_cap_hit(
         if session_id is not None:
             payload["session_id"] = session_id
         emit_event("budget.cap.hit", payload)
-    except Exception:
+    except Exception:  # nosec B110 - telemetry must not block hooks
         pass
 
 

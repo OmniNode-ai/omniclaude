@@ -602,7 +602,7 @@ async def emit_hook_event(
                         "emitted_at": datetime.now(UTC).isoformat(),
                     }
                     _emit_event_cb("circuit.breaker.tripped", _cb_payload)
-                except Exception:
+                except Exception:  # noqa: BLE001  # nosec B110
                     pass  # Telemetry must never block hook execution
 
         error_msg = f"{type(e).__name__}: {e!s}"

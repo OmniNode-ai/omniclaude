@@ -116,8 +116,8 @@ def _maybe_write_to_db(
 
     try:
         _write_to_db(entry)
-    except Exception:  # noqa: BLE001
-        pass  # non-fatal: hook must not block
+    except Exception:  # noqa: BLE001  # nosec B110 - hook must not block
+        pass
 
 
 def _write_to_db(entry: dict[str, Any]) -> None:

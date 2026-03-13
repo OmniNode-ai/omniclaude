@@ -242,7 +242,7 @@ def _upsert_skill_execution_log(payload: dict[str, Any]) -> bool:
     finally:
         try:
             conn.close()
-        except Exception:
+        except Exception:  # nosec B110 - cleanup must not raise
             pass
 
 
@@ -372,7 +372,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:
+        except Exception:  # nosec B110 - cleanup must not raise
             pass
         logger.info("skill-execution-log subscriber stopped")
 

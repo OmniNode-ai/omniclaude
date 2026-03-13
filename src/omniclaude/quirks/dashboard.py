@@ -323,7 +323,7 @@ class NodeQuirkDashboardQueryEffect:
                 {where_sql}
                 ORDER BY detected_at DESC
                 LIMIT :limit OFFSET :offset
-            """
+            """  # nosec B608 - parameterized via where_params
             async with self._db_session_factory() as session:
                 rows = (await session.execute(sa_text(sql), params)).fetchall()
 
@@ -388,7 +388,7 @@ class NodeQuirkDashboardQueryEffect:
                 {where_sql}
                 ORDER BY created_at DESC
                 LIMIT :limit OFFSET :offset
-            """
+            """  # nosec B608 - parameterized via where_params
             async with self._db_session_factory() as session:
                 rows = (await session.execute(sa_text(sql), params)).fetchall()
 

@@ -293,7 +293,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:
+        except Exception:  # nosec B110 - cleanup must not raise
             pass
         logger.info("Decision-record subscriber stopped")
 
