@@ -1,3 +1,21 @@
+## v0.7.1 (2026-03-13)
+
+### Features
+_(none)_
+
+### Bug Fixes
+- fix(cleanup): purge dead endpoints and repo paths (OMN-4845, OMN-4846) (#632)
+- fix(quorum): migrate quorum.py off deprecated Ollama to OPENAI_COMPATIBLE [OMN-4798] (#630)
+- fix(skills): add task_sections to executing-plans Step 2 structure list (#622)
+- fix(hooks): add missing config.py shim and silence stderr noise on unconfigured DB [OMN-4383] (#625)
+- fix(redeploy): add cluster PriorityClass preflight check to VERIFY phase (OMN-4761) (#629)
+- fix(deploy): replace pip-editable venv build with uv sync --no-editable [OMN-4652] (#626)
+
+### Other Changes
+- ci(standards): add version pin compliance check [OMN-4810] (#631)
+- chore(deps): bump omnibase_infra to 0.18.0 (#623)
+- refactor(plugin): migrate commands/ to skills/, standardize plugin structure (#627)
+
 ## v0.7.0 (2026-03-12)
 
 ### Features
