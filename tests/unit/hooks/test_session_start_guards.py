@@ -27,6 +27,7 @@ def test_inmemory_guard_blocks_session_start() -> None:
         capture_output=True,
         text=True,
         cwd=Path.cwd(),
+        check=False,
     )
     assert result.returncode != 0, (
         f"Expected non-zero exit when ONEX_EVENT_BUS_TYPE=inmemory, got 0.\n"
@@ -50,6 +51,7 @@ def test_guard_check_only_passes_without_inmemory() -> None:
         capture_output=True,
         text=True,
         cwd=Path.cwd(),
+        check=False,
     )
     assert result.returncode == 0, (
         f"Expected exit 0 when ONEX_EVENT_BUS_TYPE is unset.\nstderr: {result.stderr}"
