@@ -12,6 +12,7 @@ tags:
   - workflow
   - contract-driven
 author: OmniClaude Team
+runtime: mcp
 composable: true
 inputs:
   - name: ticket_id
@@ -41,6 +42,13 @@ args:
 ---
 
 # Contract-Driven Ticket Execution
+
+## Runtime
+
+This skill uses `runtime: mcp`. It invokes MCP tools (Linear, Slack) directly through
+the Claude Code tool-use protocol rather than through the skill bootstrapper's handler
+dispatch. MCP-first skills are not bootstrapper-dispatched -- the bootstrapper does not
+intercept or wrap their MCP tool calls.
 
 ## Dispatch Requirement
 

@@ -7,6 +7,7 @@ debug: false
 category: workflow
 tags: [ci, github-actions, automation, polling]
 author: OmniClaude Team
+runtime: skill-bootstrapper
 composable: true
 inputs:
   - name: pr_number
@@ -92,33 +93,14 @@ when CI reaches a terminal state: `passed`, `capped` (fix cycles exhausted), `ti
 /ci-watch 123 org/repo --no-auto-fix
 ```
 
-## Watch Loop (Tier-Aware)
+## Watch Backend
 
-The watch strategy depends on the current ONEX tier (see `@_lib/tier-routing/helpers.md`):
+The watch strategy uses `gh` CLI for CI status polling. The skill bootstrapper resolves
+the handler from the `runtime: skill-bootstrapper` metadata in this SKILL.md.
 
-### FULL_ONEX Path: Inbox-Wait (Push-Based)
+### CI Status Polling
 
-In FULL_ONEX mode, CI completion events are delivered via the event bus. The skill
-subscribes to a file-based inbox and blocks until a CI completion event arrives:
-
-```python
-# Push-based: event bus delivers CI status to file inbox
-inbox_path = Path(f"~/.claude/inboxes/ci-watch/{repo}/{pr_number}.json")
-event = await inbox_wait(
-    inbox_path,
-    timeout_seconds=timeout_minutes * 60,
-    poll_interval_seconds=5,
-)
-# event contains: { status, checks, run_id, conclusion }
-```
-
-The event bus (Kafka/Redpanda) publishes CI completion events from GitHub webhooks.
-`inbox_wait` polls a local file that the event consumer writes to. This avoids repeated
-API calls and reacts within seconds of CI completing.
-
-### STANDALONE / EVENT_BUS Path: _bin/ci-status.sh + File Inbox
-
-In STANDALONE mode, use `_bin/ci-status.sh` for polling:
+Use `_bin/ci-status.sh` for CI status extraction:
 
 ```bash
 # Option 1: Blocking wait (polls internally every 30s)
@@ -445,21 +427,16 @@ The original polling loop (`gh run watch` inline) is preserved as the STANDALONE
 The `wait_for_pr_status()` function provides a unified interface that works in both modes.
 No changes needed for existing callers -- the function handles mode detection internally.
 
-## Tier Routing (OMN-2828)
+## Watch Backend Selection
 
-CI status monitoring uses tier-aware backend selection:
+CI status monitoring uses the skill bootstrapper for handler resolution. The `runtime:
+skill-bootstrapper` metadata in the SKILL.md front-matter directs the bootstrapper to
+select the appropriate handler for CI polling operations.
 
-| Tier | Backend | Latency | Details |
+| Mode | Backend | Latency | Details |
 |------|---------|---------|---------|
-| `FULL_ONEX` | inbox-wait (push) | ~5s | Event bus delivers CI completion to file inbox |
-| `STANDALONE` | `_bin/ci-status.sh` | ~30s poll | Wraps `gh pr checks` + `gh run view --log-failed` |
-| `EVENT_BUS` | `_bin/ci-status.sh` | ~30s poll | Same as STANDALONE (event bus used for other signals) |
-
-Tier detection: see `@_lib/tier-routing/helpers.md`.
-
-The file inbox pattern (`~/.claude/inboxes/ci-watch/{repo}/{pr}.json`) is shared with
-Phase 2 (OMN-2826) push-based notifications. When the event consumer writes to this path,
-any skill blocking on `inbox_wait()` is unblocked immediately.
+| Default | `_bin/ci-status.sh` | ~30s poll | Wraps `gh pr checks` + `gh run view --log-failed` |
+| Fallback | `gh run watch` | ~30s poll | Direct GitHub CLI polling |
 
 ## See Also
 
@@ -468,6 +445,5 @@ any skill blocking on `inbox_wait()` is unblocked immediately.
 - `inbox_wait` module (`omniclaude.services.inbox_wait`) — unified wait interface
 - `node_github_pr_watcher_effect` — ONEX node for EVENT_BUS+ mode routing
 - `_bin/ci-status.sh` — STANDALONE CI status extraction backend
-- `_lib/tier-routing/helpers.md` — tier detection and routing helpers
 - OMN-2523 — ci-watch implementation ticket
 - OMN-2826 — push-based notifications ticket (inbox-wait pattern)
