@@ -11,9 +11,23 @@ Once omnibase_core publishes ContractState, replace this with:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class ContractStateMetadataDict(TypedDict, total=False):
+    """Typed metadata for ModelContractState.
+
+    All keys are optional (total=False) since metadata is populated
+    incrementally depending on the navigation context.
+    """
+
+    created_at: str
+    updated_at: str
+    tags: list[str]
+    source: str
+    version: str
 
 
 class ModelContractState(BaseModel):
@@ -47,10 +61,10 @@ class ModelContractState(BaseModel):
         default_factory=dict,
         description="Typed field values present in this state",
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
+    metadata: ContractStateMetadataDict = Field(
+        default_factory=ContractStateMetadataDict,
         description="Additional state metadata (timestamps, tags, etc.)",
     )
 
 
-__all__ = ["ModelContractState"]
+__all__ = ["ContractStateMetadataDict", "ModelContractState"]
