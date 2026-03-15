@@ -103,29 +103,19 @@ jobs:
           files: |
             **/*.md
 
-      - name: Check markdown links
-        # On PRs: only run when *.md files changed. On push to main/develop: always run.
+      - name: Set up uv
         if: github.event_name == 'push' || steps.md-changed.outputs.any_changed == 'true'
-        uses: lycheeverse/lychee-action@v2
-        with:
-          args: >
-            --no-progress
-            --exclude 'https://linear\.app'
-            --exclude 'https://github\.com/OmniNode-ai'
-            --exclude 'https://github\.com/fastapi'
-            --exclude 'https://stackoverflow\.com'
-            --exclude 'https://staging\.omniclaude\.example\.com'
-            --exclude 'https://omniclaude\.example\.com'
-            --exclude 'http://localhost'
-            --exclude 'https://www\.gnu\.org'
-            --exclude 'https://www\.contributor-covenant\.org'
-            --exclude 'https://claude\.ai'
-            --exclude 'https://freedesktop\.org'
-            --exclude 'https://www\.freedesktop\.org'
-            --exclude 'https://github\.com/fastapi'
-            --exclude 'https://stackoverflow\.com'
-            '**/*.md'
-          fail: true
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        if: github.event_name == 'push' || steps.md-changed.outputs.any_changed == 'true'
+        run: uv sync
+
+      - name: Validate markdown links (internal + external)
+        # Replaces lychee-action (OMN-5085). Uses onex-validate-links from omnibase_core.
+        # External links checked in CI only (not pre-commit) to maintain lychee parity.
+        if: github.event_name == 'push' || steps.md-changed.outputs.any_changed == 'true'
+        run: uv run onex-validate-links --verbose --check-external
 
   pyright:
     name: Pyright Type Checking

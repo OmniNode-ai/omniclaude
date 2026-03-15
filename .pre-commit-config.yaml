@@ -382,6 +382,17 @@ repos:
         exclude: ^(archived/|archive/)
         stages: [pre-commit]
 
+      # Markdown link validation (OMN-5085) — replaces lychee-action in CI
+      # Internal links only in pre-commit (fast). CI runs --check-external for full coverage.
+      # Configuration: .markdown-link-check.json (ignore patterns ported from lychee excludes)
+      - id: onex-validate-links
+        name: Validate markdown links
+        entry: uv run onex-validate-links --verbose
+        language: system
+        types: [markdown]
+        pass_filenames: false
+        stages: [pre-commit]
+
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
