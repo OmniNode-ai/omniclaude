@@ -15,12 +15,46 @@ Parse from `$ARGUMENTS`:
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--url <url>` | `http://localhost:3000` | Dashboard base URL |
+| `--target <local\|cloud>` | `local` | Deployment target |
+| `--url <url>` | _(from target)_ | Explicit base URL; overrides `--target` |
 | `--skip-reaudit` | false | Skip Phase 5 re-audit |
 | `--triage-only` | false | Run Phases 1+2 only |
 | `--fix-only` | false | Skip to Phase 3, load triage from `latest/` |
 | `--max-iterations <n>` | 3 | Hard cap on fix→reaudit cycles |
-| `--dry-run` | false | Preview plan; no agents, PRs, or tickets |
+| `--dry-run` | false | Preview plan; no agents, PRs, tickets, or deploys |
+| `--deploy` | false | Auto-deploy after fixes merge |
+| `--release` | false | Run /release before /redeploy (cloud only) |
+| `--skip-deploy` | true | Explicit no-deploy (default) |
+
+### URL and Target Resolution
+
+Resolve `{url}` and `{target}` in this precedence order:
+
+1. `--url <explicit>` → use verbatim; set `{target}` to `custom`
+2. `--target cloud` → `{url}` = `https://dash.dev.omninode.ai`; `{target}` = `cloud`
+3. `--target local` (default) → `{url}` = `http://localhost:3000`; `{target}` = `local`
+
+Store both as `{url}` and `{target}` for all subsequent phases.
+
+### Target-Aware Context
+
+| Concern | `local` | `cloud` |
+|---------|---------|---------|
+| Playwright base URL | `http://localhost:3000` | `https://dash.dev.omninode.ai` |
+| Auth | none (open) | none currently (Keycloak not deployed) |
+| Fix deployment | `docker compose up --build` | `/redeploy` skill |
+| Log access | `docker logs <container>` | `kubectl logs` via SSM tunnel |
+| DB inspection | `psql -h localhost -p 5436` | port-forward via `cloud-dev-connect.sh` |
+| Kafka inspection | `docker exec omnibase-infra-redpanda rpk` | port-forward `:9092` |
+
+**Cloud DB reference** (for triage inspection in Phase 2):
+```
+Port-forward: ./tools/cloud-dev-connect.sh (from omni_home/)
+Postgres:     localhost:5436 → dev/dev-postgres:5432
+DB:           omnidash_analytics
+Role:         role_omnidash
+Password:     in k8s secret omninode-service-roles (namespace: dev)
+```
 
 Generate `run_id` = first 12 chars of a UUID4 (e.g. `3f8a1c9b0d42`).
 Create directory: `~/.claude/dashboard-sweep/{run_id}/`
@@ -35,6 +69,7 @@ If `--dry-run`:
 - No `Task()` dispatches
 - No `mcp__linear-server__*` calls
 - No `gh pr create` or `gh pr merge` calls
+- No deploy actions (Phase 4b fully skipped)
 - Screenshots and JSON artifacts ARE written (read-only observation is always safe)
 
 ---
@@ -518,6 +553,123 @@ For domains with `status=root_cause_found_no_fix` or `status=blocked`:
 
 ---
 
+## Phase 4b — Deploy
+
+### 4b.0 Gate Check
+
+Skip Phase 4b entirely when ANY of:
+- `--deploy` flag is NOT set (default: skip)
+- `DRY_RUN=true`
+- `len({merged_repos}) == 0` (no PRs merged in this iteration)
+
+When skipped: emit `[dashboard-sweep] Deploy skipped — no --deploy flag (or no PRs merged).`
+Proceed directly to Phase 5.
+
+Track `{merged_repos}` by checking each PR's merge status after Phase 4.3:
+
+```bash
+gh pr view {pr_number} --repo OmniNode-ai/{repo} --json state,mergedAt \
+  --jq 'select(.state=="MERGED") | .mergedAt'
+```
+
+### 4b.1 Local Deployment (`{target} == "local"`)
+
+Execute automatically — no confirmation required.
+
+1. Derive affected Docker services from `{merged_repos}`:
+
+   | Repo | Docker Compose Service |
+   |------|------------------------|
+   | `omnidash` | `omnidash` |
+   | `omniintelligence` | `omniintelligence` |
+   | `omnibase_infra` | `omnibase-infra` |
+   | `omnibase_core` | _(library — no service to restart)_ |
+   | `omnibase_spi` | _(library — no service to restart)_ |
+
+2. Rebuild affected services:
+
+   ```bash
+   cd ~/Code/omni_home  # docker-compose.yml location
+   docker compose up --build --force-recreate <affected-services>
+   ```
+
+3. Health check omnidash:
+
+   ```bash
+   max_wait=60; elapsed=0
+   until curl -sf http://localhost:3000/ > /dev/null; do
+     sleep 2; elapsed=$((elapsed + 2))
+     if [ $elapsed -ge $max_wait ]; then
+       echo "[dashboard-sweep] Health check timeout — omnidash not responding after ${max_wait}s"
+       exit 1
+     fi
+   done
+   echo "[dashboard-sweep] Local deployment healthy"
+   ```
+
+4. Emit `[dashboard-sweep] Local containers restarted: {affected-services}`
+
+### 4b.2 Cloud Deployment (`{target} == "cloud"`)
+
+Prompt user for explicit confirmation before executing (destructive):
+
+```
+[dashboard-sweep] PRs merged in repos: {merged_repos}
+Cloud redeploy will sync bare clones, update image pins, and roll out new containers to k8s.
+This cannot be undone without a rollback. Type YES to proceed, anything else to skip:
+```
+
+**If confirmed (`YES`):**
+
+```
+Step 1 (if --release flag set):
+  - Dispatch polymorphic agent: run /release skill for each affected repo
+  - Wait for release tags to publish and release PRs to merge
+  - Emit "[dashboard-sweep] Release complete for: {repos}"
+
+Step 2: Dispatch polymorphic agent to run /redeploy skill:
+  - Syncs bare clones in omni_home/ to latest main
+  - Updates image pins in k8s manifests (dev namespace)
+  - Rebuilds runtime containers
+  - Applies manifests via kubectl
+
+Step 3: Poll for pod readiness (timeout 120 s):
+  kubectl rollout status deployment/omnidash -n dev --timeout=120s
+
+Step 4: Verify dashboard responds:
+  curl -sf https://dash.dev.omninode.ai/ > /dev/null && \
+    echo "[dashboard-sweep] Cloud deployment healthy"
+```
+
+**If not confirmed:**
+```
+[dashboard-sweep] Cloud redeploy declined by user. Phase 5 re-audit will reflect pre-deploy state.
+```
+Continue to Phase 5 (re-audit may not show fixes if containers still run old code).
+
+### 4b.3 Emit Deploy Record
+
+Write `~/.claude/dashboard-sweep/{run_id}/deploy.json`:
+
+```json
+{
+  "run_id": "{run_id}",
+  "target": "{local|cloud}",
+  "iteration": {n},
+  "triggered_at": "{ISO timestamp}",
+  "repos_redeployed": ["{repo}"],
+  "services_restarted": ["{service}"],
+  "release_ran": false,
+  "redeploy_confirmed": true,
+  "health_check_passed": true,
+  "error": null
+}
+```
+
+If deploy was skipped or declined, set `"redeploy_confirmed": false` and `"repos_redeployed": []`.
+
+---
+
 ## Phase 5 — Re-audit
 
 ### 5.1 Skip Check
@@ -537,9 +689,14 @@ for pr in {pr_numbers}:
     gh pr view {pr} --repo OmniNode-ai/{repo} --json state,mergedAt
 ```
 
-If PRs are merged (or `--skip-reaudit` equivalently skips this wait):
-- The local dev server may need a restart/rebuild to pick up changes
-- Emit: `[dashboard-sweep] Waiting 30 s for dev server to reflect merged changes...`
+If PRs are merged AND `--deploy` was set (Phase 4b ran):
+- Containers were already rebuilt/redeployed in Phase 4b
+- No additional wait needed — proceed directly to re-audit
+
+If PRs are merged AND `--deploy` was NOT set:
+- Code may not yet be running in the deployment
+- Emit: `[dashboard-sweep] Note: --deploy not set; deployment not refreshed. Re-audit may not reflect fixes.`
+- Proceed anyway
 
 If PRs are NOT yet merged (still pending CI):
 - Emit warning: `[dashboard-sweep] PRs not yet merged — re-audit may not reflect all fixes`
@@ -607,6 +764,8 @@ if not new_domains:
 
 Increment `iteration`. Go to Phase 3 with `new_domains`.
 
+Each iteration follows the full Phase 3 → Phase 4 → Phase 4b (if `--deploy`) → Phase 5 sequence.
+
 ---
 
 ## Final Report Generation
@@ -618,8 +777,10 @@ Write `~/.claude/dashboard-sweep/{run_id}/report.md`:
 
 **Run ID**: {run_id}
 **Dashboard**: {url}
+**Target**: {local | cloud}
 **Completed**: {ISO timestamp}
 **Iterations**: {n} / {max_iterations}
+**Deploy**: {skipped | local-restarted | cloud-redeployed | declined}
 
 ## Final Page Status
 
@@ -644,11 +805,17 @@ Write `~/.claude/dashboard-sweep/{run_id}/report.md`:
 ### Still Open (max iterations reached or blocked)
 {unresolved_pages}
 
+### Deploy Summary
+- Target: {target}
+- Repos redeployed: {repos_redeployed | none}
+- Deploy status: {local-restarted | cloud-redeployed | declined | skipped}
+
 ## Artifacts
 - Recon: ~/.claude/dashboard-sweep/{run_id}/recon.json
 - Triage: ~/.claude/dashboard-sweep/{run_id}/triage.json
 - Re-audit: ~/.claude/dashboard-sweep/{run_id}/reaudit.json
 - Fixes: ~/.claude/dashboard-sweep/{run_id}/fixes/
+- Deploy: ~/.claude/dashboard-sweep/{run_id}/deploy.json (if --deploy set)
 - Screenshots: ~/.claude/dashboard-sweep/{run_id}/screenshots/
 ```
 
@@ -661,12 +828,16 @@ Print the report path and key metrics to stdout.
 | Error | Action |
 |-------|--------|
 | Playwright navigation timeout | Classify page as `BROKEN`; continue |
-| Dev server unreachable | Emit error, stop sweep, suggest `npm run dev` |
+| Dev server unreachable | Emit error, stop sweep, suggest `npm run dev` or `docker compose up` |
 | Agent dispatch fails | Log failure, mark domain as `blocked`, continue with other domains |
 | Pre-commit fails in fix agent | Agent must fix pre-commit errors before marking `fix_ready` |
 | PR creation fails | Log error with `gh` output, mark domain as `pr_failed`, continue |
 | Linear API error | Log warning, continue; re-create tickets manually if needed |
 | Regression detected | Halt immediately (see Phase 5.4) |
+| Local docker restart fails | Log error with container name; emit warning; continue to Phase 5 |
+| Cloud health check timeout | Emit error; set `health_check_passed: false` in deploy.json; continue to Phase 5 |
+| kubectl rollout timeout | Emit error; advise manual check via `kubectl get pods -n dev`; continue |
+| /release skill fails | Halt cloud deploy; create Linear ticket with `priority=1`; skip to Phase 5 |
 
 ---
 
@@ -675,13 +846,15 @@ Print the report path and key metrics to stdout.
 When `DRY_RUN=true`:
 
 ```
-[dashboard-sweep] DRY RUN — no agents dispatched, no PRs created, no Linear tickets
+[dashboard-sweep] DRY RUN — no agents dispatched, no PRs created, no Linear tickets, no deploys
+[dashboard-sweep] Target: {target} | URL: {url}
 [dashboard-sweep] Would dispatch {n} debug agents for domains: {domain_ids}
 [dashboard-sweep] Would create {n} feature-gap tickets
 [dashboard-sweep] Would create {n} PRs across repos: {repos}
+[dashboard-sweep] Deploy: would {restart local containers | trigger cloud redeploy} (skipped in dry run)
 [dashboard-sweep] Triage written to: ~/.claude/dashboard-sweep/{run_id}/triage.json
 [dashboard-sweep] Screenshots written to: ~/.claude/dashboard-sweep/{run_id}/screenshots/
 ```
 
-Screenshots and JSON artifacts are written even in dry run (observation is safe).
-No `Task()` dispatches, no `mcp__linear-server__*` writes, no `gh pr` commands.
+Screenshots and JSON artifacts are written even in dry run (observation is always safe).
+No `Task()` dispatches, no `mcp__linear-server__*` writes, no `gh pr` commands, no Docker/kubectl commands.
