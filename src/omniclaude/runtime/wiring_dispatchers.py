@@ -176,7 +176,7 @@ def load_skill_contracts(
             contract = ModelSkillNodeContract.model_validate(raw)
             skill_id = _extract_skill_id_from_name(contract.name)
             contracts[skill_id] = contract
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: individual contract parse failure
             errors.append(f"{path}: {exc}")
             logger.warning("Failed to parse contract %s: %s", path, exc)
 
@@ -665,7 +665,7 @@ async def wire_skill_dispatchers(
                 svc = container.service_registry.get(_CCBackend)
                 if isinstance(svc, _CCBackend):
                     resolved_cc = svc
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: optional backend resolution
             logger.debug(
                 "Could not resolve SubprocessClaudeCodeSessionBackend from container"
             )
@@ -683,7 +683,7 @@ async def wire_skill_dispatchers(
                 svc = container.service_registry.get(_VllmBackend)
                 if isinstance(svc, _VllmBackend):
                     resolved_vllm = svc
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: optional backend resolution
             logger.debug("Could not resolve VllmInferenceBackend from container")
 
     # Resolve event bus from container if not provided
@@ -822,7 +822,7 @@ class QuirkFindingDispatcher:
                 bridge = self._container.quirk_memory_bridge
                 if bridge is not None:
                     return bridge
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: optional service resolution
             logger.debug(
                 "QuirkFindingDispatcher: could not resolve NodeQuirkMemoryBridgeEffect "
                 "from container",
