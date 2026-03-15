@@ -152,7 +152,6 @@ ignore = [
     # ============================================================================
     # EXCEPTION HANDLING (fix incrementally - improves error messages)
     # ============================================================================
-    "BLE001",    # Blind exception catching - TODO: Catch specific exceptions
     "EM101",     # Exception string literal - TODO: Use exception variables
     "EM102",     # Exception f-string literal - TODO: Use exception variables
     "TRY002",    # Create your own exception - TODO: Define custom exceptions
@@ -327,6 +326,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Test files can use hardcoded passwords/secrets in fixtures
 "tests/**/*.py" = [
+    "BLE001",    # Blind exception catching - test boundary catches are acceptable
     "E402",      # Module level import not at top
     "DTZ007",    # Datetime strptime without zone
     "S104",      # Possible binding to all interfaces (test servers)
@@ -343,6 +343,11 @@ ignore = [
 "tests/*.py" = ["E402"]
 # Skill test directories use hyphenated names (matching skill names) — N999 invalid module name is expected
 "tests/skills/gather-github-stats/*.py" = ["N999"]
+# Plugins/scripts/consumers use boundary catches by design (hooks must never crash host)
+"plugins/**/*.py" = ["BLE001"]
+"scripts/**/*.py" = ["BLE001"]
+"consumers/**/*.py" = ["BLE001"]
+"shared_lib/**/*.py" = ["BLE001"]
 # Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 
 # Plugins, scripts, consumers, examples, shared_lib — CLI tools, hooks, and

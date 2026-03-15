@@ -105,7 +105,7 @@ def _check_backends() -> tuple[str, str]:
         from omniclaude.nodes.node_claude_code_session_effect import (  # noqa: F401
             node as _cc_node,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: import check must not crash dry-run
         claude_code_status = f"WARN ({exc})"
 
     # Check vllm backend (local LLM inference effect)
@@ -114,7 +114,7 @@ def _check_backends() -> tuple[str, str]:
         from omniclaude.nodes.node_local_llm_inference_effect import (  # noqa: F401
             node as _vllm_node,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: import check must not crash dry-run
         vllm_status = f"WARN ({exc})"
 
     return claude_code_status, vllm_status
@@ -145,7 +145,7 @@ def _check_route_matcher() -> tuple[bool, str]:
             False,
             "Route matcher returned False for onex.cmd.omniclaude.status.v1",  # noqa: arch-topic-naming
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: dry-run check must degrade
         return False, f"Route matcher error: {exc}"
 
 
@@ -232,7 +232,7 @@ def _run_live() -> int:
     except KeyboardInterrupt:
         print("\nShutdown requested.")
         return 0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: runtime entry point
         print(f"ERROR: Failed to start runtime: {exc}", file=sys.stderr)
         return 1
 

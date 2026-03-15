@@ -323,7 +323,7 @@ class NodeQuirkClassifierCompute:
                     "not published (finding_id=%s)",
                     finding.finding_id,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: Kafka publish must degrade
             logger.warning(
                 "NodeQuirkClassifierCompute: failed to publish finding to Kafka "
                 "(finding_id=%s)",

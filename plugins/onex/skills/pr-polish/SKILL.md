@@ -163,7 +163,29 @@ Skill(skill="onex:local-review", args="--required-clean-runs {required_clean_run
 
 Runs until `required_clean_runs` consecutive clean passes (only nits). After clean passes, if `--no-push` is NOT set: `git push`.
 
-### Finalize: Enable Automerge — runs inline after final phase (currently Phase 2)
+### Phase 3: Resolve Review Threads — runs inline before automerge
+
+Runs only if `--no-automerge` is NOT set and `--no-push` is NOT set.
+
+Before arming automerge, resolve any unresolved review threads that would block merge
+(repos with `required_conversation_resolution: true`). Uses `resolve_review_threads()`
+from `@_lib/pr-safety/helpers.md`.
+
+For each unresolved thread:
+1. Read the comment body, file path, and line reference
+2. Check current code at the referenced location
+3. Classify disposition: `addressed` | `not_applicable` | `intentional` | `deferred`
+4. Post a reply explaining WHY the thread is being resolved (1-2 sentences)
+5. Resolve the thread
+
+**Critical**: Never resolve a thread without posting a reply. Silent resolution
+defeats the purpose of code review.
+
+Reports: `Resolved N review threads (M addressed, K not_applicable, J intentional, L deferred).`
+
+If no unresolved threads exist, skip silently.
+
+### Finalize: Enable Automerge — runs inline after thread resolution
 
 Runs only if `--no-automerge` is NOT set and `--no-push` is NOT set.
 
@@ -189,6 +211,8 @@ Phase 1: PR Review + CI Fix (pr-review-dev)
 Phase 2: Local Review Loop (local-review --required-clean-runs N)
     ↓ (skip if --skip-local-review)
 Push (if not --no-push)
+    ↓
+Phase 3: Resolve Review Threads (if not --no-automerge and not --no-push)
     ↓
 Enable automerge (if not --no-automerge and not --no-push)
     ↓
