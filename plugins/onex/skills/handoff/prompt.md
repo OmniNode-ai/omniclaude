@@ -4,7 +4,7 @@
 
 When the user invokes `/handoff`, execute the following steps:
 
-### Step 1: Gather Context
+### Gather Context
 
 Collect the current session context:
 
@@ -17,7 +17,7 @@ Collect the current session context:
 7. **Working files**: Changed files from `git status --short`
 8. **User message**: Optional `--message` argument (free text for the next session)
 
-### Step 2: Write Manifest
+### Write Manifest
 
 Write the manifest to `~/.claude/handoff/{cwd_hash}-{repo_slug}.json`.
 
@@ -36,7 +36,7 @@ REPO_SLUG=$(basename "$(git remote get-url origin 2>/dev/null)" .git 2>/dev/null
 MANIFEST_PATH="${HANDOFF_DIR}/${CWD_HASH}-${REPO_SLUG}.json"
 ```
 
-### Step 3: Confirm and Clear
+### Confirm and Clear
 
 Print a confirmation message:
 
