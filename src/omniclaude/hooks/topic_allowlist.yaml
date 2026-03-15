@@ -383,3 +383,18 @@ allowed_extras:
       PR validation rollup with aggregated validation tax metrics and VTS score.
       Emitted at pipeline completion (OMN-3930, MEI); contract governance to follow.
     ticket: OMN-3930
+
+  # ---------------------------------------------------------------------------
+  # Correlation trace topics (OMN-5047)
+  # Trace span events emitted by hooks for the omnidash /trace page.
+  # No dedicated node contract — emitted directly by the hook emitter.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.correlation-trace.v1"
+    lifecycle: telemetry
+    reason: >
+      Correlation trace span event emitted by hooks during active sessions.
+      Consumed by omnidash /trace page via correlation_trace_spans table.
+      No dedicated node contract — emitted directly by the CorrelationTraceEmitter
+      hook adapter; contract governance to follow.
+    ticket: OMN-5047
