@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillPlanToTicketsOrchestrator — thin orchestrator shell for the plan-to-tickets skill.
 
 Capability: skill.plan_to_tickets

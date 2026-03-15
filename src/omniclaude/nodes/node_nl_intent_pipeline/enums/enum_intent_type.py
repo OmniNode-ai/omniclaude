@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Enum for intent types recognised by the NL Intent Pipeline.
 
 This enum is the cross-process authority for intent classification — used

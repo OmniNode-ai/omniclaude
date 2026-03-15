@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Contract change detection for PR diffs (OMN-3138).
 
 Detects contract.yaml file changes in a git diff range and extracts

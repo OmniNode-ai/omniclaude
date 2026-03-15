@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Shared handler for skill dispatch — routes any skill request to Polly.
 
 Single canonical handler imported by all skill dispatch nodes. Constructs

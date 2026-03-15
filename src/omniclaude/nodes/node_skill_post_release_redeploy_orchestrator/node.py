@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillPostReleaseRedeployOrchestrator — thin orchestrator shell for the post-release-redeploy skill.
 
 Capability: skill.post_release_redeploy

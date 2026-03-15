@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Models for node_personality_logging_effect."""
 
 from omniclaude.nodes.node_personality_logging_effect.models.model_log_event import (

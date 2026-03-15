@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillPlanningContextResolverOrchestrator — thin orchestrator shell for the planning-context-resolver skill.
 
 Capability: skill.planning_context_resolver

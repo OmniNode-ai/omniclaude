@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Default Evidence Bundle handler.
 
 Stage 5 of the NL Intent-Plan-Ticket Compiler.

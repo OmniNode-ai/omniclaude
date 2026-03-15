@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """LoggingConfig — YAML-backed runtime configuration for the logging effect node.
 
 Model ownership: PRIVATE to omniclaude.

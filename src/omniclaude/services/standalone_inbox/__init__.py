@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """STANDALONE fallback inbox for push-based PR notifications.
 
 When the event bus is not available (STANDALONE mode), this module provides

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillFixPrsOrchestrator — thin orchestrator shell for the fix-prs skill.
 
 Capability: skill.fix_prs

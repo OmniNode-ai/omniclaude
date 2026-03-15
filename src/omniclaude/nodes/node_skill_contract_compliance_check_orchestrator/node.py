@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillContractComplianceCheckOrchestrator — thin orchestrator shell for the contract-compliance-check skill.
 
 Capability: skill.contract_compliance_check

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Inbox-wait pattern for ci-watch and pr-watch skills.
 
 Provides a unified interface for waiting on PR status notifications.

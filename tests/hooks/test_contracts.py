@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests for ONEX contract YAML synchronization with code.
 
 These tests ensure that contract YAML definitions remain synchronized with

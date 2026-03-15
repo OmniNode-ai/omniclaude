@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeAgentRoutingCompute - Contract-driven compute node for agent routing.
 
 This package provides the NodeAgentRoutingCompute node for evaluating user

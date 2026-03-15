@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """ONEX-compliant event schemas for Claude Code hooks.
 
 ONEX-compatible event payload models for Claude Code hooks,

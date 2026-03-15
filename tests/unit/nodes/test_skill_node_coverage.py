@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Enforce 1:1 mapping between plugin skills and ONEX orchestrator nodes.
 
 Normalizes names to hyphenated form on both sides to handle any mixed

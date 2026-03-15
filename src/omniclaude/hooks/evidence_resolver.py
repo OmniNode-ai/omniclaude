@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Evidence resolver protocol and null implementation (OMN-2092).
 
 Provides the bridge between promotion gate storage (M3 metrics aggregation)

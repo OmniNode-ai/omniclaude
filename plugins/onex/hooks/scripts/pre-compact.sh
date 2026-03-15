@@ -132,6 +132,13 @@ if [[ -z "$ACTIVE_TICKET" ]]; then
     fi
 fi
 
+# ── Toggle gate: OMNICLAUDE_PRECOMPACT_SNAPSHOT (default OFF) ─────────────────
+# When disabled (default), pre-compact snapshot is skipped entirely.
+if [[ "${OMNICLAUDE_PRECOMPACT_SNAPSHOT:-0}" != "1" ]]; then
+    log "PreCompact: snapshot disabled (OMNICLAUDE_PRECOMPACT_SNAPSHOT=${OMNICLAUDE_PRECOMPACT_SNAPSHOT:-0})"
+    exit 0
+fi
+
 # ── Build snapshot — with size cap ───────────────────────────────────────────
 # Note: state.yaml values are assumed unquoted and space-free (enforced by pipeline writer).
 MAX_SNAPSHOT_BODY=19800  # leave 200 bytes headroom for truncation marker

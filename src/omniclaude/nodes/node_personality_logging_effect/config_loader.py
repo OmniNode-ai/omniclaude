@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Config loader with live-reload support.
 
 Loads ``ModelLoggingConfig`` from a YAML file and watches for changes using

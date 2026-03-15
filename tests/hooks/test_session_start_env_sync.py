@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests for session-start.sh env sync section (OMN-3245).
 
 Tests verify that the env sync snippet in session-start.sh:

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NL Intent Pipeline node — Stage 1→2 of the NL Intent-Plan-Ticket Compiler.
 
 Parses raw natural language input and emits a typed, structured Intent object

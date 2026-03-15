@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillUltimateValidateOrchestrator — thin orchestrator shell for the ultimate-validate skill.
 
 Capability: skill.ultimate_validate

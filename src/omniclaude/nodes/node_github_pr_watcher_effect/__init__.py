@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeGithubPrWatcherEffect -- subscribes to PR status events and routes
 to per-agent inboxes via Valkey watch registry.
 

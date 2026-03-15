@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeLocalCodingOrchestrator - Contract-driven orchestrator for local coding workflow.
 
 This package provides the NodeLocalCodingOrchestrator node for coordinating

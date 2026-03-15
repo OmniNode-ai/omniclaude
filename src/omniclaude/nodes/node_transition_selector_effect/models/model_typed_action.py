@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Typed action model for graph navigation transitions.
 
 NOTE: This is a local definition pending omnibase_core export (OMN-2546).

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Plan DAG model — the directed acyclic graph of work units.
 
 The Plan DAG is the system-of-record output of Stage 3.  It is consumed by:
