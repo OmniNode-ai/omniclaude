@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeNlIntentPipelineCompute — thin coordination shell.
 
 Stage 1→2 of the NL Intent-Plan-Ticket Compiler.

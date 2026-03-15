@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests for topic_registry.yaml and Wave 2 pipeline topics (OMN-2922).
 
 Validates:

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Unit tests for cache-first context injection (OMN-2425).
 
 Verifies that HandlerContextInjection._load_patterns_from_database:

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """StdoutSink — writes rendered log messages to stdout.
 
 Failures are caught and logged internally; they never propagate to the caller.

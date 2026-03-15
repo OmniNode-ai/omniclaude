@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Handler for Kafka-based agent inbox delivery (EVENT_BUS+ tier).
 
 Implements ProtocolAgentInbox by delegating to the emit daemon's

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillFinishingADevelopmentBranchOrchestrator — thin orchestrator shell for the finishing-a-development-branch skill.
 
 Capability: skill.finishing_a_development_branch

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillGenerateNodeOrchestrator — thin orchestrator shell for the generate-node skill.
 
 Capability: skill.generate_node

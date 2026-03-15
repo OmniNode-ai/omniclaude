@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillFeatureDashboardOrchestrator — thin orchestrator shell for the feature-dashboard skill.
 
 Capability: skill.feature_dashboard

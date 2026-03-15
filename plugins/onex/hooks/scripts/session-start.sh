@@ -1217,6 +1217,18 @@ ${SKILL_SUGGESTIONS}"
         HAS_SKILL_SUGGESTIONS="true"
     fi
 
+    # ── Toggle gate: OMNICLAUDE_SESSION_HANDOFF (default OFF) ─────────────────
+    # When enabled, session-start injects the handoff manifest written by /handoff.
+    # This is a forward-looking toggle — the /handoff skill (OMN-5118) implements
+    # the manifest writer and injection logic. This guard ensures the behavior
+    # is opt-in only.
+    if [[ "${OMNICLAUDE_SESSION_HANDOFF:-0}" == "1" ]]; then
+        _HANDOFF_DIR="${HOME}/.claude/handoff"
+        if [[ -d "$_HANDOFF_DIR" ]]; then
+            log "Session handoff injection enabled but not yet implemented (OMN-5118)"
+        fi
+    fi
+
     if [[ -n "$COMBINED_CONTEXT" ]]; then
         # Include combined context in additionalContext (sync injection)
         printf '%s' "$INPUT" | jq \

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillWritingSkillsOrchestrator — thin orchestrator shell for the writing-skills skill.
 
 Capability: skill.writing_skills

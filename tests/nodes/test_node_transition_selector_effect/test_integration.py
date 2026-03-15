@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Integration tests for NodeTransitionSelectorEffect.
 
 Tests against the live local model endpoint (LLM_CODER_FAST_URL).

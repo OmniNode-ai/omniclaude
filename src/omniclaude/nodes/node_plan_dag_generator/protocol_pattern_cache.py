@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Protocol for the OmniMemory pattern cache (OMN-2506 integration).
 
 Defines the interface the Plan DAG Generator uses to query OmniMemory

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node Agent Routing Compute - 100% contract-driven.
 
 The NodeAgentRoutingCompute class, a minimal shell

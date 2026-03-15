@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeLocalLlmInferenceEffect - Contract-driven effect node for local LLM inference.
 
 This package provides the NodeLocalLlmInferenceEffect node for local LLM

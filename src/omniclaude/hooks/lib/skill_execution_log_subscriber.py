@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Skill execution log subscriber — Kafka-to-table projection consumer (OMN-2778).
 
 Subscribes to ``onex.evt.omniclaude.skill-completed.v1``, deserializes

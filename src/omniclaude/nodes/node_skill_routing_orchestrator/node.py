@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillRoutingOrchestrator — thin orchestrator shell for the routing skill.
 
 Capability: skill.routing

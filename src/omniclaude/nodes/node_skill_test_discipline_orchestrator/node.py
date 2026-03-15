@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillTestDisciplineOrchestrator -- thin orchestrator shell for the test-discipline skill.
 
 Capability: skill.test_discipline

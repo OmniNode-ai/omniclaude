@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillLinearTriageOrchestrator — thin orchestrator shell for the linear-triage skill.
 
 Capability: skill.linear_triage

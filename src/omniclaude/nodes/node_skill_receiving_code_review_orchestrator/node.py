@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillReceivingCodeReviewOrchestrator — thin orchestrator shell for the receiving-code-review skill.
 
 Capability: skill.receiving_code_review

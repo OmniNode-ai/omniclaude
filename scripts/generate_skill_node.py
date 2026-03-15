@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """generate_skill_node.py — scaffold ONEX node directories for omniclaude skills.
 
 Each omniclaude skill becomes a discoverable ONEX NodeOrchestrator shell with
@@ -171,8 +169,6 @@ def generate_init_py(skill_name_snake: str) -> str:
     return f"""\
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 \"\"\"Skill node: {skill_name_snake} orchestrator.\"\"\"
 
 from omniclaude.nodes.node_skill_{skill_name_snake}_orchestrator.node import (
@@ -198,8 +194,6 @@ def generate_node_py(skill_name_snake: str, skill_name_kebab: str) -> str:
     return f"""\
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 \"\"\"NodeSkill{pascal}Orchestrator — thin orchestrator shell for the {skill_name_kebab} skill.
 
 Capability: skill.{skill_name_snake}

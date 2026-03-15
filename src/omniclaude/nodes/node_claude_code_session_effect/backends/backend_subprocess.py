@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Subprocess-based backend for Claude Code session management.
 
 Implements ProtocolClaudeCodeSession by shelling out to the ``claude`` CLI

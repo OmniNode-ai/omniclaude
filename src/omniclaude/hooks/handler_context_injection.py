@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 # PATTERN SOURCE: in-memory projection cache (primary) → omniintelligence HTTP API (fallback)
 # See: OMN-2059 completed DB split — cache-first read replaces HTTP-only escape hatch (OMN-2425)
 """Handler for context injection - all business logic lives here.

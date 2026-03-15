@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Integration tests for routing degradation with real Kafka.
 
 These tests verify routing behavior when Kafka is available and when it degrades.

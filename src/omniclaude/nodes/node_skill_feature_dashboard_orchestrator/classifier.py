@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node type classifier and applicability matrix for the Feature Dashboard orchestrator.
 
 This module determines which audit checks apply to each skill, preventing the dashboard

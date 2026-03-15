@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """JsonSink — writes raw LogEvent as newline-delimited JSON.
 
 Personality rendering is bypassed — the raw structured event is always used.

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillReviewAllPrsOrchestrator — thin orchestrator shell for the review-all-prs skill.
 
 Capability: skill.review_all_prs

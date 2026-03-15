@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillDefenseInDepthOrchestrator — thin orchestrator shell for the defense-in-depth skill.
 
 Capability: skill.defense_in_depth
