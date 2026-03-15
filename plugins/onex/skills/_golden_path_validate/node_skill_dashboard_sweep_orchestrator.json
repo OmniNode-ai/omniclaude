@@ -1,0 +1,26 @@
+{
+  "node_id": "node_skill_dashboard_sweep_orchestrator",
+  "ticket_id": "OMN-5057",
+  "input": {
+    "topic": "onex.cmd.omniclaude.dashboard-sweep.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "dashboard-sweep",
+      "args": {
+        "--triage-only": true,
+        "--dry-run": true
+      }
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.dashboard-sweep-completed.v1"
+  },
+  "timeout_ms": 60000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

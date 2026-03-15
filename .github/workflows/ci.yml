@@ -124,6 +124,7 @@ jobs:
             --exclude 'https://www\.freedesktop\.org'
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
+            --exclude 'https://dash\.dev\.omninode\.ai'
             '**/*.md'
           fail: true
 
