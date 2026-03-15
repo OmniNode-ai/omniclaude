@@ -40,7 +40,7 @@ async def on_prompt(prompt: str) -> str:
 ## Documentation
 
 - [Architecture](docs/architecture/)
-- [Skills catalog](skills/)
+- [Skills catalog](plugins/onex/skills/)
 - [CLAUDE.md](CLAUDE.md) -- developer context and conventions
 - [AGENT.md](AGENT.md) -- LLM navigation guide
 
