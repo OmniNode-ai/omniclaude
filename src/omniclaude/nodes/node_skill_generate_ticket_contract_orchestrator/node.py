@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillGenerateTicketContractOrchestrator — thin orchestrator shell for the generate-ticket-contract skill.
 
 Capability: skill.generate_ticket_contract

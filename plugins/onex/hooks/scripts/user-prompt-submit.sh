@@ -878,10 +878,15 @@ fi
 # If a pre-compact.sh snapshot exists for this session, prepend it to AGENT_CONTEXT
 # and consume the file (one-shot). Written by the PreCompact hook before /compact runs.
 # SESSION_ID is already parsed above — do not re-read stdin.
+#
+# Toggle gate: OMNICLAUDE_POSTCOMPACT_RESTORE (default OFF)
+# When disabled (default), post-compact restore is skipped entirely.
 _COMPACT_CTX_FILE="/tmp/omniclaude-compact-ctx-${SESSION_ID}"
 
 _COMPACT_CTX_CONSUME=false
-if [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
+if [[ "${OMNICLAUDE_POSTCOMPACT_RESTORE:-0}" != "1" ]]; then
+    log "Post-compact restore disabled (OMNICLAUDE_POSTCOMPACT_RESTORE=${OMNICLAUDE_POSTCOMPACT_RESTORE:-0})"
+elif [[ -n "$SESSION_ID" && -f "$_COMPACT_CTX_FILE" ]]; then
     _COMPACT_CTX=$(cat "$_COMPACT_CTX_FILE" 2>/dev/null) || true
     if [[ -n "$_COMPACT_CTX" ]]; then
         if [[ -n "$AGENT_CONTEXT" ]]; then

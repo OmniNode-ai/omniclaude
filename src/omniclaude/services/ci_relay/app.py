@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """FastAPI application for the CI relay service.
 
 Receives GH Actions workflow completion callbacks, validates bearer token,

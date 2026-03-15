@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeRoutingHistoryReducer - Contract-driven reducer node for routing history.
 
 This package provides the NodeRoutingHistoryReducer node for recording routing

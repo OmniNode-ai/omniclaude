@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Shared skill node models — request, result, contract, completion event, and PR events."""
 
 from .model_merge_gate_result import ModelGateCheckResult, ModelMergeGateResult

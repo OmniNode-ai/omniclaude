@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeEvidenceBundleCompute — Stage 5 of the NL Intent-Plan-Ticket Compiler.
 
 Generates immutable evidence bundles that link each executed ticket to its

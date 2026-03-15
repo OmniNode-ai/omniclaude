@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Service wiring for omniclaude handlers.
 
 This module publishes handler contracts to Kafka for discovery by the platform's

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Skill node introspection proxy for omniclaude.
 
 Publishes introspection events for all skill nodes during plugin initialization,

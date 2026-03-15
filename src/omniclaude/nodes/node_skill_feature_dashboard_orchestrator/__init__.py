@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillFeatureDashboardOrchestrator - Feature dashboard skill audit node.
 
 This package provides the orchestrator node, node type classifier, applicability

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Handler for routing history storage via PostgreSQL.
 
 Phase 1: In-memory storage returning default statistics (0.5 success rate).

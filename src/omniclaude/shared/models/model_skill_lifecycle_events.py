@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Skill lifecycle event models for OMN-2773.
 
 Emitted by handle_skill_requested() on every skill invocation.

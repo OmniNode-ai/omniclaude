@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Model validation tests for the canonical Feature Dashboard result model (OMN-3501).
 
 Verifies the contract invariants that callers must uphold:

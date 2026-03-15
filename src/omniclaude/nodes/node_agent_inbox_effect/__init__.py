@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeAgentInboxEffect - Contract-driven effect node for inter-agent messaging.
 
 This package provides the NodeAgentInboxEffect node for delivering

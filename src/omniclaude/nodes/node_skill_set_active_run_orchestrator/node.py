@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillSetActiveRunOrchestrator — thin orchestrator shell for the set-active-run skill.
 
 Capability: skill.set_active_run

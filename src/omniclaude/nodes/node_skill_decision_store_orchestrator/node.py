@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillDecisionStoreOrchestrator — thin orchestrator shell for the decision-store skill.
 
 Capability: skill.decision_store

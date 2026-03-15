@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillSystemStatusOrchestrator — thin orchestrator shell for the system-status skill.
 
 Capability: skill.system_status

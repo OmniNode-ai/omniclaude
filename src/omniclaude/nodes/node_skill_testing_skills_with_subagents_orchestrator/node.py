@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillTestingSkillsWithSubagentsOrchestrator — thin orchestrator shell for the testing-skills-with-subagents skill.
 
 Capability: skill.testing_skills_with_subagents

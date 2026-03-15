@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests for OmniClaude topic names and helpers.
 
 Comprehensive tests for the build_topic() function and TopicBase enum,

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Pattern query CLI for debugging learned_patterns in PostgreSQL.
 
 DISABLED (OMN-2058): learned_patterns table moved to omniintelligence

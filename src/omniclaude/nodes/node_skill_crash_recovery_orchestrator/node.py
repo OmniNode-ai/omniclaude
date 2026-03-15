@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillCrashRecoveryOrchestrator — thin orchestrator shell for the crash-recovery skill.
 
 Capability: skill.crash_recovery

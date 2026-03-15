@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillVelocityEstimateOrchestrator — thin orchestrator shell for the velocity-estimate skill.
 
 Capability: skill.velocity_estimate

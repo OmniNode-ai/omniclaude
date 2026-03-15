@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillEnvParityOrchestrator — thin orchestrator shell for the env-parity skill.
 
 Capability: skill.env_parity
