@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1968,6 +1968,7 @@ dev = [
     { name = "coverage" },
     { name = "kafka-python" },
     { name = "mypy" },
+    { name = "onex-change-control" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -2012,6 +2013,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.4.0" },
     { name = "kafka-python", specifier = ">=2.3.0" },
     { name = "mypy", specifier = ">=1.17.0" },
+    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=jonahgabriel%2Fomn-5135-centralize-check-no-untyped-metadata" },
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
@@ -2048,6 +2050,17 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/69/d3/c5815551b338eeedd0f544f647ff1798d81a1df219005074a33296690dae/omninode_intelligence-0.13.2.tar.gz", hash = "sha256:bfceed1015343f91170f448656aa0537a50be83a10c31c12898267cf70db08ca", size = 1905582, upload-time = "2026-03-14T00:38:50.968Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/99/c660ca4883329c702df2621e750fce60be0faebf28edd31455f93b09b49a/omninode_intelligence-0.13.2-py3-none-any.whl", hash = "sha256:0adcb2ce2bce790fab4abe65567c1c30e98d144d902756c4121ec1be58b6723e", size = 1742561, upload-time = "2026-03-14T00:38:49.393Z" },
+]
+
+[[package]]
+name = "onex-change-control"
+version = "0.1.0"
+source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=jonahgabriel%2Fomn-5135-centralize-check-no-untyped-metadata#d1c1d3684bea254f5a21fc6d1c58d293ebefcd0e" }
+dependencies = [
+    { name = "colorama" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "tomli-w" },
 ]
 
 [[package]]
@@ -3519,6 +3532,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/18/a545c4ea42af3df6effd7d13d250ba77a0a86fb20393143bbb9a92e434d4/tokenizers-0.22.2-cp39-abi3-win32.whl", hash = "sha256:a6bf3f88c554a2b653af81f3204491c818ae2ac6fbc09e76ef4773351292bc92", size = 2502363, upload-time = "2026-01-05T10:45:20.593Z" },
     { url = "https://files.pythonhosted.org/packages/65/71/0670843133a43d43070abeb1949abfdef12a86d490bea9cd9e18e37c5ff7/tokenizers-0.22.2-cp39-abi3-win_amd64.whl", hash = "sha256:c9ea31edff2968b44a88f97d784c2f16dc0729b8b143ed004699ebca91f05c48", size = 2747786, upload-time = "2026-01-05T10:45:18.411Z" },
     { url = "https://files.pythonhosted.org/packages/72/f4/0de46cfa12cdcbcd464cc59fde36912af405696f687e53a091fb432f694c/tokenizers-0.22.2-cp39-abi3-win_arm64.whl", hash = "sha256:9ce725d22864a1e965217204946f830c37876eee3b2ba6fc6255e8e903d5fcbc", size = 2612133, upload-time = "2026-01-05T10:45:17.232Z" },
+]
+
+[[package]]
+name = "tomli-w"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/75/241269d1da26b624c0d5e110e8149093c759b7a286138f4efd61a60e75fe/tomli_w-1.2.0.tar.gz", hash = "sha256:2dd14fac5a47c27be9cd4c976af5a12d87fb1f0b4512f81d69cce3b35ae25021", size = 7184, upload-time = "2025-01-15T12:07:24.262Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/18/c86eb8e0202e32dd3df50d43d7ff9854f8e0603945ff398974c1d91ac1ef/tomli_w-1.2.0-py3-none-any.whl", hash = "sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90", size = 6675, upload-time = "2025-01-15T12:07:22.074Z" },
 ]
 
 [[package]]

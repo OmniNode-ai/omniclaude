@@ -61,6 +61,8 @@ dev = [
     "opentelemetry-api>=1.23.0,<2.0.0",
     "opentelemetry-sdk>=1.23.0,<2.0.0",
     "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
+    # Centralized governance hooks (OMN-5135)
+    "onex-change-control>=0.1.0",
 ]
 
 [project.scripts]
@@ -80,6 +82,9 @@ Changelog = "https://github.com/OmniNode-ai/omniclaude/blob/main/CHANGELOG.md"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.sources]
+onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "jonahgabriel/omn-5135-centralize-check-no-untyped-metadata" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
