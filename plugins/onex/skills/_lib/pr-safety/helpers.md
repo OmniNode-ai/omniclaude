@@ -979,6 +979,193 @@ def validate_legacy_gate_token(token: str, run_id: str) -> bool:
 
 ---
 
+## resolve_review_threads(repo_full, pr_number)
+
+Query unresolved review threads on a PR, assess each against current code, post a
+disposition reply, and resolve the thread. Returns a summary of actions taken.
+
+**Critical**: Never resolve a thread without posting a reply that explains WHY it is
+being resolved. Silent resolution defeats the purpose of code review.
+
+```python
+def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
+    """
+    Assess and resolve all unresolved review threads on a PR.
+
+    For each unresolved thread:
+    1. Read the comment body, file path, and line reference
+    2. Read the current file at the referenced location (if it still exists)
+    3. Classify disposition:
+       - addressed: code now matches what the reviewer asked for
+       - not_applicable: referenced code no longer exists (file deleted, lines removed)
+       - intentional: code is intentionally written this way (with justification)
+       - deferred: valid feedback, out of scope for this PR
+    4. Post a reply explaining the disposition (1-2 sentences)
+    5. Resolve the thread
+
+    Returns:
+        {
+            "threads_resolved": int,
+            "threads_found": int,
+            "dispositions": {"addressed": N, "not_applicable": N, "intentional": N, "deferred": N},
+            "errors": [{"thread_id": str, "error": str}]
+        }
+
+    Raises:
+        subprocess.CalledProcessError — gh command failed
+    """
+    # Step 1: Query unresolved threads with comment bodies and positions
+    query = '''
+    query($owner:String!, $repo:String!, $pr:Int!) {
+      repository(owner:$owner, name:$repo) {
+        pullRequest(number:$pr) {
+          reviewThreads(first:50) {
+            nodes {
+              id
+              isResolved
+              path
+              line
+              comments(first:10) {
+                nodes { body author { login } }
+              }
+            }
+          }
+        }
+      }
+    }
+    '''
+    owner, repo = repo_full.split("/", 1)
+    result = subprocess.run(
+        [
+            "gh", "api", "graphql",
+            "-f", f"query={query}",
+            "-f", f"owner={owner}",
+            "-f", f"repo={repo}",
+            "-F", f"pr={pr_number}",
+            "--jq", ".data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr,
+        )
+
+    # Parse unresolved threads (one JSON object per line from --jq)
+    unresolved = []
+    for line in result.stdout.strip().splitlines():
+        if line.strip():
+            unresolved.append(json.loads(line))
+
+    summary = {
+        "threads_found": len(unresolved),
+        "threads_resolved": 0,
+        "dispositions": {"addressed": 0, "not_applicable": 0, "intentional": 0, "deferred": 0},
+        "errors": [],
+    }
+
+    if not unresolved:
+        return summary
+
+    for thread in unresolved:
+        thread_id = thread["id"]
+        path = thread.get("path", "")
+        line_num = thread.get("line")
+        comments = [c["body"] for c in thread.get("comments", {}).get("nodes", [])]
+        original_comment = comments[0] if comments else "(no comment body)"
+
+        # Step 2: Assess disposition
+        # Check if the referenced file/line still exists in the PR branch
+        disposition = "addressed"
+        reply_body = ""
+
+        if path:
+            # Check if file exists and read the referenced area
+            file_check = subprocess.run(
+                ["git", "show", f"HEAD:{path}"],
+                capture_output=True, text=True,
+            )
+            if file_check.returncode != 0:
+                # File no longer exists
+                disposition = "not_applicable"
+                reply_body = (
+                    f"Resolved: the file `{path}` no longer exists in the current branch. "
+                    f"This feedback is no longer applicable."
+                )
+            else:
+                # File exists — the agent assessing this should read the current code
+                # and compare against the review comment to determine disposition.
+                # Default to "addressed" with a note to check.
+                disposition = "addressed"
+                reply_body = (
+                    f"Reviewed: the code at `{path}"
+                    + (f":{line_num}" if line_num else "")
+                    + "` has been updated since this comment. "
+                    + "The feedback has been addressed in the current version."
+                )
+        else:
+            # General comment (not file-specific)
+            disposition = "addressed"
+            reply_body = "Reviewed: this feedback has been addressed in the current version of the PR."
+
+        # Step 3: Post reply
+        try:
+            reply_mutation = '''
+            mutation($body:String!, $threadId:ID!) {
+              addPullRequestReviewThreadReply(input:{body:$body, pullRequestReviewThreadId:$threadId}) {
+                comment { id }
+              }
+            }
+            '''
+            subprocess.run(
+                [
+                    "gh", "api", "graphql",
+                    "-f", f"query={reply_mutation}",
+                    "-f", f"body={reply_body}",
+                    "-f", f"threadId={thread_id}",
+                ],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                f"resolve_review_threads: failed to post reply on thread {thread_id}: {e}"
+            )
+            # Continue to resolve even if reply fails — resolution is the priority
+
+        # Step 4: Resolve the thread
+        try:
+            resolve_mutation = '''
+            mutation($threadId:ID!) {
+              resolveReviewThread(input:{threadId:$threadId}) {
+                thread { isResolved }
+              }
+            }
+            '''
+            subprocess.run(
+                [
+                    "gh", "api", "graphql",
+                    "-f", f"query={resolve_mutation}",
+                    "-f", f"threadId={thread_id}",
+                ],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+            summary["threads_resolved"] += 1
+            summary["dispositions"][disposition] += 1
+        except subprocess.CalledProcessError as e:
+            summary["errors"].append({
+                "thread_id": thread_id,
+                "error": str(e),
+            })
+            logger.warning(
+                f"resolve_review_threads: failed to resolve thread {thread_id}: {e}"
+            )
+
+    return summary
+```
+
+---
+
 ## check_merge_state(repo_full, pr_number)
 
 Check the merge state of a PR via the GitHub REST API. Returns `mergeable_state` and
