@@ -1,7 +1,7 @@
 ---
 name: merge-sweep
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
-version: 3.2.0
+version: 3.3.0
 level: advanced
 debug: false
 category: workflow
@@ -172,15 +172,33 @@ def is_green(pr) -> bool:
     if not required_checks:
         return True  # no required checks = green
     return all(c.get("conclusion") == "SUCCESS" for c in required_checks)
+
+def needs_thread_resolution(pr, require_approval=True) -> bool:
+    """Track A-resolve: PR is BLOCKED only by unresolved review threads.
+    Catches: MERGEABLE + BLOCKED + ALL_GREEN — the only remaining blocker
+    is `required_conversation_resolution` branch protection.
+    These PRs need their review threads assessed and resolved before merge.
+    """
+    if pr["isDraft"]:
+        return False
+    if pr["mergeable"] != "MERGEABLE":
+        return False
+    if pr.get("mergeStateStatus", "").upper() != "BLOCKED":
+        return False
+    if not is_green(pr):
+        return False
+    # At this point: MERGEABLE + BLOCKED + GREEN
+    # The only known cause is required_conversation_resolution with unresolved threads.
+    # (review requirement is already excluded: require_approval check uses APPROVED/None)
+    return True
 ```
 
 **Classification order** (first match wins):
 1. `needs_branch_update()` -- Track A-update (stale branch OR unknown mergeable state — update forces recomputation)
 2. `is_merge_ready()` -- Track A (branch current, auto-merge immediately)
-3. `needs_polish()` -- Track B (fixable blocking issues)
-4. `BLOCKED` + all checks green -- warn as potential branch protection drift (BRANCH_PROTECTION_DRIFT).
-   These PRs are not added to Track B; they require `/gap detect` or `audit-branch-protection.py` to fix.
-5. Draft / `REVIEW_REQUIRED` -- skip silently
+3. `needs_thread_resolution()` -- Track A-resolve (BLOCKED by unresolved conversations only)
+4. `needs_polish()` -- Track B (fixable blocking issues)
+5. Draft / `REVIEW_REQUIRED` / other BLOCKED -- skip silently
 
 ## Arguments
 
@@ -228,12 +246,13 @@ def is_green(pr) -> bool:
    first match wins per PR):
    - needs_branch_update() + passes filters → branch_update_queue[] (Track A-update; includes UNKNOWN mergeable PRs)
    - is_merge_ready() + passes filters → candidates[] (Track A)
+   - needs_thread_resolution() + passes filters → thread_resolve_queue[] (Track A-resolve)
    - needs_polish() + passes filters → polish_queue[] (Track B)
    - draft / REVIEW_REQUIRED / else → ignore silently
    Check claim registry; exclude PRs with active claims from other runs.
    Apply --max-total-merges cap to candidates[] (skip if 0).
 
-4. If branch_update_queue[], candidates[], and polish_queue[] are all empty:
+4. If branch_update_queue[], candidates[], thread_resolve_queue[], and polish_queue[] are all empty:
    → emit ModelSkillResult(status=nothing_to_merge), exit
 
 5. If --dry-run:
@@ -255,6 +274,22 @@ def is_green(pr) -> bool:
       ELIF mergeable_state == "clean":
         promote to candidates[] (race: branch was updated between scan and execution)
     Sequential processing respects GitHub rate limits.
+
+5c. PHASE A-resolve — Assess and resolve review threads (sequential):
+    For each PR in thread_resolve_queue[]:
+      resolve_review_threads(repo, N)  — via @_lib/pr-safety/helpers.md
+      For each unresolved thread:
+        1. Read comment body, file path, and line reference
+        2. Read current file at referenced location (if it still exists)
+        3. Classify disposition: addressed | not_applicable | intentional | deferred
+        4. Post a reply explaining WHY the thread is being resolved (1-2 sentences)
+        5. Resolve the thread
+      After all threads resolved: promote to candidates[] for Phase A auto-merge
+      Record as "threads_resolved" with disposition breakdown
+    Sequential processing to avoid GitHub API rate limits on GraphQL mutations.
+
+    CRITICAL: Never resolve a thread without posting a reply. Silent resolution
+    defeats the purpose of code review.
 
 6. PHASE A — Enable GitHub auto-merge (parallel, up to --max-parallel-prs):
    For each candidate in candidates[]:
@@ -334,6 +369,7 @@ No polling — notification only. Best-effort: if posting fails, log warning and
 
 Repos scanned: R ok | F failed
 Branch updates (proactive):    P stale → updated (CI re-running)
+Thread resolution:             T resolved (A addressed | B not_applicable | C intentional | D deferred)
 Track A (auto-merge enabled):  N queued | D merged directly | K failed
   Post-merge branch updates:   B behind → updated
 Track B (pr-polish):           M fixed → M queued | P partial | Q blocked
@@ -376,12 +412,15 @@ Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
   "repos_failed": 2,
   "candidates_found": 3,
   "branch_update_queue_found": 2,
+  "thread_resolve_queue_found": 2,
   "polish_queue_found": 2,
   "auto_merge_set": 4,
   "merged_directly": 1,
   "branches_updated": 4,
   "branches_updated_proactive": 2,
   "branches_updated_post_merge": 0,
+  "threads_resolved": 4,
+  "thread_resolve_dispositions": {"addressed": 3, "not_applicable": 1, "intentional": 0, "deferred": 0},
   "polished": 1,
   "polish_partial": 0,
   "polish_blocked": 1,
@@ -435,6 +474,7 @@ Status values:
 
 Scan `result` values (per repo): `scan_failed` (repo scan never returned — silent miss)
 Track A-update `result` values: `branch_updated` | `failed` | `skipped`
+Track A-resolve `result` values: `threads_resolved` (promoted to Track A) | `failed` | `skipped`
 Track A `result` values: `auto_merge_set` | `merged_directly` | `failed` | `skipped`
 Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` | `failed` | `skipped`
 
@@ -450,6 +490,10 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
 | `update-branch` API fails (403/429/422) | Log warning, record `result: failed`, continue others |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
+| Thread resolution GraphQL query fails | Log warning, record `result: failed` for that PR, continue others |
+| Thread reply mutation fails | Log warning, still attempt to resolve the thread (resolution is priority) |
+| Thread resolve mutation fails | Record in errors list, continue to next thread |
+| All threads resolved but PR still BLOCKED | Log warning — may be non-thread branch protection issue; do NOT promote to Track A |
 | `gh pr merge --auto` fails with "clean status" | Fall back to direct merge (no `--auto`); record `result: merged_directly` |
 | `gh pr merge --auto` fails for other reasons | Record `result: failed`; continue others |
 | PR becomes BEHIND after auto-merge armed (Step 6a) | Safety net: update branch post-merge |
@@ -483,6 +527,16 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.3.0** (OMN-5134): Intelligent review thread resolution. Add `needs_thread_resolution()`
+  predicate for PRs that are MERGEABLE + BLOCKED + ALL_GREEN (blocked only by
+  `required_conversation_resolution`). New Phase A-resolve assesses each unresolved thread
+  against current code, posts a disposition reply (addressed | not_applicable | intentional |
+  deferred), then resolves the thread. Promoted PRs flow into Phase A for auto-merge. Add
+  `resolve_review_threads()` to `_lib/pr-safety/helpers.md`. Add `thread_resolve_queue_found`,
+  `threads_resolved`, and `thread_resolve_dispositions` counters to ModelSkillResult. Also
+  integrate thread resolution into pr-polish finalize phase. Replaces the previous
+  BRANCH_PROTECTION_DRIFT warning (which required manual intervention) with automated handling.
+  Fixes 9 PRs across 3 repos blocked on 2026-03-15 sweep.
 - **v3.2.0** (OMN-4517): Post-scan repo coverage assertion. Distinguishes repos with zero PRs
   (confirmed empty scan) from repos that silently missed in the parallel fan-out. All configured
   repos are initialized to `None` before scanning; successful scans (even empty) set their entry
