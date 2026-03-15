@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Golden path unit tests for session lifecycle: start → inject → work → end → outcome.
 
 Tests verify the full session lifecycle at the Python handler layer with mocked Kafka.

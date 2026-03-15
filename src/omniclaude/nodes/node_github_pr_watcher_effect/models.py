@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Models for the GitHub PR watcher effect node.
 
 InboxRouteResult: result of routing a PR status event to agent inboxes.

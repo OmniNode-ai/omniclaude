@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests for OmniClaude hook event schemas.
 
 Validates ONEX-compliant event schemas for Claude Code hooks following

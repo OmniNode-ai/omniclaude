@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """PersonalityAdapter — pure transformation from LogEvent → RenderedLog.
 
 No I/O. It is a pure transformation layer that accepts

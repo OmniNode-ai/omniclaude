@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillExecutingPlansOrchestrator — thin orchestrator shell for the executing-plans skill.
 
 Capability: skill.executing_plans

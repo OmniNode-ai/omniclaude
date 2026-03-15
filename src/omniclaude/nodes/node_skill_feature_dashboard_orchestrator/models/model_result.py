@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Canonical result model for the Feature Dashboard orchestrator node.
 
 This module defines all enums, audit check models, gap models, and the

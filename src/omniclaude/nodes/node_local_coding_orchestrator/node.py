@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node Local Coding Orchestrator - 100% contract-driven.
 
 The NodeLocalCodingOrchestrator class, a minimal shell

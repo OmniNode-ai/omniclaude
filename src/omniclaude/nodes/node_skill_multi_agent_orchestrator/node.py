@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillMultiAgentOrchestrator -- thin orchestrator shell for the multi-agent skill.
 
 Capability: skill.multi_agent

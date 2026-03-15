@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodePersonalityLoggingEffect — personality-aware structured logging.
 
 Implements OMN-2575: Personality Logging Effect Node.

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Pytest configuration for lib/core unit tests.
 
 This conftest.py sets up module-level mocking for omnibase_infra and omnibase_core

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Routing prompt regression tests (OMN-2266).
 
 Snapshot the expected prompt structure and validate strict parsing of the

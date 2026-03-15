@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillPrQueuePipelineOrchestrator — thin orchestrator shell for the pr-queue-pipeline skill.
 
 Capability: skill.pr_queue_pipeline

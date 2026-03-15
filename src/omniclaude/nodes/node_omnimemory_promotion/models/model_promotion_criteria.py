@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Promotion criteria for OmniMemory pattern eligibility.
 
 Criteria are loaded from configuration (Pydantic Settings / .env) rather

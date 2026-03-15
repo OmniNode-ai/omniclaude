@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Unit tests for disabled pattern filtering in ManifestInjector.
 
 Tests verify (OMN-1682: FEEDBACK-007):

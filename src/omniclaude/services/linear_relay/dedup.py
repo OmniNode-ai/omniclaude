@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """SQLite-backed deduplication store for the Linear relay service.
 
 Schema: (key TEXT PRIMARY KEY, created_at REAL)

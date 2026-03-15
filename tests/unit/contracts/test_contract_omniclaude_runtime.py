@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Verify the omniclaude runtime service contract exists and declares OMNICLAUDE_CONTRACTS_ROOT.
 
 Uses string-contains checks deliberately (no yaml import) to avoid relying on

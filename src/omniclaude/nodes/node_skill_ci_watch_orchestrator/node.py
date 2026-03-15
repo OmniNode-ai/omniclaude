@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillCiWatchOrchestrator — thin orchestrator shell for the ci-watch skill.
 
 Capability: skill.ci_watch

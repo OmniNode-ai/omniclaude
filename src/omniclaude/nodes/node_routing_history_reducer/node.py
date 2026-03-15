@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node Routing History Reducer - 100% contract-driven.
 
 The NodeRoutingHistoryReducer class, a minimal shell

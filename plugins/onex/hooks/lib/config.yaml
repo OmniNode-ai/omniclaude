@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Hook Toggle Configuration
+# ==========================
+# All optional hook behaviors are gated by environment variables.
+# All toggles default to OFF (0) unless explicitly set to 1.
+#
+# Set these in ~/.omnibase/.env or export them in your shell.
+
+toggles:
+  OMNICLAUDE_SESSION_HANDOFF:
+    description: >
+      Enable session handoff injection in session-start.sh.
+      When enabled, the /handoff skill writes a manifest that the next
+      session-start injects as continuity context. /clear alone stays clean.
+    default: "0"
+    values: ["0", "1"]
+    hook: session-start.sh
+    ticket: OMN-5118
+
+  OMNICLAUDE_PRECOMPACT_SNAPSHOT:
+    description: >
+      Enable pre-compact context snapshot capture in pre-compact.sh.
+      When enabled, a lightweight context snapshot is written to /tmp
+      before the conversation is compressed.
+    default: "0"
+    values: ["0", "1"]
+    hook: pre-compact.sh
+    ticket: null
+
+  OMNICLAUDE_POSTCOMPACT_RESTORE:
+    description: >
+      Enable post-compact context re-injection in user-prompt-submit.sh.
+      When enabled, the pre-compact snapshot is injected into the next
+      prompt after /compact runs (one-shot, consumed after injection).
+    default: "0"
+    values: ["0", "1"]
+    hook: user-prompt-submit.sh
+    ticket: null

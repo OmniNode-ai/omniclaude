@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Merge gate result event model for OMN-3138.
 
 Emitted after Tier A gate checks are run locally on a PR's contract changes.

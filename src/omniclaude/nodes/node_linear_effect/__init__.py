@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeLinearEffect - Contract-driven effect node for Linear ticketing operations.
 
 This package provides the NodeLinearEffect node for all Linear API operations

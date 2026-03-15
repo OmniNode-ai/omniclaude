@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Models for the NodeLocalLlmInferenceEffect node.
 
 This package contains Pydantic models for local LLM inference:

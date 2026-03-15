@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Integration test: emit a LogEvent → verify Slack Block Kit payload structure (OMN-2575).
 
 This test verifies the full pipeline:

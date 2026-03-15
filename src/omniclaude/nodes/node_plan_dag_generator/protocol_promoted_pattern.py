@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Protocol for promoted OmniMemory patterns (OMN-2506 integration).
 
 Defines the interface for promoted ticket generation patterns that the
