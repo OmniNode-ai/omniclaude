@@ -121,7 +121,10 @@ def _get_emit_event() -> Callable[..., bool]:
     """
     global _emit_event_func
     if _emit_event_func is None:
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        try:
+            from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        except ImportError:
+            from emit_client_wrapper import emit_event
 
         _emit_event_func = emit_event
     return _emit_event_func
@@ -850,15 +853,24 @@ class HandlerContextInjection:
         # be logged via logger.exception so they are visible in logs rather than
         # silently swallowed.
         # NOTE: plugins.onex.hooks.lib is not an installed package — this import requires
-        # the repo root in sys.path (set by pytest rootdir or OMNICLAUDE_PROJECT_ROOT).
+        # either the repo root on sys.path (dev/test mode, full path import) or
+        # HOOKS_LIB on sys.path (deployed mode, bare import).
         # Falls back gracefully to HTTP API if import fails.
         try:
-            from plugins.onex.hooks.lib.pattern_cache import (
-                get_pattern_cache as _get_pattern_cache,
-            )
-            from plugins.onex.hooks.lib.pattern_cache import (
-                start_projection_consumer_if_configured as _start_consumer,
-            )
+            try:
+                from plugins.onex.hooks.lib.pattern_cache import (
+                    get_pattern_cache as _get_pattern_cache,
+                )
+                from plugins.onex.hooks.lib.pattern_cache import (
+                    start_projection_consumer_if_configured as _start_consumer,
+                )
+            except ImportError:
+                from pattern_cache import (
+                    get_pattern_cache as _get_pattern_cache,
+                )
+                from pattern_cache import (
+                    start_projection_consumer_if_configured as _start_consumer,
+                )
         except ImportError as exc:
             logger.warning("pattern_cache module unavailable (ImportError): %s", exc)
         else:
