@@ -193,7 +193,7 @@ class HandlerRoutingEmitter:
                 duration_ms=elapsed_ms,
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: emission must degrade
             # Graceful degradation: emission failures must not propagate.
             elapsed_ms = (time.monotonic() - start) * 1000.0
             error_msg = f"{type(exc).__name__}: {exc}"

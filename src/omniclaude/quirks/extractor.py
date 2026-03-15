@@ -285,7 +285,7 @@ class NodeQuirkSignalExtractorEffect:
                     "not published (quirk_id=%s) -- DB write is authoritative",
                     signal.quirk_id,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: Kafka publish must degrade
             logger.warning(
                 "NodeQuirkSignalExtractorEffect: failed to publish signal to Kafka "
                 "(quirk_id=%s) -- DB write is authoritative",

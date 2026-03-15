@@ -138,7 +138,7 @@ class EmitClient:
         try:
             resp = self._send_and_recv({"command": "ping"})
             return resp.get("status") == "ok"
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: daemon ping must degrade
             return False
 
     def close(self) -> None:
@@ -161,7 +161,7 @@ class EmitClient:
         """Best-effort cleanup of open socket on garbage collection."""
         try:
             self.close()
-        except Exception:  # nosec B110 — __del__ finalizer, nowhere to report errors
+        except Exception:  # noqa: BLE001  # nosec B110 — boundary: __del__ finalizer
             pass
 
 

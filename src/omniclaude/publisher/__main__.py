@@ -110,7 +110,7 @@ def _do_stop(args: argparse.Namespace) -> int:
     else:
         try:
             config = PublisherConfig()  # type: ignore[call-arg]  # pydantic-settings loads from env
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: config failure falls back to env
             # If config validation fails (e.g. missing kafka_bootstrap_servers),
             # fall back to env var / default — stop doesn't need Kafka.
             config = None
@@ -146,7 +146,7 @@ def _do_stop(args: argparse.Namespace) -> int:
         print("Publisher process not found, cleaning up stale PID file")
         pid_path.unlink(missing_ok=True)
         return 0
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: stop command must not crash
         print(f"Error stopping publisher: {e}", file=sys.stderr)
         return 1
 

@@ -124,7 +124,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         # Build the prompt
         try:
             prompt = self._build_prompt(request)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: node must return error result
             logger.warning(
                 "transition_selector.prompt_build_error",
                 extra={"correlation_id": str(correlation_id), "error": str(exc)},
@@ -158,7 +158,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 duration_ms=time.monotonic() * 1000.0 - start_ms,
                 correlation_id=correlation_id,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: node must return error result
             logger.warning(
                 "transition_selector.model_unavailable",
                 extra={"correlation_id": str(correlation_id), "error": str(exc)},
@@ -361,7 +361,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         for attempt in range(self._MAX_RETRIES + 1):
             try:
                 return await self._call_model_once(prompt)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: retry loop catches all
                 last_exc = exc
                 if attempt < self._MAX_RETRIES:
                     logger.warning(

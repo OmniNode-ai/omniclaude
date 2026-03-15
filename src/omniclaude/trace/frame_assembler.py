@@ -638,6 +638,6 @@ def emit_change_frame(frame: ChangeFrame, session_id: str) -> bool:
 
     try:
         return bool(emit_event("change.frame.emitted", payload))
-    except Exception:
+    except Exception:  # noqa: BLE001 — boundary: emit is fire-and-forget
         logger.debug("ChangeFrame emission failed (fire-and-forget)", exc_info=True)
         return False

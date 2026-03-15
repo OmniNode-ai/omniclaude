@@ -238,7 +238,7 @@ class HandlerRoutingLlm:
                     context={},
                     trigger_score=trigger_score,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: scorer failure skips agent
                 logger.warning(
                     "ConfidenceScorer.score() failed for %s (correlation_id=%s)",
                     agent_name,

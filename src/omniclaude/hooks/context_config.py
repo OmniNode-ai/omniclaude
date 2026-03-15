@@ -220,7 +220,7 @@ class SessionStartInjectionConfig(BaseModel):
                     "/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
                 ),
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: config must never raise
             # Catch Pydantic ValidationError or any unexpected errors.
             # Log with context and return default config to ensure method never raises.
             logger.warning(
