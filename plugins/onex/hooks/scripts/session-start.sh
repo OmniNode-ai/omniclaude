@@ -1217,6 +1217,75 @@ ${SKILL_SUGGESTIONS}"
         HAS_SKILL_SUGGESTIONS="true"
     fi
 
+    # ── Handoff injection (OMN-5118) ─────────────────────────────────────────
+    # Toggle gate: OMNICLAUDE_SESSION_HANDOFF (default OFF)
+    # When enabled, inject the handoff manifest written by /handoff into
+    # COMBINED_CONTEXT. Manifest is consumed (deleted) after successful injection.
+    if [[ "${OMNICLAUDE_SESSION_HANDOFF:-0}" == "1" ]]; then
+        _HANDOFF_DIR="${HOME}/.claude/handoff"
+        if [[ -d "$_HANDOFF_DIR" && -n "$CWD" ]]; then
+            # Compute CWD hash + repo slug to find the manifest
+            _HANDOFF_CWD_HASH=$(echo -n "$CWD" | shasum -a 256 2>/dev/null | cut -c1-8) || _HANDOFF_CWD_HASH=""
+            _HANDOFF_REPO_SLUG=$(basename "$(git -C "$CWD" remote get-url origin 2>/dev/null)" .git 2>/dev/null || basename "$CWD")
+            if [[ -n "$_HANDOFF_CWD_HASH" && -n "$_HANDOFF_REPO_SLUG" ]]; then
+                _HANDOFF_MANIFEST="${_HANDOFF_DIR}/${_HANDOFF_CWD_HASH}-${_HANDOFF_REPO_SLUG}.json"
+                if [[ -f "$_HANDOFF_MANIFEST" ]]; then
+                    # Check staleness (>24h = ignore and clean)
+                    _HANDOFF_AGE=0
+                    _HANDOFF_MTIME=$(stat -f %m "$_HANDOFF_MANIFEST" 2>/dev/null || stat -c %Y "$_HANDOFF_MANIFEST" 2>/dev/null || echo 0)
+                    _HANDOFF_NOW=$(date +%s)
+                    _HANDOFF_AGE=$(( _HANDOFF_NOW - _HANDOFF_MTIME ))
+                    if [[ $_HANDOFF_AGE -gt 86400 ]]; then
+                        log "Handoff manifest stale (${_HANDOFF_AGE}s old), cleaning up: $_HANDOFF_MANIFEST"
+                        rm -f "$_HANDOFF_MANIFEST"
+                    else
+                        # Read and inject
+                        _HANDOFF_CTX=""
+                        _HANDOFF_MSG=$(jq -r '.message // empty' "$_HANDOFF_MANIFEST" 2>/dev/null) || _HANDOFF_MSG=""
+                        _HANDOFF_TICKET=$(jq -r '.context.active_ticket // empty' "$_HANDOFF_MANIFEST" 2>/dev/null) || _HANDOFF_TICKET=""
+                        _HANDOFF_BRANCH=$(jq -r '.context.branch // empty' "$_HANDOFF_MANIFEST" 2>/dev/null) || _HANDOFF_BRANCH=""
+                        _HANDOFF_COMMITS=$(jq -r '.context.recent_commits[]? // empty' "$_HANDOFF_MANIFEST" 2>/dev/null | head -5) || _HANDOFF_COMMITS=""
+                        _HANDOFF_FILES=$(jq -r '.context.working_files[]? // empty' "$_HANDOFF_MANIFEST" 2>/dev/null | head -20) || _HANDOFF_FILES=""
+
+                        _HANDOFF_CTX="## Session Handoff Context"
+                        [[ -n "$_HANDOFF_MSG" ]] && _HANDOFF_CTX="${_HANDOFF_CTX}
+Message: ${_HANDOFF_MSG}"
+                        [[ -n "$_HANDOFF_TICKET" ]] && _HANDOFF_CTX="${_HANDOFF_CTX}
+Ticket: ${_HANDOFF_TICKET}"
+                        [[ -n "$_HANDOFF_BRANCH" ]] && _HANDOFF_CTX="${_HANDOFF_CTX}
+Branch: ${_HANDOFF_BRANCH}"
+                        if [[ -n "$_HANDOFF_COMMITS" ]]; then
+                            _HANDOFF_CTX="${_HANDOFF_CTX}
+Recent commits:
+${_HANDOFF_COMMITS}"
+                        fi
+                        if [[ -n "$_HANDOFF_FILES" ]]; then
+                            _HANDOFF_CTX="${_HANDOFF_CTX}
+Working files:
+${_HANDOFF_FILES}"
+                        fi
+
+                        if [[ -n "$_HANDOFF_CTX" ]]; then
+                            if [[ -n "$COMBINED_CONTEXT" ]]; then
+                                COMBINED_CONTEXT="${_HANDOFF_CTX}
+
+---
+
+${COMBINED_CONTEXT}"
+                            else
+                                COMBINED_CONTEXT="$_HANDOFF_CTX"
+                            fi
+                            # Consume manifest (one-shot) — delete after successful read
+                            rm -f "$_HANDOFF_MANIFEST"
+                            log "Handoff context injected and manifest consumed: $_HANDOFF_MANIFEST"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+    fi
+    # ── End handoff injection ─────────────────────────────────────────────
+
     if [[ -n "$COMBINED_CONTEXT" ]]; then
         # Include combined context in additionalContext (sync injection)
         printf '%s' "$INPUT" | jq \
