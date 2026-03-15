@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Contract state model for graph navigation.
 
 NOTE: This is a local definition pending omnibase_core export (OMN-2540).

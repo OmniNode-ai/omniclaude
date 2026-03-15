@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Confidence breakdown model - strongly typed replacement for ConfidenceScore dataclass.
 
 Replaces the legacy `ConfidenceScore` dataclass from `confidence_scorer.py`

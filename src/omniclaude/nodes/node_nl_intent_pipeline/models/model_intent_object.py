@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Typed Intent Object — the system-of-record output of Stage 1→2.
 
 NL input is the *entry point*; the structured Intent object is the *authority*.

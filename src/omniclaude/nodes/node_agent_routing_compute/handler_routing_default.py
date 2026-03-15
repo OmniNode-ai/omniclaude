@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Default routing handler - wraps _internal/ pure-Python logic with typed models.
 
 Implements ProtocolAgentRouting by:

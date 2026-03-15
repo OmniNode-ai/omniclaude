@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Tests to verify CLI and handler PatternRecord definitions stay in sync.
 
 The PatternRecord class is intentionally duplicated in two locations:

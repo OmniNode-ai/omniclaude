@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """PR outcome event model for OMN-3138.
 
 Emitted after a PR merge or revert is detected, capturing the terminal

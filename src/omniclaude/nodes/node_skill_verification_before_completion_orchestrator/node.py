@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillVerificationBeforeCompletionOrchestrator — thin orchestrator shell for the verification-before-completion skill.
 
 Capability: skill.verification_before_completion

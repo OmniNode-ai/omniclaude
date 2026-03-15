@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeSkillAutoMergeOrchestrator — thin orchestrator shell for the auto-merge skill.
 
 Capability: skill.auto_merge

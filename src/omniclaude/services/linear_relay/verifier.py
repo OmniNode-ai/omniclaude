@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """HMAC-SHA256 signature verifier for Linear webhooks.
 
 Verifies the ``Linear-Signature`` header against the raw request body
