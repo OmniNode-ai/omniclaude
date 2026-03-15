@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodePatternPersistenceEffect - Contract-driven effect node for learned patterns.
 
 This package provides the NodePatternPersistenceEffect node for storing and

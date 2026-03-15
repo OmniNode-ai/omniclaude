@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Wave 2 pipeline observability event models for OMN-2922.
 
 Five new pipeline event types consumed by omnidash Wave 2 projection nodes.

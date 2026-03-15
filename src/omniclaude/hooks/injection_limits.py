@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Injection limits configuration and pattern selection algorithm.
 
 OMN-1671 (INJECT-002): configurable injection limits

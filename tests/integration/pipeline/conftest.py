@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Conftest for NL Intent-Plan-Ticket Compiler pipeline integration tests.
 
 This conftest adds the other epic OMN-2357 worktree src directories to

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Unit tests for skill_execution_log_subscriber (OMN-2778).
 
 Tests the Kafka-to-table projection consumer that writes

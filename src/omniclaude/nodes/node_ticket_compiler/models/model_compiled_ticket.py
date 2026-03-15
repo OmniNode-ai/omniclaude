@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Compiled ticket model — the output of Stage 4.
 
 Each compiled ticket corresponds to exactly one work unit from the Plan DAG

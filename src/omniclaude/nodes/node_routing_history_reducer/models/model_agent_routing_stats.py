@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Aggregate routing statistics model for the routing history reducer.
 
 Model ownership: PRIVATE to omniclaude.

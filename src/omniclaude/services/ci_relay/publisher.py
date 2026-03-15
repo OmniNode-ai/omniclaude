@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Kafka publisher for the CI relay service.
 
 Publishes PRStatusEvent instances to the configured Kafka bootstrap servers.

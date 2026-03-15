@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Promoted ticket generation pattern stored in OmniMemory.
 
 A promoted pattern represents a stable, evidence-backed template for

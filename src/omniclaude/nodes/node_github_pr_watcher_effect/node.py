@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeGithubPrWatcherEffect -- effect node for PR status event routing.
 
 Subscribes to ``onex.evt.omniclaude.github-pr-status.v1``, looks up the Valkey watch

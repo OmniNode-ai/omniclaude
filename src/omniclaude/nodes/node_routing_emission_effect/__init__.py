@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeRoutingEmissionEffect - Contract-driven effect node for routing emission.
 
 This package provides the NodeRoutingEmissionEffect node for emitting

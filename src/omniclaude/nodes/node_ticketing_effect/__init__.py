@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeTicketingEffect - Abstract base effect node for ticketing system operations.
 
 This package provides the NodeTicketingEffect node as a vendor-agnostic base

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node Transition Selector Effect — local model as constrained transition selector.
 
 This effect node wires the local model (Qwen3-14B at LLM_CODER_FAST_URL) into

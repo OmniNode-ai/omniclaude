@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Node Agent Inbox Effect - 100% contract-driven.
 
 The NodeAgentInboxEffect class, a minimal shell

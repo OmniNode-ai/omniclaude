@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Enum for ambiguity resolution paths.
 
 Records whether an ambiguity in the NL input was resolved via explicit

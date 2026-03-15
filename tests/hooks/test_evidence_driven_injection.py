@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Unit test for evidence-driven injection full loop (OMN-2092).
 
 Tests the full feedback loop using only local file I/O (tmp_path):

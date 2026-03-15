@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """PR changeset event model for OMN-3138.
 
 Emitted when a PR is opened or updated, capturing the set of contract changes

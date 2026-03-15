@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Unit tests for scripts/generate_skill_node.py.
 
 Tests the snake_to_pascal conversion function and the dry-run output of the

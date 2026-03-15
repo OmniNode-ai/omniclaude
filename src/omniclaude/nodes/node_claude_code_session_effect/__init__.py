@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodeClaudeCodeSessionEffect - Contract-driven effect node for Claude Code sessions.
 
 This package provides the NodeClaudeCodeSessionEffect node for managing

@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Smoke-test: audit mode stable.json write verification (OMN-3507).
 
 Verifies end-to-end file write behaviour of the audit mode:

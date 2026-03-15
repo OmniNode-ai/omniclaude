@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """Internal pure-Python routing logic.
 
 This package contains the ported routing algorithms with ZERO ONEX imports.

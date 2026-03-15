@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """conftest.py for scripts unit tests.
 
 Adds the repository root to sys.path so that ``from scripts.<module> import``

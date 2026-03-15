@@ -1,7 +1,5 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-
-# Copyright (c) 2025 OmniNode Team
 """NodePersonalityLoggingEffect — ONEX Effect Node for personality-aware logging.
 
 Consumes ``ModelLogEvent`` objects from an asyncio queue (internal) or from
