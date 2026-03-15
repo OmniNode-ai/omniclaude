@@ -2013,7 +2013,7 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.4.0" },
     { name = "kafka-python", specifier = ">=2.3.0" },
     { name = "mypy", specifier = ">=1.17.0" },
-    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=jonahgabriel%2Fomn-5135-centralize-check-no-untyped-metadata" },
+    { name = "onex-change-control", git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main" },
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
@@ -2055,7 +2055,7 @@ wheels = [
 [[package]]
 name = "onex-change-control"
 version = "0.1.0"
-source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=jonahgabriel%2Fomn-5135-centralize-check-no-untyped-metadata#d1c1d3684bea254f5a21fc6d1c58d293ebefcd0e" }
+source = { git = "https://github.com/OmniNode-ai/onex_change_control.git?branch=main#41054810a25db826a4c649f491a2d980bffb0c17" }
 dependencies = [
     { name = "colorama" },
     { name = "pydantic" },
