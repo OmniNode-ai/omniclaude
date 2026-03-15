@@ -143,6 +143,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "circuit.breaker.tripped",  # OMN-2922 - Kafka circuit breaker opened
         "response.stopped",  # STOP-HOOK-FIX - Stop hook after each assistant turn completion
         "pr.validation.rollup",  # OMN-3930 - PR validation rollup with VTS at pipeline completion
+        "correlation.trace.span",  # OMN-5047 - Correlation trace span for omnidash /trace page
     ]
 )
 

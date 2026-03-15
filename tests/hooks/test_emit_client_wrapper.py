@@ -87,6 +87,7 @@ class TestModuleImport:
             "circuit.breaker.tripped",  # OMN-2922 - Wave 2: Circuit breaker tripped
             "response.stopped",  # Stop hook lifecycle event
             "pr.validation.rollup",  # OMN-3930 - PR validation rollup with VTS at pipeline completion
+            "correlation.trace.span",  # OMN-5047 - Correlation trace span for omnidash /trace page
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

@@ -97,6 +97,7 @@ class HookEventType(StrEnum):
     MANIFEST_INJECTED = "hook.manifest.injected"
     STATIC_CONTEXT_EDIT_DETECTED = "hook.static.context.edit.detected"
     DECISION_RECORDED = "hook.decision.recorded"
+    CORRELATION_TRACE_SPAN = "hook.correlation.trace.span"
 
 
 class HookSource(StrEnum):
@@ -2650,6 +2651,185 @@ class ModelHookDecisionRecordedPayload(BaseModel):
     )
 
 
+# =============================================================================
+# Correlation Trace Span Events (OMN-5047)
+# =============================================================================
+
+
+class EnumTraceSpanKind(StrEnum):
+    """Kind of trace span emitted during a session.
+
+    Values:
+        SESSION: Top-level session span (root of the trace tree).
+        HOOK: A hook invocation (SessionStart, UserPromptSubmit, PostToolUse, etc.).
+        TOOL_USE: A tool execution within a hook (Read, Write, Bash, etc.).
+        ROUTING: Agent routing decision within a prompt submit.
+        CONTEXT_INJECTION: Context injection step within a prompt submit.
+        EMIT: Event emission to Kafka.
+        SKILL: Skill invocation lifecycle.
+        CUSTOM: Application-defined span for extensibility.
+    """
+
+    SESSION = "session"
+    HOOK = "hook"
+    TOOL_USE = "tool_use"
+    ROUTING = "routing"
+    CONTEXT_INJECTION = "context_injection"
+    EMIT = "emit"
+    SKILL = "skill"
+    CUSTOM = "custom"
+
+
+class EnumTraceSpanStatus(StrEnum):
+    """Status of a completed trace span.
+
+    Values:
+        OK: Span completed successfully.
+        ERROR: Span completed with an error.
+        TIMEOUT: Span exceeded its deadline.
+        SKIPPED: Span was skipped (e.g., injection disabled).
+    """
+
+    OK = "ok"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+    SKIPPED = "skipped"
+
+
+class ModelCorrelationTraceSpanPayload(BaseModel):
+    """Event payload for a single trace span within a correlation trace.
+
+    Emitted during active Claude Code sessions to provide real-time
+    span-level trace data for the omnidash /trace page. Each span
+    represents a unit of work (hook, tool use, routing, etc.) and
+    can be nested via parent_span_id to form a tree.
+
+    Attributes:
+        span_id: Unique identifier for this span.
+        trace_id: Groups all spans in a single session/correlation trace.
+            Typically equals the correlation_id from the session.
+        parent_span_id: ID of the parent span (None for root spans).
+        correlation_id: Correlation ID for distributed tracing.
+        session_id: Claude Code session identifier.
+        span_kind: The kind of operation this span represents.
+        operation_name: Human-readable name of the operation (e.g.,
+            "UserPromptSubmit", "Read /path/to/file", "route_agent").
+        status: Span completion status.
+        started_at: When the span started (UTC).
+        ended_at: When the span ended (UTC, None if still in progress).
+        duration_ms: Duration in milliseconds (None if still in progress).
+        metadata: Arbitrary key-value metadata for the span. Values are
+            strings to ensure JSON serialization safety. Must not contain
+            secrets -- callers are responsible for sanitization.
+        error_message: Error message if status is ERROR (max 500 chars).
+        schema_version: Schema version for forward compatibility.
+
+    Privacy Considerations:
+        - operation_name may contain file paths; anonymize in analytics.
+        - metadata values must be pre-sanitized by the emitter.
+        - No prompt content or secrets should appear in any field.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> span = ModelCorrelationTraceSpanPayload(
+        ...     span_id=uuid4(),
+        ...     trace_id=uuid4(),
+        ...     parent_span_id=None,
+        ...     correlation_id=uuid4(),
+        ...     session_id="abc-123",
+        ...     span_kind="hook",
+        ...     operation_name="UserPromptSubmit",
+        ...     status="ok",
+        ...     started_at=datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC),
+        ...     ended_at=datetime(2025, 6, 1, 12, 0, 0, 500000, tzinfo=UTC),
+        ...     duration_ms=500,
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Span identification
+    span_id: UUID = Field(
+        ...,
+        description="Unique identifier for this span",
+    )
+    trace_id: UUID = Field(
+        ...,
+        description="Groups all spans in a single session/correlation trace",
+    )
+    parent_span_id: UUID | None = Field(
+        default=None,
+        description="ID of the parent span (None for root spans)",
+    )
+
+    # Tracing
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Claude Code session identifier",
+    )
+
+    # Span details
+    span_kind: EnumTraceSpanKind = Field(
+        ...,
+        description="The kind of operation this span represents",
+    )
+    operation_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Human-readable name of the operation",
+    )
+    status: EnumTraceSpanStatus = Field(
+        ...,
+        description="Span completion status",
+    )
+
+    # Timing
+    started_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="When the span started (UTC). Must be explicitly injected.",
+    )
+    ended_at: TimezoneAwareDatetime | None = Field(
+        default=None,
+        description="When the span ended (UTC, None if still in progress)",
+    )
+    duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Duration in milliseconds (None if still in progress)",
+    )
+
+    # Extensibility
+    metadata: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Arbitrary key-value metadata for the span. "
+            "Must not contain secrets -- callers are responsible for sanitization."
+        ),
+    )
+    error_message: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Error message if status is ERROR (max 500 chars)",
+    )
+
+    # Schema versioning
+    schema_version: int = Field(
+        default=1,
+        description="Schema version for forward compatibility",
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -2689,6 +2869,10 @@ __all__ = [
     "ModelDelegationShadowComparisonPayload",
     # Decision record (OMN-2465)
     "ModelHookDecisionRecordedPayload",
+    # Correlation trace spans (OMN-5047)
+    "EnumTraceSpanKind",
+    "EnumTraceSpanStatus",
+    "ModelCorrelationTraceSpanPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

@@ -788,6 +788,8 @@ class TestEventRegistryIntegration:
             "response.stopped",
             # PR validation rollup with VTS at pipeline completion (OMN-3930)
             "pr.validation.rollup",
+            # Correlation trace spans for omnidash /trace page (OMN-5047)
+            "correlation.trace.span",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
