@@ -9,7 +9,7 @@ logic for all six phases.
 
 ---
 
-## Step 0: Parse Arguments
+## Argument Parsing
 
 Parse from `$ARGUMENTS`:
 
