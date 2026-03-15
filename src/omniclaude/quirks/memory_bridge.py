@@ -247,7 +247,7 @@ class NodeQuirkMemoryBridgeEffect:
         """
         try:
             finding = QuirkFinding.model_validate(payload)
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: parse failure returns None
             logger.warning(
                 "NodeQuirkMemoryBridgeEffect: failed to parse QuirkFinding payload: %r",
                 payload,

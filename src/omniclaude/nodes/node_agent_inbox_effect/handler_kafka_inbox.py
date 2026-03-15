@@ -176,7 +176,7 @@ class HandlerKafkaInbox:
                 duration_ms=elapsed_ms,
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: delivery must return result
             elapsed_ms = (time.monotonic() - start) * 1000.0
             error_msg = f"{type(exc).__name__}: {exc}"
             logger.debug("Kafka inbox delivery failed: %s", error_msg)

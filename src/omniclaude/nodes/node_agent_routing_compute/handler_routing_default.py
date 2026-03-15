@@ -134,7 +134,7 @@ class HandlerRoutingDefault:
                     context={},  # Phase 1: no historical context yet
                     trigger_score=trigger_score,
                 )
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: scorer failure skips agent
                 logger.warning(
                     "ConfidenceScorer.score() failed for %s (correlation_id=%s)",
                     agent_name,
@@ -356,7 +356,7 @@ def extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
 
         return None
 
-    except Exception:
+    except Exception:  # noqa: BLE001 — boundary: agent extraction must degrade
         logger.warning(
             "Failed to extract explicit agent from: %s",
             text[:50],

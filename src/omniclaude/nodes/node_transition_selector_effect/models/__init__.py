@@ -8,6 +8,7 @@ At that point, imports should be updated to pull from omnibase_core.
 """
 
 from omniclaude.nodes.node_transition_selector_effect.models.model_contract_state import (
+    ContractStateMetadataDict,
     ModelContractState,
 )
 from omniclaude.nodes.node_transition_selector_effect.models.model_goal_condition import (
@@ -28,6 +29,7 @@ from omniclaude.nodes.node_transition_selector_effect.models.model_typed_action 
 )
 
 __all__ = [
+    "ContractStateMetadataDict",
     "ModelContractState",
     "ModelGoalCondition",
     "ModelNavigationContext",
