@@ -78,7 +78,7 @@ def _emit_budget_cap_hit(
         if session_id is not None:
             payload["session_id"] = session_id
         emit_event("budget.cap.hit", payload)
-    except Exception:  # nosec B110 - telemetry must not block hooks
+    except Exception:  # noqa: BLE001  # nosec B110 — boundary: telemetry must not block hooks
         pass
 
 
@@ -775,7 +775,7 @@ def select_patterns_for_injection(
         if evidence_resolver is not None and limits.evidence_policy != "ignore":
             try:
                 gate_result = evidence_resolver.resolve(pattern.pattern_id)
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: evidence resolution must degrade
                 logger.warning(
                     "evidence_resolver.resolve(%s) failed; treating as no evidence",
                     pattern.pattern_id,

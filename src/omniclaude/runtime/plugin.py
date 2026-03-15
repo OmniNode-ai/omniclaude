@@ -146,7 +146,7 @@ class PluginClaude:
                 registry = LocalLlmEndpointRegistry()
                 self._vllm_backend = VllmInferenceBackend(registry=registry)
                 logger.info("VllmInferenceBackend initialised")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: optional backend init
                 logger.warning("VllmInferenceBackend init failed: %s", exc)
                 self._vllm_backend = None
 
@@ -159,7 +159,7 @@ class PluginClaude:
                     "kafka-connection",
                 ],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: plugin init must not crash kernel
             # Best-effort cleanup
             await self._cleanup_publisher()
             return ModelDomainPluginResult.failed(
@@ -197,7 +197,7 @@ class PluginClaude:
                 ),
                 services_registered=["wire_omniclaude_services"],
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: plugin wire must not crash kernel
             logger.exception(
                 "Plugin '%s' wire_handlers failed (contracts_root=%s)",
                 _PLUGIN_ID,
@@ -352,7 +352,7 @@ class PluginClaude:
                     stop_event=self._compliance_stop_event,
                 )
                 resources_created.append("compliance-subscriber-thread")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: subscriber start must degrade
                 logger.warning("Failed to start compliance subscriber: %s", exc)
                 self._compliance_stop_event = None
                 self._compliance_thread = None
@@ -376,7 +376,7 @@ class PluginClaude:
                     stop_event=self._decision_record_stop_event,
                 )
                 resources_created.append("decision-record-subscriber-thread")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: subscriber start must degrade
                 logger.warning("Failed to start decision-record subscriber: %s", exc)
                 self._decision_record_stop_event = None
                 self._decision_record_thread = None
@@ -410,7 +410,7 @@ class PluginClaude:
             published_count = await introspection_proxy.publish_all(reason="startup")
             if published_count > 0:
                 resources_created.append("skill-node-introspection")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: introspection is optional
             logger.warning("Skill node introspection proxy failed to start: %s", exc)
 
         return ModelDomainPluginResult(
@@ -466,7 +466,7 @@ class PluginClaude:
             if self._vllm_backend is not None:
                 try:
                     await self._vllm_backend.aclose()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 — boundary: best-effort cleanup
                     logger.debug("VllmInferenceBackend close failed: %s", exc)
                 self._vllm_backend = None
 
@@ -480,7 +480,7 @@ class PluginClaude:
             try:
                 # EmbeddedEventPublisher.stop() is async
                 await self._publisher.stop()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: shutdown must not crash
                 errors.append(str(exc))
 
             # Clear references regardless of outcome
@@ -518,7 +518,7 @@ class PluginClaude:
         if self._publisher is not None:
             try:
                 await self._publisher.stop()
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: best-effort cleanup
                 logger.debug("Cleanup: publisher stop failed", exc_info=True)
         self._publisher = None
         self._publisher_config = None

@@ -81,7 +81,7 @@ async def register_watch(
 
             registry = WatchRegistry(client)
             return await registry.register_watch(agent_id, repo, pr_number)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: registration failure falls back to STANDALONE
             logger.warning(
                 "Event bus watch registration failed, will use STANDALONE: %s",
                 exc,
@@ -128,7 +128,7 @@ async def unregister_watch(
 
             registry = WatchRegistry(client)
             return await registry.unregister_watch(agent_id, repo, pr_number)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — boundary: unregister failure is non-fatal
             logger.warning("Event bus watch unregistration failed: %s", exc)
     return True
 

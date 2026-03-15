@@ -34,10 +34,11 @@ Row = dict[str, Any]
 # =============================================================================
 
 try:
+    from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as get_version
 
     __version__ = get_version("omniclaude")
-except Exception:
+except (ImportError, PackageNotFoundError):
     __version__ = "0.1.0-dev"
 
 # =============================================================================

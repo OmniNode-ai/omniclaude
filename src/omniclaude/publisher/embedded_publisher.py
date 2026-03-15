@@ -243,7 +243,7 @@ class EmbeddedEventPublisher:
                                 "secondary_servers": self._config.kafka_secondary_bootstrap_servers
                             },
                         )
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 — boundary: secondary bus is non-fatal
                         logger.warning(
                             f"Secondary event bus failed to start (non-fatal): {e}",
                             extra={
@@ -361,7 +361,7 @@ class EmbeddedEventPublisher:
             if self._secondary_event_bus is not None:
                 try:
                     await self._secondary_event_bus.stop()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — boundary: secondary bus stop is non-fatal
                     logger.warning(f"Secondary event bus stop failed (non-fatal): {e}")
                 self._secondary_event_bus = None
 
@@ -411,13 +411,13 @@ class EmbeddedEventPublisher:
 
         except ConnectionResetError:
             pass
-        except Exception:
+        except Exception:  # noqa: BLE001 — boundary: client handler must not crash server
             logger.exception("Error handling client")
         finally:
             try:
                 writer.close()
                 await writer.wait_closed()
-            except Exception:  # noqa: S110 – best-effort socket cleanup
+            except Exception:  # noqa: BLE001  # noqa: S110 — boundary: best-effort socket cleanup
                 logger.debug("Error closing client writer", exc_info=True)
 
     async def _process_request(self, line: bytes) -> str:
@@ -731,7 +731,7 @@ class EmbeddedEventPublisher:
             )
             return True
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: event publish must degrade
             logger.warning(
                 f"Failed to publish event {event.event_id}: {e}",
                 extra={

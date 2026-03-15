@@ -93,7 +93,7 @@ def _get_db_connection() -> Any | None:
             password=settings.get_effective_postgres_password(),
             connect_timeout=5,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: DB connect must degrade
         logger.debug("skill-execution-log-subscriber: DB connect failed: %s", exc)
         return None
 
@@ -116,7 +116,7 @@ def _parse_skill_completed_event(raw: bytes) -> dict[str, Any] | None:
         return None
     try:
         return json.loads(raw.decode("utf-8"))  # type: ignore[no-any-return]
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: parse failure returns None
         logger.debug("skill-execution-log-subscriber: failed to parse payload: %s", exc)
         return None
 
@@ -199,7 +199,7 @@ def _upsert_skill_execution_log(payload: dict[str, Any]) -> bool:
             return None
         try:
             return str(UUID(str(v)))
-        except Exception:
+        except ValueError:
             return None
 
     params: dict[str, Any] = {
@@ -232,7 +232,7 @@ def _upsert_skill_execution_log(payload: dict[str, Any]) -> bool:
             with conn.cursor() as cur:
                 cur.execute(_UPSERT_SQL, params)
         return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: DB upsert must degrade
         logger.debug(
             "skill-execution-log-subscriber: upsert failed (run_id=%s): %s",
             params["run_id"],
@@ -242,7 +242,7 @@ def _upsert_skill_execution_log(payload: dict[str, Any]) -> bool:
     finally:
         try:
             conn.close()
-        except Exception:  # nosec B110 - cleanup must not raise
+        except Exception:  # noqa: BLE001  # nosec B110 — boundary: cleanup must not raise
             pass
 
 
@@ -271,7 +271,7 @@ def process_skill_completed_event(raw_value: bytes) -> bool:
             logger.debug("skill-execution-log-subscriber: skipping unparseable message")
             return False
         return _upsert_skill_execution_log(payload)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: fail-open subscriber
         # Absolute fail-open: never propagate
         logger.debug("process_skill_completed_event error: %s", exc)
         return False
@@ -339,7 +339,7 @@ def run_subscriber(
             value_deserializer=None,  # Raw bytes; deserialized in process_skill_completed_event
             max_poll_records=max_poll_records,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
         logger.warning(
             "skill-execution-log-subscriber: failed to create Kafka consumer: %s",
             exc,
@@ -358,12 +358,12 @@ def run_subscriber(
                     for msg in messages:
                         try:
                             process_skill_completed_event(msg.value)
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 — boundary: individual message failures silent
                             # Per design: individual message failures are silent
                             logger.debug(
                                 "Error processing skill-completed message: %s", exc
                             )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: poll failure retries
                 logger.warning(
                     "Kafka poll error in skill-execution-log subscriber: %s", exc
                 )
@@ -372,7 +372,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:  # nosec B110 - cleanup must not raise
+        except Exception:  # noqa: BLE001  # nosec B110 — boundary: cleanup must not raise
             pass
         logger.info("skill-execution-log subscriber stopped")
 
@@ -485,7 +485,7 @@ def main() -> None:
         else:
             print(f"Unknown mode: {mode}", file=sys.stderr)
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: CLI must always exit 0
         # Silent failure — never crash
         print(f"skill_execution_log_subscriber error: {exc}", file=sys.stderr)
 

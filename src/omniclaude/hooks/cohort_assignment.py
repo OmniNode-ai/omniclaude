@@ -68,7 +68,7 @@ def _load_contract_defaults() -> _ContractDefaults:
             control_percentage=contract.experiment.cohort.control_percentage,
             salt=contract.experiment.cohort.salt,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: contract loading must degrade gracefully
         logger.warning(f"Failed to load cohort contract, using fallbacks: {e}")
         return _ContractDefaults(
             control_percentage=_FALLBACK_CONTROL_PERCENTAGE,

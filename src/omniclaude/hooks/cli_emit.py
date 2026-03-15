@@ -49,10 +49,11 @@ import click
 # =============================================================================
 
 try:
+    from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as get_version
 
     __version__ = get_version("omniclaude")
-except Exception:
+except (ImportError, PackageNotFoundError):
     # Fallback for editable installs or when package metadata unavailable
     __version__ = "0.1.0-dev"
 
@@ -220,7 +221,7 @@ def run_with_timeout[T](
 
     try:
         return asyncio.run(with_timeout())
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning(
             "emit_runtime_error",
             extra={
@@ -317,7 +318,7 @@ def cmd_session_started(
                 "session_started_failed", extra={"error": result.error_message}
             )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("session_started_error", extra={"error": str(e)})
 
     # Always exit 0 - observability must never break Claude Code
@@ -383,7 +384,7 @@ def cmd_session_ended(
                 "session_ended_failed", extra={"error": result.error_message}
             )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("session_ended_error", extra={"error": str(e)})
 
     sys.exit(0)
@@ -448,7 +449,7 @@ def cmd_prompt_submitted(
                 "prompt_submitted_failed", extra={"error": result.error_message}
             )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("prompt_submitted_error", extra={"error": str(e)})
 
     sys.exit(0)
@@ -523,7 +524,7 @@ def cmd_tool_executed(
                 "tool_executed_failed", extra={"error": result.error_message}
             )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("tool_executed_error", extra={"error": str(e)})
 
     sys.exit(0)
@@ -607,7 +608,7 @@ def cmd_claude_hook_event(
                 "claude_hook_event_failed", extra={"error": result.error_message}
             )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("claude_hook_event_error", extra={"error": str(e)})
 
     # Always exit 0 - observability must never break Claude Code
@@ -675,7 +676,7 @@ async def _emit_tool_content(
             offset=None,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         logger.warning(
             "tool_content_publish_failed",
             extra={
@@ -698,7 +699,7 @@ async def _emit_tool_content(
         if bus is not None:
             try:
                 await bus.close()
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
                 logger.debug(
                     "kafka_bus_close_error",
                     extra={"error": str(close_error)},
@@ -818,7 +819,7 @@ def cmd_tool_content(
         elif result:
             logger.warning("tool_content_failed", extra={"error": result.error_message})
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: CLI hook must never raise
         logger.warning("tool_content_error", extra={"error": str(e)})
 
     # Always exit 0 - observability must never break Claude Code

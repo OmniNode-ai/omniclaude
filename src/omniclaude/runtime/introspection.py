@@ -197,7 +197,7 @@ class SkillNodeIntrospectionProxy:
                         "Introspection publish returned False: %s",
                         proxy.name,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: introspection publish must degrade
                 failed += 1
                 logger.warning(
                     "Introspection publish raised for %s",
@@ -252,7 +252,7 @@ class SkillNodeIntrospectionProxy:
                     event_bus=self._event_bus,
                 )
                 proxies.append(proxy)
-            except Exception:
+            except Exception:  # noqa: BLE001 — boundary: proxy build must degrade
                 logger.warning(
                     "Failed to build proxy for skill node %s",
                     node_name,

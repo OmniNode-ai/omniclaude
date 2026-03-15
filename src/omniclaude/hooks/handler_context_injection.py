@@ -363,7 +363,7 @@ class HandlerContextInjection:
             payload = record.model_dump(mode="json", by_alias=True)
 
             return emit_event("injection.recorded", payload)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
             logger.warning(f"Failed to emit injection record: {e}")
             return False
 
@@ -464,13 +464,13 @@ class HandlerContextInjection:
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
                 except TimeoutError:
                     raise  # Let outer handler report timeout with detail
-                except Exception as db_err:
+                except Exception as db_err:  # noqa: BLE001 — boundary: DB failure must degrade
                     logger.warning(f"Database pattern loading failed: {db_err}")
                     context_source = ContextSource.NONE
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: pattern retrieval must degrade
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
             is_timeout = isinstance(e, TimeoutError)
             if is_timeout:
@@ -750,7 +750,7 @@ class HandlerContextInjection:
                 source_files=[],
                 warnings=[f"omniintelligence_api_unavailable: {e}"],
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: API failure must degrade
             logger.warning("omniintelligence API request failed: %s (url=%s)", e, url)
             return ModelLoadPatternsResult(
                 patterns=[],
@@ -912,7 +912,7 @@ class HandlerContextInjection:
                     reason = "cold" if not cache_warm else "stale"
                     logger.info("pattern_source=cache_miss reason=%s", reason)
 
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: cache failure must degrade
                 logger.exception(
                     "pattern_cache read failed, falling back to API: %s", exc
                 )
@@ -1090,7 +1090,7 @@ class HandlerContextInjection:
             logger.debug(
                 f"Context injection event emitted: {len(patterns)} patterns from {context_source.value}"
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
             logger.warning(f"Failed to emit context injection event: {e}")
 
     def _derive_deterministic_id(

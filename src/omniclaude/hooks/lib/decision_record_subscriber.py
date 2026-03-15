@@ -108,7 +108,7 @@ def _parse_decision_record(raw: bytes) -> dict[str, Any] | None:
         if not isinstance(data, dict):
             return None
         return data
-    except (json.JSONDecodeError, UnicodeDecodeError, Exception):
+    except (json.JSONDecodeError, UnicodeDecodeError, Exception):  # noqa: BLE001 — boundary: parse failure returns None
         return None
 
 
@@ -148,7 +148,7 @@ def _append_audit_record(record: dict[str, Any]) -> bool:
         with audit_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, default=str) + "\n")
         return True
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: audit write must degrade
         logger.debug("Failed to append decision audit record: %s", exc)
         return False
 
@@ -196,7 +196,7 @@ def process_decision_record_event(raw_value: bytes) -> bool:
 
         return _append_audit_record(payload)
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: fail-open subscriber
         # Absolute fail-open: never propagate
         logger.debug("process_decision_record_event error: %s", exc)
         return False
@@ -262,7 +262,7 @@ def run_subscriber(
             value_deserializer=None,  # We handle raw bytes in process_decision_record_event
             max_poll_records=max_poll_records,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
         logger.warning("Failed to create Kafka consumer for decision-record: %s", exc)
         return
 
@@ -278,12 +278,12 @@ def run_subscriber(
                     for msg in messages:
                         try:
                             process_decision_record_event(msg.value)
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 — boundary: individual message failures silent
                             # Per design: individual message failures are silent
                             logger.debug(
                                 "Error processing decision-record message: %s", exc
                             )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: poll failure retries
                 logger.warning(
                     "Kafka poll error in decision-record subscriber: %s", exc
                 )
@@ -293,7 +293,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:  # nosec B110 - cleanup must not raise
+        except Exception:  # noqa: BLE001  # nosec B110 — boundary: cleanup must not raise
             pass
         logger.info("Decision-record subscriber stopped")
 
@@ -408,7 +408,7 @@ def main() -> None:
         else:
             print(f"Unknown mode: {mode}", file=sys.stderr)
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: CLI must always exit 0
         # Silent failure — never crash
         print(f"decision_record_subscriber error: {exc}", file=sys.stderr)
 

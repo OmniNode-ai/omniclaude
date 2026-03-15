@@ -102,7 +102,7 @@ def _parse_compliance_result(raw: bytes) -> dict[str, Any] | None:
         if not isinstance(data, dict):
             return None
         return data
-    except (json.JSONDecodeError, UnicodeDecodeError, Exception):
+    except (json.JSONDecodeError, UnicodeDecodeError, Exception):  # noqa: BLE001 — boundary: parse failure returns None
         return None
 
 
@@ -179,7 +179,7 @@ def violations_to_advisories(
             }
             advisories.append(advisory)
 
-        except Exception:  # nosec B112 - individual entry failures are silent by design
+        except Exception:  # noqa: BLE001  # nosec B112 — boundary: individual entry failures are silent
             continue
 
     return advisories
@@ -239,7 +239,7 @@ def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:
 
         result: bool = save_advisories(session_id, advisories)
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: advisory save must degrade
         logger.debug("Failed to save advisories: %s", exc)
         return False
 
@@ -290,7 +290,7 @@ def process_compliance_event(raw_value: bytes) -> bool:
 
         return _save_advisory(session_id, advisories)
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: fail-open subscriber
         # Absolute fail-open: never propagate
         logger.debug("process_compliance_event error: %s", exc)
         return False
@@ -356,7 +356,7 @@ def run_subscriber(
             value_deserializer=None,  # We handle raw bytes in process_compliance_event
             max_poll_records=max_poll_records,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
         logger.warning("Failed to create Kafka consumer: %s", exc)
         return
 
@@ -372,10 +372,10 @@ def run_subscriber(
                     for msg in messages:
                         try:
                             process_compliance_event(msg.value)
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 — boundary: individual message failures silent
                             # Per design: individual message failures are silent
                             logger.debug("Error processing message: %s", exc)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — boundary: poll failure retries
                 logger.warning("Kafka poll error: %s", exc)
                 # Brief backoff before retrying
                 time.sleep(1.0)
@@ -383,7 +383,7 @@ def run_subscriber(
     finally:
         try:
             consumer.close()
-        except Exception:  # nosec B110 - cleanup must not raise
+        except Exception:  # noqa: BLE001  # nosec B110 — boundary: cleanup must not raise
             pass
         logger.info("Compliance-evaluated subscriber stopped")
 
@@ -498,7 +498,7 @@ def main() -> None:
         else:
             print(f"Unknown mode: {mode}", file=sys.stderr)
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: CLI must always exit 0
         # Silent failure — never crash
         print(f"compliance_result_subscriber error: {exc}", file=sys.stderr)
 

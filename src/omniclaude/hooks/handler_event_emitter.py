@@ -559,7 +559,7 @@ async def emit_hook_event(
             offset=None,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         # Log warning but don't crash - observability must never break UX
         logger.warning(
             "hook_event_publish_failed",
@@ -619,7 +619,7 @@ async def emit_hook_event(
         if bus is not None:
             try:
                 await bus.close()
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
                 logger.debug(
                     "kafka_bus_close_error",
                     extra={"error": str(close_error)},
@@ -1152,7 +1152,7 @@ async def emit_claude_hook_event(
             offset=None,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         # Log warning but don't crash - observability must never break UX
         logger.warning(
             "claude_hook_event_publish_failed",
@@ -1178,7 +1178,7 @@ async def emit_claude_hook_event(
         if bus is not None:
             try:
                 await bus.close()
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
                 logger.debug(
                     "kafka_bus_close_error",
                     extra={"error": str(close_error)},
@@ -1271,7 +1271,7 @@ async def emit_session_outcome_from_config(
 
         try:
             await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
-        except Exception as evt_exc:
+        except Exception as evt_exc:  # noqa: BLE001 — boundary: EVT is observability-only
             # CMD succeeded, EVT failed — log but don't lose the CMD success
             evt_error = f"{type(evt_exc).__name__}: {evt_exc!s}"
             logger.warning(
@@ -1307,7 +1307,7 @@ async def emit_session_outcome_from_config(
             error_message=error_msg,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — boundary: emit must degrade not crash
         logger.warning(
             "session_outcome_publish_failed",
             extra={
@@ -1331,7 +1331,7 @@ async def emit_session_outcome_from_config(
         if bus is not None:
             try:
                 await bus.close()
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 — boundary: best-effort cleanup
                 logger.debug(
                     "kafka_bus_close_error",
                     extra={"error": str(close_error)},
