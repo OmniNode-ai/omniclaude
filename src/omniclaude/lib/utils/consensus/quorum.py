@@ -247,7 +247,7 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,
+        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> QuorumScore:
         """
         Score a correction using AI quorum consensus.
@@ -279,7 +279,7 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,
+        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> QuorumScore:
         """
         Stub implementation for Phase 1 testing.
@@ -332,7 +332,7 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,
+        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> QuorumScore:
         """
         Full AI model scoring (Phase 3-4).
@@ -379,7 +379,7 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        metadata: dict[str, Any],
+        metadata: dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> str:
         """
         Generate prompt for AI model scoring.

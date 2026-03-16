@@ -34,7 +34,7 @@ def load_state(state_file: Path) -> dict | None:
     try:
         with state_file.open() as f:
             return yaml.safe_load(f) or {}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"Warning: skipping {state_file} — {exc}", file=sys.stderr)
         return None
 

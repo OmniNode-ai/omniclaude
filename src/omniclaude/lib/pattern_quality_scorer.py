@@ -268,7 +268,7 @@ class PatternQualityScorer:
         return min(1.0, score)
 
     def _score_metadata_richness(
-        self, use_cases: list[Any] | None, examples: list[Any] | None, metadata: dict[str, Any] | None
+        self, use_cases: list[Any] | None, examples: list[Any] | None, metadata: dict[str, Any] | None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> float:
         """
         Score metadata richness.

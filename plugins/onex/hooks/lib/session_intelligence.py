@@ -164,7 +164,8 @@ def log_session_start(
 
 def log_session_end(
     session_id: str,
-    metadata: dict[str, Any] | None = None,
+    metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+    | None = None,
 ) -> str | None:
     """
     Log session end event with aggregated statistics.

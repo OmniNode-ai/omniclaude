@@ -89,7 +89,11 @@ class ModelUserPromptLogConfig:
     agent_domain: str | None = None
     correlation_id: str | None = None
     intelligence_queries: dict[str, str] | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: (
+        dict[str, Any] | None
+    ) = (  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        None
+    )
     detection_method: str | None = None
     confidence: float | None = None
     latency_ms: float | None = None
@@ -189,7 +193,10 @@ class HookEventLogger:
         resource: str,
         resource_id: str | None = None,
         payload: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[
+            str, Any
+        ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> str | None:
         """Log a hook event to the database.
 
@@ -391,7 +398,10 @@ class HookEventLogger:
         agent_domain: str | None = None,
         correlation_id: str | None = None,
         intelligence_queries: dict[str, str] | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[
+            str, Any
+        ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
         detection_method: str | None = None,
         confidence: float | None = None,
         latency_ms: float | None = None,
@@ -483,7 +493,8 @@ def log_hook_event(
     action: str,
     resource_id: str | None = None,
     payload: dict[str, Any] | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+    | None = None,
 ) -> str | None:
     """Quick log generic hook event."""
     return get_logger().log_event(

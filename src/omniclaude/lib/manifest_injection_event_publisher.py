@@ -93,7 +93,7 @@ async def publish_manifest_injection_event(
     agent_domain: str | None = None,
     min_confidence_threshold: float | None = None,
     manifest_sections: list[str] | None = None,
-    injection_metadata: dict[str, Any] | None = None,
+    injection_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     success: bool = True,
     error_message: str | None = None,
     tenant_id: str = "default",

@@ -121,7 +121,7 @@ class IntelligenceUsageRecord:
     quality_impact: float | None = None
 
     # Metadata
-    metadata: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
 
     # Timestamps
     created_at: datetime | None = None
@@ -281,7 +281,7 @@ class IntelligenceUsageTracker:
         query_results_rank: int | None = None,
         intelligence_snapshot: dict[str, Any] | None = None,
         intelligence_summary: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> bool:
         """
         Track intelligence retrieval.

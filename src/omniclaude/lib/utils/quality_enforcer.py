@@ -205,7 +205,7 @@ def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
     params = tool_call.get("tool_input", tool_call.get("parameters", {}))
 
     # Build safe metadata
-    safe_metadata: dict[str, Any] = {
+    safe_metadata: dict[str, Any] = {  # ONEX_EXCLUDE: dict_str_any - generic metadata container
         "tool_name": tool_name,
         "has_tool_input": "tool_input" in tool_call,
         "param_count": len(params) if isinstance(params, dict) else 0,
@@ -487,8 +487,8 @@ class QualityEnforcer:
         }
 
         # Enhanced metadata for decision intelligence
-        self.tool_selection_metadata: dict[str, Any] | None = None
-        self.quality_check_metadata: dict[str, Any] | None = None
+        self.tool_selection_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        self.quality_check_metadata: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any - generic metadata container
 
     async def enforce(self, tool_call: dict[str, Any]) -> dict[str, Any]:
         """

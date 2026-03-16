@@ -51,7 +51,9 @@ class MetadataExtractor:
         Returns:
             Dictionary containing all extracted metadata
         """
-        metadata: dict[str, Any] = {}
+        metadata: dict[
+            str, Any
+        ] = {}  # ONEX_EXCLUDE: dict_str_any - generic metadata container
 
         # Extract git info
         git_info = self._extract_git_info()

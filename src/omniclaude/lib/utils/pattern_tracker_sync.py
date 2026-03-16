@@ -77,7 +77,7 @@ class PatternTrackerSync:
         self,
         code: str,
         context: dict[str, Any],
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
         correlation_id: str | None = None,
     ) -> str | None:
         """Synchronous wrapper for track_pattern_creation - matches expected interface.

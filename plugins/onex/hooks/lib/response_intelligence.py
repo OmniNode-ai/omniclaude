@@ -45,7 +45,8 @@ def log_response_completion(
     session_id: str,
     tools_executed: list[str] | None = None,
     completion_status: str = "complete",
-    metadata: dict[str, Any] | None = None,
+    metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+    | None = None,
 ) -> str | None:
     """
     Log response completion event with execution summary.

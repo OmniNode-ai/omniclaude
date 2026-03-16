@@ -130,7 +130,11 @@ def main(argv: list[str] | None = None) -> None:
         # Build metadata dict: parse JSON string, then inject ticket_id.
         # json.loads can return dict[str, Any]; Pydantic coerces values at
         # the model layer so we keep the annotation honest here.
-        metadata: dict[str, Any] | None = None
+        metadata: (
+            dict[str, Any] | None
+        ) = (  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+            None
+        )
         if args.metadata is not None:
             try:
                 parsed = json.loads(args.metadata)
