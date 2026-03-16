@@ -15,10 +15,9 @@ import json
 import subprocess
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 _DEFAULT_TIMEOUT_SECONDS = 30
 
@@ -358,7 +357,7 @@ def write_evidence_receipt(
 
     receipt = EvidenceReceipt(
         ticket_id=ticket_id,
-        timestamp=datetime.now(tz=timezone.utc).isoformat(),
+        timestamp=datetime.now(tz=UTC).isoformat(),
         git_sha=git_sha,
         branch=branch,
         working_dir=working_dir,
