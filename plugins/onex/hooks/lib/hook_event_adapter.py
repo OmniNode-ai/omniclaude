@@ -85,13 +85,44 @@ except ImportError:
     TypedDictRoutingAlternative = dict  # type: ignore[assignment,misc]
 
 # Topic constants and builder (centralized in omniclaude.hooks.topics)
+#
+# PERFORMANCE FIX (OMN-5138): omniclaude.hooks.__init__.py eagerly imports
+# Pydantic schemas, handler classes, context injection, and event emitters,
+# adding ~3.2s to module load time.  We only need TopicBase and build_topic
+# from omniclaude.hooks.topics (which itself imports only lightweight
+# omnibase_core enums, ~0.15s).  Stub the parent package in sys.modules so
+# Python skips the heavy __init__.py, then import topics directly.
+def _import_topics_fast() -> tuple[type, object]:
+    """Import TopicBase and build_topic without triggering the heavy __init__."""
+    import types as _types
+
+    _src_path = _PROJECT_ROOT / "src"
+    if str(_src_path) not in sys.path:
+        sys.path.insert(0, str(_src_path))
+
+    # Ensure omniclaude parent is importable (lightweight __init__)
+    if "omniclaude" not in sys.modules:
+        import omniclaude  # noqa: F811 — ~0.03s
+
+    # Stub omniclaude.hooks to skip its heavy __init__.py
+    if "omniclaude.hooks" not in sys.modules:
+        _stub = _types.ModuleType("omniclaude.hooks")
+        import omniclaude as _oc
+
+        _stub.__path__ = [os.path.join(os.path.dirname(_oc.__file__), "hooks")]
+        _stub.__package__ = "omniclaude.hooks"
+        sys.modules["omniclaude.hooks"] = _stub
+
+    from omniclaude.hooks.topics import TopicBase as _TB
+    from omniclaude.hooks.topics import build_topic as _bt
+
+    return _TB, _bt
+
+
 try:
-    from omniclaude.hooks.topics import TopicBase, build_topic
+    TopicBase, build_topic = _import_topics_fast()
 except ImportError:
-    # Fallback: add src to path for direct execution
-    _SRC_PATH = _PROJECT_ROOT / "src"
-    if str(_SRC_PATH) not in sys.path:
-        sys.path.insert(0, str(_SRC_PATH))
+    # Last resort: full import (accepts 3s cost if stubbing somehow fails)
     from omniclaude.hooks.topics import TopicBase, build_topic
 
 
