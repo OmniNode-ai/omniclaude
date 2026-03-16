@@ -7,6 +7,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install git (required for git+https:// dependencies like onex-change-control)
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 # Install uv for fast dependency management
 RUN pip install uv
 
