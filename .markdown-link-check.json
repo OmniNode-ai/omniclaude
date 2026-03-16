@@ -1,0 +1,26 @@
+{
+    "ignorePatterns": [
+        {"pattern": "^https://linear\\.app"},
+        {"pattern": "^https://github\\.com/OmniNode-ai"},
+        {"pattern": "^https://github\\.com/fastapi"},
+        {"pattern": "^https://stackoverflow\\.com"},
+        {"pattern": "^https://staging\\.omniclaude\\.example\\.com"},
+        {"pattern": "^https://omniclaude\\.example\\.com"},
+        {"pattern": "^http://localhost"},
+        {"pattern": "^https://localhost"},
+        {"pattern": "^https://www\\.gnu\\.org"},
+        {"pattern": "^https://www\\.contributor-covenant\\.org"},
+        {"pattern": "^https://claude\\.ai"},
+        {"pattern": "^https://freedesktop\\.org"},
+        {"pattern": "^https://www\\.freedesktop\\.org"}
+    ],
+    "excludeFiles": [
+        ".pytest_cache/**",
+        ".venv/**",
+        "venv/**",
+        "node_modules/**",
+        "archived/**"
+    ],
+    "checkExternal": false,
+    "externalTimeout": 5000
+}
