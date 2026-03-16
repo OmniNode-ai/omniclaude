@@ -41,6 +41,33 @@ Collect all detected interface names into `interfaces_touched: [...]`.
 
 ---
 
+## Extract DoD evidence items
+
+After gathering the ticket context and running seam detection, extract Definition of Done
+items from the ticket description to populate the `dod_evidence[]` field.
+
+The DoD parser library (`plugins/onex/skills/_lib/dod-parser/dod_parser.py`) provides
+`extract_dod_items(description)` which:
+
+1. Scans for `## Definition of Done`, `## DoD`, or `## Acceptance Criteria` headings
+2. Extracts checklist items (`- [ ] ...`) under those headings
+3. Classifies each item into a check type using keyword heuristics:
+   - Test mentions -> `test_exists`
+   - API/endpoint mentions -> `endpoint`
+   - File creation mentions -> `file_exists`
+   - Lint/type-check mentions -> `command`
+   - Unclassifiable -> `command` with `MANUAL:` placeholder
+
+Include the extracted items in the YAML under `dod_evidence:`. If the description has no
+DoD section, set `dod_evidence: []`.
+
+**Refinement rule**: Auto-extracted DoD checks are draft scaffolding. Checks containing
+`MANUAL:` or unrefined glob patterns (`**/*`) should be treated as provisional. The
+evidence runner marks unrefined checks as `skipped` in advisory mode. Agents should refine
+these into repo-specific, meaningful checks before hard enforcement is enabled.
+
+---
+
 ## Draft the YAML
 
 Generate a complete YAML block conforming to `ModelTicketContract`. Use the field reference below.
@@ -73,6 +100,15 @@ gates: []                             # empty for new contracts
 interfaces_provided: []               # fill if seam ticket (see below)
 interfaces_consumed: []               # fill if seam ticket (see below)
 questions: []                         # clarifying questions if spec is ambiguous
+dod_evidence:                         # from DoD extraction (Step 2.5)
+  - id: dod-001
+    description: <DoD bullet text>
+    source: linear                    # "linear" if from ticket, "generated" if inferred
+    linear_dod_text: <original text>
+    checks:
+      - check_type: <test_exists|test_passes|file_exists|grep|command|endpoint>
+        check_value: <type-specific value>
+    status: pending
 ```
 
 **Seam ticket additions** — add one entry per detected interface in `interfaces_provided`:
