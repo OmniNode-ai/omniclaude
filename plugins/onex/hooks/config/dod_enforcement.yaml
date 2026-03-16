@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# DoD Evidence Enforcement Policy Configuration
+#
+# Controls how DoD evidence checks are enforced across all layers:
+# - ticket-pipeline dod_verify phase
+# - epic-team DoD audit wave
+# - PreToolUse completion guard hook
+# - /dod-verify skill (always runs, policy affects downstream behavior)
+#
+# Policy modes graduate from permissive to strict as the system matures.
+# Start with advisory, observe behavior, then tighten.
+
+# Global enforcement mode
+#
+# advisory (default) — Log results, never block. DoD summary appended to PR body.
+#                       Recommended during initial rollout to build confidence.
+#
+# soft               — Log results, warn on failures. Pipeline proceeds but marks
+#                       PR with `dod-warning` label. Completion guard allows but
+#                       injects warning. Epic audit creates follow-up tickets.
+#
+# hard               — Block on failures. Pipeline dod_verify phase blocks before
+#                       PR creation. Completion guard blocks Done status. Epic audit
+#                       blocks epic completion and creates follow-up tickets.
+mode: advisory
+
+# Per-layer overrides (optional)
+# If set, these override the global mode for specific enforcement layers.
+# If not set, each layer uses the global mode.
+layers:
+  pipeline_gate: null     # ticket-pipeline dod_verify phase
+  epic_audit: null        # epic-team DoD audit wave
+  completion_guard: null  # PreToolUse hook
+  # The /dod-verify skill always runs checks regardless of policy.
+  # Policy only affects whether the hook blocks completion.
+
+# Evidence receipt freshness window (minutes)
+# Receipts older than this are considered stale and treated as missing.
+receipt_freshness_minutes: 30
+
+# Check-type behavior overrides
+check_overrides:
+  # Endpoint checks require live infrastructure. Skip them by default
+  # since most CI/agent environments don't have live services.
+  endpoint:
+    default_status: skipped
+    reason: "Endpoint checks require live infrastructure"
+
+  # Manual placeholder checks (containing "MANUAL:" or "VERIFY:")
+  # are draft scaffolding from auto-extraction. Skip in advisory/soft,
+  # fail in hard mode.
+  manual_placeholder:
+    advisory_status: skipped
+    soft_status: skipped
+    hard_status: failed
+
+# Graduation schedule (informational)
+# This section documents the intended graduation timeline.
+# The mode field above must be updated manually.
+graduation:
+  # Phase 1: Initial rollout — advisory mode
+  # Duration: 2 weeks minimum
+  # Success criteria: >80% of tickets generate contracts with dod_evidence
+  phase_1:
+    mode: advisory
+    criteria: "Contract generation rate >80%, no false positives in evidence checks"
+
+  # Phase 2: Warning enforcement — soft mode
+  # Duration: 2 weeks minimum
+  # Success criteria: <10% of tickets trigger DoD warnings
+  phase_2:
+    mode: soft
+    criteria: "Warning rate <10%, follow-up tickets are actionable"
+
+  # Phase 3: Full enforcement — hard mode
+  # Duration: indefinite
+  # Success criteria: All tickets pass DoD checks before completion
+  phase_3:
+    mode: hard
+    criteria: "Zero unverified completions, all DoD items have meaningful checks"
