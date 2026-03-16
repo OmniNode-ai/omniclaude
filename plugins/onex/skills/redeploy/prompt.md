@@ -83,18 +83,19 @@ WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
 STATE_DIR = os.path.expanduser("~/.claude/state/redeploy")
 
 PHASES = [
-    "PREFLIGHT",       # Phase 0 — env var gate, bus tunnel, VirtioFS check
-    "SYNC",            # Phase 1
-    "ENV_CHECK",       # Phase 2
-    "WORKTREE",        # Phase 3
-    "PIN_UPDATE",      # Phase 4
-    "DEPLOY",          # Phase 5
-    "SCHEMA_SYNC",     # Phase 5b — detect and stamp stale schema fingerprints
-    "INFISICAL",       # Phase 6
-    "VERIFY",          # Phase 7
-    "K8S_VERIFY",      # Phase 7b — cloud k8s pod READY gate
-    "OMNIDASH_VERIFY", # Phase 7c — omnidash data-source health gate
-    "NOTIFY",          # Phase 8
+    "PREFLIGHT",         # Phase 0 — env var gate, bus tunnel, VirtioFS check
+    "SYNC",              # Phase 1
+    "ENV_CHECK",         # Phase 2
+    "WORKTREE",          # Phase 3
+    "PIN_UPDATE",        # Phase 4
+    "DEPLOY",            # Phase 5
+    "SCHEMA_SYNC",       # Phase 5b — detect and stamp stale schema fingerprints
+    "OMNIDASH_RESTART",  # Phase 5c — restart local omnidash to reconnect (OMN-5144)
+    "INFISICAL",         # Phase 6
+    "VERIFY",            # Phase 7
+    "K8S_VERIFY",        # Phase 7b — cloud k8s pod READY gate
+    "OMNIDASH_VERIFY",   # Phase 7c — omnidash data-source health gate
+    "NOTIFY",            # Phase 8
 ]
 
 HEALTH_ENDPOINTS: dict[str, str] = {
@@ -443,6 +444,53 @@ SCHEMA_SYNC: fingerprint stamped and deployment artifact updated
   -> stamp failure: mark_phase(state, "SCHEMA_SYNC", "failed"); EXIT 1
 ```
 
+### Phase 5c: OMNIDASH_RESTART <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+# OMN-5144: Restart local omnidash after runtime deploy so it reconnects
+# to fresh Kafka consumers with correct topic subscriptions.
+# Advisory only — omnidash not running is fine (skip silently).
+
+omnidash_lifecycle = f"{OMNI_HOME}/omnibase_infra/scripts/omnidash-lifecycle.sh"
+
+if not os.path.isfile(omnidash_lifecycle):
+    print("OMNIDASH_RESTART: lifecycle script not found — skipping")
+    mark_phase(state, "OMNIDASH_RESTART", "skipped_no_script")
+else:
+    # Check if omnidash is running
+    result = run(f"bash {omnidash_lifecycle} status", capture=True)
+    if result.returncode != 0:
+        print("OMNIDASH_RESTART: omnidash not running — skipping")
+        mark_phase(state, "OMNIDASH_RESTART", "skipped_not_running")
+    else:
+        print("OMNIDASH_RESTART: restarting omnidash...")
+        result = run(f"bash {omnidash_lifecycle} restart", capture=True)
+        if result.returncode == 0:
+            print("OMNIDASH_RESTART: omnidash restarted successfully")
+            mark_phase(state, "OMNIDASH_RESTART", "completed")
+        else:
+            print(f"OMNIDASH_RESTART WARNING: restart returned non-zero\n{result.stdout}")
+            mark_phase(state, "OMNIDASH_RESTART", "completed_with_warnings", output=result.stdout)
+            # Non-fatal — omnidash restart failure should not block the deploy
+```
+
+Expected output pattern:
+```
+OMNIDASH_RESTART: restarting omnidash...
+[omnidash] Stopping omnidash...
+[omnidash] Stopped.
+[omnidash] Starting omnidash from: /Volumes/PRO-G40/Code/omni_home/omnidash
+[omnidash] Server healthy on port 3000 (startup took ~8s)
+OMNIDASH_RESTART: omnidash restarted successfully
+```
+
+```
+  -> omnidash running + restart OK: mark_phase(state, "OMNIDASH_RESTART", "completed")
+  -> omnidash running + restart failed: mark_phase(state, "OMNIDASH_RESTART", "completed_with_warnings"); CONTINUE
+  -> omnidash not running: mark_phase(state, "OMNIDASH_RESTART", "skipped_not_running"); CONTINUE
+  -> lifecycle script missing: mark_phase(state, "OMNIDASH_RESTART", "skipped_no_script"); CONTINUE
+```
+
 ### Phase 6: INFISICAL <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
 ```
@@ -748,6 +796,7 @@ Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/redeploy.json`
   +- Phase 3: WORKTREE   create or reuse omni_worktrees/<ticket>/omnibase_infra
   +- Phase 4: PIN_UPDATE update-plugin-pins.py -> Dockerfile.runtime version pins
   +- Phase 5: DEPLOY     deploy-runtime.sh --execute --restart
+  +- Phase 5c: OMNIDASH_RESTART  restart local omnidash if running (advisory)
   +- Phase 6: INFISICAL  seed-infisical.py or sync-omnibase-env.sh (if INFISICAL_ADDR set)
   +- Phase 7: VERIFY     curl health endpoints + docker exec uv pip show per-package
   +- Phase 8: NOTIFY     Slack if FULL_ONEX; stdout if EVENT_BUS or STANDALONE

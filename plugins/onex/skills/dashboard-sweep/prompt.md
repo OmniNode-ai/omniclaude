@@ -74,6 +74,81 @@ If `--dry-run`:
 
 ---
 
+## Phase 0.5 — Freshness Check (OMN-5145)
+
+Before auditing pages, verify that the running omnidash instance is up-to-date.
+This prevents wasting a full Playwright sweep on stale code that has already been
+fixed in a newer deploy.
+
+### 0.5.1 Build Info Probe
+
+```bash
+build_info=$(curl -sf "{url}/api/build-info" 2>/dev/null)
+```
+
+If the endpoint is unreachable or returns non-200:
+```
+[dashboard-sweep] WARNING: /api/build-info not available — cannot verify freshness
+[dashboard-sweep] Proceeding with audit (omnidash may be running stale code)
+```
+Continue to Phase 1 (non-blocking).
+
+### 0.5.2 Freshness Checks
+
+If build info is available, extract and validate:
+
+```python
+import json
+from datetime import datetime, timezone
+
+info = json.loads(build_info)
+git_sha = info.get("gitSha", "unknown")
+build_time = info.get("buildTime", "")
+uptime_seconds = info.get("uptimeSeconds", 0)
+
+# Check 1: Is the build recent? (within 24h)
+if build_time:
+    build_dt = datetime.fromisoformat(build_time.replace("Z", "+00:00"))
+    age_hours = (datetime.now(timezone.utc) - build_dt).total_seconds() / 3600
+    if age_hours > 24:
+        print(f"[dashboard-sweep] WARNING: omnidash build is {age_hours:.0f}h old (gitSha={git_sha})")
+        print(f"[dashboard-sweep] Consider running omnidash-restart before sweeping")
+
+# Check 2: Does the git SHA match the latest omnidash main?
+latest_sha = run(f"git -C {OMNI_HOME}/omnidash rev-parse --short HEAD", capture=True).stdout.strip()
+if latest_sha and git_sha != "unknown" and git_sha != latest_sha:
+    print(f"[dashboard-sweep] WARNING: omnidash running {git_sha}, latest main is {latest_sha}")
+    print(f"[dashboard-sweep] Fixes merged since last restart may not be reflected")
+```
+
+### 0.5.3 Auto-Restart Option
+
+If freshness check detects stale code AND the `--deploy` flag is set:
+
+```python
+if stale_detected and deploy_flag:
+    print("[dashboard-sweep] Stale omnidash detected — auto-restarting before audit")
+    lifecycle_script = f"{OMNI_HOME}/omnibase_infra/scripts/omnidash-lifecycle.sh"
+    if os.path.isfile(lifecycle_script):
+        run(f"bash {lifecycle_script} restart")
+        # Re-check build info after restart
+        build_info = run(f"curl -sf {url}/api/build-info", capture=True).stdout
+```
+
+Write freshness result to `~/.claude/dashboard-sweep/{run_id}/freshness.json`:
+```json
+{
+  "checked_at": "{ISO timestamp}",
+  "build_info": { "version": "1.1.0", "gitSha": "abc1234", "buildTime": "...", "uptimeSeconds": 3600 },
+  "latest_main_sha": "def5678",
+  "is_stale": true,
+  "auto_restarted": false,
+  "warnings": ["omnidash running abc1234, latest main is def5678"]
+}
+```
+
+---
+
 ## Phase 1 — Recon (Playwright Audit)
 
 ### 1.1 Browser Initialization
