@@ -301,6 +301,13 @@ class TopicBase(StrEnum):
     PR_VALIDATION_ROLLUP = "onex.evt.omniclaude.pr-validation-rollup.v1"
     """Emitted at pipeline completion with aggregated validation tax metrics and VTS."""
 
+    # ==========================================================================
+    # Correlation trace topics (OMN-5047)
+    # Consumed by omnidash /trace page via correlation_trace_spans table.
+    # ==========================================================================
+    CORRELATION_TRACE = "onex.evt.omniclaude.correlation-trace.v1"
+    """Trace span event emitted during active sessions for omnidash /trace page."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

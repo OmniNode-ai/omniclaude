@@ -799,6 +799,30 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="run_id",
         required_fields=["run_id", "ticket_id", "model_id", "metric_version"],
     ),
+    # =========================================================================
+    # Correlation Trace Spans (OMN-5047 - omnidash /trace page)
+    # =========================================================================
+    # Emitted during active Claude Code sessions by correlation_trace_emitter.py.
+    # Consumed by omnidash ReadModelConsumer to project into correlation_trace_spans table.
+    # No payload transform — span metadata contains no secrets or prompt content.
+    "correlation.trace.span": EventRegistration(
+        event_type="correlation.trace.span",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CORRELATION_TRACE,
+                transform=None,  # Passthrough — no sensitive data in span metadata
+                description="Trace span event for omnidash /trace page",
+            ),
+        ],
+        partition_key_field="trace_id",
+        required_fields=[
+            "span_id",
+            "trace_id",
+            "session_id",
+            "span_kind",
+            "operation_name",
+        ],
+    ),
 }
 
 
