@@ -92,16 +92,6 @@ else
     CORRELATION_ID="$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
 fi
 
-# Log hook invocation (non-blocking)
-# Pass prompt via stdin to avoid exposing it in process table (ps aux / /proc/PID/cmdline)
-(
-    printf '%s' "$PROMPT" | $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" invocation \
-        --hook-name "UserPromptSubmit" \
-        --prompt-stdin \
-        --correlation-id "$CORRELATION_ID" \
-        2>>"$LOG_FILE" || true
-) &
-
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
 # NOTE: When sessionId is absent, SESSION_ID falls back to CORRELATION_ID.
 # The accumulator file is then written as /tmp/omniclaude-session-<correlation_id>.json.
@@ -175,7 +165,13 @@ if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
 else
-    ROUTING_RESULT="$(run_with_timeout 3 "$PYTHON_CMD" "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "3000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
+    # OMN-5138: Raised from 3s to 5s. The 3s budget (OMN-3646) was too tight —
+    # Python startup + lazy LLM handler import + LLM inference call exceeds 3s,
+    # causing SIGALRM to kill the process before it prints output.  With the
+    # import-time fix (hook_event_adapter + secret_redactor), import dropped
+    # from ~3.2s to ~0.2s, but the LLM call itself needs ~1-2s.  5s gives
+    # comfortable headroom while staying well under the CLAUDE.md 15s worst-case.
+    ROUTING_RESULT="$(run_with_timeout 5 "$PYTHON_CMD" "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
     # Clear activity on regular prompts (no longer in a skill workflow)
     update_tab_activity ""
 fi

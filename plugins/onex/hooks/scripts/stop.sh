@@ -89,42 +89,10 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     ) &
 fi
 
-# If tools not in JSON, query database
+# If tools not in JSON, default to empty list
+# (Legacy PostgreSQL query removed — Kafka is the canonical observability path)
 if [[ -z "$TOOLS_EXECUTED" ]] || [[ "$TOOLS_EXECUTED" == "null" ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Querying database for tools..." >> "$LOG_FILE"
-    TOOLS_EXECUTED=$($PYTHON_CMD -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
-from correlation_manager import get_correlation_context
-from hook_event_logger import get_logger
-import json
-
-corr_context = get_correlation_context()
-if not corr_context:
-    print('[]')
-    sys.exit(0)
-
-correlation_id = corr_context.get('correlation_id')
-if not correlation_id:
-    print('[]')
-    sys.exit(0)
-
-logger = get_logger()
-try:
-    conn = logger._get_connection()
-    with conn.cursor() as cur:
-        cur.execute('''
-            SELECT DISTINCT payload->>'tool_name' as tool_name
-            FROM hook_events
-            WHERE source = 'PostToolUse'
-            AND metadata->>'correlation_id' = %s
-            ORDER BY created_at
-        ''', (correlation_id,))
-        tools = [row[0] for row in cur.fetchall() if row[0]]
-        print(json.dumps(tools))
-except Exception as e:
-    print('[]', file=sys.stderr)
-" 2>>"$LOG_FILE" || echo "[]")
+    TOOLS_EXECUTED="[]"
 fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tools executed: $TOOLS_EXECUTED" >> "$LOG_FILE"
