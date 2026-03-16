@@ -84,6 +84,7 @@ try:
 except ImportError:
     TypedDictRoutingAlternative = dict  # type: ignore[assignment,misc]
 
+
 # Topic constants and builder (centralized in omniclaude.hooks.topics)
 #
 # PERFORMANCE FIX (OMN-5138): omniclaude.hooks.__init__.py eagerly imports
@@ -102,7 +103,7 @@ def _import_topics_fast() -> tuple[type, object]:
 
     # Ensure omniclaude parent is importable (lightweight __init__)
     if "omniclaude" not in sys.modules:
-        import omniclaude  # noqa: F811 — ~0.03s
+        pass  # noqa: F811 — ~0.03s
 
     # Stub omniclaude.hooks to skip its heavy __init__.py
     if "omniclaude.hooks" not in sys.modules:
@@ -113,10 +114,10 @@ def _import_topics_fast() -> tuple[type, object]:
         _stub.__package__ = "omniclaude.hooks"
         sys.modules["omniclaude.hooks"] = _stub
 
-    from omniclaude.hooks.topics import TopicBase as _TB
+    from omniclaude.hooks.topics import TopicBase as _TopicBase
     from omniclaude.hooks.topics import build_topic as _bt
 
-    return _TB, _bt
+    return _TopicBase, _bt
 
 
 try:
