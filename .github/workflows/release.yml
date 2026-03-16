@@ -21,6 +21,8 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -152,3 +154,47 @@ jobs:
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           files: omniclaude-plugin-*.zip
+
+  # ---------------------------------------------------------------------------
+  # Post-release: trigger Dockerfile.runtime pin cascade (OMN-5137)
+  # ---------------------------------------------------------------------------
+  # When omniclaude is released, notify omnibase_infra so its
+  # plugin-pin-cascade workflow can bump Dockerfile.runtime pins automatically.
+  #
+  # REQUIREMENT: CROSS_REPO_PAT secret must be a GitHub PAT with `repo` scope
+  # on OmniNode-ai/omnibase_infra (same pattern as omnibase_infra's
+  # trigger-runtime-rebuild job).
+  notify-plugin-pin-cascade:
+    name: Notify Plugin Pin Cascade
+    needs: release
+    if: ${{ !contains(needs.release.outputs.version, 'rc') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CROSS_REPO_PAT is configured
+        id: token_check
+        env:
+          CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+        run: |
+          if [ -z "$CROSS_REPO_PAT" ]; then
+            echo "::warning::CROSS_REPO_PAT secret is not set. Skipping cross-repo dispatch." \
+              "Set a PAT with 'repo' scope on OmniNode-ai/omnibase_infra" \
+              "as the CROSS_REPO_PAT repository secret to enable plugin pin cascade."
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch plugin-release to omnibase_infra
+        if: steps.token_check.outputs.has_token == 'true'
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.CROSS_REPO_PAT }}
+          repository: OmniNode-ai/omnibase_infra
+          event-type: plugin-release
+          client-payload: >-
+            {
+              "package": "omninode-claude",
+              "version": "${{ needs.release.outputs.version }}",
+              "source_repo": "${{ github.repository }}",
+              "source_sha": "${{ github.sha }}"
+            }
