@@ -45,7 +45,6 @@ Event-driven integration with Claude Code lifecycle events:
 **Key Libraries** (`hooks/lib/`):
 - `agent_detector.py` - Detects automated workflows
 - `route_via_events_wrapper.py` - Kafka-based agent routing with candidate list generation
-- `hook_event_logger.py` - PostgreSQL event logging
 - `correlation_manager.py` - Correlation ID management
 - `publish_intelligence_request.py` - Publishes to event bus
 - `session_intelligence.py` - Session tracking

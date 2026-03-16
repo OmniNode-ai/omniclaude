@@ -92,16 +92,6 @@ else
     CORRELATION_ID="$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
 fi
 
-# Log hook invocation (non-blocking)
-# Pass prompt via stdin to avoid exposing it in process table (ps aux / /proc/PID/cmdline)
-(
-    printf '%s' "$PROMPT" | $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" invocation \
-        --hook-name "UserPromptSubmit" \
-        --prompt-stdin \
-        --correlation-id "$CORRELATION_ID" \
-        2>>"$LOG_FILE" || true
-) &
-
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
 # NOTE: When sessionId is absent, SESSION_ID falls back to CORRELATION_ID.
 # The accumulator file is then written as /tmp/omniclaude-session-<correlation_id>.json.

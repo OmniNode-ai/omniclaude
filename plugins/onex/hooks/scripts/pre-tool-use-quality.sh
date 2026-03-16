@@ -104,40 +104,6 @@ RESULT=$(echo "$TOOL_INFO" | \
 EXIT_CODE=$?
 set -e
 
-# Database event logging (async, non-blocking)
-if [[ -f "${HOOKS_LIB}/hook_event_logger.py" ]]; then
-    (
-        $PYTHON_CMD -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
-from hook_event_logger import log_pretooluse
-from correlation_manager import get_correlation_context
-import json
-
-tool_info = json.loads('''$TOOL_INFO''')
-tool_name = tool_info.get('tool_name', 'unknown')
-tool_input = tool_info.get('tool_input', {})
-
-corr_context = get_correlation_context()
-correlation_id = corr_context.get('correlation_id') if corr_context else None
-final_corr_id = correlation_id or '$CORRELATION_ID'
-
-log_pretooluse(
-    tool_name=tool_name,
-    tool_input=tool_input,
-    correlation_id=final_corr_id,
-    quality_check_result={
-        'hook_correlation_id': '$CORRELATION_ID',
-        'user_correlation_id': correlation_id,
-        'agent_name': corr_context.get('agent_name') if corr_context else None,
-        'session_id': '$SESSION_ID',
-        'root_id': '$ROOT_ID'
-    }
-)
-" 2>/dev/null
-    ) &
-fi
-
 # Handle exit codes
 if [ $EXIT_CODE -eq 0 ]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [CID:${CORRELATION_ID:0:8}] Quality check passed for $TOOL_NAME" >> "$LOG_FILE"
