@@ -32,7 +32,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -120,6 +120,14 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+  dod_verify:
+    started_at: null
+    completed_at: null
+    artifacts: {}       # dod_total, dod_verified, dod_failed, dod_skipped, receipt_path
+    blocked_reason: null
+    block_kind: null
+    last_error: null
+    last_error_at: null
   create_pr:
     started_at: null
     completed_at: null
@@ -196,7 +204,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "create_pr", "ci_watch", "pr_review_loop", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "create_pr", "ci_watch", "pr_review_loop", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -1059,6 +1067,16 @@ def build_phase_payload(phase_name, state, result):
             "last_clean_sha": head_sha,
         }
 
+    elif phase_name == "dod_verify":
+        return {
+            "dod_total": artifacts.get("dod_total", 0),
+            "dod_verified": artifacts.get("dod_verified", 0),
+            "dod_failed": artifacts.get("dod_failed", 0),
+            "dod_skipped": artifacts.get("dod_skipped", 0),
+            "receipt_path": artifacts.get("receipt_path", ""),
+            "policy_mode": artifacts.get("policy_mode", "advisory"),
+        }
+
     elif phase_name == "create_pr":
         return {
             "pr_url": artifacts.get("pr_url", ""),
@@ -1528,6 +1546,7 @@ def execute_phase(phase_name, state):
         "pre_flight": execute_pre_flight,
         "implement": execute_implement,
         "local_review": execute_local_review,
+        "dod_verify": execute_dod_verify,
         "create_pr": execute_create_pr,
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
@@ -2095,10 +2114,75 @@ def execute_phase(phase_name, state):
 
 ---
 
-### Phase 3: CREATE PR
+### Phase 2.5: DOD VERIFY
 
 **Invariants:**
 - Phase 2 (local_review) is completed
+- Working directory has reviewed, clean code
+
+**Actions:**
+
+1. **Locate ticket contract:**
+   Look for `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`. If `ONEX_CC_REPO_PATH` is not
+   set, check the working directory for `.contracts/{ticket_id}.yaml`.
+
+2. **Early exit (no contract or no dod_evidence):**
+   If no contract file exists, or the contract has no `dod_evidence` entries, log the
+   reason and proceed to Phase 3. This phase is a no-op for legacy tickets.
+
+3. **Run evidence checks:**
+   Use the DoD evidence runner (`plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`):
+   - Load the contract YAML and extract `dod_evidence[]`
+   - Call `run_dod_evidence(evidence_items)` to execute all checks
+   - Call `write_evidence_receipt(ticket_id, contract_path, result)` to save the receipt
+
+4. **Policy enforcement (reads `dod_enforcement.yaml`):**
+   - **advisory** (default): Log results, always proceed. Append DoD summary to PR body later.
+   - **soft**: Log results, warn on failures, proceed. Mark PR with `dod-warning` label if failures.
+   - **hard**: Block pipeline if any `failed` checks exist. Status = blocked.
+
+5. **Store artifacts:**
+   ```python
+   artifacts = {
+       "dod_total": result.total,
+       "dod_verified": result.verified,
+       "dod_failed": result.failed,
+       "dod_skipped": result.skipped,
+       "receipt_path": str(receipt_path),
+       "policy_mode": policy_mode,  # "advisory" | "soft" | "hard"
+   }
+   ```
+
+6. **Append DoD Evidence table to PR description (in Phase 3):**
+   When Phase 3 creates the PR, if dod_verify produced results, append a DoD Evidence
+   section to the PR body:
+   ```markdown
+   ## DoD Evidence
+
+   | # | Description | Status |
+   |---|------------|--------|
+   | dod-001 | Tests exist and pass | verified |
+   | dod-002 | Config file created | failed |
+
+   Evidence receipt: `.evidence/{ticket_id}/dod_report.json`
+   ```
+
+**Mutations:**
+- `phases.dod_verify.started_at`
+- `phases.dod_verify.completed_at`
+- `phases.dod_verify.artifacts` (dod_total, dod_verified, dod_failed, dod_skipped, receipt_path, policy_mode)
+
+**Exit conditions:**
+- **Completed:** All checks verified, or policy mode is advisory/soft
+- **Blocked:** Hard mode and any checks failed
+- **Failed:** Evidence runner errors out
+
+---
+
+### Phase 3: CREATE PR
+
+**Invariants:**
+- Phase 2.5 (dod_verify) is completed (or skipped if no contract)
 - `policy.auto_push == true` AND `policy.auto_pr_create == true` (checked before acting)
 
 **Actions:**

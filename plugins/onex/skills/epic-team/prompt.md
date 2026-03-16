@@ -1224,9 +1224,68 @@ def execute_ticket(task):
 
 **Ordering rule**: TaskUpdate (status=completed/failed) MUST happen BEFORE SendMessage. This ensures the team-lead's TaskList polling sees terminal status before processing any notification.
 
+## DoD Audit Wave
+
+After all implementation waves are complete and before the final summary, run a DoD
+audit across all completed tickets. This is the epic-level enforcement layer that catches
+tickets where agents claimed completion without verified DoD evidence.
+
+### Audit procedure
+
+1. **Collect all completed ticket IDs** from `ticket_results` in the epic state.
+
+2. **For each ticket**, locate its contract YAML:
+   - Check `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+   - If not found, the ticket has no contract (legacy) -- mark as `skipped`
+
+3. **Load `dod_evidence[]`** from each contract:
+   - If empty or missing, mark as `skipped` (no DoD to verify)
+   - If present, invoke the evidence runner:
+     ```python
+     # Use the shared runner
+     from dod_evidence_runner import run_dod_evidence, write_evidence_receipt
+     result = run_dod_evidence(contract["dod_evidence"])
+     write_evidence_receipt(ticket_id, contract_path, result)
+     ```
+
+4. **Produce epic-level audit report**:
+   ```python
+   audit_report = {
+       "epic_id": epic_id,
+       "total_tickets": len(completed_tickets),
+       "audited": count_with_dod,
+       "skipped": count_without_dod,
+       "all_verified": count_all_checks_passed,
+       "has_failures": count_with_failures,
+       "details": per_ticket_results,
+   }
+   ```
+
+5. **For failed DoD items**, create follow-up tickets:
+   - Title: `fix: {ticket_id} DoD gap — {dod_item.description}`
+   - Link as child of the epic
+   - Priority: based on enforcement policy (advisory=minor, soft=major, hard=critical)
+
+6. **Post audit summary** to Slack thread (non-fatal if Slack unavailable):
+   ```
+   DoD Audit Complete for {epic_id}:
+   - {audited} tickets audited, {skipped} skipped (no contract/DoD)
+   - {all_verified} fully verified, {has_failures} with gaps
+   - {len(followup_tickets)} follow-up tickets created
+   ```
+
+### Policy modes
+
+The audit respects the same policy graduation as the pipeline gate:
+- **advisory**: Log audit results, do not create follow-up tickets
+- **soft**: Create follow-up tickets for failures, do not block epic completion
+- **hard**: Create follow-up tickets AND block epic completion if any failures exist
+
+---
+
 ## Final Summary
 
-After processing all tasks, send a final summary:
+After processing all tasks (and the DoD audit wave), send a final summary:
 
 ```python
 completed_tasks = [t for t in all_processed if t.final_status == "completed"]
