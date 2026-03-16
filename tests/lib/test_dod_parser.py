@@ -8,8 +8,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 # Add the skill lib to path so we can import dod_parser
 sys.path.insert(
     0,
@@ -106,12 +104,7 @@ class TestAssignsSequentialIds:
     """Tests for sequential ID assignment."""
 
     def test_assigns_sequential_ids(self) -> None:
-        desc = (
-            "## Definition of Done\n"
-            "- [ ] First\n"
-            "- [ ] Second\n"
-            "- [ ] Third\n"
-        )
+        desc = "## Definition of Done\n- [ ] First\n- [ ] Second\n- [ ] Third\n"
         items = extract_dod_items(desc)
         assert [i.id for i in items] == ["dod-001", "dod-002", "dod-003"]
 

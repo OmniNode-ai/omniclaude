@@ -11,11 +11,8 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
-import pytest
-
 
 HOOK_SCRIPT = str(
     Path(__file__).resolve().parents[2]
@@ -45,6 +42,7 @@ def _run_hook(
         env=env,
         cwd=cwd,
         timeout=10,
+        check=False,
     )
 
 
@@ -86,9 +84,7 @@ class TestBlocksDoneWithoutReceipt:
         )
         assert result.returncode == 2
 
-    def test_allows_done_without_receipt_advisory_mode(
-        self, tmp_path: Path
-    ) -> None:
+    def test_allows_done_without_receipt_advisory_mode(self, tmp_path: Path) -> None:
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
@@ -108,7 +104,7 @@ class TestAllowsDoneWithValidReceipt:
         evidence_dir.mkdir(parents=True)
         receipt = {
             "ticket_id": "OMN-1234",
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "timestamp": datetime.now(tz=UTC).isoformat(),
             "result": {"total": 2, "verified": 2, "failed": 0, "skipped": 0},
         }
         (evidence_dir / "dod_report.json").write_text(json.dumps(receipt))
@@ -127,12 +123,10 @@ class TestAllowsDoneWithValidReceipt:
 class TestBlocksDoneWithStaleReceipt:
     """Stale receipts should trigger policy enforcement."""
 
-    def test_blocks_done_with_stale_receipt_hard_mode(
-        self, tmp_path: Path
-    ) -> None:
+    def test_blocks_done_with_stale_receipt_hard_mode(self, tmp_path: Path) -> None:
         evidence_dir = tmp_path / ".evidence" / "OMN-1234"
         evidence_dir.mkdir(parents=True)
-        stale_time = datetime.now(tz=timezone.utc) - timedelta(hours=1)
+        stale_time = datetime.now(tz=UTC) - timedelta(hours=1)
         receipt = {
             "ticket_id": "OMN-1234",
             "timestamp": stale_time.isoformat(),
@@ -154,14 +148,12 @@ class TestBlocksDoneWithStaleReceipt:
 class TestBlocksDoneWithFailedChecks:
     """Receipt with failures should trigger policy enforcement."""
 
-    def test_blocks_done_with_failed_checks_hard_mode(
-        self, tmp_path: Path
-    ) -> None:
+    def test_blocks_done_with_failed_checks_hard_mode(self, tmp_path: Path) -> None:
         evidence_dir = tmp_path / ".evidence" / "OMN-1234"
         evidence_dir.mkdir(parents=True)
         receipt = {
             "ticket_id": "OMN-1234",
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "timestamp": datetime.now(tz=UTC).isoformat(),
             "result": {"total": 2, "verified": 1, "failed": 1, "skipped": 0},
         }
         (evidence_dir / "dod_report.json").write_text(json.dumps(receipt))

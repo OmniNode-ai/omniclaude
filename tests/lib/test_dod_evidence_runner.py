@@ -10,8 +10,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 # Add the skill lib to path
 sys.path.insert(
     0,
@@ -305,13 +303,10 @@ class TestEvidenceReceipt:
 
     def test_receipt_provenance_matches_current_repo(self) -> None:
         """Receipt provenance reflects actual repo state when run from a git repo."""
-        import subprocess
         import tempfile
 
         # Use the actual worktree as working_dir
-        working_dir = str(
-            Path(__file__).resolve().parents[2]
-        )  # omniclaude root
+        working_dir = str(Path(__file__).resolve().parents[2])  # omniclaude root
 
         with tempfile.TemporaryDirectory() as output_dir:
             run_result = EvidenceRunResult(total=0)
