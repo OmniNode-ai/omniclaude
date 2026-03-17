@@ -243,6 +243,12 @@ class ModelSessionOutcomeConfig:
         outcome: Classification of how the session ended. Accepts bare strings
             that match EnumClaudeCodeSessionOutcome values; coerced on init.
         tracing: Optional tracing configuration (provides emitted_at, environment).
+        success: True when DoD receipt exists and passes; False when fails; None
+            when no DoD receipt (non-ticket sessions). [OMN-5201]
+        dod_pass: Whether the DoD evidence receipt reported zero failed checks. [OMN-5201]
+        ticket_id: Active Linear ticket identifier at session end. [OMN-5201]
+        pr_url: GitHub pull request URL associated with the session. [OMN-5201]
+        commit_count: Number of commits authored in the branch during the session. [OMN-5201]
 
     Raises:
         ValueError: If session_id is empty/whitespace or outcome is invalid.
@@ -251,6 +257,11 @@ class ModelSessionOutcomeConfig:
     session_id: str
     outcome: EnumClaudeCodeSessionOutcome
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+    success: bool | None = None
+    dod_pass: bool | None = None
+    ticket_id: str | None = None
+    pr_url: str | None = None
+    commit_count: int | None = None
 
     def __post_init__(self) -> None:
         """Validate session_id and coerce outcome to enum."""
@@ -1237,6 +1248,11 @@ async def emit_session_outcome_from_config(
             session_id=config.session_id,
             outcome=outcome_enum,
             emitted_at=emitted_at,
+            success=config.success,
+            dod_pass=config.dod_pass,
+            ticket_id=config.ticket_id,
+            pr_url=config.pr_url,
+            commit_count=config.commit_count,
         )
 
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics

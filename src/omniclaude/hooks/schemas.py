@@ -700,6 +700,37 @@ class ModelSessionOutcome(BaseModel):
         description="Interpretive outcome score 0.0-1.0 (derivation TBD, see OMN-5224)",
     )
 
+    # OMN-5201: T11b enrichment fields for Effectiveness/Baselines dashboard pages.
+    # All optional with None default for backward compatibility.
+    success: bool | None = Field(
+        default=None,
+        description=(
+            "True when DoD receipt exists and passes all checks; "
+            "False when DoD receipt exists but has failures; "
+            "None when no DoD receipt (non-ticket sessions)."
+        ),
+    )
+    dod_pass: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the DoD evidence receipt reported zero failed checks. "
+            "None when no receipt exists for the session."
+        ),
+    )
+    ticket_id: str | None = Field(
+        default=None,
+        description="Active Linear ticket identifier at session end (e.g. 'OMN-1234').",
+    )
+    pr_url: str | None = Field(
+        default=None,
+        description="GitHub pull request URL associated with the session, if any.",
+    )
+    commit_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Number of commits authored in the worktree branch during the session.",
+    )
+
 
 # =============================================================================
 # Routing Feedback Events (OMN-1892)
