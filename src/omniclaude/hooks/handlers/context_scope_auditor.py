@@ -365,7 +365,9 @@ class ContextScopeAuditor:
             state_dir: Override state directory (default: ~/.claude/hooks/.state).
         """
         self.enforcement_mode = (
-            enforcement_mode if enforcement_mode is not None else EnforcementMode.from_env()
+            enforcement_mode
+            if enforcement_mode is not None
+            else EnforcementMode.from_env()
         )
         self.state_dir = state_dir
 

@@ -179,14 +179,18 @@ class TestToolScopeValidation:
 
     def test_tool_in_scope_is_allowed(self, tmp_path: Path) -> None:
         reg = _make_registry(scopes={"tool_scope": ["Read", "Glob"]})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Read", {})
         assert result.scope_violated is False
         assert result.should_block is False
 
     def test_tool_not_in_scope_permissive_allows(self, tmp_path: Path) -> None:
         reg = _make_registry(scopes={"tool_scope": ["Read", "Glob"]})
-        auditor = _auditor(mode=EnforcementMode.PERMISSIVE, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.PERMISSIVE, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {})
         assert result.scope_violated is True
         assert result.should_block is False  # permissive = log only
@@ -200,14 +204,18 @@ class TestToolScopeValidation:
 
     def test_tool_not_in_scope_strict_blocks(self, tmp_path: Path) -> None:
         reg = _make_registry(scopes={"tool_scope": ["Read"]})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {})
         assert result.scope_violated is True
         assert result.should_block is True
 
     def test_tool_not_in_scope_paranoid_blocks(self, tmp_path: Path) -> None:
         reg = _make_registry(scopes={"tool_scope": ["Read"]})
-        auditor = _auditor(mode=EnforcementMode.PARANOID, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.PARANOID, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Write", {})
         assert result.scope_violated is True
         assert result.should_block is True
@@ -215,7 +223,9 @@ class TestToolScopeValidation:
     def test_no_tool_scope_declared_allows_any_tool(self, tmp_path: Path) -> None:
         """When scopes dict has no tool_scope key, any tool is allowed."""
         reg = _make_registry(scopes={})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {"command": "rm -rf /"})
         assert result.scope_violated is False
         assert result.should_block is False
@@ -223,7 +233,9 @@ class TestToolScopeValidation:
     def test_empty_tool_scope_blocks_all_tools(self, tmp_path: Path) -> None:
         """An empty tool_scope list blocks every tool call in STRICT mode."""
         reg = _make_registry(scopes={"tool_scope": []})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Read", {})
         assert result.scope_violated is True
         assert result.should_block is True
@@ -240,7 +252,9 @@ class TestContextBudgetTracking:
     def test_within_budget_is_not_exceeded(self, tmp_path: Path) -> None:
         # Set a large budget so a small call never exceeds it
         reg = _make_registry(scopes={"context_budget_tokens": 100_000})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Read", {"file_path": "/tmp/a.txt"})
         assert result.budget_exceeded is False
         assert result.should_block is False
@@ -248,7 +262,9 @@ class TestContextBudgetTracking:
     def test_exceeding_budget_permissive_allows(self, tmp_path: Path) -> None:
         task_id = "task-budget-1"
         reg = _make_registry(task_id=task_id, scopes={"context_budget_tokens": 1})
-        auditor = _auditor(mode=EnforcementMode.PERMISSIVE, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.PERMISSIVE, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {"command": "echo hello world"})
         # Any real text will exceed a 1-token budget
         assert result.budget_exceeded is True
@@ -257,7 +273,9 @@ class TestContextBudgetTracking:
     def test_exceeding_budget_strict_blocks(self, tmp_path: Path) -> None:
         task_id = "task-budget-2"
         reg = _make_registry(task_id=task_id, scopes={"context_budget_tokens": 1})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {"command": "echo hello world"})
         assert result.budget_exceeded is True
         assert result.should_block is True
@@ -272,7 +290,9 @@ class TestContextBudgetTracking:
         budget = int(tokens_per_call * 1.5 / TOKEN_SAFETY_MARGIN)
 
         reg = _make_registry(task_id=task_id, scopes={"context_budget_tokens": budget})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
 
         # First call: within budget
         result1 = auditor.audit("Read", small_input)
@@ -285,7 +305,9 @@ class TestContextBudgetTracking:
     def test_no_budget_declared_skips_budget_check(self, tmp_path: Path) -> None:
         """When context_budget_tokens is absent, no budget tracking occurs."""
         reg = _make_registry(scopes={"tool_scope": ["Read"]})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Read", {"file_path": "/tmp/x"})
         assert result.budget_exceeded is False
 
@@ -301,7 +323,9 @@ class TestContextBudgetTracking:
         budget = int(raw_tokens / TOKEN_SAFETY_MARGIN)
 
         reg = _make_registry(task_id=task_id, scopes={"context_budget_tokens": budget})
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", input_text)
         # raw_tokens > effective_budget = budget * TOKEN_SAFETY_MARGIN
         # so this should exceed
@@ -322,7 +346,9 @@ class TestCombinedAudit:
             task_id=task_id,
             scopes={"tool_scope": ["Read"], "context_budget_tokens": 1},
         )
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {"command": "echo hello world"})
         assert result.scope_violated is True
         assert result.budget_exceeded is True
@@ -334,7 +360,9 @@ class TestCombinedAudit:
             task_id=task_id,
             scopes={"tool_scope": ["Bash"], "context_budget_tokens": 1},
         )
-        auditor = _auditor(mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg)
+        auditor = _auditor(
+            mode=EnforcementMode.STRICT, state_dir=tmp_path, registry=reg
+        )
         result = auditor.audit("Bash", {"command": "echo hello world"})
         assert result.scope_violated is False
         assert result.budget_exceeded is True
