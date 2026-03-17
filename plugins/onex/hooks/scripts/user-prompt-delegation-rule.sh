@@ -68,7 +68,6 @@ fi
 RULE_THRESHOLD="2"
 if source "${SCRIPT_DIR}/delegation-config.sh" 2>/dev/null; then
     RULE_THRESHOLD=$(_dc_read '.delegation_rule_tool_threshold' '2') || RULE_THRESHOLD="2"
-fi
 
 # Build the rule text via a variable to avoid jq escaping issues
 RULE_TEXT="DELEGATION RULE: For any task requiring more than ${RULE_THRESHOLD} tool calls, delegate as your FIRST action — before any reads, writes, or bash calls:
