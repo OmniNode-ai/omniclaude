@@ -451,6 +451,93 @@ log "CWD: $CWD"
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
 start_emit_daemon_if_needed
 
+# --- Hook Runtime Daemon [OMN-5309] ---
+# Lazily launch the hook runtime daemon (pure Python, no Kafka dependency).
+# The daemon serves classify_tool / reset_session / ping requests from hook shims.
+# Multiple concurrent Claude Code sessions share one daemon instance via the socket.
+# Follows the same pattern as start_emit_daemon_if_needed above.
+_HOOK_RUNTIME_SOCKET="${_TMPDIR}/omniclaude-hook-runtime.sock"
+_HOOK_RUNTIME_PID="${_TMPDIR}/omniclaude-hook-runtime.pid"
+_HOOK_RUNTIME_CONFIG="${HOOKS_DIR}/config.yaml"
+
+start_hook_runtime_if_needed() {
+    if [[ -S "$_HOOK_RUNTIME_SOCKET" ]]; then
+        # Fast path: PID check via kill -0 (no Python spawn)
+        if [[ -f "$_HOOK_RUNTIME_PID" ]]; then
+            local _hrt_pid
+            _hrt_pid=$(cat "$_HOOK_RUNTIME_PID" 2>/dev/null)
+            if [[ -n "$_hrt_pid" ]] && kill -0 "$_hrt_pid" 2>/dev/null; then
+                log "Hook runtime daemon already running (PID $_hrt_pid, fast-path skip)"
+                return 0
+            fi
+        fi
+        # Slow path: PID file missing or process dead — ping socket
+        if HOOK_RUNTIME_SOCKET="$_HOOK_RUNTIME_SOCKET" \
+           "$PYTHON_CMD" -c "
+import socket,sys,json
+s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+s.settimeout(0.1)
+try:
+    s.connect(sys.argv[1])
+    s.sendall(b'{\"action\":\"ping\",\"session_id\":\"health\",\"payload\":{}}\n')
+    line=s.makefile().readline().strip()
+    resp=json.loads(line) if line else {}
+    sys.exit(0 if resp.get('decision')=='ack' else 1)
+except Exception:
+    sys.exit(1)
+finally:
+    s.close()
+" "$_HOOK_RUNTIME_SOCKET" >/dev/null 2>&1; then
+            log "Hook runtime daemon already running and responsive"
+            return 0
+        else
+            log "Hook runtime daemon socket stale, restarting"
+            rm -f "$_HOOK_RUNTIME_SOCKET" "$_HOOK_RUNTIME_PID" 2>/dev/null || true
+        fi
+    fi
+
+    # Check that hook_runtime module is available before launching
+    if ! "$PYTHON_CMD" -c "import omniclaude.hook_runtime" 2>/dev/null; then
+        log "Hook runtime module not available (omniclaude.hook_runtime) — skipping"
+        return 0  # Non-fatal; hooks fall back to shell-based enforcement
+    fi
+
+    log "Starting hook runtime daemon..."
+    mkdir -p "${HOOKS_DIR}/logs"
+
+    local _config_arg=""
+    if [[ -f "$_HOOK_RUNTIME_CONFIG" ]]; then
+        _config_arg="--config $_HOOK_RUNTIME_CONFIG"
+    fi
+
+    # shellcheck disable=SC2086
+    nohup "$PYTHON_CMD" -m omniclaude.hook_runtime start \
+        --socket-path "$_HOOK_RUNTIME_SOCKET" \
+        ${_config_arg} \
+        >> "${HOOKS_DIR}/logs/hook-runtime-daemon.log" 2>&1 &
+
+    local _hrt_launch_pid=$!
+    log "Hook runtime daemon launched with PID $_hrt_launch_pid"
+
+    # Wait up to 200ms for socket to appear (10 x 20ms)
+    local _wait=0
+    while [[ ! -S "$_HOOK_RUNTIME_SOCKET" && $_wait -lt 10 ]]; do
+        sleep 0.02
+        ((_wait++)) || true
+    done
+
+    if [[ -S "$_HOOK_RUNTIME_SOCKET" ]]; then
+        echo "$_hrt_launch_pid" > "$_HOOK_RUNTIME_PID" 2>/dev/null || true
+        log "Hook runtime daemon ready"
+    else
+        log "WARNING: Hook runtime daemon socket did not appear within 200ms — hooks will use shell fallback"
+    fi
+}
+
+start_hook_runtime_if_needed
+
+# --- End Hook Runtime Daemon ---
+
 # -----------------------------
 # Session State Initialization (OMN-2119)
 # -----------------------------
