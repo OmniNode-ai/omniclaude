@@ -482,7 +482,7 @@ async def emit_hook_event(
         topic_base = _get_topic_base(event_type)
 
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
-        topic = build_topic("", topic_base)
+        topic = build_topic(topic_base)
 
         # Create envelope
         envelope = ModelHookEventEnvelope(
@@ -1058,7 +1058,7 @@ async def emit_claude_hook_event(
 
     try:
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         # Truncate prompt if it exceeds Kafka message size limit
         # Account for JSON envelope overhead to ensure total message stays within limit
@@ -1240,8 +1240,8 @@ async def emit_session_outcome_from_config(
         )
 
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
-        topic_cmd = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
-        topic_evt = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
+        topic_cmd = build_topic(TopicBase.SESSION_OUTCOME_CMD)
+        topic_evt = build_topic(TopicBase.SESSION_OUTCOME_EVT)
         first_topic = topic_cmd
 
         # Serialize payload

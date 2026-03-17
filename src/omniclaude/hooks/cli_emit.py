@@ -637,7 +637,7 @@ async def _emit_tool_content(
 
     try:
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
-        topic = build_topic("", TopicBase.TOOL_CONTENT)
+        topic = build_topic(TopicBase.TOOL_CONTENT)
 
         # Reuse shared Kafka config (raises ModelOnexError if bootstrap missing)
         config = create_kafka_config()

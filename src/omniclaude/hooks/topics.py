@@ -4,8 +4,8 @@
 """Topic base names and helper for OmniClaude events.
 
 Per OMN-1972, TopicBase values ARE the canonical wire topic names. No environment
-prefix is applied. The build_topic() helper still accepts a prefix argument for
-validation purposes, but callers should always pass an empty string.
+prefix is applied. The build_topic() helper validates and returns the canonical
+topic name (prefix parameter removed in OMN-5212).
 """
 
 from __future__ import annotations
@@ -421,77 +421,25 @@ def _validate_topic_name(topic: str) -> None:
             )
 
 
-def build_topic(prefix: str, base: str) -> str:
-    """Build full topic name from prefix and base.
+def build_topic(base: str) -> str:
+    """Return the canonical topic name after validation.
+
+    Since OMN-5212, the ``prefix`` parameter has been removed. All topics use
+    canonical ONEX names with no environment prefix.
 
     Args:
-        prefix: Topic prefix string. Must be a string without dots.
-            If empty or whitespace-only, returns just the base topic name.
-            Per OMN-1972, callers should always pass empty string ("") since
-            TopicBase values are the canonical wire topic names with no
-            environment prefix.
-        base: Base topic name from TopicBase (e.g., "omniclaude.session.started.v1").
-            Must be a valid dotted topic name.
+        base: Canonical topic name from ``TopicBase``.
 
     Returns:
-        Full topic name. If prefix is empty, returns just the base topic name.
+        The validated canonical topic name.
 
     Raises:
-        ModelOnexError: If prefix is None, not a string, or contains dots.
-        ModelOnexError: If base is empty, None, whitespace-only, or malformed.
+        ModelOnexError: If *base* is empty, None, whitespace-only, or malformed.
 
     Examples:
-        >>> build_topic("", TopicBase.SESSION_STARTED)
+        >>> build_topic(TopicBase.SESSION_STARTED)
         'onex.evt.omniclaude.session-started.v1'
-
-        >>> build_topic("  ", TopicBase.SESSION_STARTED)
-        'onex.evt.omniclaude.session-started.v1'
-
-        >>> build_topic(None, TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ModelOnexError: ...
-
-        >>> build_topic("x.y", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ModelOnexError: ...
     """
-    # Validate prefix - allow None check but handle empty separately
-    if prefix is None:
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message="prefix must not be None",
-        )
-
-    if not isinstance(prefix, str):
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message=f"prefix must be a string, got {type(prefix).__name__}",
-        )
-
-    # Handle empty prefix - return just the base
-    stripped_prefix = prefix.strip()
-    if not stripped_prefix:
-        # Validate base and return it directly
-        base = _validate_topic_segment(base, "base")
-        _validate_topic_name(base)
-        return base
-
-    # Enforce no dots in prefix
-    if "." in stripped_prefix:
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message=f"prefix must not contain dots: {stripped_prefix!r}",
-        )
-
-    # Validate base
     base = _validate_topic_segment(base, "base")
-
-    # Build the topic
-    topic = f"{stripped_prefix}.{base}"
-
-    # Validate the final topic name
-    _validate_topic_name(topic)
-
-    return topic
+    _validate_topic_name(base)
+    return base

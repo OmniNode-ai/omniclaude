@@ -219,7 +219,7 @@ def kafka_bootstrap_servers() -> str:
 @pytest.fixture(scope="session")
 def kafka_environment() -> str:
     """Get the Kafka environment prefix from environment."""
-    return os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    return os.environ.get("KAFKA_ENVIRONMENT", "")
 
 
 @pytest.fixture

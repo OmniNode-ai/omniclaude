@@ -49,7 +49,7 @@ from omniclaude.trace.fix_transition import (
 )
 
 #: Expected Kafka topic for fix transition events (mirrors the emit call)
-_EXPECTED_FIX_TRANSITION_TOPIC = build_topic("", TopicBase.AGENT_TRACE_FIX_TRANSITION)
+_EXPECTED_FIX_TRANSITION_TOPIC = build_topic(TopicBase.AGENT_TRACE_FIX_TRANSITION)
 
 # ---------------------------------------------------------------------------
 # Fixtures
