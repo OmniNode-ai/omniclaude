@@ -1,4 +1,5 @@
 """Unit tests for HookRuntimeConfig.from_yaml. [OMN-5310]"""
+
 from pathlib import Path
 
 import pytest
