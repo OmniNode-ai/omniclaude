@@ -1,4 +1,5 @@
 """Unit tests for hook runtime async socket server. [OMN-5306]"""
+
 from __future__ import annotations
 
 import asyncio

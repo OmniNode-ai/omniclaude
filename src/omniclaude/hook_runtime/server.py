@@ -9,6 +9,7 @@ nodes. Follows the EmbeddedEventPublisher lifecycle pattern:
 - Graceful shutdown via asyncio.Event
 - Newline-delimited JSON protocol
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,8 +30,8 @@ from omniclaude.hook_runtime.protocol import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108
-_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108
+_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108  # nosec B108
+_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108  # nosec B108
 
 
 @dataclass
