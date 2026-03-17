@@ -476,8 +476,11 @@ class SkillCommandDispatcher:
         Returns:
             A fully populated ``ModelSkillRequest``.
         """
-        # Default skill_path from convention
-        default_path = f"plugins/onex/skills/{skill_id}/SKILL.md"
+        # Default skill_path from convention.
+        # Skill directories use underscores (OMN-5200) but Kafka topics use
+        # kebab-case, so normalise the skill_id for filesystem lookup.
+        skill_dir = skill_id.replace("-", "_")
+        default_path = f"plugins/onex/skills/{skill_dir}/SKILL.md"
 
         if isinstance(payload, dict):
             skill_path = payload.get("skill_path", default_path)
