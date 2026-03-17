@@ -402,11 +402,18 @@ def _get_emit_event() -> Any:
         runner_dir = Path(__file__).resolve().parent
         hooks_lib = runner_dir.parent.parent.parent / "hooks" / "lib"
         if hooks_lib.is_dir():
-            sys.path.insert(0, str(hooks_lib))
-            from emit_client_wrapper import emit_event
+            hooks_lib_str = str(hooks_lib)
+            sys.path.insert(0, hooks_lib_str)
+            try:
+                from emit_client_wrapper import emit_event
 
-            return emit_event
-    except (ImportError, Exception):
+                return emit_event
+            finally:
+                try:
+                    sys.path.remove(hooks_lib_str)
+                except ValueError:
+                    pass
+    except Exception:
         pass
 
     return None

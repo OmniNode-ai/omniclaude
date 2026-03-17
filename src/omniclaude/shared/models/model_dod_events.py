@@ -36,7 +36,7 @@ class ModelDodVerifyCompletedEvent(BaseModel):
         timestamp: ISO 8601 UTC timestamp of the verification run.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     ticket_id: str
     run_id: str
@@ -65,7 +65,7 @@ class ModelDodGuardFiredEvent(BaseModel):
         timestamp: ISO 8601 UTC timestamp of the guard firing.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     ticket_id: str
     session_id: str

@@ -86,6 +86,8 @@ class TestModuleImport:
             "response.stopped",  # Stop hook lifecycle event
             "pr.validation.rollup",  # OMN-3930 - PR validation rollup with VTS at pipeline completion
             "correlation.trace.span",  # OMN-5047 - Correlation trace span for omnidash /trace page
+            "dod.verify.completed",  # OMN-5198 - DoD evidence verification run completed
+            "dod.guard.fired",  # OMN-5198 - DoD completion guard hook interception
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
