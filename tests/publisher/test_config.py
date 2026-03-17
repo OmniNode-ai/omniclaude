@@ -110,12 +110,20 @@ class TestPublisherConfig:
     def test_environment_accepts_empty_and_arbitrary_strings(self) -> None:
         """Environment field accepts any string after OMN-5210 removed the pattern validator."""
         # Empty string (new default)
-        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="")
+        config = PublisherConfig(
+            kafka_bootstrap_servers="localhost:9092", environment=""
+        )
         assert config.environment == ""
         # Arbitrary values accepted (no pattern constraint)
-        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="dev")
+        config = PublisherConfig(
+            kafka_bootstrap_servers="localhost:9092", environment="dev"
+        )
         assert config.environment == "dev"
-        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="staging")
+        config = PublisherConfig(
+            kafka_bootstrap_servers="localhost:9092", environment="staging"
+        )
         assert config.environment == "staging"
-        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="DEV")
+        config = PublisherConfig(
+            kafka_bootstrap_servers="localhost:9092", environment="DEV"
+        )
         assert config.environment == "DEV"
