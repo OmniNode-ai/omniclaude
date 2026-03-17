@@ -28,7 +28,7 @@ Requirements:
 Environment Variables:
     KAFKA_INTEGRATION_TESTS: Set to "1" to enable integration tests
     KAFKA_BOOTSTRAP_SERVERS: Kafka broker address(es)
-    KAFKA_ENVIRONMENT: Metadata tag for test isolation (default: "dev").
+    KAFKA_ENVIRONMENT: Metadata tag for test isolation (default: "" empty string).
         Not used for topic naming — topics are realm-agnostic per OMN-1972.
     KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 30 for
         integration tests, 2 for production hooks). Set higher if connecting
