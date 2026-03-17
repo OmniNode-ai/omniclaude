@@ -53,6 +53,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -129,12 +130,32 @@ def _load_agent_yaml(subagent_type: str) -> dict[str, Any] | None:
     else:
         agent_name = subagent_type
 
+    # Reject agent names that are not safe identifiers. This prevents path
+    # traversal attacks (e.g. "onex:../../hooks/context_integrity_contracts")
+    # from walking out of the configs directory.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", agent_name):
+        logger.warning(
+            "Agent name %r contains unsafe characters; rejecting YAML load",
+            agent_name,
+        )
+        return None
+
     config_dir = _resolve_agents_config_dir()
     if config_dir is None:
         logger.debug("No agents config dir found; skipping agent YAML load")
         return None
 
     config_path = config_dir / f"{agent_name}.yaml"
+    # Paranoia double-check: ensure the resolved path stays inside config_dir
+    try:
+        config_path.resolve().relative_to(config_dir.resolve())
+    except ValueError:
+        logger.warning(
+            "Resolved config path %s escapes config dir %s; rejecting",
+            config_path,
+            config_dir,
+        )
+        return None
     if not config_path.is_file():
         logger.debug("Agent config not found: %s", config_path)
         return None
@@ -232,15 +253,21 @@ def _get_context_integrity_contract_id(agent_config: dict[str, Any]) -> str | No
 # ---------------------------------------------------------------------------
 
 
-def _load_known_contract_ids() -> list[str]:
+_REGISTRY_LOAD_ERROR = object()  # sentinel: registry path found but failed to load
+
+
+def _load_known_contract_ids() -> list[str] | object:
     """Load the list of known contract handler IDs from the registry.
 
-    Currently reads from ``topic_registry.yaml`` adjacent to this file or
-    from a dedicated ``context_integrity_contracts.yaml`` if present.
-    Falls back to an empty list on any error.
+    Currently reads from a dedicated ``context_integrity_contracts.yaml`` if
+    present. Returns the sentinel ``_REGISTRY_LOAD_ERROR`` when a registry
+    file exists but cannot be parsed — callers in PARANOID mode must treat
+    this as a hard-failure rather than an allow.  Returns an empty list only
+    when no registry file exists at all (registry not yet populated).
 
     Returns:
-        List of known contract ID strings.
+        List of known contract ID strings, empty list if registry absent, or
+        ``_REGISTRY_LOAD_ERROR`` sentinel on parse/IO error.
     """
     registry_paths = [
         Path(__file__).parent.parent / "context_integrity_contracts.yaml",
@@ -249,6 +276,7 @@ def _load_known_contract_ids() -> list[str]:
     for path in registry_paths:
         if not path.is_file():
             continue
+        # Registry file exists — must succeed or we return error sentinel
         try:
             import yaml  # type: ignore[import-untyped]
 
@@ -259,9 +287,14 @@ def _load_known_contract_ids() -> list[str]:
                 if isinstance(ids, list):
                     str_ids: list[str] = [str(i) for i in ids if i]
                     return str_ids
+            # File parsed but structure unexpected — treat as error
+            logger.debug("Contract registry %s has unexpected structure", path)
+            return _REGISTRY_LOAD_ERROR
         except Exception:  # noqa: BLE001
             logger.debug("Failed to load contract registry %s", path, exc_info=True)
+            return _REGISTRY_LOAD_ERROR
 
+    # No registry file found at all — not an error, just unregistered
     return []
 
 
@@ -519,13 +552,19 @@ def validate_dispatch(
     scopes = _extract_context_integrity_scopes(agent_config)
     contract_id = _get_context_integrity_contract_id(agent_config)
 
-    # Record dispatch in correlation manager (non-blocking)
-    _record_dispatch_in_correlation_manager(subagent_type, scopes, contract_id)
+    # NOTE: _record_dispatch_in_correlation_manager is intentionally called
+    # AFTER all block decisions below to ensure blocked dispatches are never
+    # recorded as validated (OMN-5236 CodeRabbit Major finding).
 
     # STRICT / PARANOID: require metadata.context_integrity_contract_id
     if resolved_level in (_LEVEL_STRICT, _LEVEL_PARANOID):
         if not contract_id:
-            known_ids = _load_known_contract_ids()
+            raw_ids = _load_known_contract_ids()
+            known_ids: list[str] = (
+                []
+                if (raw_ids is _REGISTRY_LOAD_ERROR or not isinstance(raw_ids, list))
+                else raw_ids
+            )
             ids_hint = (
                 f" Known contract IDs: {', '.join(known_ids)}"
                 if known_ids
@@ -553,14 +592,43 @@ def validate_dispatch(
             )
 
         # Contract ID is set — validate it against the registry
-        known_ids = _load_known_contract_ids()
-        if known_ids and contract_id not in known_ids:
-            # Unknown contract ID
+        raw_ids2 = _load_known_contract_ids()
+        if raw_ids2 is _REGISTRY_LOAD_ERROR:
+            # Registry file exists but is unreadable/corrupt.
+            # In PARANOID: hard-block to preserve the no-unknown-IDs guarantee.
+            # In STRICT: warn and allow (registry may be temporarily unavailable).
+            if resolved_level == _LEVEL_PARANOID:
+                reason = (
+                    f"Agent {subagent_type!r}: contract registry could not be loaded. "
+                    f"Blocking in PARANOID mode to preserve hard-block guarantee."
+                )
+                _emit_audit_dispatch_event(
+                    subagent_type=subagent_type,
+                    passed=False,
+                    enforcement_level=resolved_level,
+                    contract_id=contract_id,
+                    correlation_id=_get_correlation_id_safe(),
+                    quiet=quiet_emit,
+                )
+                return DispatchValidationResult(
+                    allowed=False,
+                    reason=reason,
+                    contract_id=contract_id,
+                    has_context_integrity=True,
+                    enforcement_level=resolved_level,
+                )
+            else:
+                logger.warning(
+                    "Contract registry could not be loaded; allowing in STRICT mode",
+                )
+        elif isinstance(raw_ids2, list) and raw_ids2 and contract_id not in raw_ids2:
+            # Unknown contract ID (registry loaded successfully and is non-empty)
+            known_ids2: list[str] = raw_ids2
             if resolved_level == _LEVEL_PARANOID:
                 reason = (
                     f"Agent {subagent_type!r} has context_integrity_contract_id={contract_id!r} "
                     f"which is not in the contract registry. "
-                    f"Known IDs: {', '.join(known_ids)}"
+                    f"Known IDs: {', '.join(known_ids2)}"
                 )
                 _emit_audit_dispatch_event(
                     subagent_type=subagent_type,
@@ -585,8 +653,12 @@ def validate_dispatch(
                     "Known IDs: %s",
                     subagent_type,
                     contract_id,
-                    ", ".join(known_ids),
+                    ", ".join(known_ids2),
                 )
+
+    # All block decisions passed — record dispatch in correlation manager now
+    # (after block checks so blocked dispatches are never recorded as validated)
+    _record_dispatch_in_correlation_manager(subagent_type, scopes, contract_id)
 
     # All checks passed — emit success event
     _emit_audit_dispatch_event(

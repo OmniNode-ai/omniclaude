@@ -71,9 +71,12 @@ fi
 # contract binding for agents with a context_integrity subcontract (OMN-5236).
 # The validator is kept thin: it only runs after prefix validation, never blocks
 # on import errors or missing config, and exits 0 (allow) or 2 (block).
+#
+# Pass the resolved PLUGIN_ROOT as CLAUDE_PLUGIN_ROOT so the Python module
+# can locate agent YAML configs and wrappers without guessing paths.
 _AUDIT_VALIDATOR_EXIT=0
 _AUDIT_VALIDATOR_OUTPUT=""
-_AUDIT_VALIDATOR_OUTPUT=$(python3 -m omniclaude.hooks.handlers.audit_dispatch_validator \
+_AUDIT_VALIDATOR_OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" python3 -m omniclaude.hooks.handlers.audit_dispatch_validator \
     --subagent-type "$SUBAGENT_TYPE" \
     2>>"$LOG_FILE") || _AUDIT_VALIDATOR_EXIT=$?
 

@@ -22,10 +22,12 @@ from unittest.mock import patch
 import pytest
 
 from omniclaude.hooks.handlers.audit_dispatch_validator import (
+    _REGISTRY_LOAD_ERROR,
     DispatchValidationResult,
     _extract_context_integrity_scopes,
     _get_context_integrity_contract_id,
     _has_context_integrity_subcontract,
+    _load_agent_yaml,
     _resolve_enforcement_level,
     validate_dispatch,
 )
@@ -592,3 +594,168 @@ class TestDispatchValidationResult:
         )
         assert r.allowed is False
         assert r.contract_id == ""
+
+
+# =============================================================================
+# Path-traversal guard in _load_agent_yaml
+# =============================================================================
+
+
+class TestLoadAgentYamlPathSafety:
+    """Tests that _load_agent_yaml rejects unsafe agent name suffixes."""
+
+    @pytest.mark.parametrize(
+        "subagent_type",
+        [
+            "onex:../../hooks/context_integrity_contracts",
+            "onex:../some/path",
+            "onex:agent name with spaces",
+            "onex:agent!name",
+            "onex:agent/name",
+            "onex:agent\\name",
+        ],
+    )
+    def test_unsafe_agent_name_returns_none(self, subagent_type: str) -> None:
+        """Crafted subagent_type values with path-traversal characters must return None."""
+        result = _load_agent_yaml(subagent_type)
+        assert result is None, (
+            f"Expected None for unsafe subagent_type {subagent_type!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "subagent_type",
+        [
+            "onex:polymorphic-agent",
+            "onex:my-agent",
+            "onex:agent_name",
+            "onex:AgentName123",
+            "plain-agent",
+        ],
+    )
+    def test_safe_agent_name_proceeds_to_file_lookup(self, subagent_type: str) -> None:
+        """Safe agent names should proceed to file lookup (not crash on name validation)."""
+        # We don't have a real configs dir in tests — just verify no ValueError is raised
+        # from the name-validation step itself. The function returns None when config
+        # dir or file is absent, which is the expected permissive-pass behaviour.
+        result = _load_agent_yaml(subagent_type)
+        # Result is None (file not found) or a dict (if config exists) — never an exception
+        assert result is None or isinstance(result, dict)
+
+
+# =============================================================================
+# PARANOID registry-fail-closed behaviour
+# =============================================================================
+
+
+class TestParanoidRegistryFailClosed:
+    """Tests that PARANOID mode fails closed when the registry cannot be loaded."""
+
+    def test_paranoid_blocks_when_registry_load_error(self) -> None:
+        """PARANOID: registry file exists but is unreadable → hard block."""
+        config = _make_agent_config(
+            with_ci_subcontract=True, contract_id="any-contract-id"
+        )
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=_REGISTRY_LOAD_ERROR,
+            ),
+        ):
+            result = validate_dispatch(
+                "onex:test-agent",
+                enforcement_level="PARANOID",
+                quiet_emit=True,
+            )
+        assert result.allowed is False
+        assert "registry" in result.reason.lower()
+
+    def test_strict_allows_when_registry_load_error(self) -> None:
+        """STRICT: registry file exists but is unreadable → allow with warning (non-blocking)."""
+        config = _make_agent_config(
+            with_ci_subcontract=True, contract_id="any-contract-id"
+        )
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=_REGISTRY_LOAD_ERROR,
+            ),
+        ):
+            result = validate_dispatch(
+                "onex:test-agent",
+                enforcement_level="STRICT",
+                quiet_emit=True,
+            )
+        assert result.allowed is True
+
+
+# =============================================================================
+# Correlation manager called only after block decision
+# =============================================================================
+
+
+class TestCorrelationManagerOrderOfOperations:
+    """Tests that _record_dispatch_in_correlation_manager is only called for allowed dispatches."""
+
+    def test_correlation_manager_not_called_when_blocked_strict(self) -> None:
+        """Blocked dispatch (STRICT, missing contract_id) must NOT record in correlation manager."""
+        config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=[],
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ) as mock_record,
+        ):
+            result = validate_dispatch(
+                "onex:test-agent",
+                enforcement_level="STRICT",
+                quiet_emit=True,
+            )
+        assert result.allowed is False
+        mock_record.assert_not_called()
+
+    def test_correlation_manager_called_when_allowed(self) -> None:
+        """Allowed dispatch (valid contract_id) MUST record in correlation manager."""
+        config = _make_agent_config(
+            with_ci_subcontract=True, contract_id="node_poly_enforcer_effect"
+        )
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ) as mock_record,
+        ):
+            result = validate_dispatch(
+                "onex:test-agent",
+                enforcement_level="STRICT",
+                quiet_emit=True,
+            )
+        assert result.allowed is True
+        mock_record.assert_called_once()
