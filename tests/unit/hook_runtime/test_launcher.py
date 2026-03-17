@@ -1,4 +1,5 @@
 """Unit tests for hook runtime daemon CLI entry point. [OMN-5307]"""
+
 import pytest
 
 

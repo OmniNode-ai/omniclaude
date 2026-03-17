@@ -3,6 +3,7 @@
 Pure Python state manager — no ONEX/Kafka/DB dependencies.
 Extracted from shell scripts into testable Python.
 """
+
 from __future__ import annotations
 
 import re
@@ -209,7 +210,10 @@ class DelegationState:
                     counter_type="total",
                 )
             # Warn thresholds
-            if s.write_count >= self._config.write_warn_threshold and not s.write_warned:
+            if (
+                s.write_count >= self._config.write_warn_threshold
+                and not s.write_warned
+            ):
                 s.write_warned = True
                 return ThresholdDecision(
                     decision="warn",

@@ -1,4 +1,5 @@
 """Unit tests for hook runtime delegation state reducer. [OMN-5305]"""
+
 import pytest
 
 from omniclaude.hook_runtime.delegation_state import (
