@@ -1,0 +1,22 @@
+{
+  "node_id": "node_skill_standardization_sweep_orchestrator",
+  "ticket_id": "OMN-5315",
+  "input": {
+    "topic": "onex.cmd.omniclaude.standardization-sweep.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "standardization-sweep",
+      "args": {
+        "--dry-run": true,
+        "--repos": "omniclaude"
+      }
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.standardization-sweep-completed.v1"
+  },
+  "timeout_ms": 60000,
+  "assertions": [
+    {"field": "status", "op": "eq", "expected": "completed"}
+  ]
+}
