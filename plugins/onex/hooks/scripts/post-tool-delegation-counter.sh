@@ -33,6 +33,8 @@ _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 # Resolve script dir before cd $HOME (relative paths break after cwd change)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+# shellcheck source=hook-runtime-client.sh
+source "${SCRIPT_DIR}/hook-runtime-client.sh" 2>/dev/null || true
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -88,8 +90,9 @@ if [[ -f "$SKILL_LOADED_FILE" ]] && [[ ! -f "$DELEGATED_FILE" ]] && [[ "$_DC_LOA
     TOTAL_BLOCK=$(_dc_read '.skill_loaded.total_block_threshold' "$TOTAL_BLOCK") || true
 fi
 
-# --- Task = Agent() was called — mark delegated, reset all counters, pass through ---
+# --- Task = Agent() was called — notify daemon + mark delegated locally, pass through ---
 if [[ "$TOOL_NAME" == "Task" ]]; then
+    _hrt_request "{\"action\":\"mark_delegated\",\"session_id\":\"${SESSION_ID}\",\"payload\":{}}" > /dev/null 2>&1 || true
     touch "$DELEGATED_FILE" 2>/dev/null || true
     echo "0" > "$WRITE_COUNTER_FILE" 2>/dev/null || true
     echo "0" > "$READ_COUNTER_FILE" 2>/dev/null || true
@@ -142,6 +145,40 @@ if [[ "$TOOL_NAME" == "Bash" && "$IS_WRITE_TOOL" -eq 1 ]]; then
         done < <(_dc_read_array '.bash_readonly_patterns')
     fi
 fi
+
+# --- Daemon-first path [OMN-5308] ---
+# Try the hook runtime daemon first. If the daemon is running and responds,
+# use its decision directly (daemon owns all threshold state).
+# Fall back to the shell-based enforcement below if daemon is unavailable.
+if [[ -S "$HOOK_RUNTIME_SOCKET" ]]; then
+    TOOL_INPUT_JSON=$(echo "$TOOL_INFO" | jq -c '.tool_input // {}' 2>/dev/null) || TOOL_INPUT_JSON="{}"
+    DAEMON_RESPONSE=$(_hrt_request "{\"action\":\"classify_tool\",\"session_id\":\"${SESSION_ID}\",\"payload\":{\"tool_name\":\"${TOOL_NAME}\",\"tool_input\":${TOOL_INPUT_JSON}}}" 2>/dev/null) || DAEMON_RESPONSE=""
+    if [[ -n "$DAEMON_RESPONSE" ]]; then
+        DAEMON_DECISION=$(echo "$DAEMON_RESPONSE" | jq -r '.decision // "pass"' 2>/dev/null) || DAEMON_DECISION="pass"
+        DAEMON_MESSAGE=$(echo "$DAEMON_RESPONSE" | jq -r '.message // empty' 2>/dev/null) || DAEMON_MESSAGE=""
+        case "$DAEMON_DECISION" in
+            block)
+                jq -n --arg msg "${DAEMON_MESSAGE}" \
+                    '{ hookSpecificOutput: { additionalContext: $msg } }'
+                exit 2
+                ;;
+            warn)
+                if [[ -n "$DAEMON_MESSAGE" ]]; then
+                    jq -n --arg msg "${DAEMON_MESSAGE}" \
+                        '{ hookSpecificOutput: { additionalContext: $msg } }'
+                fi
+                printf '%s\n' "$TOOL_INFO"
+                exit 0
+                ;;
+            *)
+                # pass or ack — allow through
+                printf '%s\n' "$TOOL_INFO"
+                exit 0
+                ;;
+        esac
+    fi
+fi
+# --- End daemon-first path; fall through to shell-based enforcement ---
 
 # --- Increment appropriate counter ---
 if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
