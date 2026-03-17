@@ -48,7 +48,7 @@ class TestCheckKafkaTopics:
                 "topics": [
                     "agent.routing.requested.v1",
                     "agent.routing.completed.v1",
-                    "dev.archon-intelligence.intelligence.code-analysis-requested.v1",
+                    "onex.cmd.omniintelligence.code-analysis.v1",
                 ],
             }
 

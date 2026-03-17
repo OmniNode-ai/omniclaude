@@ -104,9 +104,9 @@ def build_kafka_topic(topic_base_value: str) -> str:
         topic_base_value: Base topic name from TopicBase enum
 
     Returns:
-        Topic name (same as input since prefix is empty)
+        Validated canonical topic name
     """
-    return build_topic("", topic_base_value)
+    return build_topic(topic_base_value)
 
 
 class KafkaProducerManager:

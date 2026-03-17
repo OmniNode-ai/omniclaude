@@ -12,14 +12,20 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
+import os
 import subprocess
+import sys
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 _DEFAULT_TIMEOUT_SECONDS = 30
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -369,3 +375,106 @@ def write_evidence_receipt(
     receipt_path.write_text(json.dumps(asdict(receipt), indent=2, default=str))
 
     return receipt_path
+
+
+def _get_emit_event() -> Any:
+    """Lazily import emit_event from the emit client wrapper.
+
+    The emit client wrapper lives in the hooks/lib directory. Since the
+    evidence runner is a standalone library under skills/_lib/, we need
+    to locate the wrapper via known relative paths or PYTHONPATH.
+
+    Returns:
+        The emit_event callable, or None if import fails.
+    """
+    try:
+        # Try direct import first (works when PYTHONPATH includes hooks/lib)
+        from emit_client_wrapper import emit_event
+
+        return emit_event
+    except ImportError:
+        pass
+
+    # Fallback: resolve via known directory structure
+    # dod_evidence_runner.py -> skills/_lib/dod-evidence-runner/
+    # emit_client_wrapper.py -> hooks/lib/
+    try:
+        runner_dir = Path(__file__).resolve().parent
+        hooks_lib = runner_dir.parent.parent.parent / "hooks" / "lib"
+        if hooks_lib.is_dir():
+            hooks_lib_str = str(hooks_lib)
+            sys.path.insert(0, hooks_lib_str)
+            try:
+                from emit_client_wrapper import emit_event
+
+                return emit_event
+            finally:
+                try:
+                    sys.path.remove(hooks_lib_str)
+                except ValueError:
+                    pass
+    except Exception:
+        pass
+
+    return None
+
+
+def emit_dod_verify_completed(
+    ticket_id: str,
+    run_result: EvidenceRunResult,
+    *,
+    policy_mode: str = "advisory",
+    run_id: str | None = None,
+    session_id: str | None = None,
+    correlation_id: str | None = None,
+) -> bool:
+    """Emit a dod.verify.completed event to Kafka.
+
+    Non-blocking and failure-tolerant. Returns True on success, False on
+    failure. Local JSON receipt writing is NOT affected by emission failures.
+
+    Args:
+        ticket_id: Linear ticket identifier (e.g. "OMN-5198").
+        run_result: The EvidenceRunResult from run_dod_evidence().
+        policy_mode: DoD enforcement policy (advisory/soft/hard).
+        run_id: Unique run identifier. Generated if not provided.
+        session_id: Claude Code session ID. Read from env if not provided.
+        correlation_id: Correlation ID. Read from env if not provided.
+
+    Returns:
+        True if event was successfully emitted, False otherwise.
+    """
+    emit_event = _get_emit_event()
+    if emit_event is None:
+        logger.debug("emit_event not available, skipping dod.verify.completed emission")
+        return False
+
+    if run_id is None:
+        run_id = str(uuid.uuid4())
+    if session_id is None:
+        session_id = os.environ.get("CLAUDE_SESSION_ID", "")
+    if correlation_id is None:
+        correlation_id = os.environ.get("OMNICLAUDE_CORRELATION_ID", "")
+
+    overall_pass = run_result.failed == 0
+
+    payload: dict[str, object] = {
+        "ticket_id": ticket_id,
+        "run_id": run_id,
+        "session_id": session_id,
+        "correlation_id": correlation_id,
+        "total_checks": run_result.total,
+        "passed_checks": run_result.verified,
+        "failed_checks": run_result.failed,
+        "skipped_checks": run_result.skipped,
+        "overall_pass": overall_pass,
+        "policy_mode": policy_mode,
+        "evidence_items": [asdict(d) for d in run_result.details],
+        "timestamp": datetime.now(tz=UTC).isoformat(),
+    }
+
+    try:
+        return emit_event("dod.verify.completed", payload)
+    except Exception as e:
+        logger.warning("Failed to emit dod.verify.completed: %s", e)
+        return False

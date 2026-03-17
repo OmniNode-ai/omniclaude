@@ -29,9 +29,9 @@ except ImportError:
 BOOTSTRAP_SERVERS = (
     "localhost:19092"  # Redpanda external port mapping (local Docker bus)
 )
-REQUEST_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
-COMPLETED_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
-FAILED_TOPIC = "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
+REQUEST_TOPIC = "onex.cmd.omniintelligence.code-analysis.v1"
+COMPLETED_TOPIC = "onex.evt.omniintelligence.code-analysis-completed.v1"
+FAILED_TOPIC = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
 
 async def test_event_flow():

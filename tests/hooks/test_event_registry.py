@@ -788,6 +788,12 @@ class TestEventRegistryIntegration:
             "pr.validation.rollup",
             # Correlation trace spans for omnidash /trace page (OMN-5047)
             "correlation.trace.span",
+            # DoD telemetry events (OMN-5197)
+            "dod.verify.completed",
+            "dod.guard.fired",
+            # Context integrity audit events (OMN-5235)
+            "audit.dispatch.validated",
+            "audit.scope.violation",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

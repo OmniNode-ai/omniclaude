@@ -800,6 +800,35 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["run_id", "ticket_id", "model_id", "metric_version"],
     ),
     # =========================================================================
+    # DoD Telemetry Events (OMN-5197)
+    # =========================================================================
+    # Consumed by omnidash /dod dashboard via dod_verify_runs and
+    # dod_guard_events tables.
+    "dod.verify.completed": EventRegistration(
+        event_type="dod.verify.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DOD_VERIFY_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in verification metadata
+                description="DoD evidence verification run result for omnidash /dod dashboard",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "ticket_id"],
+    ),
+    "dod.guard.fired": EventRegistration(
+        event_type="dod.guard.fired",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DOD_GUARD_FIRED,
+                transform=None,  # Passthrough — no sensitive data in guard metadata
+                description="DoD completion guard interception event for omnidash /dod dashboard",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "ticket_id"],
+    ),
+    # =========================================================================
     # Correlation Trace Spans (OMN-5047 - omnidash /trace page)
     # =========================================================================
     # Emitted during active Claude Code sessions by correlation_trace_emitter.py.
@@ -822,6 +851,36 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             "span_kind",
             "operation_name",
         ],
+    ),
+    # =========================================================================
+    # Context Integrity Audit Events (OMN-5230 / OMN-5235)
+    # =========================================================================
+    # Emitted by correlation manager push_task (dispatch validated) and on
+    # duplicate task push detection (scope violation). Consumed by omnidash
+    # /context-audit page via context_audit_events table.
+    "audit.dispatch.validated": EventRegistration(
+        event_type="audit.dispatch.validated",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AUDIT_DISPATCH_VALIDATED,
+                transform=None,  # No sensitive data in dispatch metadata
+                description="Task dispatch validation result for context integrity audit",
+            ),
+        ],
+        partition_key_field="task_id",
+        required_fields=["task_id", "contract_id", "agent_type"],
+    ),
+    "audit.scope.violation": EventRegistration(
+        event_type="audit.scope.violation",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AUDIT_SCOPE_VIOLATION,
+                transform=None,  # No sensitive data in violation metadata
+                description="Scope boundary violation for context integrity audit",
+            ),
+        ],
+        partition_key_field="task_id",
+        required_fields=["task_id", "violation_type", "enforcement_action"],
     ),
 }
 

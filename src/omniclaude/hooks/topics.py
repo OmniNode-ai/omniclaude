@@ -4,8 +4,8 @@
 """Topic base names and helper for OmniClaude events.
 
 Per OMN-1972, TopicBase values ARE the canonical wire topic names. No environment
-prefix is applied. The build_topic() helper still accepts a prefix argument for
-validation purposes, but callers should always pass an empty string.
+prefix is applied. The build_topic() helper validates and returns the canonical
+topic name (prefix parameter removed in OMN-5212).
 """
 
 from __future__ import annotations
@@ -308,6 +308,45 @@ class TopicBase(StrEnum):
     CORRELATION_TRACE = "onex.evt.omniclaude.correlation-trace.v1"
     """Trace span event emitted during active sessions for omnidash /trace page."""
 
+    # ==========================================================================
+    # DoD (Definition of Done) telemetry topics (OMN-5197)
+    # Consumed by omnidash /dod dashboard via dod_verify_runs and
+    # dod_guard_events tables.
+    # ==========================================================================
+    DOD_VERIFY_COMPLETED = "onex.evt.omniclaude.dod-verify-completed.v1"
+    """Emitted after every DoD evidence verification run."""
+
+    DOD_GUARD_FIRED = "onex.evt.omniclaude.dod-guard-fired.v1"
+    """Emitted on every DoD guard interception (pre-tool-use hook)."""
+
+    # ==========================================================================
+    # Context integrity audit topics (OMN-5230)
+    # Emitted by audit hooks for dispatch validation, scope enforcement,
+    # budget tracking, return path control, and compression lifecycle.
+    # ==========================================================================
+    AUDIT_DISPATCH_VALIDATED = "onex.evt.omniclaude.audit-dispatch-validated.v1"
+    """Emitted when a task dispatch is validated against its contract."""
+
+    AUDIT_SCOPE_VIOLATION = "onex.evt.omniclaude.audit-scope-violation.v1"
+    """Emitted when a scope boundary violation is detected during execution."""
+
+    AUDIT_CONTEXT_BUDGET_EXCEEDED = (
+        "onex.evt.omniclaude.audit-context-budget-exceeded.v1"
+    )
+    """Emitted when context budget usage is tracked or exceeded."""
+
+    AUDIT_RETURN_BOUNDED = "onex.evt.omniclaude.audit-return-bounded.v1"
+    """Emitted when return path size is evaluated against constraints."""
+
+    AUDIT_COMPRESSION_TRIGGERED = "onex.evt.omniclaude.audit-compression-triggered.v1"
+    """Emitted when context compression is triggered by budget or time limits."""
+
+    AUDIT_RUN_REQUESTED = "onex.cmd.omniclaude.audit-run-requested.v1"
+    """Command requesting an on-demand audit run for a session or task tree."""
+
+    AUDIT_RUN_COMPLETED = "onex.evt.omniclaude.audit-run-completed.v1"
+    """Emitted when an on-demand audit run completes with summary results."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
@@ -421,77 +460,25 @@ def _validate_topic_name(topic: str) -> None:
             )
 
 
-def build_topic(prefix: str, base: str) -> str:
-    """Build full topic name from prefix and base.
+def build_topic(base: str) -> str:
+    """Return the canonical topic name after validation.
+
+    Since OMN-5212, the ``prefix`` parameter has been removed. All topics use
+    canonical ONEX names with no environment prefix.
 
     Args:
-        prefix: Topic prefix string. Must be a string without dots.
-            If empty or whitespace-only, returns just the base topic name.
-            Per OMN-1972, callers should always pass empty string ("") since
-            TopicBase values are the canonical wire topic names with no
-            environment prefix.
-        base: Base topic name from TopicBase (e.g., "omniclaude.session.started.v1").
-            Must be a valid dotted topic name.
+        base: Canonical topic name from ``TopicBase``.
 
     Returns:
-        Full topic name. If prefix is empty, returns just the base topic name.
+        The validated canonical topic name.
 
     Raises:
-        ModelOnexError: If prefix is None, not a string, or contains dots.
-        ModelOnexError: If base is empty, None, whitespace-only, or malformed.
+        ModelOnexError: If *base* is empty, None, whitespace-only, or malformed.
 
     Examples:
-        >>> build_topic("", TopicBase.SESSION_STARTED)
+        >>> build_topic(TopicBase.SESSION_STARTED)
         'onex.evt.omniclaude.session-started.v1'
-
-        >>> build_topic("  ", TopicBase.SESSION_STARTED)
-        'onex.evt.omniclaude.session-started.v1'
-
-        >>> build_topic(None, TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ModelOnexError: ...
-
-        >>> build_topic("x.y", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        ModelOnexError: ...
     """
-    # Validate prefix - allow None check but handle empty separately
-    if prefix is None:
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message="prefix must not be None",
-        )
-
-    if not isinstance(prefix, str):
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message=f"prefix must be a string, got {type(prefix).__name__}",
-        )
-
-    # Handle empty prefix - return just the base
-    stripped_prefix = prefix.strip()
-    if not stripped_prefix:
-        # Validate base and return it directly
-        base = _validate_topic_segment(base, "base")
-        _validate_topic_name(base)
-        return base
-
-    # Enforce no dots in prefix
-    if "." in stripped_prefix:
-        raise ModelOnexError(
-            error_code=EnumCoreErrorCode.INVALID_INPUT,
-            message=f"prefix must not contain dots: {stripped_prefix!r}",
-        )
-
-    # Validate base
     base = _validate_topic_segment(base, "base")
-
-    # Build the topic
-    topic = f"{stripped_prefix}.{base}"
-
-    # Validate the final topic name
-    _validate_topic_name(topic)
-
-    return topic
+    _validate_topic_name(base)
+    return base

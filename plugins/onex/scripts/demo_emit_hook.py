@@ -80,7 +80,7 @@ def print_config() -> None:
     """
     kafka_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
     # Topics are realm-agnostic (OMN-1972): no environment prefix
-    topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+    topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
     print("Configuration:")
     print(f"  Kafka Brokers: {kafka_servers}")

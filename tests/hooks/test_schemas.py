@@ -1563,81 +1563,27 @@ class TestTopics:
         assert TopicBase.LEARNING_PATTERN == "onex.evt.omniclaude.learning-pattern.v1"
 
     def test_build_topic(self) -> None:
-        """Build full topic name from prefix and base."""
-        topic = build_topic("dev", TopicBase.SESSION_STARTED)
-        assert topic == "dev.onex.evt.omniclaude.session-started.v1"
-
-        topic = build_topic("prod", TopicBase.TOOL_EXECUTED)
-        assert topic == "prod.onex.evt.omniclaude.tool-executed.v1"
-
-    def test_build_topic_empty_prefix_returns_base(self) -> None:
-        """Empty prefix returns just the base topic name."""
-        topic = build_topic("", TopicBase.SESSION_STARTED)
+        """build_topic returns canonical topic name (prefix removed OMN-5212)."""
+        topic = build_topic(TopicBase.SESSION_STARTED)
         assert topic == "onex.evt.omniclaude.session-started.v1"
 
-    def test_build_topic_whitespace_prefix_returns_base(self) -> None:
-        """Whitespace-only prefix returns just the base topic name."""
-        topic = build_topic("   ", TopicBase.SESSION_STARTED)
-        assert topic == "onex.evt.omniclaude.session-started.v1"
-
-    def test_build_topic_none_prefix_raises(self) -> None:
-        """None prefix raises ModelOnexError with clear message."""
-        with pytest.raises(ModelOnexError, match="prefix must not be None"):
-            build_topic(None, TopicBase.SESSION_STARTED)  # type: ignore[arg-type]
+        topic = build_topic(TopicBase.TOOL_EXECUTED)
+        assert topic == "onex.evt.omniclaude.tool-executed.v1"
 
     def test_build_topic_empty_base_raises(self) -> None:
         """Empty base raises ModelOnexError."""
         with pytest.raises(ModelOnexError, match="base must be a non-empty string"):
-            build_topic("dev", "")
+            build_topic("")
 
     def test_build_topic_none_base_raises(self) -> None:
         """None base raises ModelOnexError with clear message."""
         with pytest.raises(ModelOnexError, match="base must not be None"):
-            build_topic("dev", None)  # type: ignore[arg-type]
-
-    def test_build_topic_whitespace_base_raises(self) -> None:
-        """Whitespace-only base raises ModelOnexError."""
-        with pytest.raises(ModelOnexError, match="base must be a non-empty string"):
-            build_topic("dev", "   ")
-
-    def test_build_topic_strips_whitespace(self) -> None:
-        """Prefix and base whitespace is stripped."""
-        topic = build_topic("  dev  ", "  omniclaude.test.v1  ")
-        assert topic == "dev.omniclaude.test.v1"
-
-    def test_build_topic_rejects_leading_dot_in_base(self) -> None:
-        """Base with leading dot produces malformed topic (rejected)."""
-        with pytest.raises(ModelOnexError, match="consecutive dots"):
-            build_topic("dev", ".omniclaude.test.v1")
-
-    def test_build_topic_rejects_trailing_dot_in_base(self) -> None:
-        """Base with trailing dot produces malformed topic (rejected)."""
-        with pytest.raises(ModelOnexError, match="must not end with a dot"):
-            build_topic("dev", "omniclaude.test.v1.")
-
-    def test_build_topic_rejects_consecutive_dots(self) -> None:
-        """Topic with consecutive dots is rejected."""
-        with pytest.raises(ModelOnexError, match="consecutive dots"):
-            build_topic("dev", "omniclaude..test.v1")
-
-    def test_build_topic_valid_characters(self) -> None:
-        """Valid topic names with allowed characters."""
-        # Alphanumeric, underscores, hyphens are allowed
-        topic = build_topic("dev-test_1", "omniclaude.session_started.v1")
-        assert topic == "dev-test_1.omniclaude.session_started.v1"
+            build_topic(None)  # type: ignore[arg-type]
 
     def test_build_topic_rejects_special_characters(self) -> None:
         """Topic segments with special characters are rejected."""
         with pytest.raises(ModelOnexError, match="invalid characters"):
-            build_topic("dev@test", TopicBase.SESSION_STARTED)
-
-        with pytest.raises(ModelOnexError, match="invalid characters"):
-            build_topic("dev", "omniclaude.test#v1")
-
-    def test_build_topic_rejects_dots_in_prefix(self) -> None:
-        """Prefix with dots is rejected."""
-        with pytest.raises(ModelOnexError, match="prefix must not contain dots"):
-            build_topic("dev.staging", TopicBase.SESSION_STARTED)
+            build_topic("omniclaude.test#v1")
 
 
 # =============================================================================

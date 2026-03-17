@@ -98,8 +98,8 @@ async def publish_handler_contracts(
         environment: Environment label passed through to omnibase_infra's
             ServiceContractPublisher for contract registration metadata.
             Per OMN-1972, this is no longer used as a Kafka topic prefix by
-            omniclaude. Defaults to ONEX_ENV environment variable or "dev"
-            within the infra layer.
+            omniclaude. Defaults to ONEX_ENV environment variable within
+            the infra layer. Empty string means no env prefix (canonical topics).
 
     Returns:
         ModelPublishResult with published handler IDs, contract_errors, infra_errors,
@@ -125,7 +125,7 @@ async def publish_handler_contracts(
     """
     # Resolve environment if provided (store in config; from_container does not accept it)
     if environment is not None:
-        resolved_env = environment.strip() or "dev"
+        resolved_env = environment.strip()
         config = config.model_copy(update={"environment": resolved_env})
 
     # Delegate to infra service — environment is embedded in config, not a kwarg

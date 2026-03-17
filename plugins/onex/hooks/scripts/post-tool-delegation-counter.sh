@@ -4,25 +4,35 @@
 
 # PostToolUse: Delegation Counter
 #
-# Tracks write/modify-tool calls per turn. After BLOCK_THRESHOLD write/edit/bash
-# calls without an Agent spawn, exits 2 (hard-block) to prevent inline execution.
-# Read-only tools are tracked separately and never trigger a block.
+# Tracks write/modify and read-only tool calls per turn. After configurable
+# thresholds without an Agent spawn, exits 2 (hard-block) to prevent inline
+# execution. Thresholds are read from config.yaml via delegation-config.sh.
 #
-# Write/modify tools counted (trigger block): Write, Edit, Bash, MultiEdit
-# Read-only tools counted (advisory only, never block): Read, Glob, Grep, WebFetch, WebSearch
+# Write/modify tools counted: Write, Edit, Bash (mutating), MultiEdit
+# Read-only tools counted: Read, Glob, Grep, WebFetch, WebSearch, Bash (read-only)
 # Delegation detected: Task tool (what Agent() maps to at hook level)
-# Advisory warning fires once per turn at WARN_THRESHOLD (WARNED_FILE prevents spamming)
-# Hard block fires on every write/modify call above BLOCK_THRESHOLD (no delegation)
+#
+# Thresholds (from config.yaml delegation_enforcement section):
+#   write_warn_threshold  — advisory warning (fires once per turn)
+#   write_block_threshold — hard block (exit 2)
+#   read_warn_threshold   — advisory warning for read-only tools
+#   read_block_threshold  — hard block for read-only tools
+#   total_block_threshold — hard block on combined read+write count
+#   skill_loaded.*        — tighter thresholds when a Skill was loaded without delegation
 #
 # State files (keyed by session ID, reset by UserPromptSubmit hook):
-#   /tmp/omniclaude-write-count-{session}  — integer count of write/modify tools
-#   /tmp/omniclaude-read-count-{session}   — integer count of read-only tools
-#   /tmp/omniclaude-delegated-{session}    — touch file: agent was spawned
-#   /tmp/omniclaude-warned-{session}       — touch file: advisory warning already sent
+#   /tmp/omniclaude-write-count-{session}   — integer count of write/modify tools
+#   /tmp/omniclaude-read-count-{session}    — integer count of read-only tools
+#   /tmp/omniclaude-delegated-{session}     — touch file: agent was spawned
+#   /tmp/omniclaude-write-warned-{session}  — touch file: write warning already sent
+#   /tmp/omniclaude-read-warned-{session}   — touch file: read warning already sent
+#   /tmp/omniclaude-skill-loaded-{session}  — touch file: skill was loaded (set by post-skill-delegation-enforcer.sh)
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
-source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+# Resolve script dir before cd $HOME (relative paths break after cwd change)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -40,28 +50,62 @@ if [[ -z "$SESSION_ID" ]]; then
     exit 0
 fi
 
+# --- Source config reader (resilient — fallback to legacy defaults on any failure) ---
+_DC_LOADED=0
+if source "${SCRIPT_DIR}/delegation-config.sh" 2>/dev/null; then
+    _DC_LOADED=1
+fi
+
+# --- Read thresholds from config ---
+if [[ "$_DC_LOADED" -eq 1 ]]; then
+    WRITE_WARN=$(_dc_read '.write_warn_threshold' '3') || WRITE_WARN=3
+    WRITE_BLOCK=$(_dc_read '.write_block_threshold' '5') || WRITE_BLOCK=5
+    READ_WARN=$(_dc_read '.read_warn_threshold' '-1') || READ_WARN=-1
+    READ_BLOCK=$(_dc_read '.read_block_threshold' '-1') || READ_BLOCK=-1
+    TOTAL_BLOCK=$(_dc_read '.total_block_threshold' '-1') || TOTAL_BLOCK=-1
+else
+    # Legacy defaults — no read enforcement
+    WRITE_WARN=3
+    WRITE_BLOCK=5
+    READ_WARN=-1
+    READ_BLOCK=-1
+    TOTAL_BLOCK=-1
+fi
+
+# --- State files ---
 WRITE_COUNTER_FILE="/tmp/omniclaude-write-count-${SESSION_ID}"
 READ_COUNTER_FILE="/tmp/omniclaude-read-count-${SESSION_ID}"
 DELEGATED_FILE="/tmp/omniclaude-delegated-${SESSION_ID}"
-WARNED_FILE="/tmp/omniclaude-warned-${SESSION_ID}"
+WRITE_WARNED_FILE="/tmp/omniclaude-write-warned-${SESSION_ID}"
+READ_WARNED_FILE="/tmp/omniclaude-read-warned-${SESSION_ID}"
+SKILL_LOADED_FILE="/tmp/omniclaude-skill-loaded-${SESSION_ID}"
 
-# Task = Agent() was called — mark delegated, reset write counter, pass through
+# --- Skill-loaded override ---
+# When a skill was loaded but no delegation happened, use tighter thresholds
+if [[ -f "$SKILL_LOADED_FILE" ]] && [[ ! -f "$DELEGATED_FILE" ]] && [[ "$_DC_LOADED" -eq 1 ]]; then
+    WRITE_BLOCK=$(_dc_read '.skill_loaded.write_block_threshold' "$WRITE_BLOCK") || true
+    READ_BLOCK=$(_dc_read '.skill_loaded.read_block_threshold' "$READ_BLOCK") || true
+    TOTAL_BLOCK=$(_dc_read '.skill_loaded.total_block_threshold' "$TOTAL_BLOCK") || true
+fi
+
+# --- Task = Agent() was called — mark delegated, reset all counters, pass through ---
 if [[ "$TOOL_NAME" == "Task" ]]; then
     touch "$DELEGATED_FILE" 2>/dev/null || true
     echo "0" > "$WRITE_COUNTER_FILE" 2>/dev/null || true
+    echo "0" > "$READ_COUNTER_FILE" 2>/dev/null || true
     printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
 
-# Meta/conversational tools — skip counting entirely
+# --- Meta/conversational tools — skip counting entirely ---
 case "$TOOL_NAME" in
-    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList)
+    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList|TaskOutput|TaskStop)
         printf '%s\n' "$TOOL_INFO"
         exit 0
         ;;
 esac
 
-# Classify tool: write/modify vs read-only
+# --- Classify tool: write/modify vs read-only ---
 IS_WRITE_TOOL=0
 case "$TOOL_NAME" in
     Write|Edit|MultiEdit|Bash)
@@ -72,23 +116,34 @@ case "$TOOL_NAME" in
         ;;
 esac
 
-# For Bash: sub-classify as read-only if the command matches known-safe observation patterns.
-# This is a best-effort classifier — intentionally conservative.
-# Ambiguous or compound commands (&&, ;, echo, sed, awk, gh api) remain counted as write-like.
+# For Bash: apply compound command guard FIRST, then read-only classification.
+# Compound commands are never eligible for read-only classification regardless of prefix.
 if [[ "$TOOL_NAME" == "Bash" && "$IS_WRITE_TOOL" -eq 1 ]]; then
     BASH_CMD=$(printf '%s' "$TOOL_INFO" | jq -r '.tool_input.command // ""' 2>/dev/null) || BASH_CMD=""
-    if printf '%s' "$BASH_CMD" | grep -qE '^(ls |cat |head |tail |grep |find |wc |diff |stat |file |ps |df |du |which |whoami |date |uname |pwd$)' 2>/dev/null \
-       || printf '%s' "$BASH_CMD" | grep -qE '^git (log|diff|status|show|branch|tag|remote|stash list)' 2>/dev/null \
-       || printf '%s' "$BASH_CMD" | grep -qE '^gh (pr list|pr view|issue list|issue view|run list|run view|auth status)' 2>/dev/null \
-       || printf '%s' "$BASH_CMD" | grep -qE '^docker (ps|logs |inspect |images)' 2>/dev/null \
-       || printf '%s' "$BASH_CMD" | grep -qE '^(infra-status|infra-path|bus-status)$' 2>/dev/null; then
-        IS_WRITE_TOOL=0
+
+    # Compound command guard — check deny patterns from config
+    IS_COMPOUND=0
+    while IFS= read -r deny_pat; do
+        [[ -z "$deny_pat" ]] && continue
+        if printf '%s' "$BASH_CMD" | grep -qE "$deny_pat" 2>/dev/null; then
+            IS_COMPOUND=1
+            break
+        fi
+    done < <(_dc_read_array '.bash_compound_deny_patterns')
+
+    # Only attempt read-only classification if not a compound command
+    if [[ "$IS_COMPOUND" -eq 0 ]]; then
+        while IFS= read -r ro_pat; do
+            [[ -z "$ro_pat" ]] && continue
+            if printf '%s' "$BASH_CMD" | grep -qE "$ro_pat" 2>/dev/null; then
+                IS_WRITE_TOOL=0
+                break
+            fi
+        done < <(_dc_read_array '.bash_readonly_patterns')
     fi
 fi
 
-WARN_THRESHOLD=3    # advisory warning fires at this many write calls
-BLOCK_THRESHOLD=5   # hard block fires at this many write calls (no delegation)
-
+# --- Increment appropriate counter ---
 if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
     # Write/modify tool — increment write counter
     WRITE_COUNT=0
@@ -99,18 +154,40 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
     WRITE_COUNT=$((WRITE_COUNT + 1))
     echo "$WRITE_COUNT" > "$WRITE_COUNTER_FILE" 2>/dev/null || true
 
-    # If delegation already happened, allow write tools freely
+    # If delegation already happened, allow freely
     if [[ -f "$DELEGATED_FILE" ]]; then
         printf '%s\n' "$TOOL_INFO"
         exit 0
     fi
 
-    # Hard block: write tools above BLOCK_THRESHOLD without any delegation
-    if [[ "$WRITE_COUNT" -gt "$BLOCK_THRESHOLD" ]]; then
+    # Read the current read count for total calculation
+    READ_COUNT=0
+    if [[ -f "$READ_COUNTER_FILE" ]]; then
+        READ_COUNT=$(cat "$READ_COUNTER_FILE" 2>/dev/null || echo "0")
+        [[ "$READ_COUNT" =~ ^[0-9]+$ ]] || READ_COUNT=0
+    fi
+
+    # Total block (read + write combined)
+    TOTAL=$((WRITE_COUNT + READ_COUNT))
+    if [[ "$TOTAL_BLOCK" -ne -1 ]] && [[ "$TOTAL" -gt "$TOTAL_BLOCK" ]]; then
+        jq -n \
+            --argjson count "$TOTAL" \
+            --arg tool "$TOOL_NAME" \
+            --argjson threshold "$TOTAL_BLOCK" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                }
+            }'
+        exit 2
+    fi
+
+    # Write block
+    if [[ "$WRITE_BLOCK" -ne -1 ]] && [[ "$WRITE_COUNT" -gt "$WRITE_BLOCK" ]]; then
         jq -n \
             --argjson count "$WRITE_COUNT" \
             --arg tool "$TOOL_NAME" \
-            --argjson threshold "$BLOCK_THRESHOLD" \
+            --argjson threshold "$WRITE_BLOCK" \
             '{
                 hookSpecificOutput: {
                     additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " write/modify tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
@@ -119,13 +196,13 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
         exit 2
     fi
 
-    # Advisory warning: fire once at WARN_THRESHOLD
-    if [[ "$WRITE_COUNT" -ge "$WARN_THRESHOLD" ]] && [[ ! -f "$WARNED_FILE" ]]; then
-        touch "$WARNED_FILE" 2>/dev/null || true
+    # Write advisory warning: fire once
+    if [[ "$WRITE_WARN" -ne -1 ]] && [[ "$WRITE_COUNT" -ge "$WRITE_WARN" ]] && [[ ! -f "$WRITE_WARNED_FILE" ]]; then
+        touch "$WRITE_WARNED_FILE" 2>/dev/null || true
         jq -n \
             --argjson count "$WRITE_COUNT" \
             --arg tool "$TOOL_NAME" \
-            --argjson block_threshold "$BLOCK_THRESHOLD" \
+            --argjson block_threshold "$WRITE_BLOCK" \
             '{
                 hookSpecificOutput: {
                     additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " write tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
@@ -137,7 +214,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
     exit 0
 
 else
-    # Read-only tool — increment read counter (advisory tracking only, never blocks)
+    # Read-only tool — increment read counter
     READ_COUNT=0
     if [[ -f "$READ_COUNTER_FILE" ]]; then
         READ_COUNT=$(cat "$READ_COUNTER_FILE" 2>/dev/null || echo "0")
@@ -145,6 +222,62 @@ else
     fi
     READ_COUNT=$((READ_COUNT + 1))
     echo "$READ_COUNT" > "$READ_COUNTER_FILE" 2>/dev/null || true
+
+    # If delegation already happened, allow freely
+    if [[ -f "$DELEGATED_FILE" ]]; then
+        printf '%s\n' "$TOOL_INFO"
+        exit 0
+    fi
+
+    # Read the current write count for total calculation
+    WRITE_COUNT=0
+    if [[ -f "$WRITE_COUNTER_FILE" ]]; then
+        WRITE_COUNT=$(cat "$WRITE_COUNTER_FILE" 2>/dev/null || echo "0")
+        [[ "$WRITE_COUNT" =~ ^[0-9]+$ ]] || WRITE_COUNT=0
+    fi
+
+    # Total block (read + write combined)
+    TOTAL=$((WRITE_COUNT + READ_COUNT))
+    if [[ "$TOTAL_BLOCK" -ne -1 ]] && [[ "$TOTAL" -gt "$TOTAL_BLOCK" ]]; then
+        jq -n \
+            --argjson count "$TOTAL" \
+            --arg tool "$TOOL_NAME" \
+            --argjson threshold "$TOTAL_BLOCK" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                }
+            }'
+        exit 2
+    fi
+
+    # Read block
+    if [[ "$READ_BLOCK" -ne -1 ]] && [[ "$READ_COUNT" -gt "$READ_BLOCK" ]]; then
+        jq -n \
+            --argjson count "$READ_COUNT" \
+            --arg tool "$TOOL_NAME" \
+            --argjson threshold "$READ_BLOCK" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                }
+            }'
+        exit 2
+    fi
+
+    # Read advisory warning: fire once
+    if [[ "$READ_WARN" -ne -1 ]] && [[ "$READ_COUNT" -ge "$READ_WARN" ]] && [[ ! -f "$READ_WARNED_FILE" ]]; then
+        touch "$READ_WARNED_FILE" 2>/dev/null || true
+        jq -n \
+            --argjson count "$READ_COUNT" \
+            --arg tool "$TOOL_NAME" \
+            --argjson block_threshold "$READ_BLOCK" \
+            '{
+                hookSpecificOutput: {
+                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
+                }
+            }'
+    fi
 
     printf '%s\n' "$TOOL_INFO"
     exit 0

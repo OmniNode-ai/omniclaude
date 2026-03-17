@@ -225,7 +225,7 @@ async def publish_transformation_event(
         topic_base = _EVENT_TYPE_TO_TOPIC.get(
             event_type, TopicBase.TRANSFORMATION_COMPLETED
         )
-        topic = build_topic("", topic_base)
+        topic = build_topic(topic_base)
 
         # Publish to Kafka
         result = await publish_to_kafka(topic, envelope, correlation_id)

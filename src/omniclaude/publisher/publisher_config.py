@@ -67,8 +67,8 @@ class PublisherConfig(BaseSettings):
         max_length=255,
     )
     environment: str = Field(
-        default="dev",
-        pattern=r"^[a-z][a-z0-9-]*$",
+        default="",
+        description="Environment identifier for metadata/routing. Empty string means no env prefix.",
     )
 
     # Socket permissions

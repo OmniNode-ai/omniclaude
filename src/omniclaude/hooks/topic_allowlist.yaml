@@ -398,3 +398,81 @@ allowed_extras:
       No dedicated node contract — emitted directly by the CorrelationTraceEmitter
       hook adapter; contract governance to follow.
     ticket: OMN-5047
+
+  # ---------------------------------------------------------------------------
+  # DoD telemetry topics (OMN-5197)
+  # DoD guard and verification events emitted by the DoD enforcement system.
+  # No dedicated node contract — emitted by hook-level DoD guards.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.dod-guard-fired.v1"
+    lifecycle: telemetry
+    reason: >
+      DoD guard fired event emitted when a Definition of Done gate check
+      triggers during a session. Telemetry for DoD enforcement observability.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5197
+
+  - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
+    lifecycle: telemetry
+    reason: >
+      DoD verification completed event emitted after a full DoD verification
+      pass completes with results. Telemetry for DoD enforcement observability.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5197
+
+  # ---------------------------------------------------------------------------
+  # Context integrity audit topics (OMN-5230)
+  # Emitted by audit hooks for dispatch validation, scope enforcement,
+  # budget tracking, return path control, and compression lifecycle.
+  # No dedicated node contracts yet — contract governance to follow.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.audit-dispatch-validated.v1"
+    lifecycle: observability
+    reason: >
+      Dispatch validation event emitted when a task is validated against its contract.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.evt.omniclaude.audit-scope-violation.v1"
+    lifecycle: observability
+    reason: >
+      Scope violation event emitted when a task exceeds its declared scope.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.evt.omniclaude.audit-context-budget-exceeded.v1"
+    lifecycle: observability
+    reason: >
+      Context budget tracking event emitted when budget usage is recorded.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.evt.omniclaude.audit-return-bounded.v1"
+    lifecycle: observability
+    reason: >
+      Return path control event emitted when return payload size is evaluated.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.evt.omniclaude.audit-compression-triggered.v1"
+    lifecycle: observability
+    reason: >
+      Compression lifecycle event emitted when context compression is triggered.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.cmd.omniclaude.audit-run-requested.v1"
+    lifecycle: internal_control
+    reason: >
+      Command topic requesting an on-demand audit run for a session or task tree.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234
+
+  - topic: "onex.evt.omniclaude.audit-run-completed.v1"
+    lifecycle: observability
+    reason: >
+      Audit run completion event emitted with summary results.
+      Part of context integrity audit framework (OMN-5230); contract governance to follow.
+    ticket: OMN-5234

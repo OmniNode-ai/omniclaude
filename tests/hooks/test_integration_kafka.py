@@ -28,7 +28,7 @@ Requirements:
 Environment Variables:
     KAFKA_INTEGRATION_TESTS: Set to "1" to enable integration tests
     KAFKA_BOOTSTRAP_SERVERS: Kafka broker address(es)
-    KAFKA_ENVIRONMENT: Metadata tag for test isolation (default: "dev").
+    KAFKA_ENVIRONMENT: Metadata tag for test isolation (default: "" empty string).
         Not used for topic naming — topics are realm-agnostic per OMN-1972.
     KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 30 for
         integration tests, 2 for production hooks). Set higher if connecting
@@ -96,7 +96,7 @@ def get_kafka_environment() -> str:
     Used as metadata in config objects (e.g., environment=env) and for test
     isolation prefixes. Topics are realm-agnostic per OMN-1972.
     """
-    return os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    return os.environ.get("KAFKA_ENVIRONMENT", "")
 
 
 def make_unique_consumer_group() -> str:
@@ -340,7 +340,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.topics import TopicBase, build_topic
 
         # Topics are realm-agnostic (OMN-1972): no environment prefix
-        topic = build_topic("", TopicBase.SESSION_STARTED)
+        topic = build_topic(TopicBase.SESSION_STARTED)
 
         # Start consumer BEFORE publishing (to catch the message)
         consumer_task = asyncio.create_task(
@@ -390,7 +390,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_session_ended
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic("", TopicBase.SESSION_ENDED)
+        topic = build_topic(TopicBase.SESSION_ENDED)
 
         # Start consumer
         consumer_task = asyncio.create_task(
@@ -433,7 +433,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_prompt_submitted
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic("", TopicBase.PROMPT_SUBMITTED)
+        topic = build_topic(TopicBase.PROMPT_SUBMITTED)
         prompt_id = uuid4()
 
         consumer_task = asyncio.create_task(
@@ -477,7 +477,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_tool_executed
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic("", TopicBase.TOOL_EXECUTED)
+        topic = build_topic(TopicBase.TOOL_EXECUTED)
         tool_execution_id = uuid4()
 
         consumer_task = asyncio.create_task(
@@ -601,7 +601,7 @@ class TestKafkaIntegrationEnvelope:
         from omniclaude.hooks.handler_event_emitter import emit_session_started
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic("", TopicBase.SESSION_STARTED)
+        topic = build_topic(TopicBase.SESSION_STARTED)
 
         consumer_task = asyncio.create_task(
             wait_for_message_with_entity_id(
@@ -720,7 +720,7 @@ class TestKafkaIntegrationPrivacy:
         from omniclaude.hooks.handler_event_emitter import emit_prompt_submitted
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic("", TopicBase.PROMPT_SUBMITTED)
+        topic = build_topic(TopicBase.PROMPT_SUBMITTED)
 
         consumer_task = asyncio.create_task(
             wait_for_message_with_entity_id(
@@ -868,7 +868,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
 
         # Build topic name
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         # Start consumer BEFORE publishing (to catch the message)
         consumer_task = asyncio.create_task(
@@ -935,7 +935,7 @@ class TestClaudeHookEventIntegration:
 
         env = get_kafka_environment()
         test_session_id = f"partition-key-test-{uuid4().hex[:12]}"
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -987,7 +987,7 @@ class TestClaudeHookEventIntegration:
         test_session_id = f"full-prompt-test-{uuid4().hex[:12]}"
         # Create a long prompt (500 chars - well over 100 char observability limit)
         long_prompt = "A" * 500
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1038,7 +1038,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
         test_session_id = f"correlation-test-{uuid4().hex[:12]}"
         test_correlation_id = uuid4()
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1088,7 +1088,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
         test_session_id = f"timestamp-test-{uuid4().hex[:12]}"
         before_emit = datetime.now(UTC)
-        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic(TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1224,7 +1224,7 @@ class TestSessionOutcomeIntegration:
         from omniclaude.hooks.topics import TopicBase, build_topic
 
         test_session_id = f"outcome-cmd-test-{uuid4().hex[:12]}"
-        topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
+        topic = build_topic(TopicBase.SESSION_OUTCOME_CMD)
 
         # Start consumer BEFORE publishing
         consumer_task = asyncio.create_task(
@@ -1270,7 +1270,7 @@ class TestSessionOutcomeIntegration:
         from omniclaude.hooks.topics import TopicBase, build_topic
 
         test_session_id = f"outcome-evt-test-{uuid4().hex[:12]}"
-        topic = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
+        topic = build_topic(TopicBase.SESSION_OUTCOME_EVT)
 
         consumer_task = asyncio.create_task(
             wait_for_session_outcome(
@@ -1324,7 +1324,7 @@ class TestSessionOutcomeIntegration:
         )
 
         test_session_id = f"golden-path-test-{uuid4().hex[:12]}"
-        topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
+        topic = build_topic(TopicBase.SESSION_OUTCOME_CMD)
 
         # Step 1: Derive outcome
         outcome_result = derive_session_outcome(

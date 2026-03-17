@@ -4,6 +4,10 @@
 
 """Capability probe for tier detection at SessionStart (OMN-2782).
 
+NOTE: Platform-generic probe logic is also available in
+omnibase_infra.probes.capability_probe. This copy is kept for
+SessionStart hook performance (zero-import budget). Keep in sync.
+
 Probes available services and writes tier information to a capabilities file.
 The file is read by context_injection_wrapper.py to inject a tier banner.
 
