@@ -1400,6 +1400,47 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
+  # Skill Hygiene Check (OMN-5200)
+  # ---------------------------------------------------------------------------
+  # Validates skill directory naming, structure, and Python separation using the
+  # cross-repo validator in onex_change_control.
+  skill-hygiene:
+    name: Skill Hygiene
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Checkout onex_change_control validator
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          path: onex_change_control
+          sparse-checkout: |
+            scripts/validation/
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate skill hygiene
+        run: python onex_change_control/scripts/validation/validate_skill_hygiene.py --skills-root plugins/onex/skills --strict
+
+  # ---------------------------------------------------------------------------
   # Version Pin Compliance Check (OMN-4810)
   # ---------------------------------------------------------------------------
   # Verifies that this repo's dependency pins are compliant with the shared
@@ -1490,6 +1531,8 @@ jobs:
       - arch-invariants
       # Version pin compliance (OMN-4810)
       - version-pin-check
+      # Skill hygiene (OMN-5200)
+      - skill-hygiene
     if: always()
     steps:
       - name: Check quality results
@@ -1518,7 +1561,8 @@ jobs:
             "arch-no-utcnow=${{ needs.arch-no-utcnow.result }}" \
             "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}" \
             "arch-invariants=${{ needs.arch-invariants.result }}" \
-            "version-pin-check=${{ needs.version-pin-check.result }}"; do
+            "version-pin-check=${{ needs.version-pin-check.result }}" \
+            "skill-hygiene=${{ needs.skill-hygiene.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
