@@ -106,6 +106,7 @@ def _emit_gate_decision(
         emit_fn = getattr(_emit_mod, "emit_event", None)
         if emit_fn is None:
             return
+        now_iso = datetime.now(UTC).isoformat()
         payload: dict[str, object] = {
             "event_id": str(uuid.uuid4()),
             "gate_id": gate_id,
@@ -115,7 +116,14 @@ def _emit_gate_decision(
             "wait_seconds": wait_seconds,
             "responder": responder,
             "correlation_id": correlation_id,
-            "emitted_at": datetime.now(UTC).isoformat(),
+            "emitted_at": now_iso,
+            # OMN-5184: fields expected by omnidash read-model-consumer
+            "outcome": decision,  # consumer reads data.outcome
+            "gate_name": gate_type,  # consumer reads data.gate_name
+            "blocking": decision == "REJECTED",
+            "details": f"{gate_type} gate {decision.lower()} after {wait_seconds:.0f}s",
+            "timestamp": now_iso,  # consumer reads data.timestamp
+            "created_at": now_iso,  # consumer fallback
         }
         if session_id is not None:
             payload["session_id"] = session_id
