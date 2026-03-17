@@ -31,9 +31,40 @@ _OMNICLAUDE_HOOK_NAME="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
 
 # Log directory for error-guard failures (created lazily on first error)
 _ERROR_GUARD_LOG_DIR="${_ERROR_GUARD_LOG_DIR:-${TMPDIR:-/tmp}/omniclaude-error-guard}"
+mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true
+
+# Structured log file — one file per hook, appended to
+_ERROR_GUARD_LOG_FILE="${_ERROR_GUARD_LOG_DIR}/${_OMNICLAUDE_HOOK_NAME}.log"
 
 # Cache hostname once at source time (no subshell if HOSTNAME is set)
 _ERROR_GUARD_HOST="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
+
+# --- Logger function ---
+# Usage: _log "message" or _log "ERROR" "message"
+# Writes to per-hook log file. Does NOT touch stdout/stderr.
+_log() {
+    local level="INFO"
+    local msg="$1"
+    if [[ $# -ge 2 ]]; then
+        level="$1"
+        msg="$2"
+    fi
+    printf "[%s] [%s] [%s] %s\n" \
+        "$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "?")" \
+        "$_OMNICLAUDE_HOOK_NAME" \
+        "$level" \
+        "$msg" \
+        >> "$_ERROR_GUARD_LOG_FILE" 2>/dev/null || true
+}
+
+# --- ERR trap ---
+# Captures the failing command and line number BEFORE the EXIT trap fires.
+# Stores in a variable that the EXIT trap can read.
+_ERROR_GUARD_LAST_ERR=""
+_omniclaude_error_guard_err_trap() {
+    _ERROR_GUARD_LAST_ERR="line ${BASH_LINENO[0]} in ${BASH_SOURCE[1]:-unknown}: $(HISTTIMEFORMAT= history 1 2>/dev/null | sed 's/^ *[0-9]* *//' || echo '?')"
+}
+trap '_omniclaude_error_guard_err_trap' ERR
 
 _omniclaude_error_guard_trap() {
     local exit_code=$?
@@ -44,20 +75,21 @@ _omniclaude_error_guard_trap() {
     fi
 
     # --- 1. Drain stdin to prevent Claude Code from hanging on unread pipe ---
-    # Use a timeout read loop to consume any remaining stdin without blocking.
-    # The dd approach is faster but not universally available with timeout;
-    # read -t 0.01 is POSIX-ish and safe.
     while IFS= read -r -t 0.01 _discard 2>/dev/null; do :; done || true
 
-    # --- 2. Log the failure to a file ---
-    mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true
+    # --- 2. Log the failure with context ---
     local log_file="${_ERROR_GUARD_LOG_DIR}/errors.log"
     {
         printf "[%s] HOOK FAILURE: %s exited with code %d\n" \
             "$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")" \
             "$_OMNICLAUDE_HOOK_NAME" \
             "$exit_code"
+        if [[ -n "${_ERROR_GUARD_LAST_ERR:-}" ]]; then
+            printf "  at: %s\n" "$_ERROR_GUARD_LAST_ERR"
+        fi
     } >> "$log_file" 2>/dev/null || true
+    # Also log to per-hook file
+    _log "ERROR" "exit code $exit_code${_ERROR_GUARD_LAST_ERR:+ at $_ERROR_GUARD_LAST_ERR}"
 
     # --- 3. Send Slack alert (best-effort, no dependencies beyond curl) ---
     local webhook_url="${SLACK_WEBHOOK_URL:-}"

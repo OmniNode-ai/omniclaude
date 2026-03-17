@@ -44,4 +44,10 @@ jq -n \
         }
     }'
 
+# Set skill-loaded flag for delegation counter (tighter thresholds until delegation occurs)
+SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
+if [[ -n "$SESSION_ID" ]]; then
+    touch "/tmp/omniclaude-skill-loaded-${SESSION_ID}" 2>/dev/null || true
+fi
+
 exit 0

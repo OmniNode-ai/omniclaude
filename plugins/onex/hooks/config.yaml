@@ -50,3 +50,58 @@ hook_policies:
   no_verify:
     mode: hard        # Change to 'soft' to enable override path; default stays hard
     channel: terminal # terminal | chat | slack_poll (see maturity notes above)
+
+# Delegation enforcement
+# Controls when inline work is warned/blocked to force polymorphic agent delegation.
+# All thresholds count tool calls since last delegation (Task/Agent with onex: prefix).
+# A new user prompt resets all counters and flags.
+# Set any threshold to -1 to disable that check.
+#
+# Precedence: skill_loaded thresholds override normal thresholds whenever
+# the skill-loaded flag exists and no delegation has occurred, even if the
+# corresponding normal threshold is disabled (-1).
+delegation_enforcement:
+  # Write/modify tools (Write, Edit, MultiEdit, Bash-that-mutates)
+  write_warn_threshold: 3       # advisory warning (fires once per turn)
+  write_block_threshold: 5      # hard block (exit 2)
+
+  # Read-only tools (Read, Glob, Grep, WebFetch, WebSearch, Bash-that-reads)
+  read_warn_threshold: 8        # advisory warning
+  read_block_threshold: 12      # hard block — closes the "unlimited reads" gap
+
+  # Combined (read + write)
+  total_block_threshold: 15     # hard block on total tool calls
+
+  # Stricter thresholds when a Skill was loaded but no delegation happened.
+  # Overrides normal thresholds unconditionally when the skill-loaded flag exists.
+  skill_loaded:
+    write_block_threshold: 2
+    read_block_threshold: 3
+    total_block_threshold: 4
+
+  # Minimum tool calls referenced in the delegation rule text (UserPromptSubmit)
+  delegation_rule_tool_threshold: 2
+
+  # Bash command patterns classified as read-only (extended regex, matched with grep -E).
+  # Best-effort classification only. Compound commands (&&, ;, |, redirects) that contain
+  # ANY non-whitelisted component default to non-read-only. Patterns are anchored to the
+  # start of the FIRST simple command only — shell composition after a whitelisted prefix
+  # does NOT inherit read-only status.
+  bash_readonly_patterns:
+    - '^(ls |cat |head |tail |grep |find |wc |diff |stat |file |ps |df |du |which |whoami |date |uname |pwd$)'
+    - '^git (log|diff|status|show|branch|tag|remote|stash list)'
+    - '^gh (pr list|pr view|issue list|issue view|run list|run view|auth status)'
+    - '^docker (ps|logs |inspect |images)'
+    - '^(infra-status|infra-path|bus-status)$'
+
+  # Compound command guard: if the Bash command contains any of these shell composition
+  # operators, it is NOT eligible for read-only classification regardless of prefix match.
+  # This prevents "gh pr list && rm -rf /" from being classified as read-only.
+  bash_compound_deny_patterns:
+    - '&&'
+    - ';'
+    - '\|[^|]'    # pipe (but not ||)
+    - '>[^&]'     # redirect (but not >& for stderr)
+    - '>>'
+    - '\$\('      # command substitution
+    - '`'         # backtick substitution
