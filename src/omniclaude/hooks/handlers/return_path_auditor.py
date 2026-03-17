@@ -51,6 +51,7 @@ from omniclaude.hooks.schemas_audit import (
     AuditScopeViolationEvent,
     AuditScopeViolationType,
 )
+from omniclaude.hooks.topics import TopicBase
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +314,7 @@ def _emit_return_bounded_event(
             emitted_at=emitted_at,
         )
         _publish_audit_event(
-            topic="onex.evt.omniclaude.audit-return-bounded.v1",
+            topic=TopicBase.AUDIT_RETURN_BOUNDED,
             payload=event.model_dump(mode="json"),
         )
     except Exception:  # noqa: BLE001 — boundary: emit must degrade not crash
@@ -345,7 +346,7 @@ def _emit_scope_violation_event(
             emitted_at=emitted_at,
         )
         _publish_audit_event(
-            topic="onex.evt.omniclaude.audit-scope-violation.v1",
+            topic=TopicBase.AUDIT_SCOPE_VIOLATION,
             payload=event.model_dump(mode="json"),
         )
     except Exception:  # noqa: BLE001 — boundary: emit must degrade not crash
@@ -372,7 +373,7 @@ def _publish_audit_event(topic: str, payload: dict[str, Any]) -> None:
             [
                 python_cmd,
                 "-m",
-                "omniclaude.hooks.cli_emit",
+                "omniclaude.hooks.cli_emit",  # noqa: arch-topic-naming — module path, not a Kafka topic
                 "audit-event",
                 "--topic",
                 topic,
@@ -384,7 +385,9 @@ def _publish_audit_event(topic: str, payload: dict[str, Any]) -> None:
             close_fds=True,
         )
     except Exception:  # noqa: BLE001 — boundary: emit must degrade not crash
-        logger.warning("Failed to launch audit event emission subprocess", exc_info=True)
+        logger.warning(
+            "Failed to launch audit event emission subprocess", exc_info=True
+        )
 
 
 def _mark_task_invalid(*, task_id: UUID, correlation_id: UUID) -> None:
@@ -407,9 +410,7 @@ def _mark_task_invalid(*, task_id: UUID, correlation_id: UUID) -> None:
             reason="return_path_audit_block",
             correlation_id=str(correlation_id),
         )
-        logger.info(
-            "PARANOID: marked task %s INVALID in correlation manager", task_id
-        )
+        logger.info("PARANOID: marked task %s INVALID in correlation manager", task_id)
     except ImportError:
         logger.warning(
             "CorrelationManager not available; skipping PARANOID task invalidation"

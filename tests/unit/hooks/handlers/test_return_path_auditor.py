@@ -528,22 +528,16 @@ class TestLoadEnforcementLevel:
 
     @pytest.mark.parametrize("level", list(_VALID_ENFORCEMENT_LEVELS))
     def test_valid_levels_accepted(self, level: str) -> None:
-        with patch.dict(
-            os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": level}
-        ):
+        with patch.dict(os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": level}):
             assert _load_enforcement_level() == level
 
     def test_invalid_level_falls_back_to_default(self) -> None:
-        with patch.dict(
-            os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": "INVALID"}
-        ):
+        with patch.dict(os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": "INVALID"}):
             level = _load_enforcement_level()
         assert level == _DEFAULT_ENFORCEMENT_LEVEL
 
     def test_case_insensitive(self) -> None:
-        with patch.dict(
-            os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": "strict"}
-        ):
+        with patch.dict(os.environ, {"OMNICLAUDE_RETURN_AUDIT_ENFORCEMENT": "strict"}):
             level = _load_enforcement_level()
         assert level == "STRICT"
 
