@@ -852,6 +852,36 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             "operation_name",
         ],
     ),
+    # =========================================================================
+    # Context Integrity Audit Events (OMN-5230 / OMN-5235)
+    # =========================================================================
+    # Emitted by correlation manager push_task (dispatch validated) and on
+    # duplicate task push detection (scope violation). Consumed by omnidash
+    # /context-audit page via context_audit_events table.
+    "audit.dispatch.validated": EventRegistration(
+        event_type="audit.dispatch.validated",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AUDIT_DISPATCH_VALIDATED,
+                transform=None,  # No sensitive data in dispatch metadata
+                description="Task dispatch validation result for context integrity audit",
+            ),
+        ],
+        partition_key_field="task_id",
+        required_fields=["task_id", "contract_id", "agent_type"],
+    ),
+    "audit.scope.violation": EventRegistration(
+        event_type="audit.scope.violation",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AUDIT_SCOPE_VIOLATION,
+                transform=None,  # No sensitive data in violation metadata
+                description="Scope boundary violation for context integrity audit",
+            ),
+        ],
+        partition_key_field="task_id",
+        required_fields=["task_id", "violation_type", "enforcement_action"],
+    ),
 }
 
 
