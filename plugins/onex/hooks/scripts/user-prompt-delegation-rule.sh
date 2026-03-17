@@ -5,8 +5,8 @@
 # UserPromptSubmit: Delegation Rule Injector
 #
 # On every user prompt:
-#   1. Resets per-turn counters and all state flags (write, read, delegated, warned, skill-loaded)
-#   2. Injects a hard delegation rule into Claude's context with config-driven threshold
+#   1. Resets per-turn work-tool counter and state flags
+#   2. Injects a hard delegation rule into Claude's context
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
