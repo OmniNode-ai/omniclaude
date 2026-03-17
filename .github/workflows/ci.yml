@@ -1428,7 +1428,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: OmniNode-ai/onex_change_control
-          token: ${{ secrets.CROSS_REPO_PAT }}
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
           path: onex_change_control
           sparse-checkout: |
             standards/

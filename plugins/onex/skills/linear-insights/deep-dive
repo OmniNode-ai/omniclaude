@@ -516,10 +516,20 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
     printf '      "tool": "mcp__linear-server__list_issues",\n'
     printf '      "params": {\n'
     printf '        "assignee": "me",\n'
-    printf '        "updatedAt": "-P%dD",\n' "$DAYS"
-    printf '        "limit": 100\n'
+    printf '        "state": "Done",\n'
+    printf '        "updatedAt": "-P%dD",\n' "$((DAYS * 3 < 3 ? 3 : DAYS * 3))"
+    printf '        "limit": 250\n'
     printf '      },\n'
-    printf '      "purpose": "Fetch all issues updated in analysis period"\n'
+    printf '      "purpose": "Pass 1: Fetch Done issues with 3x wider updatedAt window (min 3 days). Linear updatedAt can lag behind completedAt, so a wider window catches tickets completed on the target date whose updatedAt was set earlier."\n'
+    printf '    },\n'
+    printf '    {\n'
+    printf '      "tool": "mcp__linear-server__list_issues",\n'
+    printf '      "params": {\n'
+    printf '        "assignee": "me",\n'
+    printf '        "updatedAt": "-P%dD",\n' "$DAYS"
+    printf '        "limit": 250\n'
+    printf '      },\n'
+    printf '      "purpose": "Pass 2: Fetch all issues (any state) updated in analysis period for In Progress and Backlog categorization"\n'
     printf '    },\n'
     printf '    {\n'
     printf '      "tool": "mcp__linear-server__list_projects",\n'
@@ -530,6 +540,12 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
     printf '      "purpose": "Fetch project progress for context"\n'
     printf '    }\n'
     printf '  ],\n'
+    printf '  "ticket_cross_reference": {\n'
+    printf '    "description": "CRITICAL: After collecting PR data in Step 3, extract all OMN-XXXX ticket IDs from PR titles using regex. For any ticket ID NOT already present in the Pass 1/Pass 2 Linear results, call mcp__linear-server__get_issue to verify its status and completedAt date. Include the ticket in the Done count if completedAt falls within the analysis date range. This prevents undercounting when list_issues misses tickets due to updatedAt/completedAt divergence.",\n'
+    printf '    "regex": "OMN-[0-9]+",\n'
+    printf '    "verify_tool": "mcp__linear-server__get_issue",\n'
+    printf '    "filter": "completedAt within analysis date range"\n'
+    printf '  },\n'
     printf '  "gh_commands": [%s\n  ],\n' "$gh_commands_json"
     printf '  "git_commands": [\n'
     if [[ ${#LOCAL_CLONE_DIRS[@]} -gt 0 ]]; then
@@ -631,13 +647,33 @@ Task(
 
 ## Data Collection
 
-### Step 1: Fetch Linear Issues
+### Step 1: Fetch Linear Issues (Two-Pass + Cross-Reference)
+
+**Pass 1 — Done tickets (wider window):**
+Use mcp__linear-server__list_issues with:
+- assignee: "me"
+- state: "Done"
+- updatedAt: "-P3D" (3x the analysis period, minimum 3 days)
+- limit: 250
+
+Filter results to only include tickets where completedAt falls on the target date.
+
+**Pass 2 — All states (analysis window):**
 Use mcp__linear-server__list_issues with:
 - assignee: "me"
 - updatedAt: "-P1D" (or "-P{DAYS}D" for multi-day)
-- limit: 100
+- limit: 250
 
-Categorize by status: Done, In Progress, Backlog
+Categorize by status: Done, In Progress, Backlog.
+
+**Pass 3 — Cross-reference from PR data (CRITICAL):**
+After collecting PR data in Step 2, extract ALL OMN-XXXX ticket IDs from PR titles
+using regex. For any ticket ID NOT already in the Pass 1/Pass 2 results, call
+mcp__linear-server__get_issue to check its status and completedAt date. Include it
+in the Done count if completedAt falls within the analysis date range.
+
+This cross-reference step is essential because Linear's list_issues API filters by
+updatedAt (not completedAt), which can miss tickets completed on the target date.
 
 ### Step 2: Fetch PR Data (for each repo)
 PROMPT_HEADER
@@ -723,16 +759,29 @@ if [[ "$GENERATE" == "true" ]]; then
     echo "the deep dive report for: $TARGET_DATE ($DAY_NAME)"
     echo ""
     echo "============================================================"
-    echo "STEP 1: Fetch Linear Issues"
+    echo "STEP 1: Fetch Linear Issues (Two-Pass + Cross-Reference)"
     echo "============================================================"
     echo ""
-    echo "Call this MCP tool to get all issues updated in the analysis period:"
+    echo "**Pass 1 — Done tickets (wider window):**"
+    echo ""
+    echo '```python'
+    echo "mcp__linear-server__list_issues("
+    echo "    assignee=\"me\","
+    echo "    state=\"Done\","
+    echo "    updatedAt=\"-P$((DAYS * 3 < 3 ? 3 : DAYS * 3))D\","
+    echo "    limit=250"
+    echo ")"
+    echo '```'
+    echo ""
+    echo "Filter results: only include tickets where completedAt falls on the target date."
+    echo ""
+    echo "**Pass 2 — All states (analysis window):**"
     echo ""
     echo '```python'
     echo "mcp__linear-server__list_issues("
     echo "    assignee=\"me\","
     echo "    updatedAt=\"-P${DAYS}D\","
-    echo "    limit=100"
+    echo "    limit=250"
     echo ")"
     echo '```'
     echo ""
@@ -740,6 +789,17 @@ if [[ "$GENERATE" == "true" ]]; then
     echo "- Done: Completed work"
     echo "- In Progress: Active work"
     echo "- Todo/Backlog: Planned work"
+    echo ""
+    echo "**Pass 3 — Cross-reference from PR data (CRITICAL):**"
+    echo "After collecting PR data in Step 3, extract ALL OMN-XXXX ticket IDs from"
+    echo "PR titles. For any ID NOT in Pass 1/Pass 2 results, call:"
+    echo ""
+    echo '```python'
+    echo "mcp__linear-server__get_issue(id=\"OMN-XXXX\")"
+    echo '```'
+    echo ""
+    echo "Include in Done count if completedAt falls within the analysis date range."
+    echo "This catches tickets missed by list_issues due to updatedAt/completedAt divergence."
     echo ""
     echo "============================================================"
     echo "STEP 2: Fetch Project Progress"
