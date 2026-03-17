@@ -10,7 +10,6 @@ receipts to .evidence/<ticket_id>/dod_report.json.
 
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
@@ -82,7 +81,11 @@ def _run_check_test_exists(check_value: str | dict[str, str]) -> CheckResult:
     else:
         search = pattern
 
-    matches = glob.glob(search, recursive=True)
+    matches = (
+        list(Path().glob(search))
+        if not Path(search).is_absolute()
+        else list(Path("/").glob(search.lstrip("/")))
+    )
     if matches:
         return CheckResult(
             check_type="test_exists",
@@ -108,6 +111,7 @@ def _run_check_test_passes(check_value: str | dict[str, str]) -> CheckResult:
             capture_output=True,
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
+            check=False,
         )
         if result.returncode == 0:
             return CheckResult(
@@ -134,7 +138,13 @@ def _run_check_test_passes(check_value: str | dict[str, str]) -> CheckResult:
 def _run_check_file_exists(check_value: str | dict[str, str]) -> CheckResult:
     """Check if files matching a glob pattern exist."""
     pattern = str(check_value)
-    matches = glob.glob(pattern, recursive=True)
+    p = Path(pattern)
+    base = p.parent if p.parent != Path() else Path()
+    matches = (
+        list(base.glob(p.name))
+        if "*" not in str(p.parent)
+        else list(Path().glob(pattern))
+    )
     if matches:
         return CheckResult(
             check_type="file_exists",
@@ -165,6 +175,7 @@ def _run_check_grep(check_value: str | dict[str, str]) -> CheckResult:
             capture_output=True,
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             files = result.stdout.strip().split("\n")
@@ -199,6 +210,7 @@ def _run_check_command(check_value: str | dict[str, str]) -> CheckResult:
             capture_output=True,
             text=True,
             timeout=_DEFAULT_TIMEOUT_SECONDS,
+            check=False,
         )
         if result.returncode == 0:
             return CheckResult(
@@ -311,6 +323,7 @@ def _get_git_info(working_dir: str) -> tuple[str, str]:
             text=True,
             cwd=working_dir,
             timeout=5,
+            check=False,
         )
         if sha_result.returncode == 0:
             sha = sha_result.stdout.strip()
@@ -321,6 +334,7 @@ def _get_git_info(working_dir: str) -> tuple[str, str]:
             text=True,
             cwd=working_dir,
             timeout=5,
+            check=False,
         )
         if branch_result.returncode == 0:
             branch = branch_result.stdout.strip()
