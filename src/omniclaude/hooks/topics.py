@@ -308,6 +308,17 @@ class TopicBase(StrEnum):
     CORRELATION_TRACE = "onex.evt.omniclaude.correlation-trace.v1"
     """Trace span event emitted during active sessions for omnidash /trace page."""
 
+    # ==========================================================================
+    # DoD (Definition of Done) telemetry topics (OMN-5197)
+    # Consumed by omnidash /dod dashboard via dod_verify_runs and
+    # dod_guard_events tables.
+    # ==========================================================================
+    DOD_VERIFY_COMPLETED = "onex.evt.omniclaude.dod-verify-completed.v1"
+    """Emitted after every DoD evidence verification run."""
+
+    DOD_GUARD_FIRED = "onex.evt.omniclaude.dod-guard-fired.v1"
+    """Emitted on every DoD guard interception (pre-tool-use hook)."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
