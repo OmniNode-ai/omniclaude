@@ -700,6 +700,64 @@ class ModelSessionOutcome(BaseModel):
         description="Interpretive outcome score 0.0-1.0 (derivation TBD, see OMN-5224)",
     )
 
+    # OMN-5201: T11b enrichment fields for Effectiveness/Baselines dashboard pages.
+    # All optional with None default for backward compatibility.
+    success: bool | None = Field(
+        default=None,
+        description=(
+            "True when DoD receipt exists and passes all checks; "
+            "False when DoD receipt exists but has failures; "
+            "None when no DoD receipt (non-ticket sessions)."
+        ),
+    )
+    dod_pass: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the DoD evidence receipt reported zero failed checks. "
+            "None when no receipt exists for the session."
+        ),
+    )
+    ticket_id: str | None = Field(
+        default=None,
+        description="Active Linear ticket identifier at session end (e.g. 'OMN-1234').",
+    )
+    pr_url: str | None = Field(
+        default=None,
+        description="GitHub pull request URL associated with the session, if any.",
+    )
+    commit_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Number of commits authored in the worktree branch during the session.",
+    )
+    total_tokens_used: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Total tokens consumed in the session (input + output). "
+            "Extracted from context_window.current_usage in the SessionEnd payload. "
+            "None when not reported by the Claude Code runtime."
+        ),
+    )
+    files_modified_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Number of distinct files written or edited during the session. "
+            "Derived from Write/Edit tool invocations accumulated across the session. "
+            "None when session-level file tracking is not yet available."
+        ),
+    )
+    tasks_completed_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Number of tasks marked completed during the session. "
+            "Derived from the task state file when available. "
+            "None when task tracking state is not accessible at session end."
+        ),
+    )
+
 
 # =============================================================================
 # Routing Feedback Events (OMN-1892)

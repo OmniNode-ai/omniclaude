@@ -53,7 +53,6 @@ jobs:
             plugins/onex \
             plugins/onex/hooks \
             plugins/onex/agents/configs \
-            plugins/onex/commands \
             plugins/onex/skills; do
             if [ ! -d "$dir" ]; then
               echo "ERROR: Required directory missing: $dir"

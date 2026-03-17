@@ -153,6 +153,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-delegation-counter.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Task|Agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_return_path_auditor.sh"
+          }
+        ]
       }
     ]
   }
