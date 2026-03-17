@@ -190,7 +190,9 @@ class TestResolveEnforcementLevel:
     def test_override_takes_priority(self) -> None:
         assert _resolve_enforcement_level("STRICT") == "STRICT"
 
-    def test_env_var_used_when_no_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_var_used_when_no_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("AUDIT_ENFORCEMENT_LEVEL", "PARANOID")
         assert _resolve_enforcement_level(None) == "PARANOID"
 
@@ -255,14 +257,18 @@ class TestValidateDispatchStrictMode:
 
     def test_missing_contract_id_is_blocked(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -277,14 +283,18 @@ class TestValidateDispatchStrictMode:
         config = _make_agent_config(
             with_ci_subcontract=True, contract_id="node_poly_enforcer_effect"
         )
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -299,14 +309,18 @@ class TestValidateDispatchStrictMode:
         config = _make_agent_config(
             with_ci_subcontract=True, contract_id="stale-contract-id"
         )
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -320,14 +334,18 @@ class TestValidateDispatchStrictMode:
         config = _make_agent_config(
             with_ci_subcontract=True, contract_id="any-contract-id"
         )
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=[],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=[],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -338,14 +356,18 @@ class TestValidateDispatchStrictMode:
 
     def test_block_message_lists_known_contract_ids(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["id-one", "id-two"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["id-one", "id-two"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -367,14 +389,18 @@ class TestValidateDispatchParanoidMode:
 
     def test_missing_contract_id_is_blocked(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -388,14 +414,18 @@ class TestValidateDispatchParanoidMode:
         config = _make_agent_config(
             with_ci_subcontract=True, contract_id="unknown-stale-id"
         )
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -409,14 +439,18 @@ class TestValidateDispatchParanoidMode:
         config = _make_agent_config(
             with_ci_subcontract=True, contract_id="node_poly_enforcer_effect"
         )
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["node_poly_enforcer_effect"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["node_poly_enforcer_effect"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -436,11 +470,14 @@ class TestValidateDispatchPermissiveWarnModes:
 
     def test_permissive_no_block_for_missing_contract_id(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -451,11 +488,14 @@ class TestValidateDispatchPermissiveWarnModes:
 
     def test_warn_no_block_for_missing_contract_id(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -475,14 +515,18 @@ class TestValidateDispatchMisconfiguration:
 
     def test_strict_missing_contract_id_results_in_block_not_warn(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=["valid-id"],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=["valid-id"],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",
@@ -495,14 +539,18 @@ class TestValidateDispatchMisconfiguration:
 
     def test_result_contains_enforcement_level(self) -> None:
         config = _make_agent_config(with_ci_subcontract=True, contract_id=None)
-        with patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
-            return_value=config,
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
-        ), patch(
-            "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
-            return_value=[],
+        with (
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_agent_yaml",
+                return_value=config,
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._record_dispatch_in_correlation_manager",
+            ),
+            patch(
+                "omniclaude.hooks.handlers.audit_dispatch_validator._load_known_contract_ids",
+                return_value=[],
+            ),
         ):
             result = validate_dispatch(
                 "onex:test-agent",

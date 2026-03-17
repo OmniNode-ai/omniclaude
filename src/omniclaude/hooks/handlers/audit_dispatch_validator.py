@@ -305,7 +305,9 @@ def _emit_audit_dispatch_event(
             "agent_type": subagent_type,
             "enforcement_level": enforcement_level,
             "passed": passed,
-            "correlation_id": str(uuid.uuid4()) if correlation_id is None else correlation_id,
+            "correlation_id": str(uuid.uuid4())
+            if correlation_id is None
+            else correlation_id,
             "emitted_at": datetime.now(UTC).isoformat(),
         }
         payload_json = json.dumps(payload)
@@ -350,7 +352,14 @@ def _find_emit_wrapper() -> Path | None:
         )
 
     here = Path(__file__).parent
-    inferred = here.parent.parent.parent.parent / "plugins" / "onex" / "hooks" / "lib" / "emit_client_wrapper.py"
+    inferred = (
+        here.parent.parent.parent.parent
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "lib"
+        / "emit_client_wrapper.py"
+    )
     candidates.append(inferred)
 
     for candidate in candidates:
@@ -389,7 +398,9 @@ def _record_dispatch_in_correlation_manager(
         lib_path: Path | None = None
 
         if plugin_root_env:
-            candidate = Path(plugin_root_env) / "hooks" / "lib" / "correlation_manager.py"
+            candidate = (
+                Path(plugin_root_env) / "hooks" / "lib" / "correlation_manager.py"
+            )
             if candidate.is_file():
                 lib_path = candidate
 
@@ -423,9 +434,7 @@ def _record_dispatch_in_correlation_manager(
         registry.push_task(task_id, effective_contract_id, scopes)
 
     except Exception:  # noqa: BLE001
-        logger.debug(
-            "Failed to record dispatch in correlation manager", exc_info=True
-        )
+        logger.debug("Failed to record dispatch in correlation manager", exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -614,7 +623,9 @@ def _resolve_enforcement_level(override: str | None) -> str:
     Returns:
         Normalised enforcement level string (upper-case).
     """
-    raw = override or os.environ.get("AUDIT_ENFORCEMENT_LEVEL", _DEFAULT_ENFORCEMENT_LEVEL)
+    raw = override or os.environ.get(
+        "AUDIT_ENFORCEMENT_LEVEL", _DEFAULT_ENFORCEMENT_LEVEL
+    )
     normalised = raw.strip().upper()
     if normalised not in _KNOWN_LEVELS:
         logger.warning(
@@ -638,7 +649,9 @@ def _get_correlation_id_safe() -> str | None:
         lib_path: Path | None = None
 
         if plugin_root_env:
-            candidate = Path(plugin_root_env) / "hooks" / "lib" / "correlation_manager.py"
+            candidate = (
+                Path(plugin_root_env) / "hooks" / "lib" / "correlation_manager.py"
+            )
             if candidate.is_file():
                 lib_path = candidate
 
