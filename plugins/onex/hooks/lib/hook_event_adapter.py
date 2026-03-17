@@ -297,7 +297,7 @@ class HookEventAdapter:
         Returns:
             Full topic name (e.g., "onex.evt.omniclaude.routing-decision.v1")
         """
-        return build_topic("", base)
+        return build_topic(base)
 
     def _get_producer(self) -> object:
         """

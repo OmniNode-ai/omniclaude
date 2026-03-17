@@ -340,7 +340,7 @@ async def publish_action_event(
         event = {k: v for k, v in event.items() if v is not None}
 
         # Build ONEX-compliant topic name
-        topic = build_topic("", TopicBase.AGENT_ACTION)
+        topic = build_topic(TopicBase.AGENT_ACTION)
 
         # Get producer
         producer = await _get_kafka_producer()
@@ -385,7 +385,7 @@ async def publish_action_event(
         # Handle timeout specifically for better observability
         # Build topic name for error reporting (may fail if topic construction failed earlier)
         try:
-            error_topic = build_topic("", TopicBase.AGENT_ACTION)
+            error_topic = build_topic(TopicBase.AGENT_ACTION)
         except Exception:
             error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
 
@@ -409,7 +409,7 @@ async def publish_action_event(
         # Log error but don't fail - observability shouldn't break execution
         # Build topic name for error reporting (may fail if topic construction failed earlier)
         try:
-            error_topic = build_topic("", TopicBase.AGENT_ACTION)
+            error_topic = build_topic(TopicBase.AGENT_ACTION)
         except Exception:
             error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
 

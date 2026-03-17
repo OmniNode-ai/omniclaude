@@ -160,7 +160,7 @@ class TestBuildTopicMalformedTopics:
 
     def test_build_topic_rejects_leading_dot_in_base(self) -> None:
         """Base with leading dot is rejected."""
-        with pytest.raises(ModelOnexError, match="consecutive dots"):
+        with pytest.raises(ModelOnexError, match="must not start with a dot"):
             build_topic(".omniclaude.test.v1")
 
     def test_build_topic_rejects_trailing_dot_in_base(self) -> None:
