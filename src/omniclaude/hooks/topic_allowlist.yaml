@@ -398,3 +398,25 @@ allowed_extras:
       No dedicated node contract — emitted directly by the CorrelationTraceEmitter
       hook adapter; contract governance to follow.
     ticket: OMN-5047
+
+  # ---------------------------------------------------------------------------
+  # DoD telemetry topics (OMN-5197)
+  # DoD guard and verification events emitted by the DoD enforcement system.
+  # No dedicated node contract — emitted by hook-level DoD guards.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.dod-guard-fired.v1"
+    lifecycle: telemetry
+    reason: >
+      DoD guard fired event emitted when a Definition of Done gate check
+      triggers during a session. Telemetry for DoD enforcement observability.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5197
+
+  - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
+    lifecycle: telemetry
+    reason: >
+      DoD verification completed event emitted after a full DoD verification
+      pass completes with results. Telemetry for DoD enforcement observability.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5197
