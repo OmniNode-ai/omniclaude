@@ -24,7 +24,7 @@ import pytest
 # ---------------------------------------------------------------------------
 _SCRIPT_PATH = (
     Path(__file__).parent.parent.parent.parent.parent
-    / "plugins/onex/skills/slack-gate/slack_gate_poll.py"
+    / "plugins/onex/skills/_lib/slack_gate/slack_gate_poll.py"
 )
 
 spec = importlib.util.spec_from_file_location("slack_gate_poll", _SCRIPT_PATH)

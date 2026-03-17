@@ -21,7 +21,7 @@ _SKILL_DIR = (
     / "plugins"
     / "onex"
     / "skills"
-    / "feature-dashboard"
+    / "feature_dashboard"
 )
 _SKILL_MD = _SKILL_DIR / "SKILL.md"
 

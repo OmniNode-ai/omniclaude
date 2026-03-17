@@ -1,0 +1,590 @@
+---
+name: local_review
+description: Local code review loop that iterates through review, fix, commit cycles without pushing
+version: 2.0.0
+level: basic
+debug: false
+category: workflow
+tags:
+  - review
+  - code-quality
+  - local
+  - iteration
+author: OmniClaude Team
+composable: true
+inputs:
+  - name: since
+    type: str
+    description: Base ref for diff (branch/commit); auto-detected if omitted
+    required: false
+  - name: max_iterations
+    type: int
+    description: Maximum review-fix cycles (default 10)
+    required: false
+  - name: required_clean_runs
+    type: int
+    description: Consecutive clean runs required before passing (default 2)
+    required: false
+  - name: files
+    type: str
+    description: Glob pattern to limit scope
+    required: false
+outputs:
+  - name: skill_result
+    type: ModelSkillResult
+    description: "Written to ~/.claude/skill-results/{context_id}/local-review.json"
+    fields:
+      - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
+      - extra_status: "clean" | "clean_with_nits" | "max_iterations_reached" | null  # domain-specific granularity
+      - extra: "{iterations_run, issues_remaining}"
+args:
+  - name: --uncommitted
+    description: Only review uncommitted changes (ignore committed)
+    required: false
+  - name: --since
+    description: "Base ref for diff (branch/commit)"
+    required: false
+  - name: --max-iterations
+    description: Maximum review-fix cycles (default 10)
+    required: false
+  - name: --files
+    description: Glob pattern to limit scope
+    required: false
+  - name: --no-fix
+    description: Report only, don't attempt fixes
+    required: false
+  - name: --no-commit
+    description: Fix but don't commit (stage only)
+    required: false
+  - name: --checkpoint
+    description: "Write checkpoint after each iteration (format: ticket_id:run_id)"
+    required: false
+  - name: --required-clean-runs
+    description: "Number of consecutive clean runs required before passing (default 2, min 1)"
+    required: false
+  - name: --path
+    description: "Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via git worktree list. When running from a linked worktree, defaults to CWD."
+    required: false
+  - name: --guided
+    description: "Interactive mode: pause at each severity bucket for human approval before applying fixes. Reproduces former review-cycle behavior."
+    required: false
+---
+
+# Local Review
+
+## Dispatch Requirement
+
+When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
+files, run bash, or take any other action before dispatching.
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Run local-review",
+  prompt="Run the local-review skill. <full context and args>"
+)
+```
+
+**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+
+## Overview
+
+Review local changes, fix issues, commit fixes, and iterate until clean or max iterations reached.
+
+**Workflow**: Gather changes -> Review -> Fix -> Commit -> Repeat until clean
+
+**Announce at start:** "I'm using the local-review skill to review local changes."
+
+> **Classification System**: Uses onex pr-review keyword-based classification (not confidence scoring).
+> ALL Critical/Major/Minor issues MUST be resolved. Only Nits are optional.
+> See: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md` for full priority definitions.
+
+## Quick Start
+
+```
+/local-review                           # Review all changes since base branch
+/local-review --uncommitted             # Only uncommitted changes
+/local-review --since main              # Explicit base
+/local-review --max-iterations 5        # Limit iterations
+/local-review --files "src/**/*.py"     # Specific files only
+/local-review --no-fix                  # Report only mode
+/local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
+/local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
+/local-review --path ../worktrees/OMN-1234/myrepo  # Explicit worktree path
+```
+
+## Arguments
+
+Parse arguments from `$ARGUMENTS`:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--uncommitted` | false | Only review uncommitted changes (ignore committed) |
+| `--since <ref>` | auto-detect | Base ref for diff (branch/commit) |
+| `--max-iterations <n>` | 10 | Maximum review-fix cycles |
+| `--files <glob>` | all | Glob pattern to limit scope |
+| `--no-fix` | false | Report only, don't attempt fixes |
+| `--no-commit` | false | Fix but don't commit (stage only) |
+| `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
+| `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
+| `--path <dir>` | auto-detect | Path to the git worktree to review. When running from the main worktree, auto-detected from linked worktrees via `git worktree list`. When running from a linked worktree, defaults to CWD. |
+
+## Phase 0: Pre-Existing Issue Scan
+
+Phase 0 runs BEFORE the diff review loop. It detects and handles pre-existing lint/mypy
+failures so they don't surface as CI surprises after the feature work is merged.
+
+**Key invariant**: Pre-existing fixes are committed separately from the feature work.
+NEVER mix pre-existing fixes with the feature branch changes.
+
+### Phase 0 Procedure
+
+```
+Phase 0: Pre-existing issue scan
+  1. Run pre-commit run --all-files against the current HEAD state (i.e. before any uncommitted
+     fixes are applied; do NOT stash or alter the working tree to run this step)
+  2. Run mypy src/ --strict (or repo-equivalent detected from pyproject.toml)
+  3. Classify each failure:
+       - AUTO-FIX if: ≤10 files touched AND same subsystem AND low-risk change
+       - DEFER if any criterion fails (>10 files, architectural, unrelated subsystem)
+  4. For AUTO-FIX:
+       - Apply fixes
+       - Commit as: chore(pre-existing): fix pre-existing lint/type errors
+       - This commit is separate from all feature commits
+  5. For DEFER:
+       - For each deferred failure, compute fingerprint (SHA-256 of pipe-delimited
+         `tool_name|check_name|failure_kind|rule_id|repo_relative_path|symbol`)
+       - Search Linear: `mcp__linear-server__list_issues(query="gap:{fingerprint[:8]}")`
+       - Apply dedup state table (see below) — create ticket OR comment on existing
+       - Note in session: "Pre-existing issues deferred: {N} created, {M} commented"
+       - Add deferred issues to PR description note section
+  6. Write Phase 0 results to session notes (session notes = the structured context block
+     injected into the Claude session via the context-injection subsystem)
+  7. Proceed to normal diff review
+```
+
+### Auto-Fix Criteria (ALL must be true)
+
+| Criterion | Value |
+|-----------|-------|
+| Files touched | ≤ 10 |
+| Subsystem | Same as the feature work (determine by inspecting `git diff {base}..HEAD --name-only`; the top-level directory prefix of the majority of changed files identifies the subsystem — e.g. `src/omniclaude/hooks/` or `plugins/onex/skills/`) |
+| Risk level | Low (formatting, import ordering, type annotation style) |
+
+### Fingerprint Spec
+
+SHA-256 of pipe-delimited:
+
+```
+tool_name | check_name | failure_kind | rule_id | repo_relative_path | symbol
+```
+
+| Field | Value |
+|-------|-------|
+| `tool_name` | `mypy`, `ruff`, `pre-commit` |
+| `check_name` | specific check (e.g. `no-return-annotation`, `E501`) |
+| `failure_kind` | `lint`, `type`, `test`, `runtime` |
+| `rule_id` | rule code if available (e.g. `E501`), else empty string |
+| `repo_relative_path` | path from repo root (NOT absolute) |
+| `symbol` | function/class name if applicable, else empty string |
+
+Empty fields use the empty string (not `null` or `None`). Example:
+```
+mypy|no-return-annotation|type||src/omniclaude/hooks/handler.py|handle_event
+```
+
+### Dedup State Table
+
+| Existing ticket state | Last closed | Action |
+|-----------------------|-------------|--------|
+| In Progress / Backlog / Todo | — | Comment on existing ticket, skip creation |
+| Done / Duplicate / Cancelled | ≤ 7 days ago | Comment on existing ticket, skip creation |
+| Done / Duplicate / Cancelled | > 7 days ago | Create new ticket |
+| None found | — | Create new ticket |
+
+### Required Ticket Format (Phase 0 Sub-Tickets)
+
+**Title**: `[gap:<fingerprint[:8]>] <failure_kind>: <check_name> in <repo_relative_path>`
+
+**Stable marker block** in description (required, not optional):
+
+```
+<!-- gap-analysis-marker
+fingerprint: <sha256>
+gap_category: MISSING_TEST
+boundary_kind: pre_existing_failure
+rule_name: <check_name>
+tool: <tool_name>
+failure_kind: <lint|type|test|runtime>
+repos: [<repo>]
+confidence: DETERMINISTIC
+detected_at: <ISO timestamp>
+-->
+```
+
+### Phase 0 Output in Session Notes
+
+```markdown
+## Phase 0 — Pre-existing Issues — 2026-02-21 14:32
+
+### Auto-Fixed (committed separately)
+- src/api.py: missing type annotation on `user_id` param
+- src/utils.py: ruff E501 line too long
+
+### Deferred to follow-up
+- src/legacy/handler.py: no-return-annotation (type) — created OMN-XXXX [gap:a1b2c3d4]
+- src/legacy/utils.py: E501 (lint) — commented on OMN-YYYY (existing, In Progress)
+```
+
+## Dispatch Contracts (Execution-Critical)
+
+**This section governs how you execute the review loop. Follow it exactly.**
+
+You are an orchestrator. You manage the review loop, iteration tracking, and commit operations.
+You do NOT review code or fix issues yourself. Both phases run in separate agents.
+
+**Rule: The coordinator must NEVER call Edit(), Write(), or analyze code directly.**
+If code review or fixes are needed, dispatch a polymorphic agent.
+
+> **CRITICAL — subagent_type must be `"onex:polymorphic-agent"`** (with the `onex:` prefix).
+> Using `"polymorphic-agent"` without the prefix will immediately fail with:
+> `Error: Agent type 'polymorphic-agent' not found`
+
+### Review Phase -- dispatch to polymorphic agent
+
+For each iteration:
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="Review iteration {iteration+1} changes",
+  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
+
+    You are reviewing local code changes for production readiness.
+
+    ## Changes to Review
+
+    **Base ref**: {base_ref}
+    **Files to review**: {file_list}
+    **Mode**: {--uncommitted | all changes}
+
+    **Working directory**: {path} (run all git commands from this directory)
+
+    # If --uncommitted mode:
+    Run: git -C {path} diff -- {files}  # Unstaged changes
+    Also run: git -C {path} diff --cached -- {files}  # Staged but uncommitted changes
+
+    # If all changes mode (default):
+    Run: git -C {path} diff {base_ref}..HEAD -- {files}  # Committed changes
+    Also run: git -C {path} diff -- {files}  # Unstaged changes
+    Also run: git -C {path} diff --cached -- {files}  # Staged but uncommitted changes
+
+    Read each changed file fully to understand context.
+
+    ## Priority Classification (Keyword-Based)
+
+    Classify issues using these keyword triggers (from onex pr-review):
+
+    ### CRITICAL (Must Fix - BLOCKING)
+    Keywords: security, vulnerability, injection, data loss, crash, breaking change, authentication bypass, authorization, secrets exposed
+
+    ### MAJOR (Should Fix - BLOCKING)
+    Keywords: bug, error, incorrect, wrong, fails, broken, performance, missing validation, race condition, memory leak
+
+    ### MINOR (Should Fix - BLOCKING)
+    Keywords: should, missing, incomplete, edge case, documentation
+
+    ### NIT (Optional - NOT blocking)
+    Keywords: nit, consider, suggestion, optional, style, formatting, nitpick
+
+    ## Output Format
+
+    Return issues in this exact JSON format:
+    {\"critical\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+     \"major\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+     \"minor\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+     \"nit\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}]}
+
+    If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"nit\": []}"
+)
+```
+
+### Fix Phase -- dispatch to polymorphic agent (per severity)
+
+For each severity with issues (critical first, then major, then minor):
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="Fix {severity} issues from review",
+  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+
+    Fix the following {severity} issues:
+
+    {issues_list}
+
+    **Instructions**:
+    1. Read each file
+    2. Apply the fix
+    3. Verify the fix doesn't break other code
+    4. Do NOT commit - just make the changes
+
+    **Files to modify**: {file_list}
+    **Working directory**: {path} (all file paths are relative to this directory)"
+)
+```
+
+### Commit Phase -- runs inline (lightweight git only)
+
+No dispatch needed. The orchestrator handles git add + git commit directly.
+When `--path` is provided, all git commands use `git -C {path} add` / `git -C {path} commit`.
+Commit messages use the format: `fix(review): [{severity}] {summary}`
+
+## Review Loop Summary
+
+The skill runs a 3-phase loop:
+
+1. **Review**: Dispatch polymorphic agent to classify issues by keyword
+2. **Fix**: Dispatch polymorphic agent per severity (critical -> major -> minor)
+3. **Commit**: Orchestrator stages and commits fixes inline
+
+**Exit conditions**:
+- N consecutive clean runs with stable run signature (default N=2; set via `--required-clean-runs`)
+- Max iterations reached
+- `--no-fix` mode (report only, exits after first review)
+- Agent failure or parse failure after retry exhaustion (see Retry Policy below)
+
+**Status indicators**:
+- `Clean - Confirmed (N/N clean runs)` -- No blocking issues, confirmed by N consecutive clean runs
+- `Clean with nits - Confirmed (N/N clean runs)` -- Blocking issues resolved, nits remain, confirmed by N clean runs
+- `Clean run 1/2 - confirmation pass required` -- First clean run passed, awaiting confirmation
+- `Max iterations reached` -- Hit limit with blocking issues remaining
+- `Report only` -- `--no-fix` mode
+- `Changes staged` -- `--no-commit` mode, fixes applied but not committed
+- `Parse failed` / `Agent failed` / `Fix failed` / `Stage failed` / `Commit failed` -- Error states after retry exhaustion (manual re-invocation required)
+
+## Guided Mode (`--guided`)
+
+<!-- Absorbed from review-cycle -->
+
+When `--guided` is passed, the review loop pauses at each phase boundary for human approval instead of running autonomously.
+
+### Interactive Checkpoints
+
+1. **Issue Presentation**: After review, display a summary table grouped by severity (CRITICAL/MAJOR/MINOR/NIT) with counts and blocking status
+2. **Fix Selection**: AskUserQuestion with options:
+   - "All blocking issues (Critical+Major+Minor)"
+   - "Critical only"
+   - "Critical + Major"
+   - "Report only (no fixes)"
+3. **Per-Batch Approval**: After each severity batch is fixed, AskUserQuestion:
+   - "Apply all fixes in this batch"
+   - "Review individually" (show per-file diffs, allow per-file accept/reject)
+   - "Discard batch" (`git restore --worktree {modified_files}`)
+4. **Commit Checkpoint**: AskUserQuestion:
+   - "Commit" (default message: `fix(local-review): fix {n} {severity} issue(s)`)
+   - "Commit with custom message"
+   - "Stage only (don't commit)"
+   - "Discard current batch"
+5. **Continue Loop**: AskUserQuestion:
+   - "Run another review iteration"
+   - "Done"
+   - "Show summary"
+
+### Contrast with Default Mode
+
+| Aspect | Default (`local-review`) | Guided (`--guided`) |
+|--------|------------------------|---------------------|
+| Fix execution | Autonomous loop | Pauses per severity bucket |
+| Human input | None until complete | At every phase boundary |
+| Commit decisions | Auto-commit per iteration | User chooses commit/stage/discard |
+| Drill-down | Not available | Available per-file review |
+
+## Retry Policy
+
+Transient agent failures no longer cause hard exits. The orchestrator retries automatically:
+
+### Retry Behavior
+
+| Error Type | Description | Retry Policy |
+|------------|-------------|--------------|
+| `AGENT_FAILED` | Sub-agent Task() failure (network, resource, timeout) | Up to 2 retries before hard exit |
+| `PARSE_FAILED` | Review agent response could not be parsed (JSON parsing and text extraction both failed) | Up to 2 retries before hard exit |
+
+### Retry Procedure
+
+```
+Iteration N: Review phase dispatched
+  → AGENT_FAILED received
+  → Log: "Retry 1/2 for AGENT_FAILED at iteration N. Reason: {error}"
+  → Re-dispatch review phase immediately (no sleep)
+  → If AGENT_FAILED again: retry 2/2
+  → If AGENT_FAILED again: hard exit with status: failed, reason in ModelSkillResult
+  → Retry count resets on any successful iteration
+```
+
+Retry attempts are logged to the per-session notes file (if F3 notes are enabled).
+
+### Hard Exit After Retry Exhaustion
+
+After 2 retries with no success, the skill exits with:
+```
+status: failed
+reason: "AGENT_FAILED after 2 retries: {last_error}"
+```
+
+This is a hard exit — no further iterations are attempted. Manual re-invocation required.
+
+**Implementation note**: This retry policy is declared in the SKILL.md frontmatter and also
+implemented in the orchestrator (see `prompt.md` Step 2.3). The frontmatter declaration informs
+the node handler; the orchestrator logic in `prompt.md` implements the actual retry loop with
+`retry_count` state tracking. Both must agree on `max_retries: 2`.
+
+```yaml
+retry_on:
+  - AGENT_FAILED
+  - PARSE_FAILED
+max_retries: 2
+```
+
+## Per-Session Issue Notes (Audit Trail)
+
+Every review/debug skill session maintains a notes file that persists investigation history
+across disconnections and re-starts. Prior dead ends are surfaced before new investigation begins.
+
+### Notes File Location
+
+```
+~/.claude/review-notes/{timestamp}-{branch}.md
+```
+
+Where `{timestamp}` is the session start in `YYYYMMDD-HHMMSS` format and `{branch}` is the
+current git branch name (with `/` replaced by `-`).
+When `--path` is provided, `{branch}` is derived from `git -C {path} rev-parse --abbrev-ref HEAD`.
+
+### Notes Format (Append-Only)
+
+Each iteration appends to the notes file (never overwrites). In-file iteration
+timestamps use `YYYY-MM-DD HH:MM:SS ±HH:MM` (human-readable with timezone, distinct
+from the filename `YYYYMMDD-HHMMSS` format):
+
+```markdown
+## Iteration 3 — 2026-02-21 14:32:00 +00:00
+
+### Issues Found
+- [MAJOR] [FIXED] src/api.py:45 - Missing validation on user input
+- [MINOR] [FAILED] src/config.py:12 - Magic number (failed_fixes_count: 3)
+
+### Suppressed
+- tests/conftest.py:12 - asyncio_mode [fp_001]
+
+### Auto-Flagged for Suppression
+- src/utils.py:89 - lambda capture in loop (appeared 3x, adding to pending_review)
+```
+
+Fix status values: `[FIXED]` | `[FAILED]` | `[PENDING]` | `[SKIPPED]`
+
+### Init Behavior
+
+At skill start, if a notes file exists for the current branch (any timestamp), read the most
+recent file before beginning investigation. This surfaces:
+- Issues previously attempted and failed (avoid re-hitting dead ends)
+- Suppressions already in effect
+- Issues auto-flagged in prior sessions
+
+### Notes in systematic-debugging
+
+The `systematic-debugging` skill reads the branch notes file before root cause investigation.
+
+## Detailed Orchestration
+
+Full orchestration logic (phase details, argument parsing, error handling, JSON parsing with text
+extraction fallback, state tracking, status selection logic, example session) is documented in
+`prompt.md`. The dispatch contracts above are sufficient to execute the review loop.
+Load `prompt.md` only if you need reference details for edge case handling or implementation notes.
+
+## Skill Result Output
+
+**Output contract:** `ModelSkillResult` from `omnibase_core.models.skill`
+
+> **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
+
+When invoked as a composable sub-skill (from ticket-pipeline, epic-team, or other orchestrators),
+write to: `~/.claude/skill-results/{context_id}/local-review.json`
+
+| Field | Value |
+|-------|-------|
+| `skill_name` | `"local-review"` |
+| `status` | One of the canonical string values: `"success"`, `"partial"`, `"error"` (see mapping below) |
+| `extra_status` | Domain-specific status string (see mapping below) |
+| `run_id` | Correlation ID |
+| `extra` | `{"iterations_run": int, "issues_remaining": {"critical": int, "major": int, "minor": int, "nit": int}}` |
+
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/local-review.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+
+**Status mapping:**
+
+| Current status | Canonical `status` (string value) | `extra_status` |
+|----------------|-----------------------------------|----------------|
+| `clean` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"clean"` |
+| `clean_with_nits` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"clean_with_nits"` |
+| `max_iterations_reached` | `"partial"` (`EnumSkillResultStatus.PARTIAL`) | `"max_iterations_reached"` |
+| `report_only` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `null` |
+| `changes_staged` | `"partial"` (`EnumSkillResultStatus.PARTIAL`) | `null` |
+| `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
+
+**Behaviorally significant `extra_status` values:**
+- `"clean"` → ticket-pipeline treats as SUCCESS; advances to create_pr phase after 2 consecutive clean runs
+- `"clean_with_nits"` → ticket-pipeline treats as SUCCESS (same advancement path as `"clean"`); nits are recorded but do not block PR creation
+- `"max_iterations_reached"` → ticket-pipeline treats as PARTIAL; posts advisory to PR description, continues to PR creation with a warning — human reviewer decides whether to merge
+- `null` with `status: "success"` (`report_only` mode) → ticket-pipeline treats as SUCCESS; no fixes were applied but review is complete — advances normally
+- `null` with `status: "partial"` (`changes_staged` mode) → ticket-pipeline treats as advisory PARTIAL; fixes were applied but not committed — orchestrator must commit before advancing; if orchestrator cannot detect uncommitted changes, it should halt and notify human
+
+**Promotion rule for `extra` fields:** If a field appears in 3+ producer skills, open a ticket to evaluate promotion to a first-class field. If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted.
+
+Example result:
+
+```json
+{
+  "skill_name": "local-review",
+  "status": "success",
+  "extra_status": "clean_with_nits",
+  "run_id": "pipeline-1709856000-OMN-1234",
+  "extra": {
+    "iterations_run": 3,
+    "issues_remaining": {"critical": 0, "major": 0, "minor": 0, "nit": 2}
+  }
+}
+```
+
+**On error** (agent failed, parse failed, fix failed): set `status: error`, include `error_message` in `extra`.
+
+When invoked directly by a human (`/local-review`), skip writing the result file.
+
+## Error Recovery (Executable)
+
+When an agent failure or unrecoverable error occurs during the fix phase:
+
+**Auto-dispatch systematic-debugging:**
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="local-review: systematic-debugging on fix failure",
+  prompt="A fix agent failed during local-review iteration {iteration}.
+    Error: {error_details}
+
+    Invoke: Skill(skill=\"onex:systematic-debugging\")
+
+    Investigate root cause of the fix failure. Report: root cause, recommended fix, files involved."
+)
+```
+
+This replaces the former advisory annotation `REQUIRED SUB-SKILL: systematic-debugging`.
+
+## See Also
+
+- `pr-review` skill (keyword-based priority classification reference)
+- `ticket-pipeline` skill (chains local-review as Phase 2)
+- `ticket-work` skill (implementation phase before review)
+- `systematic-debugging` skill (auto-dispatched on fix failure)

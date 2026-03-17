@@ -52,8 +52,8 @@ from omniclaude.shared.models.model_skill_result import SkillResultStatus
 
 
 def _make_request(
-    skill_name: str = "pr-review",
-    skill_path: str = "/plugins/onex/skills/pr-review/SKILL.md",
+    skill_name: str = "pr_review",
+    skill_path: str = "/plugins/onex/skills/pr_review/SKILL.md",
     args: dict[str, str] | None = None,
 ) -> ModelSkillRequest:
     return ModelSkillRequest(
@@ -119,7 +119,7 @@ class TestHandleSkillRequested:
         self,
     ) -> None:
         """The prompt passed to task_dispatcher includes the skill_path."""
-        skill_path = "/plugins/onex/skills/pr-review/SKILL.md"
+        skill_path = "/plugins/onex/skills/pr_review/SKILL.md"
         request = _make_request(skill_path=skill_path)
 
         output_with_result = "Some output\nRESULT:\nstatus: success\nerror:\n"

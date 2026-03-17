@@ -20,7 +20,7 @@ class ModelSkillRequest(BaseModel):
     end-to-end tracing.
 
     Attributes:
-        skill_name: Human-readable skill identifier (e.g. "pr-review").
+        skill_name: Human-readable skill identifier (e.g. "pr_review").
         skill_path: Absolute or relative path to the skill's SKILL.md file.
             Must be non-empty and must end with "SKILL.md".
         args: Key/value argument pairs. An empty string or the literal value

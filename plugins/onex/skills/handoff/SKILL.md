@@ -2,7 +2,7 @@
 name: handoff
 description: Opt-in session continuity — save context before /clear for injection on next session start
 version: 1.0.0
-level: standard
+level: basic
 debug: false
 category: workflow
 tags:
