@@ -18,7 +18,7 @@ class TestPublisherConfig:
         config = PublisherConfig(kafka_bootstrap_servers="localhost:9092")
         assert config.kafka_bootstrap_servers == "localhost:9092"
         assert config.kafka_client_id == "omniclaude-publisher"
-        assert config.environment == "dev"
+        assert config.environment == ""
         assert config.max_memory_queue == 100
 
     def test_spool_dir_default(self) -> None:
@@ -107,10 +107,15 @@ class TestPublisherConfig:
         config = PublisherConfig(kafka_bootstrap_servers="[::1]:9092")
         assert config.kafka_bootstrap_servers == "[::1]:9092"
 
-    def test_environment_pattern_validation(self) -> None:
-        # Valid
-        PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="dev")
-        PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="staging")
-        # Invalid (uppercase)
-        with pytest.raises(ValidationError):
-            PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="DEV")
+    def test_environment_accepts_empty_and_arbitrary_strings(self) -> None:
+        """Environment field accepts any string after OMN-5210 removed the pattern validator."""
+        # Empty string (new default)
+        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="")
+        assert config.environment == ""
+        # Arbitrary values accepted (no pattern constraint)
+        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="dev")
+        assert config.environment == "dev"
+        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="staging")
+        assert config.environment == "staging"
+        config = PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="DEV")
+        assert config.environment == "DEV"
