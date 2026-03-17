@@ -1,4 +1,7 @@
-"""Hook runtime daemon async Unix socket server. [OMN-5306]
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+"""Hook runtime daemon async Unix socket server. [OMN-5306, OMN-5312]
 
 Lightweight asyncio Unix socket server that services all omniclaude hook
 nodes. Follows the EmbeddedEventPublisher lifecycle pattern:
@@ -20,6 +23,8 @@ import signal
 import socket
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from omnibase_infra.event_bus.event_bus_inmemory import EventBusInmemory
 
 from omniclaude.hook_runtime.delegation_state import DelegationConfig, DelegationState
 from omniclaude.hook_runtime.protocol import (
@@ -104,10 +109,16 @@ class HookRuntimeServer:
         self._server: asyncio.Server | None = None
         self._running = False
         self._shutdown_event: asyncio.Event | None = None
+        self._event_bus: EventBusInmemory | None = None
 
     @property
     def socket_path(self) -> str:
         return self._config.socket_path
+
+    @property
+    def event_bus(self) -> EventBusInmemory | None:
+        """Return the EventBusInmemory instance (available after start())."""
+        return self._event_bus
 
     async def start(self) -> None:
         """Start the server: clean stale socket, bind, write PID file."""
@@ -134,6 +145,14 @@ class HookRuntimeServer:
             path=self._config.socket_path,
         )
         self._running = True
+
+        # Wire EventBusInmemory for future node registration (OMN-5312)
+        # No handlers registered yet — this makes the bus available for
+        # future agent routing, LLM delegation, etc.
+        self._event_bus = EventBusInmemory(
+            environment="hook-runtime",
+            group="hook-handlers",
+        )
 
         # Write PID file
         Path(self._config.pid_path).write_text(str(os.getpid()), encoding="utf-8")
