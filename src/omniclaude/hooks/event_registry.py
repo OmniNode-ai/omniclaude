@@ -800,12 +800,6 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["run_id", "ticket_id", "model_id", "metric_version"],
     ),
     # =========================================================================
-    # Correlation Trace Spans (OMN-5047 - omnidash /trace page)
-    # =========================================================================
-    # Emitted during active Claude Code sessions by correlation_trace_emitter.py.
-    # Consumed by omnidash ReadModelConsumer to project into correlation_trace_spans table.
-    # No payload transform — span metadata contains no secrets or prompt content.
-    # =========================================================================
     # DoD Telemetry Events (OMN-5197)
     # =========================================================================
     # Consumed by omnidash /dod dashboard via dod_verify_runs and
