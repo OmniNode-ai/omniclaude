@@ -730,6 +730,33 @@ class ModelSessionOutcome(BaseModel):
         ge=0,
         description="Number of commits authored in the worktree branch during the session.",
     )
+    total_tokens_used: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Total tokens consumed in the session (input + output). "
+            "Extracted from context_window.current_usage in the SessionEnd payload. "
+            "None when not reported by the Claude Code runtime."
+        ),
+    )
+    files_modified_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Number of distinct files written or edited during the session. "
+            "Derived from Write/Edit tool invocations accumulated across the session. "
+            "None when session-level file tracking is not yet available."
+        ),
+    )
+    tasks_completed_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Number of tasks marked completed during the session. "
+            "Derived from the task state file when available. "
+            "None when task tracking state is not accessible at session end."
+        ),
+    )
 
 
 # =============================================================================

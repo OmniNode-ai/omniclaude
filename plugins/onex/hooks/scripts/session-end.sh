@@ -267,7 +267,8 @@ print(result.outcome)
 
         # --- Emit session.outcome event (OMN-5201 T11b enrichment) ---
         # Payload includes: session_id, outcome, correlation_id, ticket_id,
-        # success, dod_pass, pr_url, commit_count, duration_ms.
+        # success, dod_pass, pr_url, commit_count, duration_ms,
+        # total_tokens_used, files_modified_count, tasks_completed_count.
         # Fields derived here (off the sync path) to preserve <50ms budget.
 
         # Derive dod_pass: read .evidence/<ticket>/dod_report.json if ticket active.
@@ -305,6 +306,40 @@ print(result.outcome)
             fi
         fi
 
+        # Derive total_tokens_used from context_window in SessionEnd payload (OMN-5201 T11b).
+        # Claude Code provides context_window.current_usage.{input_tokens,output_tokens}.
+        # Uses awk to sum the two fields (avoids Python startup on this hot path).
+        TOTAL_TOKENS_USED="null"
+        _input_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.input_tokens // empty' 2>/dev/null) || _input_tokens=""
+        _output_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.output_tokens // empty' 2>/dev/null) || _output_tokens=""
+        if [[ "$_input_tokens" =~ ^[0-9]+$ ]] || [[ "$_output_tokens" =~ ^[0-9]+$ ]]; then
+            _in="${_input_tokens:-0}"
+            _out="${_output_tokens:-0}"
+            if [[ "$_in" =~ ^[0-9]+$ ]] && [[ "$_out" =~ ^[0-9]+$ ]]; then
+                TOTAL_TOKENS_USED=$(( _in + _out ))
+            fi
+        fi
+
+        # Derive files_modified_count from session accumulator (OMN-5201 T11b).
+        # Written by post_tool_use_enforcer when Write/Edit tools fire during the session.
+        FILES_MODIFIED_COUNT="null"
+        if [[ -f "$SESSION_STATE_FILE" ]]; then
+            _fmc=$(jq -r '.files_modified_count // empty' "$SESSION_STATE_FILE" 2>/dev/null) || _fmc=""
+            if [[ "$_fmc" =~ ^[0-9]+$ ]]; then
+                FILES_MODIFIED_COUNT="$_fmc"
+            fi
+        fi
+
+        # Derive tasks_completed_count from session accumulator (OMN-5201 T11b).
+        # Written by task tracking hooks when TaskUpdate completes during the session.
+        TASKS_COMPLETED_COUNT="null"
+        if [[ -f "$SESSION_STATE_FILE" ]]; then
+            _tcc=$(jq -r '.tasks_completed_count // empty' "$SESSION_STATE_FILE" 2>/dev/null) || _tcc=""
+            if [[ "$_tcc" =~ ^[0-9]+$ ]]; then
+                TASKS_COMPLETED_COUNT="$_tcc"
+            fi
+        fi
+
         if ! OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg outcome "$DERIVED_OUTCOME" \
@@ -315,6 +350,9 @@ print(result.outcome)
             --argjson success "$SESSION_SUCCESS" \
             --argjson pr_url "$PR_URL" \
             --argjson commit_count "$COMMIT_COUNT" \
+            --argjson total_tokens_used "$TOTAL_TOKENS_USED" \
+            --argjson files_modified_count "$FILES_MODIFIED_COUNT" \
+            --argjson tasks_completed_count "$TASKS_COMPLETED_COUNT" \
             '{
                 session_id: $session_id,
                 outcome: $outcome,
@@ -324,14 +362,17 @@ print(result.outcome)
                 success: $success,
                 dod_pass: $dod_pass,
                 pr_url: $pr_url,
-                commit_count: $commit_count
+                commit_count: $commit_count,
+                total_tokens_used: $total_tokens_used,
+                files_modified_count: $files_modified_count,
+                tasks_completed_count: $tasks_completed_count
             }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
         elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
             log "WARNING: outcome payload empty or null, skipping emission"
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
-            log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS"
+            log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS tokens=${TOTAL_TOKENS_USED} files=${FILES_MODIFIED_COUNT} tasks=${TASKS_COMPLETED_COUNT}"
         fi
 
         # NOTE (OMN-2622): routing.outcome.raw emit removed — topic deprecated.

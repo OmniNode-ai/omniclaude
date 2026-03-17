@@ -249,6 +249,9 @@ class ModelSessionOutcomeConfig:
         ticket_id: Active Linear ticket identifier at session end. [OMN-5201]
         pr_url: GitHub pull request URL associated with the session. [OMN-5201]
         commit_count: Number of commits authored in the branch during the session. [OMN-5201]
+        total_tokens_used: Total tokens consumed in the session (input + output). [OMN-5201 T11b]
+        files_modified_count: Number of distinct files written or edited during the session. [OMN-5201 T11b]
+        tasks_completed_count: Number of tasks marked completed during the session. [OMN-5201 T11b]
 
     Raises:
         ValueError: If session_id is empty/whitespace or outcome is invalid.
@@ -262,6 +265,9 @@ class ModelSessionOutcomeConfig:
     ticket_id: str | None = None
     pr_url: str | None = None
     commit_count: int | None = None
+    total_tokens_used: int | None = None
+    files_modified_count: int | None = None
+    tasks_completed_count: int | None = None
 
     def __post_init__(self) -> None:
         """Validate session_id and coerce outcome to enum."""
@@ -1253,6 +1259,9 @@ async def emit_session_outcome_from_config(
             ticket_id=config.ticket_id,
             pr_url=config.pr_url,
             commit_count=config.commit_count,
+            total_tokens_used=config.total_tokens_used,
+            files_modified_count=config.files_modified_count,
+            tasks_completed_count=config.tasks_completed_count,
         )
 
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
