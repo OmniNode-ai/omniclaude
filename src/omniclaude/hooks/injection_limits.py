@@ -23,7 +23,6 @@ Part of the Manifest Injection Enhancement Plan.
 
 from __future__ import annotations
 
-import functools
 import logging
 import math
 import uuid
@@ -31,11 +30,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import tiktoken
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.evidence_resolver import EvidenceResolver
+from omniclaude.lib.utils.token_counter import (
+    TOKEN_SAFETY_MARGIN as _TOKEN_SAFETY_MARGIN,
+)
+from omniclaude.lib.utils.token_counter import count_tokens as _count_tokens_impl
 
 if TYPE_CHECKING:
     from omniclaude.hooks.handler_context_injection import PatternRecord
@@ -109,17 +111,14 @@ INJECTION_HEADER: str = (
 # Safety margin to account for tokenizer differences between tiktoken (cl100k_base)
 # and Claude's actual tokenizer. The two tokenizers can differ by ~10-15%, so we
 # apply a 90% safety margin to the configured token budget to avoid over-injection.
-TOKEN_SAFETY_MARGIN: float = 0.9
-
-
-@functools.lru_cache(maxsize=1)
-def _get_tokenizer() -> tiktoken.Encoding:
-    """Get the tokenizer (cached singleton)."""
-    return tiktoken.get_encoding("cl100k_base")
+# Re-exported from omniclaude.lib.utils.token_counter (OMN-5237).
+TOKEN_SAFETY_MARGIN: float = _TOKEN_SAFETY_MARGIN
 
 
 def count_tokens(text: str) -> int:
     """Count tokens in text using cl100k_base encoding.
+
+    Delegates to omniclaude.lib.utils.token_counter.count_tokens (OMN-5237).
 
     Args:
         text: The text to tokenize.
@@ -127,8 +126,7 @@ def count_tokens(text: str) -> int:
     Returns:
         Number of tokens in the text.
     """
-    tokenizer = _get_tokenizer()
-    return len(tokenizer.encode(text, disallowed_special=()))
+    return _count_tokens_impl(text)
 
 
 # Computed header token count - keeps header_tokens default in sync with actual header.
