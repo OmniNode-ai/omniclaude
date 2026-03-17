@@ -655,6 +655,51 @@ class ModelSessionOutcome(BaseModel):
         description="Timestamp when the event was emitted (UTC)",
     )
 
+    # OMN-5184: Enrichment fields for Effectiveness and Baselines pages.
+    # All optional with None default for backward compatibility — old events
+    # without these fields still validate.
+    intent_class: str | None = Field(
+        default=None,
+        description="Routing intent classification (e.g. 'code_generation', 'debugging')",
+    )
+    token_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Total tokens consumed in the session",
+    )
+    cost_usd: float | None = Field(
+        default=None,
+        ge=0.0,
+        description="Estimated session cost in USD (0.0 until OMN-5223)",
+    )
+    duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Wall-clock session duration in milliseconds",
+    )
+    task_type: str | None = Field(
+        default=None,
+        description="Task classification (e.g. 'feature', 'bugfix', 'refactor')",
+    )
+    model_id: str | None = Field(
+        default=None,
+        description="Active LLM model identifier (e.g. 'claude-sonnet-4-6')",
+    )
+    pattern_id: str | None = Field(
+        default=None,
+        description="Injected pattern identifier for baselines tracking",
+    )
+    treatment_group: str | None = Field(
+        default=None,
+        description="A/B test group: 'treatment' or 'control'",
+    )
+    outcome_score: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Interpretive outcome score 0.0-1.0 (derivation TBD, see OMN-5224)",
+    )
+
 
 # =============================================================================
 # Routing Feedback Events (OMN-1892)
