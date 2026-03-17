@@ -19,6 +19,17 @@
 
 set -eo pipefail
 
+# Resolve hook infrastructure paths
+_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+unset _SELF SCRIPT_DIR
+HOOKS_DIR="${PLUGIN_ROOT}/hooks"
+HOOKS_LIB="${HOOKS_DIR}/lib"
+PYTHON_CMD="${PYTHON_CMD:-python3}"
+LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
+
 # Read stdin (tool invocation JSON)
 INPUT=$(cat)
 
@@ -128,19 +139,77 @@ case "$RECEIPT_CHECK" in
         ;;
 esac
 
+# --- Emit dod.guard.fired event (non-blocking, backgrounded) ---
+# Compute receipt metadata for the event payload
+RECEIPT_AGE_SECONDS="null"
+RECEIPT_PASS="null"
+if [[ -f "$RECEIPT_PATH" ]]; then
+    RECEIPT_META=$(python3 -c "
+import json, sys, os
+from datetime import datetime, timezone
+receipt_path = '$RECEIPT_PATH'
+try:
+    with open(receipt_path) as f:
+        receipt = json.load(f)
+    ts = receipt.get('timestamp', '')
+    if ts:
+        receipt_time = datetime.fromisoformat(ts)
+        age = (datetime.now(tz=timezone.utc) - receipt_time).total_seconds()
+    else:
+        age = -1
+    result = receipt.get('result', {})
+    passed = result.get('failed', 0) == 0
+    print(json.dumps({'age': age, 'pass': passed}))
+except Exception:
+    print(json.dumps({'age': -1, 'pass': False}))
+" 2>/dev/null || echo '{"age": -1, "pass": false}')
+    RECEIPT_AGE_SECONDS=$(echo "$RECEIPT_META" | python3 -c "import json,sys; print(json.load(sys.stdin).get('age', -1))" 2>/dev/null || echo "-1")
+    RECEIPT_PASS=$(echo "$RECEIPT_META" | python3 -c "import json,sys; v=json.load(sys.stdin).get('pass', False); print('true' if v else 'false')" 2>/dev/null || echo "false")
+fi
+
+emit_guard_event() {
+    local guard_outcome="$1"
+    local session_id="${CLAUDE_SESSION_ID:-}"
+    local timestamp
+    timestamp=$(python3 -c "from datetime import datetime, timezone; print(datetime.now(tz=timezone.utc).isoformat())" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local payload
+    payload=$(python3 -c "
+import json
+print(json.dumps({
+    'ticket_id': '$TICKET_ID',
+    'session_id': '$session_id',
+    'guard_outcome': '$guard_outcome',
+    'policy_mode': '$POLICY_MODE',
+    'receipt_age_seconds': $RECEIPT_AGE_SECONDS if '$RECEIPT_AGE_SECONDS' != 'null' else None,
+    'receipt_pass': $RECEIPT_PASS if '$RECEIPT_PASS' != 'null' else None,
+    'timestamp': '$timestamp',
+}))
+" 2>/dev/null || echo '{}')
+
+    if [[ "$payload" != "{}" ]]; then
+        "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+            --event-type "dod.guard.fired" --payload "$payload" \
+            >> "$LOG_FILE" 2>&1 || true
+    fi
+}
+
 case "$POLICY_MODE" in
     hard)
         # Block the tool call
+        emit_guard_event "blocked" &
         echo "{\"decision\": \"block\", \"reason\": \"$REASON\"}" >&2
         exit 2
         ;;
     soft)
         # Allow but inject warning
+        emit_guard_event "warned" &
         echo "{\"decision\": \"allow\", \"reason\": \"WARNING: $REASON\"}" >&2
         exit 0
         ;;
     *)
         # Advisory: log and allow
+        emit_guard_event "allowed" &
         echo "[dod-guard] advisory: $REASON" >&2
         exit 0
         ;;
