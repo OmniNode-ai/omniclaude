@@ -5,6 +5,7 @@ Usage:
     python -m omniclaude.hook_runtime stop [--socket-path PATH]
     python -m omniclaude.hook_runtime status [--socket-path PATH]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,8 +15,8 @@ import socket
 import sys
 from pathlib import Path
 
-_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108
-_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108
+_DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108  # nosec B108
+_DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108  # nosec B108
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -1,4 +1,5 @@
 """Unit tests for hook runtime daemon socket protocol models. [OMN-5304]"""
+
 import json
 
 import pytest

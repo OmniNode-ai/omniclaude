@@ -3,6 +3,7 @@
 Defines the newline-delimited JSON request/response protocol used between
 shell hook shims and the persistent hook runtime daemon.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel
