@@ -834,6 +834,41 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # Emitted during active Claude Code sessions by correlation_trace_emitter.py.
     # Consumed by omnidash ReadModelConsumer to project into correlation_trace_spans table.
     # No payload transform — span metadata contains no secrets or prompt content.
+    # =========================================================================
+    # DoD Telemetry Events (OMN-5197)
+    # =========================================================================
+    # Consumed by omnidash /dod dashboard via dod_verify_runs and
+    # dod_guard_events tables.
+    "dod.verify.completed": EventRegistration(
+        event_type="dod.verify.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DOD_VERIFY_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in verification metadata
+                description="DoD evidence verification run result for omnidash /dod dashboard",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "ticket_id"],
+    ),
+    "dod.guard.fired": EventRegistration(
+        event_type="dod.guard.fired",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DOD_GUARD_FIRED,
+                transform=None,  # Passthrough — no sensitive data in guard metadata
+                description="DoD completion guard interception event for omnidash /dod dashboard",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "ticket_id"],
+    ),
+    # =========================================================================
+    # Correlation Trace Spans (OMN-5047 - omnidash /trace page)
+    # =========================================================================
+    # Emitted during active Claude Code sessions by correlation_trace_emitter.py.
+    # Consumed by omnidash ReadModelConsumer to project into correlation_trace_spans table.
+    # No payload transform — span metadata contains no secrets or prompt content.
     "correlation.trace.span": EventRegistration(
         event_type="correlation.trace.span",
         fan_out=[
