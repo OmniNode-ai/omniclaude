@@ -319,6 +319,34 @@ class TopicBase(StrEnum):
     DOD_GUARD_FIRED = "onex.evt.omniclaude.dod-guard-fired.v1"
     """Emitted on every DoD guard interception (pre-tool-use hook)."""
 
+    # ==========================================================================
+    # Context integrity audit topics (OMN-5230)
+    # Emitted by audit hooks for dispatch validation, scope enforcement,
+    # budget tracking, return path control, and compression lifecycle.
+    # ==========================================================================
+    AUDIT_DISPATCH_VALIDATED = "onex.evt.omniclaude.audit-dispatch-validated.v1"
+    """Emitted when a task dispatch is validated against its contract."""
+
+    AUDIT_SCOPE_VIOLATION = "onex.evt.omniclaude.audit-scope-violation.v1"
+    """Emitted when a scope boundary violation is detected during execution."""
+
+    AUDIT_CONTEXT_BUDGET_EXCEEDED = (
+        "onex.evt.omniclaude.audit-context-budget-exceeded.v1"
+    )
+    """Emitted when context budget usage is tracked or exceeded."""
+
+    AUDIT_RETURN_BOUNDED = "onex.evt.omniclaude.audit-return-bounded.v1"
+    """Emitted when return path size is evaluated against constraints."""
+
+    AUDIT_COMPRESSION_TRIGGERED = "onex.evt.omniclaude.audit-compression-triggered.v1"
+    """Emitted when context compression is triggered by budget or time limits."""
+
+    AUDIT_RUN_REQUESTED = "onex.cmd.omniclaude.audit-run-requested.v1"
+    """Command requesting an on-demand audit run for a session or task tree."""
+
+    AUDIT_RUN_COMPLETED = "onex.evt.omniclaude.audit-run-completed.v1"
+    """Emitted when an on-demand audit run completes with summary results."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
