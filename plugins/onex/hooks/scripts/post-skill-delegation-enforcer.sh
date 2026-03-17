@@ -13,6 +13,8 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+# shellcheck source=hook-runtime-client.sh
+source "$(dirname "${BASH_SOURCE[0]}")/hook-runtime-client.sh" 2>/dev/null || true
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 # Guard: jq required
@@ -31,8 +33,14 @@ if [[ "$TOOL_NAME" != "Skill" ]]; then
     exit 0
 fi
 
-# Extract skill name for the message
+# Extract skill name and session ID
 SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null) || SKILL_NAME="unknown"
+SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
+
+# Notify daemon that a skill was loaded (tightens thresholds) [OMN-5308]
+if [[ -n "$SESSION_ID" ]]; then
+    _hrt_request "{\"action\":\"set_skill_loaded\",\"session_id\":\"${SESSION_ID}\",\"payload\":{}}" > /dev/null 2>&1 || true
+fi
 
 # Output delegation enforcement reminder as hookSpecificOutput
 # Claude Code injects this as a <system-reminder> in the next turn

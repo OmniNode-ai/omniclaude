@@ -13,6 +13,8 @@ _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 # Resolve script dir before cd $HOME (relative paths break after cwd change)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+# shellcheck source=hook-runtime-client.sh
+source "${SCRIPT_DIR}/hook-runtime-client.sh" 2>/dev/null || true
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 _log "started"
@@ -44,8 +46,10 @@ if [[ -z "$SESSION_ID" ]]; then
     fi
 fi
 
-# Reset per-turn delegation state
+# Reset per-turn delegation state: notify daemon (authoritative) + clear shell fallback files
 if [[ -n "$SESSION_ID" ]]; then
+    # Notify daemon to reset session counters [OMN-5308]
+    _hrt_request "{\"action\":\"reset_session\",\"session_id\":\"${SESSION_ID}\",\"payload\":{}}" > /dev/null 2>&1 || true
     # Bug fix: was resetting "work-count" but counter reads "write-count"
     echo "0" > "/tmp/omniclaude-write-count-${SESSION_ID}" 2>/dev/null || true
     echo "0" > "/tmp/omniclaude-read-count-${SESSION_ID}" 2>/dev/null || true
@@ -64,7 +68,6 @@ fi
 RULE_THRESHOLD="2"
 if source "${SCRIPT_DIR}/delegation-config.sh" 2>/dev/null; then
     RULE_THRESHOLD=$(_dc_read '.delegation_rule_tool_threshold' '2') || RULE_THRESHOLD="2"
-fi
 
 # Build the rule text via a variable to avoid jq escaping issues
 RULE_TEXT="DELEGATION RULE: For any task requiring more than ${RULE_THRESHOLD} tool calls, delegate as your FIRST action — before any reads, writes, or bash calls:
