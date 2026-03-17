@@ -124,6 +124,48 @@ definitions:
         type: string
         format: date-time
         description: "Timestamp when the event was emitted (UTC, timezone-aware)"
+      # OMN-5184: Enrichment fields (all optional, None default)
+      intent_class:
+        type: string
+        nullable: true
+        description: "Routing intent classification (e.g. 'code_generation', 'debugging')"
+      token_count:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "Total tokens consumed in the session"
+      cost_usd:
+        type: number
+        nullable: true
+        minimum: 0.0
+        description: "Estimated session cost in USD (0.0 until OMN-5223)"
+      duration_ms:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "Wall-clock session duration in milliseconds"
+      task_type:
+        type: string
+        nullable: true
+        description: "Task classification (e.g. 'feature', 'bugfix')"
+      model_id:
+        type: string
+        nullable: true
+        description: "Active LLM model identifier"
+      pattern_id:
+        type: string
+        nullable: true
+        description: "Injected pattern identifier for baselines tracking"
+      treatment_group:
+        type: string
+        nullable: true
+        description: "A/B test group: 'treatment' or 'control'"
+      outcome_score:
+        type: number
+        nullable: true
+        minimum: 0.0
+        maximum: 1.0
+        description: "Interpretive outcome score 0.0-1.0 (derivation TBD, see OMN-5224)"
     required:
       - event_name
       - session_id
