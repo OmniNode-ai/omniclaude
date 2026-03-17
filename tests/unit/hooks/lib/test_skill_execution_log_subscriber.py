@@ -35,8 +35,8 @@ from omniclaude.hooks.lib.skill_execution_log_subscriber import (
 def _make_payload(
     *,
     run_id: str | None = None,
-    skill_name: str = "ticket-pipeline",
-    skill_id: str | None = "plugins/onex/skills/ticket-pipeline",
+    skill_name: str = "ticket_pipeline",
+    skill_id: str | None = "plugins/onex/skills/ticket_pipeline",
     repo_id: str = "omniclaude",
     correlation_id: str | None = None,
     session_id: str | None = "sess-abc123",
@@ -103,7 +103,7 @@ class TestParseSkillCompletedEvent:
         raw = _encode(payload)
         result = _parse_skill_completed_event(raw)
         assert result is not None
-        assert result["skill_name"] == "ticket-pipeline"
+        assert result["skill_name"] == "ticket_pipeline"
 
     @pytest.mark.unit
     def test_empty_bytes_returns_none(self) -> None:
@@ -201,7 +201,7 @@ class TestUpsertSkillExecutionLog:
         run_id = str(uuid.uuid4())
         payload = _make_payload(
             run_id=run_id,
-            skill_name="pr-review",
+            skill_name="pr_review",
             repo_id="omniclaude",
             status="failed",
             duration_ms=500,
@@ -224,7 +224,7 @@ class TestUpsertSkillExecutionLog:
         call_args = mock_cursor.execute.call_args
         params = call_args[0][1]  # second positional arg to execute()
         assert params["run_id"] == run_id
-        assert params["skill_name"] == "pr-review"
+        assert params["skill_name"] == "pr_review"
         assert params["repo_id"] == "omniclaude"
         assert params["status"] == "failed"
         assert params["duration_ms"] == 500

@@ -101,7 +101,7 @@ class TestEvidencePopulated:
         check = _make_check(
             AuditCheckName.SKILL_MD,
             AuditCheckStatus.PASS,
-            ["skill.md found at plugins/onex/skills/my-skill/SKILL.md"],
+            ["skill.md found at plugins/onex/skills/my_skill/SKILL.md"],
         )
         assert len(check.evidence) >= 1
 

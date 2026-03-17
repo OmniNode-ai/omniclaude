@@ -111,15 +111,15 @@ jobs:
         run: |
           echo "=== Proof Reference Resolution (v1) ==="
           echo "SEMANTICS: RESOLVED = reference plausibility only; not proof of test execution."
-          python plugins/onex/skills/generate_ticket_contract/cli_validate_proofs.py \
+          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
-            --registry "plugins/onex/skills/generate_ticket_contract/static_checks_registry.yaml" \
+            --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
             --json > "/tmp/proof_resolution_${TICKET_ID}.json" && \
-          python plugins/onex/skills/generate_ticket_contract/cli_validate_proofs.py \
+          python plugins/onex/skills/_lib/generate_ticket_contract/cli_validate_proofs.py \
             "contracts/${TICKET_ID}.yaml" \
             --repo-root "${{ github.workspace }}" \
-            --registry "plugins/onex/skills/generate_ticket_contract/static_checks_registry.yaml" \
+            --registry "plugins/onex/skills/_lib/generate_ticket_contract/static_checks_registry.yaml" \
             || echo "::warning::Proof reference resolution found unresolvable refs. See Phase 2 for enforcement policy."
         # Rollout milestones:
         #   Phase 1 (current): warn-only; gather baseline data via --json output

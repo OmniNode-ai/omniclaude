@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS skill_execution_logs (
     -- Human-readable skill identifier (e.g. "pr-review", "ticket-pipeline").
     skill_name      TEXT NOT NULL,
 
-    -- Repo-relative skill path (e.g. "plugins/onex/skills/pipeline-metrics").
+    -- Repo-relative skill path (e.g. "plugins/onex/skills/pipeline_metrics").
     -- NULL when the consumer cannot determine the path (pre-OMN-2773 events).
     skill_id        TEXT,
 

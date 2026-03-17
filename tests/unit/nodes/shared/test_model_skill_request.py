@@ -23,7 +23,7 @@ from omniclaude.shared.models.model_skill_request import ModelSkillRequest
 
 def _valid_request(**overrides: object) -> ModelSkillRequest:
     defaults: dict[str, object] = {
-        "skill_name": "pr-review",
+        "skill_name": "pr_review",
         "skill_path": "/some/path/to/SKILL.md",
         "args": {},
         "correlation_id": uuid4(),
@@ -53,8 +53,8 @@ class TestModelSkillRequestValidation:
 
     def test_skill_path_valid_absolute(self) -> None:
         """An absolute path ending in SKILL.md is accepted."""
-        req = _valid_request(skill_path="/plugins/onex/skills/pr-review/SKILL.md")
-        assert req.skill_path == "/plugins/onex/skills/pr-review/SKILL.md"
+        req = _valid_request(skill_path="/plugins/onex/skills/pr_review/SKILL.md")
+        assert req.skill_path == "/plugins/onex/skills/pr_review/SKILL.md"
 
     def test_skill_path_valid_relative(self) -> None:
         """A relative path ending in SKILL.md is accepted."""
@@ -71,7 +71,7 @@ class TestModelSkillRequestValidation:
         """Unknown fields raise ValidationError (extra='forbid')."""
         with pytest.raises(ValidationError):
             ModelSkillRequest(
-                skill_name="pr-review",
+                skill_name="pr_review",
                 skill_path="/path/SKILL.md",
                 args={},
                 correlation_id=uuid4(),

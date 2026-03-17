@@ -26,7 +26,7 @@ import yaml
 # ---------------------------------------------------------------------------
 _SKILL_DIR = (
     Path(__file__).parent.parent.parent.parent
-    / "plugins/onex/skills/generate-ticket-contract"
+    / "plugins/onex/skills/generate_ticket_contract"
 )
 _VALIDATOR_PATH = _SKILL_DIR / "validate_contract.py"
 

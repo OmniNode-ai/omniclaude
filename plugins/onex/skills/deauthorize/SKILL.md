@@ -3,6 +3,7 @@ name: deauthorize
 description: Revoke work authorization for Edit/Write operations in this session
 version: "1.0.0"
 level: basic
+debug: false
 category: security
 tags:
   - security

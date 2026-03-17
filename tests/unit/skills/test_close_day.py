@@ -26,7 +26,7 @@ import yaml
 # ---------------------------------------------------------------------------
 
 _SKILL_DIR = (
-    Path(__file__).parent.parent.parent.parent / "plugins/onex/skills/close-day"
+    Path(__file__).parent.parent.parent.parent / "plugins/onex/skills/close_day"
 )
 _CLOSE_DAY_PATH = _SKILL_DIR / "close_day.py"
 
