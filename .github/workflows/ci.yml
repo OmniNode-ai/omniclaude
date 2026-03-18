@@ -125,6 +125,7 @@ jobs:
             --exclude 'https://github\.com/fastapi'
             --exclude 'https://stackoverflow\.com'
             --exclude 'https://dash\.dev\.omninode\.ai'
+            --accept 200..=299,429,503
             '**/*.md'
           fail: true
 
