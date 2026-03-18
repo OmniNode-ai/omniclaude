@@ -170,7 +170,7 @@ Wait for ALL dispatched probes to complete before proceeding to Phase 3.
 
 ## Phase 3 — Aggregate & Model (~1min, sequential)
 
-### Step 1: Collect probe results
+### 1. Collect probe results
 
 ```python
 # Glob ARTIFACT_DIR/*.json
@@ -190,21 +190,21 @@ probe_results = collect_probe_results(ARTIFACT_DIR)
 | Duplicate finding_ids from one probe | Keep first occurrence, warn in summary |
 | Unknown severity value | Map to MEDIUM, warn in summary |
 
-### Step 2: Merge corrections as findings
+### 2. Merge corrections as findings
 
 ```python
 # Yesterday's corrections become HIGH findings with source_probe="close_day_carryforward"
 # Finding ID: close_day_carryforward:correction:{sha256_hash_of_text[:12]}
 ```
 
-### Step 3: Carry-Forward Collision Rule
+### 3. Carry-Forward Collision Rule
 
 When a fresh probe finding and a carry-forward correction describe the same resource:
 - **Fresh finding wins** in aggregated_findings
 - Carry-forward is **suppressed** from aggregated_findings
 - Carry-forward text is **preserved** in `yesterday_corrections` (raw provenance)
 
-### Step 4: Dedup and sort
+### 4. Dedup and sort
 
 ```python
 # Dedup by (source_probe, finding_id) — first occurrence wins within a probe
@@ -212,7 +212,7 @@ When a fresh probe finding and a carry-forward correction describe the same reso
 # Sort: CRITICAL > HIGH > MEDIUM > LOW > INFO
 ```
 
-### Step 5: Compute focus areas
+### 5. Compute focus areas
 
 Weighted severity scoring:
 - CRITICAL = 16 points
@@ -223,7 +223,7 @@ Weighted severity scoring:
 
 Group by affected repo (or "platform" for cross-repo issues). Top 3-5 by total score.
 
-### Step 6: Build + validate ModelDayOpen
+### 6. Build + validate ModelDayOpen
 
 ```python
 raw = build_day_open(
@@ -243,7 +243,7 @@ from onex_change_control import ModelDayOpen
 ModelDayOpen.model_validate(raw)
 ```
 
-### Step 7: Write artifact
+### 7. Write artifact
 
 ```python
 yaml_str = serialize_day_open(raw)
@@ -251,7 +251,7 @@ write_day_open(yaml_str, ARTIFACT_DIR)
 # Updates ~/.claude/begin-day/latest -> RUN_ID
 ```
 
-### Step 8: Print executive summary
+### 8. Print executive summary
 
 ```
 ================================================================

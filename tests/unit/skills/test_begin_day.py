@@ -19,7 +19,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import yaml
 
 # ---------------------------------------------------------------------------
@@ -123,10 +122,7 @@ class TestParsePullAllOutput:
     """Test parsing of pull-all.sh output."""
 
     def test_all_up_to_date(self) -> None:
-        stdout = (
-            "omniclaude: Already up to date.\n"
-            "omnibase_core: Already up to date.\n"
-        )
+        stdout = "omniclaude: Already up to date.\nomnibase_core: Already up to date.\n"
         entries = parse_pull_all_output(stdout)
         assert len(entries) == 2
         assert entries[0]["repo"] == "omniclaude"
@@ -319,9 +315,7 @@ class TestCollectProbeResults:
                 json.dumps(good), encoding="utf-8"
             )
             # Bad probe
-            (artifact_dir / "bad_probe.json").write_text(
-                "not json", encoding="utf-8"
-            )
+            (artifact_dir / "bad_probe.json").write_text("not json", encoding="utf-8")
             results = collect_probe_results(artifact_dir)
 
         assert len(results) == 2
@@ -444,9 +438,7 @@ class TestAggregateFindings:
         ]
         results = aggregate_findings(probes, [])
         # Only one finding for shared_resource, the critical one
-        matching = [
-            f for f in results if "shared_resource" in f.get("finding_id", "")
-        ]
+        matching = [f for f in results if "shared_resource" in f.get("finding_id", "")]
         assert len(matching) == 1
         assert matching[0]["severity"] == "critical"
 
