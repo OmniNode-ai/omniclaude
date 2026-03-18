@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Tests for OMNICLAUDE_MODE resolution."""
+
 import os
 import subprocess
 from pathlib import Path
