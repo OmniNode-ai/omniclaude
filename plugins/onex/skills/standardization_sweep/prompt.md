@@ -64,7 +64,7 @@ Parse output. Each error line: `{file}:{line}: error: {message}`.
 
 **spdx check:**
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 uv run onex spdx fix --check . 2>&1 || true
 ```
 Lines containing "NEEDS FIX:" indicate files needing SPDX headers.
@@ -72,7 +72,7 @@ Exit code 1 if any files need fixing; 0 if clean.
 
 **type-unions check** (ruff UP007 — AST-aware, no docstring false positives):
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 uv run ruff check src/ --select UP007 --output-format json 2>/dev/null || true
 ```
 Parse JSON output. Each entry: `{path, row, col, code, message}`. code will be `UP007` (use X | Y instead of Union[X, Y]) or `UP006` (use type instead of Type).
@@ -87,7 +87,7 @@ grep -r "^pip install\|^python " scripts/ --include="*.sh" --include="*.py" -n \
 
 **ci-health check** (verify blocking mypy + ruff UP007 in CI):
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 python3 -c "
 import os, glob, re, sys
 
