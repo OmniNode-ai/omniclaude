@@ -30,6 +30,8 @@ lib/
 !tests/lib/**
 !tests/unit/hooks/lib/
 !tests/unit/hooks/lib/**
+!tests/unit/lib/
+!tests/unit/lib/**
 # Re-exclude __pycache__ within excepted lib directories
 agents/lib/__pycache__/
 agents/lib/**/__pycache__/

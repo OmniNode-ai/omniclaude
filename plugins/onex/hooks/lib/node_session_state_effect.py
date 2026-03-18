@@ -184,7 +184,7 @@ def _acquire_lock(lock_path: Path, timeout_ms: int) -> tuple[LockResult, int]:
     deadline = time.monotonic() + (timeout_ms / 1000.0)
     fd = -1
     try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -226,7 +226,7 @@ def _atomic_write(target: Path, data: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     seq = next(_atomic_write_counter)
     tmp_path = target.parent / f".tmp.{os.getpid()}.{threading.get_ident()}.{seq}"
-    fd = os.open(str(tmp_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
+    fd = os.open(str(tmp_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     try:
         os.write(fd, data.encode("utf-8"))
         os.fsync(fd)

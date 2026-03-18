@@ -467,6 +467,9 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
 
     test_results: dict[str, Any] = {"timestamp": time.time(), "tests": {}}
 
+    # Initialize checker to None so Test 3 can safely guard against import failure.
+    checker: object | None = None
+
     # Test 1: Import health checks
     try:
         from .health_checks import Phase4HealthChecker

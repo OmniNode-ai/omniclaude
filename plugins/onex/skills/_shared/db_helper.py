@@ -24,6 +24,8 @@ from psycopg2.extensions import connection as psycopg_connection
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
+from omniclaude.lib.utils.sanitize import _redact_dsn
+
 # Module-level logger for structured logging
 logger = logging.getLogger(__name__)
 
@@ -171,11 +173,14 @@ def get_connection() -> psycopg_connection | None:
         return conn
     except psycopg2.Error as e:
         # psycopg2.Error: database-level errors (connection, auth, pool exhaustion)
-        logger.error(f"Database connection error: {e}")
+        # Redact any DSN embedded in the exception message before logging.
+        logger.error("Database connection error: %s", _redact_dsn(str(e)))
         return None
     except OSError as e:
         # OSError/IOError: system-level errors (network issues, file descriptors)
-        logger.error(f"System error getting database connection: {e}")
+        logger.error(
+            "System error getting database connection: %s", _redact_dsn(str(e))
+        )
         return None
 
 

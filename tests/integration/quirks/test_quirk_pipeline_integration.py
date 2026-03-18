@@ -84,7 +84,7 @@ async def test_hook_event_produces_signal_and_publishes_to_kafka() -> None:
 
     extractor = NodeQuirkSignalExtractorEffect(
         db_session_factory=None,
-        producer_manager=mock_producer,
+        publish_hook=mock_producer.publish,
     )
 
     ctx = DetectionContext(
@@ -114,12 +114,12 @@ async def test_hook_event_produces_signal_and_publishes_to_kafka() -> None:
 @pytest.mark.asyncio
 async def test_ten_signals_produce_warn_finding() -> None:
     """Injecting 10 high-confidence signals into the classifier yields a warn finding."""
+    mock_clf_publish = AsyncMock(return_value=True)
     classifier = NodeQuirkClassifierCompute(
         db_session_factory=None,
-        producer_manager=MagicMock(),
+        publish_hook=mock_clf_publish,
         operator_block_approved=False,
     )
-    classifier._producer.publish = AsyncMock(return_value=True)  # type: ignore[attr-defined]
 
     await classifier.start()
 
@@ -154,7 +154,7 @@ async def test_kafka_down_signals_still_processed() -> None:
 
     extractor = NodeQuirkSignalExtractorEffect(
         db_session_factory=None,  # no DB in this test
-        producer_manager=mock_producer,
+        publish_hook=mock_producer.publish,
     )
 
     original_process = extractor._process_context
@@ -201,7 +201,7 @@ async def test_extractor_to_classifier_end_to_end() -> None:
 
     classifier = NodeQuirkClassifierCompute(
         db_session_factory=None,
-        producer_manager=mock_producer_clf,
+        publish_hook=mock_producer_clf.publish,
     )
     await classifier.start()
 
@@ -232,7 +232,7 @@ async def test_extractor_to_classifier_end_to_end() -> None:
 
     extractor = NodeQuirkSignalExtractorEffect(
         db_session_factory=None,
-        producer_manager=mock_producer_ext,
+        publish_hook=mock_producer_ext.publish,
     )
 
     await extractor.start()
