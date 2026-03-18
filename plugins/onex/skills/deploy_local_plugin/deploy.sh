@@ -257,7 +257,7 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         echo -e "${YELLOW}lib/.venv already exists at ${REPAIR_VENV_DIR}${NC}"
         echo ""
         echo "Running smoke test to verify..."
-        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
             echo -e "${GREEN}Venv is healthy. No repair needed.${NC}"
             echo ""
             exit 0
@@ -361,7 +361,7 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         # --- Smoke test ---
         echo ""
         echo "Running smoke test..."
-        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
             _REPAIR_TRAP_REMOVE=false  # Venv is good; retain on exit
 
             # Write sentinel timestamp (OMN-3727)
@@ -853,7 +853,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Venv manifest written to ${MANIFEST}${NC}"
 
     # --- Smoke test ---
-    if "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+    if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
         _TRAP_REMOVE_VENV=false  # Venv is good; retain it on normal exit
 
         # Write sentinel timestamp (OMN-3727)
