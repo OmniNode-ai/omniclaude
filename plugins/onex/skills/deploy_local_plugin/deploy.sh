@@ -730,6 +730,23 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Note: TARGET dir (synced files) may persist on failure; re-deploy overwrites it.
     # No fallbacks. Either the venv works or the deploy fails.
 
+    # --- Pre-flight venv check: skip rebuild if healthy ---
+    VENV_DIR="${TARGET}/lib/.venv"
+    if [[ -f "${VENV_DIR}/bin/python3" && -x "${VENV_DIR}/bin/python3" ]]; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase" 2>/dev/null; then
+            echo -e "${GREEN}  Existing venv passes smoke test — skipping rebuild${NC}"
+            SKIP_VENV_BUILD=true
+        else
+            echo -e "${YELLOW}  Existing venv failed smoke test — will rebuild incrementally${NC}"
+            SKIP_VENV_BUILD=false
+        fi
+    else
+        echo "  No existing venv — will build"
+        SKIP_VENV_BUILD=false
+    fi
+
+    if [[ "${SKIP_VENV_BUILD}" != "true" ]]; then
+
     echo "Creating bundled Python venv..."
 
     # PROJECT_ROOT already resolved and validated at top of execute block
@@ -844,6 +861,8 @@ if [[ "$EXECUTE" == "true" ]]; then
         rm -f "$MANIFEST"   # Clean up stale manifest
         exit 1
     fi
+
+    fi  # end SKIP_VENV_BUILD guard
 
     echo ""
 
