@@ -64,8 +64,7 @@ class TestSanitizeLogInput:
     def test_strips_all_common_control_chars(self, _sanitize: object) -> None:
         fn = _sanitize.sanitize_log_input  # type: ignore[attr-defined]
         control_chars = (
-            "".join(chr(i) for i in range(0x20) if chr(i) not in ("\t", " "))
-            + "\x7f"
+            "".join(chr(i) for i in range(0x20) if chr(i) not in ("\t", " ")) + "\x7f"
         )
         result = fn(f"before{control_chars}after")
         assert "before" in result
