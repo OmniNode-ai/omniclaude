@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: autopilot
+# This skill orchestrates other skills (merge-sweep, integration-sweep, release, redeploy, close-day).
+# It does not directly produce or consume Kafka topics — those are handled by the sub-skills.
+
+topics: []
