@@ -46,32 +46,32 @@ Run checks in parallel (up to `--max-parallel-repos` repos at a time).
 docs/  examples/  fixtures/  _golden_path_validate/  migrations/  *.generated.*  vendored/
 ```
 
-For each repo, in the omni_home bare clone at `/Volumes/PRO-G40/Code/omni_home/<repo>/`:
+For each repo, in the omni_home bare clone at `/Volumes/PRO-G40/Code/omni_home/<repo>/`: <!-- local-path-ok -->
 
 **ruff check:**
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 uv run ruff check src/ --output-format json 2>/dev/null || true
 ```
 Parse JSON output. Each entry: `{path, row, col, code, message}`.
 
 **mypy check:**
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 uv run mypy src/ --strict --output json 2>/dev/null || true
 ```
 Parse output. Each error line: `{file}:{line}: error: {message}`.
 
 **spdx check:**
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 onex spdx fix --check src tests scripts examples 2>&1 || true
 ```
 Lines containing "missing" indicate files needing SPDX headers.
 
 **type-unions check** (grep, excluding scripts/):
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 grep -r "Optional\[|Union\[" src/ --include="*.py" -n \
   --exclude-dir=__pycache__ --exclude-dir=.venv --exclude-dir=scripts \
   2>/dev/null || true
@@ -80,7 +80,7 @@ Each match: `{file}:{line}:{content}`.
 
 **pip-usage check** (grep, excluding tests/):
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>
+cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
 grep -r "^pip install\|^python " scripts/ --include="*.sh" --include="*.py" -n \
   --exclude-dir=__pycache__ --exclude-dir=.venv --exclude-dir=tests \
   2>/dev/null || true
@@ -150,7 +150,7 @@ IF `--auto-fix`:
 
   **ruff auto-fix:**
   ```bash
-  cd /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>
+  cd /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>  # local-path-ok
   uv run ruff check --fix src/
   uv run ruff format src/
   ```
@@ -169,19 +169,19 @@ For each repo with REQUIRES_FIX_AGENT findings (parallel, up to `--max-parallel-
 
   1. Create worktree:
      ```bash
-     git -C /Volumes/PRO-G40/Code/omni_home/<repo> worktree add \
-       /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo> \
+     git -C /Volumes/PRO-G40/Code/omni_home/<repo> worktree add \  # local-path-ok
+       /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo> \  # local-path-ok
        -b std-sweep-<run_id>-<repo>
      ```
 
   2. Dispatch polymorphic-agent:
-     "In the worktree at `/Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>/`,
+     "In the worktree at `/Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>/`, <!-- local-path-ok -->
       resolve these findings: [findings list]. Commit, create PR, enable auto-merge."
 
   3. After agent completes, remove worktree:
      ```bash
-     git -C /Volumes/PRO-G40/Code/omni_home/<repo> worktree remove \
-       /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>
+     git -C /Volumes/PRO-G40/Code/omni_home/<repo> worktree remove \  # local-path-ok
+       /Volumes/PRO-G40/Code/omni_worktrees/std-sweep-<run_id>/<repo>  # local-path-ok
      ```
 
 ## Phase 6: Summary

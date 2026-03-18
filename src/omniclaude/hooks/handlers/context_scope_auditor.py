@@ -61,7 +61,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from omniclaude.hooks.schemas_audit import (
     AuditContextBudgetEvent,
@@ -413,7 +413,7 @@ class ContextScopeAuditor:
         registry = self._load_correlation_registry()
         if registry is None:
             return None
-        return registry.get_correlation_id()
+        return cast("str | None", registry.get_correlation_id())
 
     def audit(
         self,

@@ -161,7 +161,7 @@ def _load_agent_yaml(subagent_type: str) -> dict[str, Any] | None:
         return None
 
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         with open(config_path, encoding="utf-8") as fh:
             result: dict[str, Any] = yaml.safe_load(fh) or {}
@@ -278,7 +278,7 @@ def _load_known_contract_ids() -> list[str] | object:
             continue
         # Registry file exists — must succeed or we return error sentinel
         try:
-            import yaml  # type: ignore[import-untyped]
+            import yaml
 
             with open(path, encoding="utf-8") as fh:
                 data: Any = yaml.safe_load(fh) or {}
@@ -459,9 +459,9 @@ def _record_dispatch_in_correlation_manager(
             return
 
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        spec.loader.exec_module(module)
 
-        registry: Any = module.get_registry()  # type: ignore[attr-defined]
+        registry: Any = module.get_registry()
         task_id = str(uuid.uuid4())
         effective_contract_id = contract_id or f"unknown:{subagent_type}"
         registry.push_task(task_id, effective_contract_id, scopes)
@@ -748,8 +748,8 @@ def _get_correlation_id_safe() -> str | None:
             return None
 
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
-        result: str | None = module.get_correlation_id()  # type: ignore[attr-defined]
+        spec.loader.exec_module(module)
+        result: str | None = module.get_correlation_id()
         return result
     except Exception:  # noqa: BLE001
         return None

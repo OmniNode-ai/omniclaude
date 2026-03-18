@@ -124,7 +124,7 @@ def _get_emit_event() -> Callable[..., bool]:
         try:
             from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
         except ImportError:
-            from emit_client_wrapper import emit_event
+            from emit_client_wrapper import emit_event  # type: ignore[no-redef]
 
         _emit_event_func = emit_event
     return _emit_event_func
@@ -865,10 +865,10 @@ class HandlerContextInjection:
                     start_projection_consumer_if_configured as _start_consumer,
                 )
             except ImportError:
-                from pattern_cache import (
+                from pattern_cache import (  # type: ignore[import-not-found, no-redef]
                     get_pattern_cache as _get_pattern_cache,
                 )
-                from pattern_cache import (
+                from pattern_cache import (  # type: ignore[no-redef]
                     start_projection_consumer_if_configured as _start_consumer,
                 )
         except ImportError as exc:

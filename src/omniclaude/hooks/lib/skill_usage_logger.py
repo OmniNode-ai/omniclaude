@@ -136,7 +136,7 @@ def _write_to_db(entry: dict[str, Any]) -> None:
 
     Raises on any DB error so the caller (``_maybe_write_to_db``) can swallow it.
     """
-    import psycopg2  # type: ignore[import-untyped]
+    import psycopg2
 
     db_url = os.getenv(
         "OMNIBASE_INFRA_DB_URL",
