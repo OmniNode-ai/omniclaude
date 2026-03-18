@@ -224,6 +224,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    @property
+    def postgres_active(self) -> bool:
+        """True if PostgreSQL is configured (inferred from connection config or explicit flag).
+
+        Infers from OMNICLAUDE_DB_URL or POSTGRES_HOST presence, falling back to
+        the explicit ENABLE_POSTGRES flag. This eliminates the need for a separate
+        boolean env var when connection config is already present. [OMN-5360]
+        """
+        return (
+            self.enable_postgres
+            or bool(self.omniclaude_db_url.get_secret_value())
+            or bool(self.postgres_host)
+        )
+
+    @property
+    def qdrant_active(self) -> bool:
+        """True if Qdrant is configured (inferred from connection config or explicit flag).
+
+        Infers from QDRANT_URL or QDRANT_HOST presence, falling back to the
+        explicit ENABLE_QDRANT flag. [OMN-5360]
+        """
+        return self.enable_qdrant or bool(self.qdrant_url) or bool(self.qdrant_host)
+
     # =========================================================================
     # VALKEY CACHE CONFIGURATION
     # =========================================================================
@@ -514,7 +537,7 @@ class Settings(BaseSettings):
         # ALL individual POSTGRES_* connection parameters must be configured.
         # No localhost defaults to prevent silent local connections in production.
         # =====================================================================
-        if self.enable_postgres:
+        if self.postgres_active:
             if not self.omniclaude_db_url.get_secret_value():
                 # Only require individual fields when no full DSN is provided
                 if not self.postgres_host:
@@ -580,11 +603,10 @@ class Settings(BaseSettings):
         self._defaults_warned = True
 
         # Log disabled services as INFO (not warnings, since disabled is safe)
-        if not self.enable_postgres:
+        if not self.postgres_active:
             logger.info(
-                "PostgreSQL is disabled (ENABLE_POSTGRES=false). "
-                "Set ENABLE_POSTGRES=true and configure OMNICLAUDE_DB_URL (or individual "
-                "POSTGRES_* variables) to enable."
+                "PostgreSQL is disabled (no connection config found). "
+                "Set OMNICLAUDE_DB_URL or POSTGRES_HOST to enable."
             )
 
         if not self.use_event_routing:
@@ -604,10 +626,10 @@ class Settings(BaseSettings):
                     "Set USE_EVENT_ROUTING=true and configure KAFKA_* variables to enable."
                 )
 
-        if not self.enable_qdrant:
+        if not self.qdrant_active:
             logger.info(
-                "Qdrant vector database is disabled (ENABLE_QDRANT=false). "
-                "Set ENABLE_QDRANT=true and configure QDRANT_* variables to enable."
+                "Qdrant vector database is disabled (no connection config found). "
+                "Set QDRANT_URL or QDRANT_HOST to enable."
             )
 
         # Warn about optional services that enhance functionality
