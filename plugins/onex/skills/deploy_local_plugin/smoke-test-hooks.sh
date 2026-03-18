@@ -26,6 +26,14 @@
 
 set -uo pipefail
 
+# Environment variables that should NOT leak into hook smoke tests.
+# These are session-scoped runtime vars that can cause false failures
+# when set to invalid values in the developer's shell.
+SANITIZE_VARS=(
+    ONEX_EVENT_BUS_TYPE
+    ONEX_ENV
+)
+
 PLUGIN_ROOT="${1:-$HOME/.claude/plugins/cache/omninode-tools/onex/2.2.5}"
 HOOKS_SCRIPTS="${PLUGIN_ROOT}/hooks/scripts"
 
@@ -60,7 +68,7 @@ test_hook() {
 
     # Use the `timeout` command for reliable wall-clock enforcement.
     # timeout exits 124 on timeout, 0-125 on normal exit.
-    echo "$input" | timeout "$timeout_sec" bash "$script" > "$out_file" 2> "$err_file"
+    echo "$input" | timeout "$timeout_sec" env "${SANITIZE_VARS[@]/#/-u}" bash "$script" > "$out_file" 2> "$err_file"
     local exit_code=$?
 
     if [[ "$exit_code" -eq 124 ]]; then

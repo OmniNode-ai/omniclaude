@@ -257,7 +257,7 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         echo -e "${YELLOW}lib/.venv already exists at ${REPAIR_VENV_DIR}${NC}"
         echo ""
         echo "Running smoke test to verify..."
-        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
             echo -e "${GREEN}Venv is healthy. No repair needed.${NC}"
             echo ""
             exit 0
@@ -361,7 +361,7 @@ if [[ "$REPAIR_VENV" == "true" ]]; then
         # --- Smoke test ---
         echo ""
         echo "Running smoke test..."
-        if "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${REPAIR_VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
             _REPAIR_TRAP_REMOVE=false  # Venv is good; retain on exit
 
             # Write sentinel timestamp (OMN-3727)
@@ -730,6 +730,23 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Note: TARGET dir (synced files) may persist on failure; re-deploy overwrites it.
     # No fallbacks. Either the venv works or the deploy fails.
 
+    # --- Pre-flight venv check: skip rebuild if healthy ---
+    VENV_DIR="${TARGET}/lib/.venv"
+    if [[ -f "${VENV_DIR}/bin/python3" && -x "${VENV_DIR}/bin/python3" ]]; then
+        if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "${VENV_DIR}/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase" 2>/dev/null; then
+            echo -e "${GREEN}  Existing venv passes smoke test — skipping rebuild${NC}"
+            SKIP_VENV_BUILD=true
+        else
+            echo -e "${YELLOW}  Existing venv failed smoke test — will rebuild incrementally${NC}"
+            SKIP_VENV_BUILD=false
+        fi
+    else
+        echo "  No existing venv — will build"
+        SKIP_VENV_BUILD=false
+    fi
+
+    if [[ "${SKIP_VENV_BUILD}" != "true" ]]; then
+
     echo "Creating bundled Python venv..."
 
     # PROJECT_ROOT already resolved and validated at top of execute block
@@ -751,11 +768,11 @@ if [[ "$EXECUTE" == "true" ]]; then
     # --- Create venv via uv sync (locked, non-editable) ---
     VENV_DIR="${TARGET}/lib/.venv"
     # Register EXIT trap BEFORE the install so that any SIGINT/SIGTERM is caught.
-    # _TRAP_REMOVE_VENV starts false (no venv yet); set true right after install;
+    # _TRAP_REMOVE_VENV starts false; set true after first successful sync;
     # reset to false after the smoke test passes so a successful deploy retains the venv.
+    # Note: venv is no longer rm'd before sync — incremental sync is the default path.
     _TRAP_REMOVE_VENV=false
     trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"' EXIT
-    rm -rf "$VENV_DIR"
     mkdir -p "${TARGET}/lib"
 
     # Validate uv is available (required for the locked non-editable install).
@@ -787,9 +804,18 @@ if [[ "$EXECUTE" == "true" ]]; then
             --frozen \
             --no-dev \
             2>&1); then
-        echo -e "${RED}Error: uv sync failed. Deploy aborted.${NC}"
+        echo -e "${YELLOW}  Incremental sync failed — nuking venv and retrying...${NC}"
         rm -rf "$VENV_DIR"
-        exit 1
+        if ! (cd "${PROJECT_ROOT}" && UV_PROJECT_ENVIRONMENT="${VENV_DIR}" uv sync \
+                --python "${PYTHON_BIN}" \
+                --no-editable \
+                --frozen \
+                --no-dev \
+                2>&1); then
+            echo -e "${RED}Error: uv sync failed on clean rebuild. Deploy aborted.${NC}"
+            rm -rf "$VENV_DIR"
+            exit 1
+        fi
     fi
     _TRAP_REMOVE_VENV=true  # Venv now exists; signal EXIT trap to clean up if interrupted hereafter
     echo -e "${GREEN}  Project installed into venv (locked, non-editable via uv sync)${NC}"
@@ -827,7 +853,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Venv manifest written to ${MANIFEST}${NC}"
 
     # --- Smoke test ---
-    if "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+    if env -u ONEX_EVENT_BUS_TYPE -u ONEX_ENV "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
         _TRAP_REMOVE_VENV=false  # Venv is good; retain it on normal exit
 
         # Write sentinel timestamp (OMN-3727)
@@ -835,15 +861,20 @@ if [[ "$EXECUTE" == "true" ]]; then
 
         echo -e "${GREEN}  Bundled venv smoke test passed${NC}"
     else
-        echo -e "${RED}Error: Bundled venv smoke test FAILED. Deploy aborted.${NC}"
+        echo -e "${RED}Error: Bundled venv smoke test FAILED.${NC}"
         echo "  The following imports must work:"
         echo "    import omnibase_spi"
         echo "    import omniclaude"
         echo "    from omniclaude.hooks.topics import TopicBase"
-        rm -rf "$VENV_DIR"  # Clean up failed venv
-        rm -f "$MANIFEST"   # Clean up stale manifest
+        echo ""
+        echo "  Venv retained at ${VENV_DIR} for debugging."
+        echo "  To patch a missing package:  uv pip install --python ${VENV_DIR}/bin/python3 <package>"
+        echo "  To nuke and retry:           rm -rf ${VENV_DIR} && deploy.sh --execute"
+        rm -f "$MANIFEST"
         exit 1
     fi
+
+    fi  # end SKIP_VENV_BUILD guard
 
     echo ""
 
@@ -1038,7 +1069,7 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     # Hook smoke tests — gate deploy on all hooks passing (OMN-4383)
     # Runs AFTER venv integrity check so Python is guaranteed present.
-    SMOKE_TEST_SCRIPT="${TARGET}/skills/deploy-local-plugin/smoke-test-hooks.sh"
+    SMOKE_TEST_SCRIPT="${TARGET}/skills/deploy_local_plugin/smoke-test-hooks.sh"
     if [[ -x "$SMOKE_TEST_SCRIPT" ]]; then
         echo ""
         echo "Running hook smoke tests..."
