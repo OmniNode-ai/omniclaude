@@ -80,7 +80,9 @@ class TestPromptMd:
 
     def test_python_repo_list_hardcoded(self) -> None:
         content = _read(_PROMPT_MD)
-        assert "PYTHON_REPOS" in content, "Repo list must be a hardcoded constant PYTHON_REPOS"
+        assert "PYTHON_REPOS" in content, (
+            "Repo list must be a hardcoded constant PYTHON_REPOS"
+        )
         assert "omniclaude" in content
         assert "omnibase_core" in content
 
@@ -95,19 +97,27 @@ class TestPromptMd:
         auto_fix_pos = content.find("Auto-Fix")
         dispatch_pos = content.find("Fix Agent Dispatch")
         if auto_fix_pos != -1 and dispatch_pos != -1:
-            assert auto_fix_pos < dispatch_pos, "--auto-fix phase must precede fix-agent dispatch"
+            assert auto_fix_pos < dispatch_pos, (
+                "--auto-fix phase must precede fix-agent dispatch"
+            )
 
     def test_path_exclusions_present(self) -> None:
         content = _read(_PROMPT_MD)
         for exclusion in (".git/", ".venv/", "docs/", "fixtures/"):
-            assert exclusion in content, f"prompt.md missing path exclusion: {exclusion}"
+            assert exclusion in content, (
+                f"prompt.md missing path exclusion: {exclusion}"
+            )
 
 
 @pytest.mark.unit
 class TestTopicsYaml:
     def test_exactly_three_topics(self) -> None:
         content = _read(_TOPICS_YAML)
-        topics = [line.strip().lstrip("- ") for line in content.splitlines() if line.strip().startswith("- onex.")]
+        topics = [
+            line.strip().lstrip("- ")
+            for line in content.splitlines()
+            if line.strip().startswith("- onex.")
+        ]
         assert len(topics) == 3, f"Expected 3 topics, found {len(topics)}: {topics}"
 
     def test_topic_naming_convention(self) -> None:
@@ -131,7 +141,10 @@ class TestGoldenPathFixture:
             pytest.skip("Fixture not found")
         data = json.loads(_FIXTURE_JSON.read_text())
         assert data["input"]["topic"] == "onex.cmd.omniclaude.standardization-sweep.v1"
-        assert data["output"]["topic"] == "onex.evt.omniclaude.standardization-sweep-completed.v1"
+        assert (
+            data["output"]["topic"]
+            == "onex.evt.omniclaude.standardization-sweep-completed.v1"
+        )
 
     def test_fixture_has_dry_run(self) -> None:
         if not _FIXTURE_JSON.exists():
@@ -144,11 +157,23 @@ class TestGoldenPathFixture:
 @pytest.mark.unit
 class TestOrchestratorNode:
     def test_node_directory_exists(self) -> None:
-        node_dir = _REPO_ROOT / "src" / "omniclaude" / "nodes" / "node_skill_standardization_sweep_orchestrator"
+        node_dir = (
+            _REPO_ROOT
+            / "src"
+            / "omniclaude"
+            / "nodes"
+            / "node_skill_standardization_sweep_orchestrator"
+        )
         assert node_dir.exists(), f"Orchestrator node directory not found: {node_dir}"
 
     def test_node_files_exist(self) -> None:
-        node_dir = _REPO_ROOT / "src" / "omniclaude" / "nodes" / "node_skill_standardization_sweep_orchestrator"
+        node_dir = (
+            _REPO_ROOT
+            / "src"
+            / "omniclaude"
+            / "nodes"
+            / "node_skill_standardization_sweep_orchestrator"
+        )
         if not node_dir.exists():
             pytest.skip("Node directory not found")
         assert (node_dir / "__init__.py").exists()
@@ -156,7 +181,14 @@ class TestOrchestratorNode:
         assert (node_dir / "contract.yaml").exists()
 
     def test_contract_correct_topic(self) -> None:
-        contract = _REPO_ROOT / "src" / "omniclaude" / "nodes" / "node_skill_standardization_sweep_orchestrator" / "contract.yaml"
+        contract = (
+            _REPO_ROOT
+            / "src"
+            / "omniclaude"
+            / "nodes"
+            / "node_skill_standardization_sweep_orchestrator"
+            / "contract.yaml"
+        )
         if not contract.exists():
             pytest.skip("contract.yaml not found")
         content = contract.read_text()
