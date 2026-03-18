@@ -643,10 +643,12 @@ class TestServiceContractPublisherAPI:
         temp_contracts_dir: Path,
         mock_omnibase_imports: dict,
     ) -> None:
-        """Verify that environment defaults to ONEX_ENV or 'dev'.
+        """Verify that environment is None when not explicitly provided.
 
-        When environment is not specified, it should use the ONEX_ENV
-        environment variable or fall back to 'dev'.
+        Per OMN-5189: ONEX_ENV is vestigial and must not be read. When
+        environment is not specified, the infra layer defaults to canonical
+        (realm-agnostic) topics via ONEX_ENVIRONMENT. omniclaude passes
+        environment=None and lets ServiceContractPublisher handle the default.
         """
         from omnibase_infra.services.contract_publisher import (
             ModelContractPublisherConfig,
@@ -676,13 +678,12 @@ class TestServiceContractPublisherAPI:
 
         ServiceContractPublisher.from_container = mock_from_container
 
-        # Act: call without environment parameter, with ONEX_ENV set
-        with patch.dict("os.environ", {"ONEX_ENV": "staging"}):
-            publisher = ServiceContractPublisher.from_container(
-                container=mock_container,
-                config=config,
-            )
-            result = await publisher.publish_all()
+        # Act: call without environment parameter (ONEX_ENV must NOT be read)
+        publisher = ServiceContractPublisher.from_container(
+            container=mock_container,
+            config=config,
+        )
+        result = await publisher.publish_all()
 
         # Assert: delegation happened with correct container
         assert captured_args["container"] is mock_container, (
