@@ -586,12 +586,54 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
 The scan output format is identical across all tiers -- downstream classification
 (`needs_branch_update`, `is_merge_ready`, `needs_polish`) works unchanged regardless of backend.
 
+## Idempotency Ledger
+
+Absorbed from the former `fix-prs` skill. Per-run record at `~/.claude/pr-queue/<date>/run_<run_id>.json`:
+
+```json
+{
+  "OmniNode-ai/omniclaude#247": {
+    "head_sha": "cbca770e",
+    "last_error_fingerprint": "SHA256(phase|error_class|check_name|first_error_line)",
+    "last_result": "fixed",
+    "retry_count": 1
+  }
+}
+```
+
+**Retry policy**: retry a PR only if `head_sha` changed OR `last_error_fingerprint` differs.
+If `retry_count >= 3` and neither condition is met: skip with `result: needs_human`.
+
+## CI Secrets Guard
+
+Before invoking `ci-fix-pipeline` for any failing check in Track B, inspect the check name:
+
+```
+External infra indicators (skip ci-fix-pipeline for these checks):
+  - Check name contains: deploy, production, prod, staging, aws, gcp, azure,
+    service-account, docker-push, publish, release, upload-to
+
+If the failing check matches any indicator:
+  → record blocked_check = <check_name>
+  → result = blocked_external for that check
+  → do NOT invoke ci-fix-pipeline
+  → continue to next check
+```
+
+If ALL failing checks are blocked_external: record PR as `result: blocked_external`, skip ci-fix-pipeline entirely.
+
+## Retry Policy
+
+Track B retry behavior for pr-polish failures:
+
+- Retry only if `head_sha` changed OR `error_fingerprint` differs from last attempt
+- Maximum 3 retries per PR per run
+- After 3 retries with no progress: record `result: needs_human`
+
 ## See Also
 
 - `pr-polish` skill -- three-phase PR fix workflow (Track B sub-skill)
 - `pr-review-dev` skill -- PR review comments + CI failures
 - `local-review` skill -- iterative local review loop
-- `pr-queue-pipeline` skill -- orchestrates fix-prs -> merge-sweep in sequence
-- `fix-prs` skill -- alternative repair skill (merge-sweep now handles this inline via Track B)
 - `_bin/pr-scan.sh` -- STANDALONE PR scanning backend
 - `_lib/tier-routing/helpers.md` -- tier detection and routing helpers

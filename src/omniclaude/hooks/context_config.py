@@ -349,8 +349,8 @@ class ContextInjectionConfig(BaseSettings):
         default=True,
         description=(
             "Enable omniintelligence HTTP API as pattern source. "
-            "Active escape hatch after DB split (OMN-2058/OMN-2059). "
-            "Override via OMNICLAUDE_CONTEXT_API_ENABLED."
+            "Automatically disabled if INTELLIGENCE_SERVICE_URL is not set. "
+            "Override via OMNICLAUDE_CONTEXT_API_ENABLED=false to explicitly disable."
         ),
     )
 
@@ -445,6 +445,28 @@ class ContextInjectionConfig(BaseSettings):
                 object.__setattr__(self, "api_url", intelligence_url)
             else:
                 object.__setattr__(self, "api_url", _API_URL_DEFAULT)
+        return self
+
+    @model_validator(mode="after")
+    def infer_api_enabled_from_url(self) -> Self:
+        """Auto-disable API when no intelligence service URL is configured.
+
+        Only infers when ``api_enabled`` was NOT explicitly provided (i.e. it
+        was left at its default). When the caller (or an env var) explicitly
+        sets ``api_enabled``, we respect that value unconditionally.
+
+        When inferring, disables the API if neither INTELLIGENCE_SERVICE_URL
+        nor OMNICLAUDE_CONTEXT_API_URL is set in the environment. [OMN-5361]
+        """
+        # model_fields_set tracks fields explicitly provided to the
+        # constructor or parsed from env -- skip inference if caller
+        # or env explicitly set api_enabled.
+        if "api_enabled" in self.model_fields_set:
+            return self
+        intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
+        context_api_url = os.environ.get("OMNICLAUDE_CONTEXT_API_URL", "").strip()
+        if not intelligence_url and not context_api_url:
+            object.__setattr__(self, "api_enabled", False)
         return self
 
     def get_db_dsn(self) -> str:

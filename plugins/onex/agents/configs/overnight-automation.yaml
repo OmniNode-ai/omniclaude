@@ -7,6 +7,7 @@
 schema_version: "2.0.0"
 mode: full
 agent_type: "overnight_automation"
+mode: "full"
 
 agent_identity:
   name: "agent-overnight-automation"

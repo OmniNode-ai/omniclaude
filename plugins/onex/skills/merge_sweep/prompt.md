@@ -27,7 +27,7 @@ When `/merge-sweep [args]` is invoked:
    - `--authors <list>` — default: all
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
-   - `--run-id <id>` — default: generate new; provided by pr-queue-pipeline for claim ownership
+   - `--run-id <id>` — default: generate new; provided by parent pipeline for claim ownership
 
 3. **Generate or restore run_id**:
    - If `--run-id` provided: use it (resume mode — no ledger for merge-sweep, but claim registry uses it)
@@ -1052,10 +1052,9 @@ Merge Sweep Complete — run <run_id>
 
 ## Composability
 
-This skill is designed to be called from `pr-queue-pipeline`:
+This skill can be called directly or from other orchestrators:
 
 ```
-# From pr-queue-pipeline Phase 3:
 Skill(skill="onex:merge-sweep", args={
   repos: <scope>,
   max_total_merges: <cap>,
@@ -1066,6 +1065,6 @@ Skill(skill="onex:merge-sweep", args={
   label: <label>,                 # optional label filter
   run_id: <pipeline_run_id>,      # claim registry ownership
   dry_run: <dry_run>,             # propagates to claim registry (zero writes)
-  skip_polish: false              # set true to skip Track B in pipeline context if fix-prs already ran
+  skip_polish: false              # set true to skip Track B
 })
 ```

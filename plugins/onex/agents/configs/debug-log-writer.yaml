@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "debug_log_writer"
+mode: "full"
 
 agent_identity:
   name: "agent-debug-log-writer"

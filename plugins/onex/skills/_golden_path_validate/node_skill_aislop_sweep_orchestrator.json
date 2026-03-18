@@ -1,0 +1,26 @@
+{
+  "node_id": "node_skill_aislop_sweep_orchestrator",
+  "ticket_id": "OMN-5316",
+  "input": {
+    "topic": "onex.cmd.omniclaude.aislop-sweep.v1",
+    "fixture": {
+      "event_type": "skill_requested",
+      "skill_name": "aislop-sweep",
+      "args": {
+        "--dry-run": true,
+        "--repos": "omniclaude"
+      }
+    }
+  },
+  "output": {
+    "topic": "onex.evt.omniclaude.aislop-sweep-completed.v1"
+  },
+  "timeout_ms": 60000,
+  "assertions": [
+    {
+      "field": "status",
+      "op": "eq",
+      "expected": "completed"
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "security_audit"
+mode: "both"
 definition_format: "yaml_agent_v1"
 
 # Agent Identity

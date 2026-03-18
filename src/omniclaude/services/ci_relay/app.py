@@ -20,6 +20,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from omniclaude.hooks.topics import TopicBase
+from omniclaude.lib.utils.sanitize import sanitize_log_input
 from omniclaude.services.ci_relay.models import CICallbackPayload, PRStatusEvent
 from omniclaude.services.ci_relay.rate_limiter import RateLimiter
 
@@ -197,21 +198,27 @@ def create_app() -> FastAPI:
         """
         dedupe_key = f"{payload.repo}:{payload.sha}:{payload.run_id}"
 
+        # Sanitize user-controlled fields before logging to prevent log injection
+        safe_repo = sanitize_log_input(payload.repo)
+        safe_sha = sanitize_log_input(payload.sha)
+        safe_conclusion = sanitize_log_input(payload.conclusion)
+        safe_dedupe_key = sanitize_log_input(dedupe_key)
+
         # Check repo rate limit
         if not _rate_limiter.check_repo_rate(payload.repo):
             logger.warning(
                 "Rate limited: repo=%s dedupe_key=%s",
-                payload.repo,
-                dedupe_key,
+                safe_repo,
+                safe_dedupe_key,
             )
             raise HTTPException(
                 status_code=429,
-                detail=f"Rate limit exceeded for repo {payload.repo}",
+                detail=f"Rate limit exceeded for repo {safe_repo}",
             )
 
         # Check idempotency (dedupe within 1 hour)
         if not _rate_limiter.check_dedupe(dedupe_key):
-            logger.info("Duplicate dropped: %s", dedupe_key)
+            logger.info("Duplicate dropped: %s", safe_dedupe_key)
             return {
                 "status": "duplicate",
                 "dedupe_key": dedupe_key,
@@ -224,9 +231,9 @@ def create_app() -> FastAPI:
         ):
             logger.info(
                 "SHA notification suppressed: repo=%s sha=%s conclusion=%s",
-                payload.repo,
-                payload.sha,
-                payload.conclusion,
+                safe_repo,
+                safe_sha,
+                safe_conclusion,
             )
             return {
                 "status": "suppressed",
@@ -244,8 +251,8 @@ def create_app() -> FastAPI:
             if resolved_pr is not None:
                 logger.info(
                     "Resolved PR for push-triggered workflow: repo=%s sha=%s -> PR #%d",
-                    payload.repo,
-                    payload.sha,
+                    safe_repo,
+                    safe_sha,
                     resolved_pr,
                 )
 
@@ -264,10 +271,10 @@ def create_app() -> FastAPI:
 
         logger.info(
             "Published PR status event: repo=%s pr=%d conclusion=%s dedupe_key=%s",
-            event.repo,
+            sanitize_log_input(event.repo),
             event.resolved_pr or event.pr,
-            event.conclusion,
-            event.dedupe_key,
+            sanitize_log_input(event.conclusion),
+            sanitize_log_input(event.dedupe_key),
         )
 
         return {

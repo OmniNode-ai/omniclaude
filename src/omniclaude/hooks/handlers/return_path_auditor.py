@@ -401,7 +401,7 @@ def _mark_task_invalid(*, task_id: UUID, correlation_id: UUID) -> None:
     """
     try:
         from omniclaude.hooks.lib.correlation_manager import (
-            CorrelationManager,  # type: ignore[import-not-found]
+            CorrelationManager,
         )
 
         manager = CorrelationManager()

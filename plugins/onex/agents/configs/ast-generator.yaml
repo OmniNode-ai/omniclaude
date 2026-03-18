@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "ast_generator"
+mode: "full"
 version: "1.2.0"
 last_updated: "2025-01-09"
 

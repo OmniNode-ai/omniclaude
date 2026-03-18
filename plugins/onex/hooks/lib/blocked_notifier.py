@@ -92,7 +92,7 @@ def _check_and_update_rate_limit(key: str) -> bool:
     Path(rate_limit_path).parent.mkdir(parents=True, exist_ok=True)
 
     # Open or create the file for read/write
-    fd = os.open(rate_limit_path, os.O_RDWR | os.O_CREAT, 0o644)
+    fd = os.open(rate_limit_path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         # Advisory lock (non-blocking to avoid indefinite hang)
         try:

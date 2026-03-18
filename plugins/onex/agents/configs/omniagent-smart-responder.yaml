@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "omniagent_smart_responder"
+mode: "full"
 
 agent_identity:
   name: "agent-omniagent-smart-responder"

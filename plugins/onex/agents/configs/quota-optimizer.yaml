@@ -7,6 +7,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "quota_optimizer"
+mode: "full"
 last_updated: "2025-01-29"
 
 agent_identity:

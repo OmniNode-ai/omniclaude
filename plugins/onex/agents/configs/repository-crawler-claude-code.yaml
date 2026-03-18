@@ -6,6 +6,7 @@
 schema_version: "2.0.0"
 mode: full
 agent_type: "repository_crawler_claude_code"
+mode: "full"
 last_updated: "2024-01-15"
 
 agent_identity:

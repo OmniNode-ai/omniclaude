@@ -177,7 +177,9 @@ def _run_assertion(op: str, actual: Any, expected: Any) -> bool:
     Raises:
         ValueError: When the operator is not recognized.
     """
-    result: bool
+    result: bool = (
+        False  # initialized before match to prevent CodeQL uninitialized-variable alert
+    )
     match op:
         case "eq":
             result = bool(actual == expected)

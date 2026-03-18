@@ -434,6 +434,41 @@ mcp__linear-server__update_issue(
 
 ---
 
+## Contract Generation (internal)
+
+When no `--from-contract` arg is provided and ticket context is available, create_ticket
+internally generates a `ModelTicketContract` YAML before creating the ticket. This absorbs
+the former `generate-ticket-contract` skill (OMN-2975).
+
+**Two-layer architecture**:
+1. **Prompt layer**: generates YAML text with seam detection, inference, and stubs
+2. **Python validator**: `validate_contract.py` imports `ModelTicketContract`, calls
+   `model_validate(yaml_dict)`, prints field-level errors
+
+**Seam detection heuristics** (scan title + description case-insensitive):
+
+| Signal keywords | Detected interface |
+|-----------------|-------------------|
+| `kafka`, `topic`, `consumer`, `producer` | `topics` |
+| `schema`, `payload`, `event model`, `modelhook` | `events` |
+| `spi`, `protocol`, `interface` | `protocols` |
+| `envelope`, `header` | `envelopes` |
+| `endpoint`, `route`, `api`, `rest` | `public_api` |
+
+If any signal found OR multiple repo names mentioned: set `is_seam_ticket: true` and
+`evidence_required: [unit, ci, integration]`. Otherwise: `evidence_required: [unit, ci]`.
+
+**DoD extraction**: Uses `plugins/onex/skills/_lib/dod-parser/dod_parser.py` to extract
+Definition of Done items from the ticket description into `dod_evidence[]`.
+
+**Validation**: After drafting, call `validate_contract.py` to validate. If validation fails
+after 3 attempts, print the draft YAML with a note that manual review is required.
+
+**ONEX_CC_REPO_PATH**: If set, writes contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`.
+If not set, prints YAML with warning banner.
+
+---
+
 ## Execution Flow
 
 ### Step 1: Parse Arguments <!-- ai-slop-ok: pre-existing step structure -->

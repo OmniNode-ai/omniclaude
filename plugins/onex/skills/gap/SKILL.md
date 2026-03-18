@@ -15,7 +15,7 @@ inputs:
     required: true
 args:
   - name: subcommand
-    description: "Mode: detect (audit), fix (auto-fix loop), or cycle (detect->fix->verify)"
+    description: "Mode: detect (audit), fix (auto-fix loop), cycle (detect->fix->verify), or reconcile (trigger artifact reconciliation)"
     required: true
   - name: --epic
     description: "Linear epic ID to audit (detect mode)"
@@ -310,7 +310,7 @@ Absorbed from: gap-fix (v0.1.0)
 
 Automates the "detected to fixed" loop that detect opens but leaves manual. Reads a
 gap-analysis report, classifies findings by auto-dispatch eligibility, dispatches
-`ticket-pipeline` for safe-only findings, then calls `pr-queue-pipeline --prs` on the created PRs.
+`ticket-pipeline` for safe-only findings, then calls `merge-sweep --prs` on the created PRs.
 
 **Scope (v0 -- narrow)**: Only auto-dispatch findings with a single deterministic resolution.
 Anything multi-option emits a decision gate and waits for human input.
@@ -342,7 +342,7 @@ Phase 1: Classify findings by auto-dispatch eligibility
 Phase 2: Decision gate -- emit choices block for non-auto findings; skip undecided; continue with auto
 Phase 3: Execute fix -- dispatch ticket-pipeline per auto finding
           -> emit gap-fix-output.json with prs_created[]
-          -> call: pr-queue-pipeline --prs <path>  (NOT --repos -- scoped to new PRs only)
+          -> call: merge-sweep --prs <path>  (NOT --repos -- scoped to new PRs only)
 Phase 4: Re-probe -- minimal grep/AST per boundary_kind before marking fixed
 Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 ```
@@ -369,17 +369,17 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 ### Key Invariants
 
 - Re-probe **must pass** before marking a finding `fixed`
-- `pr-queue-pipeline` always called with `--prs` (not `--repos`) -- only touches created PRs
+- `merge-sweep` always called with `--prs` (not `--repos`) -- only touches created PRs
 - `--dry-run` produces zero side effects: no ledger writes, no Linear writes, no PR mutations
 - `decisions.json` is write-once per finding; `--force-decide` to re-open
-- `blocked_external` guard: if `pr-queue-pipeline` returns `blocked_external > 0`, log a warning
+- `blocked_external` guard: if `merge-sweep` returns `blocked_external > 0`, log a warning
   and do NOT retry -- these are external infra failures (deploy locks, CI secrets), not skill bugs
 
 ### Modes
 
 | Mode | Description |
 |------|-------------|
-| `ticket-pipeline` | Default -- dispatches `ticket-pipeline` per auto finding; calls `pr-queue-pipeline --prs` on created PRs |
+| `ticket-pipeline` | Default -- dispatches `ticket-pipeline` per auto finding; calls `merge-sweep --prs` on created PRs |
 | `ticket-work` | Dispatches `ticket-work` only (no PR creation or merge) |
 | `implement-only` | No ticket-pipeline or ticket-work; implements fixes directly in worktree |
 
@@ -439,7 +439,7 @@ Status values:
 ### Sub-skills Used
 
 - `ticket-pipeline` (existing) -- creates PR from finding (default mode)
-- `pr-queue-pipeline` -- merges the created PRs (called with `--prs`, not `--repos`)
+- `merge-sweep` -- merges the created PRs (called with `--prs`, not `--repos`)
 
 ---
 
@@ -529,14 +529,48 @@ All tests use `@pytest.mark.unit` -- static analysis of skill files, no external
 | 1 | `TestDryRunContract` | `--dry-run` produces zero side effects |
 | 2 | `TestFixedRequiresProof` | `fixed` status requires probe block with all 5 fields |
 | 3 | `TestInfraBoundaryGate` | DB import in UI repo classified as `GATE` |
-| 4 | `TestPositiveRouting` | pr-queue-pipeline called with `--prs` |
+| 4 | `TestPositiveRouting` | merge-sweep called with `--prs` |
 | 5 | `TestDecisionsJsonAppendOnly` | `decisions.json` is write-once per fingerprint |
 | 6 | `TestForcedDecideVersioning` | `--force-decide` re-opens prior decisions |
-| 7 | `TestPrQueuePipelineInvocation` | `pr-queue-pipeline` always invoked with `--prs` |
+| 7 | `TestPrQueuePipelineInvocation` | `merge-sweep` always invoked with `--prs` |
 
 ```bash
 uv run pytest tests/integration/skills/gap_fix/test_gap_fix_integration.py -v
 ```
+
+---
+
+## Subcommand: reconcile
+
+Absorbed from the former `reconcile-artifacts` skill.
+
+Triggers artifact reconciliation for a target repository by dispatching a
+`ModelManualReconcileCommand` to the `onex.cmd.artifact.reconcile.v1` Kafka topic via the
+`omni-infra` CLI.
+
+### CLI Examples
+
+```
+/gap reconcile --repo omnibase_infra
+/gap reconcile --repo omnibase_core --reason "Post-deploy artifact drift detected"
+```
+
+| Arg | Default | Description |
+|-----|---------|-------------|
+| `--repo` | required | Target repo name (e.g., omnibase_infra) |
+| `--reason` | `"Manual reconciliation via omniclaude skill"` | Human-readable reason |
+
+### Behavior
+
+1. Sources `~/.omnibase/.env` to load `KAFKA_BOOTSTRAP_SERVERS`
+2. Verifies `omni-infra` CLI is available (falls back to `uv run omni-infra`)
+3. Runs `omni-infra artifact-reconcile --repo <repo> --reason "<reason>"`
+4. Returns exit code, stdout, and stderr
+
+Uses `KAFKA_BOOTSTRAP_SERVERS` if set, otherwise defaults to `localhost:19092`.
+If broker is unreachable, exits non-zero with error message.
+
+---
 
 ## See Also
 

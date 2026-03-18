@@ -20,6 +20,9 @@ def test_inmemory_guard_blocks_session_start() -> None:
 
     env = os.environ.copy()
     env["ONEX_EVENT_BUS_TYPE"] = "inmemory"
+    # Force full mode so the inmemory guard is reached (lite mode skips it
+    # intentionally because there is no Kafka daemon in lite mode).
+    env["OMNICLAUDE_MODE"] = "full"
 
     result = subprocess.run(
         ["bash", str(script), "--guard-check-only"],
@@ -60,6 +63,9 @@ def test_inmemory_guard_catches_project_env(tmp_path: Path) -> None:
     # Ensure the variable is NOT in the parent shell -- only in the .env file.
     env.pop("ONEX_EVENT_BUS_TYPE", None)
     env["CLAUDE_PLUGIN_ROOT"] = str(plugin_dir)
+    # Force full mode so the inmemory guard is reached (lite mode skips it
+    # intentionally because there is no Kafka daemon in lite mode).
+    env["OMNICLAUDE_MODE"] = "full"
 
     result = subprocess.run(
         ["bash", str(script), "--guard-check-only"],
@@ -84,6 +90,8 @@ def test_guard_check_only_passes_without_inmemory() -> None:
     script = Path("plugins/onex/hooks/scripts/session-start.sh")
     env = os.environ.copy()
     env.pop("ONEX_EVENT_BUS_TYPE", None)
+    # Force full mode so the guard path is exercised (not the lite early-exit).
+    env["OMNICLAUDE_MODE"] = "full"
 
     result = subprocess.run(
         ["bash", str(script), "--guard-check-only"],

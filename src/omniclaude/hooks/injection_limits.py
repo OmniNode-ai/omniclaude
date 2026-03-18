@@ -40,6 +40,11 @@ from omniclaude.lib.utils.token_counter import (
 from omniclaude.lib.utils.token_counter import count_tokens as _count_tokens_impl
 
 if TYPE_CHECKING:
+    # PatternRecord is defined in handler_context_injection which imports
+    # InjectionLimitsConfig from this module — creating a potential cycle.
+    # The TYPE_CHECKING guard breaks the runtime cycle; `from __future__ import
+    # annotations` ensures all annotations referencing PatternRecord remain
+    # string literals and are never evaluated at import time (OMN-5419).
     from omniclaude.hooks.handler_context_injection import PatternRecord
 
 logger = logging.getLogger(__name__)

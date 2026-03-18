@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "performance"
+mode: "both"
 
 agent_identity:
   name: "agent-performance"

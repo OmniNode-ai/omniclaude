@@ -7,6 +7,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "workflow_generator"
+mode: "full"
 
 agent_identity:
   name: "agent-workflow-generator"

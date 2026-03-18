@@ -4,6 +4,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "velocity_tracker"
+mode: "full"
 
 agent_identity:
   name: "agent-velocity-tracker"

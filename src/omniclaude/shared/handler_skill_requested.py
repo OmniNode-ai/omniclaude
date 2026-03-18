@@ -28,6 +28,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Literal, cast
 from uuid import UUID
 
 from .models.model_skill_lifecycle_events import (
@@ -188,7 +189,7 @@ def _emit_completed(
         skill_name=request.skill_name,
         repo_id=_REPO_ID,
         correlation_id=request.correlation_id,
-        status=status.value,
+        status=cast("Literal['success', 'failed', 'partial']", status.value),
         duration_ms=duration_ms,
         error_type=error_type,
         started_emit_failed=started_emit_failed,

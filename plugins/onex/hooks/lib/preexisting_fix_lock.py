@@ -128,7 +128,7 @@ class PreexistingFixLock:
 
         try:
             # O_CREAT | O_EXCL is atomic: fails if file already exists.
-            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             return False
 

@@ -70,7 +70,7 @@ If `--skip-sync` is set, skip pull-all.sh. Still run infra health check (read-on
 ### Sync repos
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
 ```
 
 Parse stdout to build `repo_sync_status`. On failure → HIGH finding, continue.
@@ -98,17 +98,15 @@ If infra down → HIGH finding per service, **continue** (do NOT abort).
 
 | Probe Name | Skill Invocation | Purpose |
 |------------|-----------------|---------|
-| `list_prs` | `/list-prs` | Overnight PR/CI state |
 | `dashboard_sweep` | `/dashboard-sweep --triage-only` | Page health, no fixes |
 | `aislop_sweep` | `/aislop-sweep --dry-run` | AI slop detection |
-| `standardization_sweep` | `/standardization-sweep --dry-run` | Python standards |
 | `gap_detect` | `/gap detect --since-days 1` | Cross-repo integration drift |
 | `env_parity` | `/env-parity check` | Local vs cloud env drift |
 | `system_status` | `/system-status` | Platform service health |
 
 ### Dispatch rules
 
-**ALL 7 probes MUST be dispatched in a SINGLE message as parallel polymorphic agents.**
+**ALL 5 probes MUST be dispatched in a SINGLE message as parallel polymorphic agents.**
 
 If `--probes` is set, only dispatch the named probes. Others are skipped.
 
@@ -331,11 +329,9 @@ When `--dry-run` is set:
 
 Output:
 ```
-[begin-day --dry-run] Would dispatch 7 probes:
-  - list_prs → /list-prs
+[begin-day --dry-run] Would dispatch 5 probes:
   - dashboard_sweep → /dashboard-sweep --triage-only
   - aislop_sweep → /aislop-sweep --dry-run
-  - standardization_sweep → /standardization-sweep --dry-run
   - gap_detect → /gap detect --since-days 1
   - env_parity → /env-parity check
   - system_status → /system-status

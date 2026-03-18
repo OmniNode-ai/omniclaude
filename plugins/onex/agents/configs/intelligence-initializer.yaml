@@ -9,6 +9,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "intelligence_initializer"
+mode: "full"
 
 agent_identity:
   name: "agent-intelligence-initializer"

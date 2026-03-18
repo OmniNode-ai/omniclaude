@@ -8,6 +8,7 @@
 schema_version: "2.0.0"
 mode: full
 agent_type: "contract_driven_generator"
+mode: "full"
 created_date: "2025-01-29"
 
 agent_identity:

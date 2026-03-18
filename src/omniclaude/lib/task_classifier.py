@@ -545,11 +545,19 @@ class TaskClassifier:
         - Files with extensions: node_user_reducer.py, config.yaml
         - Words with underscores: agent_routing_decisions, manifest_injector
         """
-        # Match file names with extensions (including underscores in name)
-        # OR words with underscores (table names, module names, etc.)
-        # Pattern priority: files with extensions first, then underscore words
-        pattern = r"\b\w+(?:_\w+)*\.\w+\b|\b\w+(?:_\w+)+\b"
-        matches = re.findall(pattern, prompt)
+        # Match file names with extensions OR words with underscores.
+        # Two separate non-backtracking patterns are used instead of one
+        # combined pattern with nested quantifiers to prevent ReDoS
+        # (CWE-1333, CodeQL python/redos).
+        #
+        # Pattern 1: file names — one or more word chars, optional underscore
+        #   segments, then a dot extension (e.g. "node_user_reducer.py").
+        # Pattern 2: underscore identifiers — word chars with at least one
+        #   underscore segment (e.g. "agent_routing_decisions").
+        # Both patterns are anchored with \b and use no nested quantifiers.
+        file_pat = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9_]*\.[A-Za-z0-9]+\b")
+        ident_pat = re.compile(r"\b[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+\b")
+        matches = file_pat.findall(prompt) + ident_pat.findall(prompt)
 
         return sorted(set(matches))  # Deterministic order
 

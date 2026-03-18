@@ -791,7 +791,19 @@ MEETS_THRESHOLD="$(awk -v conf="$CONFIDENCE" -v thresh="$POLLY_DISPATCH_THRESHOL
 # Only inject agent context when an agent was actually matched.
 # When nothing matched, pass through with no additional context — no fallback noise.
 AGENT_CONTEXT=""
-if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+
+# ── Lite-mode gate (OMN-5401) ────────────────────────────────────────────────
+# When OMNICLAUDE_MODE=lite, skip the full ONEX-specific context assembly
+# (YAML injection, learned patterns, enrichment, advisory) and inject a
+# lightweight generic prompt instead.  This keeps the token budget small
+# for non-ONEX projects that only need basic agent/skill routing.
+_OMNICLAUDE_MODE="${OMNICLAUDE_MODE:-full}"
+_LITE_PROMPT_FILE="${PLUGIN_ROOT}/prompts/lite-system-prompt.md"
+
+if [[ "$_OMNICLAUDE_MODE" == "lite" ]] && [[ -f "$_LITE_PROMPT_FILE" ]]; then
+    AGENT_CONTEXT="$(cat "$_LITE_PROMPT_FILE")"
+    log "Lite-mode active — injected ${#AGENT_CONTEXT} chars from $_LITE_PROMPT_FILE (skipped full context assembly)"
+elif [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     AGENT_CONTEXT=$(jq -rn \
         --arg emit_warn "$EMIT_HEALTH_WARNING" \
         --arg yaml "$AGENT_YAML_INJECTION" \

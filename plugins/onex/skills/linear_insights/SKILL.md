@@ -3,26 +3,109 @@ description: Daily deep dive reports and velocity-based project completion estim
 mode: full
 level: intermediate
 debug: false
+args:
+  - name: --mode
+    description: "Report mode: deep-dive (default) | close-day | project | velocity | suggest | pipeline | github | all"
+    required: false
 ---
 
 # Linear Insights
 
-Analytics and reporting skills for Linear project management. Provides comprehensive daily deep dives and velocity-based milestone completion estimates.
+Unified analytics and reporting for the OmniNode platform. All reporting modes are subcommands of this single skill.
 
-## Skills Available
+## Quick Start
 
-1. **deep-dive** - Generate a comprehensive daily work analysis (like DECEMBER_9_2025_DEEP_DIVE.md)
-2. **velocity-estimate** - Calculate velocity and estimate milestone completion dates
-3. **estimation-accuracy** - Three-layer factory telemetry (deep dive archive + GitHub PRs + Linear)
-4. **project-status** - Quick health dashboard; supports `--emit` to relay snapshots to Kafka
+```
+/linear-insights                           # Default: deep-dive mode
+/linear-insights --mode close-day          # End-of-day reconciliation (ModelDayClose YAML)
+/linear-insights --mode project MVP        # Quick health dashboard
+/linear-insights --mode velocity MVP       # Milestone ETA calculations
+/linear-insights --mode suggest            # Priority backlog recommendations
+/linear-insights --mode pipeline           # Rework ratio, cycle time, CI stability
+/linear-insights --mode github             # PR counts, commit velocity, LOC metrics
+/linear-insights --mode all                # Run every mode, produce combined report
+```
+
+## Modes
+
+### `--mode deep-dive` (default)
+
+Generate a comprehensive daily work analysis. See Deep Dive Report section below.
+
+### `--mode close-day`
+
+Auto-generates a `ModelDayClose` YAML from today's GitHub PRs, git activity, and invariant probes.
+Absorbed from the former `close-day` skill (CDQA-04 / OMN-2981).
+
+**Invocation**: `/linear-insights --mode close-day [--date YYYY-MM-DD] [--dry-run]`
+
+**Execution steps**:
+1. Pull merged PRs across all OmniNode-ai repos for the target date
+2. Fetch active-sprint Linear plan (OMN-XXXX tickets)
+3. Build `actual_by_repo` grouped by repo with OMN-XXXX references
+4. Detect **scope drift**: PRs with no OMN-XXXX ref → `drift_detected` entry
+5. Run `scripts/check_arch_invariants.py` (shared with CDQA-07) to probe reducers/orchestrators
+6. Detect **golden-path progress** by reading `emitted_at` from `~/.claude/golden-path/TODAY/` artifact JSON files
+7. Set unknown statuses to `"unknown"` and add entries to `corrections_for_tomorrow`
+8. Validate against `ModelDayClose.model_validate()` (fails loudly on schema mismatch)
+9. Write to `$ONEX_CC_REPO_PATH/drift/day_close/YYYY-MM-DD.yaml` or print with warning banner
+
+**ONEX_CC_REPO_PATH behavior**: If not set, YAML is printed with a warning banner (file NOT written). If set and path exists, writes to the drift directory.
+
+### `--mode project`
+
+Quick health dashboard for Linear projects — progress, velocity, blockers, ETA, and confidence.
+Absorbed from the former `project-status` skill.
+
+**Invocation**: `/linear-insights --mode project [PROJECT] [--all] [--blockers] [--risks] [--confidence] [--json] [--emit]`
+
+Supports `--emit` to relay workstream snapshots to Kafka via `onex-linear-relay`.
+
+### `--mode velocity`
+
+Calculate project velocity from historical data and estimate milestone completion dates.
+Absorbed from the former `velocity-estimate` skill.
+
+**Invocation**: `/linear-insights --mode velocity [PROJECT] [--all] [--confidence] [--history] [--weighted] [--method METHOD] [--json]`
+
+Methods: `simple` (signal-grade), `priority` (signal), `points` (ETA-grade), `labels` (signal), `cycle_time` (ETA-grade).
+
+### `--mode suggest`
+
+Priority backlog recommendations — highest priority unblocked issues with repo-based prioritization.
+Absorbed from the former `suggest-work` skill.
+
+**Invocation**: `/linear-insights --mode suggest [--count N] [--project PROJECT] [--repo REPO] [--label LABEL] [--json]`
+
+### `--mode pipeline`
+
+Pipeline health metrics — rework ratio, cycle time, CI stability, and feature velocity.
+Absorbed from the former `pipeline-metrics` skill.
+
+**Invocation**: `/linear-insights --mode pipeline [--since YYYY-MM-DD] [--ticket OMN-XXXX] [--repo REPO] [--format table|json]`
+
+Metrics: Cycle Time (P50/P90), CI Clean Rate, Rework Cycles/Ticket, Feature Velocity, Skill Duration P50.
+
+### `--mode github`
+
+GitHub repository statistics — PR counts, commit velocity, contributor activity, LOC metrics.
+Absorbed from the former `gather-github-stats` skill.
+
+**Invocation**: `/linear-insights --mode github [--github-only] [--local-only] [--include-local-loc] [--include-private] [--output PATH]`
+
+### `--mode all`
+
+Runs every mode sequentially and produces a combined report. Useful for comprehensive end-of-sprint summaries.
 
 ## When to Use
 
-- **End of day wrap-up**: Generate a comprehensive deep dive of the day's work
-- **Sprint planning**: Understand velocity trends for capacity planning
-- **Milestone tracking**: Get data-driven ETAs for MVP, Beta, Production
-- **Retrospectives**: Analyze estimation accuracy to improve future estimates
-- **Weekly summaries**: Aggregate daily work into weekly reports
+- **End of day wrap-up**: `--mode deep-dive` or `--mode close-day`
+- **Sprint planning**: `--mode velocity` for capacity planning
+- **Milestone tracking**: `--mode project` for data-driven ETAs
+- **What to work on next**: `--mode suggest` for prioritized backlog
+- **Pipeline health check**: `--mode pipeline` for rework and CI metrics
+- **Repo statistics**: `--mode github` for PR throughput and commit velocity
+- **Retrospectives**: `--mode all` for comprehensive analysis
 
 ---
 

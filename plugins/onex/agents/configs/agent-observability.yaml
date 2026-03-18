@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "observability"
+mode: "full"
 definition_format: "yaml_agent_v1"
 
 # Agent Identity
