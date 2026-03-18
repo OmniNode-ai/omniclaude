@@ -138,7 +138,9 @@ class TestPromptMd:
     def test_path_exclusions_present(self) -> None:
         content = _read(_PROMPT_MD)
         for exclusion in (".git/", ".venv/", "docs/", "fixtures/"):
-            assert exclusion in content, f"prompt.md missing path exclusion: {exclusion}"
+            assert exclusion in content, (
+                f"prompt.md missing path exclusion: {exclusion}"
+            )
 
 
 @pytest.mark.unit
@@ -173,7 +175,9 @@ class TestGoldenPathFixture:
             pytest.skip("Fixture not found")
         data = json.loads(_FIXTURE_JSON.read_text())
         assert data["input"]["topic"] == "onex.cmd.omniclaude.aislop-sweep.v1"
-        assert data["output"]["topic"] == "onex.evt.omniclaude.aislop-sweep-completed.v1"
+        assert (
+            data["output"]["topic"] == "onex.evt.omniclaude.aislop-sweep-completed.v1"
+        )
 
     def test_fixture_has_dry_run(self) -> None:
         if not _FIXTURE_JSON.exists():
