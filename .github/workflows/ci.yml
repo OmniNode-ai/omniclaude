@@ -1427,7 +1427,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: OmniNode-ai/onex_change_control
-          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196
+          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
           token: ${{ secrets.CROSS_REPO_PAT || github.token }}
           path: onex_change_control
           sparse-checkout: |
@@ -1471,7 +1471,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: OmniNode-ai/onex_change_control
-          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196
+          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
           token: ${{ secrets.CROSS_REPO_PAT || github.token }}
           path: onex_change_control
           sparse-checkout: |
