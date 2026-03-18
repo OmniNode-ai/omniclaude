@@ -497,9 +497,9 @@ def aggregate_findings(
             no_resource.append(f)
             continue
         existing = resource_dedup.get(rk)
-        if existing is None or _severity_sort_key(
-            f["severity"]
-        ) < _severity_sort_key(existing["severity"]):
+        if existing is None or _severity_sort_key(f["severity"]) < _severity_sort_key(
+            existing["severity"]
+        ):
             resource_dedup[rk] = f
 
     final = list(resource_dedup.values()) + no_resource
@@ -528,9 +528,7 @@ def compute_focus_areas(
 
     # Sort by score descending, take top N
     sorted_areas = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return [
-        f"{repo}: {score} points" for repo, score in sorted_areas[:max_areas]
-    ]
+    return [f"{repo}: {score} points" for repo, score in sorted_areas[:max_areas]]
 
 
 # ---------------------------------------------------------------------------
@@ -557,9 +555,7 @@ def build_day_open(
     clean_probes = []
     for pr in probe_results:
         clean = {
-            k: v
-            for k, v in pr.items()
-            if k not in ("findings", "_synthetic_findings")
+            k: v for k, v in pr.items() if k not in ("findings", "_synthetic_findings")
         }
         clean_probes.append(clean)
 

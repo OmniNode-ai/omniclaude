@@ -206,7 +206,10 @@ class TestSkillFileStructure:
         parts = content.split("---", 2)
         assert len(parts) >= 3, "SKILL.md frontmatter not properly delimited"
         fm = yaml.safe_load(parts[1])
-        assert fm["name"] == "release"
+        # name is derived from directory, not frontmatter (OMN-5389)
+        assert "name" not in fm, (
+            "name must NOT be in frontmatter — derived from directory"
+        )
         assert "description" in fm
         assert "version" in fm
 

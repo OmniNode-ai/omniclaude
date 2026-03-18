@@ -5,10 +5,11 @@
 """Validate SKILL.md frontmatter for all onex skills.
 
 Validates:
-- name, description, version, level keys are present
+- description, level, debug keys are present
 - level is one of: basic, intermediate, advanced
 - debug is present and is a boolean (true/false)
 - Frontmatter boundary is correct (opening and closing ---)
+- name is NOT present (derived from directory name per OMN-5389)
 
 Parses frontmatter correctly: finds the second occurrence of --- (not split('---'))
 to avoid mishandling --- inside content.
@@ -19,7 +20,10 @@ from pathlib import Path
 
 VALID_LEVELS = {"basic", "intermediate", "advanced"}
 
-REQUIRED_KEYS = {"name", "description", "level", "debug"}
+REQUIRED_KEYS = {"description", "level", "debug"}
+
+# name must NOT be in frontmatter — it is derived from the directory name (OMN-5389)
+FORBIDDEN_KEYS = {"name"}
 
 
 def parse_frontmatter(content: str, filepath: Path) -> dict[str, str] | None:
@@ -80,6 +84,13 @@ def validate_skill(skill_dir: Path) -> list[str]:
         if key not in fm:
             errors.append(f"{skill_dir.name}: Missing required frontmatter key '{key}'")
 
+    # Check forbidden keys (name is derived from directory, not frontmatter)
+    for key in FORBIDDEN_KEYS:
+        if key in fm:
+            errors.append(
+                f"{skill_dir.name}: Forbidden frontmatter key '{key}' — derived from directory name"
+            )
+
     # Validate level
     if "level" in fm:
         level = fm["level"]
@@ -130,7 +141,7 @@ def main() -> int:
         return 1
     else:
         print(
-            f"OK: All {validated} skills have valid frontmatter (name, description, level, debug)"
+            f"OK: All {validated} skills have valid frontmatter (description, level, debug)"
         )
         return 0
 

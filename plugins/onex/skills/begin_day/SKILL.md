@@ -1,5 +1,4 @@
 ---
-name: begin_day
 description: Automated morning investigation pipeline — syncs repos, checks infra, dispatches 7 parallel probes, aggregates findings into ModelDayOpen YAML, and feeds into design-to-plan
 version: 1.0.0
 level: advanced

@@ -65,10 +65,11 @@ class TestFeatureDashboardFrontmatter:
         fm, _ = _parse_frontmatter(_SKILL_MD)
         assert isinstance(fm, dict), "Frontmatter must parse as a YAML mapping"
 
-    def test_name_field(self) -> None:
+    def test_name_field_absent(self) -> None:
+        """Name is derived from directory, not frontmatter (OMN-5389)."""
         fm, _ = _parse_frontmatter(_SKILL_MD)
-        assert fm.get("name") == "feature_dashboard", (
-            f"Expected name='feature_dashboard', got {fm.get('name')!r}"
+        assert "name" not in fm, (
+            "name field must NOT be in frontmatter — it is derived from the directory name"
         )
 
     def test_description_field_present_and_nonempty(self) -> None:
