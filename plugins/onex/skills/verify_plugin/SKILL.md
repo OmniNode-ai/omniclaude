@@ -1,7 +1,12 @@
 ---
-name: verify-plugin
+name: verify_plugin
 description: Post-deployment verification suite — runs structural and in-session checks to prove the omniclaude plugin is correctly loaded after deploy + restart
-level: 1
+version: 1.0.0
+level: basic
+debug: false
+category: deployment
+tags: [deployment, verification, health]
+author: OmniClaude Team
 ---
 
 # Verify Plugin
