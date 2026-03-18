@@ -13,56 +13,56 @@
 
 progressions:
   # Core workflow ladder: local review → PR polish
-  - from: local-review
-    to: pr-polish
+  - from: local_review
+    to: pr_polish
     after_uses: 5
 
   # Core workflow ladder: ticket-work → ticket-pipeline
-  - from: ticket-work
-    to: ticket-pipeline
+  - from: ticket_work
+    to: ticket_pipeline
     after_uses: 3
 
   # PR review escalation: basic → advanced
-  - from: pr-review
-    to: pr-review-dev
+  - from: pr_review
+    to: pr_review_dev
     after_uses: 5
 
   # Linear insights → suggest-work (use insights to drive work)
-  - from: linear-insights
-    to: suggest-work
+  - from: linear_insights
+    to: suggest_work
     after_uses: 3
 
   # Create ticket → plan-ticket (richer planning)
-  - from: create-ticket
-    to: plan-ticket
+  - from: create_ticket
+    to: plan_ticket
     after_uses: 3
 
   # ticket-pipeline → epic-team (scale to multi-ticket workflows)
-  - from: ticket-pipeline
-    to: epic-team
+  - from: ticket_pipeline
+    to: epic_team
     after_uses: 5
 
   # local-review → ultimate-validate (deeper quality validation)
-  - from: local-review
-    to: ultimate-validate
+  - from: local_review
+    to: ultimate_validate
     after_uses: 10
 
   # pr-watch → merge-sweep (bulk PR management)
-  - from: pr-watch
-    to: merge-sweep
+  - from: pr_watch
+    to: merge_sweep
     after_uses: 5
 
   # status → project-status (team-level visibility)
   - from: status
-    to: project-status
+    to: project_status
     after_uses: 3
 
   # design-to-plan → plan-to-tickets (convert plans to Linear tickets)
-  - from: design-to-plan
-    to: plan-to-tickets
+  - from: design_to_plan
+    to: plan_to_tickets
     after_uses: 3
 
   # ci-watch → ci-fix-pipeline (automated CI repair)
-  - from: ci-watch
-    to: ci-fix-pipeline
+  - from: ci_watch
+    to: ci_fix_pipeline
     after_uses: 3

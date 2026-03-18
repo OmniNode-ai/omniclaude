@@ -1,0 +1,10 @@
+name: verify_plugin
+level: 1
+description: Post-deployment verification suite — proves plugin is correctly loaded and functional after deploy + restart
+tags:
+  - deployment
+  - verification
+  - health
+topics:
+  publish: []
+  subscribe: []
