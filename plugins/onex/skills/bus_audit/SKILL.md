@@ -1,5 +1,4 @@
 ---
-name: bus_audit
 description: Run OmniClaude bus health audit (Layer 2 domain validation)
 version: "1.0.0"
 level: advanced

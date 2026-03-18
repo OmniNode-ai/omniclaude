@@ -1,5 +1,4 @@
 ---
-name: project_status
 description: Project Status Command - Linear Insights Dashboard
 version: 1.0.0
 level: intermediate

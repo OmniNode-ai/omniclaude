@@ -1,5 +1,4 @@
 ---
-name: ticket_work
 description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
 version: 2.0.0
 level: basic

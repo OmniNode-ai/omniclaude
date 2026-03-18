@@ -1,5 +1,4 @@
 ---
-name: gather_github_stats
 description: Gather GitHub repository statistics — PR counts, commit velocity, contributor activity, LOC metrics — from GitHub API and optional local archive scan
 version: 1.0.0
 level: advanced

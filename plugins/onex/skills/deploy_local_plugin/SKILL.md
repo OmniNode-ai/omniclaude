@@ -1,5 +1,4 @@
 ---
-name: deploy_local_plugin
 description: Deploy local plugin files from repository source to Claude Code plugin cache for immediate testing
 version: 1.0.0
 level: advanced

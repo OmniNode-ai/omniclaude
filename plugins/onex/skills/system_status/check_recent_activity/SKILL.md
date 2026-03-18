@@ -1,5 +1,4 @@
 ---
-name: check_recent_activity
 description: Recent agent executions, routing decisions, and system activity with correlation tracking
 ---
 

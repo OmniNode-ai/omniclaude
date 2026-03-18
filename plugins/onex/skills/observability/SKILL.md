@@ -1,5 +1,4 @@
 ---
-name: observability
 description: Unified agent observability — action logging, tracking, execution logging, and trace correlation
 version: 1.0.0
 level: intermediate

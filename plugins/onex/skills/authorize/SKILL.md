@@ -1,5 +1,4 @@
 ---
-name: authorize
 description: Grant work authorization for Edit/Write operations in this session
 version: "1.0.0"
 level: basic

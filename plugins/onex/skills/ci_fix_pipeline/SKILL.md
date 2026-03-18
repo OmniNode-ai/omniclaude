@@ -1,5 +1,4 @@
 ---
-name: ci_fix_pipeline
 description: Self-healing CI pipeline -- 3-attempt retry budget with strategy rotation, inbox-wait for results, autonomous fix loop with escalation
 version: 2.0.0
 level: intermediate

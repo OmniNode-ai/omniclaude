@@ -1,5 +1,4 @@
 ---
-name: pr_review_dev
 description: PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 version: 1.0.0
 level: intermediate

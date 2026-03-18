@@ -1,5 +1,4 @@
 ---
-name: dod_verify
 description: Run DoD evidence checks against a ticket contract and generate a verification receipt
 level: intermediate
 debug: false

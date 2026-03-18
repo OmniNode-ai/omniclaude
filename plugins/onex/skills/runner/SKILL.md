@@ -1,5 +1,4 @@
 ---
-name: runner
 description: GitHub Actions runner management — deploy, update, and monitor self-hosted runners
 version: 1.0.0
 level: advanced

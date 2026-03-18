@@ -1,5 +1,4 @@
 ---
-name: decompose_epic
 description: Analyze a Linear epic description and create sub-tickets as Linear children
 version: 1.0.0
 level: advanced

@@ -1,5 +1,4 @@
 ---
-name: linear_epic_org
 description: Organize orphaned Linear tickets into epics — groups by naming pattern and repo, auto-creates obvious groupings, gates on human approval for ambiguous cases
 version: 1.0.0
 level: advanced

@@ -1,5 +1,4 @@
 ---
-name: golden_path_validate
 description: Execute a golden path event chain test using real Kafka/Redpanda to validate end-to-end event flows
 level: advanced
 debug: false

@@ -1,5 +1,4 @@
 ---
-name: epic_team
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
 version: 2.0.0
 level: advanced

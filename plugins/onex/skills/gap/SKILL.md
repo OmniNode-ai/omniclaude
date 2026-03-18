@@ -1,5 +1,4 @@
 ---
-name: gap
 description: Cross-repo integration health audit with detect, fix, and cycle modes
 version: 1.0.0
 level: advanced

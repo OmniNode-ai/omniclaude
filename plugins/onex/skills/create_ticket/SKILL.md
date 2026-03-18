@@ -1,5 +1,4 @@
 ---
-name: create_ticket
 description: Create a single Linear ticket from args, contract file, or plan milestone with conflict resolution
 version: 1.0.0
 level: basic

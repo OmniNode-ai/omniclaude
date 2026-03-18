@@ -1,5 +1,4 @@
 ---
-name: request_agent_routing
 description: Request agent routing via Kafka event bus or direct router fallback. Returns routing recommendations with confidence scores for specialized agent selection.
 ---
 

@@ -1,5 +1,4 @@
 ---
-name: suggest_work
 description: Suggest Work Command - Priority Backlog Recommendations
 version: 1.0.0
 level: basic

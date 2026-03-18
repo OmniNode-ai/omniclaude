@@ -1,5 +1,4 @@
 ---
-name: check_infrastructure
 description: Infrastructure component connectivity and health checks for Kafka, PostgreSQL, and Qdrant
 ---
 

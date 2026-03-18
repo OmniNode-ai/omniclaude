@@ -1,5 +1,4 @@
 ---
-name: mergeability_gate
 description: Evaluate a PR's mergeability and label it appropriately. Outputs one of three statuses — mergeable, needs-split, or blocked — called by ticket-pipeline between local_review and create_pr phases.
 version: 1.0.0
 level: advanced

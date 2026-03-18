@@ -1,5 +1,4 @@
 ---
-name: generate_status_report
 description: Comprehensive system status report with services, infrastructure, performance metrics, and recommendations
 ---
 

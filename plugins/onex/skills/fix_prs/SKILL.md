@@ -1,5 +1,4 @@
 ---
-name: fix_prs
 description: Org-wide PR repair — scans all repos for broken PRs and autonomously fixes merge conflicts, failing CI, and unaddressed review comments
 version: 1.0.0
 level: advanced

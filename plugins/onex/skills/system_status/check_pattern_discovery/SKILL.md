@@ -1,5 +1,4 @@
 ---
-name: check_pattern_discovery
 description: Qdrant pattern collections status, vector counts, and pattern retrieval performance
 ---
 

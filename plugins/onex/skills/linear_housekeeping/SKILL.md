@@ -1,5 +1,4 @@
 ---
-name: linear_housekeeping
 description: Orchestrate full Linear housekeeping — triage ticket status, organize orphans into epics, then sync MASTER_TICKET_PLAN.md. Human checkpoint between triage and apply.
 version: 1.0.0
 level: intermediate

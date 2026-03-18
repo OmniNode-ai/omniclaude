@@ -1007,6 +1007,12 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     done
 
+    # Remove stale commands/ directory from cache (skills replaced commands in v2.0+)
+    if [[ -d "${TARGET}/commands" ]]; then
+        rm -rf "${TARGET}/commands"
+        echo -e "${GREEN}  Removed stale commands/ directory from cache${NC}"
+    fi
+
     # Prune old version directories — keep only NEW_VERSION.
     # Runs last so all writes (registry, settings) succeed before we remove rollback targets.
     # Only delete directories whose names match the semver pattern X.Y.Z to avoid

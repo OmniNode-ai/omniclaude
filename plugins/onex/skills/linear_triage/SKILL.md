@@ -1,5 +1,4 @@
 ---
-name: linear_triage
 description: Scan all non-completed Linear tickets, verify status against actual PR state, auto-mark done tickets, flag stale ones, and identify orphans needing epic assignment
 version: 1.0.0
 level: intermediate

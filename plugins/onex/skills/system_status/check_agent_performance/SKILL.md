@@ -1,5 +1,4 @@
 ---
-name: check_agent_performance
 description: Agent routing and execution performance metrics including routing times, confidence scores, and transformation success rates
 ---
 

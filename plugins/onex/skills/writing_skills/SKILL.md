@@ -1,5 +1,4 @@
 ---
-name: writing_skills
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment - applies TDD to process documentation by testing with subagents before writing, iterating until bulletproof against rationalization
 version: 1.0.0
 level: intermediate
@@ -112,7 +111,6 @@ skills/
 
 ```markdown
 ---
-name: Skill-Name-With-Hyphens
 description: Use when [specific triggering conditions and symptoms] - [what the skill does and how it helps, written in third person]
 ---
 

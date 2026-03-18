@@ -1,5 +1,4 @@
 ---
-name: insights_to_plan
 description: Parse a Claude Code insights HTML report, archive it to the registry, and generate a design-to-plan-compatible action plan
 version: 1.0.0
 level: intermediate

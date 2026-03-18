@@ -1,5 +1,4 @@
 ---
-name: request_intelligence
 description: "Request intelligence operations from the Omni Archon intelligence adapter"
 version: "1.0.0"
 author: "OmniClaude Team"

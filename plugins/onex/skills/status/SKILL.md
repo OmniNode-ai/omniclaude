@@ -1,5 +1,4 @@
 ---
-name: status
 description: Show current OmniClaude integration tier, probe age, and per-service reachability for self-diagnosis
 version: 1.0.0
 level: advanced

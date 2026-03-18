@@ -1,5 +1,4 @@
 ---
-name: reconcile_artifacts
 description: Trigger artifact reconciliation for a repo — publishes a reconcile command to the event bus and returns the published event payload
 version: 1.0.0
 level: advanced

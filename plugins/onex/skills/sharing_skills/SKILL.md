@@ -1,5 +1,4 @@
 ---
-name: sharing_skills
 description: Use when you've developed a broadly useful skill and want to contribute it upstream via pull request - guides process of branching, committing, pushing, and creating PR to contribute skills back to upstream repository
 version: 1.0.0
 level: advanced

@@ -1,5 +1,4 @@
 ---
-name: ticket_plan
 description: Generate a prioritized master ticket plan from Linear — fetches all active tickets, resolves blocking relationships, and outputs an actionable backlog sorted by priority
 version: 1.0.0
 level: advanced

@@ -1,5 +1,4 @@
 ---
-name: release
 description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 version: 1.2.0
 level: advanced

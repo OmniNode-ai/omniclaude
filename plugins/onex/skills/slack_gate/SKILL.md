@@ -1,5 +1,4 @@
 ---
-name: slack_gate
 description: Post a risk-tiered Slack gate via chat.postMessage and poll for human reply using Bot Token
 version: 2.0.0
 level: advanced

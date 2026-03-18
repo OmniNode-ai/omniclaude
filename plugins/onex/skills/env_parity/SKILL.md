@@ -1,5 +1,4 @@
 ---
-name: env_parity
 description: Local Docker vs onex-dev k8s environment parity checker — detects credential drift, stale ECR tags, and missing Infisical paths
 version: 1.0.0
 level: advanced

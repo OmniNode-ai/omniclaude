@@ -1,5 +1,4 @@
 ---
-name: plan_ticket
 description: Generate a copyable ticket contract template - fill in the blanks and pass to /create-ticket
 version: 2.0.0
 level: advanced

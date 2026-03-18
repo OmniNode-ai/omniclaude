@@ -1,5 +1,4 @@
 ---
-name: ultimate_validate
 description: Generate comprehensive validation command for this codebase
 version: 1.0.0
 level: advanced

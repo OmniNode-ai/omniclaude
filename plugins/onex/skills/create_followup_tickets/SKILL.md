@@ -1,5 +1,4 @@
 ---
-name: create_followup_tickets
 description: Create Linear tickets from code review issues found in the current session
 version: 1.0.0
 level: intermediate

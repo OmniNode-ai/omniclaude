@@ -1,5 +1,4 @@
 ---
-name: post_release_redeploy
 description: End-to-end post-PR-merge redeployment pipeline — verifies merge gate, confirms release state, releases packages via /release, rebuilds Docker runtime via /redeploy, and runs close-out verification
 version: 1.0.0
 level: advanced

@@ -1,5 +1,4 @@
 ---
-name: check_system_health
 description: Fast overall system health snapshot - checks Docker services, infrastructure connectivity, and recent activity in under 5 seconds
 ---
 

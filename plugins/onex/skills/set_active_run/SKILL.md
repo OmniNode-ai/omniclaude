@@ -1,5 +1,4 @@
 ---
-name: set_active_run
 description: Set the active run ID for the current session
 version: "1.0.0"
 level: basic

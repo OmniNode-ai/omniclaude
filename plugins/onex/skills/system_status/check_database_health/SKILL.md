@@ -1,5 +1,4 @@
 ---
-name: check_database_health
 description: PostgreSQL database health including table stats, connection pool, and query performance
 ---
 

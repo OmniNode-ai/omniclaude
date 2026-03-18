@@ -1,5 +1,4 @@
 ---
-name: velocity_estimate
 description: Velocity Estimate Command - Project Velocity & ETA Analysis
 version: 1.0.0
 level: intermediate

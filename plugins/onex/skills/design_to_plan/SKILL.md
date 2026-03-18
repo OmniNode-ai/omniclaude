@@ -1,5 +1,4 @@
 ---
-name: design_to_plan
 description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional launch
 version: 1.0.0
 level: intermediate

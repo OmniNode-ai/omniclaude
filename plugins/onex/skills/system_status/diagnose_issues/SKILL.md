@@ -1,5 +1,4 @@
 ---
-name: diagnose_issues
 description: Identify and diagnose common system problems with actionable recommendations
 ---
 

@@ -1,5 +1,4 @@
 ---
-name: planning_context_resolver
 description: Read-only intelligence agent that compiles structured planning context for an epic
 version: 1.0.0
 level: intermediate

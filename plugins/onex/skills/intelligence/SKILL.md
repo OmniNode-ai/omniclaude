@@ -1,5 +1,4 @@
 ---
-name: intelligence
 description: Request intelligence from the OmniIntelligence service for pattern discovery, code analysis, and context enrichment
 level: advanced
 debug: true

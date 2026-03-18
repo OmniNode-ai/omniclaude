@@ -1,5 +1,4 @@
 ---
-name: checkpoint
 description: Pipeline checkpoint management for resume, replay, and phase validation
 version: 1.0.0
 level: advanced

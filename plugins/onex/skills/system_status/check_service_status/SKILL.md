@@ -1,5 +1,4 @@
 ---
-name: check_service_status
 description: Detailed status for specific Docker services including health checks, resource usage, and recent logs
 ---
 

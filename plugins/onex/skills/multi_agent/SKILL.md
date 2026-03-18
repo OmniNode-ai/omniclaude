@@ -1,5 +1,4 @@
 ---
-name: multi_agent
 description: Multi-agent coordination — parallel debugging, parallel building, and sequential review workflows
 version: 1.0.0
 level: advanced

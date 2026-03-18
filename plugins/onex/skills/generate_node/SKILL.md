@@ -1,5 +1,4 @@
 ---
-name: generate_node
 description: Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
 level: advanced
 debug: false

@@ -1,5 +1,4 @@
 ---
-name: check_kafka_topics
 description: Kafka topic existence, partition counts, and wildcard pattern matching
 ---
 

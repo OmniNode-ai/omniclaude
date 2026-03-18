@@ -1,5 +1,4 @@
 ---
-name: test_discipline
 description: Unified testing methodology — TDD red-green-refactor cycle and anti-pattern detection
 version: 1.0.0
 level: intermediate
