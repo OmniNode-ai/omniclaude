@@ -4,6 +4,14 @@
 
 ---
 
+## Skill Usage Policy
+
+- Before any task, check if a matching skill exists. If it does, use it.
+- Announce skill usage: "I'm using [Skill Name] to [what you're doing]."
+- If a skill has a checklist, create TodoWrite todos for each item.
+
+---
+
 ## Repo Boundaries
 
 | This repo owns | Another repo owns |

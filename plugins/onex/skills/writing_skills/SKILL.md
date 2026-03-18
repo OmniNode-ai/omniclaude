@@ -528,11 +528,55 @@ Run same scenarios WITH skill. Agent should now comply.
 
 Agent found new rationalization? Add explicit counter. Re-test until bulletproof.
 
-**REQUIRED SUB-SKILL:** Use superpowers:testing-skills-with-subagents for the complete testing methodology:
-- How to write pressure scenarios
-- Pressure types (time, sunk cost, authority, exhaustion)
-- Plugging holes systematically
-- Meta-testing techniques
+## Testing Skills (RED-GREEN-REFACTOR)
+
+Absorbed from the former `testing-skills-with-subagents` skill. Testing skills IS TDD applied
+to process documentation.
+
+### TDD Mapping for Skill Testing
+
+| TDD Phase | Skill Testing | What You Do |
+|-----------|---------------|-------------|
+| **RED** | Baseline test | Run scenario WITHOUT skill, watch agent fail |
+| **Verify RED** | Capture rationalizations | Document exact failures verbatim |
+| **GREEN** | Write skill | Address specific baseline failures |
+| **Verify GREEN** | Pressure test | Run scenario WITH skill, verify compliance |
+| **REFACTOR** | Plug holes | Find new rationalizations, add counters |
+| **Stay GREEN** | Re-verify | Test again, ensure still compliant |
+
+### Writing Pressure Scenarios
+
+Combine 3+ pressures for effective tests:
+
+| Pressure | Example |
+|----------|---------|
+| **Time** | Emergency, deadline, deploy window closing |
+| **Sunk cost** | Hours of work, "waste" to delete |
+| **Authority** | Senior says skip it, manager overrides |
+| **Exhaustion** | End of day, already tired, want to go home |
+| **Social** | Looking dogmatic, seeming inflexible |
+
+### Key Elements of Good Scenarios
+
+1. **Concrete options** — Force A/B/C choice, not open-ended
+2. **Real constraints** — Specific times, actual consequences
+3. **Make agent act** — "What do you do?" not "What should you do?"
+4. **No easy outs** — Can't defer without choosing
+
+### Meta-Testing (When GREEN Isn't Working)
+
+After agent chooses wrong option despite having the skill:
+1. **"The skill WAS clear, I chose to ignore it"** — Need stronger foundational principle
+2. **"The skill should have said X"** — Documentation problem; add their suggestion
+3. **"I didn't see section Y"** — Organization problem; make key points more prominent
+
+### When Skill is Bulletproof
+
+- Agent chooses correct option under maximum pressure
+- Agent cites skill sections as justification
+- Agent acknowledges temptation but follows rule anyway
+
+---
 
 ## Anti-Patterns
 

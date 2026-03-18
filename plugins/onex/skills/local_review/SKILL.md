@@ -67,6 +67,9 @@ args:
   - name: --guided
     description: "Interactive mode: pause at each severity bucket for human approval before applying fixes. Reproduces former review-cycle behavior."
     required: false
+  - name: --once
+    description: "Single review pass — no loop, no fix iterations. Dispatches one review and returns results. Absorbed from the former requesting-code-review skill."
+    required: false
 ---
 
 # Local Review
@@ -110,6 +113,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 /local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
 /local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
 /local-review --path ../worktrees/OMN-1234/myrepo  # Explicit worktree path
+/local-review --once                       # Single review pass, no fix loop
 ```
 
 ## Arguments
@@ -123,6 +127,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--max-iterations <n>` | 10 | Maximum review-fix cycles |
 | `--files <glob>` | all | Glob pattern to limit scope |
 | `--no-fix` | false | Report only, don't attempt fixes |
+| `--once` | false | Single review pass — dispatches one review and returns results. No fix loop. Replaces the former `requesting-code-review` skill. |
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |

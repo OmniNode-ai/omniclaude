@@ -13,7 +13,7 @@ tags:
 author: OmniClaude Team
 ---
 
-# /onex:status
+# /onex:plugin-status
 
 Display the current OmniClaude integration tier, probe file age, and per-service reachability.
 Useful for self-diagnosing misconfiguration instantly.
