@@ -7,6 +7,12 @@
 # Runs in background (caller should invoke with &).
 # Creates /tmp/omniclaude-tabs/{session_id}.json
 
+# --- Lite mode guard [OMN-5398] ---
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+unset _SCRIPT_DIR _MODE_SH
+
 SESSION_ID="${1:-}"
 PROJECT_PATH="${2:-$(pwd)}"
 

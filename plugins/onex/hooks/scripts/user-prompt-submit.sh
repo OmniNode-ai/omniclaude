@@ -48,6 +48,19 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 source "${HOOKS_DIR}/scripts/common.sh"
+
+# --- Mode resolution [OMN-5398] ---
+_MODE_SH="${PLUGIN_ROOT}/lib/mode.sh"
+CURRENT_MODE="full"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; CURRENT_MODE="$(omniclaude_mode)"; fi
+unset _MODE_SH
+
+# In lite mode, pass through stdin with no additional context
+if [[ "$CURRENT_MODE" == "lite" ]]; then
+    cat
+    exit 0
+fi
+
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 SKIP_IF_SESSION_INJECTED="${OMNICLAUDE_SESSION_SKIP_IF_INJECTED:-true}"
 

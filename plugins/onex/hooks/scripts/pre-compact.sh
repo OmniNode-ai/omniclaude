@@ -61,6 +61,17 @@ export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 # Source shared functions (provides log(), KAFKA_ENABLED)
 source "${HOOKS_DIR}/scripts/common.sh"
 
+# --- Mode resolution [OMN-5398] ---
+_MODE_SH="${PLUGIN_ROOT}/lib/mode.sh"
+CURRENT_MODE="full"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; CURRENT_MODE="$(omniclaude_mode)"; fi
+unset _MODE_SH
+
+# In lite mode, skip snapshot entirely
+if [[ "$CURRENT_MODE" == "lite" ]]; then
+    exit 0
+fi
+
 # Snapshot files contain repo context — restrict to owner only
 umask 077
 
