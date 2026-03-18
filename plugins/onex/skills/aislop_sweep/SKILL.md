@@ -1,6 +1,7 @@
 ---
 description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, agent-left TODO/FIXME markers, and empty implementations. Scan → triage → optional Linear tickets → optional fix.
 version: 1.0.0
+mode: full
 level: advanced
 debug: false
 category: quality
