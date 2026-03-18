@@ -91,8 +91,8 @@ EOF
 
 ### ❌ WRONG - Running bash directly:
 ```
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues 30)
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22)
 ```
 
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
@@ -101,11 +101,11 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="PR review for #30",
   prompt="Review PR #30. Use the pr-review skill tools:
-    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues 30
+    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30
     2. Analyze the output and categorize issues
     3. Report findings organized by priority (CRITICAL/MAJOR/MINOR/NIT)
 
-    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/:
+    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/:
     - collate-issues <PR#> - Get all issues from PR
     - collate-issues-with-ci <PR#> - Get PR issues + CI failures
     - pr-quick-review <PR#> - Quick summary review
@@ -194,16 +194,16 @@ Task(
 
 ```bash
 # Quick review with smart defaults (saves to {REPO}/tmp/pr-review-22.md)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22
 
 # Save to specific file
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --save ./my-review.md
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22 --save ./my-review.md
 
 # JSON output for scripting
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --json > pr22.json
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22 --json > pr22.json
 
 # CI/CD mode (fails if issues found)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --strict
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22 --strict
 ```
 
 **Benefits**:
@@ -287,7 +287,7 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 
 ```bash
 # Review PR with priority organization
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr 22
 
 # Output:
 # - Priority breakdown (Critical/Major/Minor/Nit)
@@ -300,7 +300,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22
 
 ```bash
 # Fail if any Critical/Major/Minor issues found
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --strict
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr 22 --strict
 
 # Exit codes:
 #   0 - Ready to merge (only nits or no issues)
@@ -311,10 +311,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --strict
 
 ```bash
 # Save to specific file
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --output-file ./tmp/pr22-review.md
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr 22 --output-file ./tmp/pr22-review.md
 
 # JSON output for programmatic processing
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --json > pr22.json
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr 22 --json > pr22.json
 ```
 
 ### Production Review (NEW)
@@ -323,15 +323,15 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --json > pr22.json
 
 ```bash
 # Production review (all Critical/Major/Minor MUST be resolved)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-review-production 22
 
 # Create Linear tickets for Critical and Major issues
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 \
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-review-production 22 \
   --create-linear-tickets \
   --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
 
 # JSON output for CI/CD pipelines
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 --json
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-review-production 22 --json
 
 # Exit codes:
 #   0 - Ready for production (all Critical/Major/Minor resolved)
@@ -353,7 +353,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 --json
 ```yaml
 - name: PR Review
   run: |
-    ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr ${{ github.event.pull_request.number }} --strict
+    ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr ${{ github.event.pull_request.number }} --strict
 
     # Upload review artifact
     if [ -f ./tmp/pr-review-*.md ]; then
@@ -507,13 +507,13 @@ Issues are automatically classified based on keywords:
 
 ## Skills Location
 
-**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/`
 **Executables**:
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review` - One-command quick review (RECOMMENDED)
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/fetch-pr-data` - Fetch all PR data from 4 GitHub endpoints
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/analyze-pr-comments` - Pre-process raw data into categorized analysis (NEW)
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr` - Comprehensive review with priority organization
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production` - Production-grade wrapper (NEW)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review` - One-command quick review (RECOMMENDED)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/fetch-pr-data` - Fetch all PR data from 4 GitHub endpoints
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/analyze-pr-comments` - Pre-process raw data into categorized analysis (NEW)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/review-pr` - Comprehensive review with priority organization
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-review-production` - Production-grade wrapper (NEW)
 
 ## Dependencies
 
@@ -639,7 +639,7 @@ Use the wrapper script for backward compatibility with existing workflows:
 
 ```bash
 # Same as pr_review.py but via bash wrapper
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-v2 38 --full
+${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-review-v2 38 --full
 ```
 
 ### Python API

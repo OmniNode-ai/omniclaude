@@ -189,7 +189,7 @@ failed — the deployment is not considered successful until all hooks pass.
 
 To run the smoke tests manually:
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/smoke-test-hooks.sh
+bash ${CLAUDE_PLUGIN_ROOT}/skills/deploy_local_plugin/smoke-test-hooks.sh
 ```
 
 ### Version-Agnostic `current/` Symlink
@@ -242,7 +242,7 @@ This means `lib/.venv` is missing from the active plugin cache directory. This c
 
 **Fix**:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv
+${CLAUDE_PLUGIN_ROOT}/skills/deploy_local_plugin/deploy.sh --repair-venv
 ```
 
 This builds `lib/.venv` in the currently-active deployed version (from `installed_plugins.json`)
@@ -271,7 +271,7 @@ which version is deployed. No further manual updates needed.
 
 ## Skills Location
 
-**Executable**: `${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh`
+**Executable**: `${CLAUDE_PLUGIN_ROOT}/skills/deploy_local_plugin/deploy.sh`
 
 ## See Also
 

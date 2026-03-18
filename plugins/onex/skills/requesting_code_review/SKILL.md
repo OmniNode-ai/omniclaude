@@ -55,7 +55,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 **2. Dispatch code-reviewer subagent:**
 
-Use Task tool with code-reviewer type, fill template at `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`
+Use Task tool with code-reviewer type, fill template at `${CLAUDE_PLUGIN_ROOT}/skills/requesting_code_review/code-reviewer.md`
 
 **Placeholders:**
 - `{WHAT_WAS_IMPLEMENTED}` - What you just built
@@ -126,4 +126,4 @@ You: [Fix progress indicators]
 - Show code/tests that prove it works
 - Request clarification
 
-See template at: `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`
+See template at: `${CLAUDE_PLUGIN_ROOT}/skills/requesting_code_review/code-reviewer.md`

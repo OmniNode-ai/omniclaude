@@ -18,7 +18,7 @@ View recent agent executions, routing decisions, and agent actions with correlat
 ## How to Use
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-recent-activity/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_recent_activity/execute.py \
   --limit 20 \
   --since 5m
 ```

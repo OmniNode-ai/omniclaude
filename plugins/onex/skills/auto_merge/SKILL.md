@@ -36,7 +36,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/auto-merge.json"
+    description: "Written to ~/.claude/skill-results/{context_id}/auto_merge.json"
     fields:
       - status: "success" | "gated" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "merged" | "held" | "timeout" | null  # domain-specific granularity
@@ -232,7 +232,7 @@ Gate expires in {gate_timeout_hours}h.
 
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
-Write to: `~/.claude/skill-results/{context_id}/auto-merge.json`
+Write to: `~/.claude/skill-results/{context_id}/auto_merge.json`
 
 | Field | Value |
 |-------|-------|
@@ -245,7 +245,7 @@ Write to: `~/.claude/skill-results/{context_id}/auto-merge.json`
 | `ticket_id` | Linear ticket ID (e.g. `"OMN-3262"`) or `null` |
 | `extra` | `{"merge_commit": str, "strategy": str, "ticket_close_status": str}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/auto-merge.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/auto_merge.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 
@@ -267,7 +267,7 @@ Example result:
 
 ```json
 {
-  "skill_name": "auto-merge",
+  "skill_name": "auto_merge",
   "status": "success",
   "extra_status": "merged",
   "pr_number": 123,

@@ -80,10 +80,10 @@ It exits 0 on valid YAML and exits 1 with field-level errors on invalid YAML.
 
 ```bash
 # Exit 0 — valid
-python plugins/onex/skills/generate-ticket-contract/validate_contract.py contract.yaml
+python plugins/onex/skills/generate_ticket_contract/validate_contract.py contract.yaml
 
 # Exit 1 — shows field errors
-python plugins/onex/skills/generate-ticket-contract/validate_contract.py bad_contract.yaml
+python plugins/onex/skills/generate_ticket_contract/validate_contract.py bad_contract.yaml
 ```
 
 ---

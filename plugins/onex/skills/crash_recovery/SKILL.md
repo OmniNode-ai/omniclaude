@@ -53,20 +53,20 @@ The skill scans all pipeline state directories, extracts ticket ID, current phas
 Execute the bundled script, passing any flags the user supplied directly through:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines [flags]
+${CLAUDE_PLUGIN_ROOT}/skills/crash_recovery/list-pipelines [flags]
 ```
 
 Where `[flags]` is the verbatim set of arguments the user passed to `/crash-recovery`. Examples:
 
 ```bash
 # No flags -- show default 10
-${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines
+${CLAUDE_PLUGIN_ROOT}/skills/crash_recovery/list-pipelines
 
 # In-progress only
-${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines --in-progress
+${CLAUDE_PLUGIN_ROOT}/skills/crash_recovery/list-pipelines --in-progress
 
 # Custom count, JSON output
-${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines --count 5 --json
+${CLAUDE_PLUGIN_ROOT}/skills/crash_recovery/list-pipelines --count 5 --json
 ```
 
 ### 2. Display the output

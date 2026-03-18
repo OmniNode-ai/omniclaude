@@ -20,7 +20,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/decompose-epic.json"
+    description: "Written to ~/.claude/skill-results/{context_id}/decompose_epic.json"
     fields:
       - status: "success" | "dry_run" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "created" | null  # domain-specific granularity
@@ -132,7 +132,7 @@ repos:
 
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
-Write to: `~/.claude/skill-results/{context_id}/decompose-epic.json`
+Write to: `~/.claude/skill-results/{context_id}/decompose_epic.json`
 
 | Field | Value |
 |-------|-------|
@@ -142,7 +142,7 @@ Write to: `~/.claude/skill-results/{context_id}/decompose-epic.json`
 | `run_id` | Correlation ID |
 | `extra` | `{"epic_id": str, "created_tickets": list[{"id": str, "title": str, "repo_hint": str}], "count": int}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/decompose-epic.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/decompose_epic.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 
@@ -162,7 +162,7 @@ Example result:
 
 ```json
 {
-  "skill_name": "decompose-epic",
+  "skill_name": "decompose_epic",
   "status": "success",
   "extra_status": "created",
   "run_id": "pipeline-1709856000-OMN-2000",

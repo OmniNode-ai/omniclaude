@@ -236,7 +236,7 @@ Write to: `~/.claude/skill-results/{context_id}/slack-gate.json`
 ### `slack_gate_poll.py`
 
 Python helper that implements the `conversations.replies` polling loop. See the script at
-`plugins/onex/skills/slack-gate/slack_gate_poll.py` for the full implementation.
+`plugins/onex/skills/slack_gate/slack_gate_poll.py` for the full implementation.
 
 ```
 Usage: slack_gate_poll.py [options]

@@ -40,7 +40,7 @@ Executes a golden path event chain test using real Kafka/Redpanda. Given a
 ## Entrypoint
 
 ```bash
-plugins/onex/skills/golden-path-validate/run-golden-path <decl-json-or-file>
+plugins/onex/skills/golden_path_validate/run-golden-path <decl-json-or-file>
 ```
 
 ## Declaration Format

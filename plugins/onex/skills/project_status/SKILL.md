@@ -56,7 +56,7 @@ Use the `project-status` skill which provides a comprehensive dashboard:
 
 ```bash
 # Execute the project-status skill
-${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/project-status "$1" $2 $3 $4 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/project-status "$1" $2 $3 $4 2>&1
 ```
 
 **What project-status provides**:
@@ -275,7 +275,7 @@ The adjusted ETA accounts for backlog churn:
 ### Configuration
 
 Project configuration is stored in:
-`${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/config.yaml`
+`${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/config.yaml`
 
 Run `configure` skill first if configuration is missing.
 
