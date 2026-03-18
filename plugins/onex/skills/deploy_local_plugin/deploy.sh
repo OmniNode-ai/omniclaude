@@ -1038,7 +1038,7 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     # Hook smoke tests — gate deploy on all hooks passing (OMN-4383)
     # Runs AFTER venv integrity check so Python is guaranteed present.
-    SMOKE_TEST_SCRIPT="${TARGET}/skills/deploy-local-plugin/smoke-test-hooks.sh"
+    SMOKE_TEST_SCRIPT="${TARGET}/skills/deploy_local_plugin/smoke-test-hooks.sh"
     if [[ -x "$SMOKE_TEST_SCRIPT" ]]; then
         echo ""
         echo "Running hook smoke tests..."
