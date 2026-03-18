@@ -31,7 +31,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
-_REVIEW_ALL_PRS_DIR = _SKILLS_ROOT / "review-all-prs"
+_REVIEW_ALL_PRS_DIR = _SKILLS_ROOT / "review_all_prs"
 _REVIEW_ALL_PRS_PROMPT = _REVIEW_ALL_PRS_DIR / "prompt.md"
 _REVIEW_ALL_PRS_SKILL = _REVIEW_ALL_PRS_DIR / "SKILL.md"
 _PR_SAFETY_HELPERS = _SKILLS_ROOT / "_lib" / "pr-safety" / "helpers.md"
