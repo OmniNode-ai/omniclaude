@@ -195,6 +195,82 @@ class TestExtractSkillId:
 
 
 @pytest.mark.unit
+class TestSkillPathNormalization:
+    """Tests for kebab-to-underscore normalization in _build_skill_request() (OMN-5273).
+
+    After OMN-5200 renamed skill directories from kebab-case to underscore,
+    the SKILL.md path must use underscores even though Kafka topics remain
+    kebab-case.
+    """
+
+    def test_kebab_skill_id_produces_underscore_path(self) -> None:
+        """Kebab-case skill_id yields underscore directory in SKILL.md path."""
+        contracts = {
+            "local-review": _make_contract(
+                name="node_skill_local_review_orchestrator",
+                backend="claude_code",
+            ),
+        }
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=_mock_claude_code_backend(),
+            vllm_backend=None,
+        )
+        request = dispatcher._build_skill_request(
+            skill_id="local-review",
+            payload={},
+            correlation_id=uuid4(),
+        )
+        assert "skills/local_review/SKILL.md" in request.skill_path
+
+    def test_single_word_skill_id_unchanged(self) -> None:
+        """Single-word skill_id (no hyphens) is unchanged."""
+        contracts: dict[str, ModelSkillNodeContract] = {}
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=None,
+            vllm_backend=None,
+        )
+        request = dispatcher._build_skill_request(
+            skill_id="commit",
+            payload={},
+            correlation_id=uuid4(),
+        )
+        assert "skills/commit/SKILL.md" in request.skill_path
+
+    def test_multi_hyphen_skill_id_all_normalized(self) -> None:
+        """Multi-hyphen skill_id has all hyphens replaced with underscores."""
+        contracts: dict[str, ModelSkillNodeContract] = {}
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=None,
+            vllm_backend=None,
+        )
+        request = dispatcher._build_skill_request(
+            skill_id="pr-review-dev",
+            payload={},
+            correlation_id=uuid4(),
+        )
+        assert "skills/pr_review_dev/SKILL.md" in request.skill_path
+
+    def test_explicit_skill_path_in_payload_overrides_default(self) -> None:
+        """When payload includes skill_path, normalization is not applied."""
+        contracts: dict[str, ModelSkillNodeContract] = {}
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=None,
+            vllm_backend=None,
+        )
+        custom_path = "plugins/onex/skills/custom/SKILL.md"
+        request = dispatcher._build_skill_request(
+            skill_id="local-review",
+            payload={"skill_path": custom_path},
+            correlation_id=uuid4(),
+        )
+        assert request.skill_path == custom_path
+
+
+@pytest.mark.unit
 class TestExtractSkillIdFromTopic:
     """Tests for SkillCommandDispatcher._extract_skill_id()."""
 

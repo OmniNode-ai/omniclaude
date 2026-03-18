@@ -21,7 +21,7 @@ _SKILL_DIR = (
     / "plugins"
     / "onex"
     / "skills"
-    / "feature-dashboard"
+    / "feature_dashboard"
 )
 _SKILL_MD = _SKILL_DIR / "SKILL.md"
 
@@ -67,8 +67,8 @@ class TestFeatureDashboardFrontmatter:
 
     def test_name_field(self) -> None:
         fm, _ = _parse_frontmatter(_SKILL_MD)
-        assert fm.get("name") == "feature-dashboard", (
-            f"Expected name='feature-dashboard', got {fm.get('name')!r}"
+        assert fm.get("name") == "feature_dashboard", (
+            f"Expected name='feature_dashboard', got {fm.get('name')!r}"
         )
 
     def test_description_field_present_and_nonempty(self) -> None:

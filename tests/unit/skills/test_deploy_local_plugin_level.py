@@ -29,7 +29,7 @@ _SKILL_DIR = (
     / "plugins"
     / "onex"
     / "skills"
-    / "deploy-local-plugin"
+    / "deploy_local_plugin"
 )
 _FILTER_HELPERS_SH = _SKILL_DIR / "_filter_helpers.sh"
 _DEPLOY_SH = _SKILL_DIR / "deploy.sh"

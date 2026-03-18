@@ -29,7 +29,7 @@ class ModelSkillCompletionEvent(BaseModel):
         event_id: Unique identifier for this completion event.
         run_id: Identifier shared with the skill-started event, used as the
             primary join key for execution tracing.
-        skill_name: Human-readable skill name (e.g. ``"local-review"``).
+        skill_name: Human-readable skill name (e.g. ``"local_review"``).
         command_topic: The Kafka topic the inbound command was received on
             (echo of the inbound topic).
         status: Final invocation outcome: success, failed, or partial.
@@ -62,7 +62,7 @@ class ModelSkillCompletionEvent(BaseModel):
     skill_name: str = Field(
         ...,
         min_length=1,
-        description="Human-readable skill name (e.g. 'local-review')",
+        description="Human-readable skill name (e.g. 'local_review')",
     )
     command_topic: str = Field(
         ...,

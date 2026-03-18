@@ -2,7 +2,7 @@
 # Post-merge hook: trigger feature-dashboard audit after merges to main
 # ─────────────────────────────────────────────────────────────────────
 # Skip conditions (all log to $LOG_FILE, always exit 0):
-#   1. plugins/onex/skills/feature-dashboard/SKILL.md absent
+#   1. plugins/onex/skills/feature_dashboard/SKILL.md absent
 #   2. Branch != main
 #   3. No relevant changes (plugins/onex/skills/ or src/omniclaude/nodes/)
 #   4. Rate limited (.git/.feature-dashboard-last-run timestamp <10 min ago)
@@ -23,7 +23,7 @@ set -uo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$0")/../.." && pwd)"
 LOG_FILE="${REPO_ROOT}/.git/feature-dashboard-post-merge.log"
 LAST_RUN_FILE="${REPO_ROOT}/.git/.feature-dashboard-last-run"
-SKILL_SENTINEL="${REPO_ROOT}/plugins/onex/skills/feature-dashboard/SKILL.md"
+SKILL_SENTINEL="${REPO_ROOT}/plugins/onex/skills/feature_dashboard/SKILL.md"
 RATE_LIMIT_SECONDS=600  # 10 minutes
 
 # Helper: append timestamped message to log file (never to stderr)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from plugins.onex.skills.generate_ticket_contract.proof_validation import (
+from plugins.onex.skills._lib.generate_ticket_contract.proof_validation import (
     EnumRefStatus,
     ProofReferenceResolver,
 )

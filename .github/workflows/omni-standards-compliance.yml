@@ -323,9 +323,9 @@ jobs:
 
           # Migration allowlist: pre-existing skills awaiting migration to _lib/pr-safety/.
           # Remove a skill from this list once it has been migrated (separate PR per skill).
-          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve|release|multi-agent|gap|dashboard-sweep"
+          MIGRATION_ALLOWLIST="fix-prs|fix_prs|review-all-prs|review_all_prs|auto-merge|auto_merge|merge-sweep|merge_sweep|pr-queue-pipeline|pr_queue_pipeline|ticket-pipeline|ticket_pipeline|ticket-work|ticket_work|pr-polish|pr_polish|parallel-solve|parallel_solve|release|multi-agent|multi_agent|gap|dashboard-sweep|dashboard_sweep"
           # Reference/tutorial skills: documentation only, never migrate.
-          REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
+          REFERENCE_SKILLS="using-git-worktrees|using_git_worktrees|sharing-skills|sharing_skills|review-cycle|review_cycle|local-review|local_review|ci-failures|ci_failures|pr-review|pr_review|finishing-a-development-branch|finishing_a_development_branch"
 
           ALL_EXCLUSIONS="${MIGRATION_ALLOWLIST}|${REFERENCE_SKILLS}|_lib/pr-safety"
 
@@ -382,8 +382,8 @@ jobs:
         run: |
           ERRORS=0
 
-          MIGRATION_ALLOWLIST="fix-prs|review-all-prs|auto-merge|merge-sweep|pr-queue-pipeline|ticket-pipeline|ticket-work|pr-polish|parallel-solve|release|redeploy|dashboard-sweep"
-          REFERENCE_SKILLS="using-git-worktrees|sharing-skills|review-cycle|local-review|ci-failures|pr-review|finishing-a-development-branch"
+          MIGRATION_ALLOWLIST="fix-prs|fix_prs|review-all-prs|review_all_prs|auto-merge|auto_merge|merge-sweep|merge_sweep|pr-queue-pipeline|pr_queue_pipeline|ticket-pipeline|ticket_pipeline|ticket-work|ticket_work|pr-polish|pr_polish|parallel-solve|parallel_solve|release|redeploy|dashboard-sweep|dashboard_sweep"
+          REFERENCE_SKILLS="using-git-worktrees|using_git_worktrees|sharing-skills|sharing_skills|review-cycle|review_cycle|local-review|local_review|ci-failures|ci_failures|pr-review|pr_review|finishing-a-development-branch|finishing_a_development_branch"
           ALL_EXCLUSIONS="${MIGRATION_ALLOWLIST}|${REFERENCE_SKILLS}|_lib/pr-safety"
 
           MATCHES=$(grep -r "git worktree add" plugins/onex/skills/ --include="*.md" \

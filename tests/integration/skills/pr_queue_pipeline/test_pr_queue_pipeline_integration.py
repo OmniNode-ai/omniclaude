@@ -34,7 +34,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
-_PIPELINE_DIR = _SKILLS_ROOT / "pr-queue-pipeline"
+_PIPELINE_DIR = _SKILLS_ROOT / "pr_queue_pipeline"
 _PIPELINE_PROMPT = _PIPELINE_DIR / "prompt.md"
 _PIPELINE_SKILL = _PIPELINE_DIR / "SKILL.md"
 

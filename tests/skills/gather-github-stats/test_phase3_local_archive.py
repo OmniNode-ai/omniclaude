@@ -35,7 +35,8 @@ SKILL_DIR = (
     / "plugins"
     / "onex"
     / "skills"
-    / "gather-github-stats"
+    / "_lib"
+    / "gather_github_stats"
 )
 sys.path.insert(0, str(SKILL_DIR))
 

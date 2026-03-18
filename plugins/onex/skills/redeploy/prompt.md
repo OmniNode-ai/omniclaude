@@ -479,7 +479,7 @@ Expected output pattern:
 OMNIDASH_RESTART: restarting omnidash...
 [omnidash] Stopping omnidash...
 [omnidash] Stopped.
-[omnidash] Starting omnidash from: /Volumes/PRO-G40/Code/omni_home/omnidash
+[omnidash] Starting omnidash from: /Volumes/PRO-G40/Code/omni_home/omnidash  # local-path-ok
 [omnidash] Server healthy on port 3000 (startup took ~8s)
 OMNIDASH_RESTART: omnidash restarted successfully
 ```

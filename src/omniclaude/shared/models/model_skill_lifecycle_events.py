@@ -28,8 +28,8 @@ class ModelSkillStartedEvent(BaseModel):
     Attributes:
         event_id: Unique ID for this event (handler is authoritative).
         run_id: Shared with the corresponding completed event — join key.
-        skill_name: Human-readable skill identifier (e.g. "pr-review").
-        skill_id: Repo-relative skill path (e.g. "plugins/onex/skills/pipeline-metrics").
+        skill_name: Human-readable skill identifier (e.g. "pr_review").
+        skill_id: Repo-relative skill path (e.g. "plugins/onex/skills/pipeline_metrics").
         repo_id: Repository identifier (e.g. "omniclaude") — prevents cross-repo collisions.
         correlation_id: End-to-end correlation ID from the originating request.
         args_count: Count of args provided (not values — privacy).

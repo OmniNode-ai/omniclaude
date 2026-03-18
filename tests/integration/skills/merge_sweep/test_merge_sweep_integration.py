@@ -33,7 +33,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
-_MERGE_SWEEP_DIR = _SKILLS_ROOT / "merge-sweep"
+_MERGE_SWEEP_DIR = _SKILLS_ROOT / "merge_sweep"
 _MERGE_SWEEP_PROMPT = _MERGE_SWEEP_DIR / "prompt.md"
 _MERGE_SWEEP_SKILL = _MERGE_SWEEP_DIR / "SKILL.md"
 _PR_SAFETY_HELPERS = _SKILLS_ROOT / "_lib" / "pr-safety" / "helpers.md"

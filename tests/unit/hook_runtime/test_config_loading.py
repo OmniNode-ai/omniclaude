@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Unit tests for HookRuntimeConfig.from_yaml. [OMN-5310]"""
 
 from pathlib import Path

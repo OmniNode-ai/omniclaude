@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Hook Runtime Daemon entry point. [OMN-5307]
 
 Usage:

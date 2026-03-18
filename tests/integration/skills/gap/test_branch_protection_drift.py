@@ -37,7 +37,7 @@ _TAXONOMY = _GAP_DIR / "docs" / "FAILURE_TAXONOMY.md"
 _MODELS_DIR = _GAP_DIR / "models"
 _ENUM_FILE = _MODELS_DIR / "enum_gap_category.py"
 _FINDING_FILE = _MODELS_DIR / "model_gap_finding.py"
-_MERGE_SWEEP_DIR = _SKILLS_ROOT / "merge-sweep"
+_MERGE_SWEEP_DIR = _SKILLS_ROOT / "merge_sweep"
 _MERGE_SWEEP_PROMPT = _MERGE_SWEEP_DIR / "prompt.md"
 _MERGE_SWEEP_SKILL = _MERGE_SWEEP_DIR / "SKILL.md"
 

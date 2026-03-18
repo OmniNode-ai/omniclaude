@@ -32,7 +32,7 @@ def ci_watch_skill_path() -> Path:
         / "plugins"
         / "onex"
         / "skills"
-        / "ci-watch"
+        / "ci_watch"
         / "SKILL.md"
     )
 

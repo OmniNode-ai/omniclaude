@@ -18,7 +18,7 @@ Usage
     uv run python scripts/generate_skill_node.py local-review --dry-run
 
 The script reads SKILL.md frontmatter (name, description) from
-``plugins/onex/skills/{skill-name}/SKILL.md`` and populates the template
+``plugins/onex/skills/{skill_name}/SKILL.md`` and populates the template
 via plain string replacement (no Jinja2).
 
 Template

@@ -36,7 +36,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 DEEP_DIVE_SCRIPT = (
-    REPO_ROOT / "plugins" / "onex" / "skills" / "linear-insights" / "deep-dive"
+    REPO_ROOT / "plugins" / "onex" / "skills" / "linear_insights" / "deep-dive"
 )
 
 

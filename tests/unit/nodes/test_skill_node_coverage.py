@@ -6,7 +6,7 @@ Normalizes names to hyphenated form on both sides to handle any mixed
 underscore/hyphen directory naming conventions.
 
 CANONICAL_SKILLS is the PRIMARY source of truth for the ``test_coverage`` audit check
-performed by the feature-dashboard skill (see plugins/onex/skills/feature-dashboard/SKILL.md,
+performed by the feature-dashboard skill (see plugins/onex/skills/feature_dashboard/SKILL.md,
 section ``test_coverage``).  Any skill listed here is given a definitive PASS; skills that
 have test coverage detected only via filesystem heuristics receive a WARN instead.
 
@@ -24,8 +24,8 @@ from omniclaude.runtime.wiring_dispatchers import load_skill_contracts
 # ---------------------------------------------------------------------------
 # Canonical skill list — PRIMARY source of truth for test_coverage audit
 # ---------------------------------------------------------------------------
-# Kebab-case slugs matching plugins/onex/skills/<slug>/SKILL.md
-# and src/omniclaude/nodes/node_skill_<snake>_orchestrator/
+# Hyphen-case slugs (normalized via _normalize()) matching the canonical form
+# used by _get_skills() and _get_node_skills() for set intersection.
 CANONICAL_SKILLS: frozenset[str] = frozenset(
     {
         "feature-dashboard",

@@ -21,6 +21,7 @@ sys.path.insert(
         / "plugins"
         / "onex"
         / "skills"
+        / "_lib"
         / "rrh"
     ),
 )
