@@ -324,6 +324,87 @@ def detect_golden_path_progress(
 
 
 # ---------------------------------------------------------------------------
+# Run integration sweep
+# ---------------------------------------------------------------------------
+
+
+def run_integration_sweep(
+    today: str,
+    onex_cc_repo_path: str | None = None,
+) -> tuple[str, list[str]]:
+    """Read the integration sweep artifact for *today*.
+
+    Calls /integration-sweep (via subprocess) with --date={today} --mode=omniclaude-only,
+    then reads the artifact from $ONEX_CC_REPO_PATH/drift/integration/{today}.yaml.
+
+    Returns:
+        (integration_sweep_status, corrections_for_tomorrow)
+        integration_sweep_status: "pass" | "fail" | "partial" | "unknown"
+        corrections_for_tomorrow: list of correction strings (empty on pass/unknown)
+    """
+    cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
+
+    # Attempt to run /integration-sweep to produce the artifact
+    if cc_path:
+        skill_runner = (
+            Path(__file__).resolve().parent.parent.parent / "_bin" / "run-skill"
+        )
+        if skill_runner.exists():
+            try:
+                subprocess.run(  # noqa: S603
+                    [
+                        str(skill_runner),
+                        "integration-sweep",
+                        f"--date={today}",
+                        "--mode=omniclaude-only",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass  # Fall through to artifact read; artifact may already exist
+
+    # Read artifact written by /integration-sweep
+    if not cc_path:
+        return "unknown", ["Run /integration-sweep — ONEX_CC_REPO_PATH not set"]
+
+    artifact_path = Path(cc_path) / "drift" / "integration" / f"{today}.yaml"
+    if not artifact_path.exists():
+        return "unknown", [
+            f"Run /integration-sweep — artifact missing for today ({artifact_path})"
+        ]
+
+    try:
+        data = yaml.safe_load(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return "unknown", [
+            f"Run /integration-sweep — artifact unreadable at {artifact_path}"
+        ]
+
+    # yaml.safe_load returns None for empty files
+    if not isinstance(data, dict):
+        return "unknown", [
+            f"Run /integration-sweep — artifact empty or malformed at {artifact_path}"
+        ]
+
+    raw_status: str = str(data.get("overall_status", "unknown")).lower()
+    corrections: list[str] = list(data.get("corrections_for_tomorrow", []))
+
+    # Normalise: artifact uses uppercase PASS/FAIL/PARTIAL; model expects lowercase
+    status_map = {"pass": "pass", "fail": "fail", "partial": "partial"}
+    integration_sweep_status = status_map.get(raw_status, "unknown")
+
+    if integration_sweep_status in ("fail", "partial") and not corrections:
+        corrections = [
+            f"Review /integration-sweep failures for {today}: see {artifact_path}"
+        ]
+
+    return integration_sweep_status, corrections
+
+
+# ---------------------------------------------------------------------------
 # Assemble and validate ModelDayClose
 # ---------------------------------------------------------------------------
 
@@ -338,6 +419,7 @@ def build_day_close(
     corrections_for_tomorrow: list[str],
     process_changes: list[dict[str, Any]] | None = None,
     risks: list[dict[str, Any]] | None = None,
+    integration_sweep_status: str = "unknown",
 ) -> dict[str, Any]:
     """Assemble the raw dict for ModelDayClose (pre-validation)."""
     return {
@@ -354,6 +436,7 @@ def build_day_close(
             ),
             "effects_do_io_only": "unknown",
             "real_infra_proof_progressing": golden_path_status,
+            "integration_sweep": integration_sweep_status,
         },
         "corrections_for_tomorrow": corrections_for_tomorrow,
         "risks": risks or [],
@@ -473,6 +556,13 @@ def run(
     gp_status = detect_golden_path_progress(today, golden_path_base)
     print(f"  Golden-path: {gp_status}")
 
+    # Integration sweep
+    cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
+    integration_sweep_status, integration_corrections = run_integration_sweep(
+        today, cc_path
+    )
+    print(f"  Integration sweep: {integration_sweep_status}")
+
     # Corrections for tomorrow from unknowns
     corrections: list[str] = []
     if invariant_statuses.get("reducers_pure") == "unknown":
@@ -487,6 +577,14 @@ def run(
         corrections.append(
             "Verify real_infra_proof_progressing: check ~/.claude/golden-path/ for today's artifacts."
         )
+    corrections.extend(integration_corrections)
+
+    # Report integration sweep failures prominently
+    if integration_sweep_status in ("fail", "partial"):
+        print(
+            f"  [close-day] WARNING: integration-sweep {integration_sweep_status.upper()} for {today}. "
+            "Check corrections_for_tomorrow for details."
+        )
 
     # Assemble + validate
     raw = build_day_close(
@@ -497,6 +595,7 @@ def run(
         invariant_statuses=invariant_statuses,
         golden_path_status=gp_status,
         corrections_for_tomorrow=corrections,
+        integration_sweep_status=integration_sweep_status,
     )
     try:
         validate_day_close(raw)
