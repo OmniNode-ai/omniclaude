@@ -5,6 +5,7 @@
 # Converted from agent-overnight-automation.md to YAML format for dynamic role system
 
 schema_version: "2.0.0"
+mode: full
 agent_type: "overnight_automation"
 mode: "full"
 

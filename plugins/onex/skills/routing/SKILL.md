@@ -1,5 +1,6 @@
 ---
 description: Request agent routing decisions via Kafka event bus — maps user prompts to the most appropriate specialized agent
+mode: full
 level: advanced
 debug: true
 index: true

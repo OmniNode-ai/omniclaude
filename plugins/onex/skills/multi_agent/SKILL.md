@@ -1,5 +1,6 @@
 ---
 description: Multi-agent coordination — parallel debugging, parallel building, and sequential review workflows
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

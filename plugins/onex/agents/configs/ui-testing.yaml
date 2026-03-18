@@ -6,6 +6,7 @@
 # Comprehensive UI testing specialist with Playwright automation and visual regression
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "ui_testing"
 mode: "full"
 

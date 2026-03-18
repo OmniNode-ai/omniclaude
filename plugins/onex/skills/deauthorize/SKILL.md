@@ -1,5 +1,6 @@
 ---
 description: Revoke work authorization for Edit/Write operations in this session
+mode: full
 version: "1.0.0"
 level: basic
 debug: false

@@ -1,5 +1,6 @@
 ---
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
+mode: full
 version: 3.3.0
 level: advanced
 debug: false

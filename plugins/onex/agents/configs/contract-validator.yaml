@@ -5,6 +5,7 @@
 # ONEX contract validation specialist for standards compliance and quality assurance
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "contract_validator"
 mode: "full"
 

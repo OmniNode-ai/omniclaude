@@ -6,6 +6,7 @@
 # Version: 1.0.0
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "pr_workflow"
 mode: "both"
 specialization_level: "specialist"

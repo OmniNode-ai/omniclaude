@@ -1,5 +1,6 @@
 ---
 description: Unified testing methodology — TDD red-green-refactor cycle and anti-pattern detection
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

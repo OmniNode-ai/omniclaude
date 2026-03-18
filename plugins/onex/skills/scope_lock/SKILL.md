@@ -1,5 +1,6 @@
 ---
 description: Optional session preamble that front-loads architectural constraints for cross-repo or enforcement-type sessions. Injects distributed-CI, evidence-based-status, and full-scope reminders at session start to reduce first-attempt architectural misalignment.
+mode: full
 version: 1.0.0
 level: basic
 debug: false

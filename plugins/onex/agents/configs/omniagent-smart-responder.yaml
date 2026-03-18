@@ -6,6 +6,7 @@
 # Focus: Intelligent response generation, context-aware communication, omniagent interactions
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "omniagent_smart_responder"
 mode: "full"
 

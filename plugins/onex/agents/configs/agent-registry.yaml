@@ -7,6 +7,7 @@
 # Integration: agent-polymorphic-agent (Polly) dynamic transformation system
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "registry"
 mode: "full"
 total_agents: 52

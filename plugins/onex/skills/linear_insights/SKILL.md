@@ -1,5 +1,6 @@
 ---
-description: Unified reporting hub — daily deep dives, velocity estimates, project status, pipeline metrics, GitHub stats, work suggestions, and end-of-day reconciliation via --mode subcommands
+description: Daily deep dive reports and velocity-based project completion estimates using Linear data
+mode: full
 level: intermediate
 debug: false
 args:

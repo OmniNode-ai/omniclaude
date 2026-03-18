@@ -1,5 +1,6 @@
 ---
 description: Set the active run ID for the current session
+mode: full
 version: "1.0.0"
 level: basic
 debug: false

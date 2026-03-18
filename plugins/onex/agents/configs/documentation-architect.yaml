@@ -7,6 +7,7 @@
 # Purpose: Technical documentation excellence, API documentation generation, and developer experience optimization
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "documentation_architect"
 mode: "full"
 

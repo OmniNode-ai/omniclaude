@@ -1,5 +1,6 @@
 ---
 description: Analyze a Linear epic description and create sub-tickets as Linear children
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

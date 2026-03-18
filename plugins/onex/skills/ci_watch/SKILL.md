@@ -1,5 +1,6 @@
 ---
 description: Poll GitHub Actions CI for a PR, auto-fix failures, and report terminal state
+mode: full
 version: 1.0.0
 level: basic
 debug: false

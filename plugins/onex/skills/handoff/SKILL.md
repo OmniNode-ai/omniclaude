@@ -1,5 +1,6 @@
 ---
 description: Opt-in session continuity — save context before /clear for injection on next session start
+mode: full
 version: 1.0.0
 level: basic
 debug: false
