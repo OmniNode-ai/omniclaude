@@ -72,6 +72,9 @@ omni-patterns = "omniclaude.cli.patterns:main"
 [project.entry-points."onex.domain_plugins"]
 claude = "omniclaude.runtime.plugin:PluginClaude"
 
+[project.entry-points."onex.node_package"]
+omniclaude = "omniclaude.nodes"
+
 [project.urls]
 Homepage = "https://github.com/OmniNode-ai/omniclaude"
 Repository = "https://github.com/OmniNode-ai/omniclaude"
