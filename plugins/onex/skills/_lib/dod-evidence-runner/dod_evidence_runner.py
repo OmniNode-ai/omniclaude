@@ -350,8 +350,11 @@ def write_evidence_receipt(
     run_result: EvidenceRunResult,
     working_dir: str | None = None,
     output_dir: str | None = None,
+    *,
+    policy_mode: str = "advisory",
+    emit: bool = True,
 ) -> Path:
-    """Write an evidence receipt JSON file.
+    """Write an evidence receipt JSON file and emit a dod.verify.completed event.
 
     Args:
         ticket_id: The ticket identifier (e.g., "OMN-5168").
@@ -360,6 +363,11 @@ def write_evidence_receipt(
         working_dir: Working directory for git info (defaults to cwd).
         output_dir: Base directory for evidence output (defaults to
             .evidence/<ticket_id>/).
+        policy_mode: DoD enforcement policy (advisory/soft/hard). Forwarded
+            to the emitted event. Defaults to "advisory".
+        emit: Whether to emit a dod.verify.completed Kafka event after writing
+            the receipt. Defaults to True. Set to False in tests or offline
+            scenarios where the emit daemon is unavailable.
 
     Returns:
         Path to the written receipt file.
@@ -387,6 +395,14 @@ def write_evidence_receipt(
 
     receipt_path = Path(output_dir) / "dod_report.json"
     receipt_path.write_text(json.dumps(asdict(receipt), indent=2, default=str))
+
+    # Emit Kafka event after writing the local receipt. Non-blocking: emission
+    # failures do not affect the receipt file or the return value.
+    if emit:
+        try:
+            emit_dod_verify_completed(ticket_id, run_result, policy_mode=policy_mode)
+        except Exception as e:
+            logger.warning("Emission error in write_evidence_receipt (ignored): %s", e)
 
     return receipt_path
 
@@ -488,7 +504,7 @@ def emit_dod_verify_completed(
     }
 
     try:
-        return emit_event("dod.verify.completed", payload)
+        return bool(emit_event("dod.verify.completed", payload))
     except Exception as e:
         logger.warning("Failed to emit dod.verify.completed: %s", e)
         return False
