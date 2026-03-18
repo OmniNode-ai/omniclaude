@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 # Add the skill lib to path
 sys.path.insert(
@@ -25,6 +25,7 @@ sys.path.insert(
 
 from dod_evidence_runner import (
     EvidenceRunResult,
+    emit_dod_verify_completed,
     run_dod_evidence,
     write_evidence_receipt,
 )
@@ -323,3 +324,193 @@ class TestEvidenceReceipt:
             if data["git_sha"]:
                 assert len(data["git_sha"]) == 40  # Full SHA
             assert data["working_dir"] == working_dir
+
+
+class TestEmitDodVerifyCompleted:
+    """Tests for dod.verify.completed event emission."""
+
+    def test_emit_returns_true_when_emit_event_succeeds(self) -> None:
+        mock_emit = MagicMock(return_value=True)
+        run_result = EvidenceRunResult(total=2, verified=2, failed=0, skipped=0)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            result = emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+            )
+
+        assert result is True
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args
+        assert call_args[0][0] == "dod.verify.completed"
+        payload = call_args[0][1]
+        assert payload["ticket_id"] == "OMN-5198"
+        assert payload["total_checks"] == 2
+        assert payload["passed_checks"] == 2
+        assert payload["failed_checks"] == 0
+        assert payload["overall_pass"] is True
+
+    def test_emit_returns_false_when_no_emit_event(self) -> None:
+        run_result = EvidenceRunResult(total=1, verified=0, failed=1)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=None):
+            result = emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+            )
+
+        assert result is False
+
+    def test_emit_payload_includes_policy_mode(self) -> None:
+        mock_emit = MagicMock(return_value=True)
+        run_result = EvidenceRunResult(total=1, verified=1)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+                policy_mode="hard",
+            )
+
+        payload = mock_emit.call_args[0][1]
+        assert payload["policy_mode"] == "hard"
+        assert payload["overall_pass"] is True
+
+    def test_emit_payload_overall_pass_false_when_failures(self) -> None:
+        mock_emit = MagicMock(return_value=True)
+        run_result = EvidenceRunResult(total=2, verified=1, failed=1)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+            )
+
+        payload = mock_emit.call_args[0][1]
+        assert payload["overall_pass"] is False
+        assert payload["failed_checks"] == 1
+
+    def test_emit_returns_false_on_exception(self) -> None:
+        mock_emit = MagicMock(side_effect=RuntimeError("daemon crashed"))
+        run_result = EvidenceRunResult(total=1, verified=1)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            result = emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+            )
+
+        assert result is False
+
+    def test_emit_uses_explicit_run_id(self) -> None:
+        mock_emit = MagicMock(return_value=True)
+        run_result = EvidenceRunResult(total=0)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            emit_dod_verify_completed(
+                ticket_id="OMN-5198",
+                run_result=run_result,
+                run_id="fixed-run-id-123",
+            )
+
+        payload = mock_emit.call_args[0][1]
+        assert payload["run_id"] == "fixed-run-id-123"
+
+    def test_emit_reads_session_id_from_env(self) -> None:
+        mock_emit = MagicMock(return_value=True)
+        run_result = EvidenceRunResult(total=0)
+
+        with patch("dod_evidence_runner._get_emit_event", return_value=mock_emit):
+            with patch.dict("os.environ", {"CLAUDE_SESSION_ID": "session-abc"}):
+                emit_dod_verify_completed(
+                    ticket_id="OMN-5198",
+                    run_result=run_result,
+                )
+
+        payload = mock_emit.call_args[0][1]
+        assert payload["session_id"] == "session-abc"
+
+
+class TestWriteEvidenceReceiptWithEmission:
+    """Tests for event emission wired into write_evidence_receipt."""
+
+    def test_write_receipt_emits_event_by_default(self, tmp_path: Path) -> None:
+        run_result = EvidenceRunResult(total=1, verified=1)
+        mock_emit_fn = MagicMock(return_value=True)
+
+        with patch(
+            "dod_evidence_runner.emit_dod_verify_completed",
+            mock_emit_fn,
+        ):
+            receipt_path = write_evidence_receipt(
+                ticket_id="OMN-5198",
+                contract_path="contracts/OMN-5198.yaml",
+                run_result=run_result,
+                working_dir=str(tmp_path),
+                output_dir=str(tmp_path / ".evidence" / "OMN-5198"),
+            )
+
+        # Receipt must still be written even with emission wired in
+        assert receipt_path.exists()
+        mock_emit_fn.assert_called_once_with(
+            "OMN-5198", run_result, policy_mode="advisory"
+        )
+
+    def test_write_receipt_skips_emission_when_emit_false(self, tmp_path: Path) -> None:
+        run_result = EvidenceRunResult(total=1, verified=1)
+        mock_emit_fn = MagicMock(return_value=True)
+
+        with patch(
+            "dod_evidence_runner.emit_dod_verify_completed",
+            mock_emit_fn,
+        ):
+            write_evidence_receipt(
+                ticket_id="OMN-5198",
+                contract_path="contracts/OMN-5198.yaml",
+                run_result=run_result,
+                working_dir=str(tmp_path),
+                output_dir=str(tmp_path / ".evidence" / "OMN-5198"),
+                emit=False,
+            )
+
+        mock_emit_fn.assert_not_called()
+
+    def test_write_receipt_forwards_policy_mode(self, tmp_path: Path) -> None:
+        run_result = EvidenceRunResult(total=1, verified=1)
+        mock_emit_fn = MagicMock(return_value=True)
+
+        with patch(
+            "dod_evidence_runner.emit_dod_verify_completed",
+            mock_emit_fn,
+        ):
+            write_evidence_receipt(
+                ticket_id="OMN-5198",
+                contract_path="contracts/OMN-5198.yaml",
+                run_result=run_result,
+                working_dir=str(tmp_path),
+                output_dir=str(tmp_path / ".evidence" / "OMN-5198"),
+                policy_mode="soft",
+            )
+
+        mock_emit_fn.assert_called_once_with("OMN-5198", run_result, policy_mode="soft")
+
+    def test_write_receipt_still_written_when_emission_fails(
+        self, tmp_path: Path
+    ) -> None:
+        run_result = EvidenceRunResult(total=1, failed=1)
+        mock_emit_fn = MagicMock(side_effect=RuntimeError("daemon down"))
+
+        with patch(
+            "dod_evidence_runner.emit_dod_verify_completed",
+            mock_emit_fn,
+        ):
+            # Should not raise — emission failure must not break receipt writing
+            receipt_path = write_evidence_receipt(
+                ticket_id="OMN-5198",
+                contract_path="contracts/OMN-5198.yaml",
+                run_result=run_result,
+                working_dir=str(tmp_path),
+                output_dir=str(tmp_path / ".evidence" / "OMN-5198"),
+            )
+
+        assert receipt_path.exists()
