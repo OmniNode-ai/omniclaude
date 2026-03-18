@@ -383,6 +383,12 @@ def run_integration_sweep(
             f"Run /integration-sweep — artifact unreadable at {artifact_path}"
         ]
 
+    # yaml.safe_load returns None for empty files
+    if not isinstance(data, dict):
+        return "unknown", [
+            f"Run /integration-sweep — artifact empty or malformed at {artifact_path}"
+        ]
+
     raw_status: str = str(data.get("overall_status", "unknown")).lower()
     corrections: list[str] = list(data.get("corrections_for_tomorrow", []))
 
@@ -574,9 +580,9 @@ def run(
     corrections.extend(integration_corrections)
 
     # Report integration sweep failures prominently
-    if integration_sweep_status == "fail":
+    if integration_sweep_status in ("fail", "partial"):
         print(
-            f"  [close-day] WARNING: integration-sweep FAILED for {today}. "
+            f"  [close-day] WARNING: integration-sweep {integration_sweep_status.upper()} for {today}. "
             "Check corrections_for_tomorrow for details."
         )
 

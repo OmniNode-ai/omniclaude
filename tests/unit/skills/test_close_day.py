@@ -633,6 +633,18 @@ class TestIntegrationSweepWiring:
         assert status == "partial"
         assert len(corrections) == 1  # auto-generated correction for partial
 
+    def test_empty_artifact_returns_unknown(self, today: str, tmp_path: Path) -> None:
+        """Empty artifact file → integration_sweep=unknown + correction."""
+        artifact_dir = tmp_path / "drift" / "integration"
+        artifact_dir.mkdir(parents=True)
+        (artifact_dir / f"{today}.yaml").write_text("", encoding="utf-8")
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "unknown"
+        assert len(corrections) == 1
+        assert "malformed" in corrections[0]
+
     def test_build_day_close_integration_sweep_field(self, today: str) -> None:
         """build_day_close propagates integration_sweep_status to invariants_checked."""
         raw = build_day_close(
