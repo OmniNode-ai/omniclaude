@@ -7,6 +7,7 @@
 
 schema_version: "1.0.0"
 agent_type: "commit"
+mode: "both"
 specialization_level: "specialist"
 framework_version: "yaml_optimized"
 

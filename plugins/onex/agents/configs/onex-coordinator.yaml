@@ -7,6 +7,7 @@
 
 schema_version: "1.0.0"
 agent_type: "onex_coordinator"
+mode: "full"
 priority: "high"
 specialization: "onex_development_coordination"
 

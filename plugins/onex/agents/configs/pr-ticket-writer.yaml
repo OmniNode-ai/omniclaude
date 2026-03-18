@@ -3,6 +3,7 @@
 ---
 schema_version: "1.0.0"
 agent_type: "pr_ticket_writer"
+mode: "full"
 version: "1.0.0"
 status: "active"
 

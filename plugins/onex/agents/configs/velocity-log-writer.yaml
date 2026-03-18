@@ -6,6 +6,7 @@
 
 schema_version: "1.0.0"
 agent_type: "velocity_log_writer"
+mode: "full"
 
 agent_identity:
   name: "agent-velocity-log-writer"

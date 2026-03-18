@@ -7,6 +7,7 @@
 
 schema_version: "2.0.0"
 agent_type: "address_pr_comments"
+mode: "full"
 status: "active"
 
 agent_identity:

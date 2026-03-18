@@ -3,6 +3,7 @@
 
 schema_version: "1.0.0"
 agent_type: "rag_query"
+mode: "full"
 
 agent_identity:
   name: "agent-rag-query"

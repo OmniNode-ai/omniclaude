@@ -7,6 +7,7 @@
 
 schema_version: "1.0.0"
 agent_type: "multi_step_framework"
+mode: "full"
 definition_format: "yaml_agent_v1"
 
 # Agent Identity

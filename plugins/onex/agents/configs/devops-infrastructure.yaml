@@ -7,6 +7,7 @@
 
 schema_version: "1.0.0"
 agent_type: "devops_infrastructure"
+mode: "full"
 category: "infrastructure"
 priority: "high"
 

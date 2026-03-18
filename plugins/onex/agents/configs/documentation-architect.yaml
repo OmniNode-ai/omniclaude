@@ -8,6 +8,7 @@
 
 schema_version: "1.0.0"
 agent_type: "documentation_architect"
+mode: "full"
 
 agent_identity:
   name: "agent-documentation-architect"

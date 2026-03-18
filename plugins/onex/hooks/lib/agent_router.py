@@ -880,6 +880,10 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
     """
     Build a registry dict from individual agent YAML files.
 
+    Respects ``OMNICLAUDE_MODE`` for filtering:
+    - ``"full"`` (default): load all agents.
+    - ``"lite"``: only load agents whose ``mode`` field is ``"both"``.
+
     Args:
         configs_dir: Path to directory containing agent YAML files
 
@@ -887,10 +891,13 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
         Registry dict with 'agents' key
     """
     registry: dict[str, Any] = {"agents": {}}
+    active_mode = os.environ.get("OMNICLAUDE_MODE", "full")
 
     if not configs_dir.exists():
         logger.warning(f"Agent configs directory not found: {configs_dir}")
         return registry
+
+    skipped_by_mode = 0
 
     for yaml_file in sorted(configs_dir.glob("*.yaml")):
         try:
@@ -898,6 +905,12 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
                 agent_data = yaml.safe_load(f)
 
             if not agent_data:
+                continue
+
+            # Mode filtering: in lite mode, skip agents that are full-only
+            agent_mode = agent_data.get("mode", "full")
+            if active_mode == "lite" and agent_mode != "both":
+                skipped_by_mode += 1
                 continue
 
             # Extract agent name from file or from YAML content
@@ -931,6 +944,10 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
         except Exception as e:
             logger.warning(f"Error loading {yaml_file}: {e}")
 
+    if skipped_by_mode:
+        logger.debug(
+            f"Mode filter ({active_mode}): skipped {skipped_by_mode} agents"
+        )
     logger.debug(f"Built registry with {len(registry['agents'])} agents")
     return registry
 

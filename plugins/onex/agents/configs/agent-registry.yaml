@@ -8,6 +8,7 @@
 
 schema_version: "1.0.0"
 agent_type: "registry"
+mode: "full"
 total_agents: 52
 registry_type: "dynamic_role_system"
 last_updated: "2025-11-10"

@@ -5,6 +5,7 @@
 # Converted from agents/agent-documentation-indexer.md
 schema_version: "1.0.0"
 agent_type: "documentation_indexer"
+mode: "full"
 created_date: "2025-01-29"
 last_modified: "2025-01-29"
 
