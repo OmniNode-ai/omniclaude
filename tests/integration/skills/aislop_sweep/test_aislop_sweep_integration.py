@@ -16,7 +16,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
 _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
-_AISLOP_SWEEP_DIR = _SKILLS_ROOT / "aislop-sweep"
+_AISLOP_SWEEP_DIR = _SKILLS_ROOT / "aislop_sweep"
 _SKILL_MD = _AISLOP_SWEEP_DIR / "SKILL.md"
 _PROMPT_MD = _AISLOP_SWEEP_DIR / "prompt.md"
 _TOPICS_YAML = _AISLOP_SWEEP_DIR / "topics.yaml"
