@@ -882,27 +882,27 @@ Task(
 ```
 No PR creation step. Skip Phase 3.3.
 
-### 3.3 Call pr-queue-pipeline (ticket-pipeline mode only)
+### 3.3 Call merge-sweep (ticket-pipeline mode only)
 
 After all ticket-pipeline dispatches complete, write `prs_created_path`:
 ```
 ~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json
 ```
 
-Invoke pr-queue-pipeline scoped to the created PRs only:
+Invoke merge-sweep scoped to repos with created PRs:
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="gap fix: Phase 3 pr-queue-pipeline for created PRs",
-  prompt="Invoke: Skill(skill=\"onex:pr-queue-pipeline\",
-    args=\"--prs ~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json\")
-    Report back with: status, total_prs_merged, total_prs_still_blocked."
+  description="gap fix: Phase 3 merge-sweep for created PRs",
+  prompt="Invoke: Skill(skill=\"onex:merge-sweep\",
+    args=\"--repos <repos_with_created_prs>\")
+    Report back with: status, auto_merge_set, polished, failed."
 )
 ```
 
-**Critical**: Always call with `--prs <path>` (scoped to new PRs), NEVER with `--repos`.
+**Critical**: Always scope to repos that had PRs created, not all repos.
 
-**Blocked-external guard**: If pr-queue-pipeline returns `blocked_external > 0`, log a warning
+**Blocked-external guard**: If merge-sweep returns Track B `blocked` results, log a warning
 and do NOT retry. These are infra failures (CI infrastructure down, deploy locks) -- do not loop.
 
 ### 3.4 Mode: implement-only
@@ -1109,7 +1109,7 @@ gap_fix_run_id: <fix_run_id>
 | `findings` list empty | Return `status: nothing_to_fix` |
 | All findings are GATE with no prior decisions | Return `status: gate_pending`, emit choices |
 | ticket-pipeline dispatch fails for a finding | Mark finding `still_open`, continue with rest |
-| pr-queue-pipeline returns `blocked_external > 0` | Log warning, do NOT retry, mark as `partial` |
+| merge-sweep returns Track B `blocked` results | Log warning, do NOT retry, mark as `partial` |
 | Re-probe fails | Mark finding `still_open`, continue |
 | decisions.json write fails | Log warning (non-blocking), continue |
 | `--dry-run` | Never write decisions.json, never write gap-fix-output.json |
@@ -1124,7 +1124,7 @@ When `--dry-run` is set, the following must produce ZERO side effects:
 - No Linear ticket creation or mutation
 - No PR creation, mutation, or merge
 - No `ticket-pipeline` or `ticket-work` dispatch
-- No `pr-queue-pipeline` invocation
+- No `merge-sweep` invocation
 
 The skill may still:
 - Read report files

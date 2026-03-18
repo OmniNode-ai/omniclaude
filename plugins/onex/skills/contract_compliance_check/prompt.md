@@ -37,7 +37,7 @@ Extract from the invocation arguments:
 
 ```
 ERROR: No contract found for {ticket_id}.
-Generate one first: Skill(skill="onex:generate-ticket-contract", args="{ticket_id}")
+Generate one first: Skill(skill="onex:create-ticket", args="--from-contract auto {ticket_id}")
 ```
 
 Parse the YAML into the contract fields. Extract:

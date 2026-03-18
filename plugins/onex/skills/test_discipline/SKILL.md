@@ -678,11 +678,60 @@ Run TDD first, then audit for anti-patterns.
 2. After implementation is green, run the audit checklist against all new and changed tests.
 3. Fix any anti-patterns found before marking work complete.
 
+## Completion Gate
+
+Absorbed from the former `verification-before-completion` skill. Before claiming any work is
+complete, run verification commands and confirm output. Evidence before assertions, always.
+
+**Violating the letter of this rule is violating the spirit of this rule.**
+
+### The Gate Function
+
+```
+BEFORE claiming any status or expressing satisfaction:
+
+1. IDENTIFY: What command proves this claim?
+2. RUN: Execute the FULL command (fresh, complete)
+3. READ: Full output, check exit code, count failures
+4. VERIFY: Does output confirm the claim?
+   - If NO: State actual status with evidence
+   - If YES: State claim WITH evidence
+5. ONLY THEN: Make the claim
+```
+
+### Common Failures
+
+| Claim | Requires | Not Sufficient |
+|-------|----------|----------------|
+| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
+| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Build succeeds | Build command: exit 0 | Linter passing, logs look good |
+| Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
+
+### Red Flags - STOP
+
+- Using "should", "probably", "seems to"
+- Expressing satisfaction before verification
+- About to commit/push/PR without verification
+- **ANY wording implying success without having run verification**
+
+### Rationalization Prevention
+
+| Excuse | Reality |
+|--------|---------|
+| "Should work now" | RUN the verification |
+| "I'm confident" | Confidence ≠ evidence |
+| "Just this once" | No exceptions |
+| "Agent said success" | Verify independently |
+
+---
+
 ## The Bottom Line
 
 ```
 Production code -> test exists and failed first
 Mocks are tools to isolate, not things to test
+Evidence before completion claims, always
 ```
 
 No exceptions without your human partner's permission.
