@@ -15,9 +15,7 @@ from pathlib import Path
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[3] / "plugins" / "onex" / "skills"
-FILTER_HELPERS = (
-    SKILLS_DIR / "deploy_local_plugin" / "_filter_helpers.sh"
-)
+FILTER_HELPERS = SKILLS_DIR / "deploy_local_plugin" / "_filter_helpers.sh"
 
 
 @pytest.mark.unit
@@ -36,9 +34,7 @@ def test_every_skill_has_mode_field() -> None:
         content = skill_md.read_text()
         # Check YAML frontmatter for a top-level mode field (not nested in args)
         # Must appear between the opening --- and closing --- at column 0
-        frontmatter_match = re.search(
-            r"^---\s*\n(.*?)\n---", content, re.DOTALL
-        )
+        frontmatter_match = re.search(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
         if frontmatter_match:
             frontmatter = frontmatter_match.group(1)
             if not re.search(r"^mode:\s*\S+", frontmatter, re.MULTILINE):
@@ -61,9 +57,7 @@ def test_mode_values_are_valid() -> None:
         if not skill_md.exists():
             continue
         content = skill_md.read_text()
-        frontmatter_match = re.search(
-            r"^---\s*\n(.*?)\n---", content, re.DOTALL
-        )
+        frontmatter_match = re.search(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
         if not frontmatter_match:
             continue
         frontmatter = frontmatter_match.group(1)
@@ -96,9 +90,7 @@ def test_both_mode_skills_are_generic() -> None:
         if not skill_md.exists():
             continue
         content = skill_md.read_text()
-        frontmatter_match = re.search(
-            r"^---\s*\n(.*?)\n---", content, re.DOTALL
-        )
+        frontmatter_match = re.search(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
         if not frontmatter_match:
             continue
         frontmatter = frontmatter_match.group(1)
@@ -136,6 +128,7 @@ def test_filter_helpers_mode_filter_lite() -> None:
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result_full.returncode == 1, (
         f"mode:full skill should be excluded in lite mode, "
@@ -152,6 +145,7 @@ def test_filter_helpers_mode_filter_lite() -> None:
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result_both.returncode == 0, (
         f"mode:both skill should be included in lite mode, "
@@ -174,13 +168,12 @@ def test_filter_helpers_mode_filter_full() -> None:
         [
             "bash",
             "-c",
-            f'source "{FILTER_HELPERS}" && '
-            f'_skill_passes_mode_filter "{full_skill}"',
+            f'source "{FILTER_HELPERS}" && _skill_passes_mode_filter "{full_skill}"',
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, (
-        f"mode:full skill should pass in default/full mode, "
-        f"got rc={result.returncode}"
+        f"mode:full skill should pass in default/full mode, got rc={result.returncode}"
     )
