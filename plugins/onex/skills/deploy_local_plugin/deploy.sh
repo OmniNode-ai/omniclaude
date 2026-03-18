@@ -768,11 +768,11 @@ if [[ "$EXECUTE" == "true" ]]; then
     # --- Create venv via uv sync (locked, non-editable) ---
     VENV_DIR="${TARGET}/lib/.venv"
     # Register EXIT trap BEFORE the install so that any SIGINT/SIGTERM is caught.
-    # _TRAP_REMOVE_VENV starts false (no venv yet); set true right after install;
+    # _TRAP_REMOVE_VENV starts false; set true after first successful sync;
     # reset to false after the smoke test passes so a successful deploy retains the venv.
+    # Note: venv is no longer rm'd before sync — incremental sync is the default path.
     _TRAP_REMOVE_VENV=false
     trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"' EXIT
-    rm -rf "$VENV_DIR"
     mkdir -p "${TARGET}/lib"
 
     # Validate uv is available (required for the locked non-editable install).
@@ -804,9 +804,18 @@ if [[ "$EXECUTE" == "true" ]]; then
             --frozen \
             --no-dev \
             2>&1); then
-        echo -e "${RED}Error: uv sync failed. Deploy aborted.${NC}"
+        echo -e "${YELLOW}  Incremental sync failed — nuking venv and retrying...${NC}"
         rm -rf "$VENV_DIR"
-        exit 1
+        if ! (cd "${PROJECT_ROOT}" && UV_PROJECT_ENVIRONMENT="${VENV_DIR}" uv sync \
+                --python "${PYTHON_BIN}" \
+                --no-editable \
+                --frozen \
+                --no-dev \
+                2>&1); then
+            echo -e "${RED}Error: uv sync failed on clean rebuild. Deploy aborted.${NC}"
+            rm -rf "$VENV_DIR"
+            exit 1
+        fi
     fi
     _TRAP_REMOVE_VENV=true  # Venv now exists; signal EXIT trap to clean up if interrupted hereafter
     echo -e "${GREEN}  Project installed into venv (locked, non-editable via uv sync)${NC}"
@@ -852,13 +861,16 @@ if [[ "$EXECUTE" == "true" ]]; then
 
         echo -e "${GREEN}  Bundled venv smoke test passed${NC}"
     else
-        echo -e "${RED}Error: Bundled venv smoke test FAILED. Deploy aborted.${NC}"
+        echo -e "${RED}Error: Bundled venv smoke test FAILED.${NC}"
         echo "  The following imports must work:"
         echo "    import omnibase_spi"
         echo "    import omniclaude"
         echo "    from omniclaude.hooks.topics import TopicBase"
-        rm -rf "$VENV_DIR"  # Clean up failed venv
-        rm -f "$MANIFEST"   # Clean up stale manifest
+        echo ""
+        echo "  Venv retained at ${VENV_DIR} for debugging."
+        echo "  To patch a missing package:  uv pip install --python ${VENV_DIR}/bin/python3 <package>"
+        echo "  To nuke and retry:           rm -rf ${VENV_DIR} && deploy.sh --execute"
+        rm -f "$MANIFEST"
         exit 1
     fi
 
