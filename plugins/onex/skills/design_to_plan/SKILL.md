@@ -122,6 +122,23 @@ If any of these checks fail, rewrite the offending sections and re-validate befo
 
 **Note:** This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation of plan files against `ModelPlanDocument` is not yet implemented. The model serves as the source of truth for the required plan structure. Real enforcement at the file I/O boundary is a follow-up task.
 
+### Plan Size Constraints
+
+**Hard cap: 15 tasks / ~30KB.** Before writing the plan to disk, count `## Task N:` headings and
+estimate document size.
+
+- If task count exceeds 15 **or** estimated size exceeds 30KB: **STOP. Do not write the plan.**
+  Instead, split into two or more smaller plans:
+  1. Announce: "Plan exceeds size threshold (N tasks / ~XKB). Splitting into sub-plans."
+  2. Divide tasks into logical groups of ≤15 tasks each.
+  3. Write each sub-plan as a separate file: `docs/plans/YYYY-MM-DD-<feature-name>-part-N.md`
+  4. Proceed through adversarial review and Phase 3 launch for each sub-plan independently.
+
+This constraint exists because oversized plans cause context overflows and formatting failures
+in downstream ticketization. A plan that cannot be fully loaded and reviewed is a failed plan.
+
+---
+
 ### Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**

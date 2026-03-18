@@ -52,6 +52,23 @@ from the team-lead session** — see the Architecture section below.
 **If the epic has zero child tickets**, epic-team invokes `decompose-epic` to create sub-tickets,
 then posts a Slack LOW_RISK gate. Silence for 30 minutes = proceed.
 
+## Execution Rules
+
+Execute end-to-end without stopping between tasks. If blocked on one task, record a skip note
+and continue to the next. Only pause for: (a) credentials not available in the session,
+(b) a destructive action not explicitly covered by the plan, or (c) an explicit user gate in
+the plan. Do not exit plan mode or stop to "await direction" in any other circumstance.
+
+---
+
+## Wave Cap
+
+Dispatch tickets in waves of **5 tickets maximum** to prevent usage-limit interruptions.
+Start the next wave only after all Task() calls in the current wave have returned.
+Never dispatch more than 5 tickets in a single wave, even if more are independent.
+
+---
+
 ## Composable Sub-Skills
 
 epic-team orchestrates these independently-invocable primitives:

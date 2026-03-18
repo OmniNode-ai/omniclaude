@@ -185,6 +185,15 @@ cat ~/.claude/pipelines/<ticket-id>/state.yaml
 
 ---
 
+## Execution Rules
+
+Execute end-to-end without stopping between tasks. If blocked on one task, record a skip note
+and continue to the next. Only pause for: (a) credentials not available in the session,
+(b) a destructive action not explicitly covered by the plan, or (c) an explicit user gate in
+the plan. Do not exit plan mode or stop to "await direction" in any other circumstance.
+
+---
+
 ## When to Stop and Ask for Help
 
 **STOP executing immediately when:**
