@@ -11,6 +11,7 @@ args:
   - name: --mode
     description: "Mode: tdd (red-green-refactor), audit (anti-pattern scan), or full (both)"
     required: false
+mode: both
 ---
 
 # Test Discipline

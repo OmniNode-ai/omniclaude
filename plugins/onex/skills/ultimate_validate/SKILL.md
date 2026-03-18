@@ -10,6 +10,7 @@ tags:
   - quality
   - generator
 author: OmniClaude Team
+mode: full
 ---
 
 # Generate Ultimate Validation Command

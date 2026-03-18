@@ -34,6 +34,7 @@ args:
     description: "true | false (default: false); verify Linear ticket existence via API (audit only)"
     default: "false"
 ticket: OMN-3503
+mode: full
 ---
 
 # Feature Dashboard

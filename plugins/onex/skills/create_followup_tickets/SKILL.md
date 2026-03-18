@@ -11,6 +11,7 @@ tags:
   - batch
   - automation
 author: OmniClaude Team
+mode: full
 ---
 
 # Create Follow-up Tickets Skill

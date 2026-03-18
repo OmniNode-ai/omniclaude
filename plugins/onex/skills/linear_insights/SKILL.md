@@ -2,6 +2,7 @@
 description: Unified reporting hub — daily deep dives, velocity estimates, project status, pipeline metrics, GitHub stats, work suggestions, and end-of-day reconciliation via --mode subcommands
 level: intermediate
 debug: false
+mode: full
 args:
   - name: --mode
     description: "Report mode: deep-dive (default) | close-day | project | velocity | suggest | pipeline | github | all"

@@ -76,6 +76,7 @@ args:
   - name: --resume
     description: Resume from state file by run_id
     required: false
+mode: full
 ---
 
 # Post-Release Redeploy

@@ -21,6 +21,7 @@ args:
   - name: ticket_id
     description: Linear ticket ID for loading TCB constraints
     required: false
+mode: both
 ---
 
 # hostile-reviewer

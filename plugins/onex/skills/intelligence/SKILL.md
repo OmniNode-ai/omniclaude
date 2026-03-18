@@ -3,6 +3,7 @@ description: Request intelligence from the OmniIntelligence service for pattern 
 level: advanced
 debug: true
 index: true
+mode: full
 ---
 
 # Intelligence

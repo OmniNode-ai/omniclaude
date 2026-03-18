@@ -7,6 +7,7 @@ category: workflow
 tags: [preamble, scope, architecture, cross-repo, constraints]
 author: OmniClaude Team
 composable: true
+mode: full
 ---
 
 # Scope Lock

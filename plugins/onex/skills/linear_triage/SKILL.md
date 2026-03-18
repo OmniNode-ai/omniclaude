@@ -25,6 +25,7 @@ outputs:
   - name: skill_result
     type: TriageReport
     description: "Written to ~/.claude/state/linear-triage/{run_id}.yaml"
+mode: full
 ---
 
 # Linear Triage

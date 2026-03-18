@@ -65,6 +65,7 @@ inputs:
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: queued | nothing_to_merge | partial | error"
+mode: full
 ---
 
 # Merge Sweep

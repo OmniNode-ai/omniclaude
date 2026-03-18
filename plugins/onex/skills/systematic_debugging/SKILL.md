@@ -11,6 +11,7 @@ tags:
   - bugfix
   - methodology
 author: OmniClaude Team
+mode: both
 ---
 
 # Systematic Debugging

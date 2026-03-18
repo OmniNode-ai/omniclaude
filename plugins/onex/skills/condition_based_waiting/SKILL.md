@@ -11,6 +11,7 @@ tags:
   - polling
   - timing
 author: OmniClaude Team
+mode: both
 ---
 
 # Condition-Based Waiting

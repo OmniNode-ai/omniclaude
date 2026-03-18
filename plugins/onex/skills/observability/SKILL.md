@@ -14,6 +14,7 @@ args:
   - name: --id
     description: "Correlation ID for trace subcommand"
     required: false
+mode: full
 ---
 
 # Observability

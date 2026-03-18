@@ -29,6 +29,7 @@ args:
   - name: --include-nits
     description: "Include Nit-severity findings in the multi-agent parallel-build dispatch rather than deferring them for human review. Reproduces former pr-release-ready behavior."
     required: false
+mode: full
 ---
 
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)

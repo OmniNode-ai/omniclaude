@@ -4,6 +4,7 @@ version: 1.0.0
 level: advanced
 debug: false
 category: workflow
+mode: full
 ---
 
 # generate-tcb

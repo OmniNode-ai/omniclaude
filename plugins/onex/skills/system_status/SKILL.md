@@ -3,6 +3,7 @@ description: Comprehensive system health monitoring — checks agent performance
 level: advanced
 debug: true
 index: true
+mode: full
 ---
 
 # System Status

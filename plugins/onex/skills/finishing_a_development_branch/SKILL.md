@@ -11,6 +11,7 @@ tags:
   - pull-request
   - cleanup
 author: OmniClaude Team
+mode: both
 ---
 
 # Finishing a Development Branch

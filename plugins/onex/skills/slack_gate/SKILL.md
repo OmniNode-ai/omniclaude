@@ -53,6 +53,7 @@ args:
   - name: --poll-interval-seconds
     description: Override default poll interval
     required: false
+mode: full
 ---
 
 # Slack Gate

@@ -2,6 +2,7 @@
 description: Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
 level: advanced
 debug: false
+mode: full
 ---
 
 # Generate ONEX Node

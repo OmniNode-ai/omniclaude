@@ -15,6 +15,7 @@ args:
   - name: --message
     description: "Optional message for the next session (free text context)"
     required: false
+mode: full
 ---
 
 # /handoff — Opt-in Session Continuity

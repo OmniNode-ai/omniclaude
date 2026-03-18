@@ -55,6 +55,7 @@ args:
   - name: --skip-deploy
     description: "Skip deployment phase after fixes (default behavior)"
     required: false
+mode: full
 ---
 
 # Dashboard Sweep

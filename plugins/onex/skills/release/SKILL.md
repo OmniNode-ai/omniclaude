@@ -52,6 +52,7 @@ inputs:
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: SUCCESS | PARTIAL | FAILED | DRY_RUN"
+mode: full
 ---
 
 # Release

@@ -10,6 +10,7 @@ tags:
   - error-prevention
   - data-integrity
 author: OmniClaude Team
+mode: both
 ---
 
 # Defense-in-Depth Validation

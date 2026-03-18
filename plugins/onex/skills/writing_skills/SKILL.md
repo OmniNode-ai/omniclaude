@@ -10,6 +10,7 @@ tags:
   - documentation
   - best-practices
 author: OmniClaude Team
+mode: both
 ---
 
 # Writing Skills

@@ -22,6 +22,7 @@ args:
   - name: --dry-run
     description: Print resolved paths and extraction counts; write nothing (overrides all other flags)
     required: false
+mode: full
 ---
 
 # Insights to Plan

@@ -10,6 +10,7 @@ tags:
   - linear
   - routing
 author: OmniClaude Team
+mode: both
 ---
 
 # Executing Plans

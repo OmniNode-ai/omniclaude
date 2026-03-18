@@ -3,6 +3,7 @@ description: Request agent routing decisions via Kafka event bus — maps user p
 level: advanced
 debug: true
 index: true
+mode: full
 ---
 
 # Routing

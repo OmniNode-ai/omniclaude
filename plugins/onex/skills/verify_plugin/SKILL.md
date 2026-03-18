@@ -6,6 +6,7 @@ debug: false
 category: deployment
 tags: [deployment, verification, health]
 author: OmniClaude Team
+mode: full
 ---
 
 # Verify Plugin

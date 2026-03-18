@@ -13,6 +13,7 @@ args:
   - name: reason
     description: "Reason for requesting authorization (optional)"
     required: false
+mode: full
 ---
 
 # Authorize
