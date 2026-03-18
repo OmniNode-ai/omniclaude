@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Tests for agent mode filtering."""
+
 from __future__ import annotations
 
 import os
@@ -53,7 +54,6 @@ def test_both_mode_agent_count() -> None:
 def test_lite_mode_filters_full_only_agents() -> None:
     """In lite mode, _build_registry_from_configs skips full-only agents."""
     # Import here to avoid module-level side effects
-    import importlib
     import sys
 
     # We need to reload the module with OMNICLAUDE_MODE set

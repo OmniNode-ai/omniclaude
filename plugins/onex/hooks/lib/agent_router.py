@@ -945,9 +945,7 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
             logger.warning(f"Error loading {yaml_file}: {e}")
 
     if skipped_by_mode:
-        logger.debug(
-            f"Mode filter ({active_mode}): skipped {skipped_by_mode} agents"
-        )
+        logger.debug(f"Mode filter ({active_mode}): skipped {skipped_by_mode} agents")
     logger.debug(f"Built registry with {len(registry['agents'])} agents")
     return registry
 
