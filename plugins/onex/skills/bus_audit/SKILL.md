@@ -1,5 +1,6 @@
 ---
 description: Run OmniClaude bus health audit (Layer 2 domain validation)
+mode: full
 version: "1.0.0"
 level: advanced
 debug: false

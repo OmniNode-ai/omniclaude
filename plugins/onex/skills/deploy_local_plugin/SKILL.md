@@ -1,5 +1,6 @@
 ---
 description: Deploy local plugin files from repository source to Claude Code plugin cache for immediate testing
+mode: full
 version: 1.0.0
 level: advanced
 debug: true

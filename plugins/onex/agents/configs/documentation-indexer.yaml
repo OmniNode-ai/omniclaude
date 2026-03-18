@@ -4,6 +4,7 @@
 # Documentation Indexer Agent - Dynamic Role Definition
 # Converted from agents/agent-documentation-indexer.md
 schema_version: "1.0.0"
+mode: full
 agent_type: "documentation_indexer"
 created_date: "2025-01-29"
 last_modified: "2025-01-29"

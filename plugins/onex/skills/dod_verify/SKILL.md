@@ -1,5 +1,6 @@
 ---
 description: Run DoD evidence checks against a ticket contract and generate a verification receipt
+mode: full
 level: intermediate
 debug: false
 category: verification

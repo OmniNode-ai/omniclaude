@@ -1,5 +1,6 @@
 ---
 description: Report pipeline health metrics — rework ratio, cycle time, CI stability, and feature velocity
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

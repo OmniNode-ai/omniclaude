@@ -5,6 +5,7 @@
 # Complete 6-phase LlamaIndex workflow orchestration for end-to-end ONEX tool generation
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "workflow_generator"
 
 agent_identity:

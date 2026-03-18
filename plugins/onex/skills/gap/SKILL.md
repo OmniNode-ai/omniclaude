@@ -1,5 +1,6 @@
 ---
 description: Cross-repo integration health audit with detect, fix, and cycle modes
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

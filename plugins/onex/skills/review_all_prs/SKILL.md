@@ -1,5 +1,6 @@
 ---
 description: Org-wide PR review — scans all open PRs across omni_home repos, runs local-review on each PR branch in an isolated worktree until N consecutive clean passes, then pushes any fix commits
+mode: full
 version: 0.2.0
 level: advanced
 debug: false

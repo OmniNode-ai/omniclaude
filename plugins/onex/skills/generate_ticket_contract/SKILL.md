@@ -1,5 +1,6 @@
 ---
 description: Auto-draft a ModelTicketContract YAML from ticket context with two-layer architecture — prompt generation and Python validation
+mode: full
 level: advanced
 debug: false
 ---

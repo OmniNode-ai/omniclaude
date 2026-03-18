@@ -1,5 +1,6 @@
 ---
 description: Generate a copyable ticket contract template - fill in the blanks and pass to /create-ticket
+mode: full
 version: 2.0.0
 level: advanced
 debug: false

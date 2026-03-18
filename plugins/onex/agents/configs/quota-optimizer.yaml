@@ -5,6 +5,7 @@
 # Intelligent quota management and optimization for Claude Code API usage across operational windows
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "quota_optimizer"
 last_updated: "2025-01-29"
 

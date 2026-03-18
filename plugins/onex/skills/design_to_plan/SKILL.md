@@ -1,5 +1,6 @@
 ---
 description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional launch
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

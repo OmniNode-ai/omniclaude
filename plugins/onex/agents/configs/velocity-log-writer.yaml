@@ -5,6 +5,7 @@
 # Direct-to-database velocity tracking writer for instant productivity metrics
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "velocity_log_writer"
 
 agent_identity:

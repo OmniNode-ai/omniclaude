@@ -1,5 +1,6 @@
 ---
 description: Unified agent observability — action logging, tracking, execution logging, and trace correlation
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

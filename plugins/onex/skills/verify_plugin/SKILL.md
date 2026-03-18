@@ -1,5 +1,6 @@
 ---
 description: Post-deployment verification suite — runs structural and in-session checks to prove the omniclaude plugin is correctly loaded after deploy + restart
+mode: full
 version: 1.0.0
 level: basic
 debug: false

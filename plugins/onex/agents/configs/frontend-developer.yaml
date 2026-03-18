@@ -6,6 +6,7 @@
 # Distinguished from ui-testing agent: builds UIs (not tests)
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "frontend_developer"
 
 agent_identity:

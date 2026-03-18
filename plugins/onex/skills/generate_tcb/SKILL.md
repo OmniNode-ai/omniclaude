@@ -1,5 +1,6 @@
 ---
 description: Generate an Intent-Warmed Ticket Context Bundle (TCB) for a Linear ticket with grounded evidence
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

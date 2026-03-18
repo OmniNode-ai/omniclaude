@@ -6,6 +6,7 @@ Prevents drift where new configs/skills are added without mode annotations,
 and ensures both-mode agents don't contain ONEX-specific content in their
 base prompts.
 """
+
 import re
 from pathlib import Path
 
@@ -15,7 +16,15 @@ import yaml
 AGENTS_DIR = Path(__file__).parents[2] / "plugins" / "onex" / "agents" / "configs"
 SKILLS_DIR = Path(__file__).parents[2] / "plugins" / "onex" / "skills"
 
-ONEX_TERMS = {"ONEX", "ModelContract", "omnibase", "Kafka", "poly enforcer", "4-node", "four-node"}
+ONEX_TERMS = {
+    "ONEX",
+    "ModelContract",
+    "omnibase",
+    "Kafka",
+    "poly enforcer",
+    "4-node",
+    "four-node",
+}
 INTERNAL_PACKAGES = {"omnibase_core", "omnibase_infra", "omniclaude.", "onex.evt."}
 
 
@@ -52,7 +61,7 @@ def test_both_mode_agents_have_no_onex_in_base_prompt():
             if term.lower() in base_prompt.lower():
                 violations.append(f"{yaml_file.name}: '{term}' found in prompt")
     assert not violations, (
-        f"Both-mode agent prompts contain ONEX-specific terms:\n"
+        "Both-mode agent prompts contain ONEX-specific terms:\n"
         + "\n".join(violations)
     )
 
@@ -88,13 +97,15 @@ def test_both_mode_skills_no_internal_package_refs():
             continue
         content = skill_md.read_text()
         # Check if mode: both
-        match = re.search(r'^mode:\s*both', content, re.MULTILINE)
+        match = re.search(r"^mode:\s*both", content, re.MULTILINE)
         if not match:
             continue
         for term in INTERNAL_PACKAGES:
             if term in content:
-                violations.append(f"{skill_dir.name}: references '{term}' but is mode: both")
+                violations.append(
+                    f"{skill_dir.name}: references '{term}' but is mode: both"
+                )
     assert not violations, (
-        f"Skills marked mode:both contain OmniNode-specific references:\n"
+        "Skills marked mode:both contain OmniNode-specific references:\n"
         + "\n".join(violations)
     )

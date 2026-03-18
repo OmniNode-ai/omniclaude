@@ -1,5 +1,6 @@
 ---
 description: Poll GitHub PR for review feedback, auto-fix issues, and report terminal state
+mode: full
 version: 1.0.0
 level: basic
 debug: false

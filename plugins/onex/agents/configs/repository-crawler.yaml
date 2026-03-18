@@ -5,6 +5,7 @@
 # Dynamic role system configuration for intelligent repository analysis and indexing
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "repository_crawler"
 
 agent_identity:

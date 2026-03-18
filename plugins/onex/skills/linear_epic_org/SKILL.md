@@ -1,5 +1,6 @@
 ---
 description: Organize orphaned Linear tickets into epics — groups by naming pattern and repo, auto-creates obvious groupings, gates on human approval for ambiguous cases
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

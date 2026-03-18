@@ -1,5 +1,6 @@
 ---
 description: Execute a golden path event chain test using real Kafka/Redpanda to validate end-to-end event flows
+mode: full
 level: advanced
 debug: false
 ---

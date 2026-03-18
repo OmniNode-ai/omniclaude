@@ -34,6 +34,7 @@
 # ============================================================================
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "polymorphic_agent"
 priority: "high"
 specialization: "onex_development_coordination"

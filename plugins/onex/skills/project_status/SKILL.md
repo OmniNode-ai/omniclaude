@@ -1,5 +1,6 @@
 ---
 description: Project Status Command - Linear Insights Dashboard
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

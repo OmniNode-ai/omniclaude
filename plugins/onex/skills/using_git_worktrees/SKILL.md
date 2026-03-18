@@ -1,5 +1,6 @@
 ---
 description: Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification
+mode: full
 version: 1.0.0
 level: basic
 debug: false

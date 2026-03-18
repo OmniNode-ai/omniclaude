@@ -6,6 +6,7 @@
 # Focus: Data-driven performance improvements with measurable impact
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "performance"
 
 agent_identity:

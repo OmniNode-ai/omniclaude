@@ -1,5 +1,6 @@
 ---
 description: Org-wide Python standards enforcement — scans all repos for ruff violations, mypy errors, missing SPDX headers, PEP 604 type union violations, and direct pip/python usage. Parallel scan → triage → optional fix agents per repo → PRs.
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

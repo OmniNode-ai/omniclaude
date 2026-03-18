@@ -1,5 +1,6 @@
 ---
 description: Gather GitHub repository statistics — PR counts, commit velocity, contributor activity, LOC metrics — from GitHub API and optional local archive scan
+mode: full
 version: 1.0.0
 level: advanced
 debug: true

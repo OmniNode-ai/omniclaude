@@ -6,6 +6,7 @@
 # Distinct from debug-intelligence specialist - this handles structured investigation and documentation
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "debug"
 
 agent_identity:

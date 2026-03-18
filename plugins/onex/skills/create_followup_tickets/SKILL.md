@@ -1,5 +1,6 @@
 ---
 description: Create Linear tickets from code review issues found in the current session
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

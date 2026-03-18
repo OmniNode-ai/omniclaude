@@ -1,5 +1,6 @@
 ---
 description: Suggest Work Command - Priority Backlog Recommendations
+mode: full
 version: 1.0.0
 level: basic
 debug: false

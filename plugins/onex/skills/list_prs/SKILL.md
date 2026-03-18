@@ -1,5 +1,6 @@
 ---
 description: Dashboard view of all open (non-draft) PRs across OmniNode-ai repos — shows CI status, mergeable state, and groups PRs by readiness
+mode: full
 version: 1.1.0
 level: intermediate
 debug: false

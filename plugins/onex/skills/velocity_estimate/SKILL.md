@@ -1,5 +1,6 @@
 ---
 description: Velocity Estimate Command - Project Velocity & ETA Analysis
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

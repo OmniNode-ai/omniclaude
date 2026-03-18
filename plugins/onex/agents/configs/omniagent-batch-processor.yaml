@@ -6,6 +6,7 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "omnibatch_processor"
 definition_format: "yaml_agent_v1"
 

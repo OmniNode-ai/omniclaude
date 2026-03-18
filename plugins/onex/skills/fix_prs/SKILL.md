@@ -1,5 +1,6 @@
 ---
 description: Org-wide PR repair — scans all repos for broken PRs and autonomously fixes merge conflicts, failing CI, and unaddressed review comments
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

@@ -1,5 +1,6 @@
 ---
 description: Auto-generates a ModelDayClose YAML from today's GitHub PRs, git activity, and invariant probes
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

@@ -1,5 +1,6 @@
 ---
 description: Daily deep dive reports and velocity-based project completion estimates using Linear data
+mode: full
 level: intermediate
 debug: false
 ---
