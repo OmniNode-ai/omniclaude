@@ -170,6 +170,24 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_return_path_auditor.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_tsc_check.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_state_verify.sh"
+          }
+        ]
       }
     ]
   }
