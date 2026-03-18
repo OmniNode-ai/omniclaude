@@ -60,7 +60,7 @@ INSTALLED_VER=""
 SYMLINK_TARGET=""
 
 PLUGIN_VER="$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || true)"
-INSTALLED_VER="$(jq -r '.plugins["onex@omninode-tools"].version // empty' \
+INSTALLED_VER="$(jq -r '(.plugins["onex@omninode-tools"] | if type == "array" then .[0].version else .version end) // empty' \
   "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null || true)"
 SYMLINK_TARGET="$(basename "$(resolve_path "$HOME/.claude/plugins/cache/omninode-tools/onex/current")" 2>/dev/null || true)"
 
