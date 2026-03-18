@@ -61,6 +61,34 @@ elif [[ -n "${CLAUDE_PROJECT_DIR:-}" && -f "${CLAUDE_PROJECT_DIR}/.env" ]]; then
 fi
 unset _EARLY_PLUGIN_ROOT _EARLY_PROJECT_ROOT
 
+# --- Mode Resolution (runs before all guards) ---
+# Resolve omniclaude operating mode (full vs lite) before heavy initialization.
+# In lite mode, session-start emits minimal JSON and exits immediately —
+# no Kafka daemon, no intelligence context, no ticket metadata.
+# Must run before the inmemory guard: in lite mode there is no Kafka daemon,
+# so ONEX_EVENT_BUS_TYPE=inmemory is irrelevant and should not block startup.
+_MODE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MODE_SH="${_MODE_SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then
+    source "$_MODE_SH"
+    _CURRENT_MODE="$(omniclaude_mode)"
+else
+    _CURRENT_MODE="full"
+fi
+export OMNICLAUDE_MODE="$_CURRENT_MODE"
+unset _MODE_SCRIPT_DIR _MODE_SH _CURRENT_MODE
+
+if [[ "$OMNICLAUDE_MODE" == "lite" ]]; then
+    # Lite-session minimum contract:
+    # 1. OMNICLAUDE_MODE=lite exported (done above)
+    # 2. Valid JSON output on stdout
+    # 3. Exit code 0
+    #
+    # NOT initialized: Kafka emit daemon, intelligence context, ticket metadata
+    echo '{"hookSpecificOutput":{"additionalContext":"omniclaude lite mode active — generic development tooling only"}}'
+    exit 0
+fi
+
 # HARD GUARD: ONEX_EVENT_BUS_TYPE=inmemory is FORBIDDEN in runtime sessions.
 # The emit daemon requires Kafka. This setting silently drops all events.
 # Fail loudly so the operator knows to fix it, rather than losing all observability.
