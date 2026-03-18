@@ -61,8 +61,7 @@ def test_both_mode_agents_have_no_onex_in_base_prompt():
             if term.lower() in base_prompt.lower():
                 violations.append(f"{yaml_file.name}: '{term}' found in prompt")
     assert not violations, (
-        "Both-mode agent prompts contain ONEX-specific terms:\n"
-        + "\n".join(violations)
+        "Both-mode agent prompts contain ONEX-specific terms:\n" + "\n".join(violations)
     )
 
 
