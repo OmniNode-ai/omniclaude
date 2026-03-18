@@ -20,6 +20,7 @@ def test_explicit_lite_mode():
         capture_output=True,
         text=True,
         env=env,
+        check=False,
     )
     assert result.stdout.strip() == "lite"
 
@@ -32,6 +33,7 @@ def test_explicit_full_mode():
         capture_output=True,
         text=True,
         env=env,
+        check=False,
     )
     assert result.stdout.strip() == "full"
 
@@ -48,6 +50,7 @@ def test_auto_detect_external_project(tmp_path):
         text=True,
         env=env,
         cwd=str(tmp_path),
+        check=False,
     )
     assert result.stdout.strip() == "lite"
 
@@ -62,5 +65,6 @@ def test_explicit_mode_overrides_autodetect(tmp_path):
         text=True,
         env=env,
         cwd=str(tmp_path),
+        check=False,
     )
     assert result.stdout.strip() == "full"
