@@ -18,6 +18,12 @@
 #   (b) session_id is non-"missing"
 #   (c) cwd is present in payload keys (or "missing" — update pre-compact.sh accordingly)
 
+# --- Lite mode guard [OMN-5398] ---
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+unset _SCRIPT_DIR _MODE_SH
+
 INPUT=$(cat)
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) PreCompact fired." \
   "session_id=$(echo "$INPUT" | jq -r '.session_id // .sessionId // "missing"')" \

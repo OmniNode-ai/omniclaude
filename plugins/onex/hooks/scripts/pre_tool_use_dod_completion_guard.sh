@@ -19,6 +19,12 @@
 
 set -eo pipefail
 
+# --- Lite mode guard [OMN-5398] ---
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+unset _SCRIPT_DIR _MODE_SH
+
 # Resolve hook infrastructure paths
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
     || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"

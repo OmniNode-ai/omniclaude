@@ -9,6 +9,12 @@ set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
+# --- Lite mode guard [OMN-5398] ---
+_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+unset _SCRIPT_DIR _MODE_SH
+
 # Ensure stable CWD before any Python invocation.
 # The session CWD may be on an external drive that disconnects/remounts;
 # Python's <frozen getpath> calls os.getcwd() during startup and crashes

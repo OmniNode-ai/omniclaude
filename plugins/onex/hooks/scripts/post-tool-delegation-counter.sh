@@ -35,6 +35,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 # shellcheck source=hook-runtime-client.sh
 source "${SCRIPT_DIR}/hook-runtime-client.sh" 2>/dev/null || true
+
+# --- Lite mode guard [OMN-5398] ---
+_MODE_SH="${SCRIPT_DIR}/../../lib/mode.sh"
+if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+unset _MODE_SH
+
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 if ! command -v jq >/dev/null 2>&1; then
