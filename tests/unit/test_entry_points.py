@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 OmniNode Team
 """Tests for onex.node_package entry point declaration."""
+
 import importlib.metadata
 
 import pytest
