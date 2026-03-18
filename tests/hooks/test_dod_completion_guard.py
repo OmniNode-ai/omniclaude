@@ -79,7 +79,10 @@ class TestBlocksDoneWithoutReceipt:
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-9999", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "hard"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2
@@ -139,7 +142,10 @@ class TestBlocksDoneWithStaleReceipt:
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-1234", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "hard"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2
@@ -163,7 +169,10 @@ class TestBlocksDoneWithFailedChecks:
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-1234", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "hard"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2

@@ -28,12 +28,14 @@ def run_hook(
             "tool_input": {"command": cmd},
         }
     )
+    env = {**os.environ, "OMNICLAUDE_MODE": "full"}
     proc = subprocess.run(
         ["bash", "plugins/onex/hooks/scripts/post-tool-delegation-counter.sh"],
         input=payload,
         capture_output=True,
         text=True,
         cwd=str(_REPO_ROOT),
+        env=env,
         check=False,
     )
     return proc.returncode, proc.stdout
