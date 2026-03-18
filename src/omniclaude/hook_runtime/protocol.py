@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Hook runtime daemon socket protocol models. [OMN-5304]
 
 Defines the newline-delimited JSON request/response protocol used between

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Hook runtime delegation state reducer. [OMN-5305]
 
 Pure Python state manager — no ONEX/Kafka/DB dependencies.

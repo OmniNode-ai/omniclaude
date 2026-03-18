@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Unit tests for hook runtime async socket server. [OMN-5306]"""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 """Unit tests for hook runtime delegation state reducer. [OMN-5305]"""
 
 import pytest

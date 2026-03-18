@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 # Import from sibling skill directory -- follows existing pattern in hooks/lib
 # (see cross_repo_detector.py, pipeline_slack_notifier.py imports).
-_skill_dir = str(Path(__file__).parent.parent.parent / "skills" / "rrh")
+_skill_dir = str(Path(__file__).parent.parent.parent / "skills" / "_lib" / "rrh")
 if _skill_dir not in sys.path:
     sys.path.insert(0, _skill_dir)
 
