@@ -79,7 +79,6 @@ def test_both_mode_skills_are_generic() -> None:
         "hostile_reviewer",
         "systematic_debugging",
         "test_discipline",
-        "verification_before_completion",
         "writing_skills",
     }
     actual_both: set[str] = set()
