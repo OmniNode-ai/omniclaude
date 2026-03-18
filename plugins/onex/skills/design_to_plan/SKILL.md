@@ -122,6 +122,55 @@ If any of these checks fail, rewrite the offending sections and re-validate befo
 
 **Note:** This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation of plan files against `ModelPlanDocument` is not yet implemented. The model serves as the source of truth for the required plan structure. Real enforcement at the file I/O boundary is a follow-up task.
 
+### Repository Discovery Scan (Pre-Plan)
+
+**Before writing any tasks**, scan the target repository for existing types to prevent duplication. This step is mandatory — plans that introduce new models, enums, or types without checking for existing equivalents will be caught by R7 in the adversarial review.
+
+**What to scan for:**
+- Pydantic models (`class Foo(BaseModel)`, `class Foo(ModelBase)`, etc.)
+- Enums (`class Foo(Enum)`, `class Foo(StrEnum)`, `class Foo(IntEnum)`)
+- TypedDicts, dataclasses, NamedTuples
+- Protocol classes and type aliases
+- ONEX contract YAMLs (under `src/*/nodes/` or `src/*/contracts/`)
+
+**How to scan:**
+```bash
+# Models and base classes
+grep -rn "class Model\|class .*BaseModel\|class .*ModelBase" src/ --include="*.py"
+
+# Enums
+grep -rn "class .*(Enum)\|class .*(StrEnum)\|class .*(IntEnum)" src/ --include="*.py"
+
+# TypedDicts, dataclasses, Protocols
+grep -rn "class .*(TypedDict)\|@dataclass\|class .*(Protocol)" src/ --include="*.py"
+
+# Contract YAMLs
+find src/ -name "contract.yaml" -o -name "*.contract.yaml"
+```
+
+**Output**: A **Known Types Inventory** section included at the top of the plan document (after the header, before Task 1). Format:
+
+```markdown
+## Known Types Inventory
+
+> Types discovered in the repository that are relevant to this plan.
+> Any new type introduced by a task below MUST reference this inventory
+> and state why an existing type does not suffice.
+
+- `ModelSessionState` — `src/omniclaude/hooks/schemas.py:45` — session lifecycle tracking
+- `ModelHookPromptSubmittedPayload` — `src/omniclaude/hooks/schemas.py:78` — prompt event schema
+- `TopicBase` — `src/omniclaude/hooks/topics.py:12` — Kafka topic enum
+- [... all relevant types for the planned feature area]
+```
+
+**Rules:**
+- Only include types relevant to the feature being planned (not the entire repo)
+- Each entry must include the exact file path and line number
+- If the plan creates a new type, the task MUST include a line: "**Not reusing `ExistingType` because:** [specific reason]"
+- If an existing type can be extended instead of creating a new one, prefer extension
+
+---
+
 ### Plan Size Constraints
 
 **Hard cap: 15 tasks / ~30KB.** Before writing the plan to disk, count `## Task N:` headings and
@@ -218,14 +267,14 @@ git commit -m "feat: add specific feature"
 
 ### Adversarial Review Loop (Phase 2b)
 
-After draft plan is generated, run structured R1-R6 review in rounds until convergence.
+After draft plan is generated, run structured R1-R7 review in rounds until convergence.
 
 **Convergence criteria**: No new CRITICAL or MAJOR findings. MINOR and NIT are acceptable.
 
 **Hard cap**: 3 rounds maximum. After round 3, if CRITICAL/MAJOR persist, present the unresolved list to the user and STOP -- do not continue reviewing internally.
 
 **Per-round flow**:
-1. Run R1-R6 checks against the current plan draft
+1. Run R1-R7 checks against the current plan draft
 2. Classify each finding: CRITICAL / MAJOR / MINOR / NIT
 3. If CRITICAL or MAJOR exist: fix inline, re-save plan, increment round counter
 4. If only MINOR/NIT: converged -- announce and proceed to Phase 3
@@ -312,6 +361,22 @@ Common failures to flag:
 - "grep finds no hits" != feature removed -> also check runtime execution path
 - "log contains X" != behavior correct -> also assert state or output (not log alone)
 
+#### R7 -- Type Duplication
+
+For every new model, enum, TypedDict, dataclass, Protocol, or type alias introduced by the plan:
+
+- **Inventory check**: Was this type listed in the Known Types Inventory? If the inventory section is missing entirely, flag as CRITICAL ("Repository Discovery Scan skipped").
+- **Justification check**: Does the task include a "Not reusing `ExistingType` because: [reason]" line? If missing, flag as MAJOR.
+- **Name collision**: Does the new type name collide with or shadow an existing type? Search for the class name across the repo. Collisions are CRITICAL.
+- **Near-duplicate detection**: Could an existing type serve the same purpose with minor extension (adding a field, adding an enum member)? If yes and the plan creates a new type instead, flag as MAJOR with the suggestion to extend.
+
+Common failures to flag:
+
+- Creating `ModelFooConfig` when `ModelFooSettings` already exists with overlapping fields
+- Creating a new enum when the values could be members of an existing enum
+- Creating a new Protocol when an existing base class already defines the interface
+- Proposing a new contract YAML for a type that already has one
+
 ---
 
 #### Review Output Format
@@ -327,6 +392,7 @@ R3: checked -- [issue: kill-switch criterion moved to Task 3 (DB task cannot enf
 R4: checked -- [issue: added __init__.py re-export for contract module path] OR [clean (verified: contract module path resolves at omnibase_infra/nodes/foo/models/__init__.py)]
 R5: checked -- [issue: Ticket 2 creates DB table without IF NOT EXISTS] OR [clean (dedup keys: ticket=title, table=PK)]
 R6: checked -- [issue: "pytest passes" was sole proof for schema -- added \d+ introspection] OR [clean (strongest proof: strong)]
+R7: checked -- [issue: ModelFooConfig duplicates ModelFooSettings (src/pkg/settings.py:23) -- replaced with extension] OR [clean (N new types, all justified against inventory)]
 
 Summary: [N] issues found and fixed. Plan re-saved.
 ```
@@ -337,24 +403,27 @@ Do not claim "clean" for a category that was not explicitly checked with evidenc
 
 #### Smoke Test (Verification)
 
-Run these instructions against the following known-bad mini-plan and confirm all five catches:
+Run these instructions against the following known-bad mini-plan and confirm all six catches:
 
 > "This plan creates **4 tickets** (Tickets 1, 2, 3, 4a, 4b).
 > Ticket 2 (DB-only migration): acceptance criteria: kill switch enforced via FEATURE_FLAG env var check in Python handler. Verification: pytest passes.
 > Contract module: omnibase_infra.nodes.foo.models.
-> Ticket 3: No mention of models/__init__.py."
+> Ticket 3: No mention of models/__init__.py.
+> Ticket 4a: Create `ModelNodeConfig` with fields `name`, `version`, `enabled`.
+> No Known Types Inventory section. No justification for new type."
 
-Expected catches by category: R1, R2, R3, R4, R6.
+Expected catches by category: R1, R2, R3, R4, R6, R7.
 
 - **R1**: "4 tickets" but five identifiers listed (1, 2, 3, 4a, 4b) -- count mismatch, flag
 - **R2**: "pytest passes" is weak and vague -- does not assert specific behavior
 - **R3**: DB-only Ticket 2 claims Python runtime behavior (kill switch) -- scope violation, move to code task
 - **R4**: Contract module path unverified, no re-export step mentioned -- add re-export or full path
 - **R6**: "pytest passes" is weak (grade: weak) as sole proof for a DB migration -- needs schema introspection
+- **R7**: No Known Types Inventory section (Repository Discovery Scan skipped -- CRITICAL). `ModelNodeConfig` introduced without justification (MAJOR) -- must check if similar config model already exists in the repo.
 
 R5 is clean in this mini-plan (no idempotency claims without dedup keys). That is an acceptable clean result.
 
-If the review instructions do not catch all five expected items, tighten the instructions before shipping.
+If the review instructions do not catch all six expected items, tighten the instructions before shipping.
 
 ---
 
