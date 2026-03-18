@@ -361,7 +361,7 @@ class SkillCommandDispatcher:
                     correlation_id=correlation_id,
                 )
                 result = await cc_backend.session_query(cc_request)
-                return result.output or ""
+                return result.output or ""  # type: ignore[attr-defined]
 
         elif backend_type == "local_llm":
             if self._vllm_backend is None:
@@ -400,7 +400,7 @@ class SkillCommandDispatcher:
                     correlation_id=correlation_id,
                 )
                 result = await vllm_backend.infer(llm_request)
-                return result.output or ""
+                return result.output or ""  # type: ignore[attr-defined]
 
         # Build skill request from envelope payload
         skill_request = self._build_skill_request(

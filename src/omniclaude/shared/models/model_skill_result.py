@@ -125,7 +125,7 @@ except ImportError:
 
     #: Alias matching omnibase_core naming; will be the real
     #: ``ModelSkillResult`` once OMN-3867 lands.
-    SkillResult = ModelSkillResult
+    SkillResult: type[ModelSkillResult] = ModelSkillResult  # type: ignore[no-redef]
 
     _USING_CORE = False
 
