@@ -12,8 +12,8 @@ keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
     "omnibase-core==0.28.0",
     "omnibase-spi==0.17.1",
-    "omnibase-infra==0.21.0",
-    "omninode-intelligence==0.14.0",
+    "omnibase-infra==0.21.1",
+    "omninode-intelligence==0.14.1",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",
@@ -85,6 +85,7 @@ build-backend = "hatchling.build"
 
 [tool.uv.sources]
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", branch = "main" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]
