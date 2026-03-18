@@ -577,7 +577,24 @@ class TestContextInjectionConfigAPIUrl:
             cfg = ContextInjectionConfig()
             assert cfg.api_url == "http://localhost:8053"
 
-    def test_api_enabled_default_true(self) -> None:
-        """api_enabled defaults to True."""
+    def test_api_enabled_inferred_false_without_url(self) -> None:
+        """api_enabled inferred False when no INTELLIGENCE_SERVICE_URL is set.
+
+        OMN-5361: When neither INTELLIGENCE_SERVICE_URL nor
+        OMNICLAUDE_CONTEXT_API_URL is set, api_enabled is auto-disabled
+        to avoid connection errors at runtime.
+        """
         cfg = ContextInjectionConfig()
-        assert cfg.api_enabled is True
+        assert cfg.api_enabled is False
+
+    def test_api_enabled_inferred_true_with_url(self) -> None:
+        """api_enabled stays True when INTELLIGENCE_SERVICE_URL is set."""
+        import os
+
+        with patch.dict(
+            os.environ,
+            {"INTELLIGENCE_SERVICE_URL": "http://localhost:8053"},
+            clear=False,
+        ):
+            cfg = ContextInjectionConfig()
+            assert cfg.api_enabled is True

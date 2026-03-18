@@ -451,13 +451,18 @@ class ContextInjectionConfig(BaseSettings):
     def infer_api_enabled_from_url(self) -> Self:
         """Auto-disable API when no intelligence service URL is configured.
 
-        If neither INTELLIGENCE_SERVICE_URL nor OMNICLAUDE_CONTEXT_API_URL is
-        set, automatically disables the API to avoid connection errors at
-        runtime. Explicit OMNICLAUDE_CONTEXT_API_ENABLED=false still works
-        as override regardless of URL configuration. [OMN-5361]
+        Only infers when ``api_enabled`` was NOT explicitly provided (i.e. it
+        was left at its default). When the caller (or an env var) explicitly
+        sets ``api_enabled``, we respect that value unconditionally.
+
+        When inferring, disables the API if neither INTELLIGENCE_SERVICE_URL
+        nor OMNICLAUDE_CONTEXT_API_URL is set in the environment. [OMN-5361]
         """
-        if not self.api_enabled:
-            return self  # Explicitly disabled, respect it
+        # model_fields_set tracks fields explicitly provided to the
+        # constructor or parsed from env -- skip inference if caller
+        # or env explicitly set api_enabled.
+        if "api_enabled" in self.model_fields_set:
+            return self
         intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
         context_api_url = os.environ.get("OMNICLAUDE_CONTEXT_API_URL", "").strip()
         if not intelligence_url and not context_api_url:
