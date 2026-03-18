@@ -98,8 +98,9 @@ async def publish_handler_contracts(
         environment: Environment label passed through to omnibase_infra's
             ServiceContractPublisher for contract registration metadata.
             Per OMN-1972, this is no longer used as a Kafka topic prefix by
-            omniclaude. Defaults to ONEX_ENV environment variable within
-            the infra layer. Empty string means no env prefix (canonical topics).
+            omniclaude. Per OMN-5189, ONEX_ENV is vestigial — the infra layer
+            defaults to "local" via ONEX_ENVIRONMENT. Empty string means no env
+            prefix (canonical topics, which is the standard).
 
     Returns:
         ModelPublishResult with published handler IDs, contract_errors, infra_errors,

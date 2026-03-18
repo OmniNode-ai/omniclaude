@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1867,7 +1867,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-infra"
-version = "0.21.0"
+version = "0.21.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1915,9 +1915,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/75/3a32a8d1022e0766cf86c35271ab8208a56dba1432ccda0dc3d4f73954db/omnibase_infra-0.21.0.tar.gz", hash = "sha256:41b69acac67ad7b300124f959b50dfd774d123674b5a94330e5e4ec867002aa8", size = 6524428, upload-time = "2026-03-16T13:15:26.906Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/ad/ef7c8b9a4b62973f249cfdc93b34637897d22f753d87155a704596b3d8bb/omnibase_infra-0.21.1.tar.gz", hash = "sha256:60f93f3d9922983738764dfb769c872e81b02b9851b5edb4b49d0a56f36c26c5", size = 6531486, upload-time = "2026-03-16T20:38:39.605Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/67/84/e588ad8e05bfc253fdf20718fbd1af0d80de65d99ba55c8eacfeecaf82b2/omnibase_infra-0.21.0-py3-none-any.whl", hash = "sha256:edd4518e587b18c3f72ee06a9aa781d8c1ab2a037c9e747424dcec280f36b5c5", size = 3803216, upload-time = "2026-03-16T13:15:24.355Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/57/cb93d89a049f12ce12acd57bd1fd64ab78beb9901993f971037419f98212/omnibase_infra-0.21.1-py3-none-any.whl", hash = "sha256:0f13f76e2c09e317a7ae0987e7041d2553bd6d99a3aa6576fb2c72b2c6c7e288", size = 3805237, upload-time = "2026-03-16T20:38:37.925Z" },
 ]
 
 [[package]]
@@ -1946,6 +1946,7 @@ dependencies = [
     { name = "omnibase-infra" },
     { name = "omnibase-spi" },
     { name = "omninode-intelligence" },
+    { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "tiktoken" },
@@ -1973,7 +1974,6 @@ dev = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
-    { name = "psutil" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1995,12 +1995,13 @@ requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = "==0.28.0" },
-    { name = "omnibase-infra", specifier = "==0.21.0" },
+    { name = "omnibase-infra", specifier = "==0.21.1" },
     { name = "omnibase-spi", specifier = "==0.17.1" },
-    { name = "omninode-intelligence", specifier = "==0.14.0" },
+    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
+    { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0,<3.0.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
@@ -2018,7 +2019,6 @@ dev = [
     { name = "opentelemetry-api", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.23.0,<2.0.0" },
-    { name = "psutil", specifier = ">=5.9.0" },
     { name = "pyright", specifier = ">=1.1.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
@@ -2034,8 +2034,8 @@ dev = [
 
 [[package]]
 name = "omninode-intelligence"
-version = "0.14.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.14.1"
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main#5ed8b1c1f886569e6f582061690610a08d018ea4" }
 dependencies = [
     { name = "adaptive-classifier" },
     { name = "confluent-kafka" },
@@ -2047,10 +2047,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "watchdog" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/24/b8/ba37867284f1409d9516771c53b6c7a8c53dba10ebeb4038c76c36ab27a3/omninode_intelligence-0.14.0.tar.gz", hash = "sha256:bdd121e33b04f70c8d4b3c33c754121a853a04c2c661ad380e758bfd02466638", size = 1909348, upload-time = "2026-03-16T13:27:48.522Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/dc/cfc170ce0626f4c69628b2391ce367b2bf6f878ba7a8883075142b2d17e9/omninode_intelligence-0.14.0-py3-none-any.whl", hash = "sha256:85893f91089ee337a47b5ad85de612b9f936f7c0e39be67f6ce4a704ad2c20f0", size = 1742194, upload-time = "2026-03-16T13:27:50.148Z" },
 ]
 
 [[package]]
