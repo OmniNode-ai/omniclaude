@@ -69,6 +69,15 @@ Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> deci
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
 
+## Execution Rules
+
+Execute end-to-end without stopping between tasks. If blocked on one task, record a skip note
+and continue to the next. Only pause for: (a) credentials not available in the session,
+(b) a destructive action not explicitly covered by the plan, or (c) an explicit user gate in
+the plan. Do not exit plan mode or stop to "await direction" in any other circumstance.
+
+---
+
 ## Auto-Detection (OMN-2614)
 
 When no pipeline state file exists and neither `--skip-to` nor `--force-run` is specified, the
