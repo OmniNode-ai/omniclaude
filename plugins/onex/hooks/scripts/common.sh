@@ -52,6 +52,20 @@ find_python() {
         return
     fi
 
+    # 4. Lite mode: accept system Python when OMNICLAUDE_MODE is lite
+    if command -v python3 &>/dev/null; then
+        local mode_sh
+        mode_sh="$(dirname "${BASH_SOURCE[0]}")/../../lib/mode.sh"
+        if [[ -f "$mode_sh" ]]; then
+            # shellcheck disable=SC1090
+            source "$mode_sh"
+            if [[ "$(omniclaude_mode)" == "lite" ]]; then
+                echo "python3"
+                return
+            fi
+        fi
+    fi
+
     # No fallback: return empty to trigger hard failure
     echo ""
 }
