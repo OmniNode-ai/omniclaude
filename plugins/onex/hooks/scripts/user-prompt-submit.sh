@@ -522,11 +522,11 @@ LOCAL_DELEGATION_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-false}")
 if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]] \
         && [[ "$WORKFLOW_DETECTED" != "true" ]] \
         && [[ ! "$PROMPT" =~ ^/ ]]; then  # Slash commands invoke structured skills/commands — never delegate to local models
-    DELEGATION_HANDLER="${HOOKS_LIB}/local_delegation_handler.py"
+    DELEGATION_HANDLER="${HOOKS_LIB}/delegation_orchestrator.py"
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
         set +e
-        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" 2>>"$LOG_FILE")"
+        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" 2>>"$LOG_FILE")"
         set -e
 
         # Validate output is a parseable JSON object (not just any valid JSON value)
