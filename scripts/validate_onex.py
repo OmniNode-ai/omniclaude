@@ -53,6 +53,7 @@ EXCLUDE_PATTERNS = [
     "__pycache__/",
     ".venv/",
     "cli/",  # CLI debugging tools use dynamic DB row types by design
+    "quirks/",  # Quirks module uses dynamic DB row types and dict payloads by design
 ]
 
 

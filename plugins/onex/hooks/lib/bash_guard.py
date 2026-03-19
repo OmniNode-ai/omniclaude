@@ -76,6 +76,42 @@ import threading
 import urllib.request
 
 # ---------------------------------------------------------------------------
+# Validator catch event emission (OMN-5549)
+# Fire-and-forget — never blocks the guard decision.
+# ---------------------------------------------------------------------------
+
+
+def _emit_validator_catch(
+    *,
+    session_id: str,
+    validator_type: str,
+    validator_name: str,
+    catch_description: str,
+    severity: str,
+) -> None:
+    """Emit a validator-catch event via emit_client_wrapper (fire-and-forget)."""
+    try:
+        from emit_client_wrapper import (
+            emit_event,  # type: ignore[import-not-found]  # noqa: PLC0415
+        )
+
+        payload = {
+            "session_id": session_id,
+            "validator_type": validator_type,
+            "validator_name": validator_name,
+            "catch_description": catch_description[:500],
+            "severity": severity,
+            "timestamp_iso": datetime.datetime.now(datetime.UTC).strftime(
+                "%Y-%m-%dT%H:%M:%S.%f"
+            )[:-3]
+            + "Z",
+        }
+        emit_event("validator.catch", json.dumps(payload))
+    except Exception:  # noqa: BLE001
+        pass  # Fire-and-forget — guard must not fail on emit errors
+
+
+# ---------------------------------------------------------------------------
 # Policy integration (OMN-4383)
 # Fail-safe rule: policy-load failures → HARD mode. Never fail-open on policy.
 # ---------------------------------------------------------------------------
@@ -516,6 +552,14 @@ def main() -> int:
             "decision": "block",
             "reason": block_reason,
         }
+        # OMN-5549: Emit validator catch event (fire-and-forget)
+        _emit_validator_catch(
+            session_id=session_id,
+            validator_type="pre_commit",
+            validator_name="bash-guard-hard-block",
+            catch_description=block_reason[:500],
+            severity="error",
+        )
         if webhook_url:
             notifier = threading.Thread(
                 target=_send_slack_alert,

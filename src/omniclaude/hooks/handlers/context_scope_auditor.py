@@ -243,6 +243,35 @@ def _emit_event(event_type: str, payload: dict[str, Any]) -> None:
         logger.debug("Event emission failed for %s", event_type, exc_info=True)
 
 
+def _emit_validator_catch(
+    session_id: str,
+    validator_type: str,
+    validator_name: str,
+    catch_description: str,
+    severity: str,
+) -> None:
+    """Emit a validator-catch event for savings estimation (OMN-5549).
+
+    Fire-and-forget — never raises.
+    """
+    now = datetime.now(UTC)
+    try:
+        payload = {
+            "session_id": session_id,
+            "validator_type": validator_type,
+            "validator_name": validator_name,
+            "catch_description": catch_description[:500],
+            "severity": severity,
+            "timestamp_iso": now.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        }
+        _emit_event(
+            TopicBase.VALIDATOR_CATCH,
+            payload,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to emit validator catch event", exc_info=True)
+
+
 def _emit_scope_violation(
     task_id: str,
     declared_scope: list[str],
@@ -470,6 +499,16 @@ class ContextScopeAuditor:
                     actual_tool=tool_name,
                     action=action,
                     correlation_id=correlation_id,
+                )
+                # OMN-5549: Emit validator catch for savings estimation
+                _emit_validator_catch(
+                    session_id=correlation_id or "",
+                    validator_type="poly_enforcer",
+                    validator_name="context-scope-auditor",
+                    catch_description=f"Tool scope violation: {tool_name!r} not in {tool_scope!r}",
+                    severity="error"
+                    if EnforcementMode.is_blocking(self.enforcement_mode)
+                    else "warning",
                 )
             if EnforcementMode.is_blocking(self.enforcement_mode):
                 block = True

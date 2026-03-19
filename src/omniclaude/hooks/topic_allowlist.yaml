@@ -481,3 +481,17 @@ allowed_extras:
       Audit run completion event emitted with summary results.
       Part of context integrity audit framework (OMN-5230); contract governance to follow.
     ticket: OMN-5234
+
+  # ---------------------------------------------------------------------------
+  # Validator catch / savings estimation topics (OMN-5549)
+  # Emitted by hook-level validators for cost attribution and savings tracking.
+  # No dedicated node contract — emitted by context_scope_auditor and bash_guard.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.validator-catch.v1"
+    lifecycle: telemetry
+    reason: >
+      Validator catch event emitted when a hook validator intercepts a policy
+      violation with severity-weighted attribution for savings estimation.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5549
