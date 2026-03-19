@@ -732,6 +732,7 @@ def orchestrate_delegation(
     session_id: str = "",
     correlation_id: str,
     emitted_at: datetime | None = None,
+    cached_classification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Orchestrate delegation with task-type routing and quality gate.
 
@@ -761,6 +762,10 @@ def orchestrate_delegation(
         emitted_at: Timestamp for the delegation event. When None, defaults to
             ``datetime.now(UTC)``. Inject a fixed value in tests for deterministic
             assertions.
+        cached_classification: Pre-computed classification dict from the daemon's
+            Valkey cache.  When provided, skips the internal ``_classify_prompt()``
+            call and uses it directly.  Expected keys: ``intent``, ``confidence``,
+            ``delegatable``.
 
     Returns:
         Dict with at minimum ``{"delegated": bool}``.
@@ -789,77 +794,116 @@ def orchestrate_delegation(
             )
             return {"delegated": False, "reason": "feature_disabled"}
 
-        # Gate 2: Classification
-        try:
-            classifier = _get_classifier()
-            score = classifier.is_delegatable(prompt)
-        except Exception as exc:
-            logger.debug("Classification failed: %s", exc)
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=f"classification_error: {type(exc).__name__}",
-                delegation_success=False,
-                savings_usd=0.0,
-                latency_ms=int((time.time() - start_time) * 1000),
-                emitted_at=emitted_at,
+        # Gate 2: Classification (fast-path when daemon provides cached result)
+        if cached_classification is not None and cached_classification.get(
+            "delegatable"
+        ):
+            # Daemon already classified via Valkey cache — skip classifier cold start
+            intent_value = cached_classification.get("intent", "unknown")
+            _cached_confidence = cached_classification.get("confidence", 0.0)
+            logger.debug(
+                "Using cached classification: intent=%s confidence=%.2f",
+                intent_value,
+                _cached_confidence,
             )
-            return {
-                "delegated": False,
-                "reason": f"classification_error: {type(exc).__name__}",
-            }
+        else:
+            # Standard path: classify via TaskClassifier
+            if cached_classification is not None and not cached_classification.get(
+                "delegatable"
+            ):
+                # Cached result says not delegatable — honour it
+                reasons = "cached: not delegatable"
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=reasons,
+                    delegation_success=False,
+                    savings_usd=0.0,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": reasons,
+                    "confidence": cached_classification.get("confidence", 0.0),
+                }
 
-        if not score.delegatable:
-            reasons = "; ".join(score.reasons) if score.reasons else "not delegatable"
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=reasons,
-                delegation_success=False,
-                savings_usd=score.estimated_savings_usd,
-                latency_ms=int((time.time() - start_time) * 1000),
-                emitted_at=emitted_at,
-            )
-            return {
-                "delegated": False,
-                "reason": reasons,
-                "confidence": score.confidence,
-            }
+            try:
+                classifier = _get_classifier()
+                score = classifier.is_delegatable(prompt)
+            except Exception as exc:
+                logger.debug("Classification failed: %s", exc)
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=f"classification_error: {type(exc).__name__}",
+                    delegation_success=False,
+                    savings_usd=0.0,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": f"classification_error: {type(exc).__name__}",
+                }
 
-        # Extract the intent value string for routing (reuse existing classifier instance).
-        try:
-            ctx = classifier.classify(prompt)
-            intent_value = (
-                ctx.primary_intent.value
-            )  # e.g., "document", "test", "research"
-        except Exception as exc:
-            logger.debug("Intent value extraction failed: %s", exc)
-            latency_ms = int((time.time() - start_time) * 1000)
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-                delegation_success=False,
-                savings_usd=score.estimated_savings_usd,
-                latency_ms=latency_ms,
-                emitted_at=emitted_at,
-            )
-            return {
-                "delegated": False,
-                "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-            }
+            if not score.delegatable:
+                reasons = (
+                    "; ".join(score.reasons) if score.reasons else "not delegatable"
+                )
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=reasons,
+                    delegation_success=False,
+                    savings_usd=score.estimated_savings_usd,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": reasons,
+                    "confidence": score.confidence,
+                }
+
+            # Extract the intent value string for routing (reuse existing classifier instance).
+            try:
+                ctx = classifier.classify(prompt)
+                intent_value = (
+                    ctx.primary_intent.value
+                )  # e.g., "document", "test", "research"
+            except Exception as exc:
+                logger.debug("Intent value extraction failed: %s", exc)
+                latency_ms = int((time.time() - start_time) * 1000)
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+                    delegation_success=False,
+                    savings_usd=score.estimated_savings_usd,
+                    latency_ms=latency_ms,
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+                }
 
         # Gate 3: Endpoint selection for this specific task type
         endpoint_result = _select_handler_endpoint(intent_value)

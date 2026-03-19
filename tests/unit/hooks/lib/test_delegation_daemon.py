@@ -34,11 +34,7 @@ class TestClassifyWithCache:
         from pathlib import Path
 
         lib_dir = str(
-            Path(__file__).resolve().parents[4]
-            / "plugins"
-            / "onex"
-            / "hooks"
-            / "lib"
+            Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
         )
         if lib_dir not in sys.path:
             sys.path.insert(0, lib_dir)
@@ -103,8 +99,12 @@ class TestClassifyWithCache:
         prompt_a = "Write documentation"
         prompt_b = "Fix the bug in auth"
 
-        key_a = f"delegation:classify:{hashlib.sha256(prompt_a[:500].encode()).hexdigest()}"
-        key_b = f"delegation:classify:{hashlib.sha256(prompt_b[:500].encode()).hexdigest()}"
+        key_a = (
+            f"delegation:classify:{hashlib.sha256(prompt_a[:500].encode()).hexdigest()}"
+        )
+        key_b = (
+            f"delegation:classify:{hashlib.sha256(prompt_b[:500].encode()).hexdigest()}"
+        )
 
         assert key_a != key_b
 
@@ -119,11 +119,7 @@ class TestHandleRequest:
         from pathlib import Path
 
         lib_dir = str(
-            Path(__file__).resolve().parents[4]
-            / "plugins"
-            / "onex"
-            / "hooks"
-            / "lib"
+            Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
         )
         if lib_dir not in sys.path:
             sys.path.insert(0, lib_dir)
@@ -181,11 +177,7 @@ class TestValkeyFailureModes:
         from pathlib import Path
 
         lib_dir = str(
-            Path(__file__).resolve().parents[4]
-            / "plugins"
-            / "onex"
-            / "hooks"
-            / "lib"
+            Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
         )
         if lib_dir not in sys.path:
             sys.path.insert(0, lib_dir)
