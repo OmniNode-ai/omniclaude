@@ -405,7 +405,7 @@ class SkillCommandDispatcher:
         else:
             # Unknown backend type — emit failure and return rather than
             # using potentially uninitialized backend_detail / task_dispatcher.
-            await self._emit_completion(
+            await self._emit_completion(  # type: ignore[unreachable]
                 run_id=run_id,
                 skill_name=skill_id,
                 command_topic=topic or "unknown",
