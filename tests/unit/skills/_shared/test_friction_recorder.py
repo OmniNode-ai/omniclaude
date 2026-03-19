@@ -66,8 +66,18 @@ def test_normalize_surface_category_valid() -> None:
 
 
 def test_surface_category_allowlist_completeness() -> None:
-    expected = {"kafka", "ci", "config", "permissions", "linear", "network", "auth", "tooling", "unknown"}
-    assert SURFACE_CATEGORY_ALLOWLIST == expected
+    expected = {
+        "kafka",
+        "ci",
+        "config",
+        "permissions",
+        "linear",
+        "network",
+        "auth",
+        "tooling",
+        "unknown",
+    }
+    assert expected == SURFACE_CATEGORY_ALLOWLIST
 
 
 def test_record_appends_ndjson(tmp_path: Path) -> None:
