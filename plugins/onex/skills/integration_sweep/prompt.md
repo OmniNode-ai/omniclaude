@@ -54,6 +54,10 @@ mcp__linear-server__list_issues(
 
 Filter to tickets whose `updatedAt` falls on or after `SWEEP_DATE`.
 
+**IMPORTANT (OMN-5473)**: The `list_issues` API truncates descriptions to ~500 characters.
+Do NOT use descriptions from this response for contract extraction. Only extract ticket IDs
+here. Full descriptions MUST be fetched via `get_issue` in Step 3.
+
 If no tickets found:
 ```
 INTEGRATION_SWEEP: No completed tickets found for {SWEEP_DATE}. Nothing to verify.
@@ -64,9 +68,10 @@ Exit cleanly (status: clean, no artifact written).
 
 ## Step 3: Contract Extraction <!-- ai-slop-ok: skill-step-heading -->
 
-For each discovered ticket ID:
+For each discovered ticket ID, fetch the **full** description (not the truncated list_issues
+version) and extract the contract block:
 
-1. Call `mcp__linear-server__get_issue(id=<ticket_id>)`
+1. Call `mcp__linear-server__get_issue(id=<ticket_id>)` -- this returns the untruncated description
 2. Search the ticket description for a fenced YAML block:
    ````
    ```yaml

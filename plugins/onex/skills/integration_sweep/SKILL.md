@@ -156,6 +156,16 @@ Artifact: $ONEX_CC_REPO_PATH/drift/integration/2026-03-18.yaml
 
 ---
 
+## Known Limitations
+
+- **Linear list_issues truncation (OMN-5473)**: The Linear `list_issues` API truncates
+  descriptions to ~500 characters. Discovery (Step 2) uses `list_issues` for ticket IDs
+  only. Contract extraction (Step 3) MUST use `get_issue` per ticket to retrieve full
+  descriptions. This adds ~1 API call per ticket but prevents contract parsing failures
+  from truncated YAML blocks.
+
+---
+
 ## Integration Points
 
 - **close-day**: invokes integration-sweep as part of invariants-checked gate
