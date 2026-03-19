@@ -25,9 +25,12 @@ if str(_SRC) not in sys.path:
 
 # Reload quality_enforcer to ensure clean module state in test splits where
 # prior tests may have polluted the module cache via mock patching.
-import omniclaude.lib.utils.quality_enforcer as _qe_mod
+try:
+    import omniclaude.lib.utils.quality_enforcer as _qe_mod
 
-importlib.reload(_qe_mod)
+    importlib.reload(_qe_mod)
+except Exception:
+    pass  # Module not yet importable at collection time; tests will import it directly
 
 
 # ---------------------------------------------------------------------------
