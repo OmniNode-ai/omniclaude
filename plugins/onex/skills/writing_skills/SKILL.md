@@ -1,6 +1,6 @@
 ---
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment - applies TDD to process documentation by testing with subagents before writing, iterating until bulletproof against rationalization
-mode: full
+mode: both
 version: 1.0.0
 level: intermediate
 debug: false

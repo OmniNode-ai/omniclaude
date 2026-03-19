@@ -56,6 +56,7 @@ args:
   - name: --no-auto-fix
     description: Poll only, don't attempt fixes
     required: false
+mode: full
 ---
 
 # CI Watch

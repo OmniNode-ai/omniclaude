@@ -18,6 +18,7 @@ args:
   - name: --contract-path
     description: Override path to contract YAML (default auto-detect)
     required: false
+mode: full
 ---
 
 # dod-verify

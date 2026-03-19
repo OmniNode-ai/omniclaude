@@ -37,6 +37,7 @@ args:
   - name: --payload
     description: "JSON object with phase-specific payload fields"
     required: false
+mode: full
 ---
 
 # Checkpoint

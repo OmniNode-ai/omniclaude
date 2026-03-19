@@ -12,6 +12,7 @@ tags:
   - diagnostics
   - onex
 author: OmniClaude Team
+mode: full
 ---
 
 # /onex:plugin-status

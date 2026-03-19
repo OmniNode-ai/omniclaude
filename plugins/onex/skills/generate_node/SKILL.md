@@ -3,6 +3,7 @@ description: Generate ONEX nodes via automated code generation with ContractInfe
 mode: full
 level: advanced
 debug: false
+mode: full
 ---
 
 # Generate ONEX Node

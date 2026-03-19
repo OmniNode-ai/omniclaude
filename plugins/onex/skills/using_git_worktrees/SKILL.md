@@ -11,6 +11,7 @@ tags:
   - isolation
   - workspace-management
 author: OmniClaude Team
+mode: full
 ---
 
 # Using Git Worktrees

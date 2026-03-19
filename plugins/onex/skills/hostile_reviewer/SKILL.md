@@ -1,6 +1,6 @@
 ---
 description: Adversarial code review that attempts to break the change. Produces exactly 2 risks with confidence scores. Output is MANDATORY — cannot rubber-stamp.
-mode: full
+mode: both
 version: 1.0.0
 level: intermediate
 debug: false

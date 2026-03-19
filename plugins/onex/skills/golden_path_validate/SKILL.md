@@ -3,6 +3,7 @@ description: Execute a golden path event chain test using real Kafka/Redpanda to
 mode: full
 level: advanced
 debug: false
+mode: full
 ---
 
 # golden-path-validate

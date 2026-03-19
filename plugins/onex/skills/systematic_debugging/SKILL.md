@@ -1,6 +1,6 @@
 ---
 description: Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes - five-phase framework (backward tracing, root cause investigation, pattern analysis, hypothesis testing, implementation) that ensures understanding before attempting solutions
-mode: full
+mode: both
 version: 1.0.0
 level: basic
 debug: false

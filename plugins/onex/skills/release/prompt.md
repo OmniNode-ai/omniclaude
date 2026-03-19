@@ -950,9 +950,44 @@ else
   echo "  Waiting for CI checks to pass..."
   gh pr checks "${PR_NUMBER}" --repo "${GITHUB_REPO}" --watch --fail-fast
 
-  # Merge using squash strategy
-  gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPO}" --squash --delete-branch
-  echo "  Merged PR #${PR_NUMBER}"
+  # Detect merge queue via GraphQL (OMN-5465). Repos with merge queues
+  # require enqueue via --auto (no explicit strategy flag), and the queue's
+  # configured merge strategy takes effect automatically.
+  HAS_MERGE_QUEUE=$(gh api graphql -f query='query {
+    repository(owner: "'"${GITHUB_ORG}"'", name: "'"${repo}"'") {
+      mergeQueue(branch: "main") { id }
+    }
+  }' --jq '.data.repository.mergeQueue.id' 2>/dev/null)
+
+  if [ -n "${HAS_MERGE_QUEUE}" ]; then
+    echo "  Merge queue detected — enqueuing via --auto"
+    gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPO}" --auto --delete-branch
+
+    # Poll merge queue until PR is merged or fails (timeout: 30 min)
+    MERGE_TIMEOUT=1800
+    ELAPSED=0
+    POLL_INTERVAL=30
+    while [ "$ELAPSED" -lt "$MERGE_TIMEOUT" ]; do
+      CURRENT_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" --json state --jq '.state')
+      if [ "$CURRENT_STATE" = "MERGED" ]; then
+        echo "  PR merged via merge queue"
+        break
+      fi
+      sleep "$POLL_INTERVAL"
+      ELAPSED=$((ELAPSED + POLL_INTERVAL))
+      echo "  Waiting in merge queue... (${ELAPSED}s / ${MERGE_TIMEOUT}s)"
+    done
+
+    if [ "$ELAPSED" -ge "$MERGE_TIMEOUT" ]; then
+      echo "  ERROR: Merge queue timeout after ${MERGE_TIMEOUT}s"
+      # FAIL with MERGE_QUEUE_TIMEOUT
+      exit 1
+    fi
+  else
+    # No merge queue — use direct squash merge
+    gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPO}" --squash --delete-branch
+    echo "  Merged PR #${PR_NUMBER}"
+  fi
 fi
 ```
 
@@ -960,9 +995,15 @@ fi
 release commit that hasn't passed CI. The `--watch` flag on `gh pr checks` blocks
 until checks complete.
 
-**Cross-reference**: `merge-sweep` SKILL.md for the merge readiness predicate.
-The release skill uses `gh pr merge --squash` directly rather than dispatching to
-`auto-merge`, since the human already approved the entire release plan at the gate.
+**Merge queue support (OMN-5465)**: When a repo has a merge queue enabled (detected
+via GraphQL `mergeQueue` field), the release skill enqueues the PR via `--auto`
+instead of direct `--squash` merge. It then polls the PR state every 30 seconds
+until the queue completes the merge (timeout: 30 minutes). Repos without merge
+queues use the original direct `--squash --delete-branch` path.
+
+**Cross-reference**: `merge-sweep` SKILL.md and OMN-5463 for shared merge queue
+detection logic. The release skill uses inline detection rather than importing
+from merge-sweep to keep the release pipeline self-contained.
 
 **State update**: Set phase to `MERGED`.
 

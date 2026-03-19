@@ -40,6 +40,7 @@ args:
   - name: --no-automerge
     description: Skip enabling GitHub automerge after all phases complete
     required: false
+mode: full
 ---
 
 # PR Polish
