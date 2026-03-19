@@ -252,6 +252,7 @@ class ModelSessionOutcomeConfig:
         total_tokens_used: Total tokens consumed in the session (input + output). [OMN-5201 T11b]
         files_modified_count: Number of distinct files written or edited during the session. [OMN-5201 T11b]
         tasks_completed_count: Number of tasks marked completed during the session. [OMN-5201 T11b]
+        treatment_group: A/B test group label: "treatment", "control", or "unknown". [OMN-5551]
 
     Raises:
         ValueError: If session_id is empty/whitespace or outcome is invalid.
@@ -268,6 +269,7 @@ class ModelSessionOutcomeConfig:
     total_tokens_used: int | None = None
     files_modified_count: int | None = None
     tasks_completed_count: int | None = None
+    treatment_group: str | None = None
 
     def __post_init__(self) -> None:
         """Validate session_id and coerce outcome to enum."""
@@ -1262,6 +1264,7 @@ async def emit_session_outcome_from_config(
             total_tokens_used=config.total_tokens_used,
             files_modified_count=config.files_modified_count,
             tasks_completed_count=config.tasks_completed_count,
+            treatment_group=config.treatment_group,
         )
 
         # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics

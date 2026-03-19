@@ -346,12 +346,21 @@ print(result.outcome)
             fi
         fi
 
+        # Derive treatment_group from environment capabilities (OMN-5551).
+        # Classifies session as "treatment" (all intelligence active),
+        # "control" (all intelligence stripped), or "unknown" (partial).
+        TREATMENT_GROUP="unknown"
+        if [[ -f "${HOOKS_LIB}/classify_treatment.py" ]]; then
+            TREATMENT_GROUP=$("$PYTHON_CMD" "${HOOKS_LIB}/classify_treatment.py" 2>>"$LOG_FILE") || TREATMENT_GROUP="unknown"
+        fi
+
         if ! OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg outcome "$DERIVED_OUTCOME" \
             --arg correlation_id "$CORRELATION_ID" \
             --arg ticket_id "$ACTIVE_TICKET" \
             --arg duration_ms "$SESSION_DURATION" \
+            --arg treatment_group "$TREATMENT_GROUP" \
             --argjson dod_pass "$DOD_PASS" \
             --argjson success "$SESSION_SUCCESS" \
             --argjson pr_url "$PR_URL" \
@@ -371,14 +380,15 @@ print(result.outcome)
                 commit_count: $commit_count,
                 total_tokens_used: $total_tokens_used,
                 files_modified_count: $files_modified_count,
-                tasks_completed_count: $tasks_completed_count
+                tasks_completed_count: $tasks_completed_count,
+                treatment_group: $treatment_group
             }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
         elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
             log "WARNING: outcome payload empty or null, skipping emission"
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
-            log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS tokens=${TOTAL_TOKENS_USED} files=${FILES_MODIFIED_COUNT} tasks=${TASKS_COMPLETED_COUNT}"
+            log "session.outcome emitted: outcome=$DERIVED_OUTCOME dod_pass=$DOD_PASS success=$SESSION_SUCCESS tokens=${TOTAL_TOKENS_USED} files=${FILES_MODIFIED_COUNT} tasks=${TASKS_COMPLETED_COUNT} treatment_group=${TREATMENT_GROUP}"
         fi
 
         # NOTE (OMN-2622): routing.outcome.raw emit removed — topic deprecated.
