@@ -148,6 +148,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "dod.guard.fired",  # OMN-5198 - DoD completion guard hook interception
         "audit.dispatch.validated",  # OMN-5235 - Task dispatch validated (before stack mutation)
         "audit.scope.violation",  # OMN-5235 - Duplicate task push or scope violation
+        "skill.friction-recorded",  # OMN-5442 - Friction event recorded by a skill (side-channel only)
     ]
 )
 
