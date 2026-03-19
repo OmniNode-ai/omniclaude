@@ -315,20 +315,27 @@ _TASK_MARKERS: dict[str, tuple[str, ...]] = {
 
 
 def _is_delegation_enabled() -> bool:
-    """Return True only when both delegation feature flags are active.
+    """Return True when local LLM endpoints are configured for delegation.
 
-    Both ``ENABLE_LOCAL_INFERENCE_PIPELINE`` and ``ENABLE_LOCAL_DELEGATION``
-    must be set to a truthy value (true/1/yes/on, case-insensitive).
+    Follows the connection-config-inference pattern: delegation activates when
+    at least one LLM endpoint URL is set (``LLM_CODER_URL`` or
+    ``LLM_DEEPSEEK_R1_URL``).  ``ENABLE_LOCAL_DELEGATION=false`` acts as an
+    explicit kill switch.
+
+    Legacy ``ENABLE_LOCAL_INFERENCE_PIPELINE`` is no longer required.
     """
-    parent = os.environ.get(
-        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
-    ).lower()  # ONEX_FLAG_EXEMPT: migration
-    if parent not in _TRUTHY:
+    # Explicit kill switch — only blocks when explicitly set to false
+    kill_switch = os.environ.get("ENABLE_LOCAL_DELEGATION", "").lower()
+    if kill_switch in _FALSY:
         return False
-    delegation = os.environ.get(
-        "ENABLE_LOCAL_DELEGATION", ""
-    ).lower()  # ONEX_FLAG_EXEMPT: migration
-    return delegation in _TRUTHY
+    # Infer from connection config presence
+    has_endpoints = bool(
+        os.environ.get("LLM_CODER_URL") or os.environ.get("LLM_DEEPSEEK_R1_URL")
+    )
+    return has_endpoints
+
+
+_FALSY = frozenset({"false", "0", "no", "off"})
 
 
 # ---------------------------------------------------------------------------
