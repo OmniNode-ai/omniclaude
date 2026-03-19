@@ -1,3 +1,36 @@
+## v0.9.0 (2026-03-19)
+
+### Added
+- feat(skills): autopilot close-out with integration-sweep guard [OMN-5438]
+- feat(skills): add /integration-sweep contract-driven post-merge verification [OMN-5431]
+- feat(skill): add Repository Discovery Scan + R7 type duplication check to design-to-plan
+- feat(plugin): add OMNICLAUDE_MODE resolution infrastructure [OMN-5396]
+- feat(plugin): graceful SessionStart degradation in lite mode [OMN-5397]
+- feat(plugin): add lite-mode system prompt [OMN-5401]
+- feat(plugin): add mode filtering to agent configs [OMN-5399]
+- feat(plugin): add mode guards to full-only hooks [OMN-5398]
+- feat: Phase 1 skill consolidation (reduce from ~90 to ~73 skills)
+- feat: hook runtime daemon with socket protocol, launcher, and delegation [OMN-5304..5311]
+- feat(hooks): contract-driven delegation enforcement [OMN-5132]
+- feat(hooks): context scope audit, return path control, state-verification hooks [OMN-5237, OMN-5238, OMN-5347]
+- feat(hooks): enhance poly enforcer with contract binding validation [OMN-5236]
+- feat(skills): add /aislop-sweep, /standardization-sweep, /begin-day skills
+- feat: DoD Evidence Enforcement System [OMN-5167]
+- feat: emit session-outcome.v1 and DoD telemetry events [OMN-5197, OMN-5201]
+- feat: EventBusInmemory wired into hook runtime server [OMN-5312]
+
+### Fixed
+- fix(security): CodeQL remediation Tasks 1-7 [OMN-5412]
+- fix(deps): move psutil from dev to main dependencies [OMN-5335]
+- fix(release): correct DEPENDENCY_MAP and TIER_GRAPH [OMN-5326]
+- fix: remove vestigial ONEX_ENV references [OMN-5189]
+- fix: remove dev defaults and build_topic prefix [OMN-5210..5213]
+
+### Changed
+- chore(deps): bump omnibase-core to 0.29.0, omnibase-spi to 0.18.0, omnibase-infra to 0.22.0, omninode-intelligence to 0.15.0
+- feat: skill directory restructure (kebab to underscore + Python to _lib/)
+- chore(standards): fix PEP 604 type-unions and mypy errors [OMN-5132]
+
 ## v0.7.1 (2026-03-13)
 
 ### Features
