@@ -116,7 +116,7 @@ the timeout, report the failure and stop. Do not attempt to start runtime agains
 
 ### Phase 3 — Start Runtime (if needed)
 
-Only if mode is `runtime`, `memory`, `all`, or `auto` with runtime containers missing.
+Only if mode is `runtime`, `memory`, `all`, or `auto` with runtime containers missing or unhealthy.
 Only after core is verified healthy.
 
 ```bash
@@ -130,7 +130,7 @@ docker ps --format "{{.Names}}\t{{.Status}}" | grep -E "(omninode-runtime|intell
 
 ### Phase 4 — Start Memory (if needed)
 
-Only if mode is `memory` or `all`. Only after runtime is verified healthy.
+Only if mode is `memory`, `all`, or `auto` with memory containers missing or unhealthy. Only after runtime is verified healthy.
 
 ```bash
 infra-up-memory
