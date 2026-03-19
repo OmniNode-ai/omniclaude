@@ -1257,6 +1257,62 @@ class ModelHookContextInjectedPayload(BaseModel):
 
 
 # =============================================================================
+# Validator Catch Events (OMN-5549)
+# =============================================================================
+
+
+class ModelValidatorCatchPayload(BaseModel):
+    """Event payload emitted when a validator blocks or catches an issue.
+
+    Published to ``onex.evt.omniclaude.validator-catch.v1`` by poly-enforcer
+    (on dispatch block) and pre-commit/bash-guard hooks (on failure).
+
+    The downstream savings estimator uses these events with severity-weighted
+    attribution to quantify the value of automated validation.
+
+    Attributes:
+        session_id: Session identifier string.
+        validator_type: Category of validator (pre_commit, ci_check, poly_enforcer, code_review).
+        validator_name: Specific validator name (e.g. "ruff", "mypy", "poly-enforcer-agent-type").
+        catch_description: Human-readable description of what was caught.
+        severity: Severity level of the catch (error or warning).
+        timestamp_iso: ISO-8601 timestamp when the catch occurred.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+    validator_type: str = Field(
+        ...,
+        description="Category: pre_commit | ci_check | poly_enforcer | code_review",
+    )
+    validator_name: str = Field(
+        ...,
+        description="Specific validator name (e.g. ruff, mypy, poly-enforcer-agent-type)",
+    )
+    catch_description: str = Field(
+        ...,
+        max_length=500,
+        description="Human-readable description of what was caught",
+    )
+    severity: str = Field(
+        ...,
+        description="Severity level: error | warning",
+    )
+    timestamp_iso: str = Field(
+        ...,
+        description="ISO-8601 timestamp when the catch occurred",
+    )
+
+
+# =============================================================================
 # Injection Metrics Events (OMN-1889)
 # =============================================================================
 
@@ -2953,6 +3009,7 @@ __all__ = [
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",
+    "ModelValidatorCatchPayload",
     "ModelContextUtilizationPayload",
     "ModelAgentMatchPayload",
     "ModelLatencyBreakdownPayload",

@@ -349,6 +349,14 @@ class TopicBase(StrEnum):
     AUDIT_RUN_COMPLETED = "onex.evt.omniclaude.audit-run-completed.v1"
     """Emitted when an on-demand audit run completes with summary results."""
 
+    # ==========================================================================
+    # Validator catch topics (OMN-5549)
+    # Emitted when a validator blocks or catches an issue during a session.
+    # Consumed by the savings estimation pipeline for severity-weighted attribution.
+    # ==========================================================================
+    VALIDATOR_CATCH = "onex.evt.omniclaude.validator-catch.v1"
+    """Emitted when a validator (poly-enforcer, bash-guard, pre-commit) catches an issue."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
