@@ -48,6 +48,21 @@ class TestCircularImportRegression:
         assert result.returncode == 0, f"Import failed: {result.stderr}"
         assert "OK" in result.stdout, f"Expected 'OK' in stdout, got: {result.stdout!r}"
 
+    def test_utils_re_exports_preserved(self) -> None:
+        """Every previously re-exported name from lib.utils still resolves."""
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "from omniclaude.lib.utils import __all__ as names; "
+                "[getattr(__import__('omniclaude.lib.utils', fromlist=[n]), n) for n in names]; "
+                "print(f'OK: {len(names)} names')"
+            )],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"Re-export broken: {result.stderr}"
+        assert "OK:" in result.stdout
+
     def test_lib_lazy_attribute_access(self) -> None:
         """Lazy __getattr__ resolves subpackages on attribute access."""
         result = subprocess.run(

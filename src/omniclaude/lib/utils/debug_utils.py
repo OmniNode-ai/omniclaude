@@ -35,13 +35,15 @@ from typing import Any
 
 import requests
 
-from omniclaude.config import settings
-
-# Service URL configuration from environment with settings fallback
+# Service URL configuration from environment.
+# These were previously read from settings.intelligence_service_url / .main_server_url
+# at module level, but that triggers a circular import: config.__init__ → aggregators →
+# hooks → lib.utils → debug_utils → config.settings (still loading). Using os.environ
+# directly breaks the cycle.  Defaults match the Settings field defaults.
 INTELLIGENCE_SERVICE_URL = os.environ.get(
-    "INTELLIGENCE_SERVICE_URL", str(settings.intelligence_service_url)
+    "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
 )
-MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", str(settings.main_server_url))
+MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8000")
 # Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL for backward compatibility
 # Note: MCP server URL is not yet in settings; uses environment variable with localhost fallback
 MCP_SERVER_URL = (
