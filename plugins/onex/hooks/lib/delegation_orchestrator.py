@@ -115,42 +115,46 @@ except ImportError:
 #   patch("delegation_orchestrator.TaskClassifier", ...)
 # instead of needing to patch inside the function's local namespace.
 #
-# Guard: skip the slow import attempt in the deployed venv where a circular
-# import bug (debug_utils / quality_enforcer access settings.<attr> at module
-# level) causes AttributeError after ~5s of wasted package loading.  The
-# canary import is a cheap leaf module; if it fails the heavy imports will too.
+# Direct file loading: omniclaude/lib/__init__.py eagerly imports every
+# subpackage (clients, config, core, errors, models, utils), and
+# debug_utils + quality_enforcer access settings.<attr> at module level
+# before the Settings instance is constructed — triggering a circular
+# import that costs ~6s even when caught.  Both task_classifier.py and
+# model_local_llm_config.py are leaf modules with ZERO omniclaude.*
+# imports, so we load them by file path to bypass __init__.py chains
+# entirely.  This keeps hook startup under 1s.
 
-_omniclaude_importable = False
-try:
-    import omniclaude.config.settings  # noqa: F401 — canary
-    _omniclaude_importable = True
-except (ImportError, AttributeError):
-    pass
+import importlib.util as _ilu
 
-if _omniclaude_importable:
-    try:
-        from omniclaude.lib.task_classifier import (
-            TaskClassifier,  # noqa: F401  (re-exported)
-        )
-    except (ImportError, AttributeError):  # pragma: no cover
-        TaskClassifier = None  # type: ignore[assignment,misc]
 
-    try:
-        from omniclaude.config.model_local_llm_config import (  # noqa: F401
-            LlmEndpointPurpose,
-            LocalLlmEndpointRegistry,
-        )
-    except (ImportError, AttributeError):  # pragma: no cover
-        LlmEndpointPurpose = None  # type: ignore[assignment,misc]
-        LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
-else:
-    logger.debug(
-        "omniclaude package not importable (circular import); "
-        "TaskClassifier/LlmEndpointPurpose/LocalLlmEndpointRegistry unavailable"
-    )
-    TaskClassifier = None  # type: ignore[assignment,misc]
-    LlmEndpointPurpose = None  # type: ignore[assignment,misc]
-    LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
+def _load_module_direct(name: str, file_path: Path) -> object | None:
+    """Load a Python module directly from file, bypassing __init__.py chains."""
+    if not file_path.exists():
+        return None
+    spec = _ilu.spec_from_file_location(name, file_path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_tc_mod = _load_module_direct(
+    "task_classifier", _SRC_PATH / "omniclaude" / "lib" / "task_classifier.py"
+)
+TaskClassifier = getattr(_tc_mod, "TaskClassifier", None)  # type: ignore[assignment]
+
+# LlmEndpointPurpose / LocalLlmEndpointRegistry are deferred to first use
+# inside _select_handler_endpoint() because model_local_llm_config.py pulls
+# in pydantic + pydantic_settings (~3s cold start).  Lazy-loading keeps
+# module import under 0.2s; the pydantic cost is only paid when delegation
+# actually reaches the endpoint selection stage.
+LlmEndpointPurpose = None  # type: ignore[assignment]
+LocalLlmEndpointRegistry = None  # type: ignore[assignment]
+_llm_config_loaded = False
+
+if TaskClassifier is None:
+    logger.debug("TaskClassifier unavailable (direct load from %s failed)", _SRC_PATH)
 
 # Shadow validation (OMN-2283) — imported at module level so tests can patch it.
 try:
@@ -386,8 +390,20 @@ def _select_handler_endpoint(
 
     purpose_name, system_prompt, handler_name, _min_len = routing
 
-    # Use module-level names (allows patching in tests).
-    # If imports failed at module load, these will be None and we catch below.
+    # Lazy-load LLM config on first use (pydantic cold start ~3s).
+    global LlmEndpointPurpose, LocalLlmEndpointRegistry, _llm_config_loaded  # noqa: PLW0603
+    if not _llm_config_loaded:
+        _llm_config_loaded = True
+        _llm_mod = _load_module_direct(
+            "model_local_llm_config",
+            _SRC_PATH / "omniclaude" / "config" / "model_local_llm_config.py",
+        )
+        if _llm_mod is not None:
+            LlmEndpointPurpose = getattr(_llm_mod, "LlmEndpointPurpose", None)
+            LocalLlmEndpointRegistry = getattr(
+                _llm_mod, "LocalLlmEndpointRegistry", None
+            )
+
     _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
     _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
 
