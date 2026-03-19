@@ -22,6 +22,8 @@ When `/release [args]` is invoked:
    - `--pypi-timeout-minutes <n>` — default: 10
    - `--run-id <id>` — default: auto-generated
    - `--gate-attestation <token>` — default: none
+   - `--autonomous` — default: false; skip the Slack HIGH_RISK gate (proceed without human approval)
+   - `--require-gate` — default: false; force the Slack gate even when `--autonomous` is set
 
 3. **Generate or restore run_id**:
    - If `--resume <run_id>` provided: use that run_id, load state file
@@ -330,6 +332,11 @@ IF --gate-attestation=<token>:
   → Token already validated in Step 0.1
   → Use token for audit trail
   → Skip Slack gate posting
+  → Proceed directly to Phase 3
+
+ELSE IF --autonomous AND NOT --require-gate:
+  → Log: "Autonomous mode — skipping HIGH_RISK gate"
+  → Set gate_token to "autonomous:<run_id>" for audit trail
   → Proceed directly to Phase 3
 
 ELSE:

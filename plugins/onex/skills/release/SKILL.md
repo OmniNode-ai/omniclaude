@@ -43,6 +43,12 @@ args:
   - name: --gate-attestation
     description: "Pre-issued gate token to bypass Slack HIGH_RISK gate (format: <slack_ts>:<run_id>)"
     required: false
+  - name: --autonomous
+    description: "Skip Slack HIGH_RISK gate and proceed without human approval. Intended for nightly autopilot runs."
+    required: false
+  - name: --require-gate
+    description: "Force Slack HIGH_RISK gate even when --autonomous is set. Safety override."
+    required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to release; empty list means all repos in graph"
@@ -67,7 +73,9 @@ packages can pin exact versions of their upstream dependencies.
 
 **SAFETY INVARIANT**: Release is a HIGH_RISK action. Silence is NEVER consent for
 the gate. Explicit approval required unless `--gate-attestation=<token>` is passed with a
-valid pre-issued token.
+valid pre-issued token, or `--autonomous` is set (for nightly autopilot runs where the
+entire close-out plan was pre-approved). Use `--require-gate` with `--autonomous` to
+force the gate for safety-critical autonomous runs.
 
 ## Quick Start
 
@@ -79,6 +87,8 @@ valid pre-issued token.
 /release --resume release-20260225-a3f7b2         # Resume a failed run
 /release --skip-pypi-wait                         # Don't wait for PyPI propagation
 /release --gate-attestation=1740312612.000100:release-20260225-a3f7b2  # Bypass gate
+/release --autonomous                                     # Nightly autopilot (skip gate)
+/release --autonomous --require-gate                      # Autonomous but force gate anyway
 ```
 
 ## Arguments
@@ -94,6 +104,8 @@ valid pre-issued token.
 | `--pypi-timeout-minutes` | int | 10 | Max minutes to wait for PyPI propagation per repo |
 | `--run-id` | string | auto | Override the auto-generated run ID |
 | `--gate-attestation` | `<slack_ts>:<run_id>` | — | Pre-issued gate token to bypass Slack HIGH_RISK gate |
+| `--autonomous` | flag | false | Skip Slack HIGH_RISK gate; intended for nightly autopilot runs |
+| `--require-gate` | flag | false | Force Slack gate even when `--autonomous` is set |
 
 ## Dependency Graph (Tier Order)
 
@@ -156,6 +168,8 @@ and optional PyPI availability confirmation). This ensures that when a tier N re
 6. GATE:
    If --gate-attestation=<token>:
      Validate token format, use for audit trail
+   Else if --autonomous AND NOT --require-gate:
+     Log autonomous mode, set gate_token to "autonomous:<run_id>"
    Else:
      Post HIGH_RISK Slack gate with plan table + plan_hash
      Invoke slack_gate_poll.py to poll for reply

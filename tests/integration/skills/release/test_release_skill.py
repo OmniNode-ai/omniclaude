@@ -225,6 +225,8 @@ class TestSkillFileStructure:
             "--skip-pypi-wait",
             "--pypi-timeout-minutes",
             "--gate-attestation",
+            "--autonomous",
+            "--require-gate",
         ]:
             assert arg in content, f"SKILL.md missing argument: {arg}"
 
@@ -635,3 +637,29 @@ class TestCIEnforcement:
         content = _read_file(_RELEASE_PROMPT)
         assert "plan_hash" in content
         assert "sha256" in content.lower() or "SHA256" in content
+
+    def test_autonomous_flag_skips_gate(self) -> None:
+        """prompt.md documents --autonomous skipping the HIGH_RISK gate."""
+        content = _read_file(_RELEASE_PROMPT)
+        assert "--autonomous" in content, "prompt.md must document --autonomous flag"
+        # Verify the autonomous path is documented in Phase 2
+        phase2_start = content.find("Phase 2")
+        assert phase2_start >= 0, "prompt.md must have Phase 2"
+        phase2_section = content[phase2_start:]
+        assert "autonomous" in phase2_section.lower(), (
+            "Phase 2 must document autonomous gate bypass"
+        )
+
+    def test_require_gate_overrides_autonomous(self) -> None:
+        """prompt.md documents --require-gate overriding --autonomous."""
+        content = _read_file(_RELEASE_PROMPT)
+        assert "--require-gate" in content, (
+            "prompt.md must document --require-gate flag"
+        )
+
+    def test_autonomous_gate_token_format(self) -> None:
+        """prompt.md sets gate_token to 'autonomous:<run_id>' in autonomous mode."""
+        content = _read_file(_RELEASE_PROMPT)
+        assert "autonomous:" in content, (
+            "prompt.md must document autonomous gate token format"
+        )
