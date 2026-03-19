@@ -119,7 +119,10 @@ try:
     from omniclaude.lib.task_classifier import (
         TaskClassifier,  # noqa: F401  (re-exported)
     )
-except ImportError:  # pragma: no cover
+except (ImportError, AttributeError):  # pragma: no cover
+    # AttributeError: circular import in omniclaude.lib.utils (debug_utils /
+    # quality_enforcer access settings.<attr> at module level before the Settings
+    # instance is fully constructed).  Tracked for proper fix in a follow-up ticket.
     TaskClassifier = None  # type: ignore[assignment,misc]
 
 try:
@@ -127,7 +130,7 @@ try:
         LlmEndpointPurpose,
         LocalLlmEndpointRegistry,
     )
-except ImportError:  # pragma: no cover
+except (ImportError, AttributeError):  # pragma: no cover
     LlmEndpointPurpose = None  # type: ignore[assignment,misc]
     LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
 
