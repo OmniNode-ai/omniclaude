@@ -57,15 +57,18 @@ def _write_events(
     with registry.open("a", encoding="utf-8") as f:
         for _ in range(count):
             f.write(
-                json.dumps({
-                    "skill": skill,
-                    "surface": surface,
-                    "severity": severity,
-                    "description": "test",
-                    "context_ticket_id": None,
-                    "session_id": "s",
-                    "timestamp": ts.isoformat(),
-                }) + "\n"
+                json.dumps(
+                    {
+                        "skill": skill,
+                        "surface": surface,
+                        "severity": severity,
+                        "description": "test",
+                        "context_ticket_id": None,
+                        "session_id": "s",
+                        "timestamp": ts.isoformat(),
+                    }
+                )
+                + "\n"
             )
     return registry
 
@@ -106,15 +109,18 @@ def test_skips_malformed_lines(tmp_path: Path) -> None:
         f.write("not json\n")
         # Valid line
         f.write(
-            json.dumps({
-                "skill": "x",
-                "surface": "kafka/t",
-                "severity": "low",
-                "description": "",
-                "context_ticket_id": None,
-                "session_id": "s",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }) + "\n"
+            json.dumps(
+                {
+                    "skill": "x",
+                    "surface": "kafka/t",
+                    "severity": "low",
+                    "description": "",
+                    "context_ticket_id": None,
+                    "session_id": "s",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+            + "\n"
         )
     aggregates = aggregate_friction(registry_path=registry)
     assert isinstance(aggregates, list)
@@ -135,8 +141,16 @@ def test_missing_registry_returns_empty(tmp_path: Path) -> None:
 
 
 def test_multiple_surfaces_tracked_independently(tmp_path: Path) -> None:
-    registry = _write_events(tmp_path, count=3, severity="low", skill="gap", surface="ci/missing-workflow")
-    _write_events(tmp_path, count=1, severity="high", skill="pr_polish", surface="linear/api-timeout")
+    registry = _write_events(
+        tmp_path, count=3, severity="low", skill="gap", surface="ci/missing-workflow"
+    )
+    _write_events(
+        tmp_path,
+        count=1,
+        severity="high",
+        skill="pr_polish",
+        surface="linear/api-timeout",
+    )
     # Reuse same file by passing it via registry_path (already written above)
     aggregates = aggregate_friction(registry_path=registry)
     assert len(aggregates) == 2
