@@ -91,6 +91,7 @@ class TestModuleImport:
             "audit.dispatch.validated",  # OMN-5235 - Task dispatch validated (before stack mutation)
             "audit.scope.violation",  # OMN-5235 - Duplicate task push or scope violation
             "skill.friction_recorded",  # OMN-5442 - Skill friction event recorded
+            "utilization.scoring.requested",  # OMN-5505 - Utilization scoring command emitted from Stop hook
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

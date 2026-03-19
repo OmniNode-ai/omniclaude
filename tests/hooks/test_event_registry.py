@@ -796,6 +796,8 @@ class TestEventRegistryIntegration:
             "audit.scope.violation",
             # Friction tracking side-channel event (OMN-5442)
             "skill.friction_recorded",
+            # Utilization scoring command emitted from Stop hook (OMN-5505)
+            "utilization.scoring.requested",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
