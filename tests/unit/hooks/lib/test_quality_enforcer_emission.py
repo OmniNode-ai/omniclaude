@@ -30,16 +30,20 @@ _HOOKS_LIB = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" 
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-# Reload quality_enforcer to ensure clean module state in test splits where
-# prior tests may have polluted the module cache via mock patching.
+# Import quality_enforcer; reload defensively to ensure clean module state in
+# test splits where prior tests may have polluted the module cache via mock patching.
+import types
+
 import omniclaude.lib.utils.quality_enforcer as _qe_mod
 
-importlib.reload(_qe_mod)
+if isinstance(_qe_mod, types.ModuleType):
+    importlib.reload(_qe_mod)
 
 
 def _get_enforcer_class() -> type:
     """Get a clean QualityEnforcer class via module reload to avoid mock pollution."""
-    importlib.reload(_qe_mod)
+    if isinstance(_qe_mod, types.ModuleType):
+        importlib.reload(_qe_mod)
     return _qe_mod.QualityEnforcer
 
 
