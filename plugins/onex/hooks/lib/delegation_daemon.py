@@ -109,7 +109,11 @@ def _get_valkey() -> Any:
         )
         # Probe connection
         _valkey_client.ping()
-        logger.debug("Valkey connected at %s:%s", _valkey_client.connection_pool.connection_kwargs.get("host"), _valkey_client.connection_pool.connection_kwargs.get("port"))
+        logger.debug(
+            "Valkey connected at %s:%s",
+            _valkey_client.connection_pool.connection_kwargs.get("host"),
+            _valkey_client.connection_pool.connection_kwargs.get("port"),
+        )
     except Exception as exc:
         logger.debug("Valkey unavailable (non-fatal): %s", exc)
         _valkey_client = None
@@ -128,9 +132,7 @@ def _reset_valkey() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _classify_with_cache(
-    prompt: str, correlation_id: str
-) -> dict[str, Any] | None:
+def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | None:
     """Classify a prompt, using Valkey cache when available.
 
     Cache key: ``delegation:classify:<sha256(prompt[:500])>``
@@ -142,8 +144,7 @@ def _classify_with_cache(
         ``delegatable`` keys, or None if classification fails entirely.
     """
     cache_key = (
-        f"delegation:classify:"
-        f"{hashlib.sha256(prompt[:500].encode()).hexdigest()}"
+        f"delegation:classify:{hashlib.sha256(prompt[:500].encode()).hexdigest()}"
     )
 
     # Try cache first
@@ -178,7 +179,9 @@ def _classify_with_cache(
         score = classifier.is_delegatable(prompt)
         result: dict[str, Any] = {
             "schema_version": CACHE_SCHEMA_VERSION,
-            "intent": score.intent.value if hasattr(score.intent, "value") else str(score.intent),
+            "intent": score.intent.value
+            if hasattr(score.intent, "value")
+            else str(score.intent),
             "confidence": score.confidence,
             "delegatable": score.delegatable,
             "cached_at": datetime.now(UTC).isoformat(),
@@ -436,9 +439,7 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--start", action="store_true", help="Start the daemon")
     group.add_argument("--stop", action="store_true", help="Stop the daemon")
-    group.add_argument(
-        "--health", action="store_true", help="Check daemon health"
-    )
+    group.add_argument("--health", action="store_true", help="Check daemon health")
     args = parser.parse_args()
 
     logging.basicConfig(
