@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 # Import from the plugins path — these are standalone modules
 # that run in the hooks subprocess.  For unit tests we can import
 # them directly after adjusting sys.path.
-import sys
-from pathlib import Path
 
 # Add plugins/onex/hooks/lib to sys.path so we can import classify_treatment
 _HOOKS_LIB = str(
@@ -21,8 +22,8 @@ if _HOOKS_LIB not in sys.path:
     sys.path.insert(0, _HOOKS_LIB)
 
 from classify_treatment import (  # noqa: E402
-    classify_treatment_group,
     classify_from_env,
+    classify_treatment_group,
 )
 
 pytestmark = pytest.mark.unit
