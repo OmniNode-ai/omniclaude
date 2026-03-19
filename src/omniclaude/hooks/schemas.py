@@ -1255,6 +1255,18 @@ class ModelHookContextInjectedPayload(BaseModel):
         ),
     )
 
+    # OMN-5548: Token count for savings estimation.
+    # Actual tokens in injected patterns (via count_tokens/cl100k_base).
+    # The downstream savings estimator multiplies this by regen_multiplier.
+    tokens_injected: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Actual token count of injected pattern text (cl100k_base). "
+            "Used by the savings estimation pipeline. Zero when no patterns injected."
+        ),
+    )
+
 
 # =============================================================================
 # Injection Metrics Events (OMN-1889)
