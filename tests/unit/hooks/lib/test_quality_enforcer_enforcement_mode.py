@@ -25,17 +25,20 @@ if str(_SRC) not in sys.path:
 
 # Reload quality_enforcer to ensure clean module state in test splits where
 # prior tests may have polluted the module cache via mock patching.
-try:
-    import omniclaude.lib.utils.quality_enforcer as _qe_mod
+import omniclaude.lib.utils.quality_enforcer as _qe_mod
 
-    importlib.reload(_qe_mod)
-except Exception:
-    pass  # Module not yet importable at collection time; tests will import it directly
+importlib.reload(_qe_mod)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_enforcer_class() -> type:
+    """Get a clean QualityEnforcer class via module reload to avoid mock pollution."""
+    importlib.reload(_qe_mod)
+    return _qe_mod.QualityEnforcer
 
 
 def _make_violation():
@@ -65,7 +68,7 @@ class TestEnforcementModeBanner:
 
     def test_blocking_mode_shows_blocked_banner(self) -> None:
         """When mode='blocking', the system message must show WRITE BLOCKED."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         enforcer = QualityEnforcer()
         violations = [_make_violation()]
@@ -73,13 +76,14 @@ class TestEnforcementModeBanner:
             violations, "/repo/src/module.py", mode="blocking"
         )
 
+        assert isinstance(msg, str), f"Expected str, got {type(msg)}"
         assert "WRITE BLOCKED" in msg
         assert "NAMING CONVENTION VIOLATIONS - WRITE BLOCKED" in msg
         assert "NAMING CONVENTION WARNINGS" not in msg
 
     def test_advisory_mode_shows_warning_banner(self) -> None:
         """When mode='advisory', the system message must show warnings (not blocked)."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         enforcer = QualityEnforcer()
         violations = [_make_violation()]
@@ -87,13 +91,14 @@ class TestEnforcementModeBanner:
             violations, "/repo/src/module.py", mode="advisory"
         )
 
+        assert isinstance(msg, str), f"Expected str, got {type(msg)}"
         assert "NAMING CONVENTION WARNINGS" in msg
         assert "WRITE BLOCKED" not in msg
         assert "Write will proceed" in msg
 
     def test_default_mode_shows_warning_banner(self) -> None:
         """Default mode (no explicit mode arg) must show warnings, not blocked."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         enforcer = QualityEnforcer()
         violations = [_make_violation()]
@@ -102,12 +107,13 @@ class TestEnforcementModeBanner:
             violations, "/repo/src/module.py"
         )
 
+        assert isinstance(msg, str), f"Expected str, got {type(msg)}"
         assert "NAMING CONVENTION WARNINGS" in msg
         assert "WRITE BLOCKED" not in msg
 
     def test_blocking_mode_footer_shows_fix_guidance(self) -> None:
         """Blocking mode footer must instruct user to fix violations."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         enforcer = QualityEnforcer()
         violations = [_make_violation()]
@@ -115,6 +121,7 @@ class TestEnforcementModeBanner:
             violations, "/repo/src/module.py", mode="blocking"
         )
 
+        assert isinstance(msg, str), f"Expected str, got {type(msg)}"
         assert "Fix the violations above and try again" in msg
 
     def test_no_stale_block_string_in_source(self) -> None:

@@ -32,12 +32,15 @@ if str(_HOOKS_LIB) not in sys.path:
 
 # Reload quality_enforcer to ensure clean module state in test splits where
 # prior tests may have polluted the module cache via mock patching.
-try:
-    import omniclaude.lib.utils.quality_enforcer as _qe_mod
+import omniclaude.lib.utils.quality_enforcer as _qe_mod
 
+importlib.reload(_qe_mod)
+
+
+def _get_enforcer_class() -> type:
+    """Get a clean QualityEnforcer class via module reload to avoid mock pollution."""
     importlib.reload(_qe_mod)
-except Exception:
-    pass  # Module not yet importable at collection time; tests will import it directly
+    return _qe_mod.QualityEnforcer
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +87,7 @@ class TestQualityEnforcerEmission:
     @pytest.mark.asyncio
     async def test_violation_triggers_pattern_enforcement_emission(self) -> None:
         """When violations are found, emit_event('pattern.enforcement', ...) is called."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         captured: list[dict[str, Any]] = []
 
@@ -134,7 +137,7 @@ class TestQualityEnforcerEmission:
     @pytest.mark.asyncio
     async def test_no_emission_when_no_violations(self) -> None:
         """When no violations are found, pattern.enforcement is NOT emitted."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         captured: list[dict[str, Any]] = []
 
@@ -171,7 +174,7 @@ class TestQualityEnforcerEmission:
     @pytest.mark.asyncio
     async def test_emission_payload_has_required_fields(self) -> None:
         """Emitted payload includes session_id, correlation_id, timestamp, language, domain, pattern_name, outcome."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         captured: list[dict[str, Any]] = []
 
@@ -233,7 +236,7 @@ class TestQualityEnforcerEmission:
     @pytest.mark.asyncio
     async def test_emission_outcome_is_violation(self) -> None:
         """Outcome field must be 'violation' (not 'hit') for QualityEnforcer events."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         captured: list[dict[str, Any]] = []
 
@@ -282,7 +285,7 @@ class TestQualityEnforcerEmission:
     @pytest.mark.asyncio
     async def test_emission_failure_does_not_block_enforcement(self) -> None:
         """If emit fails, enforcement still completes — fail-open design."""
-        from omniclaude.lib.utils.quality_enforcer import QualityEnforcer
+        QualityEnforcer = _get_enforcer_class()
 
         violation = _make_violation()
         tool_call = _make_write_tool_call()
