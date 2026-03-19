@@ -143,7 +143,7 @@ def _emit_kafka(event: FrictionEvent) -> None:
         # Lazy import to avoid hard dependency on hook lib from skills
         import sys as _sys
 
-        _lib_path = str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib")
+        _lib_path = str(Path(__file__).parent.parent.parent / "hooks" / "lib")
         if _lib_path not in _sys.path:
             _sys.path.insert(0, _lib_path)
         from emit_client_wrapper import emit_event
