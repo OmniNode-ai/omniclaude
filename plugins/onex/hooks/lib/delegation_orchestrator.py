@@ -1085,7 +1085,9 @@ def main() -> None:
         print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
         sys.exit(0)
 
-    logger.debug("Prompt decoded (%d chars), calling orchestrate_delegation", len(prompt))
+    logger.debug(
+        "Prompt decoded (%d chars), calling orchestrate_delegation", len(prompt)
+    )
 
     try:
         result = orchestrate_delegation(
