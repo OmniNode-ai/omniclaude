@@ -723,8 +723,8 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     "skill.friction_recorded": EventRegistration(
         event_type="skill.friction_recorded",
         fan_out=[],  # Side-channel only — no Kafka fan-out (OMN-5442)
-        partition_key_field="run_id",
-        required_fields=["run_id", "skill_name"],
+        partition_key_field="session_id",
+        required_fields=["skill", "session_id"],
     ),
     # =========================================================================
     # Wave 2 Pipeline Observability Events (OMN-2922)

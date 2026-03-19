@@ -98,7 +98,9 @@ def test_ignores_events_outside_window(tmp_path: Path) -> None:
     old = datetime.now(UTC) - timedelta(days=31)
     registry = _write_events(tmp_path, count=5, severity="low", timestamp=old)
     aggregates = aggregate_friction(registry_path=registry)
-    assert all(not a.threshold_crossed for a in aggregates)
+    assert aggregates == [], (
+        "Events outside the rolling window should produce no aggregates"
+    )
 
 
 def test_skips_malformed_lines(tmp_path: Path) -> None:

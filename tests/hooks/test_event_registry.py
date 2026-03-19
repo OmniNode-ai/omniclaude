@@ -794,6 +794,8 @@ class TestEventRegistryIntegration:
             # Context integrity audit events (OMN-5235)
             "audit.dispatch.validated",
             "audit.scope.violation",
+            # Friction tracking side-channel event (OMN-5442)
+            "skill.friction_recorded",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
@@ -900,10 +902,22 @@ class TestEventRegistryIntegration:
                 assert isinstance(rule.topic_base, str | TopicBase)
 
     def test_all_registrations_have_at_least_one_fanout(self) -> None:
-        """Verify all registrations have at least one fan-out rule."""
+        """Verify all registrations have at least one fan-out rule.
+
+        Side-channel-only events (no Kafka fan-out by design) are explicitly
+        excluded from this check. They emit via the embedded publisher daemon
+        directly and do not require Kafka topic routing.
+        """
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
+        # Side-channel events: emit via daemon directly, no Kafka fan-out by design.
+        side_channel_only: set[str] = {
+            "skill.friction_recorded",  # OMN-5442
+        }
+
         for event_type, reg in EVENT_REGISTRY.items():
+            if event_type in side_channel_only:
+                continue
             assert len(reg.fan_out) >= 1, f"{event_type} has no fan-out rules"
 
 
