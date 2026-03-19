@@ -36,6 +36,8 @@ Design constraints:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 import sys
@@ -1032,3 +1034,86 @@ def orchestrate_delegation(
             "orchestrate_delegation unexpected error: %s: %s", type(exc).__name__, exc
         )
         return {"delegated": False, "reason": "orchestrator_error", "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (mirrors local_delegation_handler.py interface)
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """CLI entry point for user-prompt-submit.sh.
+
+    Invocation:
+        printf '%s' "$PROMPT_B64" | python3 delegation_orchestrator.py \\
+            --prompt-stdin <correlation_id> [session_id]
+
+    Reads base64-encoded prompt from stdin, decodes it, and calls
+    orchestrate_delegation(). Prints JSON result to stdout.
+
+    Always exits 0. Non-zero exit would block the hook.
+    """
+    args = sys.argv[1:]
+
+    if not args or args[0] != "--prompt-stdin":
+        print(json.dumps({"delegated": False, "reason": "missing_args"}))
+        sys.exit(0)
+
+    # Expected: --prompt-stdin <correlation_id> [session_id]
+    if len(args) < 2:
+        print(json.dumps({"delegated": False, "reason": "missing_args"}))
+        sys.exit(0)
+
+    correlation_id = args[1]
+    session_id = args[2] if len(args) >= 3 else ""
+
+    logger.debug(
+        "delegation_orchestrator CLI invoked: correlation_id=%s session_id=%s",
+        correlation_id,
+        session_id[:8] if session_id else "(empty)",
+    )
+
+    try:
+        raw_b64 = sys.stdin.read().strip()
+        if not raw_b64:
+            logger.debug("Empty stdin payload — returning prompt_decode_error")
+            print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+            sys.exit(0)
+        prompt = base64.b64decode(raw_b64, validate=True).decode("utf-8")
+    except Exception:
+        logger.debug("Failed to decode base64 prompt from stdin")
+        print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+        sys.exit(0)
+
+    logger.debug("Prompt decoded (%d chars), calling orchestrate_delegation", len(prompt))
+
+    try:
+        result = orchestrate_delegation(
+            prompt=prompt,
+            correlation_id=correlation_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        logger.debug("Unexpected error in orchestrate_delegation: %s", exc)
+        result = {
+            "delegated": False,
+            "reason": f"unexpected_error: {type(exc).__name__}",
+        }
+
+    logger.debug(
+        "Delegation result: delegated=%s reason=%s",
+        result.get("delegated"),
+        result.get("reason", "n/a"),
+    )
+
+    try:
+        print(json.dumps(result))
+    except (TypeError, ValueError) as exc:
+        logger.debug("Failed to serialize delegation result: %s", exc)
+        print(json.dumps({"delegated": False, "reason": "result_serialize_error"}))
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
