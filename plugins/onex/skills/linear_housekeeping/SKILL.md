@@ -12,6 +12,7 @@ tags:
   - epics
   - documentation
 author: OmniClaude Team
+mode: full
 ---
 
 # Linear Housekeeping

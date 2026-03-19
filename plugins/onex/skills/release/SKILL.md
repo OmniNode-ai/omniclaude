@@ -59,6 +59,7 @@ inputs:
 outputs:
   - name: skill_result
     description: "ModelSkillResult with status: SUCCESS | PARTIAL | FAILED | DRY_RUN"
+mode: full
 ---
 
 # Release
@@ -537,6 +538,7 @@ This naming:
 | `uv lock` failure | `LOCK_FAILED` | Fail repo; dependency resolution error | Fix dependency conflicts, then `--resume` |
 | PR creation failure | `PR_FAILED` | Fail repo; GitHub API error or branch protection issue | Check GitHub permissions, then `--resume` |
 | PR merge failure | `MERGE_FAILED` | Fail repo; merge conflict or CI failure on PR | Resolve conflict or fix CI, then `--resume` |
+| Merge queue timeout | `MERGE_QUEUE_TIMEOUT` | Fail repo; PR stuck in merge queue >30 min | Check queue status manually, then `--resume` |
 | Tag already exists (different commit) | `TAG_CONFLICT` | Fail repo; tag points to different commit than expected | Delete stale tag manually, then `--resume` |
 | PyPI timeout | `PYPI_TIMEOUT` | Fail repo; package not available after `--pypi-timeout-minutes` | Check PyPI status, then `--resume` or `--skip-pypi-wait` |
 | Mid-chain failure | `TIER_BLOCKED` | Remaining repos in current tier + all later tiers marked `BLOCKED` | Fix failing repo, then `--resume` |

@@ -86,6 +86,7 @@ args:
   - name: --lag-threshold
     description: "Consumer group lag threshold for projection_lag probe (default: 10000)"
     required: false
+mode: full
 ---
 
 # Gap

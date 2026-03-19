@@ -26,6 +26,7 @@ outputs:
   - name: epics_created
     type: list[str]
     description: List of created epic IDs (OMN-XXXX)
+mode: full
 ---
 
 # Linear Epic Organization

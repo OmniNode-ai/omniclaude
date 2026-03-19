@@ -26,6 +26,7 @@ args:
   - name: --dry-run
     description: "Preview changes without writing. Only used with --sync."
     required: false
+mode: full
 ---
 
 # Ticket Plan

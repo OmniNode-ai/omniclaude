@@ -10,6 +10,7 @@ tags:
   - authorization
   - workflow
 author: omninode
+mode: full
 ---
 
 # Deauthorize

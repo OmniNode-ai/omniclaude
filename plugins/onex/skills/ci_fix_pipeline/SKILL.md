@@ -41,6 +41,7 @@ args:
     description: "Fetch and display CI failure analysis without attempting fixes. Reproduces former ci-failures behavior."
     required: false
 composable: true
+mode: full
 ---
 
 # CI Fix Pipeline

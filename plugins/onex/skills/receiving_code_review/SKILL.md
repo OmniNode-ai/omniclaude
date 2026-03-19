@@ -11,6 +11,7 @@ tags:
   - technical-evaluation
   - verification
 author: OmniClaude Team
+mode: full
 ---
 
 # Code Review Reception

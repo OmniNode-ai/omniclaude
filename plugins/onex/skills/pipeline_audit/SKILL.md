@@ -17,6 +17,7 @@ tags:
   - wire-format
   - tracing
 author: OmniClaude Team
+mode: full
 ---
 
 # Pipeline Audit

@@ -71,6 +71,7 @@ args:
   - name: --once
     description: "Single review pass — no loop, no fix iterations. Dispatches one review and returns results. Absorbed from the former requesting-code-review skill."
     required: false
+mode: full
 ---
 
 # Local Review

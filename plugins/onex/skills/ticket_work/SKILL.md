@@ -39,6 +39,7 @@ args:
   - name: --autonomous
     description: Skip human gates; proceed through all phases unattended
     required: false
+mode: full
 ---
 
 # Contract-Driven Ticket Execution

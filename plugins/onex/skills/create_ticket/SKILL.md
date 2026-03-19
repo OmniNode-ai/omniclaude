@@ -38,6 +38,7 @@ args:
   - name: --allow-arch-violation
     description: Bypass architecture dependency validation
     required: false
+mode: full
 ---
 
 # Create Linear Ticket

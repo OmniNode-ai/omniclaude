@@ -22,6 +22,7 @@ args:
   - name: ticket_id
     description: Linear ticket ID for fetching expected test evidence
     required: false
+mode: full
 ---
 
 # mergeability-gate
