@@ -553,6 +553,9 @@ class HandlerContextInjection:
         )
         context_size_bytes = len(context_markdown.encode("utf-8"))
 
+        # Compute token count for both injection record and event (OMN-5548)
+        tokens_injected = count_tokens(context_markdown) if patterns else 0
+
         # Record injection to database via emit daemon
         if cohort_assignment:
             if not patterns:
@@ -560,7 +563,6 @@ class HandlerContextInjection:
             else:
                 injection_source = EnumInjectionSource.INJECTED
 
-            token_count = count_tokens(context_markdown)
             self._emit_injection_record(
                 injection_id=injection_id,
                 session_id_raw=session_id,
@@ -570,7 +572,7 @@ class HandlerContextInjection:
                 cohort=cohort_assignment.cohort,
                 assignment_seed=cohort_assignment.assignment_seed,
                 injected_content=context_markdown,
-                injected_token_count=token_count,
+                injected_token_count=tokens_injected,
                 correlation_id=correlation_id,
                 effective_control_percentage=cfg.cohort.control_percentage,
                 effective_salt=cfg.cohort.salt,
@@ -590,6 +592,7 @@ class HandlerContextInjection:
                 min_confidence=cfg.min_confidence,
                 context_source=context_source,
                 emitted_at=emitted_at,
+                tokens_injected=tokens_injected,
             )
 
         return ModelInjectionResult(
@@ -1041,6 +1044,7 @@ class HandlerContextInjection:
         min_confidence: float,
         context_source: ContextSource = ContextSource.DATABASE,
         emitted_at: datetime,
+        tokens_injected: int = 0,
     ) -> None:
         """Emit context injection event to Kafka."""
         # Derive entity_id
@@ -1095,6 +1099,7 @@ class HandlerContextInjection:
                 min_confidence_threshold=min_confidence,
                 retrieval_duration_ms=retrieval_ms,
                 action_description=_action_desc,
+                tokens_injected=tokens_injected,
             )
             await emit_hook_event(payload)
             logger.debug(
