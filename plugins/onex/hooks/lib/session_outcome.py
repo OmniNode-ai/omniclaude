@@ -208,6 +208,43 @@ def derive_session_outcome(
     )
 
 
+def build_session_outcome_payload(
+    *,
+    session_id: str,
+    outcome: str,
+    reason: str,
+    correlation_id: str = "",
+) -> dict[str, object]:
+    """Build a session outcome payload matching ModelClaudeCodeSessionOutcome schema.
+
+    Used by the Stop hook to emit session outcomes to Kafka for the
+    intelligence feedback loop.
+
+    Args:
+        session_id: Claude Code session identifier.
+        outcome: One of: success, failed, abandoned, unknown.
+        reason: Human-readable explanation of why this outcome was chosen.
+        correlation_id: Optional correlation ID for tracing.
+
+    Returns:
+        Dict matching the ModelClaudeCodeSessionOutcome wire schema.
+    """
+    error: dict[str, str] | None = None
+    if outcome == OUTCOME_FAILED:
+        error = {
+            "code": "session_failed",
+            "message": reason,
+            "component": "claude_code",
+        }
+
+    return {
+        "session_id": session_id,
+        "outcome": outcome,
+        "error": error,
+        "correlation_id": correlation_id,
+    }
+
+
 __all__ = [
     # Constants
     "ABANDON_THRESHOLD_SECONDS",
@@ -220,5 +257,6 @@ __all__ = [
     # Types
     "SessionOutcomeResult",
     # Functions
+    "build_session_outcome_payload",
     "derive_session_outcome",
 ]

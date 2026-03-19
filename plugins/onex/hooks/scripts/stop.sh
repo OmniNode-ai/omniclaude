@@ -95,6 +95,48 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     ) &
 fi
 
+# --- Session outcome emission (closes feedback loop) [OMN-5501] ---
+if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
+    (
+        # Map completion_status to session outcome
+        case "$COMPLETION_STATUS" in
+            "success"|"completed"|"complete")
+                SESSION_OUTCOME="success"
+                SESSION_REASON="completion_status=$COMPLETION_STATUS"
+                ;;
+            "error"|"failed")
+                SESSION_OUTCOME="failed"
+                SESSION_REASON="completion_status=$COMPLETION_STATUS"
+                ;;
+            "cancelled"|"interrupted")
+                SESSION_OUTCOME="abandoned"
+                SESSION_REASON="completion_status=$COMPLETION_STATUS"
+                ;;
+            *)
+                if [[ -n "${TOOLS_EXECUTED:-}" ]] && [[ "$TOOLS_EXECUTED" != "null" ]] && [[ "$TOOLS_EXECUTED" != "[]" ]]; then
+                    SESSION_OUTCOME="success"
+                    SESSION_REASON="tools_executed_present"
+                else
+                    SESSION_OUTCOME="unknown"
+                    SESSION_REASON="insufficient_signal"
+                fi
+                ;;
+        esac
+
+        CORRELATION_ID="${CORRELATION_ID:-}"
+        OUTCOME_PAYLOAD=$(jq -n \
+            --arg sid "$SESSION_ID" \
+            --arg outcome "$SESSION_OUTCOME" \
+            --arg reason "$SESSION_REASON" \
+            --arg cid "$CORRELATION_ID" \
+            '{session_id: $sid, outcome: $outcome, reason: $reason, correlation_id: $cid, error: (if $outcome == "failed" then {code: "session_failed", message: $reason, component: "claude_code"} else null end)}' 2>/dev/null)
+
+        if [[ -n "$OUTCOME_PAYLOAD" ]] && [[ "$OUTCOME_PAYLOAD" != "null" ]]; then
+            emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
+        fi
+    ) &
+fi
+
 # If tools not in JSON, default to empty list
 # (Legacy PostgreSQL query removed — Kafka is the canonical observability path)
 if [[ -z "$TOOLS_EXECUTED" ]] || [[ "$TOOLS_EXECUTED" == "null" ]]; then
