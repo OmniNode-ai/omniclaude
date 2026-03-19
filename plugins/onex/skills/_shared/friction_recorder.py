@@ -126,14 +126,16 @@ def record_friction(
 ) -> None:
     """Append friction event to NDJSON registry. Non-blocking; never raises."""
     path = Path(registry_path or _DEFAULT_REGISTRY)
+    appended = False
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event.to_dict()) + "\n")
+        appended = True
     except Exception as exc:
         logger.debug("friction_recorder: append failed: %s", exc)
 
-    if emit_kafka:
+    if emit_kafka and appended:
         _emit_kafka(event)
 
 
