@@ -27,16 +27,6 @@ progressions:
     to: pr_review_dev
     after_uses: 5
 
-  # Linear insights → suggest-work (use insights to drive work)
-  - from: linear_insights
-    to: suggest_work
-    after_uses: 3
-
-  # Create ticket → plan-ticket (richer planning)
-  - from: create_ticket
-    to: plan_ticket
-    after_uses: 3
-
   # ticket-pipeline → epic-team (scale to multi-ticket workflows)
   - from: ticket_pipeline
     to: epic_team
@@ -51,11 +41,6 @@ progressions:
   - from: pr_watch
     to: merge_sweep
     after_uses: 5
-
-  # status → project-status (team-level visibility)
-  - from: status
-    to: project_status
-    after_uses: 3
 
   # design-to-plan → plan-to-tickets (convert plans to Linear tickets)
   - from: design_to_plan
