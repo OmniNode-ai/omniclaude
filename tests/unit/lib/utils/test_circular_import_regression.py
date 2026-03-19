@@ -18,7 +18,11 @@ class TestCircularImportRegression:
     def test_import_task_classifier_via_lib(self) -> None:
         """Importing TaskClassifier must not raise AttributeError from circular import."""
         result = subprocess.run(
-            [sys.executable, "-c", "from omniclaude.lib.task_classifier import TaskClassifier; print(TaskClassifier)"],
+            [
+                sys.executable,
+                "-c",
+                "from omniclaude.lib.task_classifier import TaskClassifier; print(TaskClassifier)",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -29,7 +33,11 @@ class TestCircularImportRegression:
     def test_import_quality_enforcer_via_lib(self) -> None:
         """Importing QualityEnforcer must not raise AttributeError."""
         result = subprocess.run(
-            [sys.executable, "-c", "from omniclaude.lib.utils.quality_enforcer import QualityEnforcer; print(QualityEnforcer)"],
+            [
+                sys.executable,
+                "-c",
+                "from omniclaude.lib.utils.quality_enforcer import QualityEnforcer; print(QualityEnforcer)",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -40,7 +48,11 @@ class TestCircularImportRegression:
     def test_import_debug_utils_via_lib(self) -> None:
         """Importing debug_utils must not raise AttributeError."""
         result = subprocess.run(
-            [sys.executable, "-c", "from omniclaude.lib.utils.debug_utils import INTELLIGENCE_SERVICE_URL; print('OK')"],
+            [
+                sys.executable,
+                "-c",
+                "from omniclaude.lib.utils.debug_utils import INTELLIGENCE_SERVICE_URL; print('OK')",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -51,11 +63,15 @@ class TestCircularImportRegression:
     def test_utils_re_exports_preserved(self) -> None:
         """Every previously re-exported name from lib.utils still resolves."""
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "from omniclaude.lib.utils import __all__ as names; "
-                "[getattr(__import__('omniclaude.lib.utils', fromlist=[n]), n) for n in names]; "
-                "print(f'OK: {len(names)} names')"
-            )],
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from omniclaude.lib.utils import __all__ as names; "
+                    "[getattr(__import__('omniclaude.lib.utils', fromlist=[n]), n) for n in names]; "
+                    "print(f'OK: {len(names)} names')"
+                ),
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -66,13 +82,17 @@ class TestCircularImportRegression:
     def test_lib_lazy_attribute_access(self) -> None:
         """Lazy __getattr__ resolves subpackages on attribute access."""
         result = subprocess.run(
-            [sys.executable, "-c", (
-                "import omniclaude.lib as lib; "
-                "assert lib.utils is not None; "
-                "assert lib.models is not None; "
-                "assert lib.core is not None; "
-                "print('OK')"
-            )],
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import omniclaude.lib as lib; "
+                    "assert lib.utils is not None; "
+                    "assert lib.models is not None; "
+                    "assert lib.core is not None; "
+                    "print('OK')"
+                ),
+            ],
             capture_output=True,
             text=True,
             timeout=30,
