@@ -561,8 +561,15 @@ class TestIntegrationSweepWiring:
     def test_missing_cc_path_returns_unknown(
         self, today: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """ONEX_CC_REPO_PATH not set → integration_sweep=unknown + correction."""
+        """ONEX_CC_REPO_PATH not set and no fallback → unknown + correction."""
         monkeypatch.delenv("ONEX_CC_REPO_PATH", raising=False)
+        # Patch the canonical fallback to a non-existent path so the test
+        # exercises the "no cc_path at all" branch even on dev machines.
+        monkeypatch.setattr(
+            _close_day,
+            "_ONEX_CC_FALLBACK",
+            Path("/nonexistent/fallback"),
+        )
         status, corrections = run_integration_sweep(today, onex_cc_repo_path=None)
         assert status == "unknown"
         assert len(corrections) == 1

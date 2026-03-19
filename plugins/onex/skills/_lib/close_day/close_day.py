@@ -342,7 +342,7 @@ def run_integration_sweep(
         integration_sweep_status: "pass" | "fail" | "partial" | "unknown"
         corrections_for_tomorrow: list of correction strings (empty on pass/unknown)
     """
-    cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
+    cc_path = _resolve_cc_path(onex_cc_repo_path)
 
     # Attempt to run /integration-sweep to produce the artifact
     if cc_path:
@@ -465,6 +465,38 @@ def serialize_day_close(data: dict[str, Any]) -> str:
 # Write or print
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# ONEX_CC_REPO_PATH resolution (shared across all functions)
+# ---------------------------------------------------------------------------
+
+# Canonical fallback — matches integration-sweep prompt.md Step 1
+_ONEX_CC_FALLBACK = Path(
+    "/Volumes/PRO-G40/Code/omni_home/onex_change_control"  # local-path-ok
+)
+
+
+def _resolve_cc_path(
+    explicit: str | None = None,
+) -> str | None:
+    """Resolve ONEX_CC_REPO_PATH with env-var + canonical fallback.
+
+    Resolution order:
+    1. Explicit argument (from caller)
+    2. ``ONEX_CC_REPO_PATH`` env var
+    3. Canonical fallback (``/Volumes/PRO-G40/Code/omni_home/onex_change_control``)
+
+    Returns the resolved path string, or None if none exists on disk.
+    """
+    for candidate in [
+        explicit,
+        os.environ.get("ONEX_CC_REPO_PATH"),
+        str(_ONEX_CC_FALLBACK),
+    ]:
+        if candidate and Path(candidate).exists():
+            return candidate
+    return None
+
+
 _WARNING_BANNER = (
     "\n"
     "=" * 72 + "\n"
@@ -557,7 +589,7 @@ def run(
     print(f"  Golden-path: {gp_status}")
 
     # Integration sweep
-    cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
+    cc_path = _resolve_cc_path(onex_cc_repo_path)
     integration_sweep_status, integration_corrections = run_integration_sweep(
         today, cc_path
     )
@@ -606,7 +638,7 @@ def run(
     yaml_str = serialize_day_close(raw)
 
     # Write or print
-    cc_path = onex_cc_repo_path or os.environ.get("ONEX_CC_REPO_PATH")
+    cc_path = _resolve_cc_path(onex_cc_repo_path)
     write_or_print(yaml_str, today, cc_path)
     return 0
 
