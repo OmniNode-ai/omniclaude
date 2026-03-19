@@ -106,7 +106,13 @@ _provider_initialized = False
 
 def _is_enabled() -> bool:
     """Return True unless explicitly disabled via PHOENIX_OTEL_ENABLED=false/0."""
-    val = os.environ.get("PHOENIX_OTEL_ENABLED", "true").strip().lower()
+    val = (
+        os.environ.get(  # ONEX_FLAG_EXEMPT: migration
+            "PHOENIX_OTEL_ENABLED", "true"
+        )
+        .strip()
+        .lower()
+    )
     return val not in ("0", "false", "no", "off")
 
 

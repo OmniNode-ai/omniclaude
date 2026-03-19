@@ -362,8 +362,12 @@ def main() -> None:
     IMPORTANT: Always exits with code 0 for hook compatibility.
     """
     # Feature flag checks (outer and inner)
-    enable_pipeline = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "false").lower()
-    enable_enrichment = os.environ.get("ENABLE_LOCAL_ENRICHMENT", "false").lower()
+    enable_pipeline = os.environ.get(
+        "ENABLE_LOCAL_INFERENCE_PIPELINE", "false"
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
+    enable_enrichment = os.environ.get(
+        "ENABLE_LOCAL_ENRICHMENT", "false"
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
 
     if enable_pipeline != "true" or enable_enrichment != "true":
         print(json.dumps(_empty_output()))

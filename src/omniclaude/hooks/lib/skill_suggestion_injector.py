@@ -136,7 +136,9 @@ def _load_usage_counts(
 ) -> Counter[str]:
     """Return per-skill usage counts, preferring Postgres when available."""
     if db_enabled is None:
-        db_enabled = os.getenv("ENABLE_POSTGRES", "").lower() in {"1", "true", "yes"}
+        db_enabled = os.getenv(  # ONEX_FLAG_EXEMPT: migration
+            "ENABLE_POSTGRES", ""
+        ).lower() in {"1", "true", "yes"}
 
     if db_enabled:
         db_counts = _load_counts_from_db(session_id=session_id)

@@ -201,7 +201,9 @@ def _is_shadow_validation_enabled() -> bool:
     reducer and checked here to prevent unnecessary shadow calls after the
     quality bar has been met for the full window.
     """
-    flag = os.environ.get("ENABLE_SHADOW_VALIDATION", "").lower()
+    flag = os.environ.get(
+        "ENABLE_SHADOW_VALIDATION", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     if flag not in _TRUTHY:
         return False
 

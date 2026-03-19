@@ -318,10 +318,14 @@ def _is_delegation_enabled() -> bool:
     Both ``ENABLE_LOCAL_INFERENCE_PIPELINE`` and ``ENABLE_LOCAL_DELEGATION``
     must be set to a truthy value (true/1/yes/on, case-insensitive).
     """
-    parent = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
+    parent = os.environ.get(
+        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     if parent not in _TRUTHY:
         return False
-    delegation = os.environ.get("ENABLE_LOCAL_DELEGATION", "").lower()
+    delegation = os.environ.get(
+        "ENABLE_LOCAL_DELEGATION", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     return delegation in _TRUTHY
 
 

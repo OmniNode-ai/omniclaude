@@ -29,7 +29,9 @@ def _is_event_bus_available() -> bool:
     Falls back to STANDALONE mode if not.
     """
     kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
-    enable_events = os.environ.get("ENABLE_REAL_TIME_EVENTS", "false").lower()
+    enable_events = os.environ.get(
+        "ENABLE_REAL_TIME_EVENTS", "false"
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     return bool(kafka_servers) and enable_events == "true"
 
 

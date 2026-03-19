@@ -142,10 +142,14 @@ def _is_delegation_enabled() -> bool:
     Returns:
         True only when both flags are truthy.
     """
-    parent = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
+    parent = os.environ.get(
+        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     if parent not in _TRUTHY:
         return False
-    delegation = os.environ.get("ENABLE_LOCAL_DELEGATION", "").lower()
+    delegation = os.environ.get(
+        "ENABLE_LOCAL_DELEGATION", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     return delegation in _TRUTHY
 
 

@@ -29,12 +29,14 @@
 repos:
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
-    rev: 39a09ffb2432b8b7d3f47b334b869b55c9cb4fc6
+    rev: a3d309f216f29f7ff3a4d992478cecf61274002a
     hooks:
       - id: no-hardcoded-topics
         stages: [pre-commit]
         # Pre-existing violations excluded pending migration to canonical constants
         exclude: '^(src/omniclaude/hooks/(topic_allowlist|topic_registry)\.yaml|src/omniclaude/hooks/contracts/contract_hook_.*\.yaml|src/omniclaude/lib/(config/intelligence_config|core/intelligence_event_client)\.py|src/omniclaude/nodes/node_agent_inbox_effect/handler_kafka_inbox\.py|src/omniclaude/runtime/(__main__|wiring_dispatchers)\.py|src/omniclaude/services/linear_relay/publisher\.py|plugins/onex/(agents/configs/polymorphic-agent\.yaml|hooks/lib/pattern_cache\.py)|schemas/quirks/.*\.yaml|scripts/(bus_audit|demo_runner)\.py|tests/validate_event_integration\.py|tests/integration/skills/aislop_sweep/fixtures/.*)$'
+      - id: no-bare-feature-flags
+        stages: [pre-commit]
 
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks

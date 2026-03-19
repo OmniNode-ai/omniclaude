@@ -94,8 +94,12 @@ def is_enforcement_enabled() -> bool:
     Both ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_PATTERN_ENFORCEMENT
     must be truthy ("true", "1", "yes" case-insensitive).
     """
-    parent_flag = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
-    enforcement_flag = os.environ.get("ENABLE_PATTERN_ENFORCEMENT", "").lower()
+    parent_flag = os.environ.get(
+        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
+    enforcement_flag = os.environ.get(
+        "ENABLE_PATTERN_ENFORCEMENT", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     truthy = {"true", "1", "yes"}
     return parent_flag in truthy and enforcement_flag in truthy
 

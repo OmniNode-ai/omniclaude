@@ -55,7 +55,13 @@ def _is_whitelisted(file_path: str) -> bool:
 
 
 def _detect_mode() -> str:
-    raw = os.environ.get("ENABLE_AUTH_GATE", "").strip().lower()
+    raw = (
+        os.environ.get(  # ONEX_FLAG_EXEMPT: migration
+            "ENABLE_AUTH_GATE", ""
+        )
+        .strip()
+        .lower()
+    )
     if raw == "strict":
         return "strict"
     return "enforce" if raw == "true" else "warn"

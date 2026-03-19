@@ -144,7 +144,9 @@ def _load_usage_counts(
     *, log_path: Path, session_id: str, db_enabled: bool | None
 ) -> Counter[str]:
     if db_enabled is None:
-        db_enabled = os.getenv("ENABLE_POSTGRES", "").lower() in {"1", "true", "yes"}
+        db_enabled = os.getenv(  # ONEX_FLAG_EXEMPT: migration
+            "ENABLE_POSTGRES", ""
+        ).lower() in {"1", "true", "yes"}
     if db_enabled:
         db_counts = _load_counts_from_db(session_id=session_id)
         if db_counts is not None:

@@ -109,7 +109,9 @@ def _maybe_write_to_db(
 ) -> None:
     """Optionally insert *entry* into ``skill_usage`` table.  Never raises."""
     if db_enabled is None:
-        db_enabled = os.getenv("ENABLE_POSTGRES", "").lower() in {"1", "true", "yes"}
+        db_enabled = os.getenv(  # ONEX_FLAG_EXEMPT: migration
+            "ENABLE_POSTGRES", ""
+        ).lower() in {"1", "true", "yes"}
 
     if not db_enabled:
         return

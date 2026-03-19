@@ -792,7 +792,9 @@ def _use_llm_routing() -> bool:
     """
     if _get_llm_handler() is None or _get_llm_registry() is None:
         return False
-    parent = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
+    parent = os.environ.get(
+        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: migration
     if parent not in _TRUTHY:
         return False
     flag = os.environ.get("USE_LLM_ROUTING", "").lower()
