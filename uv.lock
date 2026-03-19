@@ -1981,10 +1981,10 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=release%2Fv0.29.0" },
-    { name = "omnibase-infra", git = "https://github.com/OmniNode-ai/omnibase_infra.git?branch=release%2Fv0.22.0" },
-    { name = "omnibase-spi", git = "https://github.com/OmniNode-ai/omnibase_spi.git?branch=release%2Fv0.18.0" },
-    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=release%2Fv0.15.0" },
+    { name = "omnibase-core", specifier = "==0.29.0" },
+    { name = "omnibase-infra", specifier = "==0.22.0" },
+    { name = "omnibase-spi", specifier = "==0.18.0" },
+    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
@@ -2022,7 +2022,7 @@ dev = [
 [[package]]
 name = "omninode-intelligence"
 version = "0.15.0"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=release%2Fv0.15.0#a886247b2a1242758f9bafa71ee9b51f9591be95" }
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main#44d870e12312c9c32c7570c4c41c665f17063f9f" }
 dependencies = [
     { name = "adaptive-classifier" },
     { name = "confluent-kafka" },
