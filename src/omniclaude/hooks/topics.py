@@ -62,6 +62,8 @@ class TopicBase(StrEnum):
     SESSION_OUTCOME_CMD = "onex.cmd.omniintelligence.session-outcome.v1"
     # Session outcome: EVT target for dashboards / monitoring
     SESSION_OUTCOME_EVT = "onex.evt.omniclaude.session-outcome.v1"
+    # Utilization scoring: CMD target for LLM-based scoring (OMN-5505)
+    UTILIZATION_SCORING_CMD = "onex.cmd.omniintelligence.utilization-scoring.v1"
 
     # ==========================================================================
     # Hook adapter observability topics (migrated to ONEX format, OMN-1552)

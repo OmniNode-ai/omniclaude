@@ -303,6 +303,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "outcome"],
     ),
+    # Utilization scoring command (OMN-5505)
+    # Emitted by Stop hook when patterns were injected during the session.
+    # Routes to omniintelligence for LLM-based utilization scoring.
+    "utilization.scoring.requested": EventRegistration(
+        event_type="utilization.scoring.requested",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.UTILIZATION_SCORING_CMD,
+                transform=None,  # Passthrough — full payload to intelligence
+                description="Utilization scoring command to omniintelligence",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "injected_pattern_ids"],
+    ),
     # =========================================================================
     # Prompt Events (Fan-out to TWO topics)
     # =========================================================================

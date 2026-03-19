@@ -137,6 +137,34 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     ) &
 fi
 
+# --- Utilization scoring command (async LLM-based scoring via omniintelligence) [OMN-5505] ---
+if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
+    (
+        INJECTED_PATTERNS_FILE="${TMPDIR:-/tmp}/omniclaude-injected-patterns-${SESSION_ID}.json"
+
+        if [[ -f "$INJECTED_PATTERNS_FILE" ]]; then
+            INJECTED_PATTERNS=$(cat "$INJECTED_PATTERNS_FILE" 2>/dev/null)
+            PATTERN_COUNT=$(echo "$INJECTED_PATTERNS" | jq 'length' 2>/dev/null || echo "0")
+
+            if [[ "$PATTERN_COUNT" -gt 0 ]] 2>/dev/null; then
+                SCORING_PAYLOAD=$(jq -n \
+                    --arg sid "$SESSION_ID" \
+                    --arg cid "${CORRELATION_ID:-}" \
+                    --arg outcome "${SESSION_OUTCOME:-unknown}" \
+                    --argjson patterns "$INJECTED_PATTERNS" \
+                    '{session_id: $sid, correlation_id: $cid, session_outcome: $outcome, injected_pattern_ids: $patterns}' 2>/dev/null)
+
+                if [[ -n "$SCORING_PAYLOAD" ]] && [[ "$SCORING_PAYLOAD" != "null" ]]; then
+                    emit_via_daemon "utilization.scoring.requested" "$SCORING_PAYLOAD" 100
+                fi
+            fi
+
+            # Clean up state file
+            rm -f "$INJECTED_PATTERNS_FILE"
+        fi
+    ) &
+fi
+
 # If tools not in JSON, default to empty list
 # (Legacy PostgreSQL query removed — Kafka is the canonical observability path)
 if [[ -z "$TOOLS_EXECUTED" ]] || [[ "$TOOLS_EXECUTED" == "null" ]]; then
