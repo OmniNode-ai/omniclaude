@@ -14,7 +14,9 @@ import pytest
 
 # Plugin lib modules live outside the normal package tree.
 # Insert hooks/lib so session_outcome can be imported directly.
-_HOOKS_LIB = str(Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib")
+_HOOKS_LIB = str(
+    Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
+)
 if _HOOKS_LIB not in sys.path:
     sys.path.insert(0, _HOOKS_LIB)
 
