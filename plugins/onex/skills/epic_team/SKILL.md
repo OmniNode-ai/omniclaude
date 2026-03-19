@@ -376,6 +376,21 @@ go idle immediately (`idleReason: available`) and never process tasks from the t
 This is a confirmed behavior across multiple epic runs. The direct dispatch pattern is the
 only execution model that reliably completes tickets.
 
+### Circuit Breaker / Heartbeat Timeout
+
+Every Task() dispatch has a configurable timeout to prevent stalled agents from blocking the
+entire wave indefinitely. If an agent produces no output for `DISPATCH_TIMEOUT_MINUTES`
+(default: 30, configurable via `EPIC_TEAM_DISPATCH_TIMEOUT_MINUTES` env var), the circuit
+breaker trips:
+
+1. The Task() dispatch returns a timeout error
+2. The ticket is marked `AGENT_TIMEOUT` in state.yaml
+3. A Kafka event `onex.evt.omniclaude.agent-circuit-breaker.v1` is emitted for observability
+4. The wave continues with remaining tickets (timeout is non-blocking)
+
+This prevents the first autopilot close-out failure mode where a release dispatch stalled
+for 1+ hour with zero output.
+
 ## Failure Taxonomy and Recovery Strategies
 
 | Failure Class | Symptoms | Recovery Strategy |
@@ -388,6 +403,7 @@ only execution model that reliably completes tickets.
 | `wrong_repo` | Ticket worked in wrong repo | Look up target repo in Linear ticket `repo` field; re-dispatch |
 | `blocker_unresolved` | Ticket blocked by another in-progress ticket | Move to end of queue; complete blocking ticket first |
 | `pr_template_blocked` | Mergeability gate rejected — missing PR body sections | Update PR body with required sections (Summary/Risk/Test Evidence/Rollback), rerun gate |
+| `agent_timeout` | Sub-agent produces no output for >30 min | Circuit breaker trips; ticket marked AGENT_TIMEOUT; retry in next run |
 | `unknown` | Failure doesn't match above patterns | Escalate to user: ticket ID, last command output, branch state |
 
 ## Failure Attempt Definition
