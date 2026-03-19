@@ -1,5 +1,6 @@
 ---
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
+mode: full
 version: 2.0.0
 level: advanced
 debug: false

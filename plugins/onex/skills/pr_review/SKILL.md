@@ -1,5 +1,6 @@
 ---
 description: Comprehensive PR review with strict priority-based organization and merge readiness assessment
+mode: full
 level: basic
 debug: false
 mode: full

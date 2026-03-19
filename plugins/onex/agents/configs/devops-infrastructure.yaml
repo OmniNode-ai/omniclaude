@@ -6,6 +6,7 @@
 # Purpose: Container orchestration, CI/CD pipeline optimization, cloud deployment expertise
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "devops_infrastructure"
 mode: "full"
 category: "infrastructure"

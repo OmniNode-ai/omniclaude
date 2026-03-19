@@ -5,6 +5,7 @@
 # Pattern: Pre + During + Post (response quality)
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "address_pr_comments"
 mode: "full"
 

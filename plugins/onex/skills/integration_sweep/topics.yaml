@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: integration-sweep
+# This skill reads from Linear and writes local YAML only.
+# No Kafka topics are produced or consumed by this skill.
+
+topics: []

@@ -1,5 +1,6 @@
 ---
 description: Pre-merge seam validation — reads a ModelTicketContract, diffs the branch against origin/main, and returns PASS / WARN / BLOCK with emergency_bypass support
+mode: full
 level: advanced
 debug: false
 mode: full

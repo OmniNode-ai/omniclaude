@@ -1,5 +1,6 @@
 ---
 description: Full autonomous audit-debug-fix loop for all dashboard pages — Playwright recon, parallel systematic-debug, fix, PR, Linear ticket, re-audit, iterate until clean. Supports local and cloud targets with optional post-fix redeployment.
+mode: full
 version: 1.1.0
 level: advanced
 debug: false

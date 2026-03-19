@@ -1,5 +1,6 @@
 ---
 description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, integration verification gate, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
+mode: full
 version: 5.0.0
 level: intermediate
 debug: false

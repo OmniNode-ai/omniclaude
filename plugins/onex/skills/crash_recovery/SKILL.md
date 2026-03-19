@@ -1,5 +1,6 @@
 ---
 description: Show recent pipeline state to orient after an unexpected session end or crash
+mode: full
 version: "1.0.0"
 level: advanced
 debug: true

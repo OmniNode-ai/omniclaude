@@ -1,5 +1,6 @@
 ---
 description: Full post-release runtime redeploy — syncs bare clones, updates Dockerfile plugin pins, rebuilds Docker runtime, seeds Infisical, and verifies health
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

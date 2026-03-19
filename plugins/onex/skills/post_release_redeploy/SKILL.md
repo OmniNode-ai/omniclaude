@@ -1,5 +1,6 @@
 ---
 description: End-to-end post-PR-merge redeployment pipeline — verifies merge gate, confirms release state, releases packages via /release, rebuilds Docker runtime via /redeploy, and runs close-out verification
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

@@ -1,5 +1,6 @@
 ---
 description: Comprehensive system health monitoring — checks agent performance, database, Kafka topics, pattern discovery, and service status across the ONEX platform
+mode: full
 level: advanced
 debug: true
 index: true

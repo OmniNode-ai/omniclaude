@@ -1,0 +1,269 @@
+<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
+<!-- persona-scope: this-skill-only -- do not re-apply if polymorphic agent wraps this skill -->
+Apply the persona profile above when generating outputs.
+
+# Integration Sweep Skill Orchestration
+
+You are executing the integration-sweep skill. This prompt defines the complete orchestration
+logic for contract-driven post-merge integration verification.
+
+---
+
+## Step 0: Announce <!-- ai-slop-ok: skill-step-heading -->
+
+Say: "I'm using the integration-sweep skill to run contract-driven post-merge verification."
+
+---
+
+## Step 1: Parse Arguments <!-- ai-slop-ok: skill-step-heading -->
+
+Parse from `$ARGUMENTS`:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--date <iso-date>` | today (`date +%Y-%m-%d`) | Filter tickets by `updatedAt >= date` |
+| `--tickets <ids>` | (empty) | Explicit comma-separated ticket IDs; skips Linear discovery |
+| `--mode <scope>` | `omniclaude-only` | `omniclaude-only` or `full-infra` |
+| `--dry-run` | false | Print table but do NOT write artifact |
+| `--output <path>` | `$ONEX_CC_REPO_PATH/drift/integration/{date}.yaml` | Override artifact path |
+
+Resolve `SWEEP_DATE`:
+- If `--date` provided: use that value
+- Otherwise: `date +%Y-%m-%d` (today)
+
+Resolve `ONEX_CC_REPO_PATH`:
+- Check env var `ONEX_CC_REPO_PATH`
+- Fallback: `/Volumes/PRO-G40/Code/omni_home/onex_change_control`  <!-- local-path-ok -->
+- If path does not exist: emit `INTEGRATION_SWEEP ERROR: ONEX_CC_REPO_PATH not found at <path>` and stop.
+
+---
+
+## Step 2: Discovery <!-- ai-slop-ok: skill-step-heading -->
+
+**If `--tickets` was provided**: use those ticket IDs directly. Skip to Step 3.
+
+**Otherwise** — discover recently completed tickets:
+
+```
+mcp__linear-server__list_issues(
+  state="Done",
+  updatedAfter="{SWEEP_DATE}T00:00:00Z",
+  team="Omninode"
+)
+```
+
+Filter to tickets whose `updatedAt` falls on or after `SWEEP_DATE`.
+
+If no tickets found:
+```
+INTEGRATION_SWEEP: No completed tickets found for {SWEEP_DATE}. Nothing to verify.
+```
+Exit cleanly (status: clean, no artifact written).
+
+---
+
+## Step 3: Contract Extraction <!-- ai-slop-ok: skill-step-heading -->
+
+For each discovered ticket ID:
+
+1. Call `mcp__linear-server__get_issue(id=<ticket_id>)`
+2. Search the ticket description for a fenced YAML block:
+   ````
+   ```yaml
+   # ModelTicketContract
+   ...
+   ```
+   ````
+3. Parse the YAML block as `ModelTicketContract`.
+4. Extract:
+   - `interfaces_touched: list[str]` — maps to `EnumIntegrationSurface` values
+   - `dod_evidence: list[dict]` — checks to execute per surface
+
+**If no contract block found**:
+- Record probe result: `status=UNKNOWN`, `reason=NO_CONTRACT`
+- Apply halt policy: **Halt** — stop the entire sweep and report.
+
+**If contract is present but `dod_evidence` is empty**:
+- Record probe result: `status=UNKNOWN`, `reason=NOT_APPLICABLE`
+- Continue (no surfaces to probe for this ticket).
+
+---
+
+## Step 4: Surface Classification <!-- ai-slop-ok: skill-step-heading -->
+
+Map each `interfaces_touched` value to `EnumIntegrationSurface`:
+
+| Contract value | EnumIntegrationSurface |
+|----------------|------------------------|
+| `kafka` / `event_bus` / `topics` | `KAFKA` |
+| `database` / `db` / `postgres` / `orm` | `DB` |
+| `ci` / `github_actions` / `workflow` | `CI` |
+| `plugin` / `omniclaude` / `skill` | `PLUGIN` |
+| `github_ci` / `branch_protection` | `GITHUB_CI` |
+| `script` / `scripts` / `bash` | `SCRIPT` |
+
+Any value not matching the table above: record `status=UNKNOWN`, `reason=NOT_APPLICABLE`, continue.
+
+---
+
+## Step 5: Probe Execution <!-- ai-slop-ok: skill-step-heading -->
+
+For each `(ticket_id, surface)` pair, execute the checks from `dod_evidence[*]` whose
+surface classification matches.
+
+Run checks in the order they appear in `dod_evidence`. For each check:
+
+### Check type: `test_passes`
+
+```bash
+cd <repo_path>
+uv run pytest <test_path> -x -q 2>&1
+```
+
+- PASS if exit code 0
+- FAIL if exit code non-zero (capture stderr snippet as evidence)
+- UNKNOWN/PROBE_UNAVAILABLE if `uv` or `pytest` not available
+
+### Check type: `command`
+
+```bash
+<command>
+```
+
+- PASS if exit code 0
+- FAIL if exit code non-zero
+- UNKNOWN/PROBE_UNAVAILABLE if command not found
+
+### Check type: `file_exists`
+
+Check that the file at `path` exists on disk.
+
+- PASS if file exists
+- FAIL if file does not exist
+
+### Check type: `grep`
+
+```bash
+grep -r "<pattern>" <path>
+```
+
+- PASS if at least one match found
+- FAIL if no matches found
+- UNKNOWN/INCONCLUSIVE if path does not exist
+
+### Check type: `endpoint`
+
+```bash
+curl -sf --max-time 5 <url> > /dev/null
+```
+
+- PASS if HTTP 2xx
+- FAIL if non-2xx or connection refused
+- UNKNOWN/PROBE_UNAVAILABLE if curl not available or endpoint is outside `--mode` scope
+
+**Surface-level result**: aggregate all check results for the surface.
+- All PASS → surface `PASS`
+- Any FAIL → surface `FAIL`
+- No FAIL but any UNKNOWN/INCONCLUSIVE → surface `UNKNOWN/INCONCLUSIVE`
+- No FAIL but any UNKNOWN/PROBE_UNAVAILABLE → surface `UNKNOWN/PROBE_UNAVAILABLE`
+- No FAIL but any UNKNOWN/NOT_APPLICABLE → surface `UNKNOWN/NOT_APPLICABLE`
+
+**Apply halt policy after each surface result** (see SKILL.md halt policy table).
+
+---
+
+## Step 6: Artifact Assembly <!-- ai-slop-ok: skill-step-heading -->
+
+Assemble a `ModelIntegrationRecord`:
+
+```yaml
+# ModelIntegrationRecord
+sweep_date: "<SWEEP_DATE>"
+tickets_swept: [<ticket_ids>]
+surfaces_probed: [<distinct surfaces with at least one probe run>]
+results:
+  - ticket_id: "<id>"
+    surface: <EnumIntegrationSurface>
+    status: <PASS | FAIL | UNKNOWN>
+    reason: <EnumProbeReason | null>   # NO_CONTRACT | PROBE_UNAVAILABLE | INCONCLUSIVE | NOT_APPLICABLE | null
+    evidence: "<one-line summary>"
+overall_status: <PASS | FAIL | PARTIAL>
+artifact_written: <true | false>
+```
+
+`overall_status` rules:
+- `PASS`: all probed surfaces returned PASS or UNKNOWN/NOT_APPLICABLE or UNKNOWN/PROBE_UNAVAILABLE
+- `FAIL`: any surface returned FAIL or UNKNOWN/NO_CONTRACT or UNKNOWN/INCONCLUSIVE
+- `PARTIAL`: mix of PASS and UNKNOWN/PROBE_UNAVAILABLE with no FAIL
+
+**If `--dry-run`**: set `artifact_written: false`. Do NOT write the file. Skip Step 7.
+
+---
+
+## Step 7: Write Artifact <!-- ai-slop-ok: skill-step-heading -->
+
+Resolve output path:
+- If `--output` provided: use that path
+- Otherwise: `{ONEX_CC_REPO_PATH}/drift/integration/{SWEEP_DATE}.yaml`
+
+Ensure the parent directory exists:
+```bash
+mkdir -p "$(dirname <output_path>)"
+```
+
+Write the `ModelIntegrationRecord` YAML to the resolved path.
+
+Set `artifact_written: true` in the record.
+
+---
+
+## Step 8: Summary Output <!-- ai-slop-ok: skill-step-heading -->
+
+Always print a results table regardless of `--dry-run`:
+
+```
+INTEGRATION SWEEP — {SWEEP_DATE}
+================================
+
+| Ticket   | Surface   | Probe              | Status  | Evidence                                      |
+|----------|-----------|--------------------|---------|-----------------------------------------------|
+| OMN-5400 | KAFKA     | topic_match        | PASS    | topic constant matches consumer               |
+| OMN-5401 | DB        | migration_applied  | FAIL    | migration 0043 not found in applied list      |
+
+Summary: X PASS, Y FAIL, Z UNKNOWN (total)
+Artifact: <output_path>   (or: --dry-run, no artifact written)
+```
+
+---
+
+## Step 9: Emit Result Line <!-- ai-slop-ok: skill-step-heading -->
+
+Always end with exactly one result line:
+
+```
+INTEGRATION_SWEEP_RESULT: <PASS|FAIL|PARTIAL> tickets=<N> surfaces=<N> fail=<N> unknown=<N>
+```
+
+If `--dry-run`, append ` [dry-run]`.
+
+---
+
+## Mode Constraints <!-- ai-slop-ok: skill-step-heading -->
+
+**`omniclaude-only` mode** (default):
+- Only probe surfaces: `PLUGIN`, `GITHUB_CI`, `SCRIPT`, `CI`
+- Skip `KAFKA` and `DB` probes (record as UNKNOWN/NOT_APPLICABLE)
+
+**`full-infra` mode**:
+- Probe all six surfaces
+- Requires local Docker infra running (`infra-up` must have been executed)
+- If infra not reachable: record affected surfaces as UNKNOWN/PROBE_UNAVAILABLE, continue
+
+---
+
+## Error Handling <!-- ai-slop-ok: skill-step-heading -->
+
+- If `ONEX_CC_REPO_PATH` does not exist: emit error, stop
+- If Linear API call fails: emit error, stop
+- If a single check raises an unexpected exception: record UNKNOWN/INCONCLUSIVE for that surface, apply halt policy
+- Never silently swallow errors — always surface the exception message in `evidence`

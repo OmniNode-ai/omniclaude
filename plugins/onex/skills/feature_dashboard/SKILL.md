@@ -1,5 +1,6 @@
 ---
 description: Audit skill connectivity across 8 layers and surface gaps as actionable, machine-readable output. Supports audit (read-only) and ticketize (create Linear tickets for gaps) modes.
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

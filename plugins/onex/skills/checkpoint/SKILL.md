@@ -1,5 +1,6 @@
 ---
 description: Pipeline checkpoint management for resume, replay, and phase validation
+mode: full
 version: 1.0.0
 level: advanced
 debug: true

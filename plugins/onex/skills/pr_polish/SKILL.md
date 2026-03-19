@@ -1,5 +1,6 @@
 ---
 description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures, then iterate local-review until N consecutive clean passes
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

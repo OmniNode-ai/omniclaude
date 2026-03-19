@@ -1,5 +1,6 @@
 ---
 description: Scan all non-completed Linear tickets, verify status against actual PR state, auto-mark done tickets, flag stale ones, and identify orphans needing epic assignment
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

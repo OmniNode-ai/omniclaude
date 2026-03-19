@@ -1,5 +1,6 @@
 ---
 description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
+mode: full
 version: 2.0.0
 level: basic
 debug: false

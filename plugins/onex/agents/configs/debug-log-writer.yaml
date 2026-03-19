@@ -6,6 +6,7 @@
 # Purpose: Direct-to-database debug log writer with intelligence integration
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "debug_log_writer"
 mode: "full"
 

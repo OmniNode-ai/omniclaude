@@ -1,5 +1,6 @@
 ---
 description: PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

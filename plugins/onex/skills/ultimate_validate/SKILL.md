@@ -1,5 +1,6 @@
 ---
 description: Generate comprehensive validation command for this codebase
+mode: full
 version: 1.0.0
 level: advanced
 debug: true

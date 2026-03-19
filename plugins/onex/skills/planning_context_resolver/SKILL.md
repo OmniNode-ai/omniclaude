@@ -1,5 +1,6 @@
 ---
 description: Read-only intelligence agent that compiles structured planning context for an epic
+mode: full
 version: 1.0.0
 level: intermediate
 debug: false

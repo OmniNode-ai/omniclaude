@@ -1,5 +1,6 @@
 ---
 description: GitHub Actions runner management — deploy, update, and monitor self-hosted runners
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

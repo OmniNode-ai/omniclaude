@@ -6,6 +6,7 @@
 # Specializes in AST-based code generation and ONEX tool directory structures
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "ast_generator"
 mode: "full"
 version: "1.2.0"

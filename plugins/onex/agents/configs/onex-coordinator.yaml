@@ -6,6 +6,7 @@
 # Focus: ONEX system coordination, four-node architecture orchestration, operational excellence
 
 schema_version: "1.0.0"
+mode: full
 agent_type: "onex_coordinator"
 mode: "full"
 priority: "high"

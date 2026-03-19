@@ -1,5 +1,6 @@
 ---
 description: Create a single Linear ticket from args, contract file, or plan milestone with conflict resolution
+mode: full
 version: 1.0.0
 level: basic
 debug: false

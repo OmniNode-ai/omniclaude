@@ -1,5 +1,6 @@
 ---
 description: Local code review loop that iterates through review, fix, commit cycles without pushing
+mode: full
 version: 2.0.0
 level: basic
 debug: false

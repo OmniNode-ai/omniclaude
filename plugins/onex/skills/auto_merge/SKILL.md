@@ -1,5 +1,6 @@
 ---
 description: Merge a GitHub PR when all gates pass; uses Slack HIGH_RISK gate by default
+mode: full
 version: 1.0.0
 level: advanced
 debug: false

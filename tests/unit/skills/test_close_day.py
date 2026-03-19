@@ -402,7 +402,7 @@ class TestModelDayCloseValidation:
             validate_day_close(raw)
 
     def test_invariants_checked_schema(self, today: str) -> None:
-        """invariants_checked has all four required fields with valid statuses."""
+        """invariants_checked has all five required fields with valid statuses."""
         raw = build_day_close(
             today=today,
             plan_items=[],
@@ -417,6 +417,7 @@ class TestModelDayCloseValidation:
         assert inv["orchestrators_no_io"] == "fail"
         assert inv["effects_do_io_only"] == "unknown"
         assert inv["real_infra_proof_progressing"] == "pass"
+        assert inv["integration_sweep"] == "unknown"
         validated = validate_day_close(raw)
         assert validated.invariants_checked.reducers_pure.value == "pass"
         assert validated.invariants_checked.orchestrators_no_io.value == "fail"
@@ -546,3 +547,129 @@ class TestSerializeDayClose:
         parsed = yaml.safe_load(yaml_str)
         assert parsed["schema_version"] == "1.0.0"
         assert parsed["date"] == today
+
+
+# ---------------------------------------------------------------------------
+# Tests: integration sweep wiring
+# ---------------------------------------------------------------------------
+
+run_integration_sweep = _close_day.run_integration_sweep
+
+
+@pytest.mark.unit
+class TestIntegrationSweepWiring:
+    def test_missing_cc_path_returns_unknown(
+        self, today: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ONEX_CC_REPO_PATH not set → integration_sweep=unknown + correction."""
+        monkeypatch.delenv("ONEX_CC_REPO_PATH", raising=False)
+        status, corrections = run_integration_sweep(today, onex_cc_repo_path=None)
+        assert status == "unknown"
+        assert len(corrections) == 1
+        assert "ONEX_CC_REPO_PATH not set" in corrections[0]
+
+    def test_missing_artifact_returns_unknown(self, today: str, tmp_path: Path) -> None:
+        """Artifact file missing → integration_sweep=unknown + correction."""
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "unknown"
+        assert len(corrections) == 1
+        assert "artifact missing" in corrections[0]
+
+    def test_artifact_pass_returns_pass(self, today: str, tmp_path: Path) -> None:
+        """Artifact with overall_status=PASS → integration_sweep=pass, no corrections."""
+        artifact_dir = tmp_path / "drift" / "integration"
+        artifact_dir.mkdir(parents=True)
+        artifact = {
+            "sweep_date": today,
+            "overall_status": "PASS",
+            "corrections_for_tomorrow": [],
+        }
+        (artifact_dir / f"{today}.yaml").write_text(
+            yaml.dump(artifact), encoding="utf-8"
+        )
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "pass"
+        assert corrections == []
+
+    def test_artifact_fail_returns_fail_with_correction(
+        self, today: str, tmp_path: Path
+    ) -> None:
+        """Artifact with overall_status=FAIL → integration_sweep=fail + corrections."""
+        artifact_dir = tmp_path / "drift" / "integration"
+        artifact_dir.mkdir(parents=True)
+        artifact = {
+            "sweep_date": today,
+            "overall_status": "FAIL",
+            "corrections_for_tomorrow": ["Fix OMN-9999 plugin check"],
+        }
+        (artifact_dir / f"{today}.yaml").write_text(
+            yaml.dump(artifact), encoding="utf-8"
+        )
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "fail"
+        assert "Fix OMN-9999 plugin check" in corrections
+
+    def test_artifact_partial_returns_partial(self, today: str, tmp_path: Path) -> None:
+        """Artifact with overall_status=PARTIAL → integration_sweep=partial."""
+        artifact_dir = tmp_path / "drift" / "integration"
+        artifact_dir.mkdir(parents=True)
+        artifact = {
+            "sweep_date": today,
+            "overall_status": "PARTIAL",
+            "corrections_for_tomorrow": [],
+        }
+        (artifact_dir / f"{today}.yaml").write_text(
+            yaml.dump(artifact), encoding="utf-8"
+        )
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "partial"
+        assert len(corrections) == 1  # auto-generated correction for partial
+
+    def test_empty_artifact_returns_unknown(self, today: str, tmp_path: Path) -> None:
+        """Empty artifact file → integration_sweep=unknown + correction."""
+        artifact_dir = tmp_path / "drift" / "integration"
+        artifact_dir.mkdir(parents=True)
+        (artifact_dir / f"{today}.yaml").write_text("", encoding="utf-8")
+        status, corrections = run_integration_sweep(
+            today, onex_cc_repo_path=str(tmp_path)
+        )
+        assert status == "unknown"
+        assert len(corrections) == 1
+        assert "malformed" in corrections[0]
+
+    def test_build_day_close_integration_sweep_field(self, today: str) -> None:
+        """build_day_close propagates integration_sweep_status to invariants_checked."""
+        raw = build_day_close(
+            today=today,
+            plan_items=[],
+            actual_by_repo=[],
+            drift_detected=[],
+            invariant_statuses={"reducers_pure": "pass", "orchestrators_no_io": "pass"},
+            golden_path_status="pass",
+            corrections_for_tomorrow=[],
+            integration_sweep_status="pass",
+        )
+        assert raw["invariants_checked"]["integration_sweep"] == "pass"
+
+    def test_build_day_close_integration_sweep_defaults_unknown(
+        self, today: str
+    ) -> None:
+        """build_day_close defaults integration_sweep to unknown when not provided."""
+        raw = build_day_close(
+            today=today,
+            plan_items=[],
+            actual_by_repo=[],
+            drift_detected=[],
+            invariant_statuses={"reducers_pure": "pass", "orchestrators_no_io": "pass"},
+            golden_path_status="pass",
+            corrections_for_tomorrow=[],
+        )
+        assert raw["invariants_checked"]["integration_sweep"] == "unknown"

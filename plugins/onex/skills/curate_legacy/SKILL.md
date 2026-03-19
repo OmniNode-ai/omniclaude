@@ -1,5 +1,6 @@
 ---
 description: Canonicalize legacy docs, archived code, and feature ideas into a handler-first Ideas Registry with provenance, dedup, and executable specs
+mode: full
 version: 1.1.0
 level: advanced
 debug: false
