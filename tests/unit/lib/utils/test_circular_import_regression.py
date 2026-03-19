@@ -47,3 +47,20 @@ class TestCircularImportRegression:
         )
         assert result.returncode == 0, f"Import failed: {result.stderr}"
         assert "OK" in result.stdout, f"Expected 'OK' in stdout, got: {result.stdout!r}"
+
+    def test_lib_lazy_attribute_access(self) -> None:
+        """Lazy __getattr__ resolves subpackages on attribute access."""
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "import omniclaude.lib as lib; "
+                "assert lib.utils is not None; "
+                "assert lib.models is not None; "
+                "assert lib.core is not None; "
+                "print('OK')"
+            )],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"Lazy attribute access failed: {result.stderr}"
+        assert "OK" in result.stdout
