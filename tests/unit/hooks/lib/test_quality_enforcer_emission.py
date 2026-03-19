@@ -12,6 +12,7 @@ Ticket: OMN-2378 — wire pattern enforcement emitter in omniclaude
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,12 @@ if str(_SRC) not in sys.path:
 _HOOKS_LIB = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
+
+# Reload quality_enforcer to ensure clean module state in test splits where
+# prior tests may have polluted the module cache via mock patching.
+import omniclaude.lib.utils.quality_enforcer as _qe_mod
+
+importlib.reload(_qe_mod)
 
 
 # ---------------------------------------------------------------------------

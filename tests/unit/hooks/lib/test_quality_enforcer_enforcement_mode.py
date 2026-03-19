@@ -12,6 +12,7 @@ Ticket: OMN-1487 — Fix inconsistent enforcement mode strings in quality_enforc
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -21,6 +22,12 @@ import pytest
 _SRC = Path(__file__).resolve().parents[4] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+
+# Reload quality_enforcer to ensure clean module state in test splits where
+# prior tests may have polluted the module cache via mock patching.
+import omniclaude.lib.utils.quality_enforcer as _qe_mod
+
+importlib.reload(_qe_mod)
 
 
 # ---------------------------------------------------------------------------
