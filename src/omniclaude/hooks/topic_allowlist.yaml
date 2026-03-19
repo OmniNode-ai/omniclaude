@@ -74,6 +74,11 @@ allowed_extras:
     reason: Tool content CMD (file contents, access-restricted); predates contract governance (OMN-1702).
     ticket: OMN-3294
 
+  - topic: "onex.cmd.omniintelligence.utilization-scoring.v1"
+    lifecycle: integration
+    reason: Utilization scoring CMD for LLM-based pattern utilization scoring (OMN-5505).
+    ticket: OMN-5505
+
   - topic: "onex.cmd.omninode.routing-requested.v1"
     lifecycle: integration
     reason: Agent routing CMD topic; predates contract governance.
