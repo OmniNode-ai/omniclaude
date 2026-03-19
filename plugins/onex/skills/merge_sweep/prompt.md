@@ -339,6 +339,46 @@ def detect_branch_protection_drift(pr):
     return False
 
 blocked_green_prs = [pr for pr in all_prs if detect_branch_protection_drift(pr)]
+
+
+# Cache for merge queue detection per-repo (OMN-5463)
+_merge_queue_cache: dict[str, bool] = {}
+
+def has_merge_queue(repo_full: str) -> bool:
+    """Detect whether a GitHub repo has a merge queue enabled on its default branch.
+
+    Uses the GitHub API to check branch protection rules for the merge queue
+    configuration. Results are cached per-repo for the duration of the sweep.
+
+    Args:
+        repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
+
+    Returns:
+        True if merge queue is enabled, False otherwise.
+    """
+    if repo_full in _merge_queue_cache:
+        return _merge_queue_cache[repo_full]
+
+    result = run([
+        "gh", "api", f"repos/{repo_full}/branches/main/protection",
+        "--jq", ".required_pull_request_reviews.merge_queue // false",
+    ], capture_output=True, text=True)
+
+    # Also check via the merge queue GraphQL field as a fallback
+    if result.returncode != 0 or result.stdout.strip() == "false":
+        # Try GraphQL: mergeQueueConfig presence indicates merge queue
+        gql_result = run([
+            "gh", "api", "graphql", "-f", f'query=query {{ '
+            f'repository(owner: "{repo_full.split("/")[0]}", name: "{repo_full.split("/")[1]}") {{ '
+            f'mergeQueue(branch: "main") {{ id }} }} }}',
+            "--jq", ".data.repository.mergeQueue.id",
+        ], capture_output=True, text=True)
+        has_queue = gql_result.returncode == 0 and bool(gql_result.stdout.strip())
+    else:
+        has_queue = True
+
+    _merge_queue_cache[repo_full] = has_queue
+    return has_queue
 ```
 
 If `blocked_green_prs` is non-empty, emit a diagnostic warning:
@@ -624,13 +664,21 @@ for pr in candidates:
         continue
 
     try:
-        # Enable GitHub auto-merge — merges automatically when all required checks pass
-        result = run([
+        # Detect merge queue: repos with merge queues reject explicit merge strategy
+        # flags (--squash, --merge, --rebase) with --auto. When a merge queue is active,
+        # use --auto only and let the queue's configured strategy take effect. (OMN-5463)
+        merge_cmd = [
             "gh", "pr", "merge", str(pr["number"]),
             "--repo", repo_full,
-            f"--{merge_method}",
-            "--auto",
-        ])
+        ]
+        if has_merge_queue(repo_full):
+            merge_cmd.append("--auto")
+            print(f"  ℹ {repo_full}: merge queue detected — using --auto only (no strategy flag)")
+        else:
+            merge_cmd.extend([f"--{merge_method}", "--auto"])
+
+        # Enable GitHub auto-merge — merges automatically when all required checks pass
+        result = run(merge_cmd)
         if result.returncode == 0:
             auto_merge_results.append({
                 "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
@@ -641,11 +689,13 @@ for pr in candidates:
             # Repo has no merge queue and PR is immediately mergeable —
             # GitHub rejects --auto because there's nothing to wait for.
             # Fall back to direct merge (no --auto).
-            direct_result = run([
+            direct_cmd = [
                 "gh", "pr", "merge", str(pr["number"]),
                 "--repo", repo_full,
-                f"--{merge_method}",
-            ])
+            ]
+            if not has_merge_queue(repo_full):
+                direct_cmd.append(f"--{merge_method}")
+            direct_result = run(direct_cmd)
             if direct_result.returncode == 0:
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
