@@ -127,21 +127,34 @@ except ImportError:
 import importlib.util as _ilu
 
 
-def _load_module_direct(name: str, file_path: Path) -> object | None:
-    """Load a Python module directly from file, bypassing __init__.py chains."""
-    if not file_path.exists():
+def _load_module_direct(name: str, relative_path: str) -> object | None:
+    """Load a Python module directly from file, bypassing __init__.py chains.
+
+    Searches ``_SRC_PATH`` first (dev worktree), then ``sys.path`` entries
+    (deployed venv site-packages).  Returns the module object or None.
+    """
+    candidates = [_SRC_PATH / relative_path]
+    candidates.extend(Path(p) / relative_path for p in sys.path)
+    target: Path | None = None
+    for c in candidates:
+        if c.exists():
+            target = c
+            break
+    if target is None:
         return None
-    spec = _ilu.spec_from_file_location(name, file_path)
+    spec = _ilu.spec_from_file_location(name, target)
     if spec is None or spec.loader is None:
         return None
     mod = _ilu.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception as exc:
+        logger.debug("Failed to load %s from %s: %s", name, target, exc)
+        return None
     return mod
 
 
-_tc_mod = _load_module_direct(
-    "task_classifier", _SRC_PATH / "omniclaude" / "lib" / "task_classifier.py"
-)
+_tc_mod = _load_module_direct("task_classifier", "omniclaude/lib/task_classifier.py")
 TaskClassifier = getattr(_tc_mod, "TaskClassifier", None)  # type: ignore[assignment]
 
 # LlmEndpointPurpose / LocalLlmEndpointRegistry are deferred to first use
@@ -396,7 +409,7 @@ def _select_handler_endpoint(
         _llm_config_loaded = True
         _llm_mod = _load_module_direct(
             "model_local_llm_config",
-            _SRC_PATH / "omniclaude" / "config" / "model_local_llm_config.py",
+            "omniclaude/config/model_local_llm_config.py",
         )
         if _llm_mod is not None:
             LlmEndpointPurpose = getattr(_llm_mod, "LlmEndpointPurpose", None)

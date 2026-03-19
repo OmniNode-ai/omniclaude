@@ -333,12 +333,15 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        with patch.object(
-            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-        ):
-            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                mock_purpose_cls.return_value = MagicMock()
-                result = do._select_handler_endpoint("document")
+        # Set _llm_config_loaded=True so the lazy-load block is skipped and our
+        # patches on LlmEndpointPurpose / LocalLlmEndpointRegistry are not overwritten.
+        with patch.object(do, "_llm_config_loaded", True):
+            with patch.object(
+                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+            ):
+                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                    mock_purpose_cls.return_value = MagicMock()
+                    result = do._select_handler_endpoint("document")
 
         assert result is not None
         _url, model_name, system_prompt, handler_name = result
@@ -355,12 +358,13 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        with patch.object(
-            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-        ):
-            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                mock_purpose_cls.return_value = MagicMock()
-                result = do._select_handler_endpoint("test")
+        with patch.object(do, "_llm_config_loaded", True):
+            with patch.object(
+                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+            ):
+                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                    mock_purpose_cls.return_value = MagicMock()
+                    result = do._select_handler_endpoint("test")
 
         assert result is not None
         _, _, system_prompt, handler_name = result
@@ -376,12 +380,13 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        with patch.object(
-            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-        ):
-            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                mock_purpose_cls.return_value = MagicMock()
-                result = do._select_handler_endpoint("research")
+        with patch.object(do, "_llm_config_loaded", True):
+            with patch.object(
+                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+            ):
+                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                    mock_purpose_cls.return_value = MagicMock()
+                    result = do._select_handler_endpoint("research")
 
         assert result is not None
         _, _, system_prompt, handler_name = result
@@ -465,13 +470,23 @@ def test_handler_routing_purpose_names_match_enum() -> None:
 
 @pytest.mark.unit
 class TestFeatureFlags:
-    """orchestrate_delegation respects ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_LOCAL_DELEGATION."""
+    """orchestrate_delegation respects ENABLE_LOCAL_DELEGATION kill-switch and LLM endpoint config.
+
+    _is_delegation_enabled() uses connection-config-inference:
+    - delegation is enabled when LLM_CODER_URL or LLM_DEEPSEEK_R1_URL are set
+      (and ENABLE_LOCAL_DELEGATION != false)
+    - ENABLE_LOCAL_DELEGATION=false is an explicit kill-switch regardless of LLM URLs
+    - Legacy ENABLE_LOCAL_INFERENCE_PIPELINE is no longer required
+    """
 
     def test_both_flags_off_returns_not_delegated(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # No LLM endpoints configured → connection-config-inference returns disabled
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this function", correlation_id="corr-1"
         )
@@ -479,8 +494,11 @@ class TestFeatureFlags:
         assert result.get("reason") == "feature_disabled"
 
     def test_only_parent_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Legacy ENABLE_LOCAL_INFERENCE_PIPELINE alone does not enable delegation
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this", correlation_id="corr-2"
         )
@@ -488,8 +506,11 @@ class TestFeatureFlags:
         assert result.get("reason") == "feature_disabled"
 
     def test_only_delegation_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ENABLE_LOCAL_DELEGATION=true alone (no LLM URLs) → still disabled
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this", correlation_id="corr-3"
         )
@@ -504,6 +525,8 @@ class TestFeatureFlags:
 
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
 
         with patch.object(do, "_emit_delegation_event") as mock_emit:
             result = do.orchestrate_delegation(
@@ -1539,9 +1562,11 @@ class TestEmitDelegationEvent:
 def test_orchestrate_delegation_returns_feature_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """orchestrate_delegation returns feature_disabled when both flags are off."""
+    """orchestrate_delegation returns feature_disabled when no LLM endpoints are configured."""
     monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
     monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+    monkeypatch.delenv("LLM_CODER_URL", raising=False)
+    monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
     result = do.orchestrate_delegation(
         prompt="test prompt", correlation_id="corr-alias"
     )
