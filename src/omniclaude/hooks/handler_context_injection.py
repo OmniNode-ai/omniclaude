@@ -868,7 +868,7 @@ class HandlerContextInjection:
                     start_projection_consumer_if_configured as _start_consumer,
                 )
             except ImportError:
-                from pattern_cache import (  # type: ignore[import-not-found, no-redef]
+                from pattern_cache import (  # type: ignore[no-redef]
                     get_pattern_cache as _get_pattern_cache,
                 )
                 from pattern_cache import (  # type: ignore[no-redef]
