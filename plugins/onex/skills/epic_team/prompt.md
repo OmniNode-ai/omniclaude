@@ -76,17 +76,42 @@ def build_waves(assignments, cross_repo_splits):
     return waves
 ```
 
+### Circuit Breaker / Heartbeat Timeout
+
+Long-running agent dispatches can stall indefinitely (context exhaustion, infinite loops,
+API failures). Every Task() dispatch has a **circuit breaker timeout** to prevent this.
+
+```python
+# Default: 30 minutes. Override via EPIC_TEAM_DISPATCH_TIMEOUT_MINUTES env var.
+DISPATCH_TIMEOUT_MINUTES = int(os.environ.get("EPIC_TEAM_DISPATCH_TIMEOUT_MINUTES", "30"))
+```
+
+**Behavior when timeout fires:**
+1. The Task() call returns a timeout/error result
+2. The team-lead marks the ticket as `AGENT_TIMEOUT` in state.yaml
+3. The Linear ticket is updated to In Progress with a timeout comment
+4. A Kafka event `onex.evt.omniclaude.agent-circuit-breaker.v1` is emitted with:
+   - `ticket_id`, `epic_id`, `run_id`, `repo`, `elapsed_minutes`
+5. The wave continues with remaining tickets (timeout does not block the wave)
+
 ### Task Dispatch Per Ticket
 
 For each ticket in a wave, dispatch a Task() from the team-lead session:
 
 ```python
 def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_id, run_id):
-    """Dispatch ticket-pipeline for a single ticket as a Task() subagent."""
-    result = Task(
-        subagent_type="onex:polymorphic-agent",
-        description=f"epic-team: run ticket-pipeline for {ticket_id} [{repo}]",
-        prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
+    """Dispatch ticket-pipeline for a single ticket as a Task() subagent.
+
+    Includes circuit breaker timeout (DISPATCH_TIMEOUT_MINUTES). If the agent
+    stalls beyond the timeout, the dispatch returns a timeout error rather than
+    blocking the wave indefinitely.
+    """
+    try:
+        result = Task(
+            subagent_type="onex:polymorphic-agent",
+            description=f"epic-team: run ticket-pipeline for {ticket_id} [{repo}]",
+            timeout_minutes=DISPATCH_TIMEOUT_MINUTES,
+            prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
 
 Ticket: {ticket_id} - {ticket_title}
 URL: {ticket_url}
@@ -101,8 +126,39 @@ After ticket-pipeline completes, report back:
 - pr_url: (if available)
 - branch: (branch name used)
 """
-    )
-    return result
+        )
+        return result
+    except TimeoutError:
+        print(f"  CIRCUIT BREAKER: {ticket_id} timed out after {DISPATCH_TIMEOUT_MINUTES}m")
+        emit_circuit_breaker_event(ticket_id, epic_id, run_id, repo, DISPATCH_TIMEOUT_MINUTES)
+        return {
+            "ticket_id": ticket_id,
+            "status": "AGENT_TIMEOUT",
+            "pr_url": None,
+            "branch": None,
+            "error": f"Agent stalled — circuit breaker tripped after {DISPATCH_TIMEOUT_MINUTES} minutes",
+        }
+
+
+def emit_circuit_breaker_event(ticket_id, epic_id, run_id, repo, elapsed_minutes):
+    """Emit Kafka event when circuit breaker trips for observability."""
+    # Topic: onex.evt.omniclaude.agent-circuit-breaker.v1
+    # This is best-effort — failure to emit does not block the wave.
+    try:
+        from omniclaude.shared.events import emit_event
+        emit_event(
+            topic="onex.evt.omniclaude.agent-circuit-breaker.v1",
+            payload={
+                "ticket_id": ticket_id,
+                "epic_id": epic_id,
+                "run_id": run_id,
+                "repo": repo,
+                "elapsed_minutes": elapsed_minutes,
+                "reason": "dispatch_timeout",
+            },
+        )
+    except Exception as e:
+        print(f"  Warning: failed to emit circuit breaker event: {e}")
 ```
 
 ### Context Budgeting for Sub-Agent Prompts

@@ -9,3 +9,4 @@ topics:
   - onex.cmd.omniclaude.epic-team.v1
   - onex.evt.omniclaude.epic-team-completed.v1
   - onex.evt.omniclaude.epic-team-failed.v1
+  - onex.evt.omniclaude.agent-circuit-breaker.v1
