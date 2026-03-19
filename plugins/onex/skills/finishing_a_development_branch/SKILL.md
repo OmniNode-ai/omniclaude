@@ -1,6 +1,6 @@
 ---
 description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
-mode: full
+mode: both
 version: 1.0.0
 level: basic
 debug: false
@@ -12,7 +12,6 @@ tags:
   - pull-request
   - cleanup
 author: OmniClaude Team
-mode: both
 ---
 
 # Finishing a Development Branch

@@ -1,6 +1,6 @@
 ---
 description: Use when invalid data causes failures deep in execution, requiring validation at multiple system layers - validates at every layer data passes through to make bugs structurally impossible
-mode: full
+mode: both
 version: 1.0.0
 level: advanced
 debug: false
@@ -11,7 +11,6 @@ tags:
   - error-prevention
   - data-integrity
 author: OmniClaude Team
-mode: both
 ---
 
 # Defense-in-Depth Validation

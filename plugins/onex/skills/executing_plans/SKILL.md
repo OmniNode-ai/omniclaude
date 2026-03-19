@@ -1,6 +1,6 @@
 ---
 description: Use when partner provides a complete implementation plan to execute — reviews the plan critically, verifies live PR state against plan assumptions, creates Linear tickets via plan-to-tickets, then routes to epic-team (≥3 tickets) or ticket-pipeline (1-2 tickets)
-mode: full
+mode: both
 version: 2.0.0
 level: intermediate
 debug: false
@@ -11,7 +11,6 @@ tags:
   - linear
   - routing
 author: OmniClaude Team
-mode: both
 ---
 
 # Executing Plans

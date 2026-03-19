@@ -1,6 +1,6 @@
 ---
 description: Use when tests have race conditions, timing dependencies, or inconsistent pass/fail behavior - replaces arbitrary timeouts with condition polling to wait for actual state changes, eliminating flaky tests from timing guesses
-mode: full
+mode: both
 version: 1.0.0
 level: advanced
 debug: false
@@ -12,7 +12,6 @@ tags:
   - polling
   - timing
 author: OmniClaude Team
-mode: both
 ---
 
 # Condition-Based Waiting

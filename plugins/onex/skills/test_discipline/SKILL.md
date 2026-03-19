@@ -1,6 +1,6 @@
 ---
 description: Unified testing methodology — TDD red-green-refactor cycle and anti-pattern detection
-mode: full
+mode: both
 version: 1.0.0
 level: intermediate
 debug: false
@@ -12,7 +12,6 @@ args:
   - name: --mode
     description: "Mode: tdd (red-green-refactor), audit (anti-pattern scan), or full (both)"
     required: false
-mode: both
 ---
 
 # Test Discipline

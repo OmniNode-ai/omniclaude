@@ -73,7 +73,6 @@ def test_both_mode_skills_are_generic() -> None:
     expected_both = {
         "condition_based_waiting",
         "defense_in_depth",
-        "design_to_plan",
         "executing_plans",
         "finishing_a_development_branch",
         "hostile_reviewer",

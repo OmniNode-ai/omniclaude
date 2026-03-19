@@ -21,7 +21,6 @@ args:
   - name: --no-launch
     description: "Stop after plan save — do not prompt for launch"
     required: false
-mode: both
 ---
 
 # Design to Plan
