@@ -114,23 +114,41 @@ except ImportError:
 # Importing at module level allows tests to patch these names via
 #   patch("delegation_orchestrator.TaskClassifier", ...)
 # instead of needing to patch inside the function's local namespace.
+#
+# Guard: skip the slow import attempt in the deployed venv where a circular
+# import bug (debug_utils / quality_enforcer access settings.<attr> at module
+# level) causes AttributeError after ~5s of wasted package loading.  The
+# canary import is a cheap leaf module; if it fails the heavy imports will too.
 
+_omniclaude_importable = False
 try:
-    from omniclaude.lib.task_classifier import (
-        TaskClassifier,  # noqa: F401  (re-exported)
+    import omniclaude.config.settings  # noqa: F401 — canary
+    _omniclaude_importable = True
+except (ImportError, AttributeError):
+    pass
+
+if _omniclaude_importable:
+    try:
+        from omniclaude.lib.task_classifier import (
+            TaskClassifier,  # noqa: F401  (re-exported)
+        )
+    except (ImportError, AttributeError):  # pragma: no cover
+        TaskClassifier = None  # type: ignore[assignment,misc]
+
+    try:
+        from omniclaude.config.model_local_llm_config import (  # noqa: F401
+            LlmEndpointPurpose,
+            LocalLlmEndpointRegistry,
+        )
+    except (ImportError, AttributeError):  # pragma: no cover
+        LlmEndpointPurpose = None  # type: ignore[assignment,misc]
+        LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
+else:
+    logger.debug(
+        "omniclaude package not importable (circular import); "
+        "TaskClassifier/LlmEndpointPurpose/LocalLlmEndpointRegistry unavailable"
     )
-except (ImportError, AttributeError):  # pragma: no cover
-    # AttributeError: circular import in omniclaude.lib.utils (debug_utils /
-    # quality_enforcer access settings.<attr> at module level before the Settings
-    # instance is fully constructed).  Tracked for proper fix in a follow-up ticket.
     TaskClassifier = None  # type: ignore[assignment,misc]
-
-try:
-    from omniclaude.config.model_local_llm_config import (  # noqa: F401
-        LlmEndpointPurpose,
-        LocalLlmEndpointRegistry,
-    )
-except (ImportError, AttributeError):  # pragma: no cover
     LlmEndpointPurpose = None  # type: ignore[assignment,misc]
     LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
 
