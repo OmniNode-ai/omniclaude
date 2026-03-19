@@ -150,6 +150,6 @@ def _emit_kafka(event: FrictionEvent) -> None:
             _sys.path.insert(0, _lib_path)
         from emit_client_wrapper import emit_event
 
-        emit_event("skill.friction-recorded", event.to_dict())
+        emit_event("skill.friction_recorded", event.to_dict())
     except Exception as exc:
         logger.debug("friction_recorder: kafka emit failed: %s", exc)

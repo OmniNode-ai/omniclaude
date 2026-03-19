@@ -36,7 +36,6 @@ from friction_aggregator import (
     THRESHOLD_COUNT,
     THRESHOLD_SCORE,
     WINDOW_DAYS,
-    FrictionAggregate,
     aggregate_friction,
 )
 

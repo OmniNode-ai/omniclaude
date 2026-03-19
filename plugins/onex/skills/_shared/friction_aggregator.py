@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -32,7 +31,10 @@ WINDOW_DAYS = 30
 # Import default registry path from friction_recorder to keep single definition.
 # Both modules live in the same _shared directory so this import is always available
 # when the caller has set up sys.path correctly (e.g. via the skill or test runner).
-from friction_recorder import _DEFAULT_REGISTRY, FrictionSeverity  # type: ignore[import-not-found]
+from friction_recorder import (  # type: ignore[import-not-found]
+    _DEFAULT_REGISTRY,
+    FrictionSeverity,
+)
 
 
 @dataclass
@@ -113,7 +115,9 @@ def aggregate_friction(
                     data.get("severity", "low")
                 ).weight
             except ValueError:
-                agg.severity_score += 1  # fallback: treat unknown severity as low weight
+                agg.severity_score += (
+                    1  # fallback: treat unknown severity as low weight
+                )
 
             if agg.latest_timestamp is None or ts > agg.latest_timestamp:
                 agg.latest_timestamp = ts

@@ -720,6 +720,12 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="run_id",
         required_fields=["run_id", "skill_name", "correlation_id", "status"],
     ),
+    "skill.friction_recorded": EventRegistration(
+        event_type="skill.friction_recorded",
+        fan_out=[],  # Side-channel only — no Kafka fan-out (OMN-5442)
+        partition_key_field="run_id",
+        required_fields=["run_id", "skill_name"],
+    ),
     # =========================================================================
     # Wave 2 Pipeline Observability Events (OMN-2922)
     # Consumed by omnidash Wave 2 projection nodes.
