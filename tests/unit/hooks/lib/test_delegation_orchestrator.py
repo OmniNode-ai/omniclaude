@@ -333,15 +333,12 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        # Set _llm_config_loaded=True so the lazy-load block is skipped and our
-        # patches on LlmEndpointPurpose / LocalLlmEndpointRegistry are not overwritten.
-        with patch.object(do, "_llm_config_loaded", True):
-            with patch.object(
-                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-            ):
-                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                    mock_purpose_cls.return_value = MagicMock()
-                    result = do._select_handler_endpoint("document")
+        with patch.object(
+            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+        ):
+            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                mock_purpose_cls.return_value = MagicMock()
+                result = do._select_handler_endpoint("document")
 
         assert result is not None
         _url, model_name, system_prompt, handler_name = result
@@ -358,13 +355,12 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        with patch.object(do, "_llm_config_loaded", True):
-            with patch.object(
-                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-            ):
-                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                    mock_purpose_cls.return_value = MagicMock()
-                    result = do._select_handler_endpoint("test")
+        with patch.object(
+            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+        ):
+            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                mock_purpose_cls.return_value = MagicMock()
+                result = do._select_handler_endpoint("test")
 
         assert result is not None
         _, _, system_prompt, handler_name = result
@@ -380,13 +376,12 @@ class TestSelectHandlerEndpoint:
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
 
-        with patch.object(do, "_llm_config_loaded", True):
-            with patch.object(
-                do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
-            ):
-                with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
-                    mock_purpose_cls.return_value = MagicMock()
-                    result = do._select_handler_endpoint("research")
+        with patch.object(
+            do, "LocalLlmEndpointRegistry", return_value=mock_registry_instance
+        ):
+            with patch.object(do, "LlmEndpointPurpose") as mock_purpose_cls:
+                mock_purpose_cls.return_value = MagicMock()
+                result = do._select_handler_endpoint("research")
 
         assert result is not None
         _, _, system_prompt, handler_name = result

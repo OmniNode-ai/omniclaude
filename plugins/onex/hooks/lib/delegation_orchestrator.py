@@ -115,59 +115,25 @@ except ImportError:
 #   patch("delegation_orchestrator.TaskClassifier", ...)
 # instead of needing to patch inside the function's local namespace.
 #
-# Direct file loading: omniclaude/lib/__init__.py eagerly imports every
-# subpackage (clients, config, core, errors, models, utils), and
-# debug_utils + quality_enforcer access settings.<attr> at module level
-# before the Settings instance is constructed — triggering a circular
-# import that costs ~6s even when caught.  Both task_classifier.py and
-# model_local_llm_config.py are leaf modules with ZERO omniclaude.*
-# imports, so we load them by file path to bypass __init__.py chains
-# entirely.  This keeps hook startup under 1s.
+# Now that lib/__init__.py uses PEP 562 lazy imports (OMN-5532), the circular
+# import chain is broken and standard imports work without cold-start penalty.
 
-import importlib.util as _ilu
+try:
+    from omniclaude.lib.task_classifier import TaskClassifier
+except ImportError:  # pragma: no cover
+    TaskClassifier = None  # type: ignore[assignment,misc]
 
-
-def _load_module_direct(name: str, relative_path: str) -> object | None:
-    """Load a Python module directly from file, bypassing __init__.py chains.
-
-    Searches ``_SRC_PATH`` first (dev worktree), then ``sys.path`` entries
-    (deployed venv site-packages).  Returns the module object or None.
-    """
-    candidates = [_SRC_PATH / relative_path]
-    candidates.extend(Path(p) / relative_path for p in sys.path)
-    target: Path | None = None
-    for c in candidates:
-        if c.exists():
-            target = c
-            break
-    if target is None:
-        return None
-    spec = _ilu.spec_from_file_location(name, target)
-    if spec is None or spec.loader is None:
-        return None
-    mod = _ilu.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(mod)
-    except Exception as exc:
-        logger.debug("Failed to load %s from %s: %s", name, target, exc)
-        return None
-    return mod
-
-
-_tc_mod = _load_module_direct("task_classifier", "omniclaude/lib/task_classifier.py")
-TaskClassifier = getattr(_tc_mod, "TaskClassifier", None)  # type: ignore[assignment]
-
-# LlmEndpointPurpose / LocalLlmEndpointRegistry are deferred to first use
-# inside _select_handler_endpoint() because model_local_llm_config.py pulls
-# in pydantic + pydantic_settings (~3s cold start).  Lazy-loading keeps
-# module import under 0.2s; the pydantic cost is only paid when delegation
-# actually reaches the endpoint selection stage.
-LlmEndpointPurpose = None  # type: ignore[assignment]
-LocalLlmEndpointRegistry = None  # type: ignore[assignment]
-_llm_config_loaded = False
+try:
+    from omniclaude.config.model_local_llm_config import (
+        LlmEndpointPurpose,
+        LocalLlmEndpointRegistry,
+    )
+except ImportError:  # pragma: no cover
+    LlmEndpointPurpose = None  # type: ignore[assignment,misc]
+    LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
 
 if TaskClassifier is None:
-    logger.debug("TaskClassifier unavailable (direct load from %s failed)", _SRC_PATH)
+    logger.debug("TaskClassifier unavailable")
 
 # Shadow validation (OMN-2283) — imported at module level so tests can patch it.
 try:
@@ -403,26 +369,9 @@ def _select_handler_endpoint(
 
     purpose_name, system_prompt, handler_name, _min_len = routing
 
-    # Lazy-load LLM config on first use (pydantic cold start ~3s).
-    global LlmEndpointPurpose, LocalLlmEndpointRegistry, _llm_config_loaded  # noqa: PLW0603
-    if not _llm_config_loaded:
-        _llm_config_loaded = True
-        _llm_mod = _load_module_direct(
-            "model_local_llm_config",
-            "omniclaude/config/model_local_llm_config.py",
-        )
-        if _llm_mod is not None:
-            LlmEndpointPurpose = getattr(_llm_mod, "LlmEndpointPurpose", None)
-            LocalLlmEndpointRegistry = getattr(
-                _llm_mod, "LocalLlmEndpointRegistry", None
-            )
-
-    _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
-    _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
-
     try:
-        purpose = _purpose_cls(purpose_name)
-        registry = _registry_cls()
+        purpose = LlmEndpointPurpose(purpose_name)
+        registry = LocalLlmEndpointRegistry()
         endpoint = registry.get_endpoint(purpose)
         if endpoint is not None:
             url = str(endpoint.url).rstrip("/")
