@@ -26,6 +26,7 @@ class TestCircularImportRegression:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         assert result.returncode == 0, f"Import failed: {result.stderr}"
         assert "TaskClassifier" in result.stdout
@@ -41,6 +42,7 @@ class TestCircularImportRegression:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         assert result.returncode == 0, f"Import failed: {result.stderr}"
         assert "QualityEnforcer" in result.stdout
@@ -56,6 +58,7 @@ class TestCircularImportRegression:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         assert result.returncode == 0, f"Import failed: {result.stderr}"
         assert "OK" in result.stdout, f"Expected 'OK' in stdout, got: {result.stdout!r}"
@@ -75,6 +78,7 @@ class TestCircularImportRegression:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         assert result.returncode == 0, f"Re-export broken: {result.stderr}"
         assert "OK:" in result.stdout
@@ -96,6 +100,7 @@ class TestCircularImportRegression:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         assert result.returncode == 0, f"Lazy attribute access failed: {result.stderr}"
         assert "OK" in result.stdout
