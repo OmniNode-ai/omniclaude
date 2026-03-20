@@ -66,9 +66,10 @@ def _get_default_registry_path() -> str:
     if path := os.getenv("REGISTRY_PATH"):
         return path
 
-    # Default to home directory
-    home_dir = Path.home()
-    return str(home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml")
+    # Default to ONEX state directory
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return str(state_path("agents", "onex", "agent-registry.yaml"))
 
 
 # Use relative imports for package-based usage
@@ -830,7 +831,9 @@ class AgentRouter:
 if __name__ == "__main__":  # pragma: no cover
     from pathlib import Path
 
-    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
+    from omniclaude.hooks.lib.onex_state import state_path as _sp
+
+    registry_path = _sp("agents", "onex", "agent-registry.yaml")
 
     if not registry_path.exists():
         print(f"Registry not found at: {registry_path}")

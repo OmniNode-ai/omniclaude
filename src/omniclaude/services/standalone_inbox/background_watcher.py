@@ -30,9 +30,9 @@ INBOX_TTL_SECONDS = 7200
 
 def _inbox_dir() -> Path:
     """Get the inbox directory, creating it if needed."""
-    d = Path.home() / ".claude" / "pr-inbox"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+
+    return ensure_state_dir("pr-inbox")
 
 
 def _lock_dir() -> Path:

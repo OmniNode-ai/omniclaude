@@ -140,13 +140,18 @@ class EnforcementMode:
 
 # State directory for persisting per-task cumulative token counts.
 # Stored alongside correlation state so TTL cleanup applies.
-_DEFAULT_STATE_DIR = Path.home() / ".claude" / "hooks" / ".state"
 _BUDGET_STATE_FILE_PATTERN = "context_budget_{task_id}.json"
+
+
+def _get_default_state_dir() -> Path:
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+
+    return ensure_state_dir("hooks", ".state")
 
 
 def _budget_state_path(task_id: str, state_dir: Path | None = None) -> Path:
     """Return path to the per-task budget state file."""
-    d = state_dir if state_dir is not None else _DEFAULT_STATE_DIR
+    d = state_dir if state_dir is not None else _get_default_state_dir()
     return d / _BUDGET_STATE_FILE_PATTERN.format(task_id=task_id)
 
 

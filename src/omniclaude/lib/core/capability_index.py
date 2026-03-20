@@ -326,7 +326,9 @@ class CapabilityIndex:
 
 # Standalone test
 if __name__ == "__main__":
-    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
+    from omniclaude.hooks.lib.onex_state import state_path as _sp
+
+    registry_path = _sp("agents", "onex", "agent-registry.yaml")
 
     if registry_path.exists():
         index = CapabilityIndex(str(registry_path))

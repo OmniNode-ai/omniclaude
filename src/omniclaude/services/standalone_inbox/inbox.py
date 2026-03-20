@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 
 def _inbox_dir() -> Path:
     """Get the inbox directory."""
-    return Path.home() / ".claude" / "pr-inbox"
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("pr-inbox")
 
 
 class StandaloneInbox:

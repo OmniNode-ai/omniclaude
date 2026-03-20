@@ -57,7 +57,14 @@ DECISION_RECORDED_CMD_TOPIC = TopicBase.DECISION_RECORDED_CMD
 # Default audit log path
 # ---------------------------------------------------------------------------
 
-_DEFAULT_AUDIT_LOG_PATH = Path.home() / ".claude" / "decision_audit.jsonl"
+
+def _default_audit_log_path() -> Path:
+    from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+
+    return ensure_state_path("decision_audit.jsonl")
+
+
+_DEFAULT_AUDIT_LOG_PATH = _default_audit_log_path()
 
 # ---------------------------------------------------------------------------
 # Lazy import helpers for kafka-python
@@ -118,14 +125,11 @@ def _parse_decision_record(raw: bytes) -> dict[str, Any] | None:
 
 
 def _resolve_audit_log_path() -> Path:
-    """Return the audit log path, honouring ``OMNICLAUDE_DECISION_AUDIT_LOG`` override.
+    """Return the audit log path under ONEX_STATE_DIR.
 
     Returns:
         Absolute path to the decision audit JSONL file.
     """
-    override = os.environ.get("OMNICLAUDE_DECISION_AUDIT_LOG", "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
     return _DEFAULT_AUDIT_LOG_PATH
 
 

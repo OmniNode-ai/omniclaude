@@ -34,7 +34,14 @@ from typing import Any
 # Default paths
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+
+def _default_usage_log() -> Path:
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("onex-skill-usage.log")
+
+
+DEFAULT_USAGE_LOG: Path = _default_usage_log()
 
 # progression.yaml lives alongside the skills/ directory in the plugin
 _PLUGIN_DIR = Path(__file__).parent.parent  # hooks/lib -> hooks -> plugin root

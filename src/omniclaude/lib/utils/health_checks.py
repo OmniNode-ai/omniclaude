@@ -149,8 +149,9 @@ class Phase4HealthChecker:
         self.cache_duration = 30.0  # Cache results for 30 seconds
 
         # Setup logging
-        self.log_file = Path.home() / ".claude" / "hooks" / "logs" / "health-checks.log"
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+
+        self.log_file = ensure_state_path("hooks", "logs", "health-checks.log")
 
     def _log(self, level: str, message: str, **kwargs: Any) -> None:
         """Internal logging method for health check events."""

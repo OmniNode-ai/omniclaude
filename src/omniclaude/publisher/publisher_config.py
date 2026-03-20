@@ -45,7 +45,9 @@ class PublisherConfig(BaseSettings):
         description="PID file path",
     )
     spool_dir: Path = Field(
-        default_factory=lambda: Path.home() / ".claude" / "event-spool",
+        default_factory=lambda: __import__(  # noqa: PLC0415
+            "omniclaude.hooks.lib.onex_state", fromlist=["state_path"]
+        ).state_path("event-spool"),
         description="Disk spool directory",
     )
 

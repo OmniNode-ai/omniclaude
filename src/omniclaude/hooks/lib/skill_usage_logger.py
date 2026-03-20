@@ -27,7 +27,14 @@ from typing import Any
 # Public constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+
+def _default_usage_log() -> Path:
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("onex-skill-usage.log")
+
+
+DEFAULT_USAGE_LOG: Path = _default_usage_log()
 
 _VALID_STATUSES = frozenset({"success", "failed", "partial"})
 

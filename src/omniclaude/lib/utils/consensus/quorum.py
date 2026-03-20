@@ -171,7 +171,9 @@ class AIQuorum:
             List of ModelConfig objects
         """
         if config_path is None:
-            config_path = Path.home() / ".claude" / "hooks" / "config.yaml"
+            from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+            config_path = state_path("hooks", "config.yaml")
 
         if not config_path.exists():
             print(

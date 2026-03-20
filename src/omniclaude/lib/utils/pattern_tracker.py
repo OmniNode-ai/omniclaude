@@ -144,7 +144,11 @@ class PatternTrackerConfig:
     """Configuration with performance optimizations."""
 
     def __init__(self, config_path: Path | None = None):
-        self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        if config_path is None:
+            from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+            config_path = state_path("hooks", "config.yaml")
+        self.config_path = config_path
         self._config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:
@@ -509,12 +513,13 @@ class PatternTracker:
 
     def _setup_logging(self) -> None:
         """Setup logging infrastructure."""
-        log_file = (
-            self.config.log_file
-            if hasattr(self.config, "log_file")
-            else Path.home() / ".claude" / "hooks" / "logs" / "enhanced-pattern-tracker.log"
-        )
-        log_file.parent.mkdir(parents=True, exist_ok=True)
+        if hasattr(self.config, "log_file"):
+            log_file = self.config.log_file
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            from omniclaude.hooks.lib.onex_state import ensure_state_path  # noqa: PLC0415
+
+            log_file = ensure_state_path("hooks", "logs", "enhanced-pattern-tracker.log")
         self.log_file = log_file
 
     def _generate_session_id(self) -> str:

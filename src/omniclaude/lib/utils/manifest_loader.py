@@ -57,8 +57,10 @@ def load_manifest(
     if project_path:
         search_paths.append(Path(project_path) / "agents" / "lib")
 
-    # Add home directory
-    search_paths.append(Path.home() / ".claude" / "agents" / "lib")
+    # Add ONEX state directory
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    search_paths.append(state_path("agents", "lib"))
 
     # Add current working directory as fallback
     search_paths.append(Path.cwd() / "agents" / "lib")
