@@ -41,14 +41,17 @@ if isinstance(_qe_mod, types.ModuleType):
 
 
 def _get_enforcer_class() -> type:
-    """Get QualityEnforcer class from the (already-reloaded) module.
+    """Get a clean QualityEnforcer class, reloading to clear stale mocks.
 
-    NOTE: Do NOT reload here — reloading inside a test that uses
-    ``patch(...)`` on the module creates a new class object that the
-    patches do not apply to, causing 'MagicMock can't be used in await'
-    errors.  The module-level reload above is sufficient.
+    In CI test splits, prior tests may leave stale MagicMock patches on the
+    module. We reload the module here AND rebind ``sys.modules`` so that
+    subsequent ``patch("omniclaude.lib.utils.quality_enforcer.X")`` targets
+    the freshly-loaded objects.
     """
-    return _qe_mod.QualityEnforcer
+    mod = importlib.reload(_qe_mod)
+    # Ensure sys.modules points to the reloaded module so patch() finds it
+    sys.modules["omniclaude.lib.utils.quality_enforcer"] = mod
+    return mod.QualityEnforcer
 
 
 # ---------------------------------------------------------------------------
