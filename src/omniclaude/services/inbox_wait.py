@@ -140,7 +140,9 @@ def wait_for_pr_status(  # stub-ok: implemented with TODO for enhancement
     run_id: int | None = None,
     agent_id: str = "default",
     timeout_seconds: int = 3600,
-) -> dict[str, Any] | None:
+) -> (
+    dict[str, Any] | None  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+):  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Wait for a PR status notification.
 
     Unified interface for both EVENT_BUS and STANDALONE modes.

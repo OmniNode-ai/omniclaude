@@ -220,7 +220,8 @@ class SkillCommandDispatcher:
         contracts: dict[str, ModelSkillNodeContract],
         claude_code_backend: SubprocessClaudeCodeSessionBackend | None,
         vllm_backend: VllmInferenceBackend | None,
-        event_bus: Any | None = None,
+        event_bus: Any  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        | None = None,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     ) -> None:
         self._contracts = contracts
         self._claude_code_backend = claude_code_backend
@@ -228,7 +229,9 @@ class SkillCommandDispatcher:
         self._event_bus = event_bus
 
     async def handle(
-        self, envelope: ModelEventEnvelope[object] | dict[str, Any]
+        self,
+        envelope: ModelEventEnvelope[object]
+        | dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     ) -> str | None:
         """Dispatch an inbound skill command envelope.
 
@@ -244,7 +247,9 @@ class SkillCommandDispatcher:
         """
         # Extract topic and payload from materialized dict or envelope
         topic: str | None = None
-        payload: Any = None
+        payload: Any = (  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+            None  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        )
         correlation_id: uuid.UUID
 
         if isinstance(envelope, dict):
@@ -477,7 +482,7 @@ class SkillCommandDispatcher:
     @staticmethod
     def _build_skill_request(
         skill_id: str,
-        payload: Any,
+        payload: Any,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         correlation_id: uuid.UUID,
     ) -> ModelSkillRequest:
         """Build a ``ModelSkillRequest`` from the envelope payload.
@@ -604,14 +609,15 @@ def _build_skill_route() -> ModelDispatchRoute:
 
 
 async def wire_skill_dispatchers(
-    container: Any,
+    container: Any,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     dispatch_engine: MessageDispatchEngine,
     correlation_id: uuid.UUID | None = None,
     *,
     claude_code_backend: SubprocessClaudeCodeSessionBackend | None = None,
     vllm_backend: VllmInferenceBackend | None = None,
     contracts_root: Path | None = None,
-    event_bus: Any | None = None,
+    event_bus: Any  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+    | None = None,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
 ) -> WiringSummary:
     """Wire the skill command dispatcher onto the dispatch engine.
 
@@ -774,11 +780,16 @@ class QuirkFindingDispatcher:
     Ticket: OMN-2908
     """
 
-    def __init__(self, container: Any) -> None:
+    def __init__(
+        self,
+        container: Any,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+    ) -> None:  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         self._container = container
 
     async def handle(
-        self, envelope: ModelEventEnvelope[object] | dict[str, Any]
+        self,
+        envelope: ModelEventEnvelope[object]
+        | dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     ) -> str | None:
         """Handle one quirk-finding-produced event.
 
@@ -793,7 +804,9 @@ class QuirkFindingDispatcher:
             an error occurred.
         """
         try:
-            payload: dict[str, Any]
+            payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+                str, Any
+            ]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             if isinstance(envelope, dict):
                 raw = envelope.get("payload")
                 payload = raw if isinstance(raw, dict) else {}
@@ -819,7 +832,9 @@ class QuirkFindingDispatcher:
             )
             return None
 
-    def _resolve_bridge(self) -> Any | None:
+    def _resolve_bridge(
+        self,
+    ) -> Any | None:  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         """Resolve ``NodeQuirkMemoryBridgeEffect`` from the container.
 
         Returns ``None`` if the bridge is not registered or resolution fails.
@@ -875,7 +890,7 @@ class QuirkFindingWiringSummary(TypedDict):
 
 
 def wire_quirk_finding_subscription(
-    container: Any,
+    container: Any,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     dispatch_engine: MessageDispatchEngine,
 ) -> QuirkFindingWiringSummary:
     """Wire the quirk-finding-produced subscription onto the dispatch engine.

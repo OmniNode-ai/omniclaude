@@ -43,7 +43,9 @@ def _resolve_active_capabilities() -> set[str]:
     active: set[str] = set()
 
     # Pattern injection: enabled unless explicitly set to false
-    ctx_enabled = os.environ.get("OMNICLAUDE_CONTEXT_API_ENABLED", "true").lower()
+    ctx_enabled = os.environ.get(
+        "OMNICLAUDE_CONTEXT_API_ENABLED", "true"
+    ).lower()  # ONEX_FLAG_EXEMPT: inline shim until omnibase_core ships classify_treatment_group
     if ctx_enabled not in ("false", "0", "no"):
         active.add("intelligence_pattern_injection")
 

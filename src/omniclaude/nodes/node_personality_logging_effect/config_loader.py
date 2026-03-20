@@ -43,7 +43,9 @@ def load_config_from_yaml(path: Path) -> ModelLoggingConfig:
     """
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
-    raw: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw: Any = yaml.safe_load(  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        path.read_text(encoding="utf-8")
+    )  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     if not isinstance(raw, dict):
         raise ValueError(f"Config file must contain a YAML mapping: {path}")
     return ModelLoggingConfig.model_validate(raw)
@@ -94,7 +96,10 @@ class LiveConfigLoader:
     def __init__(
         self,
         path: Path,
-        on_reload: Callable[[ModelLoggingConfig, PersonalityAdapter], Any]
+        on_reload: Callable[
+            [ModelLoggingConfig, PersonalityAdapter],
+            Any,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        ]  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         | None = None,
     ) -> None:
         self._path = path

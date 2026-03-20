@@ -293,7 +293,9 @@ def _serialize_message(message: ModelInboxMessage) -> dict[str, object]:
     }
 
 
-def _extract_payload(raw: dict[str, object]) -> dict[str, Any]:
+def _extract_payload(
+    raw: dict[str, object],
+) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Extract the payload dict from raw data, defaulting to empty dict."""
     val = raw.get("payload")
     if isinstance(val, dict):

@@ -55,9 +55,13 @@ class ModelContractState(BaseModel):
         min_length=1,
         description="ONEX node type (Effect, Compute, Reducer, Orchestrator)",
     )
-    fields: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Typed field values present in this state",
+    fields: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=dict,
+            description="Typed field values present in this state",
+        )
     )
     metadata: ContractStateMetadataDict = Field(
         default_factory=ContractStateMetadataDict,

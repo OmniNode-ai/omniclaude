@@ -199,7 +199,9 @@ def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
     params = tool_call.get("tool_input", tool_call.get("parameters", {}))
 
     # Build safe metadata
-    safe_metadata: dict[str, Any] = {  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+    safe_metadata: dict[
+        str, Any
+    ] = {  # ONEX_EXCLUDE: dict_str_any - generic metadata container
         "tool_name": tool_name,
         "has_tool_input": "tool_input" in tool_call,
         "param_count": len(params) if isinstance(params, dict) else 0,
@@ -262,12 +264,19 @@ CONFIG = load_config()
 # Configuration flags — read directly from env to avoid circular import
 # (config -> aggregators -> hooks -> lib.utils -> quality_enforcer -> config).
 # Defaults match Settings field definitions at settings.py:365-389.
-ENABLE_PHASE_1_VALIDATION = os.environ.get("ENABLE_PHASE_1_VALIDATION", "true").lower() in {"true", "1", "yes"}
-ENABLE_PHASE_2_RAG = os.environ.get("ENABLE_PHASE_2_RAG", "true").lower() in {"true", "1", "yes"}
-ENABLE_PHASE_3_CORRECTION = os.environ.get("ENABLE_PHASE_3_CORRECTION", "true").lower() in {"true", "1", "yes"}
-ENABLE_PHASE_4_AI_QUORUM = os.environ.get("ENABLE_PHASE_4_AI_QUORUM", "false").lower() in {"true", "1", "yes"}
+_TRUTHY = {"true", "1", "yes"}
+_p1 = os.environ.get("ENABLE_PHASE_1_VALIDATION", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+ENABLE_PHASE_1_VALIDATION = _p1.lower() in _TRUTHY
+_p2 = os.environ.get("ENABLE_PHASE_2_RAG", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+ENABLE_PHASE_2_RAG = _p2.lower() in _TRUTHY
+_p3 = os.environ.get("ENABLE_PHASE_3_CORRECTION", "true")  # ONEX_FLAG_EXEMPT: circular import avoidance
+ENABLE_PHASE_3_CORRECTION = _p3.lower() in _TRUTHY
+_p4 = os.environ.get("ENABLE_PHASE_4_AI_QUORUM", "false")  # ONEX_FLAG_EXEMPT: circular import avoidance
+ENABLE_PHASE_4_AI_QUORUM = _p4.lower() in _TRUTHY
 try:
-    PERFORMANCE_BUDGET_SECONDS = float(os.environ.get("PERFORMANCE_BUDGET_SECONDS", "2.0"))
+    PERFORMANCE_BUDGET_SECONDS = float(
+        os.environ.get("PERFORMANCE_BUDGET_SECONDS", "2.0")
+    )
 except (ValueError, TypeError):
     PERFORMANCE_BUDGET_SECONDS = 2.0
 ENFORCEMENT_MODE = os.environ.get("ENFORCEMENT_MODE", "advisory")

@@ -39,9 +39,9 @@ class _KafkaProducer(Protocol):
     async def send_and_wait(
         self,
         topic: str,
-        value: Any = None,
-        key: Any = None,
-    ) -> Any: ...
+        value: Any = None,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        key: Any = None,  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+    ) -> Any: ...  # ONEX_EXCLUDE: any_type - external/untyped API boundary
 
 
 # Lazy-initialized producer

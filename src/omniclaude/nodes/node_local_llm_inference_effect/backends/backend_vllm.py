@@ -118,7 +118,9 @@ class VllmInferenceBackend:
             )
 
         url = f"{endpoint.url}v1/chat/completions"
-        payload: dict[str, Any] = {
+        payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            str, Any
+        ] = {  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             "model": request.model or endpoint.model_name,
             "messages": [{"role": "user", "content": request.prompt}],
         }

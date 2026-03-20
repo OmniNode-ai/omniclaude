@@ -115,6 +115,44 @@ BYPASS_PATTERNS: Final[list[str]] = [
     "noqa: secrets",  # Another common bypass pattern
 ]
 
+# Known-safe variable names that match secret patterns but are not secrets.
+# These are LLM token counts, regex helpers, enum values, etc.
+KNOWN_SAFE_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "max_tokens",
+        "tokens_per_minute",
+        "tokens_injected",
+        "total_tokens_used",
+        "budget_tokens",
+        "actual_tokens",
+        "return_tokens",
+        "before_tokens",
+        "after_tokens",
+        "call_tokens",
+        "context_budget_tokens",
+        "token_regression_pct",
+        "tokens",
+        "gate_token",
+        "_TECHNICAL_TOKENS",
+        "_DSN_URL_PASSWORD_RE",
+        "_DSN_KW_PASSWORD_RE",
+        "_bearer_scheme",
+        "dsn",
+        "settings_dsn",
+        "db_url",
+        "password",  # parsed from URL components, not hardcoded secret
+        "POSTGRES_PASSWORD",  # env var reference in arg defaults
+        "kafka_secondary_sasl_oauthbearer_token_endpoint_url",
+        "kafka_secondary_sasl_oauthbearer_client_id",
+        "kafka_secondary_sasl_oauthbearer_client_secret",
+        "secret",  # loaded from env via _get_webhook_secret()
+        "api_key",  # read from config dict, not hardcoded
+    }
+)
+
 # Pre-compiled regex patterns for performance
 COMPILED_SECRET_PATTERNS: Final[list[re.Pattern[str]]] = [
     # API Keys
@@ -355,6 +393,8 @@ class PythonSecretValidator(ast.NodeVisitor):
 
     def _matches_secret_patterns(self, field_name: str) -> bool:
         """Check if field name matches any secret pattern."""
+        if field_name in KNOWN_SAFE_NAMES:
+            return False
         return any(pattern.match(field_name) for pattern in COMPILED_SECRET_PATTERNS)
 
     def _is_hardcoded_value(self, value_node: ast.AST) -> bool:

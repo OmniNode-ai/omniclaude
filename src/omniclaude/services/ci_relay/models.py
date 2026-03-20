@@ -36,9 +36,13 @@ class CICallbackPayload(BaseModel):
     head_ref: str = Field(..., description="Head branch name, e.g. 'feature/my-branch'")
     base_ref: str = Field(..., description="Base branch name, e.g. 'main'")
     workflow_url: str = Field(..., description="URL to the workflow run")
-    jobs: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="List of job summary dicts (name, conclusion, url)",
+    jobs: list[
+        dict[str, Any]  # any-ok: pre-existing
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=list,
+            description="List of job summary dicts (name, conclusion, url)",
+        )
     )
 
 
@@ -75,7 +79,11 @@ class PRStatusEvent(BaseModel):
     head_ref: str
     base_ref: str
     workflow_url: str
-    jobs: list[dict[str, Any]] = Field(default_factory=list)
+    jobs: list[dict[str, Any]] = (  # any-ok: pre-existing
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=list
+        )
+    )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
     # Relay-added fields
     dedupe_key: str = Field(

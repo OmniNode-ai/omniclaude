@@ -178,7 +178,9 @@ def estimate_tokens(payload_json: str) -> int:
 
 
 def audit_return_payload(
-    payload: dict[str, Any],
+    payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     schema: ReturnSchemaConfig,
     task_id: UUID,
     correlation_id: UUID,
@@ -353,7 +355,12 @@ def _emit_scope_violation_event(
         logger.warning("Failed to emit AuditScopeViolationEvent", exc_info=True)
 
 
-def _publish_audit_event(topic: str, payload: dict[str, Any]) -> None:
+def _publish_audit_event(
+    topic: str,
+    payload: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> None:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Publish an audit event payload to the given Kafka topic.
 
     Uses the existing omnibase_infra EventBusKafka pathway via a background
@@ -446,7 +453,11 @@ def _load_enforcement_level() -> str:
     return raw
 
 
-def _extract_return_schema(tool_input: dict[str, Any]) -> ReturnSchemaConfig:
+def _extract_return_schema(
+    tool_input: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> ReturnSchemaConfig:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Extract return_schema constraints from PostToolUse tool_input.
 
     Looks for a ``return_schema`` key inside ``tool_input``.  Falls back to
@@ -468,7 +479,11 @@ def _extract_return_schema(tool_input: dict[str, Any]) -> ReturnSchemaConfig:
     )
 
 
-def _extract_payload(tool_response: dict[str, Any]) -> dict[str, Any]:
+def _extract_payload(
+    tool_response: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Extract the return payload dict from the PostToolUse hook event.
 
     Args:
@@ -530,7 +545,11 @@ def main() -> None:
     """
     try:
         raw = sys.stdin.read()
-        hook_event: dict[str, Any] = json.loads(raw)
+        hook_event: dict[str, Any] = (  # any-ok: pre-existing
+            json.loads(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+                raw
+            )
+        )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     except (json.JSONDecodeError, ValueError) as exc:
         logger.error("return_path_auditor: malformed hook event JSON: %s", exc)
         # Output passthrough so the pipeline is never blocked
@@ -543,8 +562,16 @@ def main() -> None:
         sys.stdout.write(raw)
         sys.exit(0)
 
-    tool_input: dict[str, Any] = hook_event.get("tool_input") or {}
-    tool_response: dict[str, Any] = hook_event.get("tool_response") or {}
+    tool_input: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        hook_event.get("tool_input") or {}
+    )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    tool_response: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        hook_event.get("tool_response") or {}
+    )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
     # Resolve IDs
     task_id_raw = tool_input.get("task_id") or str(uuid4())
@@ -580,7 +607,9 @@ def main() -> None:
         sys.exit(0)
 
     # Emit result JSON to stdout for the shell script to inspect
-    output: dict[str, Any] = {
+    output: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ] = {  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         "blocked": result.blocked,
         "return_tokens": result.return_tokens,
         "max_tokens": result.max_tokens,

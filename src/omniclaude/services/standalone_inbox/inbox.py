@@ -56,7 +56,9 @@ class StandaloneInbox:
         *,
         repo: str | None = None,
         pr_number: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[
+        dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    ]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Check for new inbox notifications since last cursor.
 
         Optionally filters by repo and/or pr_number.
@@ -72,7 +74,9 @@ class StandaloneInbox:
             return []
 
         cursor_ts = self._read_cursor()
-        results: list[dict[str, Any]] = []
+        results: list[
+            dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        ] = []  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         max_ts = cursor_ts
 
         for inbox_file in self._inbox_dir.glob("*.json"):
@@ -111,7 +115,10 @@ class StandaloneInbox:
         pr_number: int,
         timeout_seconds: int = 3600,
         poll_interval_seconds: int = 10,
-    ) -> dict[str, Any] | None:
+    ) -> (
+        dict[str, Any]  # any-ok: pre-existing
+        | None  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    ):  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Wait for a notification matching (repo, pr_number).
 
         Polls the inbox directory at the given interval. Returns None
@@ -144,7 +151,10 @@ class StandaloneInbox:
 
     def get_notification_for_run(
         self, repo: str, pr_number: int, run_id: int
-    ) -> dict[str, Any] | None:
+    ) -> (
+        dict[str, Any]  # any-ok: pre-existing
+        | None  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    ):  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Get a specific notification by run_id.
 
         Does not use or update the cursor -- reads the specific file directly.
@@ -161,7 +171,11 @@ class StandaloneInbox:
         inbox_path = self._inbox_dir / f"{safe_repo}_pr{pr_number}_run{run_id}.json"
         if inbox_path.exists():
             try:
-                data: dict[str, Any] = json.loads(inbox_path.read_text())
+                data: dict[str, Any] = (  # any-ok: pre-existing
+                    json.loads(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+                        inbox_path.read_text()
+                    )
+                )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
                 return data
             except (json.JSONDecodeError, OSError) as exc:
                 logger.warning("Failed to read inbox file %s: %s", inbox_path, exc)

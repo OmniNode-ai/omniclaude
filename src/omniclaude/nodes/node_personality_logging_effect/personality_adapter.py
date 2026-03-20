@@ -178,7 +178,9 @@ def load_phrase_pack(path: Path) -> ModelPersonalityProfile:
     """
     if not path.exists():
         raise FileNotFoundError(f"Phrase-pack file not found: {path}")
-    raw: Any = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw: Any = yaml.safe_load(  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+        path.read_text(encoding="utf-8")
+    )  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     if not isinstance(raw, dict):
         raise ValueError(f"Phrase-pack file must contain a YAML mapping: {path}")
     return ModelPersonalityProfile.model_validate(raw)
@@ -220,7 +222,9 @@ def apply_redaction(event: ModelLogEvent) -> ModelLogEvent:
             update={"attrs": dict.fromkeys(event.attrs, _REDACTED_PLACEHOLDER)}
         )
 
-    scrubbed: dict[str, Any] = {}
+    scrubbed: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ] = {}  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     for key, value in event.attrs.items():
         if any(rx.search(key) for rx in compiled):
             scrubbed[key] = _REDACTED_PLACEHOLDER

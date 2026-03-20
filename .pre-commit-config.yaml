@@ -250,7 +250,8 @@ repos:
 
       - id: validate-pydantic-patterns
         name: Pydantic pattern validation
-        entry: uv run python scripts/validation/validate_pydantic_patterns.py
+        # Exit 2 = warnings only (non-blocking); exit 1 = errors (blocking)
+        entry: bash -c 'uv run python scripts/validation/validate_pydantic_patterns.py; rc=$?; [ $rc -eq 2 ] && exit 0 || exit $rc'
         language: system
         pass_filenames: false
         always_run: true

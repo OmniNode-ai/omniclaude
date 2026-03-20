@@ -179,7 +179,7 @@ def create_app() -> FastAPI:
         payload: CICallbackPayload,
         request: Request,
         _token: str = Depends(_verify_bearer),
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Receive a GH Actions workflow completion callback.
 
         Validates bearer token, applies rate limiting and idempotency,

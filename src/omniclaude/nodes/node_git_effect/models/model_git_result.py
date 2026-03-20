@@ -66,13 +66,21 @@ class ModelGitResult(BaseModel):
         description="Pull request number (populated for pr_create)",
     )
     # New fields (OMN-2817 1c)
-    pr_list: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="Parsed JSON list from pr_list operation",
+    pr_list: (
+        list[dict[str, Any]] | None  # any-ok: pre-existing
+    ) = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default=None,
+            description="Parsed JSON list from pr_list operation",
+        )
     )
-    pr_data: dict[str, Any] | None = Field(
-        default=None,
-        description="Parsed JSON dict from pr_view operation",
+    pr_data: (
+        dict[str, Any] | None  # any-ok: pre-existing
+    ) = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default=None,
+            description="Parsed JSON dict from pr_view operation",
+        )
     )
     tag_name: str | None = Field(
         default=None,

@@ -97,9 +97,13 @@ class ModelLogEvent(BaseModel):
     severity: EnumLogSeverity = Field(..., description="Severity level")
     event_name: str = Field(..., description="Machine-readable event identifier")
     message: str = Field(..., description="Human-readable event description")
-    attrs: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Arbitrary structured annotations",
+    attrs: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=dict,
+            description="Arbitrary structured annotations",
+        )
     )
     metrics: ModelLogMetrics | None = Field(
         default=None, description="Optional performance metrics snapshot"

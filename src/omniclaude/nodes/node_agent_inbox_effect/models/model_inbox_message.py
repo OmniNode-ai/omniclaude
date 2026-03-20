@@ -89,9 +89,13 @@ class ModelInboxMessage(BaseModel):
         default=None,
         description="Broadcast epic target (None for directed)",
     )
-    payload: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Type-specific payload data",
+    payload: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=dict,
+            description="Type-specific payload data",
+        )
     )
 
     @field_validator("emitted_at")

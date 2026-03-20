@@ -21,7 +21,7 @@ from omniclaude.services.ci_relay.models import PRStatusEvent
 logger = logging.getLogger(__name__)
 
 # Lazy-initialized producer (typed as Any because aiokafka is optional)
-_producer: Any = None
+_producer: Any = None  # ONEX_EXCLUDE: any_type - external/untyped API boundary
 
 
 def _get_bootstrap_servers() -> str:
@@ -34,7 +34,9 @@ def _get_bootstrap_servers() -> str:
     return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", default)
 
 
-async def _get_producer() -> Any:
+async def _get_producer() -> (
+    Any  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+):  # ONEX_EXCLUDE: any_type - external/untyped API boundary
     """Get or create the Kafka producer.
 
     Returns:

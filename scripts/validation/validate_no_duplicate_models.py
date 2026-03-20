@@ -70,6 +70,15 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
         # ONEX convention: each node has a node.py entry point.
         # These are expected duplicates across node directories.
         "node.py",
+        # Pre-existing duplicates (OMN-5618): common module names across
+        # independent subsystems. Renaming would break public API surface.
+        "enums.py",
+        "models.py",
+        "protocol.py",
+        "publisher.py",
+        "__main__.py",
+        "app.py",
+        "classifier.py",
     }
 )
 
