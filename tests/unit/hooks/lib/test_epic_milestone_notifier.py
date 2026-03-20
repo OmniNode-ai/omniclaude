@@ -4,8 +4,9 @@
 """Tests for epic_milestone_notifier module.
 
 Covers the four public functions, correlation prefix format, thread_ts
-threading behaviour, graceful degradation when Slack fails, and the
-critical invariant that a non-None thread_ts is never overwritten with None.
+threading behaviour, graceful degradation when Slack fails, Kafka event
+emission (OMN-5619), and the critical invariant that a non-None thread_ts
+is never overwritten with None.
 
 Uses asyncio.run() style mocks (same pattern as test_pipeline_slack_notifier)
 because pytest-asyncio is not installed.
@@ -386,3 +387,141 @@ class TestGracefulDegradation:
                 EPIC_ID, RUN_ID, TICKET_ID, REPO, thread_ts=None
             )
         assert result is None
+
+
+# =============================================================================
+# Kafka event emission (OMN-5619)
+# =============================================================================
+
+
+class TestKafkaEventEmission:
+    """Verify that epic.run.updated events are emitted alongside Slack notifications."""
+
+    def test_ticket_completed_emits_running_event(self) -> None:
+        """notify_ticket_completed emits a 'running' status event via Kafka."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_ticket_completed(
+                EPIC_ID,
+                RUN_ID,
+                TICKET_ID,
+                REPO,
+                tickets_total=5,
+                tickets_completed=3,
+                tickets_failed=1,
+                correlation_id="corr-123",
+                session_id="sess-456",
+            )
+
+        mock_emit.assert_called_once_with(
+            run_id=RUN_ID,
+            epic_id=EPIC_ID,
+            status="running",
+            tickets_total=5,
+            tickets_completed=3,
+            tickets_failed=1,
+            correlation_id="corr-123",
+            session_id="sess-456",
+        )
+
+    def test_ticket_failed_emits_running_event(self) -> None:
+        """notify_ticket_failed emits a 'running' status event via Kafka."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_ticket_failed(
+                EPIC_ID,
+                RUN_ID,
+                TICKET_ID,
+                REPO,
+                reason="Build failed",
+                tickets_total=5,
+                tickets_completed=2,
+                tickets_failed=2,
+                correlation_id="corr-789",
+            )
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["status"] == "running"
+        assert call_kwargs["tickets_failed"] == 2
+
+    def test_epic_done_emits_completed_when_no_failures(self) -> None:
+        """notify_epic_done emits 'completed' when all tickets succeeded."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_epic_done(
+                EPIC_ID,
+                RUN_ID,
+                completed=["OMN-2401", "OMN-2402"],
+                failed=[],
+                prs=["https://github.com/org/repo/pull/10"],
+                correlation_id="corr-done",
+            )
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["status"] == "completed"
+        assert call_kwargs["tickets_total"] == 2
+        assert call_kwargs["tickets_completed"] == 2
+        assert call_kwargs["tickets_failed"] == 0
+
+    def test_epic_done_emits_failed_when_all_failed(self) -> None:
+        """notify_epic_done emits 'failed' when no tickets succeeded."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_epic_done(
+                EPIC_ID,
+                RUN_ID,
+                completed=[],
+                failed=["OMN-2401", "OMN-2402"],
+                prs=[],
+            )
+
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["status"] == "failed"
+        assert call_kwargs["tickets_failed"] == 2
+
+    def test_epic_done_emits_partial_when_mixed(self) -> None:
+        """notify_epic_done emits 'partial' when some tickets failed."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_epic_done(
+                EPIC_ID,
+                RUN_ID,
+                completed=["OMN-2401"],
+                failed=["OMN-2402"],
+                prs=[],
+            )
+
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["status"] == "partial"
+        assert call_kwargs["tickets_total"] == 2
+
+    def test_emit_defaults_to_zero_counts(self) -> None:
+        """When no ticket counts are provided, defaults to 0."""
+        mock_notifier = _make_mock_notifier(returns_thread_ts=NEW_THREAD_TS)
+        with (
+            patch("epic_milestone_notifier._make_notifier", return_value=mock_notifier),
+            patch("epic_milestone_notifier.emit_epic_run_updated") as mock_emit,
+        ):
+            notify_ticket_completed(EPIC_ID, RUN_ID, TICKET_ID, REPO)
+
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["tickets_total"] == 0
+        assert call_kwargs["tickets_completed"] == 0
+        assert call_kwargs["tickets_failed"] == 0

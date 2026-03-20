@@ -778,21 +778,40 @@ After ticket-pipeline completes, report back:
         ticket_results[ticket_id] = res
         print(f"  {ticket_id}: {res['status']}")
 
-        # Slack notification per ticket (non-fatal)
+        # Slack + Kafka notification per ticket (non-fatal) [OMN-5619]
+        _n_completed = sum(1 for v in ticket_results.values() if v.get("status") == "merged")
+        _n_failed = sum(1 for v in ticket_results.values() if v.get("status") != "merged")
         try:
             if res["status"] == "merged":
                 notify_ticket_completed(
+                    epic_id=epic_id,
+                    run_id=run_id,
                     ticket_id=ticket_id,
+                    repo=repo,
                     pr_url=res.get("pr_url"),
-                    slack_thread_ts=state.get("slack_thread_ts"),
+                    thread_ts=state.get("slack_thread_ts"),
+                    tickets_total=len(ticket_ids),
+                    tickets_completed=_n_completed,
+                    tickets_failed=_n_failed,
+                    correlation_id=state.get("correlation_id", ""),
+                    session_id=os.environ.get("SESSION_ID"),
                 )
             else:
                 notify_ticket_failed(
+                    epic_id=epic_id,
+                    run_id=run_id,
                     ticket_id=ticket_id,
-                    slack_thread_ts=state.get("slack_thread_ts"),
+                    repo=repo,
+                    reason=res.get("status", "unknown"),
+                    thread_ts=state.get("slack_thread_ts"),
+                    tickets_total=len(ticket_ids),
+                    tickets_completed=_n_completed,
+                    tickets_failed=_n_failed,
+                    correlation_id=state.get("correlation_id", ""),
+                    session_id=os.environ.get("SESSION_ID"),
                 )
         except Exception as e:
-            print(f"Warning: Slack notification for {ticket_id} failed (non-fatal): {e}")
+            print(f"Warning: Slack/Kafka notification for {ticket_id} failed (non-fatal): {e}")
 
     # Persist results after each wave
     state["ticket_results"] = ticket_results
@@ -968,7 +987,7 @@ state["integration_check"] = _integration_check
 write_yaml(STATE_FILE, state)
 print(f"[integration-check] Post-wave check complete: {_integration_check}")
 
-# 1. Notify Slack (non-fatal)
+# 1. Notify Slack + emit terminal Kafka event (non-fatal) [OMN-5619]
 ticket_results = state.get("ticket_results", {})
 completed = [tid for tid, res in ticket_results.items() if res.get("status") == "merged"]
 failed    = [tid for tid, res in ticket_results.items() if res.get("status") != "merged"]
@@ -976,13 +995,17 @@ prs       = {tid: res["pr_url"] for tid, res in ticket_results.items() if res.ge
 
 try:
     notify_epic_done(
+        epic_id=epic_id,
+        run_id=run_id,
         completed=completed,
         failed=failed,
-        prs=prs,
-        slack_thread_ts=state.get("slack_thread_ts"),
+        prs=list(prs.values()),
+        thread_ts=state.get("slack_thread_ts"),
+        correlation_id=state.get("correlation_id", ""),
+        session_id=os.environ.get("SESSION_ID"),
     )
 except Exception as e:
-    print(f"Warning: Slack epic-done notification failed (non-fatal): {e}")
+    print(f"Warning: Slack/Kafka epic-done notification failed (non-fatal): {e}")
 
 # 2. Print summary table
 print("\n=== Epic Run Summary ===")
