@@ -39,6 +39,12 @@ otel = [
     "opentelemetry-exporter-otlp-proto-http>=1.23.0,<2.0.0",
 ]
 
+# valkey is optional: delegation daemon uses Valkey for classification caching.
+# Hooks degrade gracefully (direct Python fallback) when not installed.
+hooks = [
+    "valkey>=6.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",

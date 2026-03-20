@@ -36,6 +36,8 @@ Design constraints:
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 import sys
@@ -112,22 +114,26 @@ except ImportError:
 # Importing at module level allows tests to patch these names via
 #   patch("delegation_orchestrator.TaskClassifier", ...)
 # instead of needing to patch inside the function's local namespace.
+#
+# Now that lib/__init__.py uses PEP 562 lazy imports (OMN-5532), the circular
+# import chain is broken and standard imports work without cold-start penalty.
 
 try:
-    from omniclaude.lib.task_classifier import (
-        TaskClassifier,  # noqa: F401  (re-exported)
-    )
+    from omniclaude.lib.task_classifier import TaskClassifier
 except ImportError:  # pragma: no cover
     TaskClassifier = None  # type: ignore[assignment,misc]
 
 try:
-    from omniclaude.config.model_local_llm_config import (  # noqa: F401
+    from omniclaude.config.model_local_llm_config import (
         LlmEndpointPurpose,
         LocalLlmEndpointRegistry,
     )
 except ImportError:  # pragma: no cover
     LlmEndpointPurpose = None  # type: ignore[assignment,misc]
     LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
+
+if TaskClassifier is None:
+    logger.debug("TaskClassifier unavailable")
 
 # Shadow validation (OMN-2283) — imported at module level so tests can patch it.
 try:
@@ -313,20 +319,27 @@ _TASK_MARKERS: dict[str, tuple[str, ...]] = {
 
 
 def _is_delegation_enabled() -> bool:
-    """Return True only when both delegation feature flags are active.
+    """Return True when local LLM endpoints are configured for delegation.
 
-    Both ``ENABLE_LOCAL_INFERENCE_PIPELINE`` and ``ENABLE_LOCAL_DELEGATION``
-    must be set to a truthy value (true/1/yes/on, case-insensitive).
+    Follows the connection-config-inference pattern: delegation activates when
+    at least one LLM endpoint URL is set (``LLM_CODER_URL`` or
+    ``LLM_DEEPSEEK_R1_URL``).  ``ENABLE_LOCAL_DELEGATION=false`` acts as an
+    explicit kill switch.
+
+    Legacy ``ENABLE_LOCAL_INFERENCE_PIPELINE`` is no longer required.
     """
-    parent = os.environ.get(
-        "ENABLE_LOCAL_INFERENCE_PIPELINE", ""
-    ).lower()  # ONEX_FLAG_EXEMPT: migration
-    if parent not in _TRUTHY:
+    # Explicit kill switch — only blocks when explicitly set to false
+    kill_switch = os.environ.get("ENABLE_LOCAL_DELEGATION", "").lower()
+    if kill_switch in _FALSY:
         return False
-    delegation = os.environ.get(
-        "ENABLE_LOCAL_DELEGATION", ""
-    ).lower()  # ONEX_FLAG_EXEMPT: migration
-    return delegation in _TRUTHY
+    # Infer from connection config presence
+    has_endpoints = bool(
+        os.environ.get("LLM_CODER_URL") or os.environ.get("LLM_DEEPSEEK_R1_URL")
+    )
+    return has_endpoints
+
+
+_FALSY = frozenset({"false", "0", "no", "off"})
 
 
 # ---------------------------------------------------------------------------
@@ -356,14 +369,9 @@ def _select_handler_endpoint(
 
     purpose_name, system_prompt, handler_name, _min_len = routing
 
-    # Use module-level names (allows patching in tests).
-    # If imports failed at module load, these will be None and we catch below.
-    _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
-    _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
-
     try:
-        purpose = _purpose_cls(purpose_name)
-        registry = _registry_cls()
+        purpose = LlmEndpointPurpose(purpose_name)
+        registry = LocalLlmEndpointRegistry()
         endpoint = registry.get_endpoint(purpose)
         if endpoint is not None:
             url = str(endpoint.url).rstrip("/")
@@ -673,6 +681,7 @@ def orchestrate_delegation(
     session_id: str = "",
     correlation_id: str,
     emitted_at: datetime | None = None,
+    cached_classification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Orchestrate delegation with task-type routing and quality gate.
 
@@ -702,6 +711,10 @@ def orchestrate_delegation(
         emitted_at: Timestamp for the delegation event. When None, defaults to
             ``datetime.now(UTC)``. Inject a fixed value in tests for deterministic
             assertions.
+        cached_classification: Pre-computed classification dict from the daemon's
+            Valkey cache.  When provided, skips the internal ``_classify_prompt()``
+            call and uses it directly.  Expected keys: ``intent``, ``confidence``,
+            ``delegatable``.
 
     Returns:
         Dict with at minimum ``{"delegated": bool}``.
@@ -730,77 +743,116 @@ def orchestrate_delegation(
             )
             return {"delegated": False, "reason": "feature_disabled"}
 
-        # Gate 2: Classification
-        try:
-            classifier = _get_classifier()
-            score = classifier.is_delegatable(prompt)
-        except Exception as exc:
-            logger.debug("Classification failed: %s", exc)
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=f"classification_error: {type(exc).__name__}",
-                delegation_success=False,
-                savings_usd=0.0,
-                latency_ms=int((time.time() - start_time) * 1000),
-                emitted_at=emitted_at,
+        # Gate 2: Classification (fast-path when daemon provides cached result)
+        if cached_classification is not None and cached_classification.get(
+            "delegatable"
+        ):
+            # Daemon already classified via Valkey cache — skip classifier cold start
+            intent_value = cached_classification.get("intent", "unknown")
+            _cached_confidence = cached_classification.get("confidence", 0.0)
+            logger.debug(
+                "Using cached classification: intent=%s confidence=%.2f",
+                intent_value,
+                _cached_confidence,
             )
-            return {
-                "delegated": False,
-                "reason": f"classification_error: {type(exc).__name__}",
-            }
+        else:
+            # Standard path: classify via TaskClassifier
+            if cached_classification is not None and not cached_classification.get(
+                "delegatable"
+            ):
+                # Cached result says not delegatable — honour it
+                reasons = "cached: not delegatable"
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=reasons,
+                    delegation_success=False,
+                    savings_usd=0.0,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": reasons,
+                    "confidence": cached_classification.get("confidence", 0.0),
+                }
 
-        if not score.delegatable:
-            reasons = "; ".join(score.reasons) if score.reasons else "not delegatable"
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=reasons,
-                delegation_success=False,
-                savings_usd=score.estimated_savings_usd,
-                latency_ms=int((time.time() - start_time) * 1000),
-                emitted_at=emitted_at,
-            )
-            return {
-                "delegated": False,
-                "reason": reasons,
-                "confidence": score.confidence,
-            }
+            try:
+                classifier = _get_classifier()
+                score = classifier.is_delegatable(prompt)
+            except Exception as exc:
+                logger.debug("Classification failed: %s", exc)
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=f"classification_error: {type(exc).__name__}",
+                    delegation_success=False,
+                    savings_usd=0.0,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": f"classification_error: {type(exc).__name__}",
+                }
 
-        # Extract the intent value string for routing (reuse existing classifier instance).
-        try:
-            ctx = classifier.classify(prompt)
-            intent_value = (
-                ctx.primary_intent.value
-            )  # e.g., "document", "test", "research"
-        except Exception as exc:
-            logger.debug("Intent value extraction failed: %s", exc)
-            latency_ms = int((time.time() - start_time) * 1000)
-            _emit_delegation_event(
-                session_id=session_id,
-                correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
-                model_name="unknown",
-                quality_gate_passed=False,
-                quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-                delegation_success=False,
-                savings_usd=score.estimated_savings_usd,
-                latency_ms=latency_ms,
-                emitted_at=emitted_at,
-            )
-            return {
-                "delegated": False,
-                "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-            }
+            if not score.delegatable:
+                reasons = (
+                    "; ".join(score.reasons) if score.reasons else "not delegatable"
+                )
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=reasons,
+                    delegation_success=False,
+                    savings_usd=score.estimated_savings_usd,
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": reasons,
+                    "confidence": score.confidence,
+                }
+
+            # Extract the intent value string for routing (reuse existing classifier instance).
+            try:
+                ctx = classifier.classify(prompt)
+                intent_value = (
+                    ctx.primary_intent.value
+                )  # e.g., "document", "test", "research"
+            except Exception as exc:
+                logger.debug("Intent value extraction failed: %s", exc)
+                latency_ms = int((time.time() - start_time) * 1000)
+                _emit_delegation_event(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type="unknown",
+                    handler_name="unknown",
+                    model_name="unknown",
+                    quality_gate_passed=False,
+                    quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+                    delegation_success=False,
+                    savings_usd=score.estimated_savings_usd,
+                    latency_ms=latency_ms,
+                    emitted_at=emitted_at,
+                )
+                return {
+                    "delegated": False,
+                    "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+                }
 
         # Gate 3: Endpoint selection for this specific task type
         endpoint_result = _select_handler_endpoint(intent_value)
@@ -1032,3 +1084,88 @@ def orchestrate_delegation(
             "orchestrate_delegation unexpected error: %s: %s", type(exc).__name__, exc
         )
         return {"delegated": False, "reason": "orchestrator_error", "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (mirrors local_delegation_handler.py interface)
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """CLI entry point for user-prompt-submit.sh.
+
+    Invocation:
+        printf '%s' "$PROMPT_B64" | python3 delegation_orchestrator.py \\
+            --prompt-stdin <correlation_id> [session_id]
+
+    Reads base64-encoded prompt from stdin, decodes it, and calls
+    orchestrate_delegation(). Prints JSON result to stdout.
+
+    Always exits 0. Non-zero exit would block the hook.
+    """
+    args = sys.argv[1:]
+
+    if not args or args[0] != "--prompt-stdin":
+        print(json.dumps({"delegated": False, "reason": "missing_args"}))
+        sys.exit(0)
+
+    # Expected: --prompt-stdin <correlation_id> [session_id]
+    if len(args) < 2:
+        print(json.dumps({"delegated": False, "reason": "missing_args"}))
+        sys.exit(0)
+
+    correlation_id = args[1]
+    session_id = args[2] if len(args) >= 3 else ""
+
+    logger.debug(
+        "delegation_orchestrator CLI invoked: correlation_id=%s session_id=%s",
+        correlation_id,
+        session_id[:8] if session_id else "(empty)",
+    )
+
+    try:
+        raw_b64 = sys.stdin.read().strip()
+        if not raw_b64:
+            logger.debug("Empty stdin payload — returning prompt_decode_error")
+            print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+            sys.exit(0)
+        prompt = base64.b64decode(raw_b64, validate=True).decode("utf-8")
+    except Exception:
+        logger.debug("Failed to decode base64 prompt from stdin")
+        print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+        sys.exit(0)
+
+    logger.debug(
+        "Prompt decoded (%d chars), calling orchestrate_delegation", len(prompt)
+    )
+
+    try:
+        result = orchestrate_delegation(
+            prompt=prompt,
+            correlation_id=correlation_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        logger.debug("Unexpected error in orchestrate_delegation: %s", exc)
+        result = {
+            "delegated": False,
+            "reason": f"unexpected_error: {type(exc).__name__}",
+        }
+
+    logger.debug(
+        "Delegation result: delegated=%s reason=%s",
+        result.get("delegated"),
+        result.get("reason", "n/a"),
+    )
+
+    try:
+        print(json.dumps(result))
+    except (TypeError, ValueError) as exc:
+        logger.debug("Failed to serialize delegation result: %s", exc)
+        print(json.dumps({"delegated": False, "reason": "result_serialize_error"}))
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

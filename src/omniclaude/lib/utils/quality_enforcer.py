@@ -99,12 +99,6 @@ def _sanitize_for_logging(text: str) -> str:
     return sanitized
 
 
-# Add project root to path for config import
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root))
-
-from omniclaude.config import settings
-
 # Import internal modules (fail fast - no fallbacks for required internal dependencies)
 from .consensus.quorum import AIQuorum
 from .correction.generator import CorrectionGenerator
@@ -265,17 +259,18 @@ def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
 # Load configuration
 CONFIG = load_config()
 
-# Configuration flags from Pydantic Settings (type-safe)
-ENABLE_PHASE_1_VALIDATION = settings.enable_phase_1_validation
-ENABLE_PHASE_2_RAG = settings.enable_phase_2_rag
-ENABLE_PHASE_3_CORRECTION = settings.enable_phase_3_correction
-ENABLE_PHASE_4_AI_QUORUM = settings.enable_phase_4_ai_quorum
-
-# Performance budget from Pydantic Settings
-PERFORMANCE_BUDGET_SECONDS = settings.performance_budget_seconds
-
-# Enforcement mode from Pydantic Settings
-ENFORCEMENT_MODE = settings.enforcement_mode
+# Configuration flags — read directly from env to avoid circular import
+# (config -> aggregators -> hooks -> lib.utils -> quality_enforcer -> config).
+# Defaults match Settings field definitions at settings.py:365-389.
+ENABLE_PHASE_1_VALIDATION = os.environ.get("ENABLE_PHASE_1_VALIDATION", "true").lower() in {"true", "1", "yes"}
+ENABLE_PHASE_2_RAG = os.environ.get("ENABLE_PHASE_2_RAG", "true").lower() in {"true", "1", "yes"}
+ENABLE_PHASE_3_CORRECTION = os.environ.get("ENABLE_PHASE_3_CORRECTION", "true").lower() in {"true", "1", "yes"}
+ENABLE_PHASE_4_AI_QUORUM = os.environ.get("ENABLE_PHASE_4_AI_QUORUM", "false").lower() in {"true", "1", "yes"}
+try:
+    PERFORMANCE_BUDGET_SECONDS = float(os.environ.get("PERFORMANCE_BUDGET_SECONDS", "2.0"))
+except (ValueError, TypeError):
+    PERFORMANCE_BUDGET_SECONDS = 2.0
+ENFORCEMENT_MODE = os.environ.get("ENFORCEMENT_MODE", "advisory")
 
 
 class ViolationsLogger:

@@ -720,6 +720,14 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Create .claude directory if it exists in source
     [[ -d "${SOURCE_ROOT}/.claude" ]] && rsync -a --delete "${SOURCE_ROOT}/.claude/" "${TARGET}/.claude/"
 
+    # Kill existing delegation daemon so new code is loaded on next invocation
+    _DEL_PID="/tmp/omniclaude-delegation.pid"
+    if [[ -f "$_DEL_PID" ]]; then
+        kill "$(cat "$_DEL_PID")" 2>/dev/null || true
+        rm -f "$_DEL_PID" "/tmp/omniclaude-delegation.sock"
+        echo -e "${GREEN}  Stopped delegation daemon (will auto-restart on next prompt)${NC}"
+    fi
+
     echo ""
 
     # =============================================================================

@@ -516,18 +516,44 @@ fi
 # exits 0 on all failures so this block never blocks the hook.
 DELEGATION_RESULT=""
 DELEGATION_ACTIVE="false"
-INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
-LOCAL_DELEGATION_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-false}")
+# Delegation activates when at least one local LLM endpoint is configured.
+# This follows the connection-config-inference pattern (OMN-5510): no separate
+# boolean flags — if LLM_CODER_URL or LLM_DEEPSEEK_R1_URL is set, delegation
+# can work.  ENABLE_LOCAL_DELEGATION=false still acts as an explicit kill switch.
+_DELEGATION_KILL_SWITCH=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-true}")
+_HAS_LLM_ENDPOINTS="false"
+[[ -n "${LLM_CODER_URL:-}" || -n "${LLM_DEEPSEEK_R1_URL:-}" ]] && _HAS_LLM_ENDPOINTS="true"
 
-if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]] \
+if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "false" ]] \
         && [[ "$WORKFLOW_DETECTED" != "true" ]] \
         && [[ ! "$PROMPT" =~ ^/ ]]; then  # Slash commands invoke structured skills/commands — never delegate to local models
-    DELEGATION_HANDLER="${HOOKS_LIB}/local_delegation_handler.py"
+    DELEGATION_HANDLER="${HOOKS_LIB}/delegation_orchestrator.py"
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
-        set +e
-        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" 2>>"$LOG_FILE")"
-        set -e
+
+        # Fast path: daemon (< 50ms)
+        _DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
+        if [[ -S "$_DELEGATION_SOCK" ]]; then
+            _DAEMON_REQ=$(jq -cn --arg prompt "$PROMPT" --arg corr "$CORRELATION_ID" --arg sess "$SESSION_ID" \
+                '{prompt: $prompt, correlation_id: $corr, session_id: $sess}')
+            DELEGATION_RESULT="$(printf '%s\n' "$_DAEMON_REQ" | socat -t2 - UNIX-CONNECT:"$_DELEGATION_SOCK" 2>/dev/null || echo "")"
+            if [[ -n "$DELEGATION_RESULT" ]]; then
+                log "Delegation via daemon (fast path)"
+            fi
+        fi
+
+        # Fallback: direct Python invocation (~ 3s cold start)
+        if [[ -z "$DELEGATION_RESULT" ]] || ! jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
+            set +e
+            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" 2>>"$LOG_FILE")"
+            set -e
+        fi
+
+        # Auto-start daemon in background for next invocation
+        if [[ ! -S "$_DELEGATION_SOCK" ]]; then
+            nohup "$PYTHON_CMD" "${HOOKS_LIB}/delegation_daemon.py" --start >>"$LOG_FILE" 2>&1 &
+            disown
+        fi
 
         # Validate output is a parseable JSON object (not just any valid JSON value)
         if [[ -n "$DELEGATION_RESULT" ]] && jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then

@@ -465,13 +465,23 @@ def test_handler_routing_purpose_names_match_enum() -> None:
 
 @pytest.mark.unit
 class TestFeatureFlags:
-    """orchestrate_delegation respects ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_LOCAL_DELEGATION."""
+    """orchestrate_delegation respects ENABLE_LOCAL_DELEGATION kill-switch and LLM endpoint config.
+
+    _is_delegation_enabled() uses connection-config-inference:
+    - delegation is enabled when LLM_CODER_URL or LLM_DEEPSEEK_R1_URL are set
+      (and ENABLE_LOCAL_DELEGATION != false)
+    - ENABLE_LOCAL_DELEGATION=false is an explicit kill-switch regardless of LLM URLs
+    - Legacy ENABLE_LOCAL_INFERENCE_PIPELINE is no longer required
+    """
 
     def test_both_flags_off_returns_not_delegated(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # No LLM endpoints configured → connection-config-inference returns disabled
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this function", correlation_id="corr-1"
         )
@@ -479,8 +489,11 @@ class TestFeatureFlags:
         assert result.get("reason") == "feature_disabled"
 
     def test_only_parent_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Legacy ENABLE_LOCAL_INFERENCE_PIPELINE alone does not enable delegation
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this", correlation_id="corr-2"
         )
@@ -488,8 +501,11 @@ class TestFeatureFlags:
         assert result.get("reason") == "feature_disabled"
 
     def test_only_delegation_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # ENABLE_LOCAL_DELEGATION=true alone (no LLM URLs) → still disabled
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
         result = do.orchestrate_delegation(
             prompt="document this", correlation_id="corr-3"
         )
@@ -504,6 +520,8 @@ class TestFeatureFlags:
 
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
 
         with patch.object(do, "_emit_delegation_event") as mock_emit:
             result = do.orchestrate_delegation(
@@ -530,6 +548,7 @@ class TestFeatureFlags:
         """Both flags true -> proceeds to classification (not feature_disabled)."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(False, reasons=["not delegatable"])
         classifier_mock = _make_classifier_mock(score, "debug")
 
@@ -545,6 +564,7 @@ class TestFeatureFlags:
         """When TaskClassifier is None (import failed) -> classification_error."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         with patch.object(do, "TaskClassifier", None):
             result = do.orchestrate_delegation(
                 prompt="document this", correlation_id="corr-null-cls"
@@ -560,6 +580,7 @@ class TestFeatureFlags:
 
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         with patch.object(do, "TaskClassifier", None):
             with patch.object(do, "_emit_delegation_event") as mock_emit:
@@ -595,6 +616,7 @@ class TestClassificationGate:
     def _enable_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
     def test_not_delegatable_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
@@ -701,6 +723,7 @@ class TestEndpointResolution:
     def _enable_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
     def test_no_endpoint_returns_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self._enable_flags(monkeypatch)
@@ -794,6 +817,7 @@ class TestLlmCallFailure:
     ) -> tuple[Any, Any, tuple[str, str, str, str]]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(True, confidence=0.95)
         classifier_mock = _make_classifier_mock(score, intent)
         endpoint_tuple: tuple[str, str, str, str] = (
@@ -876,6 +900,7 @@ class TestLlmCallFailure:
 
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         score = _make_score(True, confidence=0.92)
         classifier_instance = MagicMock()
@@ -1001,6 +1026,7 @@ class TestQualityGateFailure:
     ) -> tuple[Any, Any, tuple[str, str, str, str]]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(True, confidence=0.95)
         classifier_mock = _make_classifier_mock(score, intent)
         endpoint_tuple: tuple[str, str, str, str] = (
@@ -1143,6 +1169,7 @@ class TestOrchestratedDelegationSuccess:
     ) -> tuple[Any, Any, tuple[str, str, str, str], str]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(
             True,
             confidence=0.97,
@@ -1289,6 +1316,7 @@ class TestOrchestratedDelegationSuccess:
         "classification_error"."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         with patch.object(
             do, "TaskClassifier", side_effect=SystemError("unrecoverable")
@@ -1312,6 +1340,7 @@ class TestOrchestratedDelegationSuccess:
         """
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         # Build a score object whose .delegatable property raises AttributeError.
         # is_delegatable() returns this score successfully; the AttributeError
@@ -1539,9 +1568,11 @@ class TestEmitDelegationEvent:
 def test_orchestrate_delegation_returns_feature_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """orchestrate_delegation returns feature_disabled when both flags are off."""
+    """orchestrate_delegation returns feature_disabled when no LLM endpoints are configured."""
     monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
     monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+    monkeypatch.delenv("LLM_CODER_URL", raising=False)
+    monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
     result = do.orchestrate_delegation(
         prompt="test prompt", correlation_id="corr-alias"
     )
@@ -1580,6 +1611,7 @@ class TestClassifierInstanceCaching:
         """
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         score = _make_score(False, reasons=["not delegatable"])
         classifier_instance = _make_classifier_mock(score, "debug")
@@ -1616,6 +1648,7 @@ class TestClassifierInstanceCaching:
         """
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         score = _make_score(False, reasons=["not delegatable"])
         classifier_instance = _make_classifier_mock(score, "debug")

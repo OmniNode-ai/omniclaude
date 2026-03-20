@@ -916,6 +916,7 @@ class TestDelegationOrchestratorIntegration:
 
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         with (
             patch(
@@ -1000,6 +1001,7 @@ class TestDelegationOrchestratorIntegration:
 
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         with (
             patch(
@@ -1051,6 +1053,7 @@ class TestDelegationOrchestratorIntegration:
 
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
         with (
             patch(
