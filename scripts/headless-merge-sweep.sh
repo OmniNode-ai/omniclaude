@@ -14,7 +14,11 @@ set -euo pipefail
 export ONEX_RUN_ID="sweep-$(date +%s)"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 
-REPORT_DIR="${HOME}/.claude/sweep-reports"
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+  echo "FATAL: ONEX_STATE_DIR is not set" >&2
+  exit 1
+fi
+REPORT_DIR="${ONEX_STATE_DIR}/sweep-reports"
 mkdir -p "$REPORT_DIR"
 
 REPORT_FILE="${REPORT_DIR}/$(date +%Y-%m-%d)-sweep.md"
