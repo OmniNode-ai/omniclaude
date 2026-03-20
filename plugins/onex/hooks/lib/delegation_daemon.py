@@ -61,8 +61,8 @@ if _LIB_DIR not in sys.path:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DEFAULT_SOCKET_PATH = "/tmp/omniclaude-delegation.sock"
-DEFAULT_PID_PATH = "/tmp/omniclaude-delegation.pid"
+DEFAULT_SOCKET_PATH = "/tmp/omniclaude-delegation.sock"  # noqa: S108
+DEFAULT_PID_PATH = "/tmp/omniclaude-delegation.pid"  # noqa: S108
 CACHE_TTL_SECONDS = 300
 CACHE_SCHEMA_VERSION = 1
 
@@ -302,13 +302,13 @@ def _cleanup_stale(socket_path: str, pid_path: str) -> None:
             # Process dead or PID file corrupt — clean up
             pass
         try:
-            os.unlink(pid_path)
+            Path(pid_path).unlink(missing_ok=True)
         except OSError:
             pass
 
     if os.path.exists(socket_path):
         try:
-            os.unlink(socket_path)
+            Path(socket_path).unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -331,7 +331,7 @@ def start_daemon() -> None:
     server = DelegationServer(socket_path, DelegationHandler)
 
     # Restrict socket permissions
-    os.chmod(socket_path, 0o600)
+    Path(socket_path).chmod(0o600)
 
     # Write PID file
     with open(pid_path, "w") as f:
@@ -353,11 +353,11 @@ def start_daemon() -> None:
         server.serve_forever()
     finally:
         try:
-            os.unlink(socket_path)
+            Path(socket_path).unlink(missing_ok=True)
         except OSError:
             pass
         try:
-            os.unlink(pid_path)
+            Path(pid_path).unlink(missing_ok=True)
         except OSError:
             pass
         logger.info("Delegation daemon stopped")
@@ -392,7 +392,7 @@ def stop_daemon() -> bool:
         # Clean up files regardless
         for path in (pid_path, socket_path):
             try:
-                os.unlink(path)
+                Path(path).unlink(missing_ok=True)
             except OSError:
                 pass
     return False

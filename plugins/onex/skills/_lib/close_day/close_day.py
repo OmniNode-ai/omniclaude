@@ -483,7 +483,7 @@ def _resolve_cc_path(
     Resolution order:
     1. Explicit argument (from caller)
     2. ``ONEX_CC_REPO_PATH`` env var
-    3. Canonical fallback (``/Volumes/PRO-G40/Code/omni_home/onex_change_control``)
+    3. Canonical fallback (see ``_ONEX_CC_FALLBACK``)
 
     Returns the resolved path string, or None if none exists on disk.
     """
