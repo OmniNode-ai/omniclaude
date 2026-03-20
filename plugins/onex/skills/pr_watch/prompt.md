@@ -368,6 +368,32 @@ def _write_result(
     with open(result_dir / "pr-watch.json", "w") as f:
         json.dump(result, f, indent=2)
     print(f"pr-watch: result written → {result_dir}/pr-watch.json  status={status}")
+
+    # Emit pr.watch.updated Kafka event for omnidash /pr-watch page [OMN-5619]
+    # Fire-and-forget — failure never blocks the skill.
+    # Map pr-watch statuses to the Kafka event status enum.
+    _status_map = {
+        "approved": "approved",
+        "merged": "approved",   # merged is a successful terminal state
+        "capped": "capped",
+        "timeout": "timeout",
+        "error": "failed",
+    }
+    try:
+        from pipeline_event_emitters import emit_pr_watch_updated
+        emit_pr_watch_updated(
+            run_id=context_id,
+            pr_number=pr_number,
+            repo=repo,
+            ticket_id=ticket_id,
+            status=_status_map.get(status, "failed"),
+            review_cycles_used=fix_cycles_used,
+            watch_duration_hours=elapsed_hours,
+            correlation_id=os.environ.get("ONEX_CORRELATION_ID", ""),
+            session_id=os.environ.get("SESSION_ID"),
+        )
+    except Exception:
+        pass  # Telemetry must never block skill execution
 ```
 
 ---

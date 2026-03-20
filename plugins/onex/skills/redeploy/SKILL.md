@@ -180,15 +180,23 @@ Cleanup: worktree is retained; pass `--cleanup` (v2) to remove after success.
 
 ## VERIFY Phase Details
 
-Beyond `curl /health`, checks in-container package versions against `--versions` input:
+Beyond `curl /health`, runs the standalone version verification script (OMN-5608):
 
 ```bash
-docker exec omninode-runtime uv pip show omniintelligence | grep Version
-docker exec omninode-runtime uv pip show omninode-claude   | grep Version
-docker exec omninode-runtime uv pip show omninode-memory   | grep Version
+uv run python scripts/verify_deployed_versions.py \
+    --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1" \
+    --container omninode-runtime
 ```
 
-Version mismatch causes VERIFY to fail explicitly (catches silent build failure or `--restart`-only runs).
+The script (`omnibase_infra/scripts/verify_deployed_versions.py`) queries each package
+version inside the container via `docker exec ... uv pip show`, compares actual vs expected,
+and exits with clear status codes:
+- Exit 0: all versions match
+- Exit 1: version mismatch detected (fail-fast with expected vs actual in output)
+- Exit 2: infrastructure error (container unreachable)
+
+Unit tests: `omnibase_infra/tests/unit/test_verify_deployed_versions.py` (21 tests covering
+mismatch detection, infra errors, CLI exit codes, and report formatting).
 
 ## INFISICAL Phase Logic
 
@@ -246,4 +254,5 @@ Written to `~/.claude/skill-results/{context_id}/redeploy.json`:
 - `_lib/slack-gate/helpers.md` — Slack credential resolution
 - `omnibase_infra/scripts/deploy-runtime.sh` — DEPLOY phase core script
 - `omnibase_infra/scripts/update-plugin-pins.py` — PIN_UPDATE phase helper
+- `omnibase_infra/scripts/verify_deployed_versions.py` — VERIFY phase version checker (OMN-5608)
 - `omnibase_infra/scripts/seed-infisical.py` — INFISICAL phase fallback
