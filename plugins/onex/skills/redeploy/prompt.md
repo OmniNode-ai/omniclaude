@@ -576,32 +576,47 @@ if failed_health:
     mark_phase(state, "VERIFY", "failed", failed_health=failed_health)
     EXIT 1
 
-# 2. In-container package version checks
-failed_versions: list[str] = []
-for pkg, expected_ver in versions_requested.items():
-    result = run(
-        f"docker exec {CONTAINER_FOR_VERSION_CHECK} uv pip show {pkg} | grep Version",
-        capture=True,
-    )
-    if result.returncode != 0:
-        failed_versions.append(f"{pkg}: container check failed")
-        continue
-    actual_ver = result.stdout.strip().replace("Version: ", "")
-    if actual_ver != expected_ver:
-        failed_versions.append(f"{pkg}: expected {expected_ver}, got {actual_ver}")
+# 2. In-container package version checks via verify_deployed_versions.py (OMN-5608)
+# This script is a standalone, testable Python module that:
+#   - Queries each package version inside the container via docker exec + uv pip show
+#   - Compares actual vs expected version
+#   - Exits 0 on all-match, 1 on version mismatch, 2 on infra error (container unreachable)
+# Unit tests: omnibase_infra/tests/unit/test_verify_deployed_versions.py
+worktree_path = state["worktree_path"]
+versions_str = ",".join(f"{k}={v}" for k, v in versions_requested.items())
+
+result = run(
+    f"uv run python {worktree_path}/scripts/verify_deployed_versions.py "
+    f'--versions "{versions_str}" '
+    f"--container {CONTAINER_FOR_VERSION_CHECK}",
+    capture=True,
+    cwd=worktree_path,
+)
+print(result.stdout)
 ```
 
 Expected output pattern per package:
 ```
-VERIFY: omniintelligence Version: 0.8.0 (expected 0.8.0) -> OK
-VERIFY: omninode-claude   Version: 0.4.0 (expected 0.4.0) -> OK
-VERIFY: omninode-memory   Version: 0.6.1 (expected 0.6.1) -> OK
+Version verification for container: omninode-runtime
+
+  OK   omniintelligence: 0.8.0 (expected 0.8.0)
+  OK   omninode-claude: 0.4.0 (expected 0.4.0)
+  OK   omninode-memory: 0.6.1 (expected 0.6.1)
+
+Result: ALL VERSIONS MATCH
+```
+
+On mismatch:
+```
+  FAIL omniintelligence: 0.15.0 (expected 0.16.0)
+
+Result: 1 MISMATCH(ES) DETECTED -- deployed versions do not match expected release
 ```
 
 ```python
-if failed_versions:
-    print(f"VERIFY FAILED: Version mismatches: {failed_versions}")
-    mark_phase(state, "VERIFY", "failed", failed_versions=failed_versions)
+if result.returncode != 0:
+    print(f"VERIFY FAILED: Version verification exited {result.returncode}")
+    mark_phase(state, "VERIFY", "failed", failed_versions=result.stdout)
     EXIT 1
 
 mark_phase(state, "VERIFY", "completed")

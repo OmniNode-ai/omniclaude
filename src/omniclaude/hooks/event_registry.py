@@ -598,6 +598,25 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "changed_file_count"],
     ),
     # =========================================================================
+    # Task Delegation Observability (OMN-2281 / OMN-5610)
+    # =========================================================================
+    # Emitted by delegation_orchestrator.py on every delegation attempt (success
+    # or failure). Consumed by omnidash /delegation dashboard via delegation_events
+    # table. No payload transform — event contains only delegation metadata
+    # (task_type, handler, model, quality gate result, latency, savings).
+    "task.delegated": EventRegistration(
+        event_type="task.delegated",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TASK_DELEGATED,
+                transform=None,  # Passthrough — no sensitive data in delegation metadata
+                description="Task delegation event for omnidash delegation dashboard",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "correlation_id", "task_type"],
+    ),
+    # =========================================================================
     # Delegation Shadow Validation (OMN-2283)
     # =========================================================================
     "delegation.shadow.comparison": EventRegistration(
