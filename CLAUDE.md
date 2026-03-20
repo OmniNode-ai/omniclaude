@@ -433,6 +433,22 @@ These modules are intended for external use:
 
 ---
 
+## ONEX State Directory
+
+All ONEX runtime state (pipelines, epics, skill results, logs, artifacts) lives under `ONEX_STATE_DIR`. This env var MUST be set — there is no default.
+
+- Configured automatically by `deploy_local_plugin` on first deploy
+- Persisted in `~/.omnibase/.env`
+- Python resolver: `from plugins.onex.hooks.lib.onex_state import state_path, ensure_state_dir`
+- Shell resolver: `source onex-paths.sh` (provides `$ONEX_LOG_DIR`, `$ONEX_PIPELINES_DIR`, etc.)
+
+### Path Discipline
+- `state_path()` / `$ONEX_STATE_DIR/...` for read-only path calculation (no side effects)
+- `ensure_state_dir()` / `ensure_state_path()` / `mkdir -p` only where writes are expected
+- Never create directories at import time or module level
+
+---
+
 ## Project Structure
 
 ```

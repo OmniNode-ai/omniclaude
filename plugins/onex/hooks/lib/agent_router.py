@@ -130,13 +130,16 @@ def _resolve_agent_configs_dir() -> Path:
     if possible_agents_dir.exists() and possible_agents_dir.is_dir():
         return possible_agents_dir
 
-    # Legacy fallback — use ONEX_STATE_DIR if available, else Path.home()
+    # Legacy fallback — use ONEX_STATE_DIR if available
     try:
         from plugins.onex.hooks.lib.onex_state import state_path
 
         return state_path("agents", "omniclaude")
     except (ImportError, RuntimeError):
-        return Path.home() / ".claude" / "agents" / "omniclaude"
+        state_dir = os.environ.get("ONEX_STATE_DIR", "")
+        if state_dir:
+            return Path(state_dir).expanduser() / "agents" / "omniclaude"
+        raise RuntimeError("Cannot resolve agent configs: ONEX_STATE_DIR is not set")
 
 
 AGENT_CONFIGS_DIR = _resolve_agent_configs_dir()
