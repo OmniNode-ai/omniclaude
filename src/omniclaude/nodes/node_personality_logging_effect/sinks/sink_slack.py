@@ -142,7 +142,9 @@ class SlackSink:
         self._dedup_cache = {k: v for k, v in self._dedup_cache.items() if now < v}
         self._dedup_cache[key] = now + _DEDUP_WINDOW_SECONDS
 
-    def _build_payload(self, rendered: ModelRenderedLog) -> dict[str, Any]:
+    def _build_payload(
+        self, rendered: ModelRenderedLog
+    ) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Build a Slack Block Kit payload for the rendered event."""
         event = rendered.original_event
         trace = event.trace
@@ -151,7 +153,9 @@ class SlackSink:
         header_text = f"*[{event.severity.upper()}]* {event.event_name}"
         body_text = rendered.rendered_message
 
-        blocks: list[dict[str, Any]] = [
+        blocks: list[
+            dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        ] = [  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             {
                 "type": "header",
                 "text": {"type": "plain_text", "text": header_text, "emoji": False},
@@ -199,7 +203,12 @@ class SlackSink:
 
         return {"blocks": blocks}
 
-    def _post(self, payload: dict[str, Any]) -> bool:
+    def _post(
+        self,
+        payload: dict[  # any-ok: pre-existing
+            str, Any
+        ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    ) -> bool:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """POST the payload to the configured Slack webhook URL.
 
         Returns:

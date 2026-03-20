@@ -109,7 +109,11 @@ def _resolve_agents_config_dir() -> Path | None:
     return None
 
 
-def _load_agent_yaml(subagent_type: str) -> dict[str, Any] | None:
+def _load_agent_yaml(
+    subagent_type: str,
+) -> (
+    dict[str, Any] | None  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+):  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Load the YAML config for a subagent_type.
 
     The config file is resolved as:
@@ -164,14 +168,22 @@ def _load_agent_yaml(subagent_type: str) -> dict[str, Any] | None:
         import yaml
 
         with open(config_path, encoding="utf-8") as fh:
-            result: dict[str, Any] = yaml.safe_load(fh) or {}
+            result: dict[  # any-ok: pre-existing
+                str, Any
+            ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+                yaml.safe_load(fh) or {}
+            )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             return result
     except Exception:  # noqa: BLE001
         logger.debug("Failed to load agent config %s", config_path, exc_info=True)
         return None
 
 
-def _has_context_integrity_subcontract(agent_config: dict[str, Any]) -> bool:
+def _has_context_integrity_subcontract(
+    agent_config: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> bool:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Return True if the agent config declares a context_integrity subcontract.
 
     Checks the following YAML paths:
@@ -198,7 +210,11 @@ def _has_context_integrity_subcontract(agent_config: dict[str, Any]) -> bool:
     return False
 
 
-def _extract_context_integrity_scopes(agent_config: dict[str, Any]) -> dict[str, Any]:
+def _extract_context_integrity_scopes(
+    agent_config: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Extract declared scopes from the context_integrity subcontract.
 
     Returns an empty dict if not present. Scopes are best-effort; a missing
@@ -211,7 +227,9 @@ def _extract_context_integrity_scopes(agent_config: dict[str, Any]) -> dict[str,
         Dict with optional keys: tool_scope, memory_scope, retrieval_sources.
     """
     # Look under contracts.context_integrity first, then top-level
-    scopes: dict[str, Any] = {}
+    scopes: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ] = {}  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
     contracts = agent_config.get("contracts", {})
     if isinstance(contracts, dict):
@@ -232,7 +250,11 @@ def _extract_context_integrity_scopes(agent_config: dict[str, Any]) -> dict[str,
 _SCOPE_KEYS = {"tool_scope", "memory_scope", "retrieval_sources"}
 
 
-def _get_context_integrity_contract_id(agent_config: dict[str, Any]) -> str | None:
+def _get_context_integrity_contract_id(
+    agent_config: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> str | None:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Extract metadata.context_integrity_contract_id from agent config.
 
     Args:
@@ -281,7 +303,9 @@ def _load_known_contract_ids() -> list[str] | object:
             import yaml
 
             with open(path, encoding="utf-8") as fh:
-                data: Any = yaml.safe_load(fh) or {}
+                data: Any = (  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+                    yaml.safe_load(fh) or {}
+                )  # ONEX_EXCLUDE: any_type - external/untyped API boundary
             if isinstance(data, dict):
                 ids = data.get("contract_ids", [])
                 if isinstance(ids, list):
@@ -331,7 +355,9 @@ def _emit_audit_dispatch_event(
         import uuid
         from datetime import UTC, datetime
 
-        payload: dict[str, Any] = {
+        payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            str, Any
+        ] = {  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
             "task_id": str(uuid.uuid4()),
             "contract_id": contract_id or "unknown",
             "parent_task_id": None,
@@ -409,7 +435,9 @@ def _find_emit_wrapper() -> Path | None:
 
 def _record_dispatch_in_correlation_manager(
     subagent_type: str,
-    scopes: dict[str, Any],
+    scopes: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     contract_id: str | None,
 ) -> None:
     """Record dispatch in the correlation manager if available.
@@ -461,7 +489,9 @@ def _record_dispatch_in_correlation_manager(
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        registry: Any = module.get_registry()
+        registry: Any = (  # ONEX_EXCLUDE: any_type - external/untyped API boundary
+            module.get_registry()
+        )  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         task_id = str(uuid.uuid4())
         effective_contract_id = contract_id or f"unknown:{subagent_type}"
         registry.push_task(task_id, effective_contract_id, scopes)

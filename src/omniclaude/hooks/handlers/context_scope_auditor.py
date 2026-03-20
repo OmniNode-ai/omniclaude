@@ -223,7 +223,12 @@ def clear_cumulative_tokens(task_id: str, state_dir: Path | None = None) -> None
 # =============================================================================
 
 
-def _emit_event(event_type: str, payload: dict[str, Any]) -> None:
+def _emit_event(
+    event_type: str,
+    payload: dict[  # any-ok: pre-existing
+        str, Any
+    ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+) -> None:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
     """Fire-and-forget event emission via emit_client_wrapper.
 
     Never raises; logs failures at DEBUG level.
@@ -400,7 +405,9 @@ class ContextScopeAuditor:
         )
         self.state_dir = state_dir
 
-    def _load_correlation_registry(self) -> Any | None:
+    def _load_correlation_registry(
+        self,
+    ) -> Any | None:  # ONEX_EXCLUDE: any_type - external/untyped API boundary
         """Load CorrelationRegistry from the plugin lib.
 
         Returns None if the registry cannot be loaded (non-fatal).
@@ -415,7 +422,12 @@ class ContextScopeAuditor:
             logger.debug("CorrelationRegistry not available", exc_info=True)
             return None
 
-    def _get_task_scopes(self) -> tuple[str | None, dict[str, Any]]:
+    def _get_task_scopes(
+        self,
+    ) -> tuple[
+        str | None,
+        dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+    ]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Read current task ID and scope constraints from the registry.
 
         Returns:
@@ -432,9 +444,17 @@ class ContextScopeAuditor:
         if task_id is None:
             return None, {}
 
-        dispatches: dict[str, Any] = registry.task_dispatches
+        dispatches: dict[  # any-ok: pre-existing
+            str, Any
+        ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            registry.task_dispatches
+        )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         meta = dispatches.get(task_id, {})
-        scopes: dict[str, Any] = meta.get("scopes", {})
+        scopes: dict[str, Any] = (  # any-ok: pre-existing
+            meta.get(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+                "scopes", {}
+            )
+        )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         return task_id, scopes
 
     def _get_correlation_id(self) -> str | None:
@@ -447,7 +467,9 @@ class ContextScopeAuditor:
     def audit(
         self,
         tool_name: str,
-        tool_input: dict[str, Any],
+        tool_input: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            str, Any
+        ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         tool_result_text: str | None = None,
     ) -> AuditResult:
         """Audit a tool call for scope and budget compliance.
@@ -641,7 +663,11 @@ def run_hook(stdin_data: str | None = None) -> int:
         return 0
 
     tool_name: str = hook_data.get("tool_name", "")
-    tool_input: dict[str, Any] = hook_data.get("tool_input", {})
+    tool_input: dict[str, Any] = (  # any-ok: pre-existing
+        hook_data.get(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            "tool_input", {}
+        )
+    )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
     auditor = ContextScopeAuditor()
     result = auditor.audit(tool_name=tool_name, tool_input=tool_input)

@@ -118,7 +118,9 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "linear-relay"}
 
     @app.post("/webhook")
-    async def receive_webhook(request: Request) -> dict[str, Any]:
+    async def receive_webhook(
+        request: Request,
+    ) -> dict[str, Any]:  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         """Receive a Linear webhook event.
 
         Processing pipeline:

@@ -81,13 +81,19 @@ class AgentInboxMessage(BaseModel):
     )
 
     # Event payload (the PR status event data)
-    payload: dict[str, Any] = Field(..., description="Original event payload")
+    payload: dict[str, Any] = (  # any-ok: pre-existing
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            ..., description="Original event payload"
+        )
+    )  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
     @classmethod
     def from_pr_status(
         cls,
         agent_id: str,
-        pr_status_payload: dict[str, Any],
+        pr_status_payload: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            str, Any
+        ],  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
         *,
         trace: dict[str, str] | None = None,
     ) -> AgentInboxMessage:

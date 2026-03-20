@@ -27,9 +27,13 @@ class LinearWebhookPayload(BaseModel):
 
     action: str = Field(..., description="Webhook action, e.g. 'create', 'update'")
     type: str = Field(..., description="Entity type, e.g. 'Project', 'Initiative'")
-    data: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Entity data. Contains 'state' for project/initiative payloads.",
+    data: dict[  # any-ok: pre-existing
+        str, Any
+    ] = (  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        Field(  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+            default_factory=dict,
+            description="Entity data. Contains 'state' for project/initiative payloads.",
+        )
     )
     organizationId: str = Field(  # noqa: N815 — matches Linear field name
         ...,

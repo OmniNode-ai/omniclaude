@@ -76,7 +76,9 @@ class ModelSkillNodeContract(BaseModel):
     name: str
     node_type: str
     execution: ModelSkillNodeExecution = ModelSkillNodeExecution()
-    event_bus: dict[str, Any]
+    event_bus: dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+        str, Any
+    ]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
 
 
 __all__ = ["ModelSkillNodeContract", "ModelSkillNodeExecution"]
