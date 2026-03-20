@@ -39,9 +39,13 @@ if isinstance(_qe_mod, types.ModuleType):
 
 
 def _get_enforcer_class() -> type:
-    """Get a clean QualityEnforcer class via module reload to avoid mock pollution."""
-    if isinstance(_qe_mod, types.ModuleType):
-        importlib.reload(_qe_mod)
+    """Get QualityEnforcer class from the (already-reloaded) module.
+
+    NOTE: Do NOT reload here — reloading inside a test that uses
+    ``patch(...)`` on the module creates a new class object that the
+    patches do not apply to, causing 'MagicMock can't be used in await'
+    errors.  The module-level reload above is sufficient.
+    """
     return _qe_mod.QualityEnforcer
 
 
