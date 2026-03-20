@@ -294,7 +294,6 @@ class AssertionEngine:
 # Runner
 # ---------------------------------------------------------------------------
 
-_DEFAULT_ARTIFACT_BASE_DIR = str(Path.home() / ".claude" / "golden-path")
 _DEFAULT_BOOTSTRAP_SERVERS = get_kafka_bootstrap_servers()
 
 
@@ -318,10 +317,15 @@ class GoldenPathRunner:
     def __init__(
         self,
         bootstrap_servers: str = _DEFAULT_BOOTSTRAP_SERVERS,
-        artifact_base_dir: str = _DEFAULT_ARTIFACT_BASE_DIR,
+        artifact_base_dir: str | None = None,
     ) -> None:
         self._bootstrap_servers = bootstrap_servers
-        self._artifact_base_dir = Path(artifact_base_dir)
+        if artifact_base_dir is not None:
+            self._artifact_base_dir = Path(artifact_base_dir)
+        else:
+            from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+            self._artifact_base_dir = ensure_state_dir("golden-path")
         self._assertion_engine = AssertionEngine()
 
     async def run(self, decl: dict[str, Any]) -> EvidenceArtifact:

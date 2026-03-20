@@ -4,7 +4,7 @@
 """Decision query backend.
 
 Queries the local decision store for recent decisions related to a repo.
-The decision store is at ~/.claude/decisions/ (JSON files written by
+The decision store is at ``$ONEX_STATE_DIR/decisions/`` (JSON files written by
 the decision-store skill).
 
 Falls back to checking recent PR comments and review decisions
@@ -14,8 +14,9 @@ when no local decision store entries are found.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
+
+from plugins.onex.hooks.lib.onex_state import state_path
 
 from .base import (
     ScriptStatus,
@@ -37,7 +38,7 @@ def _run(
     meta = make_meta("decision_query", run_id, repo_slug)
 
     # Check local decision store
-    decision_dir = Path.home() / ".claude" / "decisions"
+    decision_dir = state_path("decisions")
     local_decisions: list[dict[str, Any]] = []
 
     if decision_dir.is_dir():
