@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Epic Milestone Notifier - Slack notifications for epic lifecycle events.
+"""Epic Milestone Notifier - Slack + Kafka notifications for epic lifecycle events.
 
-Wraps PipelineSlackNotifier to emit Slack notifications at the four
-defined milestone events of an epic-team run.
+Wraps PipelineSlackNotifier to emit Slack notifications AND Kafka events
+at the four defined milestone events of an epic-team run.
 
 ## Slack Event Policy
 
@@ -76,6 +76,7 @@ _LIB_DIR = Path(__file__).parent
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
+from pipeline_event_emitters import emit_epic_run_updated  # noqa: E402
 from pipeline_slack_notifier import (  # noqa: E402
     PipelineSlackNotifier,
     SlackHandlerProtocol,
@@ -155,12 +156,18 @@ def notify_ticket_completed(
     pr_url: str | None = None,
     thread_ts: str | None = None,
     *,
+    tickets_total: int = 0,
+    tickets_completed: int = 0,
+    tickets_failed: int = 0,
+    correlation_id: str = "",
+    session_id: str | None = None,
     _handler: SlackHandlerProtocol | None = None,
 ) -> str | None:
     """Notify that a ticket has been completed within an epic run.
 
-    Posts (or threads) a Slack message announcing the ticket completion.
-    Optionally includes a PR URL in the message.
+    Posts (or threads) a Slack message announcing the ticket completion
+    AND emits an epic.run.updated Kafka event for the omnidash /epic-pipeline
+    page (OMN-5619).
 
     This is one of the four permitted Slack events in the epic-team flow.
     Do NOT call this inside a polling loop.
@@ -172,6 +179,11 @@ def notify_ticket_completed(
         repo:    Repository name where the work was done.
         pr_url:  Optional PR URL to include in the message.
         thread_ts: Existing Slack thread timestamp. None → new root message.
+        tickets_total: Total tickets in this epic run.
+        tickets_completed: Number of tickets completed so far.
+        tickets_failed: Number of tickets that failed so far.
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
 
     Returns:
         The Slack thread timestamp to persist for future calls.
@@ -186,6 +198,18 @@ def notify_ticket_completed(
 
     message = f"{prefix}\n{summary}"
     logger.info(message)
+
+    # Emit epic.run.updated Kafka event (fire-and-forget, OMN-5619)
+    emit_epic_run_updated(
+        run_id=run_id,
+        epic_id=epic_id,
+        status="running",
+        tickets_total=tickets_total,
+        tickets_completed=tickets_completed,
+        tickets_failed=tickets_failed,
+        correlation_id=correlation_id,
+        session_id=session_id,
+    )
 
     notifier = _make_notifier(epic_id, run_id, handler=_handler)
 
@@ -213,12 +237,18 @@ def notify_ticket_failed(
     reason: str,
     thread_ts: str | None = None,
     *,
+    tickets_total: int = 0,
+    tickets_completed: int = 0,
+    tickets_failed: int = 0,
+    correlation_id: str = "",
+    session_id: str | None = None,
     _handler: SlackHandlerProtocol | None = None,
 ) -> str | None:
     """Notify that a ticket has failed within an epic run.
 
     Posts (or threads) a Slack message announcing the ticket failure with
-    the provided reason.
+    the provided reason AND emits an epic.run.updated Kafka event for the
+    omnidash /epic-pipeline page (OMN-5619).
 
     This is one of the four permitted Slack events in the epic-team flow.
     Do NOT call this inside a polling loop.
@@ -230,6 +260,11 @@ def notify_ticket_failed(
         repo:      Repository name where the work was attempted.
         reason:    Human-readable reason for the failure.
         thread_ts: Existing Slack thread timestamp. None → new root message.
+        tickets_total: Total tickets in this epic run.
+        tickets_completed: Number of tickets completed so far.
+        tickets_failed: Number of tickets that failed so far.
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
 
     Returns:
         The Slack thread timestamp to persist for future calls.
@@ -238,6 +273,18 @@ def notify_ticket_failed(
     prefix = _make_prefix(epic_id, run_id)
     message = f"{prefix}\nTicket {ticket_id} failed — {reason}"
     logger.warning(message)
+
+    # Emit epic.run.updated Kafka event (fire-and-forget, OMN-5619)
+    emit_epic_run_updated(
+        run_id=run_id,
+        epic_id=epic_id,
+        status="running",
+        tickets_total=tickets_total,
+        tickets_completed=tickets_completed,
+        tickets_failed=tickets_failed,
+        correlation_id=correlation_id,
+        session_id=session_id,
+    )
 
     notifier = _make_notifier(epic_id, run_id, handler=_handler)
 
@@ -264,12 +311,16 @@ def notify_epic_done(
     prs: list[str],
     thread_ts: str | None = None,
     *,
+    correlation_id: str = "",
+    session_id: str | None = None,
     _handler: SlackHandlerProtocol | None = None,
 ) -> str | None:
     """Notify that all tickets in an epic run have been processed.
 
     Posts (or threads) a final summary Slack message for the entire epic run,
-    listing completed tickets, failed tickets, and associated PRs.
+    listing completed tickets, failed tickets, and associated PRs. Also emits
+    a terminal epic.run.updated Kafka event for the omnidash /epic-pipeline
+    page (OMN-5619).
 
     This is one of the four permitted Slack events in the epic-team flow.
     Do NOT call this inside a polling loop.
@@ -281,6 +332,8 @@ def notify_epic_done(
         failed:    List of ticket IDs that failed.
         prs:       List of PR URLs produced during this run.
         thread_ts: Existing Slack thread timestamp. None → new root message.
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
 
     Returns:
         The Slack thread timestamp to persist for future calls.
@@ -298,6 +351,28 @@ def notify_epic_done(
 
     summary = "\n".join(lines[1:])  # everything after the prefix line
     logger.info("\n".join(lines))
+
+    # Determine terminal status: completed (all succeeded), failed (all failed),
+    # or partial (mixed results).
+    total = len(completed) + len(failed)
+    if not failed:
+        terminal_status = "completed"
+    elif not completed:
+        terminal_status = "failed"
+    else:
+        terminal_status = "partial"
+
+    # Emit terminal epic.run.updated Kafka event (fire-and-forget, OMN-5619)
+    emit_epic_run_updated(
+        run_id=run_id,
+        epic_id=epic_id,
+        status=terminal_status,  # type: ignore[arg-type]
+        tickets_total=total,
+        tickets_completed=len(completed),
+        tickets_failed=len(failed),
+        correlation_id=correlation_id,
+        session_id=session_id,
+    )
 
     notifier = _make_notifier(epic_id, run_id, handler=_handler)
 
