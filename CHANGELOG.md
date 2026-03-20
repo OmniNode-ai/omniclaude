@@ -1,3 +1,20 @@
+## v0.10.0 (2026-03-20)
+
+### Added
+- feat(delegation): wire orchestrator into UserPromptSubmit hook [OMN-5510] (#739)
+- feat(omniclaude): emit validator catch events with severity-weighted attribution [OMN-5549] (#744)
+- feat(omniclaude): wire treatment group labeling via contract capability classifier [OMN-5551] (#742)
+- feat(omniclaude): add token count signals to pattern injection events [OMN-5548] (#743)
+- feat: emit utilization-scoring command from Stop hook [OMN-5505] (#741)
+- feat: wire Stop hook to emit session outcome commands [OMN-5501] (#740)
+- feat(omniclaude): friction tracking with dual-layer detection [OMN-5442] (#730)
+
+### Fixed
+- fix(close-day): align artifact path resolution with integration-sweep fallback [OMN-5472] (#737)
+
+### Changed
+- chore: wire no-bare-feature-flags pre-commit hook [OMN-5585] (#745)
+
 ## v0.9.0 (2026-03-19)
 
 ### Added
