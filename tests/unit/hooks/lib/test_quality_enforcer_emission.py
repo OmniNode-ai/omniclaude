@@ -30,27 +30,41 @@ _HOOKS_LIB = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" 
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-# Import quality_enforcer; reload defensively to ensure clean module state in
-# test splits where prior tests may have polluted the module cache via mock patching.
+# ---------------------------------------------------------------------------
+# Import quality_enforcer defensively.
+#
+# In CI test splits, prior tests may leave a MagicMock in sys.modules for this
+# module (via unittest.mock.patch).  importlib.reload() requires a real module
+# object, so we must evict any non-module entry before importing.
+# ---------------------------------------------------------------------------
 import types
 
-import omniclaude.lib.utils.quality_enforcer as _qe_mod
+_QE_MOD_NAME = "omniclaude.lib.utils.quality_enforcer"
 
-if isinstance(_qe_mod, types.ModuleType):
-    importlib.reload(_qe_mod)
+
+def _ensure_real_module() -> types.ModuleType:
+    """Return the real quality_enforcer module, evicting stale mocks if needed."""
+    existing = sys.modules.get(_QE_MOD_NAME)
+    if existing is not None and not isinstance(existing, types.ModuleType):
+        # A MagicMock or other non-module is squatting — evict it so
+        # import_module gives us the real module.
+        del sys.modules[_QE_MOD_NAME]
+        existing = None
+
+    mod = importlib.import_module(_QE_MOD_NAME)
+    # Reload to get a fresh copy (clears stale attribute patches)
+    mod = importlib.reload(mod)
+    sys.modules[_QE_MOD_NAME] = mod
+    return mod
+
+
+# Eagerly load once at collection time
+_qe_mod = _ensure_real_module()
 
 
 def _get_enforcer_class() -> type:
-    """Get a clean QualityEnforcer class, reloading to clear stale mocks.
-
-    In CI test splits, prior tests may leave stale MagicMock patches on the
-    module. We reload the module here AND rebind ``sys.modules`` so that
-    subsequent ``patch("omniclaude.lib.utils.quality_enforcer.X")`` targets
-    the freshly-loaded objects.
-    """
-    mod = importlib.reload(_qe_mod)
-    # Ensure sys.modules points to the reloaded module so patch() finds it
-    sys.modules["omniclaude.lib.utils.quality_enforcer"] = mod
+    """Get a clean QualityEnforcer class, reloading to clear stale mocks."""
+    mod = _ensure_real_module()
     return mod.QualityEnforcer
 
 
