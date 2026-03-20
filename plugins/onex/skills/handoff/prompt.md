@@ -11,7 +11,7 @@ Collect the current session context:
 1. **CWD**: The current working directory
 2. **CWD hash**: First 8 chars of SHA-256 of the CWD path
 3. **Repo slug**: Git repo name from `git remote get-url origin`, or directory name as fallback
-4. **Active ticket**: From `~/.claude/pipelines/*/state.yaml` (if any pipeline is in-progress)
+4. **Active ticket**: From `$ONEX_STATE_DIR/pipelines/*/state.yaml` (if any pipeline is in-progress)
 5. **Branch**: From `git branch --show-current`
 6. **Recent commits**: Last 5 commits from `git log --oneline -5`
 7. **Working files**: Changed files from `git status --short`
@@ -19,7 +19,7 @@ Collect the current session context:
 
 ### Write Manifest
 
-Write the manifest to `~/.claude/handoff/{cwd_hash}-{repo_slug}.json`.
+Write the manifest to `$ONEX_STATE_DIR/handoff/{cwd_hash}-{repo_slug}.json`.
 
 **Atomicity protocol**:
 1. Serialize manifest as JSON
@@ -42,7 +42,7 @@ Print a confirmation message:
 
 ```
 Session context saved for handoff.
-Manifest: ~/.claude/handoff/{cwd_hash}-{repo_slug}.json
+Manifest: $ONEX_STATE_DIR/handoff/{cwd_hash}-{repo_slug}.json
 
 To enable injection on next session start:
   export OMNICLAUDE_SESSION_HANDOFF=1

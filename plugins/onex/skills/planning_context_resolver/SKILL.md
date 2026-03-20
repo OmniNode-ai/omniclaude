@@ -44,7 +44,7 @@ Unresolvable capability dependency:
 
 ## Output
 
-`~/.claude/epics/{epic_id}/planning_context.yaml` — structured, machine-consumable
+`$ONEX_STATE_DIR/epics/{epic_id}/planning_context.yaml` — structured, machine-consumable
 
 ## Authoritative Behavior
 

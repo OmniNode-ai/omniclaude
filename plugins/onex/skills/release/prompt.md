@@ -80,7 +80,7 @@ import os
 
 OMNI_HOME = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
 WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"  # local-path-ok
-STATE_DIR = os.path.expanduser("~/.claude/state/release")
+STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/release")
 ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 ```
 
@@ -118,7 +118,7 @@ IF --gate-attestation is set:
   → Do NOT proceed to scan
 
 IF --resume is set:
-  → Load state file from ~/.claude/state/release/<run_id>.json
+  → Load state file from $ONEX_STATE_DIR/state/release/<run_id>.json
   → IF file not found: FAIL with STATE_NOT_FOUND
   → IF file unparseable: FAIL with STATE_CORRUPT
   → Validate run_id in file matches --resume value
@@ -298,7 +298,7 @@ Release Plan (run: release-20260225-a3f7b2)
 IF --dry-run:
   → Print plan table
   → Emit ModelSkillResult(status="DRY_RUN", details=[...per-repo plan...])
-  → Write result to ~/.claude/skill-results/<context_id>/release.json
+  → Write result to $ONEX_STATE_DIR/skill-results/<context_id>/release.json
   → EXIT (no state file created, no side effects)
 ```
 
@@ -1172,7 +1172,7 @@ result -- summary is best-effort.
 def build_skill_result(state: dict, plan_hash: str) -> dict:
     """Build the final ModelSkillResult from state.
 
-    Written to: ~/.claude/skill-results/<context_id>/release.json
+    Written to: $ONEX_STATE_DIR/skill-results/<context_id>/release.json
     """
     repos = state["repos"]
 

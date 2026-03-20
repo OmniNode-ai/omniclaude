@@ -46,7 +46,7 @@ Absorbed from the former `close-day` skill (CDQA-04 / OMN-2981).
 3. Build `actual_by_repo` grouped by repo with OMN-XXXX references
 4. Detect **scope drift**: PRs with no OMN-XXXX ref → `drift_detected` entry
 5. Run `scripts/check_arch_invariants.py` (shared with CDQA-07) to probe reducers/orchestrators
-6. Detect **golden-path progress** by reading `emitted_at` from `~/.claude/golden-path/TODAY/` artifact JSON files
+6. Detect **golden-path progress** by reading `emitted_at` from `$ONEX_STATE_DIR/golden-path/TODAY/` artifact JSON files
 7. Set unknown statuses to `"unknown"` and add entries to `corrections_for_tomorrow`
 8. Validate against `ModelDayClose.model_validate()` (fails loudly on schema mismatch)
 9. Write to `$ONEX_CC_REPO_PATH/drift/day_close/YYYY-MM-DD.yaml` or print with warning banner

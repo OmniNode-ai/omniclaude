@@ -186,7 +186,7 @@ and optional PyPI availability confirmation). This ensures that when a tier N re
 
 8. CLEANUP:
    Remove worktrees
-   Archive state file to ~/.claude/state/release/archive/
+   Archive state file to $ONEX_STATE_DIR/state/release/archive/
 
 9. SUMMARY:
    Print summary table: repo | old → new | PR | tag | PyPI
@@ -328,7 +328,7 @@ git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree remove /tmp/infra
 
 ## ModelSkillResult
 
-Written to `~/.claude/skill-results/<context_id>/release.json`:
+Written to `$ONEX_STATE_DIR/skill-results/<context_id>/release.json`:
 
 ```json
 {
@@ -398,7 +398,7 @@ Use `--run-id` to override for testing.
 
 ### State File
 
-**Path**: `~/.claude/state/release/<run_id>.json`
+**Path**: `$ONEX_STATE_DIR/state/release/<run_id>.json`
 
 ```json
 {
@@ -450,7 +450,7 @@ PLANNED → WORKTREE → BUMPED → PINNED → CHANGELOG → LOCKED → LINT →
 
 When invoked with `--resume <run_id>`:
 
-1. Load state file from `~/.claude/state/release/<run_id>.json`
+1. Load state file from `$ONEX_STATE_DIR/state/release/<run_id>.json`
 2. Validate run_id matches
 3. For each repo in tier order:
    - If phase == `DONE`: skip entirely
@@ -520,8 +520,8 @@ This naming:
 
 ### Run Marker
 
-- State file existence at `~/.claude/state/release/<run_id>.json` = run in progress
-- On successful completion: state file moved to `~/.claude/state/release/archive/<run_id>.json`
+- State file existence at `$ONEX_STATE_DIR/state/release/<run_id>.json` = run in progress
+- On successful completion: state file moved to `$ONEX_STATE_DIR/state/release/archive/<run_id>.json`
 - On `--resume`: state file remains in active location until completion
 - Stale runs: if a state file is older than 24 hours and status is not `completed`, it
   is considered stale. A new run for the same repos will warn but proceed (with a new run_id).

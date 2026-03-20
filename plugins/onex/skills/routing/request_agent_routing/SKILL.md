@@ -135,7 +135,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request_agent_routing/execute_direc
         "explanation": "High confidence match on 'optimize' and 'database' triggers"
       },
       "reason": "Strong trigger match with 'optimize' keyword and database context",
-      "definition_path": "~/.claude/agent-definitions/agent-performance.yaml"
+      "definition_path": "$ONEX_STATE_DIR/agent-definitions/agent-performance.yaml"
     }
   ],
   "routing_metadata": {
@@ -223,7 +223,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
 - aiokafka package: Included in project dependencies
 
 **For Direct Router Version**:
-- Agent registry: `~/.claude/agent-definitions/agent-registry.yaml`
+- Agent registry: `$ONEX_STATE_DIR/agent-definitions/agent-registry.yaml`
 - Python packages: yaml, dataclasses (standard library)
 - No external service dependencies
 

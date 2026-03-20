@@ -1057,7 +1057,7 @@ except Exception as e:
 }
 ```
 
-Write result to: `~/.claude/skill-results/<run_id>/merge-sweep.json`
+Write result to: `$ONEX_STATE_DIR/skill-results/<run_id>/merge-sweep.json`
 
 Print summary:
 

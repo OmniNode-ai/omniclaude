@@ -115,7 +115,7 @@ Phase 4: Plan Generation (optional)
 ## Artifact Structure
 
 ```
-~/.claude/begin-day/
+$ONEX_STATE_DIR/begin-day/
 ├── {run_id}/
 │   ├── list_prs.json
 │   ├── dashboard_sweep.json

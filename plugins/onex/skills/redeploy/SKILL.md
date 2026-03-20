@@ -44,7 +44,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/redeploy.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json"
     fields:
       - status: success | failed | dry_run
       - run_id: str
@@ -150,7 +150,7 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
 
 ## State File
 
-`~/.claude/state/redeploy/<run_id>.json` — written atomically after each phase completes.
+`$ONEX_STATE_DIR/state/redeploy/<run_id>.json` — written atomically after each phase completes.
 
 ```json
 {
@@ -210,7 +210,7 @@ IF INFISICAL_ADDR set AND creds present:
 
 ## Skill Result Output
 
-Written to `~/.claude/skill-results/{context_id}/redeploy.json`:
+Written to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`:
 
 ```json
 {

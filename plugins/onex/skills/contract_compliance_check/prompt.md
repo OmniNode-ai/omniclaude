@@ -32,7 +32,7 @@ Extract from the invocation arguments:
 
 **Otherwise, resolve automatically:**
 1. Check `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml` if `ONEX_CC_REPO_PATH` is set
-2. Check `~/.claude/contracts/{ticket_id}.yaml`
+2. Check `$ONEX_STATE_DIR/contracts/{ticket_id}.yaml`
 3. If neither exists: emit error and stop
 
 ```

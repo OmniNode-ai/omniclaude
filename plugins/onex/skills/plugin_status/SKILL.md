@@ -38,7 +38,7 @@ Services:
   Kafka        ✓ reachable   (broker-host:19092)
   Intelligence ✓ healthy     (http://localhost:8053/health)
 
-Probe file:    ~/.claude/.onex_capabilities
+Probe file:    $ONEX_STATE_DIR/.onex_capabilities
 Last updated:  2026-02-25T16:15:00Z
 
 To refresh: restart Claude Code session or run /onex:status again
@@ -46,7 +46,7 @@ To refresh: restart Claude Code session or run /onex:status again
 
 ## Behavior
 
-1. Reads `~/.claude/.onex_capabilities` (written by `capability_probe.py` at each SessionStart)
+1. Reads `$ONEX_STATE_DIR/.onex_capabilities` (written by `capability_probe.py` at each SessionStart)
 2. If the file is **missing or older than 5 minutes**, runs a fresh inline probe (2s timeout) and displays the result
 3. Displays tier, probe age, and per-service reachability
 4. In **standalone mode** (no Kafka configured), shows "not configured" for unchecked services

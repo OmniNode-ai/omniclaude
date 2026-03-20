@@ -587,7 +587,7 @@ If `--dry-run`: log what would be created/commented, but make no API calls.
 
 Write two artifacts:
 
-**JSON** (`~/.claude/gap-analysis/{epic_id}/{run_id}.json`):
+**JSON** (`$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.json`):
 ```python
 import json, pathlib
 out_dir = pathlib.Path.home() / ".claude" / "gap-analysis" / (epic_id or "global")
@@ -595,7 +595,7 @@ out_dir.mkdir(parents=True, exist_ok=True)
 (out_dir / f"{run_id}.json").write_text(report.model_dump_json(indent=2))
 ```
 
-**Markdown** (`~/.claude/gap-analysis/{epic_id}/{run_id}.md`):
+**Markdown** (`$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md`):
 ```markdown
 # Gap Analysis Report -- {epic_id or "global"} -- {run_date}
 
@@ -668,7 +668,7 @@ Tickets created: {len(tickets_created)}
 Tickets commented: {len(tickets_commented)}
 Blocked epics: {N_blocked} (NO_REPO_EVIDENCE)
 
-Report: ~/.claude/gap-analysis/{epic_id}/{run_id}.md
+Report: $ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md
 ```
 
 After writing the report files, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths -- including early exits such as zero findings:
@@ -690,9 +690,9 @@ Parse from `$ARGUMENTS` (after stripping the `fix` subcommand):
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--report <run_path>` | none | Gap-analysis run path under `~/.claude/gap-analysis/` |
+| `--report <run_path>` | none | Gap-analysis run path under `$ONEX_STATE_DIR/gap-analysis/` |
 | `--ticket <id>` | none | Single finding via Linear ticket containing a marker block |
-| `--latest` | false | Follow `~/.claude/gap-analysis/latest/` |
+| `--latest` | false | Follow `$ONEX_STATE_DIR/gap-analysis/latest/` |
 | `--dry-run` | false | Zero side effects |
 | `--mode <mode>` | `ticket-pipeline` | `ticket-pipeline` \| `ticket-work` \| `implement-only` |
 | `--choose <decisions>` | none | `GAP-id=A,GAP-id=B` to provide choices for gated findings |
@@ -700,10 +700,10 @@ Parse from `$ARGUMENTS` (after stripping the `fix` subcommand):
 
 **Entry point resolution** (exactly one must resolve):
 1. If `--ticket`: load finding from Linear ticket marker block -> synthetic one-finding report
-2. If `--report <run_path>`: list `~/.claude/gap-analysis/<run_path>/` -> load the `.json` file
+2. If `--report <run_path>`: list `$ONEX_STATE_DIR/gap-analysis/<run_path>/` -> load the `.json` file
    (there must be exactly one; error if zero or multiple)
-3. If `--latest`: resolve `~/.claude/gap-analysis/latest/` symlink -> load its `.json` report
-4. If none provided: resolve `~/.claude/gap-analysis/latest/` (same as `--latest`)
+3. If `--latest`: resolve `$ONEX_STATE_DIR/gap-analysis/latest/` symlink -> load its `.json` report
+4. If none provided: resolve `$ONEX_STATE_DIR/gap-analysis/latest/` (same as `--latest`)
 
 Generate a `fix_run_id` = first 12 chars of a UUID4.
 
@@ -728,7 +728,7 @@ Extract `findings: list[ModelGapFinding]`. Each finding has:
 
 ### 0.2 Load decisions.json
 
-Load `~/.claude/gap-analysis/<source_run_id>/decisions.json` if it exists. This contains
+Load `$ONEX_STATE_DIR/gap-analysis/<source_run_id>/decisions.json` if it exists. This contains
 previously resolved gate decisions. These are used to skip re-prompting on resume.
 
 `<source_run_id>` is the run ID of the original gap-analysis report -- extracted from the
@@ -886,7 +886,7 @@ No PR creation step. Skip Phase 3.3.
 
 After all ticket-pipeline dispatches complete, write `prs_created_path`:
 ```
-~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json
+$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-output.json
 ```
 
 Invoke merge-sweep scoped to repos with created PRs:
@@ -1001,7 +1001,7 @@ If `--dry-run`: do NOT write decisions.json.
 
 ### 5.2 Append Fix Section to Report .md
 
-Append to the existing gap-analysis source report at `~/.claude/gap-analysis/<source_run_path>/<report>.md`
+Append to the existing gap-analysis source report at `$ONEX_STATE_DIR/gap-analysis/<source_run_path>/<report>.md`
 (the same `.md` produced by detect for this run -- not the fix_run_id):
 
 ```markdown
@@ -1024,7 +1024,7 @@ Date: <ISO timestamp> | Mode: <mode> | Dry-run: <true|false>
 
 ### 5.3 Write ModelSkillResult
 
-Write `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
+Write `$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-result.json`:
 
 ```json
 {
@@ -1042,7 +1042,7 @@ Write `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
   "findings_fixed": 4,
   "findings_still_open": 1,
   "gate_pending": ["GAP-b7e2d5f8", "GAP-c3a1e2d4"],
-  "output_path": "~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json"
+  "output_path": "$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-output.json"
 }
 ```
 
@@ -1382,8 +1382,8 @@ Apply this deterministic mapping (in order of precedence):
 ### 2. Write summary.json
 
 ```
-mkdir -p ~/.claude/gap-cycle/{epic_id}/{run_id}/
-Write to: ~/.claude/gap-cycle/{epic_id}/{run_id}/summary.json
+mkdir -p $ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/
+Write to: $ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/summary.json
 ```
 
 Create parent directories first. Write the complete summary object.
@@ -1399,7 +1399,7 @@ Create parent directories first. Write the complete summary object.
   PRs:     {prs_created.length} created
   Gated:   {gated_findings_count}
   Report:  {source_report_path}
-  Summary: ~/.claude/gap-cycle/{epic_id}/{run_id}/summary.json
+  Summary: $ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/summary.json
 [gap cycle] -----------------------------------------------
 ```
 

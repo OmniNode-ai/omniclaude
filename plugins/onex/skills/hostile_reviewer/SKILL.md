@@ -67,7 +67,7 @@ Assume the implementer is competent but missed edge cases.
 - Can also be called standalone for any PR
 
 ## Output
-Write result to `~/.claude/skill-results/{context_id}/hostile-reviewer.json`:
+Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`:
 ```json
 {
   "risks": [

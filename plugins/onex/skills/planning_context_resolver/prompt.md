@@ -14,7 +14,7 @@ find $OMNI_HOME/{repo}/src -name "contract.yaml" -type f
 
 For each contract.yaml found:
 1. Extract: `contract_version`, `node_version`, `name`, `node_type`, `input_model.name`, `output_model.name`
-2. Compare to prior recorded state in `~/.claude/epics/{epic_id}/contract_baseline.json`
+2. Compare to prior recorded state in `$ONEX_STATE_DIR/epics/{epic_id}/contract_baseline.json`
    - If no baseline: create it from current state, set `schema_drift.detected = false`
    - If baseline exists: compare `contract_version.major` for breaking changes (major bump = breaking)
 3. Detect cross-repo model name drift: if `input_model.name` or `output_model.name` referenced by
@@ -176,10 +176,10 @@ If pattern API or ledger is `service_unavailable`:
 ## Step 7: Write Output  <!-- ai-slop-ok -->
 
 ```bash
-mkdir -p ~/.claude/epics/{epic_id}
+mkdir -p $ONEX_STATE_DIR/epics/{epic_id}
 ```
 
-Write `~/.claude/epics/{epic_id}/planning_context.yaml`:
+Write `$ONEX_STATE_DIR/epics/{epic_id}/planning_context.yaml`:
 
 ```yaml
 planning_context:

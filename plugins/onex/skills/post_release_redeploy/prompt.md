@@ -29,7 +29,7 @@ When `/post-release-redeploy [args]` is invoked:
    ```
 
 4. **Generate or restore run_id**:
-   - If `--resume <run_id>`: load `~/.claude/state/post-release-redeploy/<run_id>.json`
+   - If `--resume <run_id>`: load `$ONEX_STATE_DIR/state/post-release-redeploy/<run_id>.json`
    - Otherwise: generate `prd-<YYYYMMDD>-<6-char-hash>`
 
 5. **Source environment**:
@@ -45,7 +45,7 @@ When `/post-release-redeploy [args]` is invoked:
 import os
 
 OMNI_HOME = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
-STATE_DIR = os.path.expanduser("~/.claude/state/post-release-redeploy")
+STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/post-release-redeploy")
 
 GITHUB_ORG = "OmniNode-ai"
 
@@ -683,7 +683,7 @@ mark_phase(state, "CLOSE_OUT", "completed")
 
 ```
 IF --resume <run_id>:
-  path = ~/.claude/state/post-release-redeploy/<run_id>.json
+  path = $ONEX_STATE_DIR/state/post-release-redeploy/<run_id>.json
   IF not os.path.exists(path):
     EXIT 1 with "State file not found: {path}"
 
@@ -712,7 +712,7 @@ On any phase failure:
 
 ## Skill Result
 
-Written to `~/.claude/skill-results/{context_id}/post-release-redeploy.json`:
+Written to `$ONEX_STATE_DIR/skill-results/{context_id}/post-release-redeploy.json`:
 
 ```json
 {
@@ -801,4 +801,4 @@ Written to `~/.claude/skill-results/{context_id}/post-release-redeploy.json`:
 | `omniclaude/src/omniclaude/hooks/topics.py` | Phase 7 -- Kafka topic name extraction |
 | `omniclaude/src/omniclaude/publisher/__main__.py` | Phase 7 -- emit daemon PID file |
 | `omnibase_infra/docker/docker-compose.infra.yml` | Phase 6 -- runtime service discovery |
-| `~/.claude/plans/agile-purring-ullman.md` | Source runbook this skill codifies |
+| `$ONEX_STATE_DIR/plans/agile-purring-ullman.md` | Source runbook this skill codifies |

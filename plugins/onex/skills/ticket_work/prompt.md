@@ -572,7 +572,7 @@ After saving to Linear, also persist locally for hook access:
 def persist_contract_locally(ticket_id: str, contract: dict) -> None:
     """Persist contract to local filesystem for hook injection.
 
-    Path: ~/.claude/tickets/{ticket_id}/contract.yaml
+    Path: $ONEX_STATE_DIR/tickets/{ticket_id}/contract.yaml
     """
     import yaml
     from pathlib import Path

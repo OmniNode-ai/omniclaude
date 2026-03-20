@@ -59,7 +59,7 @@ human approval when groupings are ambiguous.
 
 ```
 # Run after linear-triage (uses its TriageReport)
-/linear-epic-org --triage-report ~/.claude/state/linear-triage/{run_id}.yaml
+/linear-epic-org --triage-report $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml
 
 # Run standalone (fetches orphans fresh from Linear)
 /linear-epic-org

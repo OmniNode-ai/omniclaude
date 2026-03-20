@@ -9,7 +9,7 @@ Your goal: find 2 concrete risks. Do not look for what's right. Look for what br
 gh pr diff {pr_number} --repo {repo}
 ```
 
-Also load TCB constraints from `~/.claude/tcb/{ticket_id}/bundle.json` if present.
+Also load TCB constraints from `$ONEX_STATE_DIR/tcb/{ticket_id}/bundle.json` if present.
 Use TCB constraints as your invariant checklist.
 
 ## Analyze the Diff
@@ -53,7 +53,7 @@ Post findings as a formal GitHub PR review (REQUEST_CHANGES if blocking_issue, C
 gh pr review {pr_number} --repo {repo} --comment --body "{formatted_findings}"
 ```
 
-Write JSON result to `~/.claude/skill-results/{context_id}/hostile-reviewer.json`:
+Write JSON result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`:
 ```json
 {
   "risks": [

@@ -81,7 +81,7 @@ def apply_label(fresh_record):
 mutate_pr(pr_key, action="apply_mergeability_label", run_id=run_id, fn=apply_label)
 ```
 
-Write result JSON to `~/.claude/skill-results/{context_id}/mergeability-gate.json`:
+Write result JSON to `$ONEX_STATE_DIR/skill-results/{context_id}/mergeability-gate.json`:
 ```json
 {
   "status": "<mergeable|needs-split|blocked>",

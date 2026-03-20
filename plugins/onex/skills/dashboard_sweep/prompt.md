@@ -57,11 +57,11 @@ Password:     in k8s secret omninode-service-roles (namespace: dev)
 ```
 
 Generate `run_id` = first 12 chars of a UUID4 (e.g. `3f8a1c9b0d42`).
-Create directory: `~/.claude/dashboard-sweep/{run_id}/`
-Create symlink: `~/.claude/dashboard-sweep/latest -> {run_id}/`
+Create directory: `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/`
+Create symlink: `$ONEX_STATE_DIR/dashboard-sweep/latest -> {run_id}/`
 
 If `--fix-only`:
-- Load triage from `~/.claude/dashboard-sweep/latest/triage.json`
+- Load triage from `$ONEX_STATE_DIR/dashboard-sweep/latest/triage.json`
 - Skip to Phase 3
 
 If `--dry-run`:
@@ -135,7 +135,7 @@ if stale_detected and deploy_flag:
         build_info = run(f"curl -sf {url}/api/build-info", capture=True).stdout
 ```
 
-Write freshness result to `~/.claude/dashboard-sweep/{run_id}/freshness.json`:
+Write freshness result to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/freshness.json`:
 ```json
 {
   "checked_at": "{ISO timestamp}",
@@ -174,7 +174,7 @@ mcp__playwright__browser_navigate(url="{url}{route}")
 mcp__playwright__browser_wait_for(event="networkidle", timeout=10000)
 # fallback: wait DOMContentLoaded + 2 s if networkidle times out
 mcp__playwright__browser_evaluate(script="window.scrollTo(0, document.body.scrollHeight)")
-mcp__playwright__browser_take_screenshot(full_page=true, save_as="~/.claude/dashboard-sweep/{run_id}/screenshots/{slug}.png")
+mcp__playwright__browser_take_screenshot(full_page=true, save_as="$ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/{slug}.png")
 console_errors = mcp__playwright__browser_console_messages()
 network_reqs   = mcp__playwright__browser_network_requests()
 snapshot       = mcp__playwright__browser_snapshot()
@@ -185,7 +185,7 @@ snapshot       = mcp__playwright__browser_snapshot()
 
 Save console errors:
 ```
-save to: ~/.claude/dashboard-sweep/{run_id}/console/{slug}.json
+save to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/console/{slug}.json
 format:  { "route": "/...", "errors": [...], "warnings": [...] }
 ```
 
@@ -247,7 +247,7 @@ Also flag if all numeric values on the page are identical (e.g. every metric sho
 
 ### 1.5 Recon Output
 
-Write `~/.claude/dashboard-sweep/{run_id}/recon.json`:
+Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json`:
 
 ```json
 {
@@ -259,7 +259,7 @@ Write `~/.claude/dashboard-sweep/{run_id}/recon.json`:
       "route": "/agents",
       "slug": "agents",
       "status": "EMPTY",
-      "screenshot_path": "~/.claude/dashboard-sweep/{run_id}/screenshots/agents.png",
+      "screenshot_path": "$ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/agents.png",
       "console_errors": [],
       "network_failures": [],
       "visible_text_sample": "No agents found. Connect your first agent to get started.",
@@ -351,7 +351,7 @@ Signs of `FLAG_GATE`:
 
 ### 2.3 Triage Output
 
-Write `~/.claude/dashboard-sweep/{run_id}/triage.json`:
+Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json`:
 
 ```json
 {
@@ -437,12 +437,12 @@ No upstream service or Kafka producer emits data for this view.
 
 ## Sweep Context
 Run ID: {run_id}
-Triage: ~/.claude/dashboard-sweep/{run_id}/triage.json
+Triage: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
 "
 )
 ```
 
-Record ticket ID in `~/.claude/dashboard-sweep/{run_id}/feature_gap_tickets.json`.
+Record ticket ID in `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/feature_gap_tickets.json`.
 
 ### 3.2 Agent Prompt Template
 
@@ -467,8 +467,8 @@ Repos:       {repos_likely_affected}
 ## Context
 Dashboard URL: {url}
 Sweep Run ID:  {run_id}
-Recon data:    ~/.claude/dashboard-sweep/{run_id}/recon.json
-Triage data:   ~/.claude/dashboard-sweep/{run_id}/triage.json
+Recon data:    $ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json
+Triage data:   $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
 
 ## Required Process
 You MUST follow the systematic-debugging skill (5 phases):
@@ -496,7 +496,7 @@ Create worktrees for each affected repo:
 - For TypeScript repos: cd ~/Code/omni_worktrees/OMN-5057/{repo}-{domain_id} && npx tsc --noEmit
 
 ## Output Contract
-Write fix summary to: ~/.claude/dashboard-sweep/{run_id}/fixes/{domain_id}.json
+Write fix summary to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json
 
 Format:
 {
@@ -614,7 +614,7 @@ gh pr merge --auto --squash {pr_number} --repo OmniNode-ai/{repo}
 
 ### 4.4 Update Fix Registry
 
-Update `~/.claude/dashboard-sweep/{run_id}/fixes/{domain_id}.json`:
+Update `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json`:
 - Set `pr_url` to PR URL
 - Set `linear_ticket` to created ticket ID
 - Set `status` to `pr_created`
@@ -724,7 +724,7 @@ Continue to Phase 5 (re-audit may not show fixes if containers still run old cod
 
 ### 4b.3 Emit Deploy Record
 
-Write `~/.claude/dashboard-sweep/{run_id}/deploy.json`:
+Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/deploy.json`:
 
 ```json
 {
@@ -779,7 +779,7 @@ If PRs are NOT yet merged (still pending CI):
 
 ### 5.3 Re-audit Execution
 
-Re-run Phase 1 Playwright audit. Save to `~/.claude/dashboard-sweep/{run_id}/reaudit.json`.
+Re-run Phase 1 Playwright audit. Save to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/reaudit.json`.
 
 ### 5.4 Comparison
 
@@ -807,7 +807,7 @@ for page in all_routes:
 ```
 Stop all further iteration. Create a LINEAR ticket with `priority=1` for the regression.
 
-Write `~/.claude/dashboard-sweep/{run_id}/comparison.md`.
+Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/comparison.md`.
 
 ---
 
@@ -845,7 +845,7 @@ Each iteration follows the full Phase 3 → Phase 4 → Phase 4b (if `--deploy`)
 
 ## Final Report Generation
 
-Write `~/.claude/dashboard-sweep/{run_id}/report.md`:
+Write `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/report.md`:
 
 ```markdown
 # Dashboard Sweep Report
@@ -886,12 +886,12 @@ Write `~/.claude/dashboard-sweep/{run_id}/report.md`:
 - Deploy status: {local-restarted | cloud-redeployed | declined | skipped}
 
 ## Artifacts
-- Recon: ~/.claude/dashboard-sweep/{run_id}/recon.json
-- Triage: ~/.claude/dashboard-sweep/{run_id}/triage.json
-- Re-audit: ~/.claude/dashboard-sweep/{run_id}/reaudit.json
-- Fixes: ~/.claude/dashboard-sweep/{run_id}/fixes/
-- Deploy: ~/.claude/dashboard-sweep/{run_id}/deploy.json (if --deploy set)
-- Screenshots: ~/.claude/dashboard-sweep/{run_id}/screenshots/
+- Recon: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json
+- Triage: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
+- Re-audit: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/reaudit.json
+- Fixes: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/
+- Deploy: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/deploy.json (if --deploy set)
+- Screenshots: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/
 ```
 
 Print the report path and key metrics to stdout.
@@ -927,8 +927,8 @@ When `DRY_RUN=true`:
 [dashboard-sweep] Would create {n} feature-gap tickets
 [dashboard-sweep] Would create {n} PRs across repos: {repos}
 [dashboard-sweep] Deploy: would {restart local containers | trigger cloud redeploy} (skipped in dry run)
-[dashboard-sweep] Triage written to: ~/.claude/dashboard-sweep/{run_id}/triage.json
-[dashboard-sweep] Screenshots written to: ~/.claude/dashboard-sweep/{run_id}/screenshots/
+[dashboard-sweep] Triage written to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
+[dashboard-sweep] Screenshots written to: $ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/
 ```
 
 Screenshots and JSON artifacts are written even in dry run (observation is always safe).

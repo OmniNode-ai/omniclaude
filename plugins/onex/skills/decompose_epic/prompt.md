@@ -37,7 +37,7 @@ if "--repos" in args:
 # Mode detection
 mode = "B" if repos_arg is not None else "A"
 
-RESULT_DIR  = f"~/.claude/skill-results/{epic_id}"
+RESULT_DIR  = f"$ONEX_STATE_DIR/skill-results/{epic_id}"
 RESULT_FILE = f"{RESULT_DIR}/decompose-epic.json"
 ```
 
@@ -77,7 +77,7 @@ if not epic.description or not epic.description.strip():
 import os, yaml
 from pathlib import Path
 
-HOME_MANIFEST = Path("~/.claude/epic-team/repo_manifest.yaml").expanduser()
+HOME_MANIFEST = Path("$ONEX_STATE_DIR/epic-team/repo_manifest.yaml").expanduser()
 REPO_MANIFEST  = Path("plugins/onex/skills/epic-team/repo_manifest.yaml")
 
 if HOME_MANIFEST.exists():
@@ -346,7 +346,7 @@ Same as Mode A Step 6.
 
 ## ModelSkillResult Path
 
-**Exact path**: `~/.claude/skill-results/{epic_id}/decompose-epic.json`
+**Exact path**: `$ONEX_STATE_DIR/skill-results/{epic_id}/decompose-epic.json`
 
 Where `{epic_id}` is the positional argument passed to the skill (e.g., `OMN-2522`).
 
@@ -374,11 +374,11 @@ The `context_id` used as the directory name equals `epic_id` exactly. Create the
 
 ## Caller Integration
 
-**Callers read the ModelSkillResult** from `~/.claude/skill-results/{epic_id}/decompose-epic.json` after the skill completes:
+**Callers read the ModelSkillResult** from `$ONEX_STATE_DIR/skill-results/{epic_id}/decompose-epic.json` after the skill completes:
 
 ```python
 # In ticket-pipeline (cross-repo split handler):
-result_path = f"~/.claude/skill-results/{parent_epic_id}/decompose-epic.json"
+result_path = f"$ONEX_STATE_DIR/skill-results/{parent_epic_id}/decompose-epic.json"
 result = json.load(open(Path(result_path).expanduser()))
 created_tickets = result["created_tickets"]   # [{"id": ..., "title": ..., "repo": ...}]
 repos_affected  = result["repos_affected"]    # ["omniclaude", "omnibase_core"]

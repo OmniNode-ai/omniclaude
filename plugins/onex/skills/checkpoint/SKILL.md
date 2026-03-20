@@ -60,7 +60,7 @@ Checkpoints are backed by the `omnibase_infra` checkpoint node infrastructure (O
 Checkpoints are stored as YAML files under the user's home directory:
 
 ```
-~/.claude/checkpoints/{ticket_id}/{run_id}/phase_{N}_{name}_a{attempt}.yaml
+$ONEX_STATE_DIR/checkpoints/{ticket_id}/{run_id}/phase_{N}_{name}_a{attempt}.yaml
 ```
 
 Where:
@@ -72,10 +72,10 @@ Where:
 
 Example:
 ```
-~/.claude/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_1_implement_a1.yaml
-~/.claude/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a1.yaml
-~/.claude/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a2.yaml  # retry
-~/.claude/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_3_create_pr_a1.yaml
+$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_1_implement_a1.yaml
+$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a1.yaml
+$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_2_local_review_a2.yaml  # retry
+$ONEX_STATE_DIR/checkpoints/OMN-2144/e3a1b2c4-d5f6-5a78-9bcd-ef1234567890/phase_3_create_pr_a1.yaml
 ```
 
 > **Note**: Short run IDs (e.g., `a1b2c3d4`) are normalized to deterministic UUID v5 values

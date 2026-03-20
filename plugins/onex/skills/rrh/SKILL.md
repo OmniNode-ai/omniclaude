@@ -189,7 +189,7 @@ claude -p "Invoke the rrh skill for OMN-1234" \
 
 `ONEX_RUN_ID` is mandatory and written into every RRH artifact (`ContractRRHResult.run_id`).
 This is the primary correlation key for the audit trail stored under
-`~/.claude/rrh-artifacts/{ticket_id}/`.
+`$ONEX_STATE_DIR/rrh-artifacts/{ticket_id}/`.
 
 The RRH nodes run locally (no network auth required beyond what `omnibase_infra` nodes need).
 When the ONEX runtime nodes are not installed, the adapter falls back to QUARANTINE mode and

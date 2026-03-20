@@ -27,7 +27,7 @@ args:
 
 # Record Friction
 
-Records a friction event to `~/.claude/state/friction/friction.ndjson`.
+Records a friction event to `$ONEX_STATE_DIR/state/friction/friction.ndjson`.
 
 Friction events are the deterministic backbone of the friction tracking system
 (OMN-5442). Use this skill when a skill run is blocked by an unresolved external
@@ -125,7 +125,7 @@ Friction recorded:
   severity: <severity> (weight: <weight>)
   ticket:   <ticket_id or "(none — no ticket context resolved)">
 
-Registry: ~/.claude/state/friction/friction.ndjson
+Registry: $ONEX_STATE_DIR/state/friction/friction.ndjson
 
 <if severity == high>
 Note: A single 'high' event (score=9) crosses the threshold. Run /friction-triage
@@ -141,7 +141,7 @@ when `count >= 3` OR `severity_score >= 9`.
 
 ## Registry Format
 
-Each line in `~/.claude/state/friction/friction.ndjson` is a JSON object:
+Each line in `$ONEX_STATE_DIR/state/friction/friction.ndjson` is a JSON object:
 
 ```json
 {

@@ -161,9 +161,9 @@ Every finding is a structured object:
 4. IF no findings → emit ModelSkillResult(status=clean), exit
 
 4a. FINGERPRINT + DEDUP:
-   Compute fingerprints; load ~/.claude/aislop-sweep/latest/findings.json
+   Compute fingerprints; load $ONEX_STATE_DIR/aislop-sweep/latest/findings.json
    Mark finding.new = fingerprint not in prior_fingerprints
-   Save to ~/.claude/aislop-sweep/<run_id>/findings.json
+   Save to $ONEX_STATE_DIR/aislop-sweep/<run_id>/findings.json
 
 4b. GROUP findings:
    Group key = (repo, check_family, path)

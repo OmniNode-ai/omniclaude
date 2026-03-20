@@ -189,7 +189,7 @@ claude -p "Run ticket-pipeline for OMN-1234" \
 ### Authentication in headless mode
 
 `ONEX_RUN_ID` is mandatory. It serves as the correlation key written to the pipeline ledger
-(`~/.claude/pipelines/ledger.json`) and state file (`~/.claude/pipelines/{ticket_id}/state.yaml`).
+(`$ONEX_STATE_DIR/pipelines/ledger.json`) and state file (`$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml`).
 Without it the pipeline cannot distinguish runs and will refuse to start.
 
 MCP server auth is sourced from the environment at startup:
@@ -199,7 +199,7 @@ MCP server auth is sourced from the environment at startup:
 
 ### Resume after rate limits
 
-Checkpoints are written to `~/.claude/pipelines/{ticket_id}/state.yaml` after every phase
+Checkpoints are written to `$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml` after every phase
 transition. If the `claude -p` process is interrupted (rate limit, network drop, process kill),
 resume from the last completed phase:
 
@@ -316,7 +316,7 @@ contradicts an injected decision before proceeding. Contradictions trigger a Sla
 
 After loading architectural decisions:
 
-1. Check `~/.claude/tcb/{ticket_id}/bundle.json`
+1. Check `$ONEX_STATE_DIR/tcb/{ticket_id}/bundle.json`
 2. If exists and fresh (not stale): load the bundle
 3. If stale or missing: invoke `@skills/generate-tcb` with `ticket_id` (blocking -- wait for completion)
 4. Prepend TCB markdown summary to the working context under this header:
@@ -398,7 +398,7 @@ ticket-pipeline OMN-XXXX
         → 'reject' reply: revert to hard-stop behavior, notify Slack
 ```
 
-**Cross-repo detection heuristic**: Implementation touches files in repos not matching the ticket's labeled repo (from `~/.claude/epic-team/repo_manifest.yaml`).
+**Cross-repo detection heuristic**: Implementation touches files in repos not matching the ticket's labeled repo (from `$ONEX_STATE_DIR/epic-team/repo_manifest.yaml`).
 
 ### Phase 2: local_review
 
@@ -414,7 +414,7 @@ ticket-pipeline OMN-XXXX
 
 **Action:**
 1. Invoke `@skills/hostile-reviewer` with PR number, repo, and ticket_id
-2. Read result from `~/.claude/skill-results/{context_id}/hostile-reviewer.json`
+2. Read result from `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`
 3. If `overall_verdict == "blocking_issue"`:
    - Re-enter implementation phase (set phase back to `implement`)
    - Attach hostile reviewer findings to ticket context as "blocking findings"
@@ -432,7 +432,7 @@ ticket-pipeline OMN-XXXX
 **Action:**
 1. If PR does not exist yet: skip (gate runs after create_pr in this case; see Phase 3.5)
 2. If PR exists: invoke `@skills/mergeability-gate` with the PR number and repo
-3. Read result from `~/.claude/skill-results/{context_id}/mergeability-gate.json`
+3. Read result from `$ONEX_STATE_DIR/skill-results/{context_id}/mergeability-gate.json`
 4. If `status == "blocked"`: HALT pipeline, emit `phase=mergeability_gate outcome=blocked reasons=...` to ledger, post blocking reasons as PR comment, mark ticket state "blocked"
 5. If `status == "needs-split"`: Post advisory comment with split reasons, continue (do not block — agent decides whether to split)
 6. If `status == "mergeable"`: advance to create_pr
@@ -498,7 +498,7 @@ See `@_lib/cdqa-gate/helpers.md` for the full gate protocol, bypass flow, and re
   - `cdqa-bypass {ticket_id} <justification> <follow_up_ticket>` → downgrade to WARN, record bypass, advance
   - Hold/cancel/timeout → exit pipeline with `status: held` (ledger NOT cleared; bypass the block to resume)
 
-**Gate result log**: appended to `~/.claude/skill-results/{context_id}/cdqa-gate-log.json`
+**Gate result log**: appended to `$ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json`
 
 **Anti-pattern — soft-pass**: retrying a gate without fixing the underlying issue is invalid.
 A retry-to-fish-for-PASS must not be used. Fix the issue or use the explicit bypass protocol.
@@ -590,7 +590,7 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 
 ## Cross-Repo Auto-Split
 
-**Requires**: `~/.claude/epic-team/repo_manifest.yaml` (OMN-2519)
+**Requires**: `$ONEX_STATE_DIR/epic-team/repo_manifest.yaml` (OMN-2519)
 
 ### Detection
 
@@ -626,7 +626,7 @@ Task(
     Invoke: Skill(skill=\"onex:decompose-epic\",
       args=\"{parent_epic_id} --repos {comma_separated_repo_names}\")
 
-    Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/decompose-epic.json
+    Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
     Report back with: created_tickets (list), repos_affected."
 )
 ```
@@ -719,18 +719,18 @@ pr_url = state.pr_url         # str | None
 
 ## State Management
 
-Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
+Pipeline state is stored at `$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
 
 ### Ticket-Run Ledger
 
-Prevents duplicate pipeline runs. Stored at `~/.claude/pipelines/ledger.json`:
+Prevents duplicate pipeline runs. Stored at `$ONEX_STATE_DIR/pipelines/ledger.json`:
 
 ```json
 {
   "OMN-2356": {
     "active_run_id": "run-abc123",
     "started_at": "2026-02-21T14:00:00Z",
-    "log": "~/.claude/pipeline-logs/OMN-2356.log"
+    "log": "$ONEX_STATE_DIR/pipeline-logs/OMN-2356.log"
   }
 }
 ```
@@ -946,7 +946,7 @@ skill call). See `@_lib/cdqa-gate/helpers.md` for the full gate spec.
 #    → failure / cancelled: BLOCK → post HIGH_RISK bypass gate, await reply
 #
 # 4. Append gate result to:
-#    ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+#    $ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json
 #
 # 5. All gates PASS or bypassed: update state.yaml phase=auto_merge
 #    Any BLOCK + held/timeout: update state.yaml phase=cdqa_gate_held, clear ledger, exit
@@ -1009,6 +1009,6 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `slack-gate` skill (HIGH_RISK merge gate, OMN-2521)
 - `decision-store` skill (OMN-2768) — DecisionContextLoader and check-conflicts
 - `NodeDecisionStoreQueryCompute` (OMN-2767) — decision query node used in Phase 0.5/0.6
-- `~/.claude/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)
-- `~/.claude/pipelines/ledger.json` (ticket-run ledger)
+- `$ONEX_STATE_DIR/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)
+- `$ONEX_STATE_DIR/pipelines/ledger.json` (ticket-run ledger)
 - Linear MCP tools (`mcp__linear-server__*`)

@@ -88,7 +88,7 @@ plugins/onex/skills/golden_path_validate/run-golden-path <decl-json-or-file>
 
 ## Evidence Artifact
 
-**Path:** `~/.claude/golden-path/{YYYY-MM-DD}/{run_id}/{node_id}.json`
+**Path:** `$ONEX_STATE_DIR/golden-path/{YYYY-MM-DD}/{run_id}/{node_id}.json`
 
 The `YYYY-MM-DD` is extracted from `emitted_at` — used by `close-day` to detect
 today's runs.

@@ -270,7 +270,7 @@ git commit -m "feat: add specific feature"
 
 Output schema from `linear-triage`. Written to disk for review before apply phase.
 
-Location: `~/.claude/state/linear-triage/{run_id}.yaml`
+Location: `$ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml`
 
 ### Schema
 

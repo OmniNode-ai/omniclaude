@@ -19,7 +19,7 @@ mode: full
 
 # Set Active Run
 
-Sets the active run ID in the session state index (`~/.claude/state/session.json`).
+Sets the active run ID in the session state index (`$ONEX_STATE_DIR/state/session.json`).
 
 This is used when multiple concurrent pipelines are running and you need to designate which run is the "active" one for interactive commands.
 

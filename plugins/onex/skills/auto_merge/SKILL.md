@@ -36,7 +36,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/auto_merge.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json"
     fields:
       - status: "success" | "gated" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "merged" | "held" | "timeout" | null  # domain-specific granularity
@@ -93,7 +93,7 @@ or timed out.
 paths — whether called from ticket-pipeline or directly.**
 
 When invoked from `ticket-pipeline`: CDQA gates run in Phase 5.5 before this skill is
-dispatched. The gate log is written to `~/.claude/skill-results/{context_id}/cdqa-gate-log.json`.
+dispatched. The gate log is written to `$ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json`.
 
 When invoked directly (not from ticket-pipeline): this skill MUST run the CDQA gates itself
 before executing the merge mutation.
@@ -101,7 +101,7 @@ before executing the merge mutation.
 ### Direct Invocation: CDQA gate check
 
 ```
-1. Read: ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+1. Read: $ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json
    If record exists with overall=PASS or overall=bypassed AND pr_number matches:
      → skip re-run, proceed to Step 1
    If no matching record:
@@ -233,7 +233,7 @@ Gate expires in {gate_timeout_hours}h.
 
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
-Write to: `~/.claude/skill-results/{context_id}/auto_merge.json`
+Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json`
 
 | Field | Value |
 |-------|-------|
@@ -246,7 +246,7 @@ Write to: `~/.claude/skill-results/{context_id}/auto_merge.json`
 | `ticket_id` | Linear ticket ID (e.g. `"OMN-3262"`) or `null` |
 | `extra` | `{"merge_commit": str, "strategy": str, "ticket_close_status": str}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/auto_merge.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`$ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 

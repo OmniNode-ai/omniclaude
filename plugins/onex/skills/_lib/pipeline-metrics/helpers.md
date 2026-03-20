@@ -24,7 +24,7 @@
 ## `emit_phase_metric(ticket_id, epic_id, phase, outcome, iteration_count, phase_elapsed_ms, total_elapsed_ms, hostile_block_count=0, model_id="unknown", producer_kind="unknown")` — Procedure
 
 Emit to Kafka if FULL_ONEX tier (use `@_lib/tier-routing/helpers.md` for tier check).
-If STANDALONE tier: write to `~/.claude/metrics/{ticket_id}/pipeline_metrics.jsonl` (append mode).
+If STANDALONE tier: write to `$ONEX_STATE_DIR/metrics/{ticket_id}/pipeline_metrics.jsonl` (append mode).
 
 Always write to local file regardless of tier (local file is the fallback + debug log).
 

@@ -285,7 +285,7 @@ ci-fix-pipeline complete
 
 ## ModelSkillResult Output
 
-Emits to `~/.claude/skill-results/{context_id}/ci-fix-pipeline.json`
+Emits to `$ONEX_STATE_DIR/skill-results/{context_id}/ci-fix-pipeline.json`
 where `{context_id}` is the Claude session ID (from `$CLAUDE_SESSION_ID` env var) or `default`
 if the session ID is unavailable:
 
@@ -447,7 +447,7 @@ Provides:
 - `finalize_with_error(run_state, error)` -- Record error and notify
 - `fetch_ci_status(pr, repo, branch)` -- Wrapper around `_bin/ci-status.sh`
 - `wait_for_ci_rerun(pr, repo, branch, prev_run_id)` -- Inbox-wait for new CI run
-- `send_inbox_notification(run_state, message)` -- Write to `~/.claude/inbox/`
+- `send_inbox_notification(run_state, message)` -- Write to `$ONEX_STATE_DIR/inbox/`
 - `save_repair_state(run_state)` / `load_repair_state(run_id)` -- State persistence
 
 ### Self-Healing ModelSkillResult
@@ -486,7 +486,7 @@ To verify self-healing works end-to-end:
    - If still failing, attempt 2 uses `broad_lint_fix`
    - If still failing, attempt 3 uses `regenerate_and_fix`
    - Inbox notification sent on success or exhaustion
-   - State persisted to `~/.claude/state/ci-repair/`
+   - State persisted to `$ONEX_STATE_DIR/state/ci-repair/`
 
 ## See Also
 

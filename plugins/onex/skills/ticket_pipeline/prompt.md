@@ -44,7 +44,7 @@ if "--skip-to" in args:
 
 ## Pipeline State Schema
 
-State is stored at `~/.claude/pipelines/{ticket_id}/state.yaml`:
+State is stored at `$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml`:
 
 ```yaml
 pipeline_state_version: "3.0"
@@ -178,7 +178,7 @@ When `/ticket-pipeline {ticket_id}` is invoked:
 
 ### 0. Check Ticket-Run Ledger
 
-Before acquiring the per-ticket lock, check the global ledger at `~/.claude/pipelines/ledger.json`
+Before acquiring the per-ticket lock, check the global ledger at `$ONEX_STATE_DIR/pipelines/ledger.json`
 to prevent duplicate pipeline runs across sessions. If an active entry exists for this ticket_id,
 post "already running ({run-id})" to Slack and exit.
 
@@ -460,7 +460,7 @@ _state_file_existed = state_path.exists() and not force_run
 save_state(state, state_path)
 
 # Write ticket-run ledger entry (prevents duplicate pipeline runs)
-# Stored at ~/.claude/pipelines/ledger.json
+# Stored at $ONEX_STATE_DIR/pipelines/ledger.json
 ledger_path = Path.home() / ".claude" / "pipelines" / "ledger.json"
 try:
     existing_ledger = json.loads(ledger_path.read_text()) if ledger_path.exists() else {}
@@ -1639,7 +1639,7 @@ def execute_phase(phase_name, state):
        sys.path.insert(0, str(lib_dir))
    from preexisting_fix_lock import PreexistingFixLock
 
-   fix_lock = PreexistingFixLock()  # uses ~/.claude/pipeline-locks/preexisting/
+   fix_lock = PreexistingFixLock()  # uses $ONEX_STATE_DIR/pipeline-locks/preexisting/
    locked_issues = []    # issues successfully locked (will be fixed)
    skipped_issues = []   # issues locked by another run (skip and log)
 
@@ -1790,7 +1790,7 @@ def execute_phase(phase_name, state):
 - `phases.pre_flight.started_at`
 - `phases.pre_flight.completed_at`
 - `phases.pre_flight.artifacts` (auto_fixed_count, deferred_ticket_ids, deferred_fingerprints, dedup_lock_skipped)
-- `~/.claude/pipelines/ledger.json` (entry created)
+- `$ONEX_STATE_DIR/pipelines/ledger.json` (entry created)
 
 **Exit conditions:**
 - **Completed:** pre-commit and mypy issues resolved or deferred (AUTO-ADVANCE)
@@ -2604,7 +2604,7 @@ implementation including NEEDS_GATE predicate, one-shot merge check, and excepti
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
 - `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged` | `held`, merged_at)
-- `~/.claude/pipelines/ledger.json` (entry cleared on merged)
+- `$ONEX_STATE_DIR/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
 - **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
@@ -2733,7 +2733,7 @@ and auto-merge asynchronously.
        Invoke: Skill(skill=\"onex:pr-watch\",
          args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}{' --fix-nits' if auto_fix_nits else ''}\")
 
-       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/pr-watch.json
+       Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json
        Report back with: status (approved|capped|timeout|failed), pr_review_cycles_used, watch_duration_hours."
    )
    ```
@@ -2838,7 +2838,7 @@ integration_debt: true|false
 
 **Gate Result Recording:**
 
-Append to `~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+Append to `$ONEX_STATE_DIR/skill-results/{context_id}/integration-verification-gate-log.json`
 following the schema in `_lib/integration-verification-gate/helpers.md`.
 
 **Bypass Protocol:**
@@ -2855,7 +2855,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 - `phases.integration_verification_gate.started_at`
 - `phases.integration_verification_gate.completed_at`
 - `phases.integration_verification_gate.artifacts` (integration_gate_status, integration_gate_stage, nodes_blocked, nodes_warned, integration_debt)
-- `~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+- `$ONEX_STATE_DIR/skill-results/{context_id}/integration-verification-gate-log.json`
 
 **Exit conditions:**
 - **Completed (pass):** No integration-relevant files changed, OR all nodes have passing fixtures
@@ -2983,7 +2983,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
        The HIGH_RISK gate will fire and wait for operator 'merge' reply.
        After gate approval: gh pr merge {pr_url} --squash
        Any 'already merged' error from gh is caught and treated as success.
-       Read the ModelSkillResult from ~/.claude/skill-results/{context_id}/auto-merge.json
+       Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/auto-merge.json
        Report back with: status (merged|held|failed), merged_at, branch_deleted."
    )
 
@@ -3014,7 +3014,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
 - `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged` | `held`, merged_at, branch_deleted)
-- `~/.claude/pipelines/ledger.json` (entry cleared on merged)
+- `$ONEX_STATE_DIR/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
 - **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
@@ -3132,7 +3132,7 @@ When `/ticket-pipeline {ticket_id}` is invoked on an existing pipeline:
 
 ## Concurrency (R12)
 
-- **One active run per ticket:** Lock file at `~/.claude/pipelines/{ticket_id}/lock`
+- **One active run per ticket:** Lock file at `$ONEX_STATE_DIR/pipelines/{ticket_id}/lock`
 - **Lock contents:** `{run_id, pid, started_at, started_at_epoch, ticket_id}`
 - **Same run_id:** Resumes (lock check passes)
 - **Different run_id:** Blocks with Slack notification

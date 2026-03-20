@@ -30,7 +30,7 @@ mode: full
 
 ## Overview
 
-Reads `~/.claude/pipelines/*/state.yaml` files sorted by modification time and shows what was running before a crash. Use this after any unexpected session end to quickly orient yourself.
+Reads `$ONEX_STATE_DIR/pipelines/*/state.yaml` files sorted by modification time and shows what was running before a crash. Use this after any unexpected session end to quickly orient yourself.
 
 The skill scans all pipeline state directories, extracts ticket ID, current phase, branch name, and modification time, then presents them newest-first so the most recently active work is immediately visible. Combine with `--in-progress` to narrow down to pipelines that still need action.
 
@@ -117,7 +117,7 @@ Columns:
 
 ## Pipeline State Contract
 
-Pipeline state files (`~/.claude/pipelines/*/state.yaml`) should be parsed as
+Pipeline state files (`$ONEX_STATE_DIR/pipelines/*/state.yaml`) should be parsed as
 `ModelPipelineState` from `omnibase_core.models.pipeline`:
 
 ```python

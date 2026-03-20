@@ -71,7 +71,7 @@ and create_pr phases.
 - PR is rebased on current main/target branch
 
 ## Output
-Write result to `~/.claude/skill-results/{context_id}/mergeability-gate.json`:
+Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/mergeability-gate.json`:
 ```json
 {
   "status": "mergeable | needs-split | blocked",

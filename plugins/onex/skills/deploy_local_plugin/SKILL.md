@@ -100,7 +100,7 @@ Deploy only the named skills (comma-separated). Example: `--skill local-review,p
 Deploy all skills EXCEPT the named ones (comma-separated). Example: `--exclude debug-only-skill,experimental-feature`
 
 ### Selection Persistence
-Selections are persisted to `~/.claude/plugin-skill-selection.json`. Format:
+Selections are persisted to `$ONEX_STATE_DIR/plugin-skill-selection.json`. Format:
 ```json
 {
   "included": ["skill-a", "skill-b"],

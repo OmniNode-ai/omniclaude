@@ -32,7 +32,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/local-review.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/local-review.json"
     fields:
       - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "clean" | "clean_with_nits" | "max_iterations_reached" | null  # domain-specific granularity
@@ -461,7 +461,7 @@ across disconnections and re-starts. Prior dead ends are surfaced before new inv
 ### Notes File Location
 
 ```
-~/.claude/review-notes/{timestamp}-{branch}.md
+$ONEX_STATE_DIR/review-notes/{timestamp}-{branch}.md
 ```
 
 Where `{timestamp}` is the session start in `YYYYMMDD-HHMMSS` format and `{branch}` is the
@@ -516,7 +516,7 @@ Load `prompt.md` only if you need reference details for edge case handling or im
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
 When invoked as a composable sub-skill (from ticket-pipeline, epic-team, or other orchestrators),
-write to: `~/.claude/skill-results/{context_id}/local-review.json`
+write to: `$ONEX_STATE_DIR/skill-results/{context_id}/local-review.json`
 
 | Field | Value |
 |-------|-------|
@@ -526,7 +526,7 @@ write to: `~/.claude/skill-results/{context_id}/local-review.json`
 | `run_id` | Correlation ID |
 | `extra` | `{"iterations_run": int, "issues_remaining": {"critical": int, "major": int, "minor": int, "nit": int}}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/local-review.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`$ONEX_STATE_DIR/skill-results/{context_id}/local-review.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 

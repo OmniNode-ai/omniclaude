@@ -25,7 +25,7 @@ Run the gap detection probe across all repos touched by the epic.
 /gap detect --epic OMN-XXXX
 ```
 
-This produces a report at `~/.claude/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
+This produces a report at `$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
 The detect phase runs all 11 probe categories and emits findings with fingerprints,
 confidence levels, and severity ratings.
 
@@ -105,7 +105,7 @@ Review the created tickets and prioritize them in the current or next sprint.
 | Step | Command | Purpose |
 |------|---------|---------|
 | 1 | `/gap detect --epic OMN-XXXX` | Scan for integration gaps |
-| 2 | Review `~/.claude/gap-analysis/{epic_id}/{run_id}.md` | Assess findings |
+| 2 | Review `$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md` | Assess findings |
 | 3 | `/gap fix --latest` | Auto-fix eligible findings |
 | 4 | `/gap fix --latest --choose GAP-id=A,...` | Resolve GATE findings |
 | 5 | `/gap cycle --resume --verify` | Verify fixes and run golden path |
@@ -116,7 +116,7 @@ Review the created tickets and prioritize them in the current or next sprint.
 If the workflow is interrupted at any step, resume from the last completed phase:
 
 ```
-/gap cycle --resume ~/.claude/gap-cycle/{epic_id}/{run_id}/summary.json
+/gap cycle --resume $ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/summary.json
 ```
 
 The cycle subcommand reads `summary.json` to determine which phases have completed

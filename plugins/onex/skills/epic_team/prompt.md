@@ -26,7 +26,7 @@ force_kill   = "--force-kill"       in args
 force_unmatched = "--force-unmatched" in args
 dry_run      = "--dry-run"          in args
 
-STATE_DIR  = f"~/.claude/epics/{epic_id}"
+STATE_DIR  = f"$ONEX_STATE_DIR/epics/{epic_id}"
 STATE_FILE = f"{STATE_DIR}/state.yaml"
 REVOKED_FILE = f"{STATE_DIR}/revoked_runs.yaml"
 ```
@@ -432,7 +432,7 @@ if len(tickets) == 0:
     Run ID: {run_id}
     Invoke: Skill(skill="onex:decompose-epic", args="{epic_id}")
 
-    Read the ModelSkillResult from ~/.claude/skill-results/{run_id}/decompose-epic.json
+    Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{run_id}/decompose-epic.json
     Report back with: created_tickets (list of ticket IDs and titles), count."""
     )
     created_tickets = decompose_result.get("created_tickets", [])
@@ -673,10 +673,10 @@ After child tickets are confirmed and integration branches created:
 
 1. Build `repos_in_scope` from the collision_report or ticket contract repos
 2. Invoke `@skills/planning-context-resolver` with `epic_id` and `repos_in_scope`
-3. Read `~/.claude/epics/{epic_id}/planning_context.yaml`
+3. Read `$ONEX_STATE_DIR/epics/{epic_id}/planning_context.yaml`
 4. If `risk_band == "Critical"`: pause for Slack gate (resolver handles the gate — check for existing gate)
 5. If any invariant has `status == "unresolved"`: pause for Slack gate (resolver handles the gate)
-6. Set `PLANNING_CONTEXT_PATH=~/.claude/epics/{epic_id}/planning_context.yaml` in dispatch env
+6. Set `PLANNING_CONTEXT_PATH=$ONEX_STATE_DIR/epics/{epic_id}/planning_context.yaml` in dispatch env
 7. Proceed to collision detection and ticket dispatch
 
 ---
@@ -695,7 +695,7 @@ all_ticket_ids = [tid for _, tid in [t for wave in waves for t in wave]]
 collision_result = detect_collisions(all_ticket_ids, epic_id)
 
 # Write collision report
-write_json(f"~/.claude/epics/{epic_id}/collision_report.json", collision_result)
+write_json(f"$ONEX_STATE_DIR/epics/{epic_id}/collision_report.json", collision_result)
 
 # Post LOW_RISK Slack notification (no gate required)
 n_independent = len(collision_result["independent"])
@@ -1084,7 +1084,7 @@ if integration_branches:
         # for repo in repos_affected:
         #     merge_integration_branch_to_main(epic_id, repo)
     else:
-        print(f"Integration tests FAILED. Review ~/.claude/epics/{epic_id}/integration_test_results.txt")
+        print(f"Integration tests FAILED. Review $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt")
 
     # Mark epic as Done in Linear
     # linear_update_issue(epic_id, state="Done")
@@ -1132,7 +1132,7 @@ if not any(os.path.isdir(os.path.join(cwd, m)) for m in expected_markers):
 Check whether this run has been revoked:
 
 ```python
-REVOKED_FILE = f"~/.claude/epics/{epic_id}/revoked_runs.yaml"
+REVOKED_FILE = f"$ONEX_STATE_DIR/epics/{epic_id}/revoked_runs.yaml"
 revoked_data = load_yaml(REVOKED_FILE) or {{"revoked": []}}
 if "{run_id}" in revoked_data["revoked"]:
     print(f"Run {run_id} has been revoked. Exiting.")
@@ -1415,7 +1415,7 @@ SendMessage(
 
 ## State File Schema
 
-### `~/.claude/epics/{epic_id}/state.yaml`
+### `$ONEX_STATE_DIR/epics/{epic_id}/state.yaml`
 
 ```yaml
 # --- Identity ---
@@ -1490,7 +1490,7 @@ ticket_results:                    # ticket_id -> {status, pr_url, branch} (from
 # ticket_status_map: {}  # no longer written
 ```
 
-### `~/.claude/epics/{epic_id}/revoked_runs.yaml`
+### `$ONEX_STATE_DIR/epics/{epic_id}/revoked_runs.yaml`
 
 Workers check this file during startup validation. If their `run_id` appears here, they self-terminate immediately.
 
