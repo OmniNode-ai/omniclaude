@@ -75,7 +75,9 @@ def store_intent_in_correlation(
     """
     try:
         if state_dir is None:
-            state_dir = Path.home() / ".claude" / "hooks" / ".state"
+            from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+            state_dir = ensure_state_dir("hooks", ".state")
 
         state_dir.mkdir(parents=True, exist_ok=True)
         state_file = Path(state_dir) / "correlation_id.json"
@@ -118,7 +120,9 @@ def get_intent_from_correlation(
     """
     try:
         if state_dir is None:
-            state_dir = Path.home() / ".claude" / "hooks" / ".state"
+            from plugins.onex.hooks.lib.onex_state import state_path as _state_path
+
+            state_dir = _state_path("hooks", ".state")
 
         state_file = Path(state_dir) / "correlation_id.json"
         if not state_file.exists():

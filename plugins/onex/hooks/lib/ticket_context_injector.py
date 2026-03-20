@@ -63,8 +63,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default tickets directory
-DEFAULT_TICKETS_DIR = Path.home() / ".claude" / "tickets"
+# Default tickets directory — resolved lazily via ONEX_STATE_DIR
+DEFAULT_TICKETS_DIR: Path | None = None
+
+
+def _get_default_tickets_dir() -> Path:
+    """Return the default tickets directory, resolved lazily."""
+    global DEFAULT_TICKETS_DIR
+    if DEFAULT_TICKETS_DIR is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        DEFAULT_TICKETS_DIR = state_path("tickets")
+    return DEFAULT_TICKETS_DIR
 
 
 # =============================================================================
@@ -154,7 +164,7 @@ def find_active_ticket(tickets_dir: Path | None = None) -> str | None:
         "If this fires repeatedly, check session-start.sh CWD extraction logic."
     )
     try:
-        search_dir = tickets_dir or DEFAULT_TICKETS_DIR
+        search_dir = tickets_dir or _get_default_tickets_dir()
 
         if not search_dir.exists():
             logger.debug(f"Tickets directory does not exist: {search_dir}")
@@ -220,7 +230,7 @@ def build_ticket_context(
         It handles all errors gracefully and will never raise.
     """
     try:
-        search_dir = tickets_dir or DEFAULT_TICKETS_DIR
+        search_dir = tickets_dir or _get_default_tickets_dir()
         contract_path = search_dir / ticket_id / "contract.yaml"
 
         if not contract_path.exists():

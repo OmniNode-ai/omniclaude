@@ -42,7 +42,19 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-CAPABILITIES_FILE = Path.home() / ".claude" / ".onex_capabilities"
+CAPABILITIES_FILE: Path | None = None
+
+
+def _get_capabilities_file() -> Path:
+    """Return the capabilities file path, resolved lazily."""
+    global CAPABILITIES_FILE
+    if CAPABILITIES_FILE is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_path
+
+        CAPABILITIES_FILE = ensure_state_path(".onex_capabilities")
+    return CAPABILITIES_FILE
+
+
 PROBE_TTL_SECONDS = 300  # 5 minutes
 
 TierName = Literal["standalone", "event_bus", "full_onex"]
@@ -148,7 +160,7 @@ def write_atomic(data: dict[str, object]) -> None:
     Args:
         data: Dictionary to serialize as JSON.
     """
-    target = CAPABILITIES_FILE
+    target = _get_capabilities_file()
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(".tmp")
     tmp.write_text(json.dumps(data), encoding="utf-8")
@@ -162,10 +174,11 @@ def read_capabilities() -> dict[str, object] | None:
         Parsed capabilities dict, or None if the file is absent or older
         than PROBE_TTL_SECONDS.
     """
-    if not CAPABILITIES_FILE.exists():
+    caps_file = _get_capabilities_file()
+    if not caps_file.exists():
         return None
     try:
-        raw = CAPABILITIES_FILE.read_text(encoding="utf-8")
+        raw = caps_file.read_text(encoding="utf-8")
         data: dict[str, object] = json.loads(raw)
         probed_at_str = data.get("probed_at")
         if not isinstance(probed_at_str, str):

@@ -85,7 +85,19 @@ from collections import Counter  # noqa: E402
 from typing import Any  # noqa: E402
 
 _PLUGIN_DIR = Path(__file__).parent.parent  # hooks/lib -> hooks -> plugin root
-_DEFAULT_USAGE_LOG = Path.home() / ".claude" / "onex-skill-usage.log"
+_DEFAULT_USAGE_LOG: Path | None = None
+
+
+def _get_default_usage_log() -> Path:
+    """Return the default usage log path, resolved lazily."""
+    global _DEFAULT_USAGE_LOG
+    if _DEFAULT_USAGE_LOG is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        _DEFAULT_USAGE_LOG = state_path("onex-skill-usage.log")
+    return _DEFAULT_USAGE_LOG
+
+
 _DEFAULT_PROGRESSION_PATH = _PLUGIN_DIR.parent / "skills" / "progression.yaml"
 _MAX_SUGGESTIONS = 2
 
@@ -219,7 +231,7 @@ def _format_one(*, to_skill: str, from_skill: str) -> str:
 def _get_skill_suggestions(session_id: str) -> str:
     try:
         counts = _load_usage_counts(
-            log_path=_DEFAULT_USAGE_LOG,
+            log_path=_get_default_usage_log(),
             session_id=session_id,
             db_enabled=None,
         )

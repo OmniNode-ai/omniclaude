@@ -59,7 +59,19 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Default snapshot directory (persistent across reboots, not /tmp/)
-DEFAULT_SNAPSHOT_DIR = Path.home() / ".claude" / "snapshots"
+DEFAULT_SNAPSHOT_DIR: Path | None = None
+
+
+def _get_default_snapshot_dir() -> Path:
+    """Return the default snapshot directory, resolved lazily."""
+    global DEFAULT_SNAPSHOT_DIR
+    if DEFAULT_SNAPSHOT_DIR is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        DEFAULT_SNAPSHOT_DIR = ensure_state_dir("snapshots")
+    return DEFAULT_SNAPSHOT_DIR
+
+
 SNAPSHOT_INDEX_FILE = "static_context.json"
 
 # Default non-versioned paths to scan (expanded at runtime)
@@ -421,8 +433,10 @@ def _collect_non_versioned_files(project_path: Path | None = None) -> list[Path]
         if expanded.exists() and not _is_git_tracked(expanded):
             paths.append(expanded)
 
-    # Memory files: ~/.claude/memory/*.md
-    memory_dir = Path.home() / ".claude" / "memory"
+    # Memory files: $ONEX_STATE_DIR/memory/*.md
+    from plugins.onex.hooks.lib.onex_state import state_path as _sp
+
+    memory_dir = _sp("memory")
     if memory_dir.is_dir():
         try:
             for mem_file in memory_dir.glob("*.md"):
@@ -687,7 +701,7 @@ def scan_and_snapshot(
         SnapshotResult describing what was scanned and what changed.
     """
     if snapshot_dir is None:
-        snapshot_dir = DEFAULT_SNAPSHOT_DIR
+        snapshot_dir = _get_default_snapshot_dir()
 
     project = Path(project_path).resolve() if project_path else None
 

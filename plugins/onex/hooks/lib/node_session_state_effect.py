@@ -42,7 +42,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 def _claude_state_dir() -> str:
     """Return the configured state directory path string (reads env at call time)."""
-    return os.environ.get("CLAUDE_STATE_DIR", str(Path.home() / ".claude" / "state"))
+    from plugins.onex.hooks.lib.onex_state import state_path
+
+    return str(state_path("state"))
 
 
 def _lock_timeout_ms() -> int:

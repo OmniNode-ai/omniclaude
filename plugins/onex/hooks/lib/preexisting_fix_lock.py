@@ -57,7 +57,19 @@ from pathlib import Path
 
 __all__ = ["PreexistingFixLock"]
 
-_LOCK_DIR = Path.home() / ".claude" / "pipeline-locks" / "preexisting"
+_LOCK_DIR: Path | None = None
+
+
+def _get_lock_dir() -> Path:
+    """Return the lock directory, resolved lazily."""
+    global _LOCK_DIR
+    if _LOCK_DIR is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        _LOCK_DIR = ensure_state_dir("pipeline-locks", "preexisting")
+    return _LOCK_DIR
+
+
 _DEFAULT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
 
@@ -81,7 +93,7 @@ class PreexistingFixLock:
         lock_dir: Path | None = None,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
-        self._lock_dir = lock_dir or _LOCK_DIR
+        self._lock_dir = lock_dir or _get_lock_dir()
         self._timeout_seconds = timeout_seconds
 
     # ------------------------------------------------------------------

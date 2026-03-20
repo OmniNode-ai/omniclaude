@@ -67,8 +67,29 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-CLAIMS_DIR = Path.home() / ".claude" / "pr-queue" / "claims"
-INSTANCE_ID_PATH = Path.home() / ".claude" / "instance_id"
+CLAIMS_DIR: Path | None = None
+INSTANCE_ID_PATH: Path | None = None
+
+
+def _get_claims_dir() -> Path:
+    """Return the claims directory, resolved lazily."""
+    global CLAIMS_DIR
+    if CLAIMS_DIR is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        CLAIMS_DIR = ensure_state_dir("pr-queue", "claims")
+    return CLAIMS_DIR
+
+
+def _get_instance_id_path() -> Path:
+    """Return the instance ID file path, resolved lazily."""
+    global INSTANCE_ID_PATH
+    if INSTANCE_ID_PATH is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_path
+
+        INSTANCE_ID_PATH = ensure_state_path("instance_id")
+    return INSTANCE_ID_PATH
+
 
 HEARTBEAT_STALE_MINUTES = 30
 CLAIMED_AT_STALE_HOURS = 2
@@ -81,14 +102,15 @@ CLAIMED_AT_STALE_HOURS = 2
 
 def get_instance_id() -> str:
     """Return the stable instance UUID, creating it if it doesn't exist."""
-    if INSTANCE_ID_PATH.exists():
-        return INSTANCE_ID_PATH.read_text().strip()
+    id_path = _get_instance_id_path()
+    if id_path.exists():
+        return id_path.read_text().strip()
     instance_id = str(uuid.uuid4())
-    INSTANCE_ID_PATH.parent.mkdir(parents=True, exist_ok=True)
+    id_path.parent.mkdir(parents=True, exist_ok=True)
     # Write atomically
-    tmp = INSTANCE_ID_PATH.with_suffix(".tmp")
+    tmp = id_path.with_suffix(".tmp")
     tmp.write_text(instance_id)
-    tmp.rename(INSTANCE_ID_PATH)
+    tmp.rename(id_path)
     return instance_id
 
 
@@ -197,7 +219,7 @@ class ClaimRegistry:
     """
 
     def __init__(self, claims_dir: Path | None = None) -> None:
-        self._claims_dir = claims_dir or CLAIMS_DIR
+        self._claims_dir = claims_dir or _get_claims_dir()
         self._instance_id: str | None = None
         self._hostname: str | None = None
 

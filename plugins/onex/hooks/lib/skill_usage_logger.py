@@ -27,7 +27,18 @@ from typing import Any
 # Public constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+DEFAULT_USAGE_LOG: Path | None = None
+
+
+def _get_default_usage_log() -> Path:
+    """Return the default usage log path, resolved lazily."""
+    global DEFAULT_USAGE_LOG
+    if DEFAULT_USAGE_LOG is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_path
+
+        DEFAULT_USAGE_LOG = ensure_state_path("onex-skill-usage.log")
+    return DEFAULT_USAGE_LOG
+
 
 _VALID_STATUSES = frozenset({"success", "failed", "partial"})
 
@@ -68,7 +79,7 @@ def append_skill_usage(
         return False
 
     entry = _build_entry(skill_name=skill_name, session_id=session_id)
-    file_ok = _write_to_file(entry=entry, log_path=log_path or DEFAULT_USAGE_LOG)
+    file_ok = _write_to_file(entry=entry, log_path=log_path or _get_default_usage_log())
 
     # Optional Postgres write — always non-fatal
     _maybe_write_to_db(entry=entry, db_enabled=db_enabled)
