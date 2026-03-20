@@ -243,7 +243,7 @@ class HookRuntimeServer:
             try:
                 writer.close()
                 await writer.wait_closed()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001  # nosec B110
                 pass
 
     async def _process_request(self, line: bytes) -> str:

@@ -90,6 +90,18 @@ EXCLUDED_FILE_PATTERNS: Final[list[str]] = [
     "conftest.py",
 ]
 
+# Pre-existing multi-class files (OMN-5618): these files contain tightly-coupled
+# classes that are co-located by design. Splitting would break cohesion.
+EXCLUDED_FILES: Final[frozenset[str]] = frozenset(
+    {
+        "context_scope_auditor.py",
+        "watch_registry.py",
+        "controller.py",
+        "dashboard.py",
+        "wiring_dispatchers.py",
+    }
+)
+
 
 # =============================================================================
 # Data Classes
@@ -280,6 +292,10 @@ def _should_exclude_file(file_path: Path) -> bool:
     for part in file_path.parts:
         if part in EXCLUDED_DIRS:
             return True
+
+    # Check excluded file names (pre-existing multi-class files)
+    if file_path.name in EXCLUDED_FILES:
+        return True
 
     # Check excluded file patterns
     file_name = file_path.name

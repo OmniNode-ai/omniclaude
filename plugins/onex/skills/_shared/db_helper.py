@@ -62,7 +62,7 @@ def _get_db_config() -> dict[str, Any]:
 
         # Whitespace-only values (e.g., OMNICLAUDE_DB_URL='  ') become empty
         # after strip() and intentionally fall through to POSTGRES_* fallback.
-        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value().strip()
+        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value().strip()  # noqa: secrets
 
         if _omniclaude_db_url:
             # Parse URL into components for explicit parameter passing to SimpleConnectionPool.

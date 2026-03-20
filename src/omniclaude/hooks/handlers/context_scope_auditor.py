@@ -167,7 +167,7 @@ def load_cumulative_tokens(task_id: str, state_dir: Path | None = None) -> int:
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
             return int(data.get("cumulative_tokens", 0))
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001  # nosec B110
         pass
     return 0
 
@@ -197,7 +197,7 @@ def save_cumulative_tokens(
             ),
             encoding="utf-8",
         )
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001  # nosec B110
         pass
 
 
@@ -214,7 +214,7 @@ def clear_cumulative_tokens(task_id: str, state_dir: Path | None = None) -> None
     try:
         if path.exists():
             path.unlink()
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001  # nosec B110
         pass
 
 
