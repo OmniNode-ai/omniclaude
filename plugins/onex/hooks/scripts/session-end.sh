@@ -156,7 +156,8 @@ fi
 # Uses jq instead of Python to avoid ~30-50ms interpreter startup on the
 # synchronous path (preserves <50ms SessionEnd budget).
 CORRELATION_ID=""
-CORRELATION_STATE_FILE="${HOME}/.claude/hooks/.state/correlation_id.json"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+CORRELATION_STATE_FILE="${ONEX_HOOKS_STATE_DIR}/correlation_id.json"
 if [[ -f "$CORRELATION_STATE_FILE" ]]; then
     CORRELATION_ID=$(jq -r '.correlation_id // empty' "$CORRELATION_STATE_FILE" 2>/dev/null) || CORRELATION_ID=""
 fi
@@ -470,7 +471,7 @@ fi
 if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
     (
         # Read active_run_id from session index
-        SESSION_STATE_DIR="${CLAUDE_STATE_DIR:-${HOME}/.claude/state}"
+        SESSION_STATE_DIR="${ONEX_SESSION_STATE_DIR}"
         SESSION_INDEX="${SESSION_STATE_DIR}/session.json"
         ACTIVE_RUN_ID=""
         if [[ -f "$SESSION_INDEX" ]]; then
@@ -495,13 +496,13 @@ echo "$INPUT"
 # Worktree Cleanup (OMN-1856)
 # -----------------------------
 # Clean up agent-created worktrees from this session.
-# Only targets ~/.claude/worktrees/ with valid .claude-session.json markers.
+# Only targets $ONEX_WORKTREES_DIR/ with valid .claude-session.json markers.
 # Uses git worktree remove (never rm -rf). Idempotent.
 #
 # Runs in a backgrounded subshell so find/jq/git subprocess invocations
 # do not block Claude Code (performance budget: <50ms sync path).
 
-WORKTREE_BASE="${HOME}/.claude/worktrees"
+WORKTREE_BASE="${ONEX_WORKTREES_DIR}"
 
 if [[ -d "$WORKTREE_BASE" ]]; then
     (
@@ -524,7 +525,7 @@ if [[ -d "$WORKTREE_BASE" ]]; then
     _wt_removed=0
     _wt_skipped=0
 
-    # Scan for markers under ~/.claude/worktrees/{repo}/{branch}/.
+    # Scan for markers under $ONEX_WORKTREES_DIR/{repo}/{branch}/.
     # Use -mindepth 2 (at least {repo}/{file}) and -maxdepth 10 to handle
     # branch names containing slashes (e.g., "feature/auth",
     # "jonahgabriel/omn-1856") — git creates nested subdirectories for

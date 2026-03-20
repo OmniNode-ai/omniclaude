@@ -195,9 +195,10 @@ fi
 
 # -----------------------------------------------------------------------
 # Pipeline Trace Logging — unified trace for routing/injection visibility
-# tail -f ~/.claude/logs/pipeline-trace.log to see the full chain
+# tail -f $ONEX_LOG_DIR/pipeline-trace.log to see the full chain
 # -----------------------------------------------------------------------
-TRACE_LOG="$HOME/.claude/logs/pipeline-trace.log"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+TRACE_LOG="${ONEX_LOG_DIR}/pipeline-trace.log"
 mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
 _TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 _PROMPT_SHORT="$(printf '%s' "${PROMPT:0:80}" | redact_secrets)"

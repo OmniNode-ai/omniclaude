@@ -15,7 +15,8 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+LOG_FILE="${ONEX_HOOK_LOG}"
 
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then

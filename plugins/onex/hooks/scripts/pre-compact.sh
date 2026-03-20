@@ -92,6 +92,7 @@ TO=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null || true)
 # Usage: ${TO:+$TO 5} git -C ... (expands to "timeout 5 git ..." if TO is set)
 
 # ── Active ticket detection — deterministic, worktree-scoped ─────────────────
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
 OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
 ACTIVE_TICKET=""
 ACTIVE_STATE_FILE=""
@@ -102,7 +103,7 @@ if [[ -n "$SESSION_CWD" ]]; then
     if [[ "$SESSION_CWD" == "$OMNI_WORKTREES_DIR"/OMN-[0-9]* ]]; then
         ACTIVE_TICKET=$(echo "$SESSION_CWD" | sed "s|$OMNI_WORKTREES_DIR/||" | grep -o "OMN-[0-9]\+" 2>/dev/null || true)
         if [[ -n "$ACTIVE_TICKET" ]]; then
-            ACTIVE_STATE_FILE="$HOME/.claude/pipelines/$ACTIVE_TICKET/state.yaml"
+            ACTIVE_STATE_FILE="${ONEX_PIPELINES_DIR}/$ACTIVE_TICKET/state.yaml"
             if [[ ! -f "$ACTIVE_STATE_FILE" ]]; then
                 ACTIVE_STATE_FILE=""
                 ACTIVE_TICKET=""
@@ -135,7 +136,7 @@ if [[ -z "$ACTIVE_TICKET" ]]; then
             BEST_MATCH_MTIME=$mtime
             BEST_MATCH="$f"
         fi
-    done < <(find "$HOME/.claude/pipelines" -name "state.yaml" 2>/dev/null)
+    done < <(find "${ONEX_PIPELINES_DIR}" -name "state.yaml" 2>/dev/null)
 
     if [[ -n "$BEST_MATCH" ]]; then
         ACTIVE_STATE_FILE="$BEST_MATCH"
