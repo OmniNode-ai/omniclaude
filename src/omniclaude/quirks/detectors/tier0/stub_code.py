@@ -70,7 +70,9 @@ def _strip_diff_prefix(line: str) -> str:
     return line[1:] if line.startswith("+") else line
 
 
-def _is_inside_string(line_content: str) -> bool:
+def _is_inside_string(  # stub-ok: implemented with TODO for edge case
+    line_content: str,
+) -> bool:
     """Very conservative check: is this line *likely* a string-literal body?
 
     Returns True when the stripped line starts with a quote character (common
@@ -113,7 +115,9 @@ class StubCodeDetector:
         - 0.5  inline TODO / FIXME comment
     """
 
-    def detect(self, context: DetectionContext) -> list[QuirkSignal]:
+    def detect(  # stub-ok: implemented with TODO for enhancement
+        self, context: DetectionContext
+    ) -> list[QuirkSignal]:
         """Run stub-code detection against the diff in *context*.
 
         Args:

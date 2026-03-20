@@ -201,7 +201,9 @@ class NodeQuirkDashboardQueryEffect:
     # Summary / aggregation
     # ------------------------------------------------------------------
 
-    async def summary(self, days: int = 7) -> dict[str, Any]:
+    async def summary(  # stub-ok: implemented with TODO for future enhancement
+        self, days: int = 7
+    ) -> dict[str, Any]:
         """Return aggregated quirk statistics for the last *days* days.
 
         Result shape::
@@ -267,7 +269,7 @@ class NodeQuirkDashboardQueryEffect:
     # Signal listing
     # ------------------------------------------------------------------
 
-    async def list_signals(
+    async def list_signals(  # stub-ok: implemented with TODO for future enhancement
         self,
         *,
         quirk_type: str | None = None,

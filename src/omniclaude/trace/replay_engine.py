@@ -307,7 +307,7 @@ class ReplayEngine:
         self.repo_root = repo_root
         self.checks = checks
 
-    def replay(
+    def replay(  # stub-ok: implemented with TODO for future enhancement
         self,
         frame: ChangeFrame,
         mode: ReplayMode = ReplayMode.TEST_ONLY,

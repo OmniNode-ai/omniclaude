@@ -27,6 +27,12 @@
 #   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
 
 repos:
+  # Stub implementation detection — sourced from omnibase_core (OMN-5599)
+  - repo: https://github.com/OmniNode-ai/omnibase_core
+    rev: 458f44ef24564956c6430ae7671570aed035c853 # pragma: allowlist secret
+    hooks:
+      - id: check-stub-implementations
+
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
     rev: a3d309f216f29f7ff3a4d992478cecf61274002a

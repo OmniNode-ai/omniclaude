@@ -308,7 +308,9 @@ class HandlerContextInjection:
         """Return the handler identifier."""
         return "handler-context-injection"
 
-    async def close(self) -> None:
+    async def close(  # stub-ok: close() is intentional no-op for stateless handler
+        self,
+    ) -> None:
         """Close handler resources.
 
         No-op after OMN-2058 (direct DB access removed).
