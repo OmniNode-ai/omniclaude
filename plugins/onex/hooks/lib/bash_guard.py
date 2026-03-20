@@ -233,6 +233,19 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
         r"printf\b\s+['\"]?\\x[0-9a-f]+[^|]*\|\s*(?:ba)?sh\b",
         re.IGNORECASE | re.MULTILINE,
     ),
+    # Branch protection: block re-enabling required_pull_request_reviews.
+    # Solo developer — reviews block all PRs.  Agents must never re-enable them.
+    # Matches gh api / curl calls that set required_pull_request_reviews or
+    # required_approving_review_count to any truthy value.
+    re.compile(
+        r"required_pull_request_reviews"
+        r'[^}]*"required_approving_review_count"\s*:\s*[1-9]',
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    ),
+    re.compile(
+        r"required_approving_review_count\]?\s*[=:]\s*[1-9]",
+        re.IGNORECASE | re.MULTILINE,
+    ),
 ]
 
 # =============================================================================
@@ -545,6 +558,17 @@ def main() -> int:
                     "If the hook itself is broken, create a ticket (see OMN-3201). "
                     "Human operators retain an emergency bypass via direct terminal access."
                 )
+        elif re.search(
+            r"required_pull_request_reviews|required_approving_review_count",
+            command,
+            re.IGNORECASE,
+        ):
+            block_reason = (
+                "Re-enabling required_pull_request_reviews is forbidden. "
+                "Solo developer — reviews block all PRs. "
+                "required_approving_review_count must always be null/0. "
+                "See memory: feedback_no_required_reviews.md"
+            )
         else:
             block_reason = f"Destructive command blocked by bash_guard: {command[:200]}"
 
