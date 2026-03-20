@@ -798,6 +798,8 @@ class TestEventRegistryIntegration:
             "skill.friction_recorded",
             # Utilization scoring command emitted from Stop hook (OMN-5505)
             "utilization.scoring.requested",
+            # Task delegation observability (OMN-5610)
+            "task.delegated",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

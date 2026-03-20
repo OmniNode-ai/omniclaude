@@ -329,7 +329,9 @@ def _is_delegation_enabled() -> bool:
     Legacy ``ENABLE_LOCAL_INFERENCE_PIPELINE`` is no longer required.
     """
     # Explicit kill switch — only blocks when explicitly set to false
-    kill_switch = os.environ.get("ENABLE_LOCAL_DELEGATION", "").lower()
+    kill_switch = os.environ.get(
+        "ENABLE_LOCAL_DELEGATION", ""
+    ).lower()  # ONEX_FLAG_EXEMPT: kill-switch checked before contract system loads
     if kill_switch in _FALSY:
         return False
     # Infer from connection config presence
@@ -624,7 +626,6 @@ def _emit_delegation_event(
         from uuid import UUID, uuid4
 
         from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
-        from omniclaude.hooks.topics import TopicBase
 
         # Validate correlation_id is a UUID; generate a placeholder if not.
         try:
@@ -655,10 +656,14 @@ def _emit_delegation_event(
 
         from emit_client_wrapper import emit_event
 
+        # Use semantic event type (not topic name) so emit_client_wrapper routes
+        # through the daemon's EventRegistry fan-out.  The registry maps
+        # "task.delegated" -> TopicBase.TASK_DELEGATED topic.  Previously this
+        # passed TopicBase.TASK_DELEGATED (the wire topic name) which was
+        # silently rejected by SUPPORTED_EVENT_TYPES validation (OMN-5610).
         emit_event(
-            event_type=TopicBase.TASK_DELEGATED,
+            event_type="task.delegated",
             payload=payload.model_dump(mode="json"),
-            # timeout_ms is ignored by emit_event — actual timeout is OMNICLAUDE_EMIT_TIMEOUT (default 5 s)
         )
         logger.debug(
             "Emitted task-delegated event: task=%s handler=%s success=%s",
