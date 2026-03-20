@@ -473,7 +473,9 @@ def make_trace_group(
     # ------------------------------------------------------------------
 
     @click.group("pr")
-    def pr_group() -> None:
+    def pr_group() -> (  # stub-ok: CLI group placeholder, subcommands registered below
+        None
+    ):
         """Inspect PR envelopes and their associated frames."""
 
     @pr_group.command("show")
@@ -526,7 +528,9 @@ def make_trace_group(
     # ------------------------------------------------------------------
 
     @click.group("trace")
-    def trace_group() -> None:
+    def trace_group() -> (  # stub-ok: CLI group placeholder, subcommands registered below
+        None
+    ):
         """Inspect agent ChangeFrames and PR envelopes (TRACE system)."""
 
     @trace_group.command("last")

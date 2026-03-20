@@ -372,7 +372,7 @@ class CorrectionGenerator:
         """Convert name to UPPER_SNAKE_CASE."""
         return CorrectionGenerator._to_snake_case(name).upper()
 
-    async def close(self) -> None:
+    async def close(self) -> None:  # stub-ok: close() is intentional no-op for stateless generator
         """
         Cleanup resources.
 

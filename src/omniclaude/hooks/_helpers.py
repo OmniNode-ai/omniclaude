@@ -15,7 +15,9 @@ __all__ = ["normalize_action_description"]
 ACTION_DESCRIPTION_MAX_LENGTH: int = 160
 
 
-def normalize_action_description(s: str) -> str:
+def normalize_action_description(  # stub-ok: implemented function with TODO in docstring
+    s: str,
+) -> str:
     """Truncate to 160 chars and strip newlines. Never raises.
 
     Args:

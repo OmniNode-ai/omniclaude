@@ -53,7 +53,7 @@ def _get_controller() -> NodeValidatorRolloutOrchestratorOrchestrator:
 
 
 @click.group()
-def cli() -> None:
+def cli() -> None:  # stub-ok: CLI group placeholder, subcommands registered below
     """Quirks Detector operator commands."""
 
 
@@ -122,7 +122,7 @@ def status_cmd() -> None:
 @click.option(
     "--notes", default=None, help="Optional notes to attach to the audit record."
 )
-def promote_cmd(
+def promote_cmd(  # stub-ok: implemented with TODO for future enhancement
     quirk_type: str,
     to_stage: str,
     finding_count: int,
