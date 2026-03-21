@@ -675,7 +675,8 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Deploying from a worktree sets installLocation to that worktree path, which breaks
     # the plugin when the worktree is later pruned (known_marketplaces.json points at nothing).
     MAIN_WORKTREE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
-    if [[ -n "$MAIN_WORKTREE" && "$PROJECT_ROOT" != "$MAIN_WORKTREE" ]]; then
+    _MAIN_IS_BARE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | head -2 | grep -c '^bare$')"
+    if [[ -n "$MAIN_WORKTREE" && "$PROJECT_ROOT" != "$MAIN_WORKTREE" && "$_MAIN_IS_BARE" -eq 0 ]]; then
         echo -e "${RED}Error: Deploy must run from the canonical (main) worktree, not a secondary worktree.${NC}" >&2
         echo "" >&2
         echo -e "  Current:   ${YELLOW}${PROJECT_ROOT}${NC}" >&2
