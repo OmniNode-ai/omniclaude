@@ -323,8 +323,9 @@ class TestHandleRequestE2E:
 
         # Phase 2: Dispatch via orchestrator returning agentic=True
         with (
-            patch(
-                "lib.delegation_daemon.orchestrate_delegation",
+            patch.object(
+                _mod_daemon,
+                "orchestrate_delegation",
                 return_value={
                     "delegated": False,
                     "agentic": True,
@@ -334,8 +335,8 @@ class TestHandleRequestE2E:
                     "reason": "agentic_eligible",
                 },
             ),
-            patch("lib.delegation_daemon._classify_with_cache", return_value=None),
-            patch("lib.delegation_daemon.run_agentic_task") as mock_task,
+            patch.object(_mod_daemon, "_classify_with_cache", return_value=None),
+            patch.object(_mod_daemon, "run_agentic_task") as mock_task,
         ):
             dispatch_req = json.dumps(
                 {
