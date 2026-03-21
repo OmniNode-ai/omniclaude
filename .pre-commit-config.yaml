@@ -35,7 +35,7 @@ repos:
 
   # Shared ONEX governance hooks (onex_change_control)
   - repo: https://github.com/OmniNode-ai/onex_change_control
-    rev: 8d7e85bc00e7f1b1306d1cb40949be1ab6e7e91a
+    rev: 8d7e85bc00e7f1b1306d1cb40949be1ab6e7e91a  # pragma: allowlist secret
     hooks:
       - id: no-hardcoded-topics
         stages: [pre-commit]
