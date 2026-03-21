@@ -503,6 +503,58 @@ PYBLOCK
 fi
 
 # -----------------------------
+# Agentic Job Collection (OMN-5728 — Phase 1: Collect)
+# -----------------------------
+# Poll the delegation daemon for completed agentic jobs from previous prompts.
+# If a completed work product is found, inject it as additionalContext.
+AGENTIC_WORK_PRODUCT=""
+_DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
+if [[ -S "$_DELEGATION_SOCK" ]] && [[ -n "${SESSION_ID:-}" ]]; then
+    _POLL_REQ=$(jq -cn --arg sess "$SESSION_ID" '{"action": "poll_agentic", "session_id": $sess}')
+    _POLL_RESULT="$(printf '%s\n' "$_POLL_REQ" | socat -t2 - UNIX-CONNECT:"$_DELEGATION_SOCK" 2>/dev/null || echo "")"
+    if [[ -n "$_POLL_RESULT" ]] && jq -e '.agentic_completed == true' <<< "$_POLL_RESULT" >/dev/null 2>/dev/null; then
+        AGENTIC_WORK_PRODUCT="$(jq -r '.content // ""' <<< "$_POLL_RESULT")"
+        _AGENTIC_ITERATIONS="$(jq -r '.iterations // 0' <<< "$_POLL_RESULT")"
+        _AGENTIC_TOOLS="$(jq -r '.tool_calls_count // 0' <<< "$_POLL_RESULT")"
+        _AGENTIC_JOB_ID="$(jq -r '.job_id // "?"' <<< "$_POLL_RESULT")"
+        log "Agentic job completed: job=$_AGENTIC_JOB_ID iterations=$_AGENTIC_ITERATIONS tools=$_AGENTIC_TOOLS content_chars=${#AGENTIC_WORK_PRODUCT}"
+        _TS_AGENTIC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "[$_TS_AGENTIC] [UserPromptSubmit] AGENTIC_COLLECTED job=$_AGENTIC_JOB_ID iterations=$_AGENTIC_ITERATIONS tool_calls=$_AGENTIC_TOOLS" >> "$TRACE_LOG"
+    fi
+fi
+
+# If an agentic work product was collected, inject it as additionalContext and exit.
+if [[ -n "$AGENTIC_WORK_PRODUCT" ]]; then
+    AGENTIC_CONTEXT="$(jq -rn \
+        --arg content "$AGENTIC_WORK_PRODUCT" \
+        --arg iters "$_AGENTIC_ITERATIONS" \
+        --arg tools "$_AGENTIC_TOOLS" \
+        '
+        "========================================================================\n" +
+        "AGENTIC RESEARCH COMPLETE\n" +
+        "========================================================================\n" +
+        "A local model performed " + $iters + " iterations with " + $tools + " tool calls\n" +
+        "to research this topic. Present the findings below to the user.\n" +
+        "You may add your own commentary, corrections, or additional context.\n" +
+        "========================================================================\n\n" +
+        $content + "\n\n" +
+        "========================================================================\n" +
+        "END OF AGENTIC RESEARCH\n" +
+        "========================================================================\n"
+        ' 2>/dev/null)"
+
+    if [[ -n "$AGENTIC_CONTEXT" ]]; then
+        printf %s "$INPUT" | jq --arg ctx "$AGENTIC_CONTEXT" \
+            '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
+             .hookSpecificOutput.additionalContext = $ctx |
+             .hookSpecificOutput.metadata.agentic_work_product = true' \
+            2>>"$LOG_FILE" \
+            || { log "ERROR: Agentic context jq output failed, passing through raw input"; printf %s "$INPUT"; }
+        exit 0
+    fi
+fi
+
+# -----------------------------
 # Local Model Delegation Dispatch (OMN-2271)
 # -----------------------------
 # Delegation runs AFTER routing + injection + advisory because:
@@ -563,6 +615,28 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
             log "WARNING: local_delegation_handler.py produced non-JSON output, skipping"
             DELEGATION_RESULT=""
             DELEGATION_ACTIVE="false"
+        fi
+
+        # --- Agentic dispatch handling (OMN-5728 — Phase 2: Dispatch) ---
+        # When the daemon starts an agentic loop in the background, inject a
+        # status message so Claude knows work is in progress.
+        _AGENTIC_DISPATCHED="$(jq -r '.agentic_dispatched // false' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'false')"
+        if [[ "$_AGENTIC_DISPATCHED" == "true" ]]; then
+            _AGENTIC_JOB_ID="$(jq -r '.job_id // "?"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '?')"
+            log "Agentic loop dispatched: job=$_AGENTIC_JOB_ID"
+            _TS_DISP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "[$_TS_DISP] [UserPromptSubmit] AGENTIC_DISPATCHED job=$_AGENTIC_JOB_ID" >> "$TRACE_LOG"
+            # Inject a note that research is in progress — the work product
+            # will be collected on the next prompt via the poll phase above.
+            _AGENTIC_STATUS_CTX="[A local model is researching this topic in the background. The results will be available on your next prompt. In the meantime, you can answer based on your own knowledge or ask the user to wait a moment.]"
+            printf %s "$INPUT" | jq --arg ctx "$_AGENTIC_STATUS_CTX" --arg jid "$_AGENTIC_JOB_ID" \
+                '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
+                 .hookSpecificOutput.additionalContext = $ctx |
+                 .hookSpecificOutput.metadata.agentic_dispatched = true |
+                 .hookSpecificOutput.metadata.agentic_job_id = $jid' \
+                2>>"$LOG_FILE" \
+                || { log "ERROR: Agentic dispatch jq output failed, passing through raw input"; printf %s "$INPUT"; }
+            exit 0
         fi
 
         if [[ "$DELEGATION_ACTIVE" == "true" ]]; then
