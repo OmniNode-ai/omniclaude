@@ -137,6 +137,25 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     ) &
 fi
 
+# --- Friction observation for failed/abandoned sessions [OMN-5747] ---
+if [[ "$SESSION_OUTCOME" == "failed" || "$SESSION_OUTCOME" == "abandoned" ]]; then
+    (
+        echo "$OUTCOME_PAYLOAD" | $PYTHON_CMD -c "
+import sys, json
+sys.path.insert(0, '${HOOKS_LIB}')
+sys.path.insert(0, '${PLUGIN_ROOT}/skills/_shared')
+payload = json.load(sys.stdin)
+from friction_observer_adapter import observe_friction
+observe_friction(
+    event_type='session.outcome',
+    payload=payload,
+    session_id=payload.get('session_id', 'unknown'),
+    source='claude_code_hook',
+)
+" 2>>"$LOG_FILE"
+    ) &
+fi
+
 # --- Utilization scoring command (async LLM-based scoring via omniintelligence) [OMN-5505] ---
 if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     (
