@@ -1402,6 +1402,129 @@ def update_pr_branch(repo_full: str, pr_number: int) -> dict:
 
 ---
 
+## has_merge_queue(repo_full)
+
+Detect whether a GitHub repo has a merge queue enabled on its default branch.
+Results are cached per-repo for the duration of the caller's session.
+
+```python
+# Cache for merge queue detection per-repo (OMN-5463)
+_merge_queue_cache: dict[str, bool] = {}
+
+
+def has_merge_queue(repo_full: str) -> bool:
+    """Detect whether a GitHub repo has a merge queue enabled on its default branch.
+
+    Uses the GitHub REST API to check branch protection rules, with a GraphQL
+    fallback to check the mergeQueue field. Results are cached per-repo.
+
+    Args:
+        repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
+
+    Returns:
+        True if merge queue is enabled, False otherwise.
+    """
+    if repo_full in _merge_queue_cache:
+        return _merge_queue_cache[repo_full]
+
+    result = subprocess.run([
+        "gh", "api", f"repos/{repo_full}/branches/main/protection",
+        "--jq", ".required_pull_request_reviews.merge_queue // false",
+    ], capture_output=True, text=True)
+
+    # Also check via the merge queue GraphQL field as a fallback
+    if result.returncode != 0 or result.stdout.strip() == "false":
+        org, repo_name = repo_full.split("/")
+        gql_result = subprocess.run([
+            "gh", "api", "graphql", "-f",
+            f'query=query {{ repository(owner: "{org}", name: "{repo_name}") '
+            f'{{ mergeQueue(branch: "main") {{ id }} }} }}',
+            "--jq", ".data.repository.mergeQueue.id",
+        ], capture_output=True, text=True)
+        has_queue = gql_result.returncode == 0 and bool(gql_result.stdout.strip())
+    else:
+        has_queue = True
+
+    _merge_queue_cache[repo_full] = has_queue
+    return has_queue
+```
+
+---
+
+## enqueue_to_merge_queue(repo_full, pr_number)
+
+Enqueue a PR into the repo's merge queue via the GraphQL `enqueuePullRequest`
+mutation. This is the **only** place in the codebase that calls the enqueue
+mutation directly.
+
+`gh pr merge --auto` does NOT enqueue into merge queues (OMN-5635). Repos with
+merge queues must use this function instead.
+
+```python
+def enqueue_to_merge_queue(repo_full: str, pr_number: int) -> dict:
+    """Enqueue a PR into the GitHub merge queue via GraphQL.
+
+    Two-step process:
+    1. Fetch the PR's GraphQL node ID
+    2. Call the enqueuePullRequest mutation
+
+    Args:
+        repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
+        pr_number: PR number.
+
+    Returns:
+        {"status": "enqueued"} on success.
+        {"status": "unresolved_conversations"} if blocked by unresolved review threads.
+        {"status": "failed", "error": str} on other failures.
+
+    Raises:
+        subprocess.CalledProcessError — only on node ID fetch failure.
+    """
+    org, repo_name = repo_full.split("/")
+
+    # Step 1: Get the PR's GraphQL node ID
+    node_id_result = subprocess.run([
+        "gh", "api", "graphql",
+        "-f", f'query=query {{ repository(owner: "{org}", name: "{repo_name}") '
+              f'{{ pullRequest(number: {pr_number}) {{ id }} }} }}',
+        "--jq", ".data.repository.pullRequest.id",
+    ], capture_output=True, text=True, timeout=30)
+
+    if node_id_result.returncode != 0 or not node_id_result.stdout.strip():
+        return {
+            "status": "failed",
+            "error": f"Failed to get PR node ID: {node_id_result.stderr.strip()}",
+        }
+
+    pr_node_id = node_id_result.stdout.strip()
+
+    # Step 2: Enqueue via GraphQL enqueuePullRequest mutation
+    enqueue_result = subprocess.run([
+        "gh", "api", "graphql",
+        "-f", f'query=mutation {{ enqueuePullRequest(input: '
+              f'{{pullRequestId: "{pr_node_id}"}}) '
+              f'{{ mergeQueueEntry {{ position state }} }} }}',
+    ], capture_output=True, text=True, timeout=30)
+
+    if enqueue_result.returncode == 0:
+        return {"status": "enqueued"}
+
+    stderr = enqueue_result.stderr or ""
+    stdout = enqueue_result.stdout or ""
+    if "All comments must be resolved" in stderr or "UNRESOLVED_CONVERSATIONS" in stdout:
+        return {
+            "status": "unresolved_conversations",
+            "error": "Unresolved review conversations block enqueue — resolve threads (OMN-5634) then retry",
+        }
+
+    return {
+        "status": "failed",
+        "error": stderr.strip() or stdout.strip(),
+    }
+```
+
+---
+
 ## Usage Pattern
 
 Every PR-mutating skill follows this pattern:

@@ -706,56 +706,77 @@ for pr in candidates:
         continue
 
     try:
-        # Detect merge queue: repos with merge queues reject explicit merge strategy
-        # flags (--squash, --merge, --rebase) with --auto. When a merge queue is active,
-        # use --auto only and let the queue's configured strategy take effect. (OMN-5463)
-        merge_cmd = [
-            "gh", "pr", "merge", str(pr["number"]),
-            "--repo", repo_full,
-        ]
+        # Detect merge queue: repos with merge queues need enqueue_to_merge_queue()
+        # from _lib/pr-safety/helpers.md — `gh pr merge --auto` does NOT enqueue
+        # into merge queues. (OMN-5635)
+        # Repos without merge queues continue using `gh pr merge --auto` as before.
         if has_merge_queue(repo_full):
-            merge_cmd.append("--auto")
-            print(f"  ℹ {repo_full}: merge queue detected — using --auto only (no strategy flag)")
-        else:
-            merge_cmd.extend([f"--{merge_method}", "--auto"])
+            # Use pr-safety helper: enqueue_to_merge_queue(repo_full, pr_number)
+            # (GraphQL enqueuePullRequest mutation lives in _lib/pr-safety/helpers.md)
+            enqueue = enqueue_to_merge_queue(repo_full, pr["number"])
 
-        # Enable GitHub auto-merge — merges automatically when all required checks pass
-        result = run(merge_cmd)
-        if result.returncode == 0:
-            auto_merge_results.append({
-                "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
-            })
-            print(f"  ✓ auto-merge enabled: {repo_full}#{pr['number']} — {pr['title'][:60]}")
-        elif "Pull request is in clean status" in (result.stderr or ""):
-            # Repo has no merge queue and PR is immediately mergeable —
-            # GitHub rejects --auto because there's nothing to wait for.
-            # Fall back to direct merge (no --auto).
-            direct_cmd = [
-                "gh", "pr", "merge", str(pr["number"]),
-                "--repo", repo_full,
-            ]
-            if not has_merge_queue(repo_full):
-                direct_cmd.append(f"--{merge_method}")
-            direct_result = run(direct_cmd)
-            if direct_result.returncode == 0:
+            if enqueue["status"] == "enqueued":
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                    "result": "merged_directly", "head_sha": pr["headRefOid"][:8]
+                    "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
                 })
-                print(f"  ✓ merged directly: {repo_full}#{pr['number']} — {pr['title'][:60]} (auto-merge unavailable, PR was clean)")
+                print(f"  ✓ enqueued in merge queue: {repo_full}#{pr['number']} — {pr['title'][:60]}")
+            elif enqueue["status"] == "unresolved_conversations":
+                # Unresolved review threads block enqueue — needs CodeRabbit resolution (OMN-5634)
+                auto_merge_results.append({
+                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                    "result": "failed", "error": "unresolved_conversations — resolve CodeRabbit threads then retry"
+                })
+                print(f"  ✗ unresolved conversations block enqueue: {repo_full}#{pr['number']} — resolve review threads (OMN-5634) then retry")
             else:
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                    "result": "failed", "error": direct_result.stderr.strip()
+                    "result": "failed", "error": enqueue.get("error", "unknown enqueue failure")
                 })
-                print(f"  ✗ direct merge also failed: {repo_full}#{pr['number']} — {direct_result.stderr.strip()}")
+                print(f"  ✗ failed to enqueue: {repo_full}#{pr['number']} — {enqueue.get('error', 'unknown')}")
         else:
-            auto_merge_results.append({
-                "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                "result": "failed", "error": result.stderr.strip()
-            })
-            print(f"  ✗ failed to enable auto-merge: {repo_full}#{pr['number']} — {result.stderr.strip()}")
+            # No merge queue — use gh pr merge --auto with explicit strategy
+            merge_cmd = [
+                "gh", "pr", "merge", str(pr["number"]),
+                "--repo", repo_full,
+                f"--{merge_method}", "--auto",
+            ]
+
+            # Enable GitHub auto-merge — merges automatically when all required checks pass
+            result = run(merge_cmd)
+            if result.returncode == 0:
+                auto_merge_results.append({
+                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                    "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
+                })
+                print(f"  ✓ auto-merge enabled: {repo_full}#{pr['number']} — {pr['title'][:60]}")
+            elif "Pull request is in clean status" in (result.stderr or ""):
+                # PR is immediately mergeable — GitHub rejects --auto because
+                # there's nothing to wait for. Fall back to direct merge.
+                direct_cmd = [
+                    "gh", "pr", "merge", str(pr["number"]),
+                    "--repo", repo_full,
+                    f"--{merge_method}",
+                ]
+                direct_result = run(direct_cmd)
+                if direct_result.returncode == 0:
+                    auto_merge_results.append({
+                        "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                        "result": "merged_directly", "head_sha": pr["headRefOid"][:8]
+                    })
+                    print(f"  ✓ merged directly: {repo_full}#{pr['number']} — {pr['title'][:60]} (auto-merge unavailable, PR was clean)")
+                else:
+                    auto_merge_results.append({
+                        "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                        "result": "failed", "error": direct_result.stderr.strip()
+                    })
+                    print(f"  ✗ direct merge also failed: {repo_full}#{pr['number']} — {direct_result.stderr.strip()}")
+            else:
+                auto_merge_results.append({
+                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+                    "result": "failed", "error": result.stderr.strip()
+                })
+                print(f"  ✗ failed to enable auto-merge: {repo_full}#{pr['number']} — {result.stderr.strip()}")
     finally:
         registry.release(pr_key, run_id=run_id, dry_run=dry_run)
 ```
@@ -893,15 +914,18 @@ Steps:
    ```
    Parse the result using is_merge_ready() logic (mergeable=MERGEABLE, all required CI green, reviewDecision in APPROVED/None).
 
-4. If merge-ready: enable GitHub auto-merge:
-   ```bash
-   gh pr merge {pr_number} --repo {repo_full} --{merge_method} --auto
-   ```
-   If this fails with "Pull request is in clean status", fall back to direct merge:
-   ```bash
-   gh pr merge {pr_number} --repo {repo_full} --{merge_method}
-   ```
-   Record `"merged_directly": true` instead of `"auto_merge_set": true` in the result.
+4. If merge-ready: enqueue or enable auto-merge depending on merge queue presence:
+   - **With merge queue** (OMN-5635): Call `enqueue_to_merge_queue(repo_full, pr_number)`
+     from `_lib/pr-safety/helpers.md`. This handles the GraphQL `enqueuePullRequest`
+     mutation, node ID resolution, and error classification.
+     If enqueue returns `"unresolved_conversations"`,
+     record as failed with note to resolve CodeRabbit threads (OMN-5634) then retry.
+   - **Without merge queue**: Use `gh pr merge --{merge_method} --auto` as before.
+     If this fails with "Pull request is in clean status", fall back to direct merge:
+     ```bash
+     gh pr merge {pr_number} --repo {repo_full} --{merge_method}
+     ```
+   Record `"merged_directly": true` instead of `"auto_merge_set": true` when directly merged.
 
 5. Clean up the worktree:
    ```bash
@@ -1129,8 +1153,10 @@ Merge Sweep Complete — run <run_id>
 | PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge in Step 6 |
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
 | `update-branch` API fails (403/429) | Log warning, record `result: failed`, continue others |
-| `gh pr merge --auto` fails with "clean status" | Fall back to direct `gh pr merge` (no `--auto`); record `result: merged_directly` |
-| `gh pr merge --auto` fails for other reasons | Record `result: failed` in details, continue others |
+| GraphQL `enqueuePullRequest` fails with unresolved conversations | Record `result: failed` with note to resolve CodeRabbit threads (OMN-5634), continue others |
+| GraphQL `enqueuePullRequest` fails for other reasons | Record `result: failed` in details, continue others |
+| `gh pr merge --auto` fails with "clean status" (non-queue repos) | Fall back to direct `gh pr merge` (no `--auto`); record `result: merged_directly` |
+| `gh pr merge --auto` fails for other reasons (non-queue repos) | Record `result: failed` in details, continue others |
 | PR becomes BEHIND after auto-merge armed (Step 6a) | Safety net: update branch post-merge |
 | pr-polish BLOCKED (conflicts unresolvable) | Record `result: blocked`, skip auto-merge for that PR |
 | pr-polish PARTIAL (max iterations hit) | Record `result: polished_partial`, skip auto-merge |
