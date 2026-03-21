@@ -960,8 +960,33 @@ else
   }' --jq '.data.repository.mergeQueue.id' 2>/dev/null)
 
   if [ -n "${HAS_MERGE_QUEUE}" ]; then
-    echo "  Merge queue detected — enqueuing via --auto"
-    gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPO}" --auto --delete-branch
+    echo "  Merge queue detected — enqueuing via GraphQL enqueuePullRequest (OMN-5635)"
+
+    # Get PR node ID for GraphQL mutation
+    PR_NODE_ID=$(gh api graphql -f query='query {
+      repository(owner: "'"${GITHUB_ORG}"'", name: "'"${repo}"'") {
+        pullRequest(number: '"${PR_NUMBER}"') { id }
+      }
+    }' --jq '.data.repository.pullRequest.id')
+
+    if [ -z "${PR_NODE_ID}" ]; then
+      echo "  ERROR: Failed to get PR node ID for #${PR_NUMBER}"
+      exit 1
+    fi
+
+    # Enqueue into merge queue via GraphQL mutation
+    ENQUEUE_OUTPUT=$(gh api graphql -f query='mutation {
+      enqueuePullRequest(input: {pullRequestId: "'"${PR_NODE_ID}"'"}) {
+        mergeQueueEntry { position state }
+      }
+    }' 2>&1)
+
+    if echo "${ENQUEUE_OUTPUT}" | grep -qi "unresolved\|All comments must be resolved"; then
+      echo "  ERROR: Unresolved review conversations block enqueue — resolve threads (OMN-5634) then retry"
+      exit 1
+    fi
+
+    echo "  Enqueued PR #${PR_NUMBER} into merge queue"
 
     # Poll merge queue until PR is merged or fails (timeout: 30 min)
     MERGE_TIMEOUT=1800
@@ -995,15 +1020,18 @@ fi
 release commit that hasn't passed CI. The `--watch` flag on `gh pr checks` blocks
 until checks complete.
 
-**Merge queue support (OMN-5465)**: When a repo has a merge queue enabled (detected
-via GraphQL `mergeQueue` field), the release skill enqueues the PR via `--auto`
-instead of direct `--squash` merge. It then polls the PR state every 30 seconds
-until the queue completes the merge (timeout: 30 minutes). Repos without merge
-queues use the original direct `--squash --delete-branch` path.
+**Merge queue support (OMN-5465, OMN-5635)**: When a repo has a merge queue enabled
+(detected via GraphQL `mergeQueue` field), the release skill enqueues the PR via
+the GraphQL `enqueuePullRequest` mutation instead of `gh pr merge --auto` (which
+only enables auto-merge but does NOT enqueue into merge queues). It then polls the
+PR state every 30 seconds until the queue completes the merge (timeout: 30 minutes).
+If enqueue fails due to unresolved review conversations, it exits with an error
+directing the user to resolve threads (OMN-5634). Repos without merge queues use
+the original direct `--squash --delete-branch` path.
 
-**Cross-reference**: `merge-sweep` SKILL.md and OMN-5463 for shared merge queue
-detection logic. The release skill uses inline detection rather than importing
-from merge-sweep to keep the release pipeline self-contained.
+**Cross-reference**: `merge-sweep` SKILL.md and OMN-5463/OMN-5635 for shared merge
+queue detection and enqueue logic. The release skill uses inline detection rather
+than importing from merge-sweep to keep the release pipeline self-contained.
 
 **State update**: Set phase to `MERGED`.
 
