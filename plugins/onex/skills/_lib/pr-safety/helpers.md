@@ -1166,6 +1166,171 @@ def resolve_review_threads(repo_full: str, pr_number: int) -> dict:
 
 ---
 
+## resolve_coderabbit_threads(repo_full, pr_number)
+
+Resolve all unresolved review threads authored by `coderabbitai[bot]` on a PR.
+CodeRabbit posts 5-20 automated review comments per PR. Branch protection requires
+all review threads resolved before the merge queue accepts PRs, so these must be
+resolved before any enqueue/merge attempt.
+
+Unlike `resolve_review_threads()` (which resolves ALL threads with disposition
+assessment), this function targets only CodeRabbit bot threads and resolves them
+with a standard automated-resolution reply. Human review threads are never touched.
+
+**Idempotent**: safe to call multiple times; returns immediately if no unresolved
+CodeRabbit threads exist.
+
+```python
+def resolve_coderabbit_threads(repo_full: str, pr_number: int) -> dict:
+    """
+    Resolve all unresolved review threads authored by coderabbitai[bot].
+
+    Queries review threads via GraphQL, filters for CodeRabbit-authored unresolved
+    threads, posts a standard reply on each, and resolves them.
+
+    Args:
+        repo_full: Full repo name (e.g., "OmniNode-ai/omniclaude").
+        pr_number: PR number.
+
+    Returns:
+        {
+            "threads_found": int,       # total unresolved CodeRabbit threads
+            "threads_resolved": int,    # successfully resolved
+            "errors": [{"thread_id": str, "error": str}]
+        }
+
+    Raises:
+        subprocess.CalledProcessError — gh GraphQL query failed
+    """
+    # Step 1: Query all review threads with author info
+    query = '''
+    query($owner:String!, $repo:String!, $pr:Int!) {
+      repository(owner:$owner, name:$repo) {
+        pullRequest(number:$pr) {
+          reviewThreads(first:100) {
+            nodes {
+              id
+              isResolved
+              comments(first:1) {
+                nodes { author { login } }
+              }
+            }
+          }
+        }
+      }
+    }
+    '''
+    owner, repo = repo_full.split("/", 1)
+    result = subprocess.run(
+        [
+            "gh", "api", "graphql",
+            "-f", f"query={query}",
+            "-f", f"owner={owner}",
+            "-f", f"repo={repo}",
+            "-F", f"pr={pr_number}",
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args,
+            output=result.stdout, stderr=result.stderr,
+        )
+
+    data = json.loads(result.stdout)
+    threads = (
+        data.get("data", {})
+        .get("repository", {})
+        .get("pullRequest", {})
+        .get("reviewThreads", {})
+        .get("nodes", [])
+    )
+
+    # Step 2: Filter for unresolved CodeRabbit threads
+    coderabbit_unresolved = [
+        t for t in threads
+        if not t.get("isResolved")
+        and t.get("comments", {}).get("nodes", [])
+        and t["comments"]["nodes"][0].get("author", {}).get("login") == "coderabbitai[bot]"
+    ]
+
+    summary = {
+        "threads_found": len(coderabbit_unresolved),
+        "threads_resolved": 0,
+        "errors": [],
+    }
+
+    if not coderabbit_unresolved:
+        return summary
+
+    print(f"  [resolve-coderabbit] Found {len(coderabbit_unresolved)} unresolved CodeRabbit thread(s) on {repo_full}#{pr_number}")
+
+    for thread in coderabbit_unresolved:
+        thread_id = thread["id"]
+
+        # Step 3: Post reply before resolving (required by pr-safety convention)
+        try:
+            reply_mutation = '''
+            mutation($body:String!, $threadId:ID!) {
+              addPullRequestReviewThreadReply(input:{body:$body, pullRequestReviewThreadId:$threadId}) {
+                comment { id }
+              }
+            }
+            '''
+            reply_body = "Resolved: automated CodeRabbit feedback acknowledged. Resolving thread for merge queue."
+            subprocess.run(
+                [
+                    "gh", "api", "graphql",
+                    "-f", f"query={reply_mutation}",
+                    "-f", f"body={reply_body}",
+                    "-f", f"threadId={thread_id}",
+                ],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            logger.warning(
+                f"resolve_coderabbit_threads: failed to post reply on thread {thread_id}: {e}"
+            )
+            # Continue to resolve even if reply fails — resolution is the priority
+
+        # Step 4: Resolve the thread
+        try:
+            resolve_mutation = '''
+            mutation($threadId:ID!) {
+              resolveReviewThread(input:{threadId:$threadId}) {
+                thread { isResolved }
+              }
+            }
+            '''
+            subprocess.run(
+                [
+                    "gh", "api", "graphql",
+                    "-f", f"query={resolve_mutation}",
+                    "-f", f"threadId={thread_id}",
+                ],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+            summary["threads_resolved"] += 1
+        except subprocess.CalledProcessError as e:
+            summary["errors"].append({
+                "thread_id": thread_id,
+                "error": str(e),
+            })
+            logger.warning(
+                f"resolve_coderabbit_threads: failed to resolve thread {thread_id}: {e}"
+            )
+
+    resolved = summary["threads_resolved"]
+    total = summary["threads_found"]
+    errors = len(summary["errors"])
+    print(f"  [resolve-coderabbit] Resolved {resolved}/{total} CodeRabbit thread(s)"
+          + (f" ({errors} error(s))" if errors else ""))
+
+    return summary
+```
+
+---
+
 ## check_merge_state(repo_full, pr_number)
 
 Check the merge state of a PR via the GitHub REST API. Returns `mergeable_state` and

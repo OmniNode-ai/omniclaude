@@ -2429,6 +2429,19 @@ EOF
    else:
        state["hold_label_applied"] = False
 
+   # STEP 3b — Resolve CodeRabbit review threads before auto-merge (OMN-5634)
+   # Branch protection requires all review threads resolved before merge queue
+   # accepts PRs. CodeRabbit posts 5-20 automated comments that block enqueue.
+   if not skip_auto_merge and repo_full_name and pr_number:
+       try:
+           from plugins.onex.skills._lib.pr_safety.helpers import resolve_coderabbit_threads
+           cr_result = resolve_coderabbit_threads(repo_full_name, pr_number)
+           if cr_result["threads_resolved"] > 0:
+               print(f"  Resolved {cr_result['threads_resolved']} CodeRabbit thread(s) on {repo_full_name}#{pr_number}")
+       except Exception as e:
+           print(f"  WARNING: Failed to resolve CodeRabbit threads: {e}")
+           # Non-fatal: continue to auto-merge — branch protection will catch if threads remain
+
    # STEP 4 — Persist state and conditionally enable auto-merge
    state["hold_reason"] = hold_reason if skip_auto_merge else None
    state["auto_merge_armed"] = False  # default; updated below

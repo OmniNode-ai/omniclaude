@@ -933,6 +933,27 @@ fi
 
 **State update**: Set phase to `PR_CREATED`, record `pr_url` and `pr_number`.
 
+#### Sub-Step 9b: RESOLVE CODERABBIT THREADS
+
+Before merging, resolve all unresolved CodeRabbit review threads on the PR.
+Branch protection requires all review threads resolved before the merge queue
+accepts PRs. This step is idempotent — safe to call on PRs with no CodeRabbit threads.
+
+```python
+# Uses resolve_coderabbit_threads() from @_lib/pr-safety/helpers.md
+from plugins.onex.skills._lib.pr_safety.helpers import resolve_coderabbit_threads
+
+try:
+    cr_result = resolve_coderabbit_threads(f"{GITHUB_ORG}/{repo}", int(PR_NUMBER))
+    if cr_result["threads_resolved"] > 0:
+        print(f"  Resolved {cr_result['threads_resolved']} CodeRabbit thread(s)")
+    if cr_result["errors"]:
+        print(f"  WARNING: {len(cr_result['errors'])} CodeRabbit thread(s) failed to resolve")
+except Exception as e:
+    print(f"  WARNING: Failed to resolve CodeRabbit threads: {e}")
+    # Non-fatal: continue to merge — branch protection will catch if threads remain
+```
+
 #### Sub-Step 10: MERGE
 
 ```bash

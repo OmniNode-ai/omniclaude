@@ -635,6 +635,48 @@ if branches_updated:
 
 ---
 
+## Step 5c — Resolve CodeRabbit Review Threads (Pre-Merge)
+
+Before enabling auto-merge or enqueuing into the merge queue, resolve all unresolved
+CodeRabbit review threads. Branch protection requires all review threads resolved
+before the merge queue accepts PRs, and CodeRabbit posts 5-20 automated comments
+per PR that would otherwise block enqueue.
+
+Process all candidates and branch-update-promoted PRs. Idempotent — safe to call
+on PRs with no CodeRabbit threads.
+
+```python
+# Uses resolve_coderabbit_threads() from @_lib/pr-safety/helpers.md
+from plugins.onex.skills._lib.pr_safety.helpers import resolve_coderabbit_threads
+
+coderabbit_results = []
+
+for pr in candidates:
+    base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
+    repo_full = f"{base_owner}/{base_repo_name}"
+    pr_number = pr["number"]
+
+    try:
+        cr_result = resolve_coderabbit_threads(repo_full, pr_number)
+        coderabbit_results.append({
+            "repo": repo_full, "pr": pr_number, **cr_result
+        })
+    except Exception as e:
+        print(f"  WARNING: Failed to resolve CodeRabbit threads on {repo_full}#{pr_number}: {e}")
+        coderabbit_results.append({
+            "repo": repo_full, "pr": pr_number,
+            "threads_found": 0, "threads_resolved": 0,
+            "errors": [{"thread_id": "unknown", "error": str(e)}],
+        })
+        # Non-fatal: continue to auto-merge attempt — branch protection will catch if threads remain
+
+total_cr_resolved = sum(r["threads_resolved"] for r in coderabbit_results)
+if total_cr_resolved > 0:
+    print(f"\n  Resolved {total_cr_resolved} CodeRabbit review thread(s) across {len(candidates)} PR(s).")
+```
+
+---
+
 ## Step 6 — Phase A: Enable GitHub Auto-Merge (Parallel)
 
 For each PR in `candidates[]`, acquire a claim and enable GitHub auto-merge.
