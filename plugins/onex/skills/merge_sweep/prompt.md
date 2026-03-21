@@ -664,41 +664,22 @@ for pr in candidates:
         continue
 
     try:
-        # Detect merge queue: repos with merge queues need GraphQL enqueuePullRequest
-        # mutation — `gh pr merge --auto` does NOT enqueue into merge queues. (OMN-5635)
+        # Detect merge queue: repos with merge queues need enqueue_to_merge_queue()
+        # from _lib/pr-safety/helpers.md — `gh pr merge --auto` does NOT enqueue
+        # into merge queues. (OMN-5635)
         # Repos without merge queues continue using `gh pr merge --auto` as before.
         if has_merge_queue(repo_full):
-            # Step 1: Get the PR's GraphQL node ID
-            org, repo_name = repo_full.split("/")
-            node_id_result = run([
-                "gh", "api", "graphql",
-                "-f", f'query=query {{ repository(owner: "{org}", name: "{repo_name}") {{ pullRequest(number: {pr["number"]}) {{ id }} }} }}',
-                "--jq", ".data.repository.pullRequest.id",
-            ], capture_output=True, text=True)
+            # Use pr-safety helper: enqueue_to_merge_queue(repo_full, pr_number)
+            # (GraphQL enqueuePullRequest mutation lives in _lib/pr-safety/helpers.md)
+            enqueue = enqueue_to_merge_queue(repo_full, pr["number"])
 
-            if node_id_result.returncode != 0 or not node_id_result.stdout.strip():
-                auto_merge_results.append({
-                    "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                    "result": "failed", "error": f"Failed to get PR node ID: {node_id_result.stderr.strip()}"
-                })
-                print(f"  ✗ failed to get PR node ID: {repo_full}#{pr['number']} — {node_id_result.stderr.strip()}")
-                continue
-
-            pr_node_id = node_id_result.stdout.strip()
-
-            # Step 2: Enqueue via GraphQL enqueuePullRequest mutation
-            enqueue_result = run([
-                "gh", "api", "graphql",
-                "-f", f'query=mutation {{ enqueuePullRequest(input: {{pullRequestId: "{pr_node_id}"}}) {{ mergeQueueEntry {{ position state }} }} }}',
-            ], capture_output=True, text=True)
-
-            if enqueue_result.returncode == 0:
+            if enqueue["status"] == "enqueued":
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
                     "result": "auto_merge_set", "head_sha": pr["headRefOid"][:8]
                 })
                 print(f"  ✓ enqueued in merge queue: {repo_full}#{pr['number']} — {pr['title'][:60]}")
-            elif "All comments must be resolved" in (enqueue_result.stderr or "") or "UNRESOLVED_CONVERSATIONS" in (enqueue_result.stdout or ""):
+            elif enqueue["status"] == "unresolved_conversations":
                 # Unresolved review threads block enqueue — needs CodeRabbit resolution (OMN-5634)
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
@@ -708,9 +689,9 @@ for pr in candidates:
             else:
                 auto_merge_results.append({
                     "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
-                    "result": "failed", "error": enqueue_result.stderr.strip() or enqueue_result.stdout.strip()
+                    "result": "failed", "error": enqueue.get("error", "unknown enqueue failure")
                 })
-                print(f"  ✗ failed to enqueue: {repo_full}#{pr['number']} — {enqueue_result.stderr.strip() or enqueue_result.stdout.strip()}")
+                print(f"  ✗ failed to enqueue: {repo_full}#{pr['number']} — {enqueue.get('error', 'unknown')}")
         else:
             # No merge queue — use gh pr merge --auto with explicit strategy
             merge_cmd = [
@@ -892,12 +873,10 @@ Steps:
    Parse the result using is_merge_ready() logic (mergeable=MERGEABLE, all required CI green, reviewDecision in APPROVED/None).
 
 4. If merge-ready: enqueue or enable auto-merge depending on merge queue presence:
-   - **With merge queue** (OMN-5635): Use GraphQL `enqueuePullRequest` mutation:
-     ```bash
-     PR_NODE_ID=$(gh api graphql -f query='...' --jq '.data.repository.pullRequest.id')
-     gh api graphql -f query='mutation { enqueuePullRequest(input: {pullRequestId: "'"$PR_NODE_ID"'"}) { mergeQueueEntry { position state } } }'
-     ```
-     If enqueue fails with "All comments must be resolved" / `UNRESOLVED_CONVERSATIONS`,
+   - **With merge queue** (OMN-5635): Call `enqueue_to_merge_queue(repo_full, pr_number)`
+     from `_lib/pr-safety/helpers.md`. This handles the GraphQL `enqueuePullRequest`
+     mutation, node ID resolution, and error classification.
+     If enqueue returns `"unresolved_conversations"`,
      record as failed with note to resolve CodeRabbit threads (OMN-5634) then retry.
    - **Without merge queue**: Use `gh pr merge --{merge_method} --auto` as before.
      If this fails with "Pull request is in clean status", fall back to direct merge:
