@@ -1,0 +1,162 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: node_friction_observer_compute
+contract_name: node_friction_observer_compute
+node_name: node_friction_observer_compute
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_type: COMPUTE_GENERIC
+
+description: >
+  Contract-driven friction observer. Classifies failure signals from any agent
+  platform (Claude Code, Cursor, Codex) or Kafka event stream into friction
+  events using YAML-defined classification rules. Pure computation node — all
+  classification intelligence lives in this contract, not in Python code.
+
+input_model:
+  name: FrictionSignal
+  module: plugins.onex.skills._shared.friction_signal
+
+output_model:
+  name: ClassificationResult
+  module: plugins.onex.skills._shared.friction_classifier
+
+execution:
+  backend: claude_code
+  model_purpose: null
+
+# ============================================================================
+# Classification rules — the core intelligence of the friction observer.
+# Rules are evaluated first-match-wins. Each rule maps an event pattern to a
+# friction surface + severity.
+#
+# Pattern format:
+#   "event.type"              — exact match on event_type
+#   "event.type:field=value"  — match event_type AND payload[field] == value
+#   "*"                       — wildcard fallback
+#
+# Template variables:
+#   {event_type}    — the signal's event_type
+#   {source}        — the signal's source
+#   {payload.key}   — signal.payload["key"] (empty string if missing)
+# ============================================================================
+classification_rules:
+  # --- Skill lifecycle failures ---
+  - rule_id: skill_failed
+    event_pattern: "skill.completed:status=failed"
+    surface: "tooling/skill-failed"
+    severity: "medium"
+    description_template: "Skill {payload.skill_name} failed: {payload.error}"
+
+  - rule_id: skill_error
+    event_pattern: "skill.completed:status=error"
+    surface: "tooling/skill-error"
+    severity: "high"
+    description_template: "Skill {payload.skill_name} errored: {payload.error}"
+
+  - rule_id: skill_blocked
+    event_pattern: "skill.completed:status=blocked"
+    surface: "tooling/skill-blocked"
+    severity: "high"
+    description_template: "Skill {payload.skill_name} blocked: {payload.blocked_reason}"
+
+  - rule_id: skill_gated
+    event_pattern: "skill.completed:status=gated"
+    surface: "tooling/skill-gated"
+    severity: "low"
+    description_template: "Skill {payload.skill_name} waiting on human gate"
+
+  # --- Infrastructure failures ---
+  - rule_id: circuit_breaker
+    event_pattern: "circuit.breaker.tripped"
+    surface: "kafka/circuit-breaker"
+    severity: "high"
+    description_template: "Circuit breaker tripped after {payload.failure_count} failures (threshold: {payload.threshold})"
+
+  - rule_id: budget_cap
+    event_pattern: "budget.cap.hit"
+    surface: "tooling/budget-exceeded"
+    severity: "medium"
+    description_template: "Token budget exceeded: {payload.tokens_used}/{payload.tokens_budget}"
+
+  - rule_id: notification_blocked
+    event_pattern: "notification.blocked"
+    surface: "tooling/notification-blocked"
+    severity: "low"
+    description_template: "Notification blocked in session {payload.session_id}"
+
+  # --- Session-level outcomes ---
+  - rule_id: session_failed
+    event_pattern: "session.outcome:outcome=failed"
+    surface: "tooling/session-failed"
+    severity: "low"
+    description_template: "Session ended with failure: {payload.reason}"
+
+  - rule_id: session_abandoned
+    event_pattern: "session.outcome:outcome=abandoned"
+    surface: "tooling/session-abandoned"
+    severity: "low"
+    description_template: "Session abandoned: {payload.reason}"
+
+  # --- Wildcard fallback (always last) ---
+  - rule_id: wildcard
+    event_pattern: "*"
+    surface: "unknown/unclassified"
+    severity: "low"
+    description_template: "Unclassified friction signal: {event_type} from {source}"
+
+# ============================================================================
+# Kafka subscriptions — for event-driven mode (Phase 2).
+# When run as a Kafka consumer, the runtime auto-subscribes to these topics.
+# ============================================================================
+event_bus:
+  subscribe_topics:
+    - "onex.evt.omniclaude.skill-completed.v1"
+    - "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+    - "onex.evt.omniclaude.budget-cap-hit.v1"
+    - "onex.evt.omniclaude.notification-blocked.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.friction-observed.v1"
+
+capabilities:
+  - name: friction.classify
+    description: Classify failure signals into friction events via contract-driven rules
+    version: 1.0.0
+
+io_operations:
+  - operation: classify_signal
+    description: Classify a FrictionSignal into a ClassificationResult
+    input_fields:
+      - signal: FrictionSignal
+    output_fields:
+      - result: ClassificationResult | None
+    idempotent: true
+
+error_handling:
+  retry_policy:
+    max_retries: 0
+    retry_on: []
+  circuit_breaker:
+    enabled: false
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-5747
+  maturity: mvp
+  tags:
+    - compute
+    - friction
+    - observability
+    - contract-driven
+    - portable
