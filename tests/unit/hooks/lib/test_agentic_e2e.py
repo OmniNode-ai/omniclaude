@@ -15,6 +15,7 @@ Uses real code for all components except the LLM endpoint (mocked).
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import time
@@ -25,22 +26,39 @@ from unittest.mock import patch
 
 import pytest
 
-# Add the plugins path so we can import hooks.lib modules.
-_PLUGINS_ROOT = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks"
-if str(_PLUGINS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PLUGINS_ROOT))
+# The hooks/lib modules are not installed packages — they're loaded at runtime.
+# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
+# entry that would shadow tests/unit/lib/ during pytest collection.
+_LIB_DIR = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks" / "lib"
 
-from lib.agentic_loop import AgenticStatus, run_agentic_loop
-from lib.agentic_quality_gate import check_agentic_quality
-from lib.agentic_tools import ALL_TOOLS, dispatch_tool
-from lib.delegation_daemon import (
-    AgenticJob,
-    AgenticJobStatus,
-    _agentic_jobs,
-    _agentic_jobs_lock,
-    _handle_request,
-    _poll_agentic_jobs,
-)
+
+def _load_module(name: str) -> Any:
+    """Load a module from the hooks/lib directory by file name."""
+    path = _LIB_DIR / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_mod_loop = _load_module("agentic_loop")
+_mod_gate = _load_module("agentic_quality_gate")
+_mod_tools = _load_module("agentic_tools")
+_mod_daemon = _load_module("delegation_daemon")
+
+AgenticStatus = _mod_loop.AgenticStatus
+run_agentic_loop = _mod_loop.run_agentic_loop
+check_agentic_quality = _mod_gate.check_agentic_quality
+ALL_TOOLS = _mod_tools.ALL_TOOLS
+dispatch_tool = _mod_tools.dispatch_tool
+AgenticJob = _mod_daemon.AgenticJob
+AgenticJobStatus = _mod_daemon.AgenticJobStatus
+_agentic_jobs = _mod_daemon._agentic_jobs
+_agentic_jobs_lock = _mod_daemon._agentic_jobs_lock
+_handle_request = _mod_daemon._handle_request
+_poll_agentic_jobs = _mod_daemon._poll_agentic_jobs
 
 # Type alias
 _JsonDict = dict[str, Any]
