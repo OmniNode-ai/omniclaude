@@ -558,6 +558,18 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
     fi
 fi
 
+# --- Friction observation for skill failures [OMN-5747] ---
+(
+    echo "$TOOL_INFO" | $PYTHON_CMD -c "
+import sys, json
+sys.path.insert(0, '${HOOKS_LIB}')
+sys.path.insert(0, '${PLUGIN_ROOT}/skills/_shared')
+from post_tool_use_friction_check import check_tool_for_friction
+tool_info = json.load(sys.stdin)
+check_tool_for_friction(tool_info, session_id=tool_info.get('session_id', tool_info.get('sessionId', 'unknown')))
+" 2>>"$LOG_FILE"
+) &
+
 # Always pass through original output
 printf '%s\n' "$TOOL_INFO"
 exit 0
