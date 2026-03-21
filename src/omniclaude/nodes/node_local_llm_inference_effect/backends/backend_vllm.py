@@ -51,6 +51,9 @@ _MAP_PURPOSE: dict[str, LlmEndpointPurpose] = {
     "FUNCTION_CALLING": LlmEndpointPurpose.FUNCTION_CALLING,
 }
 
+# Type alias for untyped dicts at the OpenAI API boundary.
+_JsonDict = dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - external/untyped API boundary
+
 
 @dataclass
 class ChatCompletionResult:
@@ -60,13 +63,13 @@ class ChatCompletionResult:
     """
 
     content: str | None = None
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[_JsonDict] = field(default_factory=list)
     error: str | None = None
 
 
 def _parse_tool_calls_from_message(
-    message: dict[str, Any],
-) -> list[dict[str, Any]]:
+    message: _JsonDict,
+) -> list[_JsonDict]:
     """Extract and normalize tool_calls from an OpenAI chat completion message.
 
     Mirrors ``_parse_tool_calls`` from ``handler_llm_openai_compatible.py:861-907``.
@@ -83,7 +86,7 @@ def _parse_tool_calls_from_message(
     if not raw_calls or not isinstance(raw_calls, list):
         return []
 
-    parsed: list[dict[str, Any]] = []
+    parsed: list[_JsonDict] = []
     for call in raw_calls:
         if not isinstance(call, dict):
             continue
@@ -120,7 +123,7 @@ def _parse_tool_calls_from_message(
 
 
 def _parse_chat_completion_response(
-    data: dict[str, Any],
+    data: _JsonDict,
 ) -> ChatCompletionResult:
     """Parse a full chat completion response into a ChatCompletionResult.
 
@@ -160,10 +163,10 @@ class VllmInferenceBackend:
 
     def chat_completion_sync(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[_JsonDict],
         endpoint_url: str,
         model: str | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[_JsonDict] | None = None,
         tool_choice: str | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
@@ -190,7 +193,7 @@ class VllmInferenceBackend:
             ChatCompletionResult with content and/or tool_calls.
         """
         url = f"{endpoint_url.rstrip('/')}/v1/chat/completions"
-        payload: dict[str, Any] = {
+        payload: _JsonDict = {
             "model": model or "default",
             "messages": messages,
         }
