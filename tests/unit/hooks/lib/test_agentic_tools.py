@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -131,22 +133,24 @@ class TestReadFile:
 @pytest.mark.unit
 class TestSearchContent:
     def test_search_finds_matches(self, tmp_path: Path) -> None:
-        f = tmp_path / "code.py"
-        f.write_text("def hello():\n    pass\ndef world():\n    pass\n")
-        result = dispatch_tool(
-            "search_content",
-            json.dumps({"pattern": "def \\w+", "path": str(tmp_path)}),
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="code.py:1:def hello()\ncode.py:3:def world()"
         )
+        with patch.object(_mod.subprocess, "run", return_value=mock_result):
+            result = dispatch_tool(
+                "search_content",
+                json.dumps({"pattern": "def \\w+", "path": str(tmp_path)}),
+            )
         assert "hello" in result
         assert "world" in result
 
     def test_search_no_matches(self, tmp_path: Path) -> None:
-        f = tmp_path / "empty.txt"
-        f.write_text("nothing interesting here")
-        result = dispatch_tool(
-            "search_content",
-            json.dumps({"pattern": "zzzznotfound", "path": str(tmp_path)}),
-        )
+        mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="")
+        with patch.object(_mod.subprocess, "run", return_value=mock_result):
+            result = dispatch_tool(
+                "search_content",
+                json.dumps({"pattern": "zzzznotfound", "path": str(tmp_path)}),
+            )
         assert "no matches" in result.lower()
 
     def test_search_missing_pattern(self) -> None:
