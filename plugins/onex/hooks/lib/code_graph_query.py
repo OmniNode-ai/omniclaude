@@ -37,7 +37,13 @@ SIMILARITY_THRESHOLD = 0.75
 
 
 def _run_psql(sql: str) -> tuple[bool, str]:
-    """Run psql query against omniintelligence DB. Returns (ok, output)."""
+    """Run psql query against omniintelligence DB. Returns (ok, output).
+
+    Note: OMNIINTELLIGENCE_DB_URL must use the host-accessible address
+    (localhost:5436), not the Docker-internal hostname (postgres:5432).
+    If ~/.omnibase/.env has the Docker-internal URL, override via:
+      OMNIINTELLIGENCE_DB_URL=postgresql://postgres:...@localhost:5436/omniintelligence
+    """
     db_url = os.environ.get("OMNIINTELLIGENCE_DB_URL", "")
     if not db_url:
         return False, "OMNIINTELLIGENCE_DB_URL not set"
@@ -58,7 +64,7 @@ def _run_psql(sql: str) -> tuple[bool, str]:
 
 def _get_embedding(text: str) -> list[float]:
     """Get embedding vector from LLM endpoint."""
-    payload = json.dumps({"input": text, "model": "embedding"}).encode()
+    payload = json.dumps({"input": text, "model": "default"}).encode()
     req = Request(  # noqa: S310 — URL from env var, not user input
         f"{EMBEDDING_URL}/v1/embeddings",
         data=payload,
@@ -103,7 +109,12 @@ def query_structural(*, repos: list[str]) -> dict[str, Any]:
                 "relationships": [],
             }
 
-    ok, _ = _run_psql("SELECT 1 FROM code_entities LIMIT 1")
+    # Preflight: verify table exists AND has expected columns from 025_code_entities.sql.
+    # Two competing migrations exist — 025_code_entities.sql (entity_name, qualified_name)
+    # vs 025_create_code_entities.sql (name, file_path). We require the former.
+    ok, _ = _run_psql(
+        "SELECT entity_name, qualified_name, classification FROM code_entities LIMIT 1"
+    )
     if not ok:
         return {
             "success": True,
@@ -194,13 +205,19 @@ def query_semantic(
             payload = hit.get("payload", {})
             if repos and payload.get("source_repo", "") not in repos:
                 continue
+            # Qdrant payload fields: entity_id, entity_type, name, file_path,
+            # source_repo, line_start. Map to stable output contract.
+            entity_name = payload.get("name", "")
+            file_path = payload.get("file_path", "")
             entities.append(
                 {
-                    "entity_name": payload.get("entity_name", ""),
+                    "entity_name": entity_name,
                     "entity_type": payload.get("entity_type", ""),
-                    "qualified_name": payload.get("qualified_name", ""),
+                    "qualified_name": f"{file_path}:{entity_name}"
+                    if file_path
+                    else entity_name,
                     "source_repo": payload.get("source_repo", ""),
-                    "classification": payload.get("classification", ""),
+                    "classification": payload.get("entity_type", ""),
                     "relevance_score": hit.get("score", 0.0),
                 }
             )

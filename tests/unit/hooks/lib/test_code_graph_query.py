@@ -71,17 +71,20 @@ class TestSemanticMode:
     def test_semantic_returns_ranked_results(self):
         from code_graph_query import query_semantic
 
-        mock_embedding = [0.1] * 4096
+        mock_embedding = [0.1] * 1024  # Qwen3-Embedding-8B produces 1024-dim vectors
+        # Qdrant payload matches dispatch_handler_code_embed_graph.py output:
+        # entity_id, entity_type, name, file_path, source_repo, line_start
         mock_qdrant_response = {
             "result": [
                 {
                     "score": 0.85,
                     "payload": {
-                        "entity_name": "DispatchHandler",
+                        "entity_id": "abc-123",
                         "entity_type": "class",
-                        "qualified_name": "omniclaude.runtime.handler.DispatchHandler",
+                        "name": "DispatchHandler",
+                        "file_path": "src/omniclaude/runtime/handler.py",
                         "source_repo": "omniclaude",
-                        "classification": "handler",
+                        "line_start": 42,
                     },
                 },
             ]
@@ -98,31 +101,35 @@ class TestSemanticMode:
         assert result["mode"] == "semantic"
         assert len(result["entities"]) == 1
         assert result["entities"][0]["entity_name"] == "DispatchHandler"
+        # qualified_name is synthesized from file_path:name
+        assert "handler.py:DispatchHandler" in result["entities"][0]["qualified_name"]
 
     def test_semantic_filters_by_repo_when_provided(self):
         from code_graph_query import query_semantic
 
-        mock_embedding = [0.1] * 4096
+        mock_embedding = [0.1] * 1024
         mock_qdrant_response = {
             "result": [
                 {
                     "score": 0.9,
                     "payload": {
-                        "entity_name": "A",
+                        "entity_id": "id-1",
+                        "name": "A",
                         "source_repo": "omniclaude",
                         "entity_type": "class",
-                        "qualified_name": "a",
-                        "classification": "handler",
+                        "file_path": "src/a.py",
+                        "line_start": 1,
                     },
                 },
                 {
                     "score": 0.85,
                     "payload": {
-                        "entity_name": "B",
+                        "entity_id": "id-2",
+                        "name": "B",
                         "source_repo": "omniintelligence",
                         "entity_type": "class",
-                        "qualified_name": "b",
-                        "classification": "handler",
+                        "file_path": "src/b.py",
+                        "line_start": 1,
                     },
                 },
             ]
