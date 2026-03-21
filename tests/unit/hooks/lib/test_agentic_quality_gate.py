@@ -10,17 +10,30 @@ Coverage:
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
 import pytest
 
-# Add the plugins path so we can import hooks.lib modules.
-_PLUGINS_ROOT = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks"
-if str(_PLUGINS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PLUGINS_ROOT))
+# The hooks/lib modules are not installed packages — they're loaded at runtime.
+# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
+# entry that would shadow tests/unit/lib/ during pytest collection.
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "plugins"
+    / "onex"
+    / "hooks"
+    / "lib"
+    / "agentic_quality_gate.py"
+)
+_spec = importlib.util.spec_from_file_location("agentic_quality_gate", _MODULE_PATH)
+assert _spec and _spec.loader
+_mod = importlib.util.module_from_spec(_spec)
+sys.modules["agentic_quality_gate"] = _mod
+_spec.loader.exec_module(_mod)
 
-from lib.agentic_quality_gate import check_agentic_quality
+check_agentic_quality = _mod.check_agentic_quality
 
 
 @pytest.mark.unit
