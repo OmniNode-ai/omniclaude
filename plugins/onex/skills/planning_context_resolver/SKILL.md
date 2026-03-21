@@ -41,6 +41,8 @@ Unresolvable capability dependency:
 1. Contract YAML files (handler/node contracts in repos) — schema drift detection
 2. Pattern API (omniintelligence REST at `localhost:8053`) — VALIDATED/PROVISIONAL patterns
 3. Execution ledger (PostgreSQL `validation_event_ledger`) — historical failure signatures
+4. Code entities graph (PostgreSQL `code_entities` + `code_relationships` via OMNIINTELLIGENCE_DB_URL) — structural overview of classes, protocols, models, and their relationships
+5. Related tickets (Linear MCP `list_issues`) — open tickets related to the epic's repos and scope
 
 ## Output
 

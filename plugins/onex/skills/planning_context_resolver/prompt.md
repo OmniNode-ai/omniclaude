@@ -37,6 +37,82 @@ For each returned pattern:
 - Include if `status in ["validated", "provisional"]` AND `quality_score >= 0.7`
 - Map to `planning_context.patterns[]`: `{id, signature_hash, status, confidence, quality_score, domain_id}`
 
+## Step 2b: Code Graph Structural Overview  <!-- ai-slop-ok -->
+
+Query the code entity graph for a structural overview of repos in scope.
+This surfaces key classes, protocols, models, and their relationships.
+
+```bash
+source ~/.omnibase/.env
+
+# Preflight: verify code_entities table exists
+if ! psql "$OMNIINTELLIGENCE_DB_URL" -t -A -c \
+    "SELECT 1 FROM code_entities LIMIT 1" > /dev/null 2>&1; then
+  echo "Warning: code_entities table inaccessible — degraded mode" >&2
+  code_graph_status="service_unavailable"
+else
+  REPO_LIST=$(printf "'%s'," "${repos_in_scope[@]}" | sed 's/,$//')
+
+  # Key entities: classes, protocols, models (limit 50)
+  psql "$OMNIINTELLIGENCE_DB_URL" -t -A -F'|' -c "
+    SELECT source_repo, entity_type, entity_name, qualified_name,
+           COALESCE(classification, entity_type) AS classification
+    FROM code_entities
+    WHERE source_repo = ANY(ARRAY[${REPO_LIST}])
+      AND entity_type IN ('class', 'protocol', 'model')
+    ORDER BY source_repo, entity_type, entity_name
+    LIMIT 50
+  " 2>/dev/null
+
+  # Relationship summary
+  psql "$OMNIINTELLIGENCE_DB_URL" -t -A -F'|' -c "
+    SELECT ce.source_repo, cr.relationship_type, COUNT(*)
+    FROM code_relationships cr
+    JOIN code_entities ce ON cr.source_entity_id = ce.id
+    WHERE ce.source_repo = ANY(ARRAY[${REPO_LIST}])
+      AND cr.inject_into_context = true
+    GROUP BY ce.source_repo, cr.relationship_type
+  " 2>/dev/null
+
+  code_graph_status="ok"
+fi
+```
+
+Parse pipe-delimited rows into `code_graph.entities[]` and `code_graph.relationships[]`.
+If psql fails: set `code_graph.status = "service_unavailable"`, continue.
+
+## Step 2c: Related Ticket Discovery  <!-- ai-slop-ok -->
+
+Search Linear for open tickets related to the epic's repos and scope.
+Uses `mcp__linear-server__list_issues` MCP tool (available to skill agents).
+
+Search for open tickets related to the epic. Two query strategies:
+
+1. **Epic linkage search** (highest signal): Search for tickets mentioning the epic ID:
+   ```
+   mcp__linear-server__list_issues(query="{epic_id}", state="not done", limit=5)
+   ```
+   These are always `"direct"` relevance.
+
+2. **Component-term search** (per repo, moderate signal): For each repo in `repos_in_scope`,
+   extract 2-3 key component terms from the epic description (handler names, node names,
+   topic names — NOT the bare repo name). Search:
+   ```
+   mcp__linear-server__list_issues(query="{component_term}", state="not done", limit=5)
+   ```
+
+**Relevance classification (strict rules):**
+- `"direct"` requires repo overlap PLUS at least one of:
+  - Explicit shared component term (handler name, node name, topic name)
+  - Explicit epic/ticket linkage (parent, blocker, or related relation)
+  - Shared label that is domain-specific (not just `effort:M`)
+- `"tangential"` = repo overlap only, or component-term match without repo overlap
+- Repo-name-only matches default to `tangential` — never `direct`
+
+**Hard cap: 8 tickets total** (deduped by ticket ID across all queries).
+
+If Linear MCP unavailable or returns errors: set `related_tickets.status = "service_unavailable"`, continue.
+
 ## Step 3: Historical Failure Correlation *(SQL safety + psql quoting + preflight)*  <!-- ai-slop-ok -->
 
 ```bash
@@ -135,9 +211,9 @@ risk_score = (
 Risk bands: 0.00–0.25=Low, 0.26–0.50=Moderate, 0.51–0.75=High, 0.76–1.00=Critical
 
 Confidence:
-- `"high"` = all three data sources available (schema scan + patterns API + ledger)
-- `"medium"` = one source service_unavailable
-- `"low"` = two or more sources service_unavailable
+- `"high"` = all five data sources available (schema scan + patterns API + ledger + code graph + related tickets)
+- `"medium"` = one or two sources service_unavailable
+- `"low"` = three or more sources service_unavailable
 
 ## Step 5: Invariant Check  <!-- ai-slop-ok -->
 
@@ -219,6 +295,28 @@ planning_context:
         frequency: N
         last_seen: "{iso8601}"
 
+  code_graph:
+    status: ok|service_unavailable
+    entities:
+      - name: "{entity_name}"
+        type: "class|protocol|model"
+        qualified_name: "{fully.qualified.Name}"
+        repo: "{source_repo}"
+        classification: "{classification}"
+    relationships:
+      - repo: "{source_repo}"
+        type: "{relationship_type}"
+        count: N
+
+  related_tickets:
+    status: ok|service_unavailable
+    items:
+      - id: "OMN-XXXX"
+        title: "..."
+        status: "..."
+        repo: "..."
+        relevance: "direct|tangential"
+
   invariants:
     - text: "{invariant description}"
       source: "contract:{contract_name}"
@@ -244,4 +342,5 @@ Log summary to epic Slack thread (LOW_RISK, no gate unless `risk_score >= 0.76`)
 ```
 Planning context compiled for {epic_id}. Risk: {risk_band} ({risk_score:.2f}).
 Patterns: {N} VALIDATED, {M} PROVISIONAL. Failures: {K} historical signatures.
+Code graph: {E} entities, {R} relationship types. Related tickets: {T} found.
 ```

@@ -45,6 +45,17 @@ Start by understanding the current project context, then ask questions one at a 
 ### Understanding the idea
 
 - Check out the current project state first (files, docs, recent commits)
+- Query the code graph for entities relevant to the brainstorm topic (graceful degradation).
+  Pass `repos` when the target repo is known to suppress cross-repo noise:
+  ```bash
+  source ~/.omnibase/.env
+  echo '{"mode": "semantic", "query": "{brainstorm_topic}", "repos": ["{target_repo}"], "limit": 20}' \
+    | python3 "${OMNICLAUDE_PROJECT_ROOT:-$CLAUDE_PLUGIN_ROOT}/plugins/onex/hooks/lib/code_graph_query.py"
+  ```
+  If results returned with `"status": "ok"`: surface only the **top 5** most relevant entities
+  as one-line summaries when presenting the "current project state" overview. Do not dump
+  raw results into the brainstorm narrative.
+  If unavailable: continue without code graph context.
 - Ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
 - Only one question per message - if a topic needs more exploration, break it into multiple questions
