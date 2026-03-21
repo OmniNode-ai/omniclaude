@@ -71,6 +71,14 @@ class ModelDelegationScore:
     reasons: list[str] = field(default_factory=list)
     """Human-readable explanations for the delegation decision."""
 
+    agentic_eligible: bool = False
+    """Whether this task is eligible for agentic delegation (tool-calling loop).
+
+    True when the prompt implies codebase interaction (reading files, searching
+    code) AND the intent is delegatable (research/test/document) AND confidence
+    exceeds the agentic threshold (0.5). Added in OMN-5726.
+    """
+
 
 class TaskClassifier:
     """
@@ -322,6 +330,37 @@ class TaskClassifier:
     #: roughly 40 % of an intent's keywords must match — a reasonable bar that
     #: actually allows delegation to fire for well-matched prompts.
     DELEGATION_CONFIDENCE_THRESHOLD: float = 0.4
+
+    #: Minimum confidence required for agentic delegation (higher bar than
+    #: single-shot because the agentic loop is more expensive to run).
+    AGENTIC_CONFIDENCE_THRESHOLD: float = 0.5
+
+    #: Keywords indicating the prompt implies codebase interaction suitable
+    #: for the agentic loop (read files, search code, examine structure).
+    _AGENTIC_CODEBASE_SIGNALS: frozenset[str] = frozenset(
+        {
+            "look at",
+            "find",
+            "search",
+            "read",
+            "check",
+            "examine",
+            "analyze",
+            "review",
+            "in this repo",
+            "in this codebase",
+            "in this project",
+            "in the codebase",
+            "in the repo",
+            "in the project",
+            "how does",
+            "how is",
+            "where is",
+            "where does",
+            "what does",
+            "show me",
+        }
+    )
 
     #: Vision-related keywords that indicate the prompt involves image/vision
     #: content.  Tasks containing these signals always route to the primary model.
@@ -603,6 +642,20 @@ class TaskClassifier:
                 return True
         return False
 
+    def _has_agentic_codebase_signals(self, prompt_lower: str) -> bool:
+        """Return True if the prompt implies codebase interaction.
+
+        Checks for phrases that suggest the user wants the model to read files,
+        search code, or examine the repository — tasks suitable for the agentic
+        tool-calling loop rather than single-shot text generation.
+
+        Added in OMN-5726.
+        """
+        for signal in self._AGENTIC_CODEBASE_SIGNALS:
+            if signal in prompt_lower:
+                return True
+        return False
+
     def _compute_savings(self, intent: TaskIntent) -> float:
         """Estimate USD savings for delegating a task of the given intent type.
 
@@ -690,6 +743,17 @@ class TaskClassifier:
             task_context = self.classify(prompt)
             classification_confidence = task_context.confidence
 
+        # --- Agentic eligibility (OMN-5726) -----------------------------------
+        # Computed independently: agentic_eligible requires a delegatable intent,
+        # codebase interaction signals, and confidence > AGENTIC_CONFIDENCE_THRESHOLD.
+        # This is separate from single-shot delegation (Gate 4 below).
+        has_codebase_signals = self._has_agentic_codebase_signals(prompt_lower)
+        is_agentic = (
+            resolved_intent in self.DELEGATABLE_INTENTS
+            and has_codebase_signals
+            and classification_confidence >= self.AGENTIC_CONFIDENCE_THRESHOLD
+        )
+
         # --- Gate 3: Intent must be in the delegation allow-list --------------
         if resolved_intent not in self.DELEGATABLE_INTENTS:
             reasons.append(
@@ -719,6 +783,7 @@ class TaskClassifier:
                 confidence=classification_confidence,
                 estimated_savings_usd=0.0,
                 reasons=reasons,
+                agentic_eligible=is_agentic,
             )
 
         # --- All gates passed: delegation approved ----------------------------
@@ -734,4 +799,5 @@ class TaskClassifier:
             confidence=classification_confidence,
             estimated_savings_usd=savings,
             reasons=reasons,
+            agentic_eligible=is_agentic,
         )

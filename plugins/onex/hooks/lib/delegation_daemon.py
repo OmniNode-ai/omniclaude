@@ -39,8 +39,12 @@ import signal
 import socket
 import socketserver
 import sys
+import threading
 import time
+import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +84,189 @@ try:
     )
 except ImportError:  # pragma: no cover
     orchestrate_delegation = None  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Agentic loop import (after path setup)
+# ---------------------------------------------------------------------------
+try:
+    from agentic_loop import (  # type: ignore[import-not-found]
+        AgenticResult,
+        AgenticStatus,
+        run_agentic_task,
+    )
+except ImportError:  # pragma: no cover
+    AgenticResult = None  # type: ignore[assignment,misc]
+    AgenticStatus = None  # type: ignore[assignment,misc]
+    run_agentic_task = None  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# Agentic job types (OMN-5725)
+# ---------------------------------------------------------------------------
+
+# GC thresholds for completed/all jobs
+_AGENTIC_JOB_COMPLETED_TTL_S = 60
+_AGENTIC_JOB_MAX_TTL_S = 300
+
+
+class AgenticJobStatus(Enum):
+    """Status of an agentic background job."""
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass
+class AgenticJob:
+    """Tracks an agentic loop running in a background thread."""
+
+    job_id: str
+    session_id: str
+    prompt: str
+    started_at: float = field(default_factory=time.monotonic)
+    completed_at: float | None = None
+    status: AgenticJobStatus = AgenticJobStatus.RUNNING
+    result: AgenticResult | None = None  # type: ignore[type-arg]
+    error: str | None = None
+
+
+# Thread-safe job store
+_agentic_jobs: dict[str, AgenticJob] = {}
+_agentic_jobs_lock = threading.Lock()
+
+
+def _gc_agentic_jobs() -> None:
+    """Remove expired agentic jobs from the store.
+
+    Completed jobs are removed after _AGENTIC_JOB_COMPLETED_TTL_S.
+    All jobs are removed after _AGENTIC_JOB_MAX_TTL_S regardless of status.
+    """
+    now = time.monotonic()
+    with _agentic_jobs_lock:
+        expired = []
+        for job_id, job in _agentic_jobs.items():
+            age = now - job.started_at
+            if age > _AGENTIC_JOB_MAX_TTL_S or (
+                job.status != AgenticJobStatus.RUNNING
+                and job.completed_at is not None
+                and (now - job.completed_at) > _AGENTIC_JOB_COMPLETED_TTL_S
+            ):
+                expired.append(job_id)
+        for job_id in expired:
+            del _agentic_jobs[job_id]
+        if expired:
+            logger.debug("GC'd %d agentic jobs", len(expired))
+
+
+def _start_agentic_job(
+    session_id: str,
+    prompt: str,
+    system_prompt: str,
+    endpoint_url: str,
+    working_dir: str | None = None,
+) -> str:
+    """Start an agentic loop in a background thread and return the job ID.
+
+    Args:
+        session_id: Session identifier for the requesting client.
+        prompt: The user's task prompt.
+        system_prompt: System prompt for the agentic LLM.
+        endpoint_url: Base URL of the LLM endpoint.
+        working_dir: Optional working directory for tool operations.
+
+    Returns:
+        A unique job_id string.
+    """
+    job_id = str(uuid.uuid4())[:8]
+    job = AgenticJob(job_id=job_id, session_id=session_id, prompt=prompt)
+
+    with _agentic_jobs_lock:
+        _agentic_jobs[job_id] = job
+
+    max_iterations = int(os.environ.get("AGENTIC_MAX_ITERATIONS", "10"))
+    timeout_s = float(os.environ.get("AGENTIC_TIMEOUT_S", "60"))
+
+    def _run() -> None:
+        try:
+            if run_agentic_task is None:
+                job.status = AgenticJobStatus.FAILED
+                job.error = "agentic_loop module not available"
+                job.completed_at = time.monotonic()
+                return
+
+            result = run_agentic_task(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                endpoint_url=endpoint_url,
+                max_iterations=max_iterations,
+                timeout_s=timeout_s,
+                working_dir=working_dir,
+            )
+            job.result = result
+            if result.status == AgenticStatus.SUCCESS:
+                job.status = AgenticJobStatus.COMPLETED
+            else:
+                job.status = AgenticJobStatus.FAILED
+                job.error = result.error or result.status.value
+        except Exception as exc:
+            logger.debug("Agentic job %s failed: %s", job_id, exc)
+            job.status = AgenticJobStatus.FAILED
+            job.error = str(exc)
+        finally:
+            job.completed_at = time.monotonic()
+
+    thread = threading.Thread(target=_run, name=f"agentic-{job_id}", daemon=True)
+    thread.start()
+    logger.info("Started agentic job %s for session %s", job_id, session_id[:8])
+    return job_id
+
+
+def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
+    """Poll for completed agentic jobs belonging to a session.
+
+    Returns the first completed job found, or a status dict if none are ready.
+    """
+    _gc_agentic_jobs()
+
+    with _agentic_jobs_lock:
+        for job_id, job in list(_agentic_jobs.items()):
+            if job.session_id != session_id:
+                continue
+            if job.status == AgenticJobStatus.COMPLETED and job.result is not None:
+                content = job.result.content or ""
+                iterations = job.result.iterations
+                tool_calls_count = job.result.tool_calls_count
+                tool_names = sorted(job.result.tool_names_used)
+                # Remove job after delivery
+                del _agentic_jobs[job_id]
+                return {
+                    "agentic_completed": True,
+                    "job_id": job_id,
+                    "content": content,
+                    "iterations": iterations,
+                    "tool_calls_count": tool_calls_count,
+                    "tool_names": tool_names,
+                }
+            if job.status == AgenticJobStatus.FAILED:
+                error = job.error or "unknown"
+                del _agentic_jobs[job_id]
+                return {
+                    "agentic_completed": False,
+                    "job_id": job_id,
+                    "error": error,
+                }
+            if job.status == AgenticJobStatus.RUNNING:
+                elapsed = time.monotonic() - job.started_at
+                return {
+                    "agentic_completed": False,
+                    "job_id": job_id,
+                    "status": "running",
+                    "elapsed_s": round(elapsed, 1),
+                }
+
+    return {"agentic_completed": False, "status": "no_jobs"}
+
 
 # ---------------------------------------------------------------------------
 # Valkey client (lazy singleton)
@@ -184,6 +371,7 @@ def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | N
             else str(score.intent),
             "confidence": score.confidence,
             "delegatable": score.delegatable,
+            "agentic_eligible": getattr(score, "agentic_eligible", False) is True,
             "cached_at": datetime.now(UTC).isoformat(),
         }
 
@@ -208,8 +396,11 @@ def _classify_with_cache(prompt: str, correlation_id: str) -> dict[str, Any] | N
 def _handle_request(data: bytes) -> bytes:
     """Parse a JSON request and return a JSON response.
 
-    Request format: ``{"prompt": "...", "correlation_id": "...", "session_id": "..."}``
-    Response: dict from ``orchestrate_delegation()`` or error dict.
+    Request format:
+      Standard: ``{"prompt": "...", "correlation_id": "...", "session_id": "..."}``
+      Poll:     ``{"action": "poll_agentic", "session_id": "..."}``
+
+    Response: dict from ``orchestrate_delegation()``, agentic dispatch, or error dict.
     """
     try:
         req = json.loads(data)
@@ -218,7 +409,18 @@ def _handle_request(data: bytes) -> bytes:
             {"delegated": False, "reason": f"invalid_json: {exc}"}
         ).encode()
 
-    if not isinstance(req, dict) or "prompt" not in req:
+    if not isinstance(req, dict):
+        return json.dumps({"delegated": False, "reason": "invalid_request"}).encode()
+
+    # --- Action: poll_agentic (OMN-5725) ---
+    action = req.get("action")
+    if action == "poll_agentic":
+        session_id = req.get("session_id", "")
+        result = _poll_agentic_jobs(session_id)
+        return json.dumps(result).encode()
+
+    # --- Standard delegation request ---
+    if "prompt" not in req:
         return json.dumps(
             {"delegated": False, "reason": "missing_field: prompt"}
         ).encode()
@@ -242,6 +444,30 @@ def _handle_request(data: bytes) -> bytes:
             correlation_id=correlation_id,
             cached_classification=cached_classification,
         )
+
+        # --- Agentic dispatch (OMN-5725) ---
+        # If the orchestrator signals agentic eligibility, start a background
+        # agentic loop and return immediately with a job_id.
+        if result.get("agentic") and run_agentic_task is not None:
+            agentic_prompt = result.get("agentic_prompt", prompt)
+            system_prompt = result.get("agentic_system_prompt", "")
+            endpoint_url = result.get("agentic_endpoint_url", "")
+            if endpoint_url and system_prompt:
+                job_id = _start_agentic_job(
+                    session_id=session_id,
+                    prompt=agentic_prompt,
+                    system_prompt=system_prompt,
+                    endpoint_url=endpoint_url,
+                )
+                return json.dumps(
+                    {
+                        "delegated": False,
+                        "agentic_dispatched": True,
+                        "job_id": job_id,
+                        "reason": "agentic_loop_started",
+                    }
+                ).encode()
+
         return json.dumps(result).encode()
     except Exception as exc:
         logger.debug("orchestrate_delegation failed: %s", exc)
@@ -270,10 +496,16 @@ class DelegationHandler(socketserver.StreamRequestHandler):
             logger.debug("Handler error: %s", exc)
 
 
-class DelegationServer(socketserver.UnixStreamServer):
-    """Unix domain socket server for delegation requests."""
+class DelegationServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+    """Threaded Unix domain socket server for delegation requests.
+
+    ThreadingMixIn enables concurrent request handling, which is required
+    for the agentic loop (OMN-5725): poll_agentic requests must be served
+    while an agentic loop is running in a background thread.
+    """
 
     allow_reuse_address = True
+    daemon_threads = True
 
 
 # ---------------------------------------------------------------------------

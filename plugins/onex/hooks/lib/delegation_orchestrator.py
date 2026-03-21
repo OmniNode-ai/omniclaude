@@ -251,6 +251,41 @@ _SYSTEM_PROMPT_RESEARCH = (
     "and explain the reasoning. Be direct and technical."
 )
 
+# Agentic system prompts (OMN-5727) — used when agentic_eligible=True.
+# These instruct the LLM to use the available tools to do real codebase work.
+_AGENTIC_SYSTEM_PROMPT_RESEARCH = (
+    "You are a codebase research assistant with access to tools for reading files, "
+    "searching code, finding files, and running read-only commands. "
+    "Use these tools to thoroughly investigate the codebase before answering. "
+    "Always read relevant source files and search for related patterns. "
+    "Provide concrete, evidence-based answers with file paths and code snippets. "
+    "Be thorough but concise."
+)
+
+_AGENTIC_SYSTEM_PROMPT_TEST = (
+    "You are a Python testing expert with access to tools for reading files, "
+    "searching code, finding files, and running read-only commands. "
+    "Use these tools to understand the code under test before generating tests. "
+    "Read the source file, find related tests for patterns, and understand the "
+    "module's dependencies. Generate comprehensive pytest tests with proper "
+    "fixtures, descriptive names, and clear assertions."
+)
+
+_AGENTIC_SYSTEM_PROMPT_DOC = (
+    "You are a technical documentation expert with access to tools for reading files, "
+    "searching code, finding files, and running read-only commands. "
+    "Use these tools to understand the code before generating documentation. "
+    "Read the source file and related modules. Generate clear, well-structured "
+    "documentation with accurate parameter descriptions and usage examples."
+)
+
+# Maps task intent to agentic system prompt
+_AGENTIC_SYSTEM_PROMPTS: dict[str, str] = {
+    "research": _AGENTIC_SYSTEM_PROMPT_RESEARCH,
+    "test": _AGENTIC_SYSTEM_PROMPT_TEST,
+    "document": _AGENTIC_SYSTEM_PROMPT_DOC,
+}
+
 # ---------------------------------------------------------------------------
 # Handler routing table
 # ---------------------------------------------------------------------------
@@ -884,6 +919,51 @@ def orchestrate_delegation(
             }
 
         endpoint_url, model_name, system_prompt, handler_name = endpoint_result
+
+        # --- Agentic path (OMN-5727) ---
+        # When the classifier says the prompt is agentic-eligible, return
+        # metadata for the daemon to start a background agentic loop instead
+        # of making a single-shot LLM call.
+        is_agentic = False
+        if cached_classification is not None:
+            is_agentic = cached_classification.get("agentic_eligible") is True
+        else:
+            # Use getattr with strict identity check to avoid MagicMock truthiness
+            _agentic_val = getattr(score, "agentic_eligible", False)
+            is_agentic = _agentic_val is True
+
+        if is_agentic:
+            # Select the agentic-specific system prompt for this task type
+            agentic_sys_prompt = _AGENTIC_SYSTEM_PROMPTS.get(
+                intent_value, _AGENTIC_SYSTEM_PROMPT_RESEARCH
+            )
+            # Select FUNCTION_CALLING endpoint if available, fall back to current
+            agentic_url = endpoint_url
+            try:
+                fc_purpose = LlmEndpointPurpose("function_calling")
+                registry = LocalLlmEndpointRegistry()
+                fc_endpoint = registry.get_endpoint(fc_purpose)
+                if fc_endpoint is not None:
+                    agentic_url = str(fc_endpoint.url).rstrip("/")
+            except Exception:
+                pass  # Fall back to the standard endpoint
+
+            logger.info(
+                "Agentic delegation: intent=%s endpoint=%s correlation=%s",
+                intent_value,
+                agentic_url,
+                correlation_id,
+            )
+            return {
+                "delegated": False,
+                "agentic": True,
+                "agentic_prompt": prompt,
+                "agentic_system_prompt": agentic_sys_prompt,
+                "agentic_endpoint_url": agentic_url,
+                "intent": intent_value,
+                "confidence": score.confidence,
+                "reason": "agentic_eligible",
+            }
 
         # Gate 4: LLM call with task-specific system prompt
         # Redact secrets from the prompt before forwarding to the local LLM
