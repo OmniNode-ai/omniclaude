@@ -249,13 +249,13 @@ class TaskClassifier:
             "push",
             "curl",
             "bash",
-            "browse",   # 6 chars: matches "browser", "browsed", etc.
-            "shell",    # 5 chars: matches "seashell", "eggshell", etc.
-            "commit",   # 6 chars: matches "commitment", "committed", etc.
-            "deploy",   # 6 chars: matches "deployed", "deployment", etc.
+            "browse",  # 6 chars: matches "browser", "browsed", etc.
+            "shell",  # 5 chars: matches "seashell", "eggshell", etc.
+            "commit",  # 6 chars: matches "commitment", "committed", etc.
+            "deploy",  # 6 chars: matches "deployed", "deployment", etc.
             # Vision signals that are common substrings of unrelated words
-            "ocr",     # 3 chars: matches "score", "discord", etc.
-            "graph",   # 5 chars: matches "paragraph", "biography", etc.
+            "ocr",  # 3 chars: matches "score", "discord", etc.
+            "graph",  # 5 chars: matches "paragraph", "biography", etc.
             "figure",  # 6 chars: matches "configure", "disfigure", etc.
             "visual",  # 6 chars: matches "audiovisual", etc.
         }
@@ -317,8 +317,11 @@ class TaskClassifier:
     )
 
     #: Minimum confidence required before delegation is approved.
-    #: Conservative: must be certain the task is genuinely text-only.
-    DELEGATION_CONFIDENCE_THRESHOLD: float = 0.9
+    #: The keyword classifier normalises as hits / total_keywords_for_intent,
+    #: so real prompts typically score 0.09-0.375.  A threshold of 0.4 means
+    #: roughly 40 % of an intent's keywords must match — a reasonable bar that
+    #: actually allows delegation to fire for well-matched prompts.
+    DELEGATION_CONFIDENCE_THRESHOLD: float = 0.4
 
     #: Vision-related keywords that indicate the prompt involves image/vision
     #: content.  Tasks containing these signals always route to the primary model.
@@ -429,7 +432,9 @@ class TaskClassifier:
         # Primary intent = highest score
         if intent_scores:
             primary_intent = max(intent_scores, key=lambda k: intent_scores.get(k, 0))
-            confidence = intent_scores[primary_intent] / len(self.INTENT_KEYWORDS[primary_intent])  # Normalize
+            confidence = intent_scores[primary_intent] / len(
+                self.INTENT_KEYWORDS[primary_intent]
+            )  # Normalize
 
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
@@ -696,7 +701,7 @@ class TaskClassifier:
         )
 
         # --- Gate 4: Confidence must exceed threshold -------------------------
-        if classification_confidence <= self.DELEGATION_CONFIDENCE_THRESHOLD:
+        if classification_confidence < self.DELEGATION_CONFIDENCE_THRESHOLD:
             reasons.append(
                 f"classification confidence {classification_confidence:.3f} does not "
                 f"exceed threshold {self.DELEGATION_CONFIDENCE_THRESHOLD}"
