@@ -16,7 +16,7 @@ Coverage:
 
 from __future__ import annotations
 
-import sys
+import importlib.util
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,15 +24,27 @@ from typing import Any
 
 import pytest
 
-# Add the plugins path so we can import hooks.lib modules.
-_PLUGINS_ROOT = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks"
-if str(_PLUGINS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PLUGINS_ROOT))
-
-from lib.agentic_loop import (
-    AgenticStatus,
-    run_agentic_loop,
+# The hooks/lib modules are not installed packages — they're loaded at runtime.
+# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
+# entry that would shadow tests/unit/lib/ during pytest collection.
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "plugins"
+    / "onex"
+    / "hooks"
+    / "lib"
+    / "agentic_loop.py"
 )
+import sys
+
+_spec = importlib.util.spec_from_file_location("agentic_loop", _MODULE_PATH)
+assert _spec and _spec.loader
+_mod = importlib.util.module_from_spec(_spec)
+sys.modules["agentic_loop"] = _mod
+_spec.loader.exec_module(_mod)
+
+AgenticStatus = _mod.AgenticStatus
+run_agentic_loop = _mod.run_agentic_loop
 
 # Type alias matching the module's convention.
 _JsonDict = dict[str, Any]
@@ -343,7 +355,7 @@ class TestNoBackend:
         """When _get_backend() returns None, the loop should return NO_BACKEND."""
         from unittest.mock import patch
 
-        with patch("lib.agentic_loop._get_backend", return_value=None):
+        with patch.object(_mod, "_get_backend", return_value=None):
             result = run_agentic_loop(
                 prompt="Task",
                 system_prompt="System",
