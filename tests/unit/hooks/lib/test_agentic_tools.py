@@ -13,25 +13,31 @@ Coverage:
 
 from __future__ import annotations
 
+import importlib.util
 import json
-
-# The hooks/lib modules are not installed packages — they're loaded at runtime.
-# We import by manipulating sys.path in conftest or directly here.
-import sys
 from pathlib import Path
 
 import pytest
 
-# Add the plugins path so we can import hooks.lib modules.
-_PLUGINS_ROOT = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks"
-if str(_PLUGINS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PLUGINS_ROOT))
-
-from lib.agentic_tools import (
-    ALL_TOOLS,
-    _is_command_allowed,
-    dispatch_tool,
+# The hooks/lib modules are not installed packages — they're loaded at runtime.
+# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
+# entry that would shadow tests/unit/lib/ during pytest collection.
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "plugins"
+    / "onex"
+    / "hooks"
+    / "lib"
+    / "agentic_tools.py"
 )
+_spec = importlib.util.spec_from_file_location("agentic_tools", _MODULE_PATH)
+assert _spec and _spec.loader
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+ALL_TOOLS = _mod.ALL_TOOLS
+_is_command_allowed = _mod._is_command_allowed
+dispatch_tool = _mod.dispatch_tool
 
 # ---------------------------------------------------------------------------
 # Tests: Tool definitions
