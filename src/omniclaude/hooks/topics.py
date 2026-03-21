@@ -265,6 +265,12 @@ class TopicBase(StrEnum):
     """Emitted after skill dispatch (success or failure); join key is run_id."""
 
     # ==========================================================================
+    # Friction observation topics (OMN-5747)
+    # ==========================================================================
+    FRICTION_OBSERVED = "onex.evt.omniclaude.friction-observed.v1"
+    """Contract-driven friction classification output; partition key is session_id."""
+
+    # ==========================================================================
     # Wave 2 pipeline observability topics (OMN-2922)
     # Consumed by omnidash Wave 2 projection nodes.
     # ==========================================================================

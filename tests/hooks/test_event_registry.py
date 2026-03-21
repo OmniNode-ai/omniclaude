@@ -796,6 +796,8 @@ class TestEventRegistryIntegration:
             "audit.scope.violation",
             # Friction tracking side-channel event (OMN-5442)
             "skill.friction_recorded",
+            # Contract-driven friction observation (OMN-5747)
+            "friction.observed",
             # Utilization scoring command emitted from Stop hook (OMN-5505)
             "utilization.scoring.requested",
             # Task delegation observability (OMN-5610)
