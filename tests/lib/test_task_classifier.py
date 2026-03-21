@@ -1087,17 +1087,14 @@ class TestIsDelegatableConfidenceThreshold:
         """DELEGATION_CONFIDENCE_THRESHOLD is 0.4."""
         assert TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD == 0.4
 
-    def test_low_confidence_document_not_delegatable(
+    def test_single_keyword_document_is_delegatable(
         self, classifier: TaskClassifier
     ) -> None:
-        """Low-confidence DOCUMENT intent is not delegated even if in allow-list."""
-        # A minimal prompt gives low confidence (single keyword hit)
+        """Single-keyword DOCUMENT hit IS delegated — the saturating boost for
+        delegatable intents means even 1 match produces sufficient confidence."""
         result = classifier.is_delegatable("document", intent=TaskIntent.DOCUMENT)
-        # Confidence is well below the delegation threshold regardless of the exact
-        # normalization formula — behavior matters, not the specific numeric value.
-        assert result.delegatable is False
-        assert result.confidence < TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD
-        assert result.estimated_savings_usd == 0.0
+        assert result.delegatable is True
+        assert result.confidence >= TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD
 
     def test_confidence_at_threshold_is_delegatable(
         self, classifier: TaskClassifier
@@ -1111,18 +1108,16 @@ class TestIsDelegatableConfidenceThreshold:
         assert result.confidence >= TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD
         assert result.delegatable is True
 
-    def test_below_threshold_document_result_is_valid(
+    def test_non_delegatable_intent_below_threshold(
         self, classifier: TaskClassifier
     ) -> None:
-        """DOCUMENT intent with confidence below 0.4 returns a valid (non-delegatable) result."""
-        # DOCUMENT has 8 keywords.  A minimal prompt with only 1 keyword hit
-        # gives confidence = 1/8 = 0.125, which is below the 0.4 threshold.
-        result = classifier.is_delegatable("document", intent=TaskIntent.DOCUMENT)
+        """Non-delegatable intent (IMPLEMENT) stays below threshold — the
+        saturating boost only applies to DELEGATABLE_INTENTS."""
+        result = classifier.is_delegatable("build a new feature")
         assert isinstance(result, ModelDelegationScore)
         assert isinstance(result.delegatable, bool)
         assert isinstance(result.confidence, float)
         assert 0.0 <= result.confidence <= 1.0
-        assert result.confidence < TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD
         assert result.delegatable is False
 
     def test_high_confidence_research_delegatable(

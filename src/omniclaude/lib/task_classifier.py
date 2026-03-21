@@ -432,9 +432,16 @@ class TaskClassifier:
         # Primary intent = highest score
         if intent_scores:
             primary_intent = max(intent_scores, key=lambda k: intent_scores.get(k, 0))
-            confidence = intent_scores[primary_intent] / len(
-                self.INTENT_KEYWORDS[primary_intent]
-            )  # Normalize
+            raw_hits = intent_scores[primary_intent]
+            total_kws = len(self.INTENT_KEYWORDS[primary_intent])
+            confidence = raw_hits / total_kws  # Normalize
+
+            # For delegatable intents (RESEARCH, TEST, DOCUMENT), even 1-2 keyword
+            # matches are strong signal because the keywords are specific action
+            # words, not ambiguous terms.  Use a saturating formula so that 1 hit
+            # produces ~0.5 and 2 hits produce ~0.7, making delegation reachable.
+            if primary_intent in self.DELEGATABLE_INTENTS and raw_hits >= 1:
+                confidence = min(0.4 + (raw_hits * 0.15), 0.95)
 
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
