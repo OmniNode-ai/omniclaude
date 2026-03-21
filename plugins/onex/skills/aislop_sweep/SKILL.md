@@ -18,7 +18,7 @@ args:
     description: "Comma-separated repo names to scan (default: aislop supported repos — see supported repo list)"
     required: false
   - name: --checks
-    description: "Comma-separated pattern categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,todo-fixme,empty-impls (default: all)"
+    description: "Comma-separated pattern categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,todo-fixme,todo-stale,empty-impls (default: all)"
     required: false
   - name: --dry-run
     description: Scan and report only — no tickets, no fixes
@@ -114,7 +114,8 @@ migrations/    *.generated.*  vendored/
 | `phantom-callables` | Executable-looking `identifier()` or `call identifier` in **imperative** skill .md context (not prose description, not examples); identifier absent from `_lib/`, `_bin/`, any `.py` under `plugins/` | ERROR | HIGH if confirmed missing (searched 3 locations); MEDIUM if only 1 location checked |
 | `compat-shims` | `# removed`, `# backwards.compat`, `_unused_` in non-test src | WARNING | MEDIUM |
 | `empty-impls` | `^\s*pass$` in src/ outside Abstract/Protocol/stub files | WARNING | MEDIUM |
-| `todo-fixme` | `TODO`, `FIXME`, `HACK` in src/ (not tests/, not docs/) | INFO | LOW |
+| `todo-fixme` | `TODO`, `FIXME`, `HACK` in src/ (not tests/, not docs/) | WARNING | MEDIUM |
+| `todo-stale` | `TODO(OMN-XXXX)` where referenced ticket is Done/Canceled in Linear | ERROR | HIGH (cross-referenced against Linear); falls back to WARNING if Linear MCP unavailable |
 
 ## ModelSweepFinding Schema
 
@@ -155,7 +156,11 @@ Every finding is a structured object:
      → HIGH if confirmed missing; MEDIUM if path match is ambiguous
    - compat-shims: flag only in src/ (skip tests/, docs/, skill markdown)
    - empty-impls: skip *Abstract*, *Protocol*, *stub*, *__init__* files
-   - todo-fixme: flag only in src/ (not tests/, not docs/, not skill markdown)
+   - todo-fixme: flag only in src/ (not tests/, not docs/, not skill markdown); severity=WARNING, confidence=MEDIUM
+   - todo-stale: for each TODO(OMN-XXXX), query Linear MCP for ticket state;
+     if state.type is COMPLETED or CANCELED → severity=ERROR, confidence=HIGH, ticketable=true
+     if Linear MCP unavailable → downgrade to WARNING with explicit message:
+     "Linear MCP unavailable -- todo-stale downgraded from ERROR to WARNING"
    Set ticketable=true when confidence=HIGH AND severity>=WARNING
 
 4. IF no findings → emit ModelSkillResult(status=clean), exit
@@ -204,6 +209,7 @@ Every finding is a structured object:
     "prohibited-patterns": 1,
     "hardcoded-topics": 2,
     "todo-fixme": 7,
+    "todo-stale": 2,
     "empty-impls": 2
   },
   "tickets_created": 6,
