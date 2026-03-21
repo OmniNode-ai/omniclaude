@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Mapping
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class IncrementalExtractionHandler:
     All config is read from contract YAML's incremental_extraction section.
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: Mapping[str, object]) -> None:
         """Initialize from contract config.
 
         Args:
@@ -111,7 +111,7 @@ class IncrementalExtractionHandler:
         self._last_trigger[file_path] = now
         return True
 
-    def build_crawl_command(self, file_path: str) -> dict[str, Any] | None:
+    def build_crawl_command(self, file_path: str) -> Mapping[str, object] | None:
         """Build a code-crawl-requested.v1 command payload for a changed file.
 
         Args:
