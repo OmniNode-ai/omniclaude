@@ -23,7 +23,8 @@ if HOOKS_LIB not in sys.path:
 class TestStructuralMode:
     """Test SQL-based structural queries for epic-level context."""
 
-    def test_structural_returns_entities_on_success(self):
+    def test_structural_rich_schema(self):
+        """Test with 025_code_entities.sql schema (entity_name, qualified_name)."""
         from code_graph_query import query_structural
 
         entity_output = (
@@ -31,11 +32,11 @@ class TestStructuralMode:
             "omniclaude|protocol|BaseHandler|omniclaude.protocols.base|protocol"
         )
         rel_output = "omniclaude|implements|3"
-        # _run_psql called 3 times: preflight, entity query, relationship query
+        # _run_psql: rich preflight succeeds, entity query, relationship query
         with patch(
             "code_graph_query._run_psql",
             side_effect=[
-                (True, "1"),  # preflight
+                (True, "1"),  # rich schema preflight (entity_name exists)
                 (True, entity_output),  # entity query
                 (True, rel_output),  # relationship query
             ],
@@ -48,9 +49,38 @@ class TestStructuralMode:
         assert len(result["relationships"]) == 1
         assert result["relationships"][0]["count"] == 3
 
+    def test_structural_simple_schema_fallback(self):
+        """Test with 025_create_code_entities.sql schema (name, file_path)."""
+        from code_graph_query import query_structural
+
+        entity_output = (
+            "omniclaude|class|DispatchHandler|src/handler.py:DispatchHandler|class\n"
+            "omniclaude|protocol|BaseHandler|src/base.py:BaseHandler|protocol"
+        )
+        rel_output = "omniclaude|implements|2"
+        # _run_psql: rich preflight FAILS, simple preflight succeeds
+        with patch(
+            "code_graph_query._run_psql",
+            side_effect=[
+                (False, "column entity_name does not exist"),  # rich fails
+                (True, "1"),  # simple schema preflight (name exists)
+                (True, entity_output),  # entity query (synthesized qualified_name)
+                (
+                    True,
+                    rel_output,
+                ),  # relationship query (no inject_into_context filter)
+            ],
+        ):
+            result = query_structural(repos=["omniclaude"])
+        assert result["success"] is True
+        assert len(result["entities"]) == 2
+        assert result["entities"][0]["entity_name"] == "DispatchHandler"
+        assert "handler.py" in result["entities"][0]["qualified_name"]
+
     def test_structural_graceful_on_psql_failure(self):
         from code_graph_query import query_structural
 
+        # Both schema preflights fail → service_unavailable
         with patch("code_graph_query._run_psql", return_value=(False, "")):
             result = query_structural(repos=["omniclaude"])
         assert result["success"] is True

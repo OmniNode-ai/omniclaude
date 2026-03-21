@@ -109,32 +109,50 @@ def query_structural(*, repos: list[str]) -> dict[str, Any]:
                 "relationships": [],
             }
 
-    # Preflight: verify table exists AND has expected columns from 025_code_entities.sql.
-    # Two competing migrations exist — 025_code_entities.sql (entity_name, qualified_name)
-    # vs 025_create_code_entities.sql (name, file_path). We require the former.
-    ok, _ = _run_psql(
-        "SELECT entity_name, qualified_name, classification FROM code_entities LIMIT 1"
-    )
-    if not ok:
-        return {
-            "success": True,
-            "mode": "structural",
-            "status": "service_unavailable",
-            "entities": [],
-            "relationships": [],
-        }
+    # Detect which schema variant is active. Two competing migrations exist:
+    #   025_code_entities.sql: entity_name, qualified_name, inject_into_context
+    #   025_create_code_entities.sql: name, file_path (no qualified_name)
+    # Try the richer schema first; fall back to the simpler one.
+    ok, _ = _run_psql("SELECT entity_name FROM code_entities LIMIT 1")
+    if ok:
+        schema = "rich"  # 025_code_entities.sql
+    else:
+        ok, _ = _run_psql("SELECT name FROM code_entities LIMIT 1")
+        if ok:
+            schema = "simple"  # 025_create_code_entities.sql
+        else:
+            return {
+                "success": True,
+                "mode": "structural",
+                "status": "service_unavailable",
+                "entities": [],
+                "relationships": [],
+            }
 
     repo_list = ",".join(f"'{r}'" for r in repos)
 
-    entity_sql = f"""
-        SELECT source_repo, entity_type, entity_name, qualified_name,
-               COALESCE(classification, entity_type) AS classification
-        FROM code_entities
-        WHERE source_repo IN ({repo_list})
-          AND entity_type IN ('class', 'protocol', 'model')
-        ORDER BY source_repo, entity_type, entity_name
-        LIMIT 50
-    """
+    if schema == "rich":
+        entity_sql = f"""
+            SELECT source_repo, entity_type, entity_name, qualified_name,
+                   COALESCE(classification, entity_type) AS classification
+            FROM code_entities
+            WHERE source_repo IN ({repo_list})
+              AND entity_type IN ('class', 'protocol', 'model')
+            ORDER BY source_repo, entity_type, entity_name
+            LIMIT 50
+        """
+    else:
+        entity_sql = f"""
+            SELECT source_repo, entity_type, name,
+                   file_path || ':' || name AS qualified_name,
+                   COALESCE(classification, entity_type) AS classification
+            FROM code_entities
+            WHERE source_repo IN ({repo_list})
+              AND entity_type IN ('class', 'protocol', 'model')
+            ORDER BY source_repo, entity_type, name
+            LIMIT 50
+        """
+
     ok, entity_output = _run_psql(entity_sql)
     entities = []
     if ok and entity_output:
@@ -151,15 +169,26 @@ def query_structural(*, repos: list[str]) -> dict[str, Any]:
                     }
                 )
 
-    rel_sql = f"""
-        SELECT ce.source_repo, cr.relationship_type, COUNT(*)
-        FROM code_relationships cr
-        JOIN code_entities ce ON cr.source_entity_id = ce.id
-        WHERE ce.source_repo IN ({repo_list})
-          AND cr.inject_into_context = true
-        GROUP BY ce.source_repo, cr.relationship_type
-        ORDER BY ce.source_repo, cr.relationship_type
-    """
+    # Relationship query: inject_into_context only exists in the rich schema
+    if schema == "rich":
+        rel_sql = f"""
+            SELECT ce.source_repo, cr.relationship_type, COUNT(*)
+            FROM code_relationships cr
+            JOIN code_entities ce ON cr.source_entity_id = ce.id
+            WHERE ce.source_repo IN ({repo_list})
+              AND cr.inject_into_context = true
+            GROUP BY ce.source_repo, cr.relationship_type
+            ORDER BY ce.source_repo, cr.relationship_type
+        """
+    else:
+        rel_sql = f"""
+            SELECT ce.source_repo, cr.relationship_type, COUNT(*)
+            FROM code_relationships cr
+            JOIN code_entities ce ON cr.source_entity_id = ce.id
+            WHERE ce.source_repo IN ({repo_list})
+            GROUP BY ce.source_repo, cr.relationship_type
+            ORDER BY ce.source_repo, cr.relationship_type
+        """
     ok, rel_output = _run_psql(rel_sql)
     relationships: list[dict[str, Any]] = []
     if ok and rel_output:
