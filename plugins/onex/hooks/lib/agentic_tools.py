@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -256,9 +258,19 @@ def _dispatch_find_files(args: dict[str, Any]) -> str:
     return _truncate("\n".join(result_lines))
 
 
+# Shell metacharacters that enable command chaining/injection.
+_SHELL_METACHAR_PATTERN = re.compile(r"[;|&`$()<>\n]")
+
+
 def _is_command_allowed(command: str) -> bool:
-    """Check if a command matches the allowlist."""
+    """Check if a command matches the allowlist.
+
+    Rejects commands containing shell metacharacters to prevent injection
+    via chaining operators (e.g. ``cat /etc/passwd; rm -rf /``).
+    """
     stripped = command.strip()
+    if _SHELL_METACHAR_PATTERN.search(stripped):
+        return False
     return any(stripped.startswith(prefix) for prefix in _COMMAND_ALLOWLIST)
 
 
@@ -275,9 +287,13 @@ def _dispatch_run_command(args: dict[str, Any]) -> str:
         )
 
     try:
+        cmd_args = shlex.split(command)
+    except ValueError as exc:
+        return f"Error: could not parse command: {exc}"
+
+    try:
         result = subprocess.run(
-            command,
-            shell=True,
+            cmd_args,
             capture_output=True,
             text=True,
             timeout=30,

