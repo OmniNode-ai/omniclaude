@@ -341,6 +341,7 @@ Mandatory mechanical checks -- required, not suggested:
 - **API signatures**: any callable invoked across a boundary -- pin exact keyword argument names to a real existing call site. "publish(payload)" is wrong if the real signature is "publish(data=..., event_type=...)". Must-verify, not assumed.
 - **Return types**: write the actual import path or "returns dict shaped like ModelFoo JSON" -- not "returns ModelFoo type" without a path.
 - **Topics and schema names**: if a topic string is introduced, prove it matches the naming spec and is registered via the designated mechanism. If an event model is referenced, prove the module path exists or the `__init__.py` re-export exists.
+- **Verified Assumptions (cross-repo schema)**: if the plan references a DB schema, Qdrant payload, Kafka event shape, or any data contract owned by another repository, include a **Verified Assumptions** section listing each assumed field/column name with evidence (e.g., "Verified: `entity_name` column exists in `025_code_entities.sql` line 12"). Plans that reference external schema without verified assumptions are an R4 failure. This prevents the class of bugs where code is written against an assumed schema that has since changed or was never correct (see OMN-5765 for the motivating incident).
 
 #### R5 -- Idempotency
 
