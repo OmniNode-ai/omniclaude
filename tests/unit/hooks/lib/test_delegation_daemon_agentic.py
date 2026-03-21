@@ -11,6 +11,7 @@ Coverage:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import time
@@ -20,20 +21,30 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add the plugins path so we can import hooks.lib modules.
-_PLUGINS_ROOT = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "hooks"
-if str(_PLUGINS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PLUGINS_ROOT))
-
-from lib.delegation_daemon import (
-    AgenticJob,
-    AgenticJobStatus,
-    _agentic_jobs,
-    _agentic_jobs_lock,
-    _gc_agentic_jobs,
-    _handle_request,
-    _poll_agentic_jobs,
+# The hooks/lib modules are not installed packages — they're loaded at runtime.
+# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
+# entry that would shadow tests/unit/lib/ during pytest collection.
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[4]
+    / "plugins"
+    / "onex"
+    / "hooks"
+    / "lib"
+    / "delegation_daemon.py"
 )
+_spec = importlib.util.spec_from_file_location("delegation_daemon", _MODULE_PATH)
+assert _spec and _spec.loader
+_mod = importlib.util.module_from_spec(_spec)
+sys.modules["delegation_daemon"] = _mod
+_spec.loader.exec_module(_mod)
+
+AgenticJob = _mod.AgenticJob
+AgenticJobStatus = _mod.AgenticJobStatus
+_agentic_jobs = _mod._agentic_jobs
+_agentic_jobs_lock = _mod._agentic_jobs_lock
+_gc_agentic_jobs = _mod._gc_agentic_jobs
+_handle_request = _mod._handle_request
+_poll_agentic_jobs = _mod._poll_agentic_jobs
 
 
 @pytest.fixture(autouse=True)
@@ -143,12 +154,14 @@ class TestHandleRequestPollAction:
     def test_standard_request_still_works(self) -> None:
         """Standard delegation requests should still work when orchestrator is available."""
         with (
-            patch(
-                "lib.delegation_daemon.orchestrate_delegation",
+            patch.object(
+                _mod,
+                "orchestrate_delegation",
                 return_value={"delegated": False, "reason": "not_delegatable"},
             ),
-            patch(
-                "lib.delegation_daemon._classify_with_cache",
+            patch.object(
+                _mod,
+                "_classify_with_cache",
                 return_value=None,
             ),
         ):
@@ -231,16 +244,19 @@ class TestAgenticDispatch:
         }
 
         with (
-            patch(
-                "lib.delegation_daemon.orchestrate_delegation",
+            patch.object(
+                _mod,
+                "orchestrate_delegation",
                 return_value=agentic_result,
             ),
-            patch(
-                "lib.delegation_daemon._classify_with_cache",
+            patch.object(
+                _mod,
+                "_classify_with_cache",
                 return_value=None,
             ),
-            patch(
-                "lib.delegation_daemon.run_agentic_task",
+            patch.object(
+                _mod,
+                "run_agentic_task",
                 return_value=MagicMock(),
             ) as mock_task,
         ):
