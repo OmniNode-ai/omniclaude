@@ -245,7 +245,9 @@ class CodeContextResolver:
                     json={"input": text, "model": "default"},
                 )
                 response.raise_for_status()
-                return response.json()["data"][0]["embedding"]
+                data: dict[str, object] = response.json()
+                embedding: list[float] = data["data"][0]["embedding"]  # type: ignore[index,assignment]
+                return embedding
         except Exception:  # noqa: BLE001 — boundary: embedding request must degrade gracefully
             logger.warning("CodeContextResolver: embedding request failed")
             return None
