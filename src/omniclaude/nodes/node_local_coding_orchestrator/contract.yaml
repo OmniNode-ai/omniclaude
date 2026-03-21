@@ -70,6 +70,12 @@ invariants:
   - no_api_client_imports: true
   - react_to_structured_results_only: true
 
+# Input model
+input_model:
+  name: "ModelEventEnvelope"
+  module: "omnibase_core.models.events.model_event_envelope"
+  description: "Event envelope containing structured results from downstream effect nodes"
+
 # Metadata
 metadata:
   author: OmniNode Team
