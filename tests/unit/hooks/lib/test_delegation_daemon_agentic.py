@@ -80,9 +80,14 @@ class TestPollAgenticAction:
         assert result["job_id"] == "j1"
 
     def test_poll_completed_job(self) -> None:
-        # Create a fake completed result
+        # Create a fake completed result with content that passes quality gate
+        _long_content = (
+            "The delegation system in omniclaude uses a ReAct-style agentic loop "
+            "that iteratively calls the local LLM with tool definitions. "
+            "The main entry point is in delegation_daemon.py."
+        )
         fake_result = MagicMock()
-        fake_result.content = "Research findings here."
+        fake_result.content = _long_content
         fake_result.iterations = 3
         fake_result.tool_calls_count = 5
         fake_result.tool_names_used = {"read_file", "search_content"}
@@ -102,7 +107,7 @@ class TestPollAgenticAction:
 
         result = _poll_agentic_jobs("session-1")
         assert result["agentic_completed"] is True
-        assert result["content"] == "Research findings here."
+        assert result["content"] == _long_content
         assert result["iterations"] == 3
         assert result["tool_calls_count"] == 5
         assert "read_file" in result["tool_names"]

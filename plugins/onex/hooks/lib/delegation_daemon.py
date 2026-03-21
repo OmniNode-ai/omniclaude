@@ -99,6 +99,13 @@ except ImportError:  # pragma: no cover
     AgenticStatus = None  # type: ignore[assignment,misc]
     run_agentic_task = None  # type: ignore[assignment]
 
+try:
+    from agentic_quality_gate import (  # type: ignore[import-not-found]
+        check_agentic_quality,
+    )
+except ImportError:  # pragma: no cover
+    check_agentic_quality = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # Agentic job types (OMN-5725)
@@ -238,6 +245,27 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 iterations = job.result.iterations
                 tool_calls_count = job.result.tool_calls_count
                 tool_names = sorted(job.result.tool_names_used)
+
+                # Quality gate check (OMN-5729)
+                if check_agentic_quality is not None:
+                    gate_result = check_agentic_quality(
+                        content=content,
+                        tool_calls_count=tool_calls_count,
+                        iterations=iterations,
+                    )
+                    if not gate_result.passed:
+                        logger.info(
+                            "Agentic quality gate failed for job %s: %s",
+                            job_id,
+                            gate_result.reason,
+                        )
+                        del _agentic_jobs[job_id]
+                        return {
+                            "agentic_completed": False,
+                            "job_id": job_id,
+                            "error": f"quality_gate_failed: {gate_result.reason}",
+                        }
+
                 # Remove job after delivery
                 del _agentic_jobs[job_id]
                 return {
