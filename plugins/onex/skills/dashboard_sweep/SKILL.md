@@ -39,7 +39,7 @@ args:
     description: "Run Phase 1+2 only (recon + triage), no fixes"
     required: false
   - name: --fix-only
-    description: "Skip recon, use existing triage report from ~/.claude/dashboard-sweep/latest/"
+    description: "Skip recon, use existing triage report from $ONEX_STATE_DIR/dashboard-sweep/latest/"
     required: false
   - name: --max-iterations
     description: "Maximum fix-reaudit iterations before stopping (default: 3)"
@@ -224,7 +224,7 @@ the pre-deploy state (re-audit may show fixes only when containers restart manua
 
 ### Emit Deploy Record
 
-Emit to `~/.claude/dashboard-sweep/{run_id}/deploy.json`:
+Emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/deploy.json`:
 
 ```json
 {
@@ -270,8 +270,8 @@ For each route:
 
 1. Navigate to route; wait for `networkidle` (max 10 s) or `DOMContentLoaded` + 2 s
 2. Scroll to bottom to trigger lazy renders
-3. Capture full-page screenshot → save to `~/.claude/dashboard-sweep/{run_id}/screenshots/{route_slug}.png`
-4. Capture browser console errors → save to `~/.claude/dashboard-sweep/{run_id}/console/{route_slug}.json`
+3. Capture full-page screenshot → save to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/{route_slug}.png`
+4. Capture browser console errors → save to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/console/{route_slug}.json`
 5. Capture `document.title` and visible text summary (first 500 chars)
 
 ### Page Classification
@@ -297,7 +297,7 @@ Classify each page immediately after screenshot:
 
 ### Recon Output
 
-Emit recon report to `~/.claude/dashboard-sweep/{run_id}/recon.json`:
+Emit recon report to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json`:
 
 ```json
 {
@@ -307,7 +307,7 @@ Emit recon report to `~/.claude/dashboard-sweep/{run_id}/recon.json`:
     {
       "route": "/agents",
       "status": "EMPTY",
-      "screenshot": "~/.claude/dashboard-sweep/{run_id}/screenshots/agents.png",
+      "screenshot": "$ONEX_STATE_DIR/dashboard-sweep/{run_id}/screenshots/agents.png",
       "console_errors": [],
       "network_failures": [],
       "visible_text_sample": "No agents found",
@@ -361,7 +361,7 @@ For each domain, assign exactly one fix tier:
 
 ### Triage Output
 
-Emit to `~/.claude/dashboard-sweep/{run_id}/triage.json`:
+Emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json`:
 
 ```json
 {
@@ -408,8 +408,8 @@ Hypothesis:      {hypothesis}
 Repos:           {repos_likely_affected}
 Dashboard URL:   {url}
 Run ID:          {run_id}
-Triage Path:     ~/.claude/dashboard-sweep/{run_id}/triage.json
-Recon Path:      ~/.claude/dashboard-sweep/{run_id}/recon.json
+Triage Path:     $ONEX_STATE_DIR/dashboard-sweep/{run_id}/triage.json
+Recon Path:      $ONEX_STATE_DIR/dashboard-sweep/{run_id}/recon.json
 ```
 
 ### Agent Constraints (Non-Negotiable)
@@ -420,7 +420,7 @@ Each dispatched debug agent MUST:
    pattern → hypothesis → implementation)
 2. Work in a git worktree (NEVER edit files in `omni_home/` directly)
 3. Run `uv run pre-commit run --all-files` before committing
-4. Write fix summary to `~/.claude/dashboard-sweep/{run_id}/fixes/{domain_id}.json`
+4. Write fix summary to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json`
 5. Report actual root cause found (not just "fixed")
 
 ### Parallel Dispatch Contract
@@ -470,7 +470,7 @@ Description:
 
 ### Fix Registry
 
-Emit to `~/.claude/dashboard-sweep/{run_id}/fixes/{domain_id}.json`:
+Emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/fixes/{domain_id}.json`:
 
 ```json
 {
@@ -506,11 +506,11 @@ Unchanged:   still EMPTY or BROKEN after fixes (new domains for next iteration)
 New issues:  routes now returning data but with new errors
 ```
 
-Emit to `~/.claude/dashboard-sweep/{run_id}/reaudit.json` (same schema as recon.json).
+Emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/reaudit.json` (same schema as recon.json).
 
 ### Comparison Report
 
-Emit to `~/.claude/dashboard-sweep/{run_id}/comparison.md`:
+Emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/comparison.md`:
 
 ```markdown
 ## Dashboard Sweep — Before vs After
@@ -560,7 +560,7 @@ IF iteration > max_iterations:
 
 ## Final Report
 
-After all iterations complete, emit to `~/.claude/dashboard-sweep/{run_id}/report.md`:
+After all iterations complete, emit to `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/report.md`:
 
 ```markdown
 # Dashboard Sweep Report — {run_id}
@@ -641,7 +641,7 @@ uv run pytest tests/integration/skills/dashboard_sweep/ -v
 ## Artifacts
 
 ```
-~/.claude/dashboard-sweep/{run_id}/
+$ONEX_STATE_DIR/dashboard-sweep/{run_id}/
   recon.json                  # Phase 1 output
   screenshots/*.png           # Per-page screenshots
   console/*.json              # Per-page console errors
@@ -651,7 +651,7 @@ uv run pytest tests/integration/skills/dashboard_sweep/ -v
   reaudit.json                # Phase 5 output
   comparison.md               # Before vs after comparison
   report.md                   # Final summary
-~/.claude/dashboard-sweep/latest -> {run_id}  # symlink to most recent run
+$ONEX_STATE_DIR/dashboard-sweep/latest -> {run_id}  # symlink to most recent run
 ```
 
 ## See Also

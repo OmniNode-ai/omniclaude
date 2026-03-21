@@ -50,7 +50,18 @@ logger = logging.getLogger(__name__)
 
 ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelinePhase)
 
-BASELINES_ROOT = Path.home() / ".claude" / "baselines"
+BASELINES_ROOT: Path | None = None
+
+
+def _get_baselines_root() -> Path:
+    """Return the baselines root directory, resolved lazily."""
+    global BASELINES_ROOT
+    if BASELINES_ROOT is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        BASELINES_ROOT = ensure_state_dir("baselines")
+    return BASELINES_ROOT
+
 
 REQUIRED_DIMENSIONS: tuple[str, ...] = ("duration", "tokens", "tests")
 
@@ -226,7 +237,7 @@ def save_baseline(
     Returns:
         The path to the saved file on success, or None on failure.
     """
-    root = baselines_root or BASELINES_ROOT
+    root = baselines_root or _get_baselines_root()
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
@@ -259,7 +270,7 @@ def load_baseline(
     baselines_root: Path | None = None,
 ) -> ContractAggregatedRun | None:
     """Load the baseline for the given context, or None if not found."""
-    root = baselines_root or BASELINES_ROOT
+    root = baselines_root or _get_baselines_root()
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
@@ -447,7 +458,7 @@ def save_gate(
     Returns:
         The path to the saved file on success, or None on failure.
     """
-    root = baselines_root or BASELINES_ROOT
+    root = baselines_root or _get_baselines_root()
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
@@ -481,7 +492,7 @@ def load_gate(
     baselines_root: Path | None = None,
 ) -> ContractPromotionGate | None:
     """Load the gate for the given context, or None if not found."""
-    root = baselines_root or BASELINES_ROOT
+    root = baselines_root or _get_baselines_root()
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
@@ -518,7 +529,7 @@ def load_latest_gate_result(
         The gate_result string ("pass", "fail", or "insufficient_evidence")
         or None if no gate files found or on any error.
     """
-    root = baselines_root or BASELINES_ROOT
+    root = baselines_root or _get_baselines_root()
     if not pattern_id:
         logger.debug(
             "load_latest_gate_result called with empty pattern_id; returning None"

@@ -34,7 +34,8 @@ unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
-LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+LOG_FILE="${ONEX_HOOK_LOG}"
 
 # Read stdin (tool invocation JSON)
 INPUT=$(cat)

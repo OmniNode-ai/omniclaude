@@ -135,9 +135,10 @@ set -e
 
 # -----------------------------------------------------------------------
 # Pipeline Trace Logging — unified trace for Skill/Task/routing visibility
-# tail -f ~/.claude/logs/pipeline-trace.log to see the full chain
+# tail -f $ONEX_LOG_DIR/pipeline-trace.log to see the full chain
 # -----------------------------------------------------------------------
-TRACE_LOG="$HOME/.claude/logs/pipeline-trace.log"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+TRACE_LOG="${ONEX_LOG_DIR}/pipeline-trace.log"
 mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
 TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -159,7 +160,7 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
         # -----------------------------------------------------------------------
         # Skill Usage Logging (OMN-3454)
         # Appends {"skill_name":..., "timestamp":..., "session_id":...} to
-        # ~/.claude/onex-skill-usage.log for Kaizen progression injection.
+        # $ONEX_LOG_DIR/onex-skill-usage.log for Kaizen progression injection.
         # Non-blocking: runs in background subshell; hook exits 0 on failure.
         # -----------------------------------------------------------------------
         SKILL_USAGE_LOGGER="${HOOKS_LIB}/skill_usage_logger.py"

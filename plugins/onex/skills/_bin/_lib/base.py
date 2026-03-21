@@ -97,10 +97,10 @@ def stdout_line(status: ScriptStatus, log_path: str, msg: str) -> str:
 
 
 def default_log_dir() -> Path:
-    """Return the default log directory (~/.claude/skill-logs/)."""
-    log_dir = Path.home() / ".claude" / "skill-logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
+    """Return the default log directory under ONEX_STATE_DIR."""
+    from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+    return ensure_state_dir("skill-logs")
 
 
 def default_run_id() -> str:

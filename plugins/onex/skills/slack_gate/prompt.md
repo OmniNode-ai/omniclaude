@@ -147,7 +147,7 @@ Exit with `status: timeout` immediately. No re-notification needed.
 import json, os, pathlib
 
 context_id = os.environ.get("CLAUDE_CONTEXT_ID", "default")
-result_dir = pathlib.Path(f"~/.claude/skill-results/{context_id}").expanduser()
+result_dir = pathlib.Path(f"$ONEX_STATE_DIR/skill-results/{context_id}").expanduser()
 result_dir.mkdir(parents=True, exist_ok=True)
 
 result = {

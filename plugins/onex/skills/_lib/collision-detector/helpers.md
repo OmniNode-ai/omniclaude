@@ -61,7 +61,7 @@ DetectionResult = {
 }
 ```
 
-### `detect_collisions(tickets, epic_id, tcb_dir="~/.claude/tcb/")` — Procedure
+### `detect_collisions(tickets, epic_id, tcb_dir="$ONEX_STATE_DIR/tcb/")` — Procedure
 
 1. For each ticket, load TCB if it exists at `{tcb_dir}/{ticket_id}/bundle.json`
 2. Extract predicted surfaces (entrypoint file refs)
@@ -72,7 +72,7 @@ DetectionResult = {
 7. Remaining tickets with no collisions → `independent` list
 8. Emit `DetectionResult`
 
-Write result to `~/.claude/epics/{epic_id}/collision_report.json`.
+Write result to `$ONEX_STATE_DIR/epics/{epic_id}/collision_report.json`.
 
 ### Serialization Strategy
 
@@ -88,7 +88,7 @@ Within a collision set:
 
 Before dispatching tickets:
 1. Call detect_collisions(ticket_ids, epic_id)
-2. Log DetectionResult to epic state at ~/.claude/epics/{epic_id}/collision_report.json
+2. Log DetectionResult to epic state at $ONEX_STATE_DIR/epics/{epic_id}/collision_report.json
 3. For each collision set: dispatch tickets sequentially (wait for previous to reach create_pr before starting next)
 4. For independent tickets: dispatch all in parallel immediately
 ```

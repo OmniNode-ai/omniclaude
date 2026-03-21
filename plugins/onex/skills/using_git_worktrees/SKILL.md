@@ -64,7 +64,7 @@ Which would you prefer?
 When agents (subagents, polymorphic agents, automated workflows) create worktrees, they MUST use the canonical location:
 
 ```
-~/.claude/worktrees/{repo}/{branch}
+$ONEX_STATE_DIR/worktrees/{repo}/{branch}
 ```
 
 This location:
@@ -173,7 +173,7 @@ Ready to implement <feature-name>
 
 ## Session Marker
 
-When creating a worktree at `~/.claude/worktrees/`, write a `.claude-session.json` marker file in the worktree root immediately after creation:
+When creating a worktree at `$ONEX_STATE_DIR/worktrees/`, write a `.claude-session.json` marker file in the worktree root immediately after creation:
 
 ```bash
 # After git worktree add
@@ -213,7 +213,7 @@ MARKER
 
 ### Automatic Cleanup (SessionEnd)
 
-When a Claude Code session ends, the SessionEnd hook scans `~/.claude/worktrees/` for worktrees with `.claude-session.json` markers matching the current session ID.
+When a Claude Code session ends, the SessionEnd hook scans `$ONEX_STATE_DIR/worktrees/` for worktrees with `.claude-session.json` markers matching the current session ID.
 
 **A worktree is removed if ALL conditions are met:**
 1. Has a valid `.claude-session.json` marker with `cleanup_policy: "session-end"`
@@ -222,7 +222,7 @@ When a Claude Code session ends, the SessionEnd hook scans `~/.claude/worktrees/
 4. No uncommitted changes (`git diff --quiet`)
 5. No staged changes (`git diff --cached --quiet`)
 6. No unpushed commits (upstream configured, remote ref resolvable, local HEAD matches upstream)
-7. Path is under `~/.claude/worktrees/` (traversal guard)
+7. Path is under `$ONEX_STATE_DIR/worktrees/` (traversal guard)
 
 **If ANY condition fails, the worktree is logged as STALE but NOT deleted.**
 
@@ -241,12 +241,12 @@ When a Claude Code session ends, the SessionEnd hook scans `~/.claude/worktrees/
 For stale worktrees that weren't auto-cleaned:
 
 ```bash
-# List all worktrees under ~/.claude/worktrees
-find ~/.claude/worktrees -name '.claude-session.json' -exec jq -r '.repo + "/" + .branch + " (session: " + .session_id + ")"' {} \;
+# List all worktrees under $ONEX_STATE_DIR/worktrees
+find $ONEX_STATE_DIR/worktrees -name '.claude-session.json' -exec jq -r '.repo + "/" + .branch + " (session: " + .session_id + ")"' {} \;
 
 # Remove a specific stale worktree (from parent repo)
 cd /path/to/parent/repo
-git worktree remove ~/.claude/worktrees/repo/branch
+git worktree remove $ONEX_STATE_DIR/worktrees/repo/branch
 git worktree prune
 ```
 
@@ -261,8 +261,8 @@ git worktree prune
 | Directory not in .gitignore | Add it immediately + commit |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
-| Agent creating worktree | Use `~/.claude/worktrees/{repo}/{branch}` |
-| Worktree created at `~/.claude/worktrees/` | Write `.claude-session.json` marker |
+| Agent creating worktree | Use `$ONEX_STATE_DIR/worktrees/{repo}/{branch}` |
+| Worktree created at `$ONEX_STATE_DIR/worktrees/` | Write `.claude-session.json` marker |
 | Session ending | Auto-cleanup matching clean worktrees |
 | Stale worktree logged | Manual cleanup required |
 

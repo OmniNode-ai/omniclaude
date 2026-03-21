@@ -289,18 +289,20 @@ class ViolationsLogger:
         """Initialize violations logger with configured paths."""
         log_config = CONFIG.get("logging", {})
 
-        # Get log paths from config or use defaults
-        self.violations_log = Path(
-            os.path.expanduser(
-                log_config.get("violations_log", "~/.claude/hooks/logs/violations.log")
-            )
+        from omniclaude.hooks.lib.onex_state import ensure_state_path
+
+        # Get log paths from config or use defaults (ONEX_STATE_DIR)
+        cfg_log = log_config.get("violations_log")
+        cfg_summary = log_config.get("violations_summary")
+        self.violations_log = (
+            Path(os.path.expanduser(cfg_log))
+            if cfg_log
+            else ensure_state_path("hooks", "logs", "violations.log")
         )
-        self.violations_summary = Path(
-            os.path.expanduser(
-                log_config.get(
-                    "violations_summary", "~/.claude/hooks/logs/violations_summary.json"
-                )
-            )
+        self.violations_summary = (
+            Path(os.path.expanduser(cfg_summary))
+            if cfg_summary
+            else ensure_state_path("hooks", "logs", "violations_summary.json")
         )
         self.max_violations_history = log_config.get("max_violations_history", 100)
 
@@ -1233,8 +1235,9 @@ async def main() -> int:
     - 1: Fatal error (original tool call passed through)
     """
     # Log hook execution immediately (before any processing)
-    hook_exec_log = Path.home() / ".claude" / "hooks" / "logs" / "hook_executions.log"
-    hook_exec_log.parent.mkdir(parents=True, exist_ok=True)
+    from omniclaude.hooks.lib.onex_state import ensure_state_path as _esp
+
+    hook_exec_log = _esp("hooks", "logs", "hook_executions.log")
 
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     with open(hook_exec_log, "a") as f:

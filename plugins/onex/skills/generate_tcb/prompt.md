@@ -4,13 +4,13 @@ You are generating a Ticket Context Bundle for ticket {ticket_id}.
 
 ## Freshness Check
 
-Read `~/.claude/tcb/{ticket_id}/bundle.json` if it exists.
+Read `$ONEX_STATE_DIR/tcb/{ticket_id}/bundle.json` if it exists.
 If exists AND `is_stale()` returns False AND `force_regenerate` is not set: STOP and output
 "TCB exists and is fresh -- skip. Use force_regenerate=true to override."
 
 ## Step 0.5: Load Planning Context (if available)
 
-Check for `~/.claude/epics/{epic_id}/planning_context.yaml` where `epic_id` is from the ticket.
+Check for `$ONEX_STATE_DIR/epics/{epic_id}/planning_context.yaml` where `epic_id` is from the ticket.
 
 If found:
   Load the file. Extract:
@@ -88,7 +88,7 @@ Take top 15 tests by score.
 
 ### Patterns and constraints
 
-Check `~/.claude/patterns/active_patterns.json` if it exists (written by node_pattern_feedback_effect).
+Check `$ONEX_STATE_DIR/patterns/active_patterns.json` if it exists (written by node_pattern_feedback_effect).
 Filter patterns by `status == "active"` and any tag overlap with capability_tags.
 Take top 10 by `success_count / (apply_count + 1)` ratio.
 
@@ -105,10 +105,10 @@ Create `ModelTicketContextBundle` with all collected data, applying size caps.
 ## Artifact Storage
 
 ```bash
-mkdir -p ~/.claude/tcb/{ticket_id}
+mkdir -p $ONEX_STATE_DIR/tcb/{ticket_id}
 ```
 
-Write bundle as JSON to `~/.claude/tcb/{ticket_id}/bundle.json`.
+Write bundle as JSON to `$ONEX_STATE_DIR/tcb/{ticket_id}/bundle.json`.
 
 ## Linear Comment
 

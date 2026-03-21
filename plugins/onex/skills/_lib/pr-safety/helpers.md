@@ -50,9 +50,9 @@ CLAIM_HEARTBEAT_STALE_SECONDS = 1800   # 30 minutes
 CLAIM_AGE_STALE_SECONDS = 7200         # 2 hours
 
 # pr-queue base paths
-PR_QUEUE_ROOT = "~/.claude/pr-queue"
-CLAIMS_DIR = "~/.claude/pr-queue/claims"
-RUNS_DIR = "~/.claude/pr-queue/runs"
+PR_QUEUE_ROOT = "$ONEX_STATE_DIR/pr-queue"
+CLAIMS_DIR = "$ONEX_STATE_DIR/pr-queue/claims"
+RUNS_DIR = "$ONEX_STATE_DIR/pr-queue/runs"
 ```
 
 ---
@@ -126,14 +126,14 @@ def claim_path(pr_key: str) -> Path:
 
     Example:
       claim_path("omninode-ai/omniclaude#247")
-      => Path("~/.claude/pr-queue/claims/omninode-ai--omniclaude--247.json").expanduser()
+      => Path("$ONEX_STATE_DIR/pr-queue/claims/omninode-ai--omniclaude--247.json").expanduser()
 
     This is the ONLY place the claims/ path template is encoded.
     All callers must use this function; never construct the path manually.
     """
     validate_pr_key(pr_key)
     filename = pr_key.replace("/", "--").replace("#", "--") + ".json"
-    return Path("~/.claude/pr-queue/claims").expanduser() / filename
+    return Path("$ONEX_STATE_DIR/pr-queue/claims").expanduser() / filename
 ```
 
 ---
@@ -149,14 +149,14 @@ def ledger_path(run_id: str) -> Path:
 
     Example:
       ledger_path("20260223-143012-a3f")
-      => Path("~/.claude/pr-queue/runs/20260223-143012-a3f/ledger.json").expanduser()
+      => Path("$ONEX_STATE_DIR/pr-queue/runs/20260223-143012-a3f/ledger.json").expanduser()
 
     This is the ONLY place the runs/ ledger path template is encoded.
     All callers must use this function; never construct the path manually.
     """
     if not run_id or "/" in run_id or ".." in run_id:
         raise ValueError(f"ledger_path: invalid run_id '{run_id}'")
-    return Path("~/.claude/pr-queue/runs").expanduser() / run_id / "ledger.json"
+    return Path("$ONEX_STATE_DIR/pr-queue/runs").expanduser() / run_id / "ledger.json"
 ```
 
 ---
@@ -238,8 +238,8 @@ from pathlib import Path
 
 
 def _get_instance_id() -> str:
-    """Return stable instance UUID from ~/.claude/instance_id, creating if absent."""
-    id_path = Path("~/.claude/instance_id").expanduser()
+    """Return stable instance UUID from $ONEX_STATE_DIR/instance_id, creating if absent."""
+    id_path = Path("$ONEX_STATE_DIR/instance_id").expanduser()
     if id_path.exists():
         return id_path.read_text().strip()
     new_id = str(uuid.uuid4())
@@ -842,7 +842,7 @@ def get_worktree(
     Args:
         pr_key: Canonical PR key.
         run_id: The active run ID.
-        worktree_base: Base directory for worktrees. Defaults to ~/.claude/worktrees/.
+        worktree_base: Base directory for worktrees. Defaults to $ONEX_STATE_DIR/worktrees/.
         branch: Branch name to checkout. Defaults to extracted from pr_key context.
         dry_run: If True, raises DryRunWriteError.
 
@@ -868,7 +868,7 @@ def get_worktree(
         )
 
     if worktree_base is None:
-        worktree_base = Path("~/.claude/worktrees").expanduser()
+        worktree_base = Path("$ONEX_STATE_DIR/worktrees").expanduser()
 
     safe_name = pr_key.replace("/", "--").replace("#", "--")
     worktree_path = worktree_base / safe_name
@@ -1309,7 +1309,7 @@ to enforce that only `_lib/pr-safety/` references these paths and mutation comma
 # Path bans — only _lib/pr-safety/ may reference these strings
 grep -r "pr-queue/claims/"   plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
 grep -r "pr-queue/runs/"     plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
-grep -r "~/.claude/pr-queue" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
+grep -r "$ONEX_STATE_DIR/pr-queue" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"
 
 # Mutation bans — only _lib/pr-safety/ may call these directly
 grep -r "gh pr merge\|gh pr comment\|gh pr edit\|gh pr checkout\|git push" plugins/onex/skills/ --include="*.md" | grep -v "_lib/pr-safety"

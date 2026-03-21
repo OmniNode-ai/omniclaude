@@ -31,7 +31,7 @@ comment plus stores JSON locally.
 
 ## Outputs
 
-- JSON artifact: `~/.claude/tcb/{ticket_id}/bundle.json` (ModelTicketContextBundle serialized)
+- JSON artifact: `$ONEX_STATE_DIR/tcb/{ticket_id}/bundle.json` (ModelTicketContextBundle serialized)
 - Ticket comment: Markdown summary posted to Linear ticket
 - Stdout: "TCB generated for {ticket_id}: {entrypoint_count} entrypoints, {test_count} tests, {pattern_count} patterns"
 

@@ -38,8 +38,8 @@ on disk but whose `node_id` field does not match is treated as not found (`exist
 ```json
 {
   "status": "pass",
-  "artifact_path": "~/.claude/golden-path/2026-03-02/run-abc123/node_my_compute.json",
-  "stdout": "ARTIFACT: ~/.claude/golden-path/2026-03-02/run-abc123/node_my_compute.json\n..."
+  "artifact_path": "$ONEX_STATE_DIR/golden-path/2026-03-02/run-abc123/node_my_compute.json",
+  "stdout": "ARTIFACT: $ONEX_STATE_DIR/golden-path/2026-03-02/run-abc123/node_my_compute.json\n..."
 }
 ```
 
@@ -214,7 +214,7 @@ kill the process and return `{status: "runner_error", artifact_path: null, stdou
 ## Gate Result Recording
 
 After all nodes are verified, append a JSON record to:
-`~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+`$ONEX_STATE_DIR/skill-results/{context_id}/integration-verification-gate-log.json`
 
 ### Schema
 
@@ -236,7 +236,7 @@ After all nodes are verified, append a JSON record to:
       },
       "fixture_run": {
         "status": "pass",
-        "artifact_path": "~/.claude/golden-path/2026-03-02/run-abc123/node_my_compute.json",
+        "artifact_path": "$ONEX_STATE_DIR/golden-path/2026-03-02/run-abc123/node_my_compute.json",
         "stdout": "ARTIFACT: ..."
       },
       "result": "PASS"

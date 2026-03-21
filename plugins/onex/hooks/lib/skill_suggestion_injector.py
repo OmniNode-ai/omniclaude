@@ -34,7 +34,18 @@ from typing import Any
 # Default paths
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+DEFAULT_USAGE_LOG: Path | None = None
+
+
+def _get_default_usage_log() -> Path:
+    """Return the default usage log path, resolved lazily."""
+    global DEFAULT_USAGE_LOG
+    if DEFAULT_USAGE_LOG is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        DEFAULT_USAGE_LOG = state_path("onex-skill-usage.log")
+    return DEFAULT_USAGE_LOG
+
 
 # progression.yaml lives alongside the skills/ directory in the plugin
 _PLUGIN_DIR = Path(__file__).parent.parent  # hooks/lib -> hooks -> plugin root
@@ -77,7 +88,7 @@ def get_skill_suggestions(
     try:
         return _compute_suggestions(
             session_id=session_id,
-            log_path=log_path or DEFAULT_USAGE_LOG,
+            log_path=log_path or _get_default_usage_log(),
             progression_path=progression_path or DEFAULT_PROGRESSION_PATH,
             db_enabled=db_enabled,
         )

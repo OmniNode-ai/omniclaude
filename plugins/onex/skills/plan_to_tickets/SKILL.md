@@ -1111,26 +1111,26 @@ report_summary(results, epic, doc.structure_type.value, args.dry_run)
 
 ```bash
 # Basic usage - detect structure, create epic, create tickets
-/plan-to-tickets ~/.claude/plans/velvety-fluttering-sonnet.md
+/plan-to-tickets $ONEX_STATE_DIR/plans/velvety-fluttering-sonnet.md
 
 # With project assignment
-/plan-to-tickets ~/.claude/plans/my-plan.md --project "Workflow Automation"
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --project "Workflow Automation"
 
 # Preview without creating
-/plan-to-tickets ~/.claude/plans/my-plan.md --dry-run
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --dry-run
 
 # Auto-skip existing tickets
-/plan-to-tickets ~/.claude/plans/my-plan.md --skip-existing
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --skip-existing
 
 # Use specific epic title
-/plan-to-tickets ~/.claude/plans/my-plan.md --epic-title "My Epic Title"
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --epic-title "My Epic Title"
 
 # Fail if epic doesn't exist
-/plan-to-tickets ~/.claude/plans/my-plan.md --no-create-epic --epic-title "Existing Epic"
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --no-create-epic --epic-title "Existing Epic"
 
 # With repository label (enables architecture validation)
-/plan-to-tickets ~/.claude/plans/my-plan.md --repo omniclaude --project "Workflow Automation"
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --repo omniclaude --project "Workflow Automation"
 
 # Override architecture validation for cross-app dependencies
-/plan-to-tickets ~/.claude/plans/my-plan.md --repo omniclaude --allow-arch-violation
+/plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --repo omniclaude --allow-arch-violation
 ```

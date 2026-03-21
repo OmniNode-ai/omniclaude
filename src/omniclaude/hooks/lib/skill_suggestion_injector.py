@@ -34,7 +34,17 @@ from typing import Any
 # Default paths
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+
+def _resolve_default_usage_log() -> Path:
+    """Lazily resolve the default usage-log path under ONEX_STATE_DIR."""
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("onex-skill-usage.log")
+
+
+# Sentinel: resolved lazily in get_skill_suggestions.
+# Tests may patch this to a concrete Path.
+DEFAULT_USAGE_LOG: Path | None = None
 
 # progression.yaml lives alongside the skills/ directory in the plugin
 _PLUGIN_DIR = Path(__file__).parent.parent  # hooks/lib -> hooks -> plugin root
@@ -77,7 +87,7 @@ def get_skill_suggestions(
     try:
         return _compute_suggestions(
             session_id=session_id,
-            log_path=log_path or DEFAULT_USAGE_LOG,
+            log_path=log_path or DEFAULT_USAGE_LOG or _resolve_default_usage_log(),
             progression_path=progression_path or DEFAULT_PROGRESSION_PATH,
             db_enabled=db_enabled,
         )

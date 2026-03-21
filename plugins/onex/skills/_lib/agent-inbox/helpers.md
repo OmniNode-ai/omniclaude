@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 # Inbox root directory (STANDALONE tier)
-INBOX_ROOT = Path(os.path.expanduser("~/.claude/agent-inboxes"))
+INBOX_ROOT = Path(os.path.expanduser("$ONEX_STATE_DIR/agent-inboxes"))
 
 # Broadcast subdirectory
 BROADCAST_DIR = "_broadcast"
@@ -330,7 +330,7 @@ import time
 def gc_inboxes(ttl_hours: int = DEFAULT_GC_TTL_HOURS) -> int:
     """Remove expired messages from all agent inboxes.
 
-    Walks ~/.claude/agent-inboxes/ and removes .json files older
+    Walks $ONEX_STATE_DIR/agent-inboxes/ and removes .json files older
     than ttl_hours.
 
     Args:

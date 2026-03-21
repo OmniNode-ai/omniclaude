@@ -126,6 +126,8 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
 LOG_FILE="${HOOKS_DIR}/logs/hook-session-start.log"
 
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
@@ -576,7 +578,7 @@ start_hook_runtime_if_needed
 
 _init_session_state() {
     # Sync: ensure state directory exists (O(1))
-    mkdir -p "${HOME}/.claude/state/runs" 2>/dev/null || true
+    mkdir -p "${ONEX_SESSION_STATE_DIR}/runs" 2>/dev/null || true
 
     # Sanitize SESSION_ID for safe use in filenames
     local safe_id
@@ -743,7 +745,7 @@ fi
 # Tier Detection Probe (OMN-2782) - ASYNC, NON-BLOCKING
 # -----------------------------
 # Probes Kafka + intelligence service availability and writes tier to
-# ~/.claude/.onex_capabilities for use by context_injection_wrapper.py.
+# $ONEX_STATE_DIR/.onex_capabilities for use by context_injection_wrapper.py.
 # Runs in background to keep SessionStart under <50ms budget.
 
 if [[ -f "${HOOKS_LIB}/capability_probe.py" ]]; then
@@ -951,7 +953,7 @@ fi
 _cleanup_merged_pipeline_states() {
     local _log="${LOG_FILE:-/dev/null}"
     local pipelines_dir
-    pipelines_dir=$(cd "$HOME/.claude/pipelines" 2>/dev/null && pwd -P || echo "$HOME/.claude/pipelines")
+    pipelines_dir=$(cd "${ONEX_PIPELINES_DIR}" 2>/dev/null && pwd -P || echo "${ONEX_PIPELINES_DIR}")
 
     [[ -d "$pipelines_dir" ]] || return 0
 
@@ -1337,7 +1339,7 @@ ${SKILL_SUGGESTIONS}"
     # When enabled, inject the handoff manifest written by /handoff into
     # COMBINED_CONTEXT. Manifest is consumed (deleted) after successful injection.
     if [[ "${OMNICLAUDE_SESSION_HANDOFF:-0}" == "1" ]]; then
-        _HANDOFF_DIR="${HOME}/.claude/handoff"
+        _HANDOFF_DIR="${ONEX_HANDOFF_DIR}"
         if [[ -d "$_HANDOFF_DIR" && -n "$CWD" ]]; then
             # Compute CWD hash + repo slug to find the manifest
             _HANDOFF_CWD_HASH=$(echo -n "$CWD" | shasum -a 256 2>/dev/null | cut -c1-8) || _HANDOFF_CWD_HASH=""
@@ -1432,7 +1434,7 @@ fi
 # Runs sync-omnibase-env.py in background when Infisical is configured.
 # Throttle and flock guards in the script prevent duplicate syncs.
 if [[ -n "${INFISICAL_ADDR:-}" ]]; then
-  _sync_log="${HOME}/.claude/logs/env-sync.log"
+  _sync_log="${ONEX_LOG_DIR}/env-sync.log"
   mkdir -p "$(dirname "${_sync_log}")" || true
   _sync_script="${OMNIBASE_INFRA_DIR:-}/scripts/sync-omnibase-env.py"
   if [[ -f "${_sync_script}" ]]; then

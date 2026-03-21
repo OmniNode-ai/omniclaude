@@ -5,7 +5,7 @@
 # Install shared library from version control to user directory
 #
 # This script copies the shared library code from the omniclaude repository
-# to the user's ~/.claude/lib/ directory for use by git hooks and agents.
+# to $ONEX_STATE_DIR/lib/ for use by git hooks and agents.
 #
 # Usage: ./setup.sh
 
@@ -13,7 +13,12 @@ set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_LIB="$SCRIPT_DIR"
-USER_LIB="$HOME/.claude/lib"
+
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+  echo "FATAL: ONEX_STATE_DIR is not set" >&2
+  exit 1
+fi
+USER_LIB="${ONEX_STATE_DIR}/lib"
 
 echo "=================================================="
 echo "OmniClaude Shared Library Installation"

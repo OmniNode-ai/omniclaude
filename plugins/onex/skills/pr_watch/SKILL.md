@@ -36,7 +36,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/pr-watch.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json"
     fields:
       - status: approved | changes_requested_fixed | timeout | capped | error
       - pr_number: int
@@ -119,7 +119,7 @@ Task(
 
 ## Skill Result Output
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/pr-watch.json` on exit.
+Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json` on exit.
 
 ```json
 {
@@ -171,7 +171,7 @@ ci_result = wait_for_pr_status(
 When Kafka/Valkey are unavailable:
 
 1. Spawn `gh run watch {run_id} --exit-status` as background process after pushing fixes
-2. Wait for result in file-based inbox (`~/.claude/pr-inbox/`)
+2. Wait for result in file-based inbox (`$ONEX_STATE_DIR/pr-inbox/`)
 
 ```python
 from omniclaude.services.inbox_wait import wait_for_pr_status

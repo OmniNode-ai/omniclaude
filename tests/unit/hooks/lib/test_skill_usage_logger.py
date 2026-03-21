@@ -218,9 +218,15 @@ class TestAppendSkillUsage:
         mock_db.assert_called_once()
 
     @pytest.mark.unit
-    def test_default_log_path_constant(self) -> None:
-        expected = Path.home() / ".claude" / "onex-skill-usage.log"
-        assert expected == DEFAULT_USAGE_LOG
+    def test_default_log_path_resolved_lazily(self) -> None:
+        """DEFAULT_USAGE_LOG is None at import time; _resolve_default_usage_log
+        returns the correct ONEX_STATE_DIR-based path at runtime."""
+        from omniclaude.hooks.lib.skill_usage_logger import _resolve_default_usage_log
+
+        assert DEFAULT_USAGE_LOG is None  # lazy sentinel
+        resolved = _resolve_default_usage_log()
+        assert resolved.name == "onex-skill-usage.log"
+        assert resolved.is_absolute()
 
     @pytest.mark.unit
     def test_multiple_invocations_append_sequentially(self, tmp_path: Path) -> None:

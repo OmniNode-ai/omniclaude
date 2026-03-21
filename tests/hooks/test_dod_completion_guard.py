@@ -10,6 +10,7 @@ based on evidence receipt presence, freshness, and check results.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -30,7 +31,13 @@ def _run_hook(
     cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run the completion guard hook with the given tool input."""
-    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(Path.home())}
+    env = {
+        "PATH": "/usr/bin:/bin:/usr/local/bin",
+        "HOME": str(Path.home()),
+        "ONEX_STATE_DIR": os.environ.get(
+            "ONEX_STATE_DIR", str(Path.home() / ".onex-state")
+        ),
+    }
     if env_overrides:
         env.update(env_overrides)
 

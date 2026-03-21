@@ -50,8 +50,19 @@ MAX_ERROR_MESSAGES = 5
 MAX_FAILED_TEST_LENGTH = 100
 MAX_FAILED_TESTS = 20
 
-# Artifact base directory
-ARTIFACT_BASE_DIR = Path.home() / ".claude" / "pipelines"
+# Artifact base directory — resolved lazily via ONEX_STATE_DIR
+ARTIFACT_BASE_DIR: Path | None = None
+
+
+def _get_artifact_base_dir() -> Path:
+    """Return the artifact base directory, resolved lazily."""
+    global ARTIFACT_BASE_DIR
+    if ARTIFACT_BASE_DIR is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        ARTIFACT_BASE_DIR = ensure_state_dir("pipelines")
+    return ARTIFACT_BASE_DIR
+
 
 # Sequences that must not appear in path components to prevent traversal.
 # Single chars use membership check; ".." uses exact string equality
@@ -431,7 +442,7 @@ def write_metrics_artifact(
                 )
                 return None
 
-        metrics_dir = ARTIFACT_BASE_DIR / ticket_id / "metrics" / run_id
+        metrics_dir = _get_artifact_base_dir() / ticket_id / "metrics" / run_id
         metrics_dir.mkdir(parents=True, exist_ok=True)
 
         artifact_path = metrics_dir / f"{phase}_{attempt}.metrics.json"
@@ -497,7 +508,7 @@ def read_metrics_artifact(
             return None
 
     artifact_path = (
-        ARTIFACT_BASE_DIR
+        _get_artifact_base_dir()
         / ticket_id
         / "metrics"
         / run_id
@@ -542,7 +553,7 @@ def metrics_artifact_exists(
             return False
 
     artifact_path = (
-        ARTIFACT_BASE_DIR
+        _get_artifact_base_dir()
         / ticket_id
         / "metrics"
         / run_id
@@ -560,4 +571,5 @@ __all__ = [
     "reset_redactor",
     "MAX_ERROR_MESSAGE_LENGTH",
     "ARTIFACT_BASE_DIR",
+    "_get_artifact_base_dir",
 ]

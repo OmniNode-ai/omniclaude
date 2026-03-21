@@ -27,7 +27,17 @@ from typing import Any
 # Public constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_USAGE_LOG: Path = Path.home() / ".claude" / "onex-skill-usage.log"
+
+def _resolve_default_usage_log() -> Path:
+    """Lazily resolve the default usage-log path under ONEX_STATE_DIR."""
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("onex-skill-usage.log")
+
+
+# Sentinel: resolved lazily in append_skill_usage / _main.
+# Tests may patch this to a concrete Path.
+DEFAULT_USAGE_LOG: Path | None = None
 
 _VALID_STATUSES = frozenset({"success", "failed", "partial"})
 
@@ -68,7 +78,8 @@ def append_skill_usage(
         return False
 
     entry = _build_entry(skill_name=skill_name, session_id=session_id)
-    file_ok = _write_to_file(entry=entry, log_path=log_path or DEFAULT_USAGE_LOG)
+    resolved_path = log_path or DEFAULT_USAGE_LOG or _resolve_default_usage_log()
+    file_ok = _write_to_file(entry=entry, log_path=resolved_path)
 
     # Optional Postgres write — always non-fatal
     _maybe_write_to_db(entry=entry, db_enabled=db_enabled)

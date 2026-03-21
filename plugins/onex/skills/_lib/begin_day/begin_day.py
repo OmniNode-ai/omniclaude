@@ -28,7 +28,18 @@ import yaml
 
 SCHEMA_VERSION = "1.0.0"
 
-ARTIFACT_BASE = Path.home() / ".claude" / "begin-day"
+_ARTIFACT_BASE: Path | None = None
+
+
+def _get_artifact_base() -> Path:
+    """Lazy-resolve the begin-day artifact base via ONEX_STATE_DIR."""
+    global _ARTIFACT_BASE  # noqa: PLW0603
+    if _ARTIFACT_BASE is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        _ARTIFACT_BASE = ensure_state_dir("begin-day")
+    return _ARTIFACT_BASE
+
 
 OMNI_REPOS: list[str] = [
     "omniclaude",

@@ -97,6 +97,6 @@ These scenarios verify the Stage 1 logic of the integration verification gate.
 ## Gate Result Log
 
 All scenarios must append a record to:
-`~/.claude/skill-results/{context_id}/integration-verification-gate-log.json`
+`$ONEX_STATE_DIR/skill-results/{context_id}/integration-verification-gate-log.json`
 
 Following the schema defined in `helpers.md` (Gate Result Recording section).

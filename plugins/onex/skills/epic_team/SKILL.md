@@ -126,9 +126,9 @@ epic-team OMN-XXXX
   → Fetch child tickets from Linear
   → If 0 child tickets:
       → Dispatch decompose-epic (composable, returns skill_result)
-      → Read ~/.claude/skill-results/{context_id}/decompose-epic.json
+      → Read $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
       → Dispatch slack-gate (LOW_RISK, 30 min, silence=proceed)
-      → Read ~/.claude/skill-results/{context_id}/slack-gate.json
+      → Read $ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json
       → If rejected: stop
       → Re-fetch newly created tickets
   → Assign tickets to repos via repo_manifest
@@ -142,7 +142,7 @@ epic-team OMN-XXXX
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
   → Send Slack lifecycle notifications (started, ticket done, epic done)
-  → Persist state to ~/.claude/epics/{epic_id}/state.yaml
+  → Persist state to $ONEX_STATE_DIR/epics/{epic_id}/state.yaml
 ```
 
 ## Dispatch: decompose-epic
@@ -157,7 +157,7 @@ Task(
 
     Invoke: Skill(skill=\"onex:decompose-epic\", args=\"{epic_id}\")
 
-    Read result from ~/.claude/skill-results/{context_id}/decompose-epic.json
+    Read result from $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
     Report back: created_tickets (list of IDs and titles), count."
 )
 ```
@@ -198,7 +198,7 @@ preserved for historical reference.
 
 ## Skill Result Communication
 
-All sub-skills write their output to `~/.claude/skill-results/{context_id}/`:
+All sub-skills write their output to `$ONEX_STATE_DIR/skill-results/{context_id}/`:
 
 | Sub-Skill | Output File | Key Fields |
 |-----------|------------|------------|
@@ -260,7 +260,7 @@ iterations_run = result.extra.get("iterations_run", 0)      # local-review resul
 
 ## State Persistence
 
-Runtime state is persisted to `~/.claude/epics/{epic_id}/state.yaml`:
+Runtime state is persisted to `$ONEX_STATE_DIR/epics/{epic_id}/state.yaml`:
 
 ```yaml
 epic_id: OMN-XXXX
@@ -339,7 +339,7 @@ Use `--force-unmatched` to route them to omniplan as TRIAGE tasks.
 
 Workers create isolated git worktrees at:
 ```
-~/.claude/worktrees/{epic_id}/{run_id}/{ticket_id}/
+$ONEX_STATE_DIR/worktrees/{epic_id}/{run_id}/{ticket_id}/
 ```
 
 Stale worktrees are cleaned up automatically after merge when `auto_cleanup_merged_worktrees: true`
@@ -352,7 +352,7 @@ epic-team is a thin composition layer. It owns:
 - Ticket-to-repo assignment (via repo_manifest)
 - Wave construction (group tickets by dependency into parallel waves)
 - Direct Task() dispatch of ticket-pipeline per ticket (from team-lead session)
-- State persistence (`~/.claude/epics/{epic_id}/state.yaml`)
+- State persistence (`$ONEX_STATE_DIR/epics/{epic_id}/state.yaml`)
 - Slack lifecycle notifications (started, ticket done, epic done)
 
 It does NOT own:

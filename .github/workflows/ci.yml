@@ -19,6 +19,8 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
+  # ONEX state directory — required by hooks/lib/onex_state.py (OMN-5632)
+  ONEX_STATE_DIR: /tmp/onex-state
 
 jobs:
   # ============================================================================

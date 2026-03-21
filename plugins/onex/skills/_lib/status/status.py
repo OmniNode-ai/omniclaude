@@ -25,7 +25,19 @@ from pathlib import Path
 # Constants (mirrors capability_probe.py)
 # ---------------------------------------------------------------------------
 
-CAPABILITIES_FILE = Path.home() / ".claude" / ".onex_capabilities"
+_CAPABILITIES_FILE: Path | None = None
+
+
+def _get_capabilities_file() -> Path:
+    """Lazy-resolve the capabilities file path via ONEX_STATE_DIR."""
+    global _CAPABILITIES_FILE  # noqa: PLW0603
+    if _CAPABILITIES_FILE is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        _CAPABILITIES_FILE = state_path(".onex_capabilities")
+    return _CAPABILITIES_FILE
+
+
 PROBE_TTL_SECONDS = 300  # 5 minutes
 INLINE_PROBE_TIMEOUT = 2.0  # seconds — tighter timeout for interactive use
 
@@ -93,10 +105,11 @@ def _kafka_reachable(servers: str) -> tuple[bool, list[str]]:
 
 def _read_capabilities() -> dict[str, object] | None:
     """Read and validate capabilities file. Returns None if missing or stale."""
-    if not CAPABILITIES_FILE.exists():
+    caps_file = _get_capabilities_file()
+    if not caps_file.exists():
         return None
     try:
-        raw = CAPABILITIES_FILE.read_text(encoding="utf-8")
+        raw = caps_file.read_text(encoding="utf-8")
         data: dict[str, object] = json.loads(raw)
         probed_at_str = data.get("probed_at")
         if not isinstance(probed_at_str, str):
@@ -230,7 +243,7 @@ def print_status(caps: dict[str, object], refreshed: bool = False) -> None:
         print(f"  Intelligence {symbol} {status:12s}({intel_health})")
 
     print()
-    print(f"Probe file:    {CAPABILITIES_FILE}")
+    print(f"Probe file:    {_get_capabilities_file()}")
     if probed_at_str:
         print(f"Last updated:  {probed_at_str}")
     print()

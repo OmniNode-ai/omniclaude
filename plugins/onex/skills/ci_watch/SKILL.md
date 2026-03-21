@@ -33,7 +33,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/ci-watch.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/ci-watch.json"
     fields:
       - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "passed" | "capped" | "timeout" | null  # domain-specific granularity
@@ -235,7 +235,7 @@ Task(
 
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
-Write to: `~/.claude/skill-results/{context_id}/ci-watch.json`
+Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/ci-watch.json`
 
 | Field | Value |
 |-------|-------|
@@ -247,7 +247,7 @@ Write to: `~/.claude/skill-results/{context_id}/ci-watch.json`
 | `pr_number` | PR number |
 | `extra` | `{"fix_cycles_used": int, "elapsed_minutes": int, "preexisting_fixes_dispatched": int}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/ci-watch.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`$ONEX_STATE_DIR/skill-results/{context_id}/ci-watch.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 
@@ -407,7 +407,7 @@ result = wait_for_pr_status(
 When Kafka/Valkey are unavailable:
 
 1. Spawn `gh run watch {run_id} --exit-status` as background process
-2. Wait for result in file-based inbox (`~/.claude/pr-inbox/`)
+2. Wait for result in file-based inbox (`$ONEX_STATE_DIR/pr-inbox/`)
 3. Max 5 concurrent watchers (`OMNICLAUDE_MAX_WATCHERS=5`)
 
 ```python

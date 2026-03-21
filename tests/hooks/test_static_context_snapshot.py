@@ -229,11 +229,15 @@ class TestCollectVersionedFiles:
 class TestCollectNonVersionedFiles:
     """Tests for non-versioned file discovery."""
 
-    def test_memory_dir_scanned(self, tmp_path: Path) -> None:
-        memory_dir = tmp_path / ".claude" / "memory"
+    def test_memory_dir_scanned(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        state_dir = tmp_path / "onex-state"
+        memory_dir = state_dir / "memory"
         memory_dir.mkdir(parents=True)
         (memory_dir / "notes.md").write_text("mem", encoding="utf-8")
 
+        monkeypatch.setenv("ONEX_STATE_DIR", str(state_dir))
         with (
             patch("static_context_snapshot.Path.home", return_value=tmp_path),
             patch("static_context_snapshot._is_git_tracked", return_value=False),

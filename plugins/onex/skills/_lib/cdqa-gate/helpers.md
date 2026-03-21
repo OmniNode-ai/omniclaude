@@ -74,7 +74,7 @@ gh pr checks {pr_number} --repo {repo} --json name,conclusion \
 ## Gate Result Recording
 
 After all gates complete (pass or bypass), append a JSON record to:
-`~/.claude/skill-results/{context_id}/cdqa-gate-log.json`
+`$ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json`
 
 ### Schema
 
@@ -189,7 +189,7 @@ gates before proceeding. This prevents bypass via direct skill invocation.
 
 Check whether CDQA gates have already run for this PR:
 ```
-Read: ~/.claude/skill-results/{context_id}/cdqa-gate-log.json
+Read: $ONEX_STATE_DIR/skill-results/{context_id}/cdqa-gate-log.json
 If record exists with overall=PASS or overall=bypassed: skip re-run, proceed
 If no record: run all 3 gates before merge
 ```

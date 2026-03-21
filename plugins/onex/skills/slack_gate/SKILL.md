@@ -36,7 +36,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/slack-gate.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json"
     fields:
       - status: "success" | "failed" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "accepted" | "rejected" | "timeout"  # domain-specific granularity
@@ -230,7 +230,7 @@ The helper script exits with:
 }
 ```
 
-Write to: `~/.claude/skill-results/{context_id}/slack-gate.json`
+Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json`
 
 ## Executable Scripts
 
@@ -313,7 +313,7 @@ exec claude --skill onex:slack-gate \
 
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
-Write to: `~/.claude/skill-results/{context_id}/slack-gate.json`
+Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json`
 
 | Field | Value |
 |-------|-------|
@@ -323,7 +323,7 @@ Write to: `~/.claude/skill-results/{context_id}/slack-gate.json`
 | `run_id` | Correlation ID |
 | `extra` | `{"risk_level": str, "reply": str, "thread_ts": str, "elapsed_minutes": int}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/slack-gate.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`$ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 

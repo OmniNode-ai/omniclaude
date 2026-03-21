@@ -37,8 +37,21 @@ OMNI_REPOS: list[str] = [
     "onex_change_control",
 ]
 
-# Path to golden-path artifact directory (per-day sub-directories)
-_GOLDEN_PATH_BASE = Path.home() / ".claude" / "golden-path"
+# Path to golden-path artifact directory (per-day sub-directories).
+# Lazily resolved via ONEX_STATE_DIR; callers that pass an explicit path
+# bypass this default entirely.
+_GOLDEN_PATH_BASE: Path | None = None
+
+
+def _get_golden_path_base() -> Path:
+    """Lazy-resolve the golden-path artifact base via ONEX_STATE_DIR."""
+    global _GOLDEN_PATH_BASE  # noqa: PLW0603
+    if _GOLDEN_PATH_BASE is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        _GOLDEN_PATH_BASE = state_path("golden-path")
+    return _GOLDEN_PATH_BASE
+
 
 # Expected location of check_arch_invariants.py inside each repo worktree.
 _INVARIANTS_SCRIPT_NAME = "check_arch_invariants.py"
@@ -298,7 +311,7 @@ def detect_golden_path_progress(
     Returns: "pass" | "unknown"
     """
     if golden_path_base is None:
-        golden_path_base = _GOLDEN_PATH_BASE
+        golden_path_base = _get_golden_path_base()
 
     today_dir = golden_path_base / today
     if not today_dir.exists():
@@ -607,7 +620,7 @@ def run(
         )
     if gp_status == "unknown":
         corrections.append(
-            "Verify real_infra_proof_progressing: check ~/.claude/golden-path/ for today's artifacts."
+            "Verify real_infra_proof_progressing: check $ONEX_STATE_DIR/golden-path/ for today's artifacts."
         )
     corrections.extend(integration_corrections)
 

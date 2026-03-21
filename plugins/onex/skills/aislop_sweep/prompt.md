@@ -129,9 +129,9 @@ Apply triage rules:
 
 **Fingerprint**: `f"{repo}:{path}:{check}:{str(line // 10 * 10)}"`
 
-**Dedup**: Load `~/.claude/aislop-sweep/latest/findings.json` if exists.
+**Dedup**: Load `$ONEX_STATE_DIR/aislop-sweep/latest/findings.json` if exists.
 Mark `finding.new = fingerprint not in prior_fingerprints`.
-Save to `~/.claude/aislop-sweep/<run_id>/findings.json`.
+Save to `$ONEX_STATE_DIR/aislop-sweep/<run_id>/findings.json`.
 
 If no findings → emit `ModelSkillResult(status=clean)` and exit.
 

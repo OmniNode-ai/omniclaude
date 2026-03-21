@@ -52,7 +52,9 @@ class CorrelationRegistry:
                      If None, events are logged but not emitted.
         """
         if state_dir is None:
-            state_dir = Path.home() / ".claude" / "hooks" / ".state"
+            from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+            state_dir = ensure_state_dir("hooks", ".state")
 
         self.state_dir = Path(state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)

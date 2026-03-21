@@ -36,7 +36,7 @@ Save session context and clear. The next session starts with continuity.
 ## How It Works
 
 1. `/handoff` captures current session context (active ticket, branch, recent commits, working files)
-2. Writes a manifest to `~/.claude/handoff/{cwd_hash}-{repo_slug}.json`
+2. Writes a manifest to `$ONEX_STATE_DIR/handoff/{cwd_hash}-{repo_slug}.json`
 3. Clears the session (equivalent to `/clear`)
 4. On next session start (if `OMNICLAUDE_SESSION_HANDOFF=1`), session-start.sh:
    - Reads the manifest for the current CWD

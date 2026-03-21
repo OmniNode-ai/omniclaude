@@ -39,7 +39,18 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
-ATTRIBUTIONS_ROOT = Path.home() / ".claude" / "attributions"
+ATTRIBUTIONS_ROOT: Path | None = None
+
+
+def _get_attributions_root() -> Path:
+    """Return the attributions root directory, resolved lazily."""
+    global ATTRIBUTIONS_ROOT
+    if ATTRIBUTIONS_ROOT is None:
+        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+
+        ATTRIBUTIONS_ROOT = ensure_state_dir("attributions")
+    return ATTRIBUTIONS_ROOT
+
 
 _DANGEROUS_PATTERNS = ("..", "/", "\\", "\x00")
 
@@ -107,7 +118,7 @@ def load_attribution_record(
     safe_pid = _validate_path_segment(pattern_id, "pattern_id")
     if safe_pid is None:
         return None
-    root = attributions_root or ATTRIBUTIONS_ROOT
+    root = attributions_root or _get_attributions_root()
     target = root / safe_pid / "record.json"
     if not target.exists():
         return None
@@ -138,7 +149,7 @@ def load_aggregated_run(
     safe_rid = _validate_path_segment(run_id, "run_id")
     if safe_pid is None or safe_rid is None:
         return None
-    root = attributions_root or ATTRIBUTIONS_ROOT
+    root = attributions_root or _get_attributions_root()
     target = root / safe_pid / f"{safe_rid}.measured.json"
     if not target.exists():
         return None
@@ -215,7 +226,7 @@ def save_measured_attribution(
         raise ValueError(
             f"Unsafe path segment rejected: pattern_id={pattern_id!r}, run_id={run_id!r}"
         )
-    root = attributions_root or ATTRIBUTIONS_ROOT
+    root = attributions_root or _get_attributions_root()
     target_dir = root / safe_pid
     target_dir.mkdir(parents=True, exist_ok=True)
 

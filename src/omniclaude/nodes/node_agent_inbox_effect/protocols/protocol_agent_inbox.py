@@ -69,11 +69,11 @@ class ProtocolAgentInbox(Protocol):
 
         For directed messages (target_agent_id set):
             - EVENT_BUS+: Produces to onex.evt.omniclaude.agent-inbox.{agent_id}.v1
-            - STANDALONE: Writes to ~/.claude/agent-inboxes/{agent_id}/{ts}_{id}.json
+            - STANDALONE: Writes to $ONEX_STATE_DIR/agent-inboxes/{agent_id}/{ts}_{id}.json
 
         For broadcast messages (target_epic_id set):
             - EVENT_BUS+: Produces to onex.evt.omniclaude.epic-status.v1 (epic_id in payload)
-            - STANDALONE: Writes to ~/.claude/agent-inboxes/_broadcast/{epic_id}/{ts}_{id}.json
+            - STANDALONE: Writes to $ONEX_STATE_DIR/agent-inboxes/_broadcast/{epic_id}/{ts}_{id}.json
 
         Args:
             message: The inbox message envelope to deliver.
@@ -112,7 +112,7 @@ class ProtocolAgentInbox(Protocol):
         """Garbage collect expired messages from file-based agent inboxes.
 
         Removes message files older than ttl_hours from all agent inboxes
-        under ~/.claude/agent-inboxes/.
+        under $ONEX_STATE_DIR/agent-inboxes/.
 
         Args:
             ttl_hours: Messages older than this many hours are removed.

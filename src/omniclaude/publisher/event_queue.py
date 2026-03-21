@@ -77,7 +77,11 @@ class BoundedEventQueue:
         self._max_memory_queue = max_memory_queue
         self._max_spool_messages = max_spool_messages
         self._max_spool_bytes = max_spool_bytes
-        self._spool_dir = spool_dir or (Path.home() / ".claude" / "event-spool")
+        if spool_dir is None:
+            from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+            spool_dir = state_path("event-spool")
+        self._spool_dir = spool_dir
 
         self._memory_queue: deque[ModelQueuedEvent] = deque()
         self._spool_files: deque[Path] = deque()

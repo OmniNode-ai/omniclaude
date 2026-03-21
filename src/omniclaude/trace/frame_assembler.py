@@ -592,8 +592,9 @@ def persist_frame_to_jsonl(frame: ChangeFrame, session_id: str) -> Path:
     Returns:
         Path to the JSONL file
     """
-    trace_dir = Path.home() / ".claude" / "trace"
-    trace_dir.mkdir(parents=True, exist_ok=True)
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir  # noqa: PLC0415
+
+    trace_dir = ensure_state_dir("trace")
 
     jsonl_path = trace_dir / f"{session_id}.jsonl"
     frame_json = frame.model_dump_json()

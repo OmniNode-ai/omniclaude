@@ -26,7 +26,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/ticket-work.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/ticket-work.json"
     fields:
       - status: "success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values
       - extra_status: "done" | "questions_pending" | null  # domain-specific granularity
@@ -373,7 +373,7 @@ checks, or edge case handling.
 > **Note: This contract reference is behavioral guidance for the LLM executing this skill. Runtime validation not yet implemented.**
 
 When invoked as a composable sub-skill (from ticket-pipeline, epic-team, or other orchestrators),
-write to: `~/.claude/skill-results/{context_id}/ticket-work.json`
+write to: `$ONEX_STATE_DIR/skill-results/{context_id}/ticket-work.json`
 
 | Field | Value |
 |-------|-------|
@@ -384,7 +384,7 @@ write to: `~/.claude/skill-results/{context_id}/ticket-work.json`
 | `ticket_id` | Linear ticket ID (e.g. `"OMN-1234"`) |
 | `extra` | `{"pr_url": str, "phase_reached": str, "commits": list[str]}` |
 
-> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`~/.claude/skill-results/{context_id}/ticket-work.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
+> **Note on `context_id`:** Prior schema versions included `context_id` as a top-level field. This field is not part of `ModelSkillResult` — it belongs to the file path convention (`$ONEX_STATE_DIR/skill-results/{context_id}/ticket-work.json`). Consumers should derive context from the file path, not from `context_id` in the result body.
 
 **Status mapping:**
 

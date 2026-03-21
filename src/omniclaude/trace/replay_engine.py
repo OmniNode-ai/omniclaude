@@ -118,7 +118,9 @@ def load_frame_from_jsonl(
         ChangeFrame if found, None if not found
     """
     if trace_dir is None:
-        trace_dir = Path.home() / ".claude" / "trace"
+        from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+        trace_dir = state_path("trace")
 
     jsonl_path = trace_dir / f"{session_id}.jsonl"
     if not jsonl_path.exists():

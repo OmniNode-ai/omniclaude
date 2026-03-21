@@ -51,7 +51,7 @@ args:
     description: "Single finding via Linear ticket ID containing a gap-analysis marker block (fix mode)"
     required: false
   - name: --latest
-    description: "Follow ~/.claude/gap-analysis/latest/ symlink (fix mode, default if no other entry point)"
+    description: "Follow $ONEX_STATE_DIR/gap-analysis/latest/ symlink (fix mode, default if no other entry point)"
     required: false
   - name: --mode
     description: "Execution mode: ticket-pipeline | ticket-work | implement-only (fix mode, default ticket-pipeline)"
@@ -205,7 +205,7 @@ Legacy config auto-fix uses deterministic search-replace from the denylist.
 Branch protection auto-fix removes stale required check names via the GitHub API.
 
 **Phase 3 -- Report**: Dedup against existing Linear tickets, create/comment tickets,
-write report artifacts to `~/.claude/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
+write report artifacts to `$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.json` and `.md`.
 
 ### Fingerprint Spec
 
@@ -254,8 +254,8 @@ Example: `[gap:a3f2c891] CONTRACT_DRIFT: pattern-learned.v1`
 ### Report Artifacts
 
 ```
-~/.claude/gap-analysis/{epic_id}/{run_id}.json   # Full report (ModelGapAnalysisReport)
-~/.claude/gap-analysis/{epic_id}/{run_id}.md     # Human-readable summary
+$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.json   # Full report (ModelGapAnalysisReport)
+$ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md     # Human-readable summary
 ```
 
 ### DB Boundary Rules
@@ -321,15 +321,15 @@ Anything multi-option emits a decision gate and waits for human input.
 ```
 /gap fix --report <run_path>   # e.g., multi-epic-2026-02-23/run-001
 /gap fix --ticket OMN-XXXX     # single finding via marker block
-/gap fix --latest              # follows ~/.claude/gap-analysis/latest/
+/gap fix --latest              # follows $ONEX_STATE_DIR/gap-analysis/latest/
 /gap fix --dry-run             # classify and print plan, no side effects
 ```
 
 | Arg | Default | Description |
 |-----|---------|-------------|
-| `--report <run_path>` | none | Gap-analysis run path under `~/.claude/gap-analysis/` |
+| `--report <run_path>` | none | Gap-analysis run path under `$ONEX_STATE_DIR/gap-analysis/` |
 | `--ticket <id>` | none | Single finding via Linear ticket containing a marker block |
-| `--latest` | false | Follow `~/.claude/gap-analysis/latest/` symlink |
+| `--latest` | false | Follow `$ONEX_STATE_DIR/gap-analysis/latest/` symlink |
 | `--dry-run` | false | Zero side effects: no ledger, no Linear writes, no PR mutations |
 | `--mode <mode>` | `ticket-pipeline` | `ticket-pipeline` \| `ticket-work` \| `implement-only` |
 | `--choose <decisions>` | none | `GAP-id=A,GAP-id=B` -- provide choices for gated findings |
@@ -386,7 +386,7 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 
 ### Artifacts
 
-`~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json`:
+`$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-output.json`:
 
 ```json
 {
@@ -397,7 +397,7 @@ Phase 5: Report -- append fix section to .md artifact; update decisions ledger
 }
 ```
 
-`~/.claude/gap-analysis/<source_run_id>/decisions.json` -- persisted decisions so `--choose`
+`$ONEX_STATE_DIR/gap-analysis/<source_run_id>/decisions.json` -- persisted decisions so `--choose`
 selections are not re-prompted on every run. `<source_run_id>` is the gap-analysis run
 identifier (the original analysis run), NOT the fix run ID:
 
@@ -409,7 +409,7 @@ identifier (the original analysis run), NOT the fix run ID:
 
 ### ModelSkillResult
 
-Written to `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
+Written to `$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-result.json`:
 
 ```json
 {
@@ -426,7 +426,7 @@ Written to `~/.claude/gap-analysis/<source_run_id>/gap-fix-result.json`:
   "findings_fixed": 4,
   "findings_still_open": 1,
   "gate_pending": ["GAP-b7e2d5f8", "GAP-c3a1e2d4"],
-  "output_path": "~/.claude/gap-analysis/<source_run_id>/gap-fix-output.json"
+  "output_path": "$ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-output.json"
 }
 ```
 
@@ -466,10 +466,10 @@ Single entry point replacing manual sub-skill chaining.
 /gap cycle --epic OMN-XXXX --verify
 
 # Skip detect (use existing report)
-/gap cycle --report ~/.claude/gap-analysis/OMN-XXXX/<run_id>.json
+/gap cycle --report $ONEX_STATE_DIR/gap-analysis/OMN-XXXX/<run_id>.json
 
 # Resume interrupted run
-/gap cycle --resume ~/.claude/gap-cycle/OMN-XXXX/<run_id>/summary.json
+/gap cycle --resume $ONEX_STATE_DIR/gap-cycle/OMN-XXXX/<run_id>/summary.json
 
 # Dry run (no external writes, local files written)
 /gap cycle --epic OMN-XXXX --dry-run
@@ -486,7 +486,7 @@ fallback pointer files.
 
 ### Output
 
-Written to `~/.claude/gap-cycle/{epic_id}/{run_id}/summary.json`:
+Written to `$ONEX_STATE_DIR/gap-cycle/{epic_id}/{run_id}/summary.json`:
 
 ```json
 {
@@ -583,5 +583,5 @@ If broker is unreachable, exits non-zero with error message.
 - `skills/gap/models/` (local Pydantic models)
 - `skills/gap/docs/FAILURE_TAXONOMY.md` (11 failure class reference)
 - `skills/gap/docs/POST_MERGE_STABILIZATION.md` (6-step post-merge workflow)
-- `~/.claude/gap-analysis/` (report output directory)
-- `~/.claude/gap-cycle/` (cycle summary output directory)
+- `$ONEX_STATE_DIR/gap-analysis/` (report output directory)
+- `$ONEX_STATE_DIR/gap-cycle/` (cycle summary output directory)

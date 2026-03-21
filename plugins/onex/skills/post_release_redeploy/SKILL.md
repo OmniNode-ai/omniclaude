@@ -44,7 +44,7 @@ inputs:
 outputs:
   - name: skill_result
     type: ModelSkillResult
-    description: "Written to ~/.claude/skill-results/{context_id}/post-release-redeploy.json"
+    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/post-release-redeploy.json"
     fields:
       - status: success | failed | partial | dry_run
       - run_id: str
@@ -144,4 +144,4 @@ All other phases run inline.
 - `prompt.md` -- authoritative phase execution logic
 - `release` skill -- Phase 3 delegate for package release
 - `redeploy` skill -- Phase 5 delegate for Docker rebuild
-- `~/.claude/plans/agile-purring-ullman.md` -- source runbook
+- `$ONEX_STATE_DIR/plans/agile-purring-ullman.md` -- source runbook

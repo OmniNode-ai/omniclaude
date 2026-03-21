@@ -7,7 +7,7 @@ Messages are written atomically (write to temp file, then rename) to
 prevent partial reads by concurrent agents.
 
 Directory Layout:
-    ~/.claude/agent-inboxes/
+    $ONEX_STATE_DIR/agent-inboxes/
         {agent_id}/
             {timestamp}_{message_id}.json     # directed messages
         _broadcast/
@@ -49,8 +49,10 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-#: Default inbox root directory.
-DEFAULT_INBOX_ROOT: str = os.path.expanduser("~/.claude/agent-inboxes")
+#: Default inbox root directory — resolved via ONEX_STATE_DIR.
+DEFAULT_INBOX_ROOT: str = (
+    os.environ.get("ONEX_STATE_DIR", os.path.expanduser("~/.claude")) + "/agent-inboxes"
+)
 
 #: Subdirectory for broadcast messages.
 BROADCAST_DIR: str = "_broadcast"
@@ -69,7 +71,7 @@ class HandlerStandaloneInbox:
 
     Args:
         inbox_root: Root directory for agent inboxes. Defaults to
-            ``~/.claude/agent-inboxes``.
+            ``$ONEX_STATE_DIR/agent-inboxes``.
 
     Example::
 

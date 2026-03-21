@@ -60,7 +60,7 @@ from pathlib import Path
 def state_path(run_id: str, skill_name: str) -> Path:
     """Return the canonical path for a skill run state file.
 
-    State files are written to: ~/.claude/state/<skill_name>/<run_id>.json
+    State files are written to: $ONEX_STATE_DIR/state/<skill_name>/<run_id>.json
 
     Args:
         run_id: The run identifier.
@@ -74,7 +74,7 @@ def state_path(run_id: str, skill_name: str) -> Path:
     """
     if not run_id or "/" in run_id or ".." in run_id:
         raise ValueError(f"state_path: invalid run_id '{run_id}'")
-    return Path("~/.claude/state").expanduser() / skill_name / f"{run_id}.json"
+    return Path("$ONEX_STATE_DIR/state").expanduser() / skill_name / f"{run_id}.json"
 ```
 
 ---

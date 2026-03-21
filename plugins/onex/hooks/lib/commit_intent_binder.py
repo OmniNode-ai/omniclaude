@@ -51,7 +51,18 @@ _log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_STATE_DIR_DEFAULT = Path.home() / ".claude" / "hooks" / ".state"
+_STATE_DIR_DEFAULT: Path | None = None
+
+
+def _get_state_dir_default() -> Path:
+    """Return the default state directory, resolved lazily."""
+    global _STATE_DIR_DEFAULT
+    if _STATE_DIR_DEFAULT is None:
+        from plugins.onex.hooks.lib.onex_state import state_path
+
+        _STATE_DIR_DEFAULT = state_path("hooks", ".state")
+    return _STATE_DIR_DEFAULT
+
 
 # Regex: match a git commit SHA in tool output.
 # Accepts both long (40-char) and short (7-12 char) hex SHAs that appear
@@ -157,7 +168,7 @@ def read_intent_from_state(state_dir: Path | None = None) -> dict[str, str]:
         "intent_class": "",
         "correlation_id": "",
     }
-    sd = state_dir or _STATE_DIR_DEFAULT
+    sd = state_dir or _get_state_dir_default()
     state_file = sd / "correlation_id.json"
     try:
         if not state_file.exists():

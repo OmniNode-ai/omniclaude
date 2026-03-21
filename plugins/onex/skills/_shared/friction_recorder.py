@@ -4,7 +4,7 @@
 """Friction event recording — shared utility for all omniclaude skills.
 
 Registry contract:
-  - Append-only NDJSON at ~/.claude/state/friction/friction.ndjson
+  - Append-only NDJSON at $ONEX_STATE_DIR/state/friction/friction.ndjson
   - Malformed lines are skipped by readers
   - No rotation in Phase 1
   - Kafka emission is opportunistic side-channel; failures are swallowed
@@ -23,21 +23,26 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from plugins.onex.hooks.lib.onex_state import ensure_state_path
+
 logger = logging.getLogger(__name__)
 
-_DEFAULT_REGISTRY = Path(
-    os.environ.get(
-        "FRICTION_REGISTRY_PATH",
-        str(Path.home() / ".claude" / "state" / "friction" / "friction.ndjson"),
-    )
-)
+_DEFAULT_REGISTRY: Path | None = None
+
+
+def _get_default_registry() -> Path:
+    """Lazy-resolve the default friction registry path via ONEX_STATE_DIR."""
+    global _DEFAULT_REGISTRY  # noqa: PLW0603
+    if _DEFAULT_REGISTRY is None:
+        _DEFAULT_REGISTRY = ensure_state_path("state", "friction", "friction.ndjson")
+    return _DEFAULT_REGISTRY
+
 
 SURFACE_CATEGORY_ALLOWLIST = frozenset(
     {
@@ -125,7 +130,7 @@ def record_friction(
     emit_kafka: bool = True,
 ) -> None:
     """Append friction event to NDJSON registry. Non-blocking; never raises."""
-    path = Path(registry_path or _DEFAULT_REGISTRY)
+    path = Path(registry_path or _get_default_registry())
     appended = False
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -405,7 +405,7 @@ Run: <run_id>
 
 ## ModelSkillResult
 
-Written to `~/.claude/skill-results/<run_id>/merge-sweep.json`:
+Written to `$ONEX_STATE_DIR/skill-results/<run_id>/merge-sweep.json`:
 
 ```json
 {
@@ -589,7 +589,7 @@ The scan output format is identical across all tiers -- downstream classificatio
 
 ## Idempotency Ledger
 
-Absorbed from the former `fix-prs` skill. Per-run record at `~/.claude/pr-queue/<date>/run_<run_id>.json`:
+Absorbed from the former `fix-prs` skill. Per-run record at `$ONEX_STATE_DIR/pr-queue/<date>/run_<run_id>.json`:
 
 ```json
 {

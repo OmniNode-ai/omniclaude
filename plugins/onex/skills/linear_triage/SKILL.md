@@ -25,7 +25,7 @@ inputs:
 outputs:
   - name: skill_result
     type: TriageReport
-    description: "Written to ~/.claude/state/linear-triage/{run_id}.yaml"
+    description: "Written to $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml"
 mode: full
 ---
 
@@ -288,7 +288,7 @@ mcp__linear-server__list_issues(parentId=epic_ticket.id, includeArchived=true, l
 
 ### Phase 6: Write TriageReport
 
-Write report to `~/.claude/state/linear-triage/{run_id}.yaml` (see `TriageReport` in
+Write report to `$ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml` (see `TriageReport` in
 `@_lib/contracts/helpers.md` for schema).
 
 Print summary to stdout:
@@ -306,7 +306,7 @@ Stale (>{N}d):   {stale} tickets
 🔗 Orphans:           {orphaned} (no parent epic)
 📦 Proposed new epics: {proposed_epics}
 
-Report: ~/.claude/state/linear-triage/{run_id}.yaml
+Report: $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -330,7 +330,7 @@ Linear API has per-minute rate limits. If you have >100 tickets:
 ## Composable Output
 
 When invoked as a sub-skill (e.g., from `linear-housekeeping`), write `TriageReport`
-to `~/.claude/state/linear-triage/{run_id}.yaml` and return the path in output.
+to `$ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml` and return the path in output.
 
 The `orphaned_tickets` list from the TriageReport is the input to `linear-epic-org`.
 

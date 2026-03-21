@@ -23,7 +23,7 @@ When `/redeploy [args]` is invoked:
    - `--resume <run_id>` — resume from state file
 
 3. **Generate or restore run_id**:
-   - If `--resume <run_id>`: load `~/.claude/state/redeploy/<run_id>.json`, fail if missing
+   - If `--resume <run_id>`: load `$ONEX_STATE_DIR/state/redeploy/<run_id>.json`, fail if missing
    - Otherwise: generate `redeploy-<YYYYMMDD>-<6-char-hash>` where hash is sha256 of timestamp
 
 4. **Source environment**:
@@ -80,7 +80,7 @@ import os
 
 OMNI_HOME = os.environ.get("OMNI_HOME", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok
 WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
-STATE_DIR = os.path.expanduser("~/.claude/state/redeploy")
+STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/redeploy")
 
 PHASES = [
     "PREFLIGHT",         # Phase 0 — env var gate, bus tunnel, VirtioFS check
@@ -741,7 +741,7 @@ Expected output pattern:
 
 ```
 IF --resume <run_id>:
-  path = ~/.claude/state/redeploy/<run_id>.json
+  path = $ONEX_STATE_DIR/state/redeploy/<run_id>.json
   IF not os.path.exists(path):
     EXIT 1 with "State file not found: {path}"
 
@@ -771,7 +771,7 @@ On any phase failure:
 
 ## Skill Result
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/redeploy.json`:
+Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`:
 
 ```json
 {

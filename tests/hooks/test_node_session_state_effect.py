@@ -11,7 +11,7 @@ Verifies:
 - GC time-gate (stamp file prevents re-runs)
 - Schema validation with extra="ignore"
 
-All tests use tmp_path fixture and CLAUDE_STATE_DIR env var override.
+All tests use tmp_path fixture and ONEX_STATE_DIR env var override.
 
 Related Tickets:
     - OMN-2119: Session State Orchestrator Shim + Adapter
@@ -44,9 +44,9 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _state_dir(tmp_path, monkeypatch):
-    """Configure CLAUDE_STATE_DIR to use tmp_path for all tests."""
+    """Configure ONEX_STATE_DIR to use tmp_path for all tests."""
     state_dir = str(tmp_path / "state")
-    monkeypatch.setenv("CLAUDE_STATE_DIR", state_dir)
+    monkeypatch.setenv("ONEX_STATE_DIR", state_dir)
     return state_dir
 
 
@@ -259,7 +259,7 @@ class TestFlock:
         self, tmp_path, monkeypatch
     ) -> None:
         """write_session_index returns TIMEOUT if the lock is held."""
-        # The _state_dir fixture already sets CLAUDE_STATE_DIR
+        # The _state_dir fixture already sets ONEX_STATE_DIR
         from node_session_state_effect import _session_index_path
 
         path = _session_index_path()

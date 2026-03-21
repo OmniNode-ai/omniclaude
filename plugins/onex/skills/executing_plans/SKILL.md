@@ -180,7 +180,7 @@ After routing, verify progress:
 /epic-team <epic-id> --resume
 
 # If routed to ticket-pipeline — check pipeline state:
-cat ~/.claude/pipelines/<ticket-id>/state.yaml
+cat $ONEX_STATE_DIR/pipelines/<ticket-id>/state.yaml
 ```
 
 ---

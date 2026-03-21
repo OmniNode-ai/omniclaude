@@ -36,7 +36,7 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
    - If not: use `mutate_pr(pr_key, action="rebase_for_integration", run_id=run_id, fn=...)` to update the base branch
 3. Merge via `mutate_pr(pr_key, action="merge_into_integration", run_id=run_id, fn=...)`:
    - Inside `fn`: invoke the squash-merge subprocess command for the PR (use `@_lib/pr-safety/helpers.md` for the merge call)
-4. Log merge to `~/.claude/epics/{epic_id}/integration_log.json`:
+4. Log merge to `$ONEX_STATE_DIR/epics/{epic_id}/integration_log.json`:
    ```json
    { "pr_number": 1234, "merged_at": "2026-02-28T00:00:00Z", "ticket_id": "OMN-XXXX" }
    ```
@@ -47,14 +47,14 @@ Import `@_lib/pr-safety/helpers.md` before calling any mutation.
 cd /Volumes/PRO-G40/Code/omni_worktrees/{any_ticket}/{repo}  # local-path-ok
 git checkout epic/{epic_id}/integration
 git pull origin epic/{epic_id}/integration
-uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee ~/.claude/epics/{epic_id}/integration_test_results.txt
+uv run pytest tests/ -m "not slow" --tb=short -q 2>&1 | tee $ONEX_STATE_DIR/epics/{epic_id}/integration_test_results.txt
 ```
 
 Return pass/fail + counts.
 
 ## `emit_integration_report(epic_id, test_results, prs_merged)` — Procedure
 
-Write `~/.claude/epics/{epic_id}/integration_report.md`:
+Write `$ONEX_STATE_DIR/epics/{epic_id}/integration_report.md`:
 
 ```markdown
 # Epic Integration Report: {epic_id}

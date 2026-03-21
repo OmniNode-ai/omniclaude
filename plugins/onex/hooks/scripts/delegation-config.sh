@@ -80,5 +80,5 @@ fi
 
 # If JSON still missing/empty, use legacy defaults and WARN
 if [[ ! -s "$CONFIG_JSON" ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [delegation-config] WARNING: config parse failed, falling back to legacy thresholds — read-only enforcement DISABLED" >> "${LOG_FILE:-$HOME/.claude/hooks.log}" 2>/dev/null || true
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [delegation-config] WARNING: config parse failed, falling back to legacy thresholds — read-only enforcement DISABLED" >> "${LOG_FILE:-${ONEX_HOOK_LOG:-/dev/null}}" 2>/dev/null || true
 fi

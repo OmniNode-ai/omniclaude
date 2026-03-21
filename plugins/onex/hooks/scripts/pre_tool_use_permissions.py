@@ -76,9 +76,13 @@ from typing import Any
 # CONSTANTS - Paths
 # =============================================================================
 
-# Claude settings and cache paths
+# Claude Code native settings (NOT migrated — owned by Claude Code itself)
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
-CACHE_PATH = Path.home() / ".claude" / ".cache" / "permission-cache.json"
+
+# ONEX-managed caches (resolved via ONEX_STATE_DIR)
+from plugins.onex.hooks.lib.onex_state import ensure_state_path  # noqa: E402
+
+CACHE_PATH = ensure_state_path(".cache", "permission-cache.json")
 
 # =============================================================================
 # CONSTANTS - Timeouts and Rate Limiting
@@ -97,7 +101,7 @@ RATE_LIMIT_BURST_SIZE = 20  # Allow short bursts up to this size
 RATE_LIMIT_WINDOW_SECONDS = 60  # Sliding window for tracking (informational)
 
 # Rate limiting state file (lightweight persistence between invocations)
-RATE_LIMIT_STATE_FILE = Path.home() / ".claude" / ".cache" / "rate-limit-state.json"
+RATE_LIMIT_STATE_FILE = ensure_state_path(".cache", "rate-limit-state.json")
 
 # Rate limiting feature flag (set to True to enable explicit rate limiting)
 # When False, relies on Claude Code's implicit 5000ms timeout rate limiting

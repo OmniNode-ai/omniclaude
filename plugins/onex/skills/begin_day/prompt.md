@@ -39,7 +39,7 @@ ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 ### Rerun check
 
-If `~/.claude/begin-day/latest/day_open.yaml` exists and contains today's date:
+If `$ONEX_STATE_DIR/begin-day/latest/day_open.yaml` exists and contains today's date:
 - Print advisory: `"Prior run exists: {previous_run_id}. Proceeding with new run."`
 - Continue — do NOT prompt. The user invoked `/begin-day` intentionally.
 - New `RUN_ID`, new artifact directory. Prior artifacts are retained.
@@ -246,7 +246,7 @@ ModelDayOpen.model_validate(raw)
 ```python
 yaml_str = serialize_day_open(raw)
 write_day_open(yaml_str, ARTIFACT_DIR)
-# Updates ~/.claude/begin-day/latest -> RUN_ID
+# Updates $ONEX_STATE_DIR/begin-day/latest -> RUN_ID
 ```
 
 ### 8. Print executive summary
@@ -269,7 +269,7 @@ RECOMMENDED FOCUS AREAS:
   2. {area}
   3. {area}
 
-Artifact: ~/.claude/begin-day/{RUN_ID}/day_open.yaml
+Artifact: $ONEX_STATE_DIR/begin-day/{RUN_ID}/day_open.yaml
 ================================================================
 ```
 
@@ -297,7 +297,7 @@ The run is still successful. Print the artifact path and advise manual review:
 
 ```
 Phase 4 skipped: /design-to-plan not available. Review findings manually:
-  ~/.claude/begin-day/{RUN_ID}/day_open.yaml
+  $ONEX_STATE_DIR/begin-day/{RUN_ID}/day_open.yaml
 ```
 
 ---

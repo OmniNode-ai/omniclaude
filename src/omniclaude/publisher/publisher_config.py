@@ -25,6 +25,12 @@ def _default_pid_path() -> Path:
     return Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
 
 
+def _lazy_spool_dir() -> Path:
+    from omniclaude.hooks.lib.onex_state import state_path  # noqa: PLC0415
+
+    return state_path("event-spool")
+
+
 class PublisherConfig(BaseSettings):
     """Configuration for the Embedded Event Publisher."""
 
@@ -45,7 +51,7 @@ class PublisherConfig(BaseSettings):
         description="PID file path",
     )
     spool_dir: Path = Field(
-        default_factory=lambda: Path.home() / ".claude" / "event-spool",
+        default_factory=lambda: _lazy_spool_dir(),
         description="Disk spool directory",
     )
 

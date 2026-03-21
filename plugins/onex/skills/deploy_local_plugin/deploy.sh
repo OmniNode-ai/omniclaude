@@ -991,6 +991,34 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${GREEN}  Removed legacy onex hook entries from settings.json (hooks.json is authoritative)${NC}"
     fi
 
+    # --- ONEX State Directory Configuration ---
+    _ENV_FILE="${HOME}/.omnibase/.env"
+
+    # Read ONEX_STATE_DIR specifically — do not broadly source .env
+    _existing_state_dir="$(grep '^ONEX_STATE_DIR=' "$_ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '"'"'")"
+
+    if [[ -z "$_existing_state_dir" ]]; then
+      echo ""
+      echo "━━━ ONEX State Directory ━━━"
+      echo "ONEX_STATE_DIR is not configured. All ONEX runtime state (pipelines,"
+      echo "epics, skill results, logs) needs a writable directory outside ~/.claude/."
+      echo ""
+      read -r -p "State directory path [default: ${HOME}/onex-state]: " _state_dir
+      _state_dir="${_state_dir:-${HOME}/onex-state}"
+      _state_dir="${_state_dir/#\~/$HOME}"  # expand tilde
+      mkdir -p "$_state_dir"
+      if grep -q '^ONEX_STATE_DIR=' "$_ENV_FILE" 2>/dev/null; then
+        sed -i.bak "s|^ONEX_STATE_DIR=.*|ONEX_STATE_DIR=\"${_state_dir}\"|" "$_ENV_FILE"
+      else
+        printf '\n# ONEX state directory (all runtime state, logs, artifacts)\nONEX_STATE_DIR="%s"\n' "$_state_dir" >> "$_ENV_FILE"
+      fi
+      export ONEX_STATE_DIR="$_state_dir"
+      echo "✓ ONEX_STATE_DIR=${_state_dir} written to ${_ENV_FILE}"
+    else
+      export ONEX_STATE_DIR="$_existing_state_dir"
+      echo "✓ ONEX_STATE_DIR=${ONEX_STATE_DIR} (already configured)"
+    fi
+
     # Install register-tab.sh to ~/.claude/ — required by statusline.sh for tab bar.
     # This file is not inside the plugin cache; it must live at ~/.claude/register-tab.sh.
     REGISTER_TAB_SRC="${SOURCE_ROOT}/hooks/scripts/register-tab.sh"

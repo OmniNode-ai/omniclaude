@@ -31,7 +31,7 @@ Extract from the invocation arguments:
 - `--fix-nits`: optional flag, default `false`
 - `--no-auto-fix`: optional flag, disables auto-fix; poll-only mode
 
-Resolve `repo` from pipeline state (`~/.claude/pipelines/{ticket_id}/state.yaml` →
+Resolve `repo` from pipeline state (`$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml` →
 `state["repo_full_name"]`) or from the PR URL stored in state. If neither is available,
 infer from `gh pr view {pr_number} --json headRepository`.
 
@@ -39,7 +39,7 @@ infer from `gh pr view {pr_number} --json headRepository`.
 
 ## Step 2: Load pipeline state <!-- ai-slop-ok: skill-step-heading -->
 
-Load `~/.claude/pipelines/{ticket_id}/state.yaml` if it exists. Extract:
+Load `$ONEX_STATE_DIR/pipelines/{ticket_id}/state.yaml` if it exists. Extract:
 
 ```python
 state_path = Path.home() / ".claude" / "pipelines" / ticket_id / "state.yaml"
@@ -335,7 +335,7 @@ def _post_slack_medium_risk(message: str, thread_ts: str | None) -> None:
 
 ### `_write_result`
 
-Write `ModelSkillResult` to `~/.claude/skill-results/{context_id}/pr-watch.json`.
+Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json`.
 
 ```python
 def _write_result(
@@ -400,7 +400,7 @@ def _write_result(
 
 ## Result file schema
 
-Written to `~/.claude/skill-results/{context_id}/pr-watch.json`:
+Written to `$ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json`:
 
 ```json
 {

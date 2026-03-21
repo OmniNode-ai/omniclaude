@@ -22,7 +22,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
-| `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to ~/.claude/review-suppressions.yml (exits immediately after writing) |
+| `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to $ONEX_STATE_DIR/review-suppressions.yml (exits immediately after writing) |
 | `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home against any worktree. |
 
 **Examples**:
@@ -219,7 +219,7 @@ retry_count = 0  # Transient failure retry counter; resets to 0 on any successfu
 quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
                 "consecutive_clean_runs": 0, "final_signature": None,
                 "blocking_issue_count": 0, "nit_count": 0}
-suppression_registry = []  # Loaded from ~/.claude/review-suppressions.yml on first use
+suppression_registry = []  # Loaded from $ONEX_STATE_DIR/review-suppressions.yml on first use
 session_start_ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")  # For notes file naming
 ```
 
@@ -667,7 +667,7 @@ Fix the following {severity} issues:
            ff["auto_flagged"] = True  # Mark so we don't write duplicate entries on future iterations
            _write_suppression_entry(ff["file"], ff["description"], status="active",
                                     reason="Auto-flagged: 3 consecutive failed fixes")
-           print(f"Auto-flagged false positive: {ff['fingerprint']} -> written to ~/.claude/review-suppressions.yml")
+           print(f"Auto-flagged false positive: {ff['fingerprint']} -> written to $ONEX_STATE_DIR/review-suppressions.yml")
            # Reload registry so it's suppressed on next iteration
            suppression_registry = _reload_suppression_registry()
    ```
@@ -1230,7 +1230,7 @@ if "--flag-false-positive" in args:
         reason="Manually flagged",
     )
     print(f"Suppression entry written: pattern='{flag_false_positive_pattern}' status=pending_review")
-    print(f"Registry: ~/.claude/review-suppressions.yml")
+    print(f"Registry: $ONEX_STATE_DIR/review-suppressions.yml")
     print("Review the entry and change status to 'active' to suppress it in future runs.")
     exit(0)
 ```

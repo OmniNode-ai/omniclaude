@@ -18,7 +18,7 @@ args:
 
 # Friction Triage
 
-Reads `~/.claude/state/friction/friction.ndjson`, aggregates events by
+Reads `$ONEX_STATE_DIR/state/friction/friction.ndjson`, aggregates events by
 `skill:surface` over a rolling window, and creates Linear tickets for surfaces
 where `count >= 3` OR `severity_score >= 9`.
 
@@ -156,7 +156,7 @@ Skipped (already tracked): {tickets_skipped}
 | integration_sweep:kafka/missing-topic | 1 | 9 | score>=9 | Created OMN-XXXX |
 | pr_polish:linear/api-timeout | 2 | 6 | (below) | — |
 
-Registry: ~/.claude/state/friction/friction.ndjson
+Registry: $ONEX_STATE_DIR/state/friction/friction.ndjson
 ```
 
 ## Dedup Marker
