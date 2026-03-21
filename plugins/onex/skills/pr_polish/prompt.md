@@ -234,6 +234,29 @@ else:
 
 ## Finalize
 
+### Resolve CodeRabbit Review Threads (Pre-Push)
+
+Before pushing, resolve any unresolved CodeRabbit review threads on the PR.
+Branch protection requires all review threads resolved before the merge queue
+accepts PRs, and CodeRabbit posts 5-20 automated comments per PR. This step
+is idempotent and safe to call on PRs with no CodeRabbit threads.
+
+```python
+# Uses resolve_coderabbit_threads() from @_lib/pr-safety/helpers.md
+from plugins.onex.skills._lib.pr_safety.helpers import resolve_coderabbit_threads
+
+if pr_number:
+    try:
+        repo_full = run("gh pr view {pr_number} --json baseRepository --jq .baseRepository.nameWithOwner").strip()
+        if repo_full:
+            cr_result = resolve_coderabbit_threads(repo_full, int(pr_number))
+            if cr_result["threads_resolved"] > 0:
+                print(f"Resolved {cr_result['threads_resolved']} CodeRabbit thread(s)")
+    except Exception as e:
+        print(f"WARNING: Failed to resolve CodeRabbit threads: {e}")
+        # Non-fatal: continue to push
+```
+
 ### Push
 
 ```python
