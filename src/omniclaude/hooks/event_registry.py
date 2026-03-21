@@ -760,6 +760,18 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["skill", "session_id"],
     ),
+    "friction.observed": EventRegistration(
+        event_type="friction.observed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.FRICTION_OBSERVED,
+                transform=None,
+                description="Friction observation event — contract-driven classification output (OMN-5747)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "surface", "severity"],
+    ),
     # =========================================================================
     # Wave 2 Pipeline Observability Events (OMN-2922)
     # Consumed by omnidash Wave 2 projection nodes.
