@@ -44,9 +44,9 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _state_dir(tmp_path, monkeypatch):
-    """Configure CLAUDE_STATE_DIR to use tmp_path for all tests."""
+    """Configure ONEX_STATE_DIR to use tmp_path for all tests."""
     state_dir = str(tmp_path / "state")
-    monkeypatch.setenv("CLAUDE_STATE_DIR", state_dir)
+    monkeypatch.setenv("ONEX_STATE_DIR", state_dir)
     return state_dir
 
 

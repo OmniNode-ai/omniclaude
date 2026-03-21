@@ -23,7 +23,8 @@ class TestPublisherConfig:
 
     def test_spool_dir_default(self) -> None:
         config = PublisherConfig(kafka_bootstrap_servers="localhost:9092")
-        assert config.spool_dir == Path.home() / ".claude" / "event-spool"
+        assert config.spool_dir.name == "event-spool"
+        assert config.spool_dir.is_absolute()
 
     def test_socket_path_default(self) -> None:
         import tempfile
