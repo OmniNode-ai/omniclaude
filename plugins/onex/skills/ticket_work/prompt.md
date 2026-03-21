@@ -143,7 +143,27 @@ hardening_tickets: []
    - Relevant files (`context.relevant_files`)
    - Existing patterns (`context.patterns_found`)
    - Notes about approach (`context.notes`)
-4. Generate clarifying questions (add to `questions[]`)
+4. **Query code graph for relevant entities** *(graceful degradation)*:
+
+   Run the code graph semantic query with the ticket title as search text.
+   Always pass `repos` to scope results to the ticket's target repo:
+   ```bash
+   source ~/.omnibase/.env
+   echo '{"mode": "semantic", "query": "{ticket_title}", "repos": ["{ticket_repo}"], "limit": 20}' \
+     | python3 "${OMNICLAUDE_PROJECT_ROOT:-$CLAUDE_PLUGIN_ROOT}/plugins/onex/hooks/lib/code_graph_query.py"
+   ```
+
+   If the command succeeds and returns `"status": "ok"`:
+   - Take only the **top 5** results by relevance_score (do not dump all 20 into context)
+   - For each, append to `context.patterns_found`:
+     `"{entity_type} {qualified_name} ({source_repo}) — {classification}"`
+   - Append to `context.notes`: "Code graph queried for: {ticket_title} — {N} of {total} entities surfaced (top-5 by relevance)"
+
+   If the command fails or returns `"status": "service_unavailable"`:
+   - Skip silently. Do not block research phase.
+   - Append to `context.notes`: "Code graph unavailable — skipped entity enrichment"
+
+5. Generate clarifying questions (add to `questions[]`)
 5. Save contract after each mutation
 
 **Mutations allowed:**

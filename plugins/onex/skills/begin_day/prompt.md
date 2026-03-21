@@ -103,10 +103,31 @@ If infra down → HIGH finding per service, **continue** (do NOT abort).
 | `gap_detect` | `/gap detect --since-days 1` | Cross-repo integration drift |
 | `env_parity` | `/env-parity check` | Local vs cloud env drift |
 | `system_status` | `/system-status` | Platform service health |
+| `omnidash_health` | `uv run check-omnidash-health --baseline-path ~/.omnibase/omnidash_baseline.json --json` | Dashboard row count regression (OMN-5653) |
+| `boundary_parity` | `uv run check-boundary-parity --json` | Kafka boundary parity (OMN-5653) |
+
+### Probe-specific handling (OMN-5653)
+
+**omnidash_health** (severity weight: 16 -- CRITICAL):
+- Source: `onex_change_control` package (`check-omnidash-health` entry point)
+- If exit code 1 (regressions found): create `CRITICAL` findings for each regressed table
+- If baseline file is stale (mtime older than latest migration): downgrade to advisory
+- Known false-positive sources: transient DB access issues, baseline staleness after migrations
+- Initial posture: RECOMMEND block, do not hard-block. Set `regression_detected` flag.
+
+**boundary_parity** (severity weight: 8 -- HIGH):
+- Source: `onex_change_control` package (`check-boundary-parity` entry point)
+- If mismatches found: create `HIGH` findings with producer/consumer file paths
+- Dedup by topic name (do not re-ticket already-tracked mismatches)
+- If `check-boundary-parity` not installed (PR #82 not merged): status = "skipped"
+
+**Baseline validity rule**: If the saved baseline predates material schema or boundary
+changes, downgrade comparison from regression to advisory until a new close-day baseline
+is captured. Detect staleness by comparing baseline file mtime against latest migration mtime.
 
 ### Dispatch rules
 
-**ALL 5 probes MUST be dispatched in a SINGLE message as parallel polymorphic agents.**
+**ALL 7 probes MUST be dispatched in a SINGLE message as parallel polymorphic agents.**
 
 If `--probes` is set, only dispatch the named probes. Others are skipped.
 

@@ -191,7 +191,7 @@ def parse_delegated_response(text: str) -> ModelDelegatedResponse | None:
 # ---------------------------------------------------------------------------
 
 # Canonical representative prompts for each delegatable intent type.
-# Chosen to reliably trigger classification above the 0.9 confidence threshold.
+# Chosen to reliably trigger classification above the 0.4 confidence threshold.
 _DOC_GEN_PROMPT = (
     "Document the handle_delegation function with a detailed docstring. "
     "Include parameters, return value, and description."
@@ -231,7 +231,7 @@ def _doc_gen_score() -> Any:
         estimated_savings_usd=0.0112,  # DOCUMENT: 800 avg tokens
         reasons=[
             "intent 'document' is in the delegation allow-list",
-            "confidence 0.950 exceeds threshold 0.900",
+            "confidence 0.950 exceeds threshold 0.4",
         ],
     )
 
@@ -244,7 +244,7 @@ def _boilerplate_score() -> Any:
         estimated_savings_usd=0.0084,  # TEST: 600 avg tokens
         reasons=[
             "intent 'test' is in the delegation allow-list",
-            "confidence 0.920 exceeds threshold 0.900",
+            "confidence 0.920 exceeds threshold 0.4",
         ],
     )
 
@@ -257,7 +257,7 @@ def _code_review_score() -> Any:
         estimated_savings_usd=0.0056,  # RESEARCH: 400 avg tokens
         reasons=[
             "intent 'research' is in the delegation allow-list",
-            "confidence 0.910 exceeds threshold 0.900",
+            "confidence 0.910 exceeds threshold 0.4",
         ],
     )
 
@@ -542,7 +542,7 @@ class TestModelDelegatedResponseParsing:
         output = self._canonical_output(
             reasons=[
                 "intent 'document' is in the delegation allow-list",
-                "confidence 0.950 exceeds threshold 0.900",
+                "confidence 0.950 exceeds threshold 0.4",
             ]
         )
         parsed = parse_delegated_response(output)
