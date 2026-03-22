@@ -141,6 +141,10 @@ epic-team OMN-XXXX
   → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
+  → DoD compliance gate (OMN-5833): invoke /dod-sweep {epic_id} (targeted mode)
+      → If FAIL: do NOT mark epic Done; follow-ups auto-created; post Slack block
+      → If PASS: proceed to mark epic Done; post Slack clean notification
+      → If UNKNOWN (all exempt): proceed (rollout accommodation); post review warning
   → Send Slack lifecycle notifications (started, ticket done, epic done)
   → Persist state to $ONEX_STATE_DIR/epics/{epic_id}/state.yaml
 ```
@@ -416,6 +420,30 @@ A failure attempt is counted when `ticket-pipeline` returns non-zero exit OR the
 - Attempt retry up to 2 times *within the same run only*. On interruption + re-run, counts reset.
 - After 2 failed attempts: produce failure report and stop dispatching new tickets.
 - Escalation = log the failure report and continue with remaining unblocked tickets.
+
+## DoD Compliance Gate
+
+After all ticket-pipeline waves complete and before marking the epic as Done:
+
+1. Invoke `/dod-sweep {epic_id}` (targeted mode)
+2. If `overall_status == FAIL`:
+   - Do NOT mark the epic Done
+   - Follow-up tickets are auto-created by dod_sweep
+   - Post Slack notification: "Epic {epic_id} blocked by DoD gaps: {failed} failed, {exempted} exempted, {passed} passed"
+   - Leave epic in current state for manual resolution
+3. If `overall_status == PASS`:
+   - Proceed to mark epic Done
+   - Post Slack notification: "Epic {epic_id} DoD gate cleared: {passed} passed, {exempted} exempted, {failed} failed"
+4. If `overall_status == UNKNOWN` (e.g., all tickets exempted):
+   - Post Slack notification: "Epic {epic_id} DoD gate: no evidence-backed passes -- {exempted} exempted, review recommended"
+   - Proceed to mark epic Done (non-blocking) but flag for review
+   - NOTE: Allowing all-exempted epics to proceed under UNKNOWN is a rollout
+     accommodation, not the intended long-term steady state. This allow-through
+     must sunset after the cutoff exemption review trigger fires (4 weeks or
+     warning volume <10%, whichever first).
+
+Notifications must always include passed/failed/exempted counts separately --
+never imply all tickets passed when exemptions are present.
 
 ## See Also
 
