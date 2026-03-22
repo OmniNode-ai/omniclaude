@@ -291,6 +291,47 @@ Artifact: <output_path>   (or: --dry-run, no artifact written)
 
 ---
 
+## Step 8b: Auto-Ticket on FAIL <!-- ai-slop-ok: skill-step-heading -->
+
+If `overall_status` is not FAIL, skip this step.
+
+For each probe result where `status == FAIL`:
+
+1. **Compute failure signature**: Extract a normalized signature from the probe detail that
+   distinguishes materially different failures on the same surface. For example:
+   - CONTAINER_HEALTH: signature = sorted list of failing container names (e.g., `"omninode-runtime,runtime-worker-1"`)
+   - RUNTIME_HEALTH: signature = sorted list of failing endpoint ports (e.g., `"8085,8091"`)
+   - Other surfaces: signature = first 80 chars of detail, normalized (lowercase, whitespace-collapsed)
+
+   This ensures: repeated identical failures dedup, but materially different failures on the
+   same surface create distinct tickets.
+
+2. **Dedup check**: Search Linear for an existing open ticket with:
+   - Label: `autopilot-triage`
+   - Title contains both the surface name AND the failure signature hash (first 8 chars of SHA-256 of signature)
+   If found and still open, skip creating a duplicate. Print: `"DEDUP: Existing ticket {id} covers {surface}:{signature_hash}"`
+
+3. **Determine priority** (profile-aware):
+   - CONTAINER_HEALTH or RUNTIME_HEALTH with active runtime profile: Priority 1 (Urgent) -- real expected-service failure
+   - CONTAINER_HEALTH or RUNTIME_HEALTH with core-only profile or optional services: Priority 2 (High) -- infrastructure issue but not runtime-critical
+   - All other surfaces: Priority 2 (High)
+
+4. **Create ticket**:
+   ```
+   mcp__linear-server__save_issue(
+     title="[autopilot-triage] {surface} {signature_hash} -- {SWEEP_DATE}",
+     description="## Context\n- Surface: {surface}\n- Sweep date: {SWEEP_DATE}\n- Failure signature: {signature}\n- Active profile: {profile}\n\n## Evidence\n{detail}\n\n## Resolution\nInvestigate and fix. Re-run /integration-sweep to verify.",
+     team="Omninode",
+     project="Active Sprint",
+     priority=<1 or 2>,
+     labels=["autopilot-triage"]
+   )
+   ```
+
+5. Print: `"AUTO-TICKET: Created {ticket_id} for {surface}:{signature_hash} (priority {priority})"`
+
+---
+
 ## Step 9: Emit Result Line <!-- ai-slop-ok: skill-step-heading -->
 
 Always end with exactly one result line:
