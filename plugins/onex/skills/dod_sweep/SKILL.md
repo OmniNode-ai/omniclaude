@@ -57,8 +57,8 @@ UNKNOWN when linkage cannot be established cleanly.
    across repos. If no PR found, record `UNKNOWN` with detail "No merged PR found
    matching ticket ID -- may indicate PR title/branch naming mismatch" rather than
    hard FAIL.
-5. **CI_GREEN**: `gh api repos/{org}/{repo}/commits/{merge_sha}/check-runs` --
-   verify all conclusions are "success". If merge SHA cannot be determined, record
+5. **CI_GREEN**: Use the GitHub check-runs endpoint for the merged commit SHA --
+   verify all conclusions are "success". If the SHA cannot be determined, record
    `UNKNOWN`.
 6. **INTEGRATION_SWEEP_EVIDENCE**: If contract has `interfaces_touched`, grep
    `$ONEX_CC_REPO_PATH/drift/integration/*.yaml` for ticket_id. This verifies
