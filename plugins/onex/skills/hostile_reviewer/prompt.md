@@ -60,7 +60,8 @@ If no TCB available, check these universal invariants:
 2. Identify disagreements: when one model flags CRITICAL/MAJOR and another does not.
 3. Group findings by source model.
 4. Determine overall verdict:
-   - `clean`: no findings above MINOR severity
+   - `degraded`: ALL requested models failed -- no findings produced (not clean, review could not be performed)
+   - `clean`: at least one model succeeded, no findings above MINOR severity
    - `risks_noted`: MAJOR findings exist but not blocking
    - `blocking_issue`: at least one CRITICAL finding
 
