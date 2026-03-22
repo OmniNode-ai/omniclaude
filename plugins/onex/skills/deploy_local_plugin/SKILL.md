@@ -43,14 +43,18 @@ This skill solves the deployment gap between development and testing.
 ## Quick Start
 
 ```
-# Preview what would change
+# Preview what would change (deploys from canonical bare clone, ref: main)
 /deploy-local-plugin
 
 # Actually deploy (syncs files + builds lib/.venv)
 /deploy-local-plugin --execute
 
-# Deploy without bumping version
-/deploy-local-plugin --execute --no-version-bump
+# Deploy from a specific branch, tag, or commit SHA
+/deploy-local-plugin --execute --ref release/v0.10.1
+/deploy-local-plugin --execute --ref abc1234
+
+# Deploy from an explicit worktree/checkout (opt-in override)
+/deploy-local-plugin --execute --source-path /path/to/omniclaude
 
 # New user install — daily driver skills only (excludes debug: true skills)
 /deploy-local-plugin --execute --level basic
@@ -65,6 +69,24 @@ This skill solves the deployment gap between development and testing.
 # Use when hooks fail with "No valid Python found" after a deploy
 /deploy-local-plugin --repair-venv
 ```
+
+## Source Resolution
+
+The deploy script resolves its source files deterministically. No silent worktree fallback.
+
+| Priority | Source | Trigger |
+|----------|--------|---------|
+| 1 | `--source-path <path>` | Explicit flag (deliberate override) |
+| 2 | `DEPLOY_SOURCE_PATH` env var | Same as above, env form |
+| 3 | Canonical bare clone (`$OMNI_HOME/omniclaude`) | Default — `git archive` into ephemeral staging dir |
+| 4 | `CLAUDE_PLUGIN_ROOT` | Legacy fallback (warns), only if outside cache |
+
+**Archive-based deploys** (tier 3) extract plugin files via `git archive` from the canonical
+bare clone. This means:
+- Exact ref, exact tree, no stale checkout
+- Provenance is logged: repo path, ref, concrete commit SHA, staging path
+- Staging dir is cleaned up automatically on exit (success or failure)
+- Use `--ref` to deploy from a specific branch/tag/SHA (default: `main`)
 
 ## Skill Tier Filtering
 
@@ -115,9 +137,10 @@ Subsequent `--select` runs pre-check previously selected skills. Use `--skill` o
 
 ### Source → Target Mapping
 
-| Source (Repository) | Target (Cache) |
-|---------------------|----------------|
-| `plugins/onex/commands/` | `~/.claude/plugins/cache/omninode-tools/onex/{version}/commands/` |
+By default, files are extracted from the canonical bare clone via `git archive`:
+
+| Source (Canonical Repo @ ref) | Target (Cache) |
+|-------------------------------|----------------|
 | `plugins/onex/skills/` | `~/.claude/plugins/cache/omninode-tools/onex/{version}/skills/` |
 | `plugins/onex/agents/` | `~/.claude/plugins/cache/omninode-tools/onex/{version}/agents/` |
 | `plugins/onex/hooks/` | `~/.claude/plugins/cache/omninode-tools/onex/{version}/hooks/` |
