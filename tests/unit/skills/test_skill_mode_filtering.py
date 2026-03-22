@@ -74,6 +74,7 @@ def test_both_mode_skills_are_generic() -> None:
         "condition_based_waiting",
         "defense_in_depth",
         "executing_plans",
+        "external_model_review",
         "finishing_a_development_branch",
         "hostile_reviewer",
         "systematic_debugging",
