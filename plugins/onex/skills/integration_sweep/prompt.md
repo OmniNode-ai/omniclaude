@@ -60,9 +60,10 @@ here. Full descriptions MUST be fetched via `get_issue` in Step 3.
 
 If no tickets found:
 ```
-INTEGRATION_SWEEP: No completed tickets found for {SWEEP_DATE}. Nothing to verify.
+INTEGRATION_SWEEP: No completed tickets found for {SWEEP_DATE}. Running unconditional surface probes.
 ```
-Exit cleanly (status: clean, no artifact written).
+Skip Steps 3-5 (no ticket-gated probes to execute).
+Proceed directly to Step 5b (Unconditional Surface Probes).
 
 ---
 
