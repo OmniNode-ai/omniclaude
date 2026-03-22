@@ -1509,6 +1509,21 @@ for phase_name in PHASE_ORDER:
         except Exception as _rollup_err:
             print(f"Warning: Failed to emit partial PR validation rollup: {_rollup_err}")
 
+        # Emit budget-cap-hit when pipeline stops due to iteration cap (OMN-5860)
+        if result.get("block_kind") in ("capped", "timeout"):
+            try:
+                from plugins.onex.hooks.lib.pipeline_event_emitters import emit_budget_cap_hit
+                emit_budget_cap_hit(
+                    run_id=state.get("run_id", ""),
+                    tokens_used=result.get("cycles_used", 0),
+                    tokens_budget=result.get("max_cycles", 0),
+                    cap_reason=f"{phase_name} {result.get('block_kind', 'capped')}: {result.get('reason', '')}",
+                    correlation_id=state.get("correlation_id", ""),
+                    session_id=os.environ.get("CLAUDE_SESSION_ID"),
+                )
+            except Exception as _budget_err:
+                print(f"Warning: Failed to emit budget cap event: {_budget_err}")
+
         # Do NOT release lock on block/fail - preserves state for resume
         exit(1)
 

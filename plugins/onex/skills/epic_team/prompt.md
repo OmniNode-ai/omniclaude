@@ -141,21 +141,18 @@ After ticket-pipeline completes, report back:
 
 
 def emit_circuit_breaker_event(ticket_id, epic_id, run_id, repo, elapsed_minutes):
-    """Emit Kafka event when circuit breaker trips for observability."""
-    # Topic: onex.evt.omniclaude.agent-circuit-breaker.v1
+    """Emit Kafka event when circuit breaker trips for observability (OMN-5860)."""
+    # Uses the standardized emitter from pipeline_event_emitters.py
     # This is best-effort — failure to emit does not block the wave.
     try:
-        from omniclaude.shared.events import emit_event
-        emit_event(
-            topic="onex.evt.omniclaude.agent-circuit-breaker.v1",
-            payload={
-                "ticket_id": ticket_id,
-                "epic_id": epic_id,
-                "run_id": run_id,
-                "repo": repo,
-                "elapsed_minutes": elapsed_minutes,
-                "reason": "dispatch_timeout",
-            },
+        from plugins.onex.hooks.lib.pipeline_event_emitters import emit_circuit_breaker_tripped
+        emit_circuit_breaker_tripped(
+            session_id=os.environ.get("CLAUDE_SESSION_ID", f"epic-{epic_id}"),
+            failure_count=1,
+            threshold=1,
+            reset_timeout_seconds=elapsed_minutes * 60,
+            last_error=f"Agent dispatch timeout for {ticket_id} in {repo} after {elapsed_minutes}m",
+            correlation_id=run_id,
         )
     except Exception as e:
         print(f"  Warning: failed to emit circuit breaker event: {e}")
