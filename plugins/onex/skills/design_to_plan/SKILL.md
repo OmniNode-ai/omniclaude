@@ -486,7 +486,9 @@ Record in the plan output or review artifact:
 
 ### Stop Conditions
 
-- After adversarial review converges (or caps at 3 rounds), proceed to multi-model adversarial review (Phase 2c), then Phase 3. Do not re-review after Phase 2c.
+- After adversarial review converges (or caps at 3 rounds), proceed to multi-model adversarial review (Phase 2c).
+- At most one additional R1-R7 pass is allowed only when Phase 2c returns actionable CRITICAL/MAJOR findings with concrete evidence.
+- After that optional extra pass, proceed to Phase 3 with no further re-review loops.
 - If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
 - After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
 

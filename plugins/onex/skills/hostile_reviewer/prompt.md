@@ -9,27 +9,34 @@ independent perspectives that you synthesize.
 Check arguments:
 - If `--pr <N> --repo <owner/repo>`: PR mode
 - If `--file <path>`: file mode
+- If both `--pr` and `--file` are provided: error -- they are mutually exclusive
 - If neither: error -- one of `--pr` or `--file` is required
 
 ## Select Models
 
 Default: `deepseek-r1,qwen3-coder`
-Override: `--models <comma-separated>`
+Override: `--models <comma-separated>` -- split on commas and expand into repeated `--model` args.
 
 ## Execute Multi-Model Review
+
+Build the model args dynamically from the `--models` override or defaults:
+```
+models = args.models.split(",") if args.models else ["deepseek-r1", "qwen3-coder"]
+model_args = " ".join(f"--model {m}" for m in models)
+```
 
 ### PR Mode
 
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --pr {pr_number} --repo {repo} --model deepseek-r1 --model qwen3-coder
+  --pr {pr_number} --repo {repo} {model_args}
 ```
 
 ### File Mode
 
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --file {file_path} --model deepseek-r1 --model qwen3-coder
+  --file {file_path} {model_args}
 ```
 
 Parse the JSON output from stdout. The CLI returns a `ModelMultiReviewResult` with

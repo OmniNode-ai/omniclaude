@@ -52,8 +52,9 @@ Agent(
 
 Multi-model adversarial review that calls local LLMs (DeepSeek-R1, Qwen3-Coder, Qwen3-14B)
 and optionally Codex CLI to conduct independent adversarial reviews. Returns all findings
-with per-model attribution. Output is MANDATORY -- if no risks are found, that itself is a
-finding. Cannot rubber-stamp.
+with per-model attribution. Output is MANDATORY -- the skill always produces a result
+artifact even when verdict is `clean` (empty `findings` array is valid for `clean`).
+Cannot rubber-stamp without running the models.
 
 This skill consolidates the former `hostile-reviewer` (PR-only, Claude-only, exactly-2-risks)
 and `external-model-review` (file-only, multi-model) into a single unified skill.
@@ -82,16 +83,23 @@ This replaces the former `/external-model-review` skill.
 1. Determine mode (PR or file) from arguments.
 2. Invoke the multi-model review CLI:
 
-**PR mode:**
+**PR mode (default models):**
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
   --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-coder
 ```
 
-**File mode:**
+**File mode (default models):**
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
   --file <path> --model deepseek-r1 --model qwen3-coder
+```
+
+When `--models` is provided, expand into repeated `--model` args dynamically:
+```bash
+# Example: --models deepseek-r1,qwen3-14b,codex
+uv run python -m omniintelligence.review_pairing.cli_review \
+  --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-14b --model codex
 ```
 
 3. Parse the `ModelMultiReviewResult` JSON from stdout.
@@ -169,7 +177,7 @@ Findings use canonical severity levels:
 
 ## Verdict Determination
 
-- `clean`: no findings above MINOR severity across all models
+- `clean`: no findings above MINOR severity across all models (findings array may be empty or contain only NIT/MINOR entries)
 - `risks_noted`: MAJOR findings exist but are not blocking -- implementer should address
 - `blocking_issue`: at least one CRITICAL finding from any model -- must fix before merge
 
