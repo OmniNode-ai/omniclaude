@@ -529,6 +529,35 @@ seed-infisical.py: complete
 ```python
 versions_requested: dict[str, str] = state["versions_requested"]
 
+# 0b. Container manifest verification (OMN-5804)
+# Verify all expected containers are running before health endpoint checks.
+# Uses docker ps -a to detect containers stuck in Created/Exited/Dead state.
+profile = state.get("profile", "runtime")  # default: runtime
+result = run(
+    f"python3 $OMNIBASE_INFRA_DIR/src/omnibase_infra/scripts/verify_container_manifest.py "
+    f"--catalog-dir $OMNIBASE_INFRA_DIR/docker/catalog "
+    f"--bundles {profile} "
+    f"--restart-once "
+    f"--json",
+    capture=True,
+)
+import json
+manifest_result = json.loads(result.stdout)
+
+if manifest_result["exit_code"] == 0:
+    if manifest_result.get("recovered"):
+        recovered = manifest_result["recovered"]
+        print(f"VERIFY: {len(recovered)} container(s) recovered after restart: {recovered}")
+elif manifest_result["exit_code"] == 1:
+    for failure in manifest_result["failures"]:
+        print(f"VERIFY FAILED: {failure}")
+    mark_phase(state, "VERIFY", "failed", container_failures=manifest_result["failures"])
+    EXIT 1
+elif manifest_result["exit_code"] == 2:
+    print(f"VERIFY FAILED: Docker unavailable or ambiguous manifest")
+    mark_phase(state, "VERIFY", "failed", error="Docker unavailable or ambiguous manifest")
+    EXIT 1
+
 # 0. Cluster prerequisite preflight — assert PriorityClasses exist (OMN-4761)
 # Missing PriorityClasses cause pods with priorityClassName set to remain 0/1 AVAILABLE
 # indefinitely without a clear error. Check before pod readiness so we fail fast.

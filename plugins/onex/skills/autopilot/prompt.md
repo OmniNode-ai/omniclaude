@@ -33,11 +33,26 @@ If `--mode` is not provided, default to `build`.
 
 **If `--mode build`**: execute Build Mode (see Build Mode section below). Stop after.
 
-**If `--mode close-out`**: execute Close-Out Mode (Steps 3–9 below). Stop after.
+**If `--mode close-out`**: execute Close-Out Mode (Steps 2b–9b below). Stop after.
 
 ---
 
 ## Close-Out Mode
+
+### Step 2b: Initialize Cycle Record <!-- ai-slop-ok: skill-step-heading -->
+
+Generate cycle_id: `autopilot-{mode}-{YYYYMMDD}-{6-char-random}`
+
+Check for consecutive no-op cycles:
+- Read the single most recent cycle record from `$ONEX_STATE_DIR/state/autopilot/` (by modification time)
+- Read its `consecutive_noop_count` field directly (no need to reconstruct from multiple files)
+- If `consecutive_noop_count >= 2`:
+  Print: "WARNING: {count + 1} consecutive autopilot cycles found zero tickets.
+  Unconditional surface probes still running but ticket-gated verification has not occurred."
+
+Initialize step tracking: all 5 steps start as `not_run`.
+
+---
 
 ### Step 3: merge-sweep <!-- ai-slop-ok: skill-step-heading -->
 
@@ -206,6 +221,29 @@ Emit result line:
 ```
 AUTOPILOT_RESULT: complete mode=close-out
 ```
+
+---
+
+### Step 9b: Write Cycle Record <!-- ai-slop-ok: skill-step-heading -->
+
+Populate `ModelAutopilotCycleRecord`:
+- Set each step's status from execution results
+- Set `overall_status` (using `EnumAutopilotCycleStatus`):
+  - `COMPLETE` if all steps are `completed` or `skipped` (and every skipped step has a non-empty `reason` — the model validator enforces this)
+  - `INCOMPLETE` if any step has status `not_run`, or if any step is `skipped` without a valid reason (should not happen if model validation is correct, but defense-in-depth)
+  - `HALTED` if integration-sweep triggered a halt
+  - `CIRCUIT_BREAKER` if 3 consecutive failures occurred
+- Set `consecutive_noop_count` from previous cycle + 1 if no tickets found, else reset to 0
+
+Write YAML to: `$ONEX_STATE_DIR/state/autopilot/{cycle_id}.yaml`
+
+Ensure the parent directory exists:
+```bash
+mkdir -p "$ONEX_STATE_DIR/state/autopilot"
+```
+
+If `overall_status == "incomplete"`:
+  Print: "CYCLE INCOMPLETE: Steps {list of not_run steps} were never executed."
 
 ---
 
