@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+name: Check Architecture Handshake
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '.claude/architecture-handshake.md'
+      - '.github/workflows/check-handshake.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.claude/architecture-handshake.md'
+      - '.github/workflows/check-handshake.yml'
+  merge_group:
+  workflow_dispatch:
+
+jobs:
+  check-handshake:
+    name: Check architecture handshake
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Checkout omnibase_core
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omnibase_core
+          # Pinned to omnibase_core main as of 2026-03-22.
+          # Update by running: gh api repos/OmniNode-ai/omnibase_core/commits/main --jq '.sha'
+          ref: 330a344cdb9c5dedd04a46dfbb0b63dae0baccfb
+          path: omnibase_core
+
+      - name: Verify omnibase_core checkout
+        run: |
+          if [ ! -f omnibase_core/architecture-handshakes/check-handshake.sh ]; then
+            echo "::error::Failed to checkout omnibase_core or check-handshake.sh not found."
+            exit 1
+          fi
+
+      - name: Check architecture handshake
+        run: bash omnibase_core/architecture-handshakes/check-handshake.sh
