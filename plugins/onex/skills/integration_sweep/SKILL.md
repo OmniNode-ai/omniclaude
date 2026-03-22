@@ -1,5 +1,5 @@
 ---
-description: Contract-driven post-merge integration verification — reads ModelTicketContract.dod_evidence for recently completed tickets, probes each integration surface (KAFKA, DB, CI, PLUGIN, GITHUB_CI, SCRIPT), and writes a ModelIntegrationRecord artifact to onex_change_control
+description: Contract-driven post-merge integration verification — reads ModelTicketContract.dod_evidence for recently completed tickets, probes each integration surface (KAFKA, DB, CI, PLUGIN, GITHUB_CI, SCRIPT, CONTAINER_HEALTH, RUNTIME_HEALTH), and writes a ModelIntegrationRecord artifact to onex_change_control
 version: 1.0.0
 mode: full
 level: advanced
@@ -90,6 +90,8 @@ The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 | `PLUGIN` | omniclaude plugin loads cleanly; skill files valid; no phantom callables |
 | `GITHUB_CI` | Branch protection rules; required status checks registered; auto-merge eligibility |
 | `SCRIPT` | Referenced scripts exist at declared paths; exit cleanly under `--dry-run` when applicable |
+| `CONTAINER_HEALTH` | Docker container state — all expected containers running (unconditional, every invocation) |
+| `RUNTIME_HEALTH` | HTTP health endpoints for runtime services (unconditional, every invocation) |
 
 ---
 

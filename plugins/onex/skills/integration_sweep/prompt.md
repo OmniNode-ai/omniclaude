@@ -178,6 +178,55 @@ curl -sf --max-time 5 <url> > /dev/null
 
 ---
 
+## Step 5b: Unconditional Surface Probes <!-- ai-slop-ok: skill-step-heading -->
+
+These probes run on EVERY integration-sweep invocation, regardless of whether
+tickets were discovered or `--tickets` was empty. They detect infrastructure
+drift not associated with any specific ticket.
+
+### CONTAINER_HEALTH
+
+1. Determine active profile:
+   - If an explicit `--profile` flag was passed to the invoking skill (redeploy or autopilot), use that. This is authoritative.
+   - Fallback only: infer from ambient containers. If any runtime container exists, use "runtime", else "core". When inferred, report it as "profile: inferred from running containers" in the probe detail, not as authoritative.
+   - A stale container from a previous deployment does not automatically upgrade the expected profile. Explicit context outranks ambient residue.
+
+2. Resolve expected containers from catalog for the determined profile:
+   ```bash
+   python3 $OMNIBASE_INFRA_DIR/src/omnibase_infra/scripts/verify_container_manifest.py \
+     --catalog-dir $OMNIBASE_INFRA_DIR/docker/catalog \
+     --bundles <profile> \
+     --json
+   ```
+   - The script reads bundles.yaml + service YAMLs, extracts `container_name` (skips null entries like runtime-worker replicas).
+   - If bundle resolution is ambiguous, the script exits 2 and the probe returns UNKNOWN with reason INCONCLUSIVE.
+
+3. Parse JSON output:
+   - exit_code 0: surface result = PASS
+   - exit_code 1: surface result = FAIL with failures list as evidence
+   - exit_code 2: surface result = UNKNOWN with reason PROBE_UNAVAILABLE (Docker not running) or INCONCLUSIVE (ambiguous manifest)
+
+### RUNTIME_HEALTH
+
+Runtime health expectations are profile-scoped. Only endpoints expected for the active profile contribute to PASS/FAIL; others are excluded or marked NOT_APPLICABLE.
+
+1. Determine which endpoints to probe based on the active profile determined above:
+   - **core** profile: no runtime endpoints expected. Surface result = UNKNOWN with reason NOT_APPLICABLE.
+   - **runtime** profile: probe all three endpoints:
+     - omninode-runtime: `curl -sf --max-time 5 http://localhost:8085/health`
+     - intelligence-api: `curl -sf --max-time 5 http://localhost:8053/health`
+     - omninode-contract-resolver: `curl -sf --max-time 5 http://localhost:8091/health`
+
+2. Per endpoint:
+   - HTTP 2xx: PASS
+   - Connection refused or timeout: FAIL
+
+3. Aggregate: any FAIL = surface FAIL. All PASS = surface PASS. Endpoints not in the active profile's expected set do not contribute.
+
+Append both probe results to the main results list before proceeding to Step 6.
+
+---
+
 ## Step 6: Artifact Assembly <!-- ai-slop-ok: skill-step-heading -->
 
 Assemble a `ModelIntegrationRecord`:
