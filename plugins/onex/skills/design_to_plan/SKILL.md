@@ -438,9 +438,55 @@ If the review instructions do not catch all six expected items, tighten the inst
 
 ---
 
+### External Model Review (Phase 2c)
+
+After R1-R7 converges (Phase 2b), invoke the external model review skill for
+an independent adversarial challenge from non-Claude models.
+
+**Flow:**
+
+1. R1-R7 converges (Phase 2b complete)
+2. Invoke `/external-model-review` with the plan file path
+3. Triage external findings (see policy below)
+4. If actionable CRITICAL/MAJOR with concrete evidence: run ONE additional R1-R7 pass
+5. If only MINOR/NIT: note them and proceed to Phase 3
+6. If external model unavailable (all models failed): log warning and proceed
+
+**Triage policy (not mechanical obedience):**
+
+- Only clearly actionable CRITICAL/MAJOR findings trigger the extra R1-R7 pass
+- The finding MUST cite a specific plan section or design flaw (concrete evidence)
+- Vague concerns ("might be fragile", "could have issues") are noted but do NOT
+  force re-review
+- A single high-severity finding from one model MAY trigger the extra pass only
+  when its evidence clearly identifies a concrete plan defect
+
+**Model disagreement handling:**
+
+- When models materially disagree on a major issue (one flags CRITICAL/MAJOR,
+  the other is silent or disagrees), present the disagreement to the user
+  rather than auto-resolving
+- Do not suppress disagreements; they are valuable signal
+
+**Constraints:**
+
+- Maximum 1 external review round (prevents infinite loops)
+- External review runs AFTER R1-R7 convergence, never during
+- External model failure does not block the workflow
+
+**Observability:**
+
+Record in the plan output or review artifact:
+- Whether external review ran
+- Which models succeeded and which degraded
+- Whether the extra R1-R7 pass was triggered and why
+- Total external findings by severity
+
+---
+
 ### Stop Conditions
 
-- After adversarial review converges (or caps at 3 rounds), proceed to Phase 3. Do not re-review.
+- After adversarial review converges (or caps at 3 rounds), proceed to external model review (Phase 2c), then Phase 3. Do not re-review after Phase 2c.
 - If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
 - After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
 
@@ -453,6 +499,7 @@ Phase 3 flows automatically from Phase 2b convergence. It is not optional.
 **Pre-launch checklist** (all must be true before launching):
 - [ ] Plan file written to disk (not just assembled in memory)
 - [ ] Adversarial review converged (or capped at round 3 with user-acknowledged unresolved issues)
+- [ ] External model review ran (Phase 2c) or was skipped due to model unavailability
 - [ ] Plan contains an acceptance criteria section
 
 **Routing decision** (output as structured `routing:` block at end of plan file):
