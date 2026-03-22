@@ -7,15 +7,18 @@ name: Integration Tests
 # Catches database issues, logging gaps, agent observability problems, and Kafka integration failures
 # before they reach production
 #
-# NOTE: Integration tests require remote services (PostgreSQL, Kafka, Qdrant) which are not available in CI.
-# These tests are disabled on pull requests to prevent CI failures. They run on main/develop branches
-# or can be triggered manually via workflow_dispatch.
+# NOTE: Integration tests require services (PostgreSQL, Kafka) spun up as GitHub Actions service
+# containers, but the test files and DB migrations referenced by this workflow do not exist yet.
+# The referenced test files (test_kafka_logging.py, test_agent_execution_logging.py, etc.) and
+# the migrations/ directory were never created, and the DB tables (agent_routing_decisions, etc.)
+# were removed in DB-SPLIT-07 (OMN-2058). This workflow is disabled on push/PR triggers until
+# the test files are created. Use workflow_dispatch for manual runs.
 
 on:
-  push:
-    branches: [main, develop]
-  # Integration tests disabled on PRs - they require remote services not available in CI
-  # Use ci.yml for unit tests on PRs
+  # Disabled on push — test files referenced by this workflow do not exist yet.
+  # Re-enable when the test files listed in each job are created.
+  # push:
+  #   branches: [main, develop]
   # pull_request:
   #   branches: [main, develop]
   workflow_dispatch:
