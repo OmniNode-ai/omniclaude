@@ -25,6 +25,7 @@ import time
 from collections.abc import Mapping
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +42,29 @@ class IncrementalExtractionHandler:
         Args:
             config: The ``config.incremental_extraction`` dict.
         """
-        self._enabled: bool = config.get("enabled", True)
+        self._enabled: bool = cast("bool", config.get("enabled", True))
         self._trigger_tools: set[str] = set(
-            config.get("trigger_tools", ["Edit", "Write"])
+            cast("list[str]", config.get("trigger_tools", ["Edit", "Write"]))
         )
-        self._debounce_seconds: float = config.get("debounce_seconds", 30)
+        self._debounce_seconds: float = cast(
+            "float", config.get("debounce_seconds", 30)
+        )
         self._watched_extensions: set[str] = set(
-            config.get("watched_extensions", [".py", ".ts", ".js"])
+            cast("list[str]", config.get("watched_extensions", [".py", ".ts", ".js"]))
         )
-        self._watched_repos: list[dict[str, str]] = config.get("watched_repos", [])
-        self._excluded_paths: list[str] = config.get(
-            "excluded_paths",
-            [
-                "tests/**",
-                "__pycache__/**",
-                "node_modules/**",
-            ],
+        self._watched_repos: list[dict[str, str]] = cast(
+            "list[dict[str, str]]", config.get("watched_repos", [])
+        )
+        self._excluded_paths: list[str] = cast(
+            "list[str]",
+            config.get(
+                "excluded_paths",
+                [
+                    "tests/**",
+                    "__pycache__/**",
+                    "node_modules/**",
+                ],
+            ),
         )
 
         # In-memory debounce state
