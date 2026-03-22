@@ -125,7 +125,7 @@ and verify that health endpoints and pinned package versions match expectations.
 | 5 | `DEPLOY` | `deploy-runtime.sh --execute --restart` from worktree | Safe: rsync + rebuild + `--force-recreate` |
 | 5b | `SCHEMA_SYNC` | `check_schema_fingerprint.py verify` — auto-stamp if stale | Idempotent: verify-then-stamp pattern |
 | 6 | `INFISICAL` | Seed new contract keys to Infisical | `seed-infisical.py` is idempotent |
-| 7 | `VERIFY` | curl health endpoints + in-container version checks | Read-only, always safe |
+| 7 | `VERIFY` | Container manifest check via `verify_container_manifest.py` (`docker ps -a`) + curl health endpoints + in-container version checks. Restart-once policy for non-running containers. Profile-aware (core/runtime/memory). | Read-only (except restart-once recovery attempt), always safe |
 | 7b | `K8S_VERIFY` | `k8s-pod-readiness-check.sh` — SSM-based cloud k8s pod READY gate | Read-only; exit 2 advisory when SSM unreachable |
 | 7c | `OMNIDASH_VERIFY` | `verify-omnidash-health.sh` — >= 3 live data sources at localhost:3000 | Read-only; exit 2 advisory when omnidash offline |
 | 8 | `NOTIFY` | Slack via `node_slack_alerter_effect` (FULL_ONEX only) | Idempotent (run_id in message) |
