@@ -438,19 +438,19 @@ If the review instructions do not catch all six expected items, tighten the inst
 
 ---
 
-### External Model Review (Phase 2c)
+### Multi-Model Adversarial Review (Phase 2c)
 
-After R1-R7 converges (Phase 2b), invoke the external model review skill for
-an independent adversarial challenge from non-Claude models.
+After R1-R7 converges (Phase 2b), invoke the hostile-reviewer skill in file mode for
+an independent adversarial challenge from non-Claude models (DeepSeek-R1, Qwen3-Coder).
 
 **Flow:**
 
 1. R1-R7 converges (Phase 2b complete)
-2. Invoke `/external-model-review` with the plan file path
+2. Invoke `/hostile-reviewer --file <plan_file_path>`
 3. Triage external findings (see policy below)
 4. If actionable CRITICAL/MAJOR with concrete evidence: run ONE additional R1-R7 pass
 5. If only MINOR/NIT: note them and proceed to Phase 3
-6. If external model unavailable (all models failed): log warning and proceed
+6. If all models failed: log warning and proceed
 
 **Triage policy (not mechanical obedience):**
 
@@ -486,7 +486,7 @@ Record in the plan output or review artifact:
 
 ### Stop Conditions
 
-- After adversarial review converges (or caps at 3 rounds), proceed to external model review (Phase 2c), then Phase 3. Do not re-review after Phase 2c.
+- After adversarial review converges (or caps at 3 rounds), proceed to multi-model adversarial review (Phase 2c), then Phase 3. Do not re-review after Phase 2c.
 - If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
 - After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
 

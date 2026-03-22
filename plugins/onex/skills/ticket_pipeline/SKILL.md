@@ -413,14 +413,15 @@ ticket-pipeline OMN-XXXX
 **Trigger:** After local_review confirms 2 consecutive clean passes. Runs BEFORE mergeability_gate.
 
 **Action:**
-1. Invoke `@skills/hostile-reviewer` with PR number, repo, and ticket_id
+1. Invoke `/hostile-reviewer --pr <N> --repo <owner/repo> --ticket_id <ticket_id>`
+   This runs multi-model adversarial review (DeepSeek-R1, Qwen3-Coder) against the PR diff.
 2. Read result from `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`
 3. If `overall_verdict == "blocking_issue"`:
    - Re-enter implementation phase (set phase back to `implement`)
-   - Attach hostile reviewer findings to ticket context as "blocking findings"
+   - Attach hostile reviewer findings (with per-model attribution) to ticket context as "blocking findings"
    - Increment `hostile_block_count` in ledger (cap at 3; if exceeded, post MEDIUM_RISK Slack gate to human)
 4. If `overall_verdict == "risks_noted"` or `"clean"`:
-   - Note risks in PR description under a "Hostile Review Notes" section
+   - Note risks (with model attribution) in PR description under a "Hostile Review Notes" section
    - Advance to Phase 2.5 (mergeability_gate)
 
 - AUTO-ADVANCE to Phase 2.5 (on risks_noted or clean)
