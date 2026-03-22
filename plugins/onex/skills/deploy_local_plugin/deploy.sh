@@ -5,14 +5,22 @@
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:
-#   ./deploy.sh [--execute] [--bump-version]
+#   ./deploy.sh [--execute] [--bump-version] [--ref <tree-ish>] [--source-path <path>]
 #   ./deploy.sh --repair-venv
 #
-# Default: Dry run, deploys to same version (no bump)
+# Default: Dry run, deploys from canonical bare clone (main) to same version (no bump)
 # --execute: Actually perform deployment (sync files + build venv)
 # --bump-version: Increment patch version before deploying
+# --ref: Deploy from a specific branch, tag, or commit SHA (default: main)
+# --source-path: Explicit worktree/checkout path override
 # --repair-venv: Build lib/.venv in the currently-active deployed version (no file sync, no version bump)
 #                Use this when hooks fail with "No valid Python found" after a deploy.
+#
+# Source resolution order:
+#   1. --source-path / DEPLOY_SOURCE_PATH  (explicit override)
+#   2. Canonical bare clone via git archive (deterministic, default)
+#   3. CLAUDE_PLUGIN_ROOT                  (legacy fallback, warns)
+#   4. Hard error
 # Deploys to plugin cache ONLY. Skills/commands/agents discovered via plugin installPath.
 
 set -euo pipefail
@@ -67,6 +75,8 @@ REPAIR_VENV=false
 LEVEL_FILTER="advanced"   # default: no filtering (advanced includes all)
 INCLUDE_DEBUG=false
 _LEVEL_EXPLICIT=false     # track whether --level was passed explicitly
+DEPLOY_REF=""             # --ref <tree-ish>: deploy from specific branch/tag/SHA
+EXPLICIT_SOURCE_PATH=""   # --source-path <path>: explicit worktree/checkout override
 
 while [[ $# -gt 0 ]]; do
     arg="$1"
@@ -101,13 +111,40 @@ while [[ $# -gt 0 ]]; do
         --include-debug)
             INCLUDE_DEBUG=true
             ;;
+        --ref=*)
+            DEPLOY_REF="${arg#--ref=}"
+            ;;
+        --ref)
+            if [[ $# -lt 2 ]]; then
+                echo -e "${RED}Error: --ref requires a value (branch, tag, or commit SHA)${NC}" >&2
+                exit 1
+            fi
+            DEPLOY_REF="$2"
+            shift
+            ;;
+        --source-path=*)
+            EXPLICIT_SOURCE_PATH="${arg#--source-path=}"
+            ;;
+        --source-path)
+            if [[ $# -lt 2 ]]; then
+                echo -e "${RED}Error: --source-path requires a directory path${NC}" >&2
+                exit 1
+            fi
+            EXPLICIT_SOURCE_PATH="$2"
+            shift
+            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--bump-version] [--level basic|intermediate|advanced] [--include-debug]"
+            echo "Usage: deploy.sh [--execute] [--bump-version] [--ref <tree-ish>] [--source-path <path>]"
+            echo "       deploy.sh [--level basic|intermediate|advanced] [--include-debug]"
             echo "       deploy.sh --repair-venv"
             echo ""
             echo "Options:"
             echo "  --execute                  Actually perform deployment (default: dry run)"
             echo "  --bump-version             Increment patch version (default: deploy to same version)"
+            echo "  --ref <tree-ish>           Deploy from a specific branch, tag, or commit SHA."
+            echo "                             Default: main. Only used with archive-based deploys."
+            echo "  --source-path <path>       Explicit worktree/checkout path override. Bypasses"
+            echo "                             archive-based resolution. Path must contain plugins/onex/."
             echo "  --level basic|intermediate|advanced"
             echo "                             Filter skills by tier (inclusive downward):"
             echo "                               basic       → only level: basic skills"
@@ -138,6 +175,16 @@ case "$LEVEL_FILTER" in
         ;;
 esac
 
+# Guard: --ref and --source-path are mutually exclusive.
+# --ref selects a git ref for archive-based deploys.
+# --source-path bypasses archive resolution entirely.
+if [[ -n "$DEPLOY_REF" && -n "$EXPLICIT_SOURCE_PATH" ]]; then
+    echo -e "${RED}Error: --ref and --source-path are mutually exclusive.${NC}" >&2
+    echo "  --ref deploys from the canonical repo via git archive." >&2
+    echo "  --source-path deploys from an explicit checkout path." >&2
+    exit 1
+fi
+
 # Guard: --no-version-bump and --bump-version are mutually exclusive.
 # Since --no-version-bump sets NO_VERSION_BUMP=true and --bump-version sets
 # BUMP_VERSION=true, detect the conflict explicitly rather than relying on
@@ -147,33 +194,32 @@ if [[ "$NO_VERSION_BUMP" == "true" && "$BUMP_VERSION" == "true" ]]; then
     exit 1
 fi
 
-# Determine source directory
+# =============================================================================
+# Source Resolution
+# =============================================================================
 # Priority:
-#   1. CLAUDE_PLUGIN_ROOT, but only when it's NOT the plugin cache (i.e. a real dev checkout)
-#   2. installLocation from known_marketplaces.json (set when plugin was registered from a local path)
-#   3. source.path from known_marketplaces.json (fallback if installLocation is missing)
-#   4. Error — refuse to deploy cache-to-cache
+#   1. --source-path <path>     → explicit worktree/checkout override (deliberate)
+#   2. DEPLOY_SOURCE_PATH env   → same as above, env form
+#   3. Canonical bare clone     → git archive into ephemeral staging dir
+#   4. CLAUDE_PLUGIN_ROOT       → only if outside cache AND no canonical repo found
+#   5. Hard error               → refuse to deploy with ambiguous source
 #
-# When invoked as a Claude Code skill, CLAUDE_PLUGIN_ROOT points to the installed cache
-# (e.g. ~/.claude/plugins/cache/omninode-tools/onex/2.2.4), NOT the dev repo.
-# Using the cache as source would deploy the old cached version, ignoring any local changes.
-CACHE_PAT="$HOME/.claude/plugins/cache"
-KNOWN_MKT="$HOME/.claude/plugins/known_marketplaces.json"
+# known_marketplaces.json is NOT used for source resolution. It is updated
+# during deploy for Claude Code's plugin loader, but never drives source selection.
+# This prevents silent fallback to arbitrary registered worktrees.
+# =============================================================================
 
-_resolve_marketplace_source() {
-    # Try installLocation first, then source.path — both may point to the repo root.
-    local loc
-    for key in "installLocation" "source.path"; do
-        loc="$(jq -r ".\"omninode-tools\".${key} // empty" "$KNOWN_MKT" 2>/dev/null)" || continue
-        [[ -n "$loc" ]] || continue
-        # Validate the path has the expected plugin structure
-        if [[ -f "${loc}/plugins/onex/.claude-plugin/plugin.json" ]]; then
-            echo "${loc}/plugins/onex"
-            return 0
-        fi
-    done
-    return 1
-}
+CACHE_PAT="$HOME/.claude/plugins/cache"
+
+# Default canonical repo location. Override via OMNI_HOME env var.
+OMNI_HOME="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok: default, overridable via env
+CANONICAL_REPO="${OMNI_HOME}/omniclaude"
+
+# Provenance fields — set during source resolution, logged during deploy
+DEPLOY_MODE=""           # "archive", "explicit-path", "plugin-root"
+DEPLOY_REPO=""           # canonical repo path (archive mode)
+DEPLOY_SHA=""            # concrete commit SHA
+STAGING_DIR=""           # ephemeral staging dir (archive mode only)
 
 _verify_venv_integrity() {
     # Post-deploy sanity check: ensure the venv survived all deploy operations.
@@ -183,27 +229,123 @@ _verify_venv_integrity() {
     [[ -f "${venv_dir}/bin/python3" && -x "${venv_dir}/bin/python3" ]]
 }
 
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && "$CLAUDE_PLUGIN_ROOT" != "$CACHE_PAT"* ]]; then
-    # CLAUDE_PLUGIN_ROOT points to a real dev checkout, not the installed cache
+_cleanup_staging() {
+    if [[ -n "${STAGING_DIR:-}" && -d "${STAGING_DIR}" ]]; then
+        rm -rf "$STAGING_DIR"
+    fi
+}
+
+_stage_from_archive() {
+    # Extract plugin files + build context from a git repo (bare or checked out)
+    # via git archive into an ephemeral staging directory.
+    #
+    # Sets: SOURCE_ROOT, STAGING_DIR, DEPLOY_REPO, DEPLOY_REF, DEPLOY_SHA, DEPLOY_MODE
+    local repo_path="$1"
+    local ref="${2:-main}"
+
+    # Resolve ref to concrete SHA
+    local commit_sha
+    commit_sha="$(git -C "$repo_path" rev-parse --verify "$ref" 2>/dev/null)" || {
+        echo -e "${RED}Error: ref '${ref}' does not exist in ${repo_path}${NC}" >&2
+        return 1
+    }
+
+    # Verify plugins/onex exists at this ref
+    git -C "$repo_path" cat-file -e "${commit_sha}:plugins/onex/.claude-plugin/plugin.json" 2>/dev/null || {
+        echo -e "${RED}Error: plugins/onex/.claude-plugin/plugin.json not found at ref ${ref} (${commit_sha:0:12})${NC}" >&2
+        return 1
+    }
+
+    # Create ephemeral staging dir
+    STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/onex-deploy-XXXXXXXX")"
+
+    # Extract plugin files + build context (pyproject.toml, uv.lock, src/, marketplace.json)
+    # needed for uv sync during venv build. Mode bits (executables) are preserved by tar.
+    git -C "$repo_path" archive --format=tar "$commit_sha" -- \
+        plugins/onex/ \
+        pyproject.toml \
+        uv.lock \
+        src/ \
+        .claude-plugin/marketplace.json \
+        2>/dev/null \
+        | tar -x -C "$STAGING_DIR"
+
+    # SOURCE_ROOT points at the extracted plugin directory
+    SOURCE_ROOT="${STAGING_DIR}/plugins/onex"
+
+    # Record provenance
+    DEPLOY_REPO="$repo_path"
+    DEPLOY_REF="$ref"
+    DEPLOY_SHA="$commit_sha"
+    DEPLOY_MODE="archive"
+}
+
+# --- Source resolution ---
+
+if [[ -n "$EXPLICIT_SOURCE_PATH" ]]; then
+    # Tier 1: Explicit --source-path override
+    EXPLICIT_SOURCE_PATH="${EXPLICIT_SOURCE_PATH/#\~/$HOME}"  # expand tilde
+    if [[ -f "${EXPLICIT_SOURCE_PATH}/plugins/onex/.claude-plugin/plugin.json" ]]; then
+        SOURCE_ROOT="${EXPLICIT_SOURCE_PATH}/plugins/onex"
+    elif [[ -f "${EXPLICIT_SOURCE_PATH}/.claude-plugin/plugin.json" ]]; then
+        SOURCE_ROOT="$EXPLICIT_SOURCE_PATH"
+    else
+        echo -e "${RED}Error: --source-path does not contain a valid plugin structure.${NC}" >&2
+        echo "  Looked for: ${EXPLICIT_SOURCE_PATH}/plugins/onex/.claude-plugin/plugin.json" >&2
+        echo "  Also tried: ${EXPLICIT_SOURCE_PATH}/.claude-plugin/plugin.json" >&2
+        exit 1
+    fi
+    DEPLOY_MODE="explicit-path"
+    DEPLOY_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+
+elif [[ -n "${DEPLOY_SOURCE_PATH:-}" ]]; then
+    # Tier 2: DEPLOY_SOURCE_PATH env var (same as --source-path)
+    DEPLOY_SOURCE_PATH="${DEPLOY_SOURCE_PATH/#\~/$HOME}"
+    if [[ -f "${DEPLOY_SOURCE_PATH}/plugins/onex/.claude-plugin/plugin.json" ]]; then
+        SOURCE_ROOT="${DEPLOY_SOURCE_PATH}/plugins/onex"
+    elif [[ -f "${DEPLOY_SOURCE_PATH}/.claude-plugin/plugin.json" ]]; then
+        SOURCE_ROOT="$DEPLOY_SOURCE_PATH"
+    else
+        echo -e "${RED}Error: DEPLOY_SOURCE_PATH does not contain a valid plugin structure.${NC}" >&2
+        exit 1
+    fi
+    DEPLOY_MODE="explicit-path"
+    DEPLOY_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+
+elif [[ -d "$CANONICAL_REPO" ]] && git -C "$CANONICAL_REPO" rev-parse --git-dir &>/dev/null; then
+    # Tier 3: Canonical bare clone — archive-based deploy
+    _REF="${DEPLOY_REF:-main}"
+    if ! _stage_from_archive "$CANONICAL_REPO" "$_REF"; then
+        echo -e "${RED}Error: Failed to stage files from canonical repo at ${CANONICAL_REPO}${NC}" >&2
+        exit 1
+    fi
+    # Register cleanup trap (composes with existing venv trap later)
+    trap _cleanup_staging EXIT
+
+elif [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && "$CLAUDE_PLUGIN_ROOT" != "$CACHE_PAT"* ]]; then
+    # Tier 4: CLAUDE_PLUGIN_ROOT points to a real dev checkout (legacy fallback)
+    echo -e "${YELLOW}Warning: Falling back to CLAUDE_PLUGIN_ROOT. This is a legacy resolution path.${NC}" >&2
+    echo -e "${YELLOW}  Prefer deploying from the canonical repo or use --source-path.${NC}" >&2
     SOURCE_ROOT="$CLAUDE_PLUGIN_ROOT"
-elif [[ -f "$KNOWN_MKT" ]] && SOURCE_ROOT="$(_resolve_marketplace_source)"; then
-    # Resolved from known_marketplaces.json (installLocation or source.path)
-    :
+    DEPLOY_MODE="plugin-root"
+    DEPLOY_SHA="$(git -C "$SOURCE_ROOT" rev-parse HEAD 2>/dev/null || echo 'unknown')"
+
 else
-    # All resolution tiers failed. Refuse to silently deploy cache-to-cache.
+    # All resolution tiers failed.
     echo -e "${RED}Error: Could not find the omniclaude repository.${NC}" >&2
     echo "" >&2
     echo "The deploy script needs a source directory (the repo) to sync from." >&2
     echo "Tried:" >&2
-    echo "  1. CLAUDE_PLUGIN_ROOT env var (not set, or points to cache)" >&2
-    echo "  2. known_marketplaces.json installLocation (missing or invalid)" >&2
-    echo "  3. known_marketplaces.json source.path (missing or invalid)" >&2
+    echo "  1. --source-path flag (not provided)" >&2
+    echo "  2. DEPLOY_SOURCE_PATH env var (not set)" >&2
+    echo "  3. Canonical repo at ${CANONICAL_REPO} (not found or not a git repo)" >&2
+    echo "  4. CLAUDE_PLUGIN_ROOT env var (not set, or points to cache)" >&2
     echo "" >&2
-    echo "Fix: set CLAUDE_PLUGIN_ROOT to the plugin directory in your repo:" >&2
-    echo "  CLAUDE_PLUGIN_ROOT=/path/to/omniclaude/plugins/onex $0 $*" >&2
+    echo "Fix: use --source-path to point at your omniclaude checkout:" >&2
+    echo "  $0 --source-path /path/to/omniclaude --execute" >&2
     echo "" >&2
-    echo "Or run a deploy once with CLAUDE_PLUGIN_ROOT set — subsequent runs" >&2
-    echo "will auto-resolve via known_marketplaces.json." >&2
+    echo "Or set OMNI_HOME to your omni_home directory:" >&2
+    echo "  OMNI_HOME=/path/to/omni_home $0 --execute" >&2
     exit 1
 fi
 
@@ -516,8 +658,30 @@ else
 fi
 echo ""
 
-# Print paths
-echo "Source:  ${SOURCE_ROOT}"
+# Print provenance
+echo "Deploy source:"
+case "$DEPLOY_MODE" in
+    archive)
+        echo "  repo:    ${DEPLOY_REPO}"
+        echo "  ref:     ${DEPLOY_REF}"
+        echo "  commit:  ${DEPLOY_SHA:0:12}"
+        echo "  staging: ${STAGING_DIR}"
+        echo "  mode:    archive (canonical)"
+        ;;
+    explicit-path)
+        echo "  path:    ${SOURCE_ROOT}"
+        echo "  commit:  ${DEPLOY_SHA:0:12}"
+        echo "  mode:    explicit-path (override)"
+        ;;
+    plugin-root)
+        echo "  path:    ${SOURCE_ROOT}"
+        echo "  commit:  ${DEPLOY_SHA:0:12}"
+        echo "  mode:    plugin-root (legacy)"
+        ;;
+    *)
+        echo "  path:    ${SOURCE_ROOT}"
+        ;;
+esac
 echo "Target:  ${TARGET}"
 echo ""
 
@@ -632,59 +796,63 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo ""
 
     # =========================================================================
-    # Resolve PROJECT_ROOT — the repo root containing .claude-plugin/marketplace.json.
-    #
-    # Claude Code's plugin loader (IEA → bz7 → MQR) reads marketplace.json
-    # from known_marketplaces.json:installLocation. If installLocation points
-    # to the cache instead of the repo root, MQR fails with
-    # "missing .claude-plugin/marketplace.json" and the ENTIRE plugin is skipped
-    # (zero skills, zero commands, zero agents).
+    # Resolve PROJECT_ROOT — the directory containing pyproject.toml + uv.lock.
     #
     # This path is used for:
-    #   1. uv pip install --no-editable (needs pyproject.toml + uv.lock)
+    #   1. uv sync --no-editable (needs pyproject.toml + uv.lock + src/)
     #   2. known_marketplaces.json installLocation (needs marketplace.json)
-    #   3. git SHA in venv manifest
+    #   3. git SHA in venv manifest (for non-archive deploys)
     #
-    # Use `git rev-parse --show-toplevel` instead of relative traversal
-    # (../../) so this works regardless of where CLAUDE_PLUGIN_ROOT points.
+    # For archive-based deploys, PROJECT_ROOT is the staging dir root
+    # (which already contains pyproject.toml, uv.lock, src/, marketplace.json).
+    # For path-based deploys, use git rev-parse --show-toplevel.
     # =========================================================================
-    if ! PROJECT_ROOT="$(git -C "${SOURCE_ROOT}" rev-parse --show-toplevel 2>/dev/null)"; then
+    if [[ "$DEPLOY_MODE" == "archive" ]]; then
+        PROJECT_ROOT="$STAGING_DIR"
+    elif ! PROJECT_ROOT="$(git -C "${SOURCE_ROOT}" rev-parse --show-toplevel 2>/dev/null)"; then
         echo -e "${RED}Error: Could not determine repo root via 'git rev-parse --show-toplevel'.${NC}"
         echo -e "${RED}SOURCE_ROOT (${SOURCE_ROOT}) does not appear to be inside a git repository.${NC}"
-        echo -e "${RED}Ensure CLAUDE_PLUGIN_ROOT points to a directory within the omniclaude repo.${NC}"
+        echo -e "${RED}Use --source-path to point at the omniclaude repo root.${NC}"
         exit 1
     fi
 
-    # Validate PROJECT_ROOT has the required files (safety net in case the
-    # git root is correct but the repo layout is unexpected)
+    # Validate PROJECT_ROOT has the required files
     if [[ ! -f "${PROJECT_ROOT}/.claude-plugin/marketplace.json" ]]; then
         echo -e "${RED}Error: marketplace.json not found at ${PROJECT_ROOT}/.claude-plugin/${NC}"
         echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
-        echo -e "${RED}Ensure this is the omniclaude repo root containing .claude-plugin/.${NC}"
         exit 1
     fi
     if [[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
         echo -e "${RED}Error: pyproject.toml not found at ${PROJECT_ROOT}${NC}"
         echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
-        echo -e "${RED}Ensure this is the omniclaude repo root containing pyproject.toml.${NC}"
         exit 1
     fi
     echo -e "${GREEN}  Project root: ${PROJECT_ROOT}${NC}"
 
-    # Guard: deploy must run from the canonical (main) worktree, not a secondary worktree.
-    # Deploying from a worktree sets installLocation to that worktree path, which breaks
-    # the plugin when the worktree is later pruned (known_marketplaces.json points at nothing).
-    MAIN_WORKTREE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
-    _MAIN_IS_BARE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | head -2 | grep -c '^bare$')"
-    if [[ -n "$MAIN_WORKTREE" && "$PROJECT_ROOT" != "$MAIN_WORKTREE" && "$_MAIN_IS_BARE" -eq 0 ]]; then
-        echo -e "${RED}Error: Deploy must run from the canonical (main) worktree, not a secondary worktree.${NC}" >&2
-        echo "" >&2
-        echo -e "  Current:   ${YELLOW}${PROJECT_ROOT}${NC}" >&2
-        echo -e "  Canonical: ${GREEN}${MAIN_WORKTREE}${NC}" >&2
-        echo "" >&2
-        echo "Run deploy from the canonical repo instead:" >&2
-        echo "  CLAUDE_PLUGIN_ROOT=${MAIN_WORKTREE}/plugins/onex $0 --execute" >&2
-        exit 1
+    # Guard: for non-archive deploys, warn if deploying from a secondary worktree.
+    # Archive deploys skip this guard entirely (no worktree involved).
+    # Explicit --source-path deploys warn but don't block (deliberately opted in).
+    if [[ "$DEPLOY_MODE" != "archive" ]]; then
+        MAIN_WORKTREE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2; exit}')"
+        _MAIN_IS_BARE="$(git -C "${PROJECT_ROOT}" worktree list --porcelain 2>/dev/null | head -2 | grep -c '^bare$')"
+        if [[ -n "$MAIN_WORKTREE" && "$PROJECT_ROOT" != "$MAIN_WORKTREE" && "$_MAIN_IS_BARE" -eq 0 ]]; then
+            if [[ "$DEPLOY_MODE" == "explicit-path" ]]; then
+                echo -e "${YELLOW}Warning: Deploying from a secondary worktree via --source-path.${NC}" >&2
+                echo -e "${YELLOW}  This is allowed because it was explicitly requested.${NC}" >&2
+                echo -e "  Current:   ${YELLOW}${PROJECT_ROOT}${NC}" >&2
+                echo -e "  Canonical: ${GREEN}${MAIN_WORKTREE}${NC}" >&2
+                echo "" >&2
+            else
+                echo -e "${RED}Error: Deploy must run from the canonical (main) worktree, not a secondary worktree.${NC}" >&2
+                echo "" >&2
+                echo -e "  Current:   ${YELLOW}${PROJECT_ROOT}${NC}" >&2
+                echo -e "  Canonical: ${GREEN}${MAIN_WORKTREE}${NC}" >&2
+                echo "" >&2
+                echo "Use --source-path to deploy from a worktree explicitly, or deploy from main:" >&2
+                echo "  $0 --execute  (deploys from canonical repo via git archive)" >&2
+                exit 1
+            fi
+        fi
     fi
 
     # Create target directory FIRST, then write bumped version to target only.
@@ -781,7 +949,8 @@ if [[ "$EXECUTE" == "true" ]]; then
     # reset to false after the smoke test passes so a successful deploy retains the venv.
     # Note: venv is no longer rm'd before sync — incremental sync is the default path.
     _TRAP_REMOVE_VENV=false
-    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"' EXIT
+    # Compose venv cleanup with staging cleanup (both run on EXIT)
+    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"; _cleanup_staging' EXIT
     mkdir -p "${TARGET}/lib"
 
     # Validate uv is available (required for the locked non-editable install).
@@ -851,10 +1020,16 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo "# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         echo "# Deploy version: ${NEW_VERSION}"
         echo ""
+        echo "deploy_mode: ${DEPLOY_MODE}"
+        if [[ "$DEPLOY_MODE" == "archive" ]]; then
+            echo "deploy_repo: ${DEPLOY_REPO}"
+            echo "deploy_ref: ${DEPLOY_REF}"
+            echo "deploy_sha: ${DEPLOY_SHA}"
+        fi
         echo "python_version: $("$VENV_DIR/bin/python3" --version 2>&1)"
         echo "pip_version: (uv-managed venv — pip not installed)"
         echo "source_root: ${PROJECT_ROOT}"
-        echo "git_sha: $(cd "${PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+        echo "git_sha: ${DEPLOY_SHA:-$(cd "${PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')}"
         echo ""
         echo "# Installed packages:"
         uv pip list --python "${VENV_DIR}/bin/python3" 2>/dev/null
@@ -907,24 +1082,39 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
-    # Update known_marketplaces.json — point installLocation at the repo root
-    # (NOT the cache). Claude Code uses this for plugin/skill discovery via
-    # .claude-plugin/marketplace.json. Pointing to cache breaks skill loading.
+    # Update known_marketplaces.json — records deploy source for audit/provenance.
+    # For archive deploys: records the canonical repo path, ref, and SHA.
+    # For path-based deploys: records the source path as installLocation.
     KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
     if [[ -f "$KNOWN_MARKETPLACES" ]]; then
         if jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
             TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-            jq --arg p "$PROJECT_ROOT" --arg ts "$TIMESTAMP" '
-                .["omninode-tools"].source.source = "directory" |
-                .["omninode-tools"].source.path = $p |
-                del(.["omninode-tools"].source.repo) |
-                del(.["omninode-tools"].source.ref) |
-                .["omninode-tools"].installLocation = $p |
-                .["omninode-tools"].lastUpdated = $ts
-            ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+            if [[ "$DEPLOY_MODE" == "archive" ]]; then
+                jq --arg repo "$DEPLOY_REPO" --arg ref "$DEPLOY_REF" \
+                   --arg sha "$DEPLOY_SHA" --arg ts "$TIMESTAMP" \
+                   --arg p "$DEPLOY_REPO" '
+                    .["omninode-tools"].source.source = "archive" |
+                    .["omninode-tools"].source.path = $repo |
+                    .["omninode-tools"].source.ref = $ref |
+                    .["omninode-tools"].source.sha = $sha |
+                    .["omninode-tools"].installLocation = $p |
+                    .["omninode-tools"].lastUpdated = $ts
+                ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT)${NC}"
+                echo -e "${GREEN}  Updated known_marketplaces.json (source: archive, ref: ${DEPLOY_REF}, sha: ${DEPLOY_SHA:0:12})${NC}"
+            else
+                jq --arg p "$PROJECT_ROOT" --arg ts "$TIMESTAMP" '
+                    .["omninode-tools"].source.source = "directory" |
+                    .["omninode-tools"].source.path = $p |
+                    del(.["omninode-tools"].source.repo) |
+                    del(.["omninode-tools"].source.ref) |
+                    .["omninode-tools"].installLocation = $p |
+                    .["omninode-tools"].lastUpdated = $ts
+                ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+
+                echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT)${NC}"
+            fi
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
