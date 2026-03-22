@@ -85,12 +85,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: TruffleHog Secret Scanning
+      - name: TruffleHog Secret Scanning (push diff)
+        if: github.event_name == 'push'
         uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
-          base: ${{ github.event.before || github.event.repository.default_branch }}
-          head: ${{ github.event.after || 'HEAD' }}
+          base: ${{ github.event.before }}
+          head: ${{ github.event.after }}
+          extra_args: --only-verified
+
+      - name: TruffleHog Secret Scanning (full scan)
+        if: github.event_name != 'push'
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d  # v3.93.7 (pinned 2026-03-04)
+        with:
+          path: ./
           extra_args: --only-verified
 
   # ============================================================================
