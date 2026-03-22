@@ -1782,6 +1782,10 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     timeout-minutes: 30
     needs: [quality-gate, tests-gate, security-gate]
     steps:

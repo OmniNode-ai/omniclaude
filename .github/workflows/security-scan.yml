@@ -12,6 +12,10 @@ on:
   push:
     branches: [main]
 
+# Default permissions — individual jobs override as needed
+permissions:
+  contents: read
+
 jobs:
   # ============================================================================
   # Dependency Security Scanning
@@ -37,13 +41,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@76e04a911780d5b312d89783f7b1cd627778900a  # v1.4.1 (pinned 2026-03-04)
-        with:
-          version: 1.8.3
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Export requirements
-        run: poetry export -f requirements.txt --output requirements.txt --without-hashes
+        run: uv export --format requirements-txt --no-hashes --output-file requirements.txt
 
       - name: Run Dependency Review
         uses: actions/dependency-review-action@v4
@@ -83,12 +85,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: TruffleHog Secret Scanning
+      - name: TruffleHog Secret Scanning (push diff)
+        if: github.event_name == 'push'
         uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ github.event.before }}
+          head: ${{ github.event.after }}
+          extra_args: --only-verified
+
+      - name: TruffleHog Secret Scanning (full scan)
+        if: github.event_name != 'push'
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d  # v3.93.7 (pinned 2026-03-04)
+        with:
+          path: ./
           extra_args: --only-verified
 
   # ============================================================================
@@ -149,6 +159,9 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -199,6 +212,9 @@ jobs:
         && fromJSON('["self-hosted","omnibase-ci"]')
         || fromJSON('["ubuntu-latest"]')
       }}
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
