@@ -196,10 +196,48 @@ class ModelCircuitBreakerTrippedEvent(BaseModel):
     emitted_at: datetime
 
 
+class ModelHostileReviewerCompletedEvent(BaseModel):
+    """Emitted when a hostile-reviewer run completes.
+
+    Each emission is an independent event (keyed by event_id, append-only).
+    Multiple reviews within the same correlation produce separate rows.
+
+    Attributes:
+        event_id: Unique ID for this event (primary identity, one per emission).
+        mode: Review mode — "pr" or "file".
+        target: PR number or file path reviewed.
+        models_attempted: LLM models attempted during the review.
+        models_succeeded: LLM models that returned usable results.
+        verdict: Review outcome — clean, risks_noted, blocking_issue, or degraded.
+        total_findings: Total number of findings across all models.
+        critical_count: Number of critical-severity findings.
+        major_count: Number of major-severity findings.
+        correlation_id: End-to-end correlation identifier (grouping context).
+        emitted_at: UTC timestamp when the event was emitted (injected by emitter).
+        session_id: Optional Claude Code session identifier.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    event_id: UUID = Field(default_factory=uuid.uuid4)
+    mode: Literal["pr", "file"]
+    target: str
+    models_attempted: list[str] = Field(default_factory=list)
+    models_succeeded: list[str] = Field(default_factory=list)
+    verdict: Literal["clean", "risks_noted", "blocking_issue", "degraded"]
+    total_findings: int = 0
+    critical_count: int = 0
+    major_count: int = 0
+    correlation_id: str
+    emitted_at: datetime
+    session_id: str | None = None
+
+
 __all__ = [
     "ModelEpicRunUpdatedEvent",
     "ModelPrWatchUpdatedEvent",
     "ModelGateDecisionEvent",
     "ModelBudgetCapHitEvent",
     "ModelCircuitBreakerTrippedEvent",
+    "ModelHostileReviewerCompletedEvent",
 ]
