@@ -1723,6 +1723,27 @@ jobs:
           echo "Security Gate PASSED"
 
   # ============================================================================
+  # CROSS-REPO BOUNDARY PARITY (OMN-5771)
+  # Validates Kafka topic boundaries against onex_change_control manifest.
+  # warn-only until all violations fixed (see OMN-5775).
+  # ============================================================================
+
+  boundary-parity:
+    name: Cross-Repo Boundary Parity
+    runs-on: ubuntu-latest
+    # Only run when seam-relevant files change
+    if: >-
+      github.event_name == 'merge_group' ||
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.changed_files || '0', '0') == false
+    continue-on-error: true
+    steps:
+      - uses: OmniNode-ai/onex_change_control/.github/actions/validate-boundaries@main
+        with:
+          checks: "boundary-parity"
+          warn-only: "true"
+
+  # ============================================================================
   # CI SUMMARY (OMN-4501) — single branch-protection check
   # Aggregates quality-gate, tests-gate, security-gate into one status context.
   # build is excluded: it is post-gate artifact packaging, not a gating requirement.
