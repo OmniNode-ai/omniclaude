@@ -177,9 +177,10 @@ Findings use canonical severity levels:
 
 ## Verdict Determination
 
-- `clean`: no findings above MINOR severity across all models (findings array may be empty or contain only NIT/MINOR entries)
+- `clean`: no findings above MINOR severity across all models (findings array may be empty or contain only NIT/MINOR entries). Requires at least one model to have succeeded.
 - `risks_noted`: MAJOR findings exist but are not blocking -- implementer should address
 - `blocking_issue`: at least one CRITICAL finding from any model -- must fix before merge
+- `degraded`: ALL requested models failed. No findings were produced. This is NOT `clean` -- it means review could not be performed. The calling workflow decides whether to proceed or block.
 
 ## When Called
 
@@ -197,6 +198,9 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
   "models_requested": ["deepseek-r1", "qwen3-coder"],
   "models_succeeded": ["deepseek-r1"],
   "models_failed": [{"model": "qwen3-coder", "error": "..."}],
+  "per_model_severity_counts": {
+    "deepseek-r1": {"CRITICAL": 1, "MAJOR": 2, "MINOR": 1, "NIT": 0}
+  },
   "findings": [
     {
       "model": "deepseek-r1",
@@ -219,7 +223,7 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
   "invariant_checklist": [
     {"invariant": "...", "status": "PASS|FAIL|NOT_CHECKED"}
   ],
-  "overall_verdict": "clean|risks_noted|blocking_issue"
+  "overall_verdict": "clean|risks_noted|blocking_issue|degraded"
 }
 ```
 

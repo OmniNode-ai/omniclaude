@@ -8,6 +8,7 @@ independent perspectives that you synthesize.
 
 Check arguments:
 - If `--pr <N> --repo <owner/repo>`: PR mode
+- If `--pr <N>` without `--repo`: error -- `--repo` is required with `--pr`
 - If `--file <path>`: file mode
 - If both `--pr` and `--file` are provided: error -- they are mutually exclusive
 - If neither: error -- one of `--pr` or `--file` is required
