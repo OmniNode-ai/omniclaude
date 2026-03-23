@@ -870,6 +870,13 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo "  Syncing hooks..."
     rsync -a --delete "${SOURCE_ROOT}/hooks/" "${TARGET}/hooks/"
 
+    # Sync lib/ (contains mode.sh for mode resolution). Exclude .venv which is
+    # managed by the venv build step — rsync --delete would clobber it otherwise.
+    if [[ -d "${SOURCE_ROOT}/lib/" ]]; then
+        echo "  Syncing lib..."
+        rsync -a --delete --exclude='.venv' "${SOURCE_ROOT}/lib/" "${TARGET}/lib/"
+    fi
+
     echo "  Syncing .claude-plugin..."
     rsync -a --delete "${SOURCE_ROOT}/.claude-plugin/" "${TARGET}/.claude-plugin/"
 
