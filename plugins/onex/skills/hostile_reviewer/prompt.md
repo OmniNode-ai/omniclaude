@@ -78,3 +78,30 @@ Use `--request-changes` instead of `--comment` if verdict is `blocking_issue`.
 
 Write JSON result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`
 with the schema defined in SKILL.md.
+
+## Emit Completion Event (OMN-5861)
+
+After writing the result artifact, emit a hostile-reviewer completion event.
+This call is fire-and-forget and must never block skill completion.
+
+```python
+from plugins.onex.hooks.lib.pipeline_event_emitters import emit_hostile_reviewer_completed
+
+emit_hostile_reviewer_completed(
+    mode=mode,                          # "pr" or "file"
+    target=str(pr_number if mode == "pr" else file_path),
+    models_attempted=models,            # list of model names attempted
+    models_succeeded=succeeded_models,  # list of model names that returned results
+    verdict=verdict,                    # clean/risks_noted/blocking_issue/degraded
+    total_findings=total_findings,
+    critical_count=critical_count,
+    major_count=major_count,
+    correlation_id=os.environ.get("ONEX_CORRELATION_ID", context_id),
+    session_id=os.environ.get("CLAUDE_SESSION_ID"),
+)
+```
+
+**Verification:** If hostile-reviewer artifacts are written but no completion event
+is emitted (detectable by comparing artifact count vs event count in the DB), this
+is a prompt-drift failure. The emit call should then be moved into a deterministic
+post-run hook.

@@ -7,14 +7,21 @@
 Provides fire-and-forget emit helpers for:
     epic.run.updated       → onex.evt.omniclaude.epic-run-updated.v1
     pr.watch.updated       → onex.evt.omniclaude.pr-watch-updated.v1
+    gate.decision          → onex.evt.omniclaude.gate-decision.v1
+    budget.cap.hit         → onex.evt.omniclaude.budget-cap-hit.v1
+    circuit.breaker.tripped → onex.evt.omniclaude.circuit-breaker-tripped.v1
 
-These helpers are called at terminal outcome points in the epic-team and pr-watch
-skill orchestration flows. All emitters are non-blocking and never raise exceptions.
+These helpers are called at terminal outcome points in the epic-team, pr-watch,
+slack-gate, and ticket-pipeline skill orchestration flows. All emitters are
+non-blocking and never raise exceptions.
 
 Usage (from epic-team or pr-watch skill invocation context):
     from plugins.onex.hooks.lib.pipeline_event_emitters import (
         emit_epic_run_updated,
         emit_pr_watch_updated,
+        emit_gate_decision,
+        emit_budget_cap_hit,
+        emit_circuit_breaker_tripped,
     )
 
     emit_epic_run_updated(
@@ -35,6 +42,45 @@ Usage (from epic-team or pr-watch skill invocation context):
         status="approved",
         review_cycles_used=1,
         watch_duration_hours=0.5,
+        correlation_id="...",
+    )
+
+    emit_gate_decision(
+        gate_id="gate-abc123",
+        decision="ACCEPTED",
+        ticket_id="OMN-2922",
+        gate_type="HIGH_RISK",
+        wait_seconds=120.5,
+        responder="jonah",
+        correlation_id="...",
+    )
+
+    emit_budget_cap_hit(
+        run_id="...",
+        tokens_used=50000,
+        tokens_budget=40000,
+        cap_reason="max_tokens_injected exceeded",
+        correlation_id="...",
+    )
+
+    emit_circuit_breaker_tripped(
+        session_id="sess-abc",
+        failure_count=5,
+        threshold=3,
+        reset_timeout_seconds=30.0,
+        last_error="Connection refused",
+        correlation_id="...",
+    )
+
+    emit_hostile_reviewer_completed(
+        mode="file",
+        target="docs/plans/my-plan.md",
+        models_attempted=["claude-sonnet-4-20250514"],
+        models_succeeded=["claude-sonnet-4-20250514"],
+        verdict="risks_noted",
+        total_findings=3,
+        critical_count=0,
+        major_count=1,
         correlation_id="...",
     )
 """
@@ -165,7 +211,198 @@ def emit_pr_watch_updated(
         pass  # Telemetry must never block pipeline execution
 
 
+def emit_gate_decision(
+    *,
+    gate_id: str,
+    decision: Literal["ACCEPTED", "REJECTED", "TIMEOUT"],
+    ticket_id: str,
+    gate_type: Literal["HIGH_RISK", "MEDIUM_RISK"] = "HIGH_RISK",
+    wait_seconds: float = 0.0,
+    responder: str | None = None,
+    correlation_id: str = "",
+    session_id: str | None = None,
+) -> None:
+    """Emit a gate.decision event (fire-and-forget, never raises).
+
+    Consumers append to gate_decisions keyed by gate_id.
+    Consumed by the omnidash /gate-decisions view.
+
+    Args:
+        gate_id: Unique identifier for the gate invocation.
+        decision: Gate outcome — exactly one of ACCEPTED, REJECTED, TIMEOUT.
+        ticket_id: Linear ticket identifier for which the gate was raised.
+        gate_type: Gate risk level (HIGH_RISK, MEDIUM_RISK).
+        wait_seconds: Wall-clock seconds from gate posting to decision.
+        responder: Slack user who responded (None on TIMEOUT).
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "gate_id": gate_id,
+            "decision": decision,
+            "ticket_id": ticket_id,
+            "gate_type": gate_type,
+            "wait_seconds": wait_seconds,
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if responder is not None:
+            payload["responder"] = responder
+        if session_id is not None:
+            payload["session_id"] = session_id
+        emit_fn("gate.decision", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
+def emit_budget_cap_hit(
+    *,
+    run_id: str,
+    tokens_used: int,
+    tokens_budget: int,
+    cap_reason: str = "max_tokens_injected exceeded",
+    correlation_id: str = "",
+    session_id: str | None = None,
+) -> None:
+    """Emit a budget.cap.hit event (fire-and-forget, never raises).
+
+    Consumers upsert into pipeline_budget_state keyed by run_id.
+    Consumed by the omnidash /pipeline-budget view.
+
+    Args:
+        run_id: Pipeline run identifier — upsert key for pipeline_budget_state.
+        tokens_used: Actual tokens used at the time of cap.
+        tokens_budget: Configured token budget limit.
+        cap_reason: Human-readable reason for the cap.
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "run_id": run_id,
+            "tokens_used": tokens_used,
+            "tokens_budget": tokens_budget,
+            "cap_reason": cap_reason,
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if session_id is not None:
+            payload["session_id"] = session_id
+        emit_fn("budget.cap.hit", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
+def emit_circuit_breaker_tripped(
+    *,
+    session_id: str,
+    failure_count: int,
+    threshold: int,
+    reset_timeout_seconds: float,
+    last_error: str | None = None,
+    correlation_id: str = "",
+) -> None:
+    """Emit a circuit.breaker.tripped event (fire-and-forget, never raises).
+
+    Consumers append to circuit_breaker_events (event table, keyed by event_id).
+    Provides visibility into Kafka connectivity issues during Claude Code sessions.
+
+    Args:
+        session_id: Claude Code session identifier.
+        failure_count: Number of consecutive failures that triggered the trip.
+        threshold: Configured failure threshold.
+        reset_timeout_seconds: Seconds until the breaker will attempt HALF_OPEN.
+        last_error: String representation of the last error (if available).
+        correlation_id: End-to-end correlation identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "failure_count": failure_count,
+            "threshold": threshold,
+            "reset_timeout_seconds": reset_timeout_seconds,
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if last_error is not None:
+            payload["last_error"] = last_error
+        emit_fn("circuit.breaker.tripped", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
+def emit_hostile_reviewer_completed(
+    *,
+    mode: Literal["pr", "file"],
+    target: str,
+    models_attempted: list[str] | None = None,
+    models_succeeded: list[str] | None = None,
+    verdict: Literal["clean", "risks_noted", "blocking_issue", "degraded"],
+    total_findings: int = 0,
+    critical_count: int = 0,
+    major_count: int = 0,
+    correlation_id: str = "",
+    session_id: str | None = None,
+) -> None:
+    """Emit a hostile.reviewer.completed event (fire-and-forget, never raises).
+
+    Consumers append to hostile_reviewer_runs (event table, keyed by event_id).
+    Consumed by the omnidash /hostile-reviewer view.
+
+    Args:
+        mode: Review mode — "pr" or "file".
+        target: PR number or file path reviewed.
+        models_attempted: LLM models attempted during the review.
+        models_succeeded: LLM models that returned usable results.
+        verdict: Review outcome.
+        total_findings: Total number of findings across all models.
+        critical_count: Number of critical-severity findings.
+        major_count: Number of major-severity findings.
+        correlation_id: End-to-end correlation identifier.
+        session_id: Optional Claude Code session identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "mode": mode,
+            "target": target,
+            "models_attempted": models_attempted or [],
+            "models_succeeded": models_succeeded or [],
+            "verdict": verdict,
+            "total_findings": total_findings,
+            "critical_count": critical_count,
+            "major_count": major_count,
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if session_id is not None:
+            payload["session_id"] = session_id
+        emit_fn("hostile.reviewer.completed", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
 __all__ = [
     "emit_epic_run_updated",
     "emit_pr_watch_updated",
+    "emit_gate_decision",
+    "emit_budget_cap_hit",
+    "emit_circuit_breaker_tripped",
+    "emit_hostile_reviewer_completed",
 ]

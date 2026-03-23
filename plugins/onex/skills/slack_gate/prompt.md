@@ -141,7 +141,27 @@ followup = f"*[MEDIUM_RISK]* Gate expired with no response. Holding for manual r
 **HIGH_RISK timeout behavior:**
 Exit with `status: timeout` immediately. No re-notification needed.
 
-### 6. Write Skill Result
+### 6. Emit Gate Decision Event (OMN-5860)
+
+Emit a gate-decision event exactly once at the terminal state transition.
+This call is fire-and-forget and must never block skill completion.
+
+```python
+from plugins.onex.hooks.lib.pipeline_event_emitters import emit_gate_decision
+
+emit_gate_decision(
+    gate_id=f"gate-{thread_ts or 'webhook'}",
+    decision=status.upper(),   # ACCEPTED | REJECTED | TIMEOUT
+    ticket_id=os.environ.get("ONEX_TICKET_ID", ""),
+    gate_type=risk_level,      # HIGH_RISK | MEDIUM_RISK
+    wait_seconds=elapsed_minutes * 60,
+    responder=reply[:50] if reply else None,
+    correlation_id=os.environ.get("ONEX_CORRELATION_ID", context_id),
+    session_id=os.environ.get("CLAUDE_SESSION_ID"),
+)
+```
+
+### 7. Write Skill Result
 
 ```python
 import json, os, pathlib
