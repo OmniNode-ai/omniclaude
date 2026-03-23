@@ -1,5 +1,5 @@
 ---
-description: Multi-model adversarial code review with iterative convergence. Loops automatically until 2 consecutive clean passes (nothing above NIT). Uses Codex CLI (primary) and local LLMs (DeepSeek-R1) for cross-check. Output is MANDATORY.
+description: Multi-model adversarial code review (Gemini, Codex, Qwen3-Coder, DeepSeek-R1, Claude) with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp.
 mode: both
 version: 3.0.0
 level: intermediate
@@ -347,6 +347,25 @@ Overall convergence verdict (new in v3):
 - **design-to-plan Phase 2c** (after R1-R7 convergence) -- file mode
 - **Standalone** for any PR or plan file
 
+## Token Budget
+
+**`2>/dev/null` is MANDATORY in all `prompt.md` bash blocks that invoke the aggregator.**
+
+Each model (Gemini, Codex, Qwen3-Coder, DeepSeek-R1) emits hundreds to thousands of
+tokens of chain-of-thought, progress output, and prose to stderr before producing its
+JSON finding. Without `2>/dev/null`, every model's verbose output enters Claude's context
+window on every review run, making multi-model review unviably expensive (~5,000–15,000
+tokens per invocation instead of ~500).
+
+The stdout-only JSON contract is what makes multi-model review viable:
+- **stdout**: compact aggregated JSON (~500 tokens) — Claude Code sees this
+- **stderr**: all model verbose output — silenced by `2>/dev/null`, never enters context
+- **event bus**: full per-model raw findings — captured here for observability via
+  `hostile.reviewer.completed` / `hostile.reviewer.failed` events (OMN-6188)
+
+**Do not remove `2>/dev/null` from prompt.md.** If you need to debug model output,
+redirect stderr to a temp file instead: `2>/tmp/hostile-reviewer-debug.log`.
+
 ## Persisted Artifact
 
 Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`:
@@ -401,8 +420,9 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
       "action": "clean"
     }
   ],
-  "models_requested": ["codex", "deepseek-r1"],
-  "models_succeeded": ["codex", "deepseek-r1"],
+  "models_requested": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
+  "models_run": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
+  "models_succeeded": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
   "models_failed": [],
   "per_model_severity_counts": {
     "codex": {"CRITICAL": 0, "MAJOR": 0, "MINOR": 0, "NIT": 0},
