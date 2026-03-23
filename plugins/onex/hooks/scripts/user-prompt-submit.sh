@@ -708,6 +708,7 @@ fi
 ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
 ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
+INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
 if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
     # Normalize routing sentinels to empty string so Python maps them to None.
     # "NO_AGENT_DETECTED" is a jq fallback for absent/malformed routing JSON.
