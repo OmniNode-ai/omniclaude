@@ -332,7 +332,7 @@ if [[ -z "$PR_NUMBER" || -z "$REPO" ]]; then
   exit 1
 fi
 
-exec claude --skill onex:auto-merge \
+exec claude --skill onex:auto_merge \
   --arg "pr_number=${PR_NUMBER}" \
   --arg "repo=${REPO}" \
   --arg "strategy=${STRATEGY}" \
@@ -345,7 +345,7 @@ exec claude --skill onex:auto-merge \
 |------------|-------------|
 | `/auto-merge 123 org/repo` | Interactive: merge PR 123 with default HIGH_RISK gate (24h timeout) |
 | `/auto-merge 123 org/repo --strategy merge` | Interactive: use merge commit strategy |
-| `Skill(skill="onex:auto-merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
+| `Skill(skill="onex:auto_merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
 | `auto-merge.sh 123 org/repo --no-delete-branch` | Shell: direct invocation, keep branch after merge |
 
 ## Tier Routing (OMN-2828)

@@ -526,7 +526,7 @@ Runs inline in the orchestrator (no Task dispatch — gates are fast CI reads + 
 See `@_lib/cdqa-gate/helpers.md` for the full gate protocol, bypass flow, and result schema.
 
 **Gates** (run in order):
-1. **contract-compliance-check** — `Skill(skill="onex:contract-compliance-check", args="{ticket_id}")`
+1. **contract-compliance-check** — `Skill(skill="onex:contract_compliance_check", args="{ticket_id}")`
 2. **arch-invariants CI** — query CI check `arch-invariants` on the PR
 3. **AI-slop CI** — query CI check `check-ai-slop` on the PR
 
@@ -661,7 +661,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: cross-repo split for {ticket_id}",
   prompt="Cross-repo changes detected for {ticket_id}.
-    Invoke: Skill(skill=\"onex:decompose-epic\",
+    Invoke: Skill(skill=\"onex:decompose_epic\",
       args=\"{parent_epic_id} --repos {comma_separated_repo_names}\")
 
     Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
@@ -898,7 +898,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
   prompt="You are executing ticket-work for {ticket_id}.
-    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
+    Invoke: Skill(skill=\"onex:ticket_work\", args=\"{ticket_id}\")
 
     Ticket: {ticket_id} - {title}
     Description: {description}
@@ -920,7 +920,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
-    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
+    Invoke: Skill(skill=\"onex:local_review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1\")
 
     Branch: {branch_name}
     Repo: {repo_path}
@@ -950,7 +950,7 @@ Task(
   run_in_background=True,
   description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
   prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
-    Invoke: Skill(skill=\"onex:ci-watch\",
+    Invoke: Skill(skill=\"onex:ci_watch\",
       args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
     Fix any failures, push fixes. GitHub will auto-merge once CI is green."
 )
@@ -964,7 +964,7 @@ Task(
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
-  prompt="Invoke: Skill(skill=\"onex:pr-watch\",
+  prompt="Invoke: Skill(skill=\"onex:pr_watch\",
     args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}\")
     Report back with: status, pr_review_cycles_used, watch_duration_hours."
 )
@@ -979,7 +979,7 @@ skill call). See `@_lib/cdqa-gate/helpers.md` for the full gate spec.
 
 ```
 # Inline orchestrator actions for Phase 5.5:
-# 1. Invoke: Skill(skill="onex:contract-compliance-check", args="{ticket_id}")
+# 1. Invoke: Skill(skill="onex:contract_compliance_check", args="{ticket_id}")
 #    → PASS / WARN: log and continue
 #    → BLOCK: post HIGH_RISK bypass gate, await reply
 #
@@ -1021,7 +1021,7 @@ Phase 6 runs inline in the orchestrator on the normal path (no Task dispatch).
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
-  prompt="Invoke: Skill(skill=\"onex:auto-merge\",
+  prompt="Invoke: Skill(skill=\"onex:auto_merge\",
     args=\"--pr {pr_number} --ticket-id {ticket_id} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
     Note: NEEDS_GATE=true for this PR (hold_reason: {hold_reason}).
     Report back with: status, merged_at, branch_deleted."

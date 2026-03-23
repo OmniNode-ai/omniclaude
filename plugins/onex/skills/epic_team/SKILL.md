@@ -159,7 +159,7 @@ Task(
   description="epic-team: auto-decompose empty epic {epic_id}",
   prompt="The epic {epic_id} has no child tickets.
 
-    Invoke: Skill(skill=\"onex:decompose-epic\", args=\"{epic_id}\")
+    Invoke: Skill(skill=\"onex:decompose_epic\", args=\"{epic_id}\")
 
     Read result from $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
     Report back: created_tickets (list of IDs and titles), count."
@@ -181,7 +181,7 @@ Task(
     Repo: {repo} at {repo_path}
     Epic: {epic_id}  Run: {run_id}
 
-    Invoke: Skill(skill=\"onex:ticket-pipeline\", args=\"{ticket_id}\")
+    Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"{ticket_id}\")
 
     After ticket-pipeline completes, report back:
     - ticket_id: {ticket_id}

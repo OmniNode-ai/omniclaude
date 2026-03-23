@@ -164,7 +164,7 @@ if pr_number is None:
 print(f"Phase 1: Running pr-review-dev on PR #{pr_number}...")
 
 no_ci_flag = "--no-ci" if no_ci else ""
-Skill(skill="onex:pr-review-dev", args=f"{pr_number} {no_ci_flag}")
+Skill(skill="onex:pr_review_dev", args=f"{pr_number} {no_ci_flag}")
 
 # pr-review-dev handles:
 # - fetching PR review comments via collate-issues-with-ci
@@ -205,7 +205,7 @@ if phase_0_status == "FAILED":
 print(f"Phase 2: Running local-review (--required-clean-runs {required_clean}, --max-iterations {max_iterations})...")
 
 Skill(
-  skill="onex:local-review",
+  skill="onex:local_review",
   args=f"--required-clean-runs {required_clean} --max-iterations {max_iterations}"
 )
 

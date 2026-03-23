@@ -58,7 +58,7 @@ def append_skill_usage(
     Parameters
     ----------
     skill_name:
-        Fully-qualified skill identifier, e.g. ``onex:ticket-pipeline``.
+        Fully-qualified skill identifier, e.g. ``onex:ticket_pipeline``.
     session_id:
         Claude session identifier extracted from the hook payload.
     log_path:

@@ -219,9 +219,9 @@ class TestAutoMergeAndPolishDispatch:
     def test_prompt_does_not_dispatch_auto_merge_sub_skill(self) -> None:
         """prompt.md must not call the auto-merge sub-skill (replaced by direct --auto flag)."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # onex:auto-merge sub-skill invocation pattern
-        assert "onex:auto-merge" not in content, (
-            "prompt.md must not dispatch onex:auto-merge sub-skill "
+        # onex:auto_merge sub-skill invocation pattern
+        assert "onex:auto_merge" not in content, (
+            "prompt.md must not dispatch onex:auto_merge sub-skill "
             "(v3.0.0 uses gh pr merge --auto directly)"
         )
 

@@ -904,7 +904,7 @@ Steps:
 
 2. Run pr-polish from inside the worktree:
    ```
-   Skill(skill="onex:pr-polish", args="{pr_number} --required-clean-runs {polish_clean_runs}")
+   Skill(skill="onex:pr_polish", args="{pr_number} --required-clean-runs {polish_clean_runs}")
    ```
    pr-polish will resolve conflicts, fix CI failures and review comments, run local-review loop, and push.
 
@@ -1173,7 +1173,7 @@ Merge Sweep Complete — run <run_id>
 This skill can be called directly or from other orchestrators:
 
 ```
-Skill(skill="onex:merge-sweep", args={
+Skill(skill="onex:merge_sweep", args={
   repos: <scope>,
   max_total_merges: <cap>,
   max_parallel_prs: <cap>,
