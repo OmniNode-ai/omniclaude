@@ -49,10 +49,12 @@ mode: soft
 #                     actionable, no false positives, UNKNOWN rates acceptable,
 #                     exemption volume stable or shrinking.
 layers:
-  pipeline_gate: null     # ticket-pipeline dod_verify phase
-  epic_audit: null        # epic-team DoD audit wave
-  completion_guard: null  # PreToolUse hook
-  dod_sweep: soft         # dod_sweep skill follow-up ticket creation
+  pipeline_gate: advisory          # PreToolUse hook blocking Edit/Write without active pipeline
+  pipeline_gate_contract: advisory # Pre_flight contract check — graduates with pipeline_gate
+  pipeline_dod_verify: null        # ticket-pipeline dod_verify phase
+  epic_audit: null                 # epic-team DoD audit wave
+  completion_guard: null           # PreToolUse hook blocking Done without DoD receipt
+  dod_sweep: soft                  # dod_sweep skill follow-up ticket creation
   # The /dod-verify skill always runs checks regardless of policy.
   # Policy only affects whether the hook blocks completion.
 
@@ -100,3 +102,60 @@ graduation:
   phase_3:
     mode: hard
     criteria: "Zero unverified completions, all DoD items have meaningful checks"
+
+# Pipeline Gate Configuration
+#
+# Controls the pipeline-gate PreToolUse hook that blocks Edit/Write/Bash
+# without an active ticket-pipeline or /authorize override.
+#
+# MUST match the whitelist in pre_tool_use_pipeline_gate.sh exactly.
+# Do not reintroduce broad patterns here.
+#
+# Bootstrap strategy:
+#   Phase 0: advisory (log-only, never blocks) — deploy and verify hook fires
+#   Phase 1: soft (warn but allow) — monitor for false positives for 1 week
+#   Phase 2: hard (block) — after 1 week with no false positives
+pipeline_gate:
+  # Paths that are never blocked (mirrors hook script whitelist)
+  whitelisted_patterns:
+    - "**/docs/**"
+    - "**/plans/**"
+    - "**/memory/**"
+    - "**/CLAUDE.md"
+    - "**/MEMORY.md"
+    - "**/.claude/settings*"
+    - "**/.claude/plugins/*/SKILL.md"
+    - "**/.claude/plans/**"
+    - "**/.claude/memory/**"
+    - "**/hooks/config/**"
+    - "**/dod_sweep_exemptions.yaml"
+    - "**/__pycache__/**"
+    - "/tmp/**"
+  # Bash commands that are never blocked (specific read-only operations only)
+  # SECURITY: No bare "uv run" — only specific subcommands
+  allowed_bash_prefixes:
+    - "git status"
+    - "git diff"
+    - "git log"
+    - "git branch"
+    - "docker ps"
+    - "docker logs"
+    - "docker inspect"
+    - "gh pr list"
+    - "gh pr view"
+    - "gh api"
+    - "pytest"
+    - "mypy"
+    - "ruff"
+    - "pre-commit"
+    - "uv run pytest"
+    - "uv run mypy"
+    - "uv run ruff"
+    - "uv run pre-commit"
+    - "ls"
+    - "cat"
+    - "head"
+    - "tail"
+    - "grep"
+    - "find"
+    - "wc"
