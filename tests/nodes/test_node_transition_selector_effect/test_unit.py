@@ -12,9 +12,10 @@ Tests added as part of the Crenshaw architecture review fixes:
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from omniclaude.nodes.node_transition_selector_effect.models.model_contract_state import (
@@ -141,3 +142,79 @@ class TestSelectEndpointError:
             assert not result.success
             assert result.error_kind == SelectionErrorKind.MODEL_UNAVAILABLE
             assert "LLM_CODER_FAST_URL" in (result.error_detail or "")
+
+
+# =============================================================================
+# Task 10: Health probing
+# =============================================================================
+
+
+class TestProbeEndpoint:
+    """Tests for _probe_endpoint() health checking."""
+
+    @pytest.mark.asyncio
+    async def test_probe_endpoint_returns_false_when_unreachable(self) -> None:
+        """Health probe returns False when endpoint is unreachable."""
+        with patch.dict("os.environ", {"LLM_CODER_FAST_URL": "http://localhost:1"}):
+            node = _make_node()
+            result = await node._probe_endpoint(timeout=0.5)
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_probe_endpoint_returns_true_when_healthy(self) -> None:
+        """Health probe returns True when endpoint responds."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with patch.dict("os.environ", {"LLM_CODER_FAST_URL": "http://localhost:8001"}):
+            with patch("httpx.AsyncClient.get", return_value=mock_response):
+                node = _make_node()
+                result = await node._probe_endpoint()
+                assert result is True
+
+
+# =============================================================================
+# Task 11: Actionable error messages
+# =============================================================================
+
+
+class TestActionableErrors:
+    """Tests for actionable error detail in MODEL_UNAVAILABLE."""
+
+    @pytest.mark.asyncio
+    async def test_select_returns_actionable_error_when_endpoint_unreachable(
+        self,
+    ) -> None:
+        """MODEL_UNAVAILABLE error must include endpoint URL and remediation hint."""
+        with patch.dict("os.environ", {"LLM_CODER_FAST_URL": "http://test-host:8001"}):
+            node = _make_node()
+            # Mock _call_model to raise a network error
+            node._call_model = AsyncMock(  # type: ignore[method-assign]
+                side_effect=httpx.NetworkError("Connection refused")
+            )
+            request = _make_request()
+            result = await node.select(request)
+            assert result.error_kind == SelectionErrorKind.MODEL_UNAVAILABLE
+            assert "LLM_CODER_FAST_URL" in (result.error_detail or "")
+            assert "test-host:8001" in (result.error_detail or "")
+            assert "curl" in (result.error_detail or "").lower()
+
+
+# =============================================================================
+# Task 12: Prompt building purity
+# =============================================================================
+
+
+class TestBuildPromptPurity:
+    """Tests verifying _build_prompt is a pure function with no network deps."""
+
+    @pytest.mark.unit
+    def test_build_prompt_is_pure_no_network(self) -> None:
+        """Prompt building must work without any network access or env vars."""
+        request = _make_request()
+        # Should succeed even with no endpoint configured
+        with patch.dict("os.environ", {}, clear=True):
+            node = _make_node()
+            prompt = node._build_prompt(request)
+            assert "Build the code" in prompt
+            assert "Run tests" in prompt
