@@ -166,8 +166,14 @@ _try_inline_venv_repair() {
         return 1
     fi
 
-    # Verify system python3 has venv module
-    if ! "$sys_python" -m venv --help >/dev/null 2>&1; then
+    # Determine venv creation strategy: prefer python3 -m venv, fallback to uv
+    local venv_strategy=""
+    if "$sys_python" -m venv --help >/dev/null 2>&1; then
+        venv_strategy="python-venv"
+    elif command -v uv &>/dev/null; then
+        venv_strategy="uv"
+    else
+        # Neither python3 -m venv nor uv available
         touch "$repair_failed_marker" 2>/dev/null || true
         echo ""
         return 1
@@ -181,9 +187,15 @@ _try_inline_venv_repair() {
     }
 
     # Create minimal venv (~200ms synchronous)
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: creating venv at ${venv_dir}" >> "$repair_log" 2>/dev/null || true
-    if ! "$sys_python" -m venv "$venv_dir" >> "$repair_log" 2>&1; then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: venv creation failed" >> "$repair_log" 2>/dev/null || true
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: creating venv at ${venv_dir} (strategy: ${venv_strategy})" >> "$repair_log" 2>/dev/null || true
+    local venv_ok=false
+    if [[ "$venv_strategy" == "python-venv" ]]; then
+        "$sys_python" -m venv "$venv_dir" >> "$repair_log" 2>&1 && venv_ok=true
+    elif [[ "$venv_strategy" == "uv" ]]; then
+        uv venv "$venv_dir" >> "$repair_log" 2>&1 && venv_ok=true
+    fi
+    if [[ "$venv_ok" != "true" ]]; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: venv creation failed (strategy: ${venv_strategy})" >> "$repair_log" 2>/dev/null || true
         touch "$repair_failed_marker" 2>/dev/null || true
         echo ""
         return 1
@@ -202,18 +214,36 @@ _try_inline_venv_repair() {
     # Remove any stale failure marker (repair succeeded)
     rm -f "$repair_failed_marker" 2>/dev/null || true
 
-    # Background: pip install omniclaude into the repaired venv
-    # This is non-blocking — the venv python3 is already usable for hooks
+    # Background: install omniclaude into the repaired venv
+    # This is non-blocking — the venv python3 is already usable for hooks.
+    # Uses venv_strategy (not re-probing PATH) to select the correct install tool.
+    # uv-created venvs have no pip, so pip install would fail without this guard.
     (
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background pip install starting" >> "$repair_log" 2>/dev/null || true
-        if [[ -f "${PLUGIN_ROOT}/pyproject.toml" ]]; then
-            "$repaired_python" -m pip install --quiet --disable-pip-version-check \
-                -e "${PLUGIN_ROOT}" >> "$repair_log" 2>&1 || true
-        elif [[ -f "${PLUGIN_ROOT}/requirements.txt" ]]; then
-            "$repaired_python" -m pip install --quiet --disable-pip-version-check \
-                -r "${PLUGIN_ROOT}/requirements.txt" >> "$repair_log" 2>&1 || true
+        _bg_strategy="$venv_strategy"  # capture before any PATH changes
+        _bg_python="$repaired_python"
+        _bg_root="$PLUGIN_ROOT"
+        _bg_log="$repair_log"
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background install starting (strategy: ${_bg_strategy})" >> "$_bg_log" 2>/dev/null || true
+
+        # _bg_strategy is captured from the enclosing subshell scope — do not
+        # extract this function into a separate script without passing it explicitly.
+        _install_pkg() {
+            local flag="$1" target="$2"
+            if [[ "$_bg_strategy" == "uv" ]]; then
+                uv pip install --quiet "$flag" "$target" >> "$_bg_log" 2>&1 || true
+            elif "$_bg_python" -m pip --version &>/dev/null 2>&1; then
+                "$_bg_python" -m pip install --quiet --disable-pip-version-check "$flag" "$target" >> "$_bg_log" 2>&1 || true
+            else
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: no install tool available" >> "$_bg_log" 2>/dev/null || true
+            fi
+        }
+
+        if [[ -f "${_bg_root}/pyproject.toml" ]]; then
+            _install_pkg "-e" "${_bg_root}"
+        elif [[ -f "${_bg_root}/requirements.txt" ]]; then
+            _install_pkg "-r" "${_bg_root}/requirements.txt"
         fi
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background pip install finished" >> "$repair_log" 2>/dev/null || true
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background install finished" >> "$_bg_log" 2>/dev/null || true
     ) &
 
     echo "$repaired_python"
