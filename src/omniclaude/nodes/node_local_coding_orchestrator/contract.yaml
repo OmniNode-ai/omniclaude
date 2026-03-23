@@ -32,7 +32,7 @@ node_version:
   patch: 0
 
 # Node type
-node_type: ORCHESTRATOR
+node_type: ORCHESTRATOR_GENERIC
 
 # Description
 description: >

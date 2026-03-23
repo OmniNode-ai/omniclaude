@@ -351,7 +351,7 @@ class HookToolExecutedContract(BaseModel):
         min_length=1,
         description="Node name for ONEX compatibility",
     )
-    version: Version = Field(
+    contract_version: Version = Field(
         ...,
         description="Semantic version of the contract",
     )

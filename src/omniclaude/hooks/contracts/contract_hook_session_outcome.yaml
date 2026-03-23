@@ -16,7 +16,7 @@ contract_name: "hook_session_outcome"
 node_name: "hook_session_outcome"
 
 # Version (semantic versioning)
-version:
+contract_version:
   major: 1
   minor: 0
   patch: 0
@@ -26,7 +26,7 @@ node_version:
   patch: 0
 
 # Node type - EFFECT because it publishes to Kafka (side effect)
-node_type: "EFFECT"
+node_type: "EFFECT_GENERIC"
 
 # Description
 description: >

@@ -144,7 +144,7 @@ class HookPromptSubmittedContract(BaseModel):
         min_length=1,
         description="Node name for ONEX compatibility",
     )
-    version: Version = Field(
+    contract_version: Version = Field(
         ...,
         description="Semantic version of the contract",
     )
@@ -152,9 +152,18 @@ class HookPromptSubmittedContract(BaseModel):
         ...,
         description="Semantic version of the node implementation",
     )
-    node_type: Literal["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"] = Field(
+    node_type: Literal[
+        "EFFECT",
+        "EFFECT_GENERIC",
+        "COMPUTE",
+        "COMPUTE_GENERIC",
+        "REDUCER",
+        "REDUCER_GENERIC",
+        "ORCHESTRATOR",
+        "ORCHESTRATOR_GENERIC",
+    ] = Field(
         ...,
-        description="ONEX node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)",
+        description="ONEX node type",
     )
     description: str = Field(
         ...,

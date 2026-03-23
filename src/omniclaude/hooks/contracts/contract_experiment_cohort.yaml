@@ -19,7 +19,7 @@ contract_name: experiment_cohort
 node_name: experiment_cohort
 
 # Version - increment when experiment parameters change
-version:
+contract_version:
   major: 1
   minor: 0
   patch: 0

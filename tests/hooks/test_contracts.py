@@ -129,7 +129,7 @@ class TestContractYamlValidity:
 
         # Core identifiers
         assert "name" in contract
-        assert "version" in contract
+        assert "contract_version" in contract
         assert "node_type" in contract
 
         # I/O models
