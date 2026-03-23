@@ -919,8 +919,9 @@ def report_summary(results: dict, epic: dict | None, structure_type: str, dry_ru
 ## Post-Creation: Generate Contracts (every ticket)
 
 After the summary is printed, call `generate-ticket-contract` for every created (or skipped/updated)
-ticket. Do NOT filter by seam-keyword — call for every ticket. The generator handles seam detection
-internally and returns cheaply for non-seam tickets.
+ticket. Do NOT filter by seam-keyword — call for every ticket. The generator produces a contract
+for ALL tickets: full contracts for seam tickets, stub contracts for non-seam tickets. Every ticket
+gets a contract file written to disk (see create_ticket SKILL.md "Contract Generation" section).
 
 ```python
 def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
@@ -1040,7 +1041,8 @@ Output a **Generated Contracts** table after calling the generator for all ticke
 ```
 
 **Key rule:** Call `generate-ticket-contract` for every ticket — no seam-keyword filtering at this
-layer. The generator handles seam detection internally. Before the per-ticket loop,
+layer. The generator produces contracts for ALL tickets (stub for non-seam, full for seam).
+Every ticket gets a contract file written to disk. Before the per-ticket loop,
 `ONEX_CC_REPO_PATH` is auto-detected from standard paths so contracts are written directly to
 `onex_change_control/contracts/`. Only if detection fails will the YAML be printed inline with a
 manual commit banner.
