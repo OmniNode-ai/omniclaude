@@ -40,6 +40,14 @@ appropriate execution skill based on ticket count.
 
 ---
 
+## Arguments
+
+| Flag | Description |
+|------|-------------|
+| `--local` | Skip Linear ticket creation; create local YAML ticket files in `docs/tickets/local/` and route directly to implementation |
+
+---
+
 ## The 5-Step Flow
 
 ### Step 1: Review Plan <!-- ai-slop-ok: pre-existing step structure -->
@@ -92,6 +100,24 @@ gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup
 - Never wait more than 90 seconds total for pending checks.
 - If the plan does not reference any PRs or branches, skip this step entirely.
 - After verification, proceed to Step 2.
+
+---
+
+### Linear Availability Check
+
+Before Step 2, verify Linear MCP availability (see `_shared/linear-availability-check.md`):
+
+1. Call `mcp__linear-server__list_teams`
+2. If unavailable (or `--local` flag is set):
+   - Log: "Linear MCP unavailable — entering local ticket mode"
+   - In Step 2: Still run plan structure validation (task parsing, dependency check).
+     Skip only the Linear-specific dry-run preview.
+   - Skip Step 3 (ticket creation) entirely.
+   - At Step 4 (routing): parse the plan directly and dispatch a `general-purpose` agent
+     for each `## Task N:` section. **Do NOT dispatch `onex:ticket-work` or
+     `onex:ticket-pipeline`** — they require Linear `ticket_id`.
+   - Create local ticket YAML files per `_shared/linear-availability-check.md`
+3. If available: proceed with normal flow (Steps 2-4 unchanged)
 
 ---
 
