@@ -18,12 +18,12 @@ contract_name: node_skill_hostile_reviewer_orchestrator
 node_name: node_skill_hostile_reviewer_orchestrator
 
 contract_version:
-  major: 1
+  major: 2
   minor: 0
   patch: 0
 
 node_version:
-  major: 1
+  major: 2
   minor: 0
   patch: 0
 
@@ -32,11 +32,12 @@ node_type: ORCHESTRATOR_GENERIC
 
 # Description
 description: >
-  Orchestrator node for the hostile-reviewer skill.
-  Adversarial code review that attempts to break the change. Produces exactly 2 risks with confidence scores. Output is MANDATORY — cannot rubber-stamp.
-  Dispatches skill invocations to the polymorphic agent via the shared
-  handle_skill_requested handler. Subscribes to command events, emits
-  outcome events on success or failure.
+  Orchestrator node for the hostile-reviewer skill with iterative convergence.
+  Multi-model adversarial code review that loops until 2 consecutive clean passes
+  (nothing above NIT severity). Applies fixes between passes automatically.
+  Output is MANDATORY -- cannot rubber-stamp. Dispatches skill invocations to
+  the polymorphic agent via the shared handle_skill_requested handler. Subscribes
+  to command events, emits outcome events on success or failure.
 
 # Strongly typed I/O models (shared across all skill nodes)
 input_model:
