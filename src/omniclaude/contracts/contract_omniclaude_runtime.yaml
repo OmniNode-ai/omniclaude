@@ -10,7 +10,7 @@ name: "omniclaude_runtime"
 contract_name: "omniclaude_runtime"
 node_type: "SERVICE"
 
-version:
+contract_version:
   major: 1
   minor: 0
   patch: 0

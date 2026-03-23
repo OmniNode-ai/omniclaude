@@ -127,15 +127,15 @@ class TestHookSessionStartedContract:
         contract = HookSessionStartedContract.load()
 
         assert contract.name == "hook_session_started"
-        assert contract.node_type == "EFFECT"
+        assert contract.node_type == "EFFECT_GENERIC"
         assert contract.node_name == "hook_session_started"
 
     def test_version_is_valid(self) -> None:
-        """Contract has valid version."""
+        """Contract has valid contract_version."""
         contract = HookSessionStartedContract.load()
 
-        assert contract.version.major >= 0
-        assert str(contract.version) == "1.0.0"
+        assert contract.contract_version.major >= 0
+        assert str(contract.contract_version) == "1.0.0"
 
     def test_node_version_is_valid(self) -> None:
         """Contract has valid node_version."""
@@ -260,15 +260,15 @@ class TestHookPromptSubmittedContract:
         contract = HookPromptSubmittedContract.load()
 
         assert contract.name == "hook_prompt_submitted"
-        assert contract.node_type == "EFFECT"
+        assert contract.node_type == "EFFECT_GENERIC"
         assert contract.node_name == "hook_prompt_submitted"
 
     def test_version_is_valid(self) -> None:
-        """Contract has valid version."""
+        """Contract has valid contract_version."""
         contract = HookPromptSubmittedContract.load()
 
-        assert contract.version.major >= 0
-        assert str(contract.version) == "1.0.0"
+        assert contract.contract_version.major >= 0
+        assert str(contract.contract_version) == "1.0.0"
 
     def test_node_version_is_valid(self) -> None:
         """Contract has valid node_version."""
@@ -390,8 +390,8 @@ class TestHookPromptSubmittedContract:
         with pytest.raises(ValidationError):
             contract.name = "different_name"
 
-    def test_no_redundant_contract_version(self) -> None:
-        """YAML no longer has redundant contract_version field."""
+    def test_contract_version_field_present(self) -> None:
+        """YAML uses contract_version (not deprecated version) field."""
         import yaml
 
         contracts_dir = (
@@ -402,5 +402,6 @@ class TestHookPromptSubmittedContract:
         with open(yaml_path) as f:
             raw_data = yaml.safe_load(f)
 
-        # contract_version should NOT be in the raw YAML
-        assert "contract_version" not in raw_data
+        # contract_version should be in the raw YAML (renamed from version)
+        assert "contract_version" in raw_data
+        assert "version" not in raw_data

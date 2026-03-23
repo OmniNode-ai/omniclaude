@@ -304,8 +304,7 @@ class ExperimentCohortContract(BaseModel):
         name: Contract name identifier.
         contract_name: Contract name (typically same as name).
         node_name: Node name for ONEX compatibility.
-        version: Semantic version of the contract.
-        contract_version: Contract semantic version (optional, typically same as version).
+        contract_version: Semantic version of the contract.
         description: Human-readable description of the contract purpose.
         experiment: Experiment configuration with cohort settings.
         invariants: List of invariants enforced by the contract.
@@ -342,13 +341,9 @@ class ExperimentCohortContract(BaseModel):
         min_length=1,
         description="Node name for ONEX compatibility",
     )
-    version: Version = Field(
+    contract_version: Version = Field(
         ...,
         description="Semantic version of the contract",
-    )
-    contract_version: Version | None = Field(
-        default=None,
-        description="Contract semantic version (typically same as version, optional)",
     )
     description: str = Field(
         ...,

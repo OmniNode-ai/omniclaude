@@ -115,7 +115,7 @@ class HookSessionEndedContract(BaseModel):
     )
 
     # Versioning
-    version: Version = Field(
+    contract_version: Version = Field(
         ...,
         description="Semantic version of the contract",
     )

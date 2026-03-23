@@ -102,7 +102,7 @@ class HookSessionStartedContract(BaseModel):
         min_length=1,
         description="Node name for ONEX compatibility",
     )
-    version: Version = Field(
+    contract_version: Version = Field(
         ...,
         description="Semantic version of the contract",
     )
@@ -110,7 +110,16 @@ class HookSessionStartedContract(BaseModel):
         ...,
         description="Node implementation version",
     )
-    node_type: Literal["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"] = Field(
+    node_type: Literal[
+        "EFFECT",
+        "EFFECT_GENERIC",
+        "COMPUTE",
+        "COMPUTE_GENERIC",
+        "REDUCER",
+        "REDUCER_GENERIC",
+        "ORCHESTRATOR",
+        "ORCHESTRATOR_GENERIC",
+    ] = Field(
         ...,
         description="ONEX node type",
     )
