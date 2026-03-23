@@ -1846,7 +1846,7 @@ wheels = [
 [[package]]
 name = "omnibase-core"
 version = "0.29.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_core.git?branch=release%2Fv0.29.0#786df81e4107ad9bd46ec25e471a87554bf8f454" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
     { name = "click" },
@@ -1859,11 +1859,15 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/65/27/0ad177b31bc4a5359044ff8aa09a6d88fec2f7bbfcb82ed617a37568ec44/omnibase_core-0.29.0.tar.gz", hash = "sha256:36cf25b5e18cd2843cccd901bf67f897829b6040ee7cee029ee9ef4afb48c8f6", size = 8506349, upload-time = "2026-03-19T12:53:05.283Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/cd/7d4e015c1865d2ca0eda84e5af296547ebc1514670d3e2f229cba537ca57/omnibase_core-0.29.0-py3-none-any.whl", hash = "sha256:a1f1277290fd609645dd5e6393a5a7ae7e36c7c7004ea026a338f178144401e5", size = 5196717, upload-time = "2026-03-19T12:53:09.073Z" },
+]
 
 [[package]]
 name = "omnibase-infra"
 version = "0.22.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_infra.git?branch=release%2Fv0.22.0#fcbbbbbcc3e09f5fec9ddccafe3b0c93a2fd86b9" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
@@ -1910,20 +1914,28 @@ dependencies = [
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/21/c1/8850c1d3d02996d3de332b6ed61ab0cf48d857bb16e94720a8fa743d036a/omnibase_infra-0.22.0.tar.gz", hash = "sha256:71121cd723556d7467008d73b18d71aa8eaf8a72682e53eeabd57ae7240d3b33", size = 6620587, upload-time = "2026-03-19T12:53:25.183Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/31/c6ee3a5490968b21bf9005ca667009d99aeb4e5db71019e55bb3dfa0e800/omnibase_infra-0.22.0-py3-none-any.whl", hash = "sha256:6f54682a443a533f4b3f23e4f4a5e05d42a6e78f7b57d8c0151b37d700301a09", size = 3869732, upload-time = "2026-03-19T12:53:23.302Z" },
+]
 
 [[package]]
 name = "omnibase-spi"
 version = "0.18.0"
-source = { git = "https://github.com/OmniNode-ai/omnibase_spi.git?branch=release%2Fv0.18.0#dea7c4e2f5cdf4156c9f987e98f0f00d0464cf9b" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/cd/9d/e7f04394a22bc4641727576b393d7aca8c828db3829d60576a50f745e7df/omnibase_spi-0.18.0.tar.gz", hash = "sha256:c72847d229ccf6a5c53e2b67d0bf8a16be60da7c233af87a17557a69f3145791", size = 1111608, upload-time = "2026-03-19T12:52:57.396Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/12/d25528501e092f7a142c3ac6ebbae2ba1fdf848a8341864918513992d63d/omnibase_spi-0.18.0-py3-none-any.whl", hash = "sha256:f40c0e7f9c73ecbb33c498acd5f4762e20456a387c71c02bd7acd8e43a34ba53", size = 755916, upload-time = "2026-03-19T12:52:59.175Z" },
+]
 
 [[package]]
 name = "omninode-claude"
-version = "0.11.0"
+version = "0.11.1"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2025,8 +2037,8 @@ dev = [
 
 [[package]]
 name = "omninode-intelligence"
-version = "0.15.0"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main#44d870e12312c9c32c7570c4c41c665f17063f9f" }
+version = "0.16.2"
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?branch=main#bf422ed38fa817d9f3f2144371728f88062adb93" }
 dependencies = [
     { name = "adaptive-classifier" },
     { name = "confluent-kafka" },
