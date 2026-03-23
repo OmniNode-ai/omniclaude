@@ -398,6 +398,53 @@ def emit_hostile_reviewer_completed(
         pass  # Telemetry must never block pipeline execution
 
 
+def emit_plan_review_completed(
+    *,
+    session_id: str,
+    plan_file: str,
+    total_rounds: int,
+    final_status: Literal[
+        "converged", "capped", "partially_converged", "not_converged"
+    ],
+    findings_by_severity: dict[str, int] | None = None,
+    models_used: list[str] | None = None,
+    correlation_id: str = "",
+) -> None:
+    """Emit a plan.review.completed event (fire-and-forget, never raises).
+
+    Consumers append to plan_review_runs (event table, keyed by event_id).
+    Consumed by the omnidash /plan-reviewer page.
+
+    Args:
+        session_id: Claude Code session identifier.
+        plan_file: Path of the plan file reviewed.
+        total_rounds: Total convergence passes completed.
+        final_status: Convergence outcome.
+        findings_by_severity: Counts keyed by severity (CRITICAL, MAJOR, MINOR, NIT).
+        models_used: LLM models used during the review.
+        correlation_id: End-to-end correlation identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "plan_file": plan_file,
+            "total_rounds": total_rounds,
+            "final_status": final_status,
+            "findings_by_severity": findings_by_severity or {},
+            "models_used": models_used or [],
+            "correlation_id": correlation_id,
+            "completed_at": datetime.now(UTC).isoformat(),
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        emit_fn("plan.review.completed", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
 __all__ = [
     "emit_epic_run_updated",
     "emit_pr_watch_updated",
@@ -405,4 +452,5 @@ __all__ = [
     "emit_budget_cap_hit",
     "emit_circuit_breaker_tripped",
     "emit_hostile_reviewer_completed",
+    "emit_plan_review_completed",
 ]

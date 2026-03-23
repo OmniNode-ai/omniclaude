@@ -152,6 +152,8 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "friction.observed",  # OMN-5747 - Contract-driven friction classification output
         "utilization.scoring.requested",  # OMN-5505 - Utilization scoring command emitted from Stop hook
         "task.delegated",  # OMN-5610 - Delegation event for omnidash delegation_events table
+        "plan.review.completed",  # OMN-6128 - Plan review strategy run completed
+        "hostile.reviewer.completed",  # OMN-5864 - Hostile reviewer skill completed
     ]
 )
 

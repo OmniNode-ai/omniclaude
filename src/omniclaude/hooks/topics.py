@@ -363,6 +363,18 @@ class TopicBase(StrEnum):
     VALIDATOR_CATCH = "onex.evt.omniclaude.validator-catch.v1"
     """Emitted when a validator (poly-enforcer, bash-guard, pre-commit) catches an issue."""
 
+    # ==========================================================================
+    # Plan review topics (OMN-6128)
+    # ==========================================================================
+    PLAN_REVIEW_COMPLETED = "onex.evt.omniclaude.plan-review-completed.v1"
+    """Emitted after hostile-reviewer convergence loop completes."""
+
+    # ==========================================================================
+    # Hostile reviewer topics (OMN-5864)
+    # ==========================================================================
+    HOSTILE_REVIEWER_COMPLETED = "onex.evt.omniclaude.hostile-reviewer-completed.v1"
+    """Emitted on hostile-reviewer skill completion (any mode)."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
