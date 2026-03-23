@@ -323,7 +323,7 @@ jobs:
 
           # Migration allowlist: pre-existing skills awaiting migration to _lib/pr-safety/.
           # Remove a skill from this list once it has been migrated (separate PR per skill).
-          MIGRATION_ALLOWLIST="fix-prs|fix_prs|review-all-prs|review_all_prs|auto-merge|auto_merge|merge-sweep|merge_sweep|pr-queue-pipeline|pr_queue_pipeline|ticket-pipeline|ticket_pipeline|ticket-work|ticket_work|pr-polish|pr_polish|parallel-solve|parallel_solve|release|multi-agent|multi_agent|gap|dashboard-sweep|dashboard_sweep"
+          MIGRATION_ALLOWLIST="fix-prs|fix_prs|review-all-prs|review_all_prs|auto-merge|auto_merge|merge-sweep|merge_sweep|pr-queue-pipeline|pr_queue_pipeline|ticket-pipeline|ticket_pipeline|ticket-work|ticket_work|pr-polish|pr_polish|parallel-solve|parallel_solve|release|multi-agent|multi_agent|gap|dashboard-sweep|dashboard_sweep|decompose-epic|decompose_epic"
           # Reference/tutorial skills: documentation only, never migrate.
           REFERENCE_SKILLS="using-git-worktrees|using_git_worktrees|sharing-skills|sharing_skills|review-cycle|review_cycle|local-review|local_review|ci-failures|ci_failures|pr-review|pr_review|finishing-a-development-branch|finishing_a_development_branch"
 
