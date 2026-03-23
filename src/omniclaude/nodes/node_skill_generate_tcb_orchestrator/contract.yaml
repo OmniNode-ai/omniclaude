@@ -61,6 +61,12 @@ event_bus:
   publish:
     success_topic: "onex.evt.omniclaude.generate-tcb-completed.v1"
     failure_topic: "onex.evt.omniclaude.generate-tcb-failed.v1"
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.generate-tcb.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.generate-tcb-completed.v1"
+    - "onex.evt.omniclaude.generate-tcb-failed.v1"
 
 # Capabilities
 capabilities:
@@ -109,6 +115,7 @@ error_handling:
 
 # Metadata
 metadata:
+  ticket: OMN-5987
   author: OmniNode Team
   license: MIT
   generated_by: generate_skill_node.py
