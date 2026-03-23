@@ -784,3 +784,73 @@ class TestPostScanCoverageAssertion:
         assert "scan_failure_details" in content, (
             "prompt.md must include scan_failure_details in the collected results/details list"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test class: Track B dispatch not gated by --skip-polish at empty check
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestTrackBDispatchNotGatedBySkipPolish:
+    """Regression: OMN-6189 — Step 4 empty check must not reference --skip-polish.
+
+    The --skip-polish flag belongs at Step 7 (Phase B execution gate), not Step 4
+    (pre-flight empty check). If Step 4 mentions --skip-polish, Track B PRs are
+    silently skipped when Track A queues are empty.
+    """
+
+    def test_step4_empty_check_does_not_reference_skip_polish(self) -> None:
+        """Step 4 empty check must not contain --skip-polish or skip_polish."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        # Extract the Step 4 / Empty Check section (between "## 4." and "## 5.")
+        step4_match = re.search(
+            r"##\s*4\..*?(?=##\s*5\.)",
+            content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert step4_match is not None, (
+            "Could not find Step 4 (Empty Check) section in prompt.md"
+        )
+        step4_text = step4_match.group(0)
+        assert "skip-polish" not in step4_text.lower(), (
+            "Step 4 empty check must NOT reference --skip-polish. "
+            "The --skip-polish gate belongs at Step 7 (Phase B), not Step 4 (pre-flight). "
+            "See OMN-6189."
+        )
+
+    def test_step4_checks_all_four_queues(self) -> None:
+        """Step 4 must check ALL queues: candidates, branch_update, thread_resolve, polish."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        step4_match = re.search(
+            r"##\s*4\..*?(?=##\s*5\.)",
+            content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert step4_match is not None, (
+            "Could not find Step 4 (Empty Check) section in prompt.md"
+        )
+        step4_text = step4_match.group(0).lower()
+        for queue_name in ["candidates", "branch_update", "thread_resolve", "polish"]:
+            assert queue_name in step4_text, (
+                f"Step 4 empty check must reference {queue_name} queue. "
+                "All four queues must be checked before declaring nothing_to_merge."
+            )
+
+    def test_step7_has_skip_polish_gate(self) -> None:
+        """Step 7 (Phase B) must contain the --skip-polish gate."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        # Find Step 7 / Phase B section
+        step7_match = re.search(
+            r"##\s*(?:Step\s*)?7\b.*?(?=##\s*(?:Step\s*)?8\b|##\s*\d+\.\s)",
+            content,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert step7_match is not None, (
+            "Could not find Step 7 / Phase B section in prompt.md"
+        )
+        step7_text = step7_match.group(0)
+        assert "skip-polish" in step7_text.lower(), (
+            "Step 7 (Phase B) must contain the --skip-polish gate. "
+            "This is the correct location for the skip-polish check."
+        )
