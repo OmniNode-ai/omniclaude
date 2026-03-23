@@ -509,7 +509,7 @@ Phase 3 flows automatically from Phase 2b convergence. It is not optional.
 - Multiple repos or parallel work -> plan-to-tickets + epic-team
 
 **Default behavior: auto-launch.** After the pre-launch checklist passes, immediately invoke
-`/executing-plans` with the exact plan file path. No prompt, no confirmation gate. The entire
+`onex:executing-plans` with the exact plan file path. No prompt, no confirmation gate. The entire
 chain — planning -> plan-to-tickets -> epic-team or ticket-pipeline — runs autonomously.
 
 - With `--no-launch`: stop after plan save (opt-out from autonomous execution)
