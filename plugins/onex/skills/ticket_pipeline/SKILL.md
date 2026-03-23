@@ -264,6 +264,43 @@ stateDiagram-v2
 
 ### Phase 0: pre_flight
 
+**Step 0 (contract verification):** Before any other pre_flight work, verify a ticket
+contract exists:
+
+1. Check for contract at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+2. If contract exists: load it, extract `dod_evidence[]` for later use in DoD verification.
+   **Idempotence:** Do NOT overwrite existing contracts. The first writer wins. If the
+   existing contract is a `stub` and richer data is now available (e.g., ticket description
+   was updated with DoD), the generator may enrich (add new `dod_evidence` items) but must
+   not remove existing fields.
+3. If contract does NOT exist:
+   a. Fetch ticket details from Linear via `mcp__linear-server__get_issue`
+   b. Extract DoD/acceptance criteria from ticket description via dod_parser
+   c. Generate contract YAML with required fields: `schema_version`, `ticket_id`, `summary`,
+      `is_seam_ticket`, `interface_change`, `contract_completeness` (stub or enriched),
+      `dod_evidence[]`, `evidence_requirements[]`, `emergency_bypass`
+   d. Validate contract before writing (YAML lint + schema check -- verify required fields
+      are present and typed correctly)
+   e. Write validated contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+   f. Publish via branch + PR to onex_change_control (non-blocking -- implementation
+      proceeds if PR creation fails):
+      ```
+      cd $ONEX_CC_REPO_PATH
+      git checkout -b auto/contract-{ticket_id}
+      git add contracts/{ticket_id}.yaml
+      git commit -m "feat: auto-generate contract for {ticket_id}"
+      git push origin auto/contract-{ticket_id}
+      gh pr create --title "auto: contract for {ticket_id}" --body "Auto-generated ticket contract" --auto
+      ```
+   g. Record publication status in pipeline state: if PR creation fails, set
+      `phases.pre_flight.artifacts.contract_publication: failed` with the error reason.
+      This is ticket-attributable and session-durable (not just a log message).
+   h. Log: "Contract auto-generated for {ticket_id} -- {N} DoD evidence items extracted"
+4. If contract generation fails AND `PIPELINE_GATE_MODE=hard`: HALT pipeline
+5. If contract generation fails AND mode is `soft` or `advisory`: log warning, continue
+
+**Step 1 (lint/type checks):**
+
 - Runs pre-commit hooks + mypy on clean checkout
 - Classifies pre-existing issues as AUTO-FIX or DEFER
 - AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing): fix pre-existing issues [OMN-XXXX]`
@@ -781,10 +818,18 @@ If code changes are needed, dispatch a polymorphic agent.
 
 ### Phase 0: pre_flight — runs inline (lightweight checks only)
 
-No dispatch needed. The orchestrator runs pre-commit hooks and mypy directly, classifies issues, and auto-fixes or defers as appropriate. No Task() dispatch because pre_flight is lightweight and must complete before the first agent is spawned.
+No dispatch needed. The orchestrator runs contract verification, pre-commit hooks, and mypy directly, classifies issues, and auto-fixes or defers as appropriate. No Task() dispatch because pre_flight is lightweight and must complete before the first agent is spawned.
 
 ```
 # Inline orchestrator actions for Phase 0:
+# 0. Contract verification:
+#    a. Check $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml
+#    b. If missing: fetch ticket from Linear, extract DoD, generate contract YAML
+#    c. Validate (YAML lint + schema), write to disk
+#    d. Publish via branch + PR to onex_change_control (non-blocking)
+#    e. Record publication status in state.yaml artifacts
+#    f. If generation fails + hard mode: HALT
+#    g. If generation fails + soft/advisory: warn, continue
 # 1. Run: pre-commit run --all-files (capture output)
 # 2. Run: mypy src/ (capture output)
 # 3. Classify issues: AUTO-FIX (<=10 files, same subsystem) or DEFER (else)

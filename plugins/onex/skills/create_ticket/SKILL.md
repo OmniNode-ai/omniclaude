@@ -441,6 +441,10 @@ When no `--from-contract` arg is provided and ticket context is available, creat
 internally generates a `ModelTicketContract` YAML before creating the ticket. This absorbs
 the former `generate-ticket-contract` skill (OMN-2975).
 
+**Critical rule: generate a contract for EVERY ticket.** Do NOT early-return or skip contract
+generation for non-seam tickets. Every ticket gets a contract file written to disk, regardless
+of seam status. Seam detection determines the contract's depth, not whether it is created.
+
 **Two-layer architecture**:
 1. **Prompt layer**: generates YAML text with seam detection, inference, and stubs
 2. **Python validator**: `validate_contract.py` imports `ModelTicketContract`, calls
@@ -456,14 +460,68 @@ the former `generate-ticket-contract` skill (OMN-2975).
 | `envelope`, `header` | `envelopes` |
 | `endpoint`, `route`, `api`, `rest` | `public_api` |
 
-If any signal found OR multiple repo names mentioned: set `is_seam_ticket: true` and
-`evidence_required: [unit, ci, integration]`. Otherwise: `evidence_required: [unit, ci]`.
+If any signal found OR multiple repo names mentioned: set `is_seam_ticket: true`,
+`contract_completeness: full`, and `evidence_required: [unit, ci, integration]`.
+
+If no seam signals found: set `is_seam_ticket: false`, `contract_completeness: stub`,
+and `evidence_required: [unit, ci]`. The contract is simpler but still written to disk
+with baseline DoD evidence:
+
+```yaml
+schema_version: "1.0.0"
+ticket_id: OMN-XXXX
+summary: "Ticket title from Linear"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+contract_completeness: stub  # stub | enriched | full
+dod_evidence:
+  - id: dod-001
+    description: "Tests exist and pass"
+    source: generated
+    checks:
+      - check_type: test_passes
+        check_value: "uv run pytest -v"
+evidence_requirements:
+  - kind: tests
+    description: "All tests pass"
+    command: "uv run pytest -v"
+  - kind: ci
+    description: "CI passes"
+    command: "pre-commit run --all-files"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+```
+
+**contract_completeness field**:
+- `stub`: auto-generated non-seam contract with baseline governance. Satisfies presence
+  requirements but has not been enriched with ticket-specific DoD.
+- `enriched`: stub updated with ticket-specific DoD evidence and requirements.
+- `full`: seam ticket with full interface detection, cross-repo analysis, and comprehensive
+  evidence requirements.
+
+**Downstream consequences of contract_completeness**:
+- `dod-sweep` reports stub counts separately from enriched/full (e.g., "12 passed (8 full, 4 stub)")
+- `integration-sweep` treats stub contracts as lower-confidence coverage evidence
+- Completion guard warns if a ticket is being marked Done with a stub contract that was
+  never enriched: "Contract was auto-generated and never updated with ticket-specific DoD"
+- These are informational in soft mode, blocking in hard mode
 
 **DoD extraction**: Uses `plugins/onex/skills/_lib/dod-parser/dod_parser.py` to extract
-Definition of Done items from the ticket description into `dod_evidence[]`.
+Definition of Done items from the ticket description into `dod_evidence[]`. When DoD items
+are extracted from the ticket description, `contract_completeness` is upgraded from `stub`
+to `enriched`.
 
 **Validation**: After drafting, call `validate_contract.py` to validate. If validation fails
 after 3 attempts, print the draft YAML with a note that manual review is required.
+
+**Contract generation idempotence**: If a contract already exists for this ticket, load and
+preserve it -- do NOT overwrite. The first writer wins. If the existing contract is a `stub`
+and richer data is now available (e.g., ticket description was updated with DoD), the generator
+may enrich the existing contract (add new `dod_evidence` items) but must not remove existing
+fields.
 
 **ONEX_CC_REPO_PATH**: If set, writes contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`.
 If not set, prints YAML with warning banner.
