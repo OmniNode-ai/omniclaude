@@ -166,7 +166,7 @@ Use `_bin/pr-scan.sh` for structured JSON output via `gh` CLI:
 ${CLAUDE_PLUGIN_ROOT}/_bin/pr-scan.sh \
   --repo <repo> \
   --state open \
-  --limit 100 \
+  --limit 50 \
   ${AUTHOR:+--author $AUTHOR} \
   ${LABEL:+--label $LABEL} \
   ${SINCE:+--since $SINCE}
@@ -188,7 +188,7 @@ gh pr list \
   --repo <repo> \
   --state open \
   --json number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
-  --limit 100
+  --limit 50
 ```
 
 **IMPORTANT**: `labels`, `updatedAt`, `isDraft`, and `mergeStateStatus` are required JSON fields.
