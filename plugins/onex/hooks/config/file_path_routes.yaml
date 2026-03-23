@@ -1,0 +1,14 @@
+# File-path convention routing table
+# Routes evaluated top-to-bottom, first match wins.
+# More specific patterns should be listed first.
+routes:
+  - pattern: "omnidash/server/consumers/**"
+    convention: "kafka-consumer-conventions"
+  - pattern: "omnidash/migrations/**"
+    convention: "migration-conventions"
+  - pattern: "omniclaude/plugins/onex/hooks/**"
+    convention: "hook-conventions"
+  - pattern: "**/tests/**"
+    convention: "test-conventions"
+  - pattern: "**/migrations/**"
+    convention: "migration-conventions"

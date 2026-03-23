@@ -116,6 +116,15 @@
         ]
       },
       {
+        "matcher": "^(Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre_tool_use_convention_injector.sh"
+          }
+        ]
+      },
+      {
         "matcher": "^mcp__linear-server__(save_issue|update_issue)$",
         "hooks": [
           {
