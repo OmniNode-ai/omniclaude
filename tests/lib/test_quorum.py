@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from omniclaude.lib.utils.consensus.quorum import AIQuorum, ModelConfig, ModelProvider
+from omniclaude.lib.utils.consensus.quorum import (
+    AIQuorum,
+    ModelConfig,
+    ModelProvider,
+    _resolve_llm_coder_url,
+)
 
 
 class TestModelProviderEnum:
@@ -63,32 +68,16 @@ class TestModelConfigDefaultEndpoint:
         assert config.endpoint == f"http://gpu-server:{expected_host}"
 
     @pytest.mark.unit
-    def test_openai_compatible_hardcoded_fallback(
+    def test_openai_compatible_raises_when_env_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Falls back to LLM_CODER_URL default when env var is unset."""
+        """ModelConfig must fail fast when LLM_CODER_URL is not set."""
         monkeypatch.delenv("LLM_CODER_URL", raising=False)
-        config = ModelConfig(
-            name="test-model",
-            provider=ModelProvider.OPENAI_COMPATIBLE,
-        )
-        # Endpoint should be set (not None) — fallback is the GPU server
-        assert config.endpoint is not None
-        assert "8000" in config.endpoint  # vLLM port
-
-    @pytest.mark.unit
-    def test_openai_compatible_no_ollama_endpoint(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """OPENAI_COMPATIBLE endpoint is NOT the old Ollama localhost:11434."""
-        monkeypatch.delenv("LLM_CODER_URL", raising=False)
-        config = ModelConfig(
-            name="test-model",
-            provider=ModelProvider.OPENAI_COMPATIBLE,
-        )
-        assert "localhost:11434" not in (config.endpoint or ""), (
-            "Endpoint uses deprecated Ollama URL. Use LLM_CODER_URL instead."
-        )
+        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
+            ModelConfig(
+                name="test-model",
+                provider=ModelProvider.OPENAI_COMPATIBLE,
+            )
 
 
 class TestAIQuorumDefaultModels:
@@ -116,3 +105,20 @@ class TestAIQuorumDefaultModels:
             "No OPENAI_COMPATIBLE model in DEFAULT_MODELS. "
             "Expected at least one vLLM/local code model."
         )
+
+
+class TestResolveLlmCoderUrl:
+    """Tests for _resolve_llm_coder_url() fail-fast behavior."""
+
+    @pytest.mark.unit
+    def test_requires_llm_coder_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Quorum must not silently fall back to hardcoded IP."""
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
+            _resolve_llm_coder_url()
+
+    @pytest.mark.unit
+    def test_returns_url_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Returns the configured URL."""
+        monkeypatch.setenv("LLM_CODER_URL", "http://gpu-server:8000")
+        assert _resolve_llm_coder_url() == "http://gpu-server:8000"

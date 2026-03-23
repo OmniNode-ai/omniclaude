@@ -28,6 +28,18 @@ except ImportError:
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 
+def _resolve_llm_coder_url() -> str:
+    """Resolve LLM_CODER_URL from environment. Fail fast if not configured."""
+    url = os.environ.get("LLM_CODER_URL", "")
+    if not url:
+        raise RuntimeError(
+            "LLM_CODER_URL is not set. "
+            "The quorum system requires an explicit LLM endpoint. "
+            "Set LLM_CODER_URL in ~/.omnibase/.env or your environment."
+        )
+    return url
+
+
 class ModelProvider(Enum):
     """Supported AI model providers."""
 
@@ -58,9 +70,7 @@ class ModelConfig:
             if self.provider == ModelProvider.OPENAI_COMPATIBLE:
                 # Uses vLLM-hosted Qwen3-Coder-30B-A3B (RTX 5090, 64K context).
                 # See CLAUDE.md: LLM_CODER_URL. Ollama endpoint decommissioned (OMN-4798).
-                self.endpoint = os.getenv(
-                    "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
-                )
+                self.endpoint = _resolve_llm_coder_url()
             elif self.provider == ModelProvider.GEMINI:
                 self.endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -119,7 +129,7 @@ class AIQuorum:
         ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
     ]
 
-    def __init__(  # stub-ok: implemented __init__ with TODO for future config
+    def __init__(  # stub-ok: implemented __init__
         self,
         models: list[ModelConfig] | None = None,
         stub_mode: bool = True,  # Phase 1: Default to stub mode
@@ -216,9 +226,7 @@ class AIQuorum:
                     if "base_url" in model_data:
                         endpoint = model_data["base_url"]
                     else:
-                        endpoint = os.getenv(
-                            "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
-                        )
+                        endpoint = _resolve_llm_coder_url()
 
                 model_config = ModelConfig(
                     name=model_data.get("name", model_name),
@@ -249,7 +257,8 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Score a correction using AI quorum consensus.
@@ -276,12 +285,13 @@ class AIQuorum:
             original_prompt, corrected_prompt, correction_type, correction_metadata
         )
 
-    def _stub_score_correction(  # stub-ok: implemented correction with TODO for calibration
+    def _stub_score_correction(  # stub-ok: implemented correction
         self,
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Stub implementation for Phase 1 testing.
@@ -334,7 +344,8 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[str, Any]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Full AI model scoring (Phase 3-4).
@@ -381,7 +392,9 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        metadata: dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        metadata: dict[
+            str, Any
+        ],  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> str:
         """
         Generate prompt for AI model scoring.
