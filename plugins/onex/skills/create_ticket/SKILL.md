@@ -435,11 +435,24 @@ mcp__linear-server__update_issue(
 
 ---
 
-## Contract Generation (internal)
+## Contract Generation (MANDATORY)
 
-When no `--from-contract` arg is provided and ticket context is available, create_ticket
-internally generates a `ModelTicketContract` YAML before creating the ticket. This absorbs
-the former `generate-ticket-contract` skill (OMN-2975).
+**ALWAYS** generate a `ModelTicketContract` for every ticket created, regardless of context
+richness or argument source. This is mandatory, not conditional. This absorbs the former
+`generate-ticket-contract` skill (OMN-2975).
+
+If ticket context is minimal (title-only), generate a minimal valid contract with:
+- `interfaces_touched: []` (empty -- will be updated during implementation)
+- `dod_evidence: []` (empty -- will be populated by ticket-work)
+- `is_seam_ticket: false` (default -- seam detection runs if description available)
+- `contract_completeness: "stub"` (marks this as scaffolding, not a fully specified contract)
+
+Minimal stub contracts are acceptable only as creation-time scaffolding for low-context tickets.
+They are NOT equivalent to fully specified governance contracts and MUST be enriched during
+implementation. Downstream workflows should distinguish "present-and-rich" from "present-but-stubbed"
+via the `contract_completeness` field. Downstream workflows (ticket-work, DoD sweep,
+integration-sweep) should treat "stub" as incomplete governance state requiring later
+enrichment, not as equivalent to a fully specified contract.
 
 **Two-layer architecture**:
 1. **Prompt layer**: generates YAML text with seam detection, inference, and stubs
@@ -463,7 +476,33 @@ If any signal found OR multiple repo names mentioned: set `is_seam_ticket: true`
 Definition of Done items from the ticket description into `dod_evidence[]`.
 
 **Validation**: After drafting, call `validate_contract.py` to validate. If validation fails
-after 3 attempts, print the draft YAML with a note that manual review is required.
+after 3 attempts, embed a minimal stub contract (all fields empty/default) rather than
+omitting entirely. Retain the raw YAML that failed and the validation error in the create-ticket
+run output for later debugging. The stub fallback ensures every ticket has something parseable,
+but the primary path should produce a schema-valid contract.
+
+**Embedding**: After generating the YAML block, embed it in the ticket description as a
+fenced YAML block:
+
+````
+```yaml
+# ModelTicketContract
+schema_version: "1.0.0"
+ticket_id: "OMN-XXXX"
+...
+```
+````
+
+Then update the ticket description via `mcp__linear-server__save_issue`.
+
+**Validation step**: After generating the YAML block:
+1. Parse with `yaml.safe_load()`
+2. Validate required fields exist: `schema_version`, `ticket_id`, `summary`,
+   `is_seam_ticket`, `interfaces_touched`
+3. Canonical validation MUST come from `validate_contract.py` so embedded contracts
+   are validated against the actual `ModelTicketContract` schema
+4. If validation fails after 3 attempts, embed a minimal stub contract with
+   `contract_completeness: "stub"` and preserve diagnostic context
 
 **ONEX_CC_REPO_PATH**: If set, writes contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`.
 If not set, prints YAML with warning banner.
@@ -598,6 +637,48 @@ if args.blocked_by:
 result = mcp__linear-server__create_issue(**params)
 ```
 
+### Step 5.5: Generate and Embed ModelTicketContract (MANDATORY) <!-- ai-slop-ok: new step -->
+
+After ticket creation, ALWAYS generate and embed a ModelTicketContract:
+
+```python
+ticket_id = result["identifier"]  # e.g., "OMN-5957"
+
+# 1. Generate contract YAML
+# If rich context available (description, requirements, DoD): generate full contract
+# If minimal context (title-only): generate stub contract
+contract_yaml = generate_model_ticket_contract(
+    ticket_id=ticket_id,
+    title=ticket_data["title"],
+    description=description,
+    repo=args.repo or ticket_data.get("repo"),
+    is_stub=(not ticket_data.get("requirements") and not ticket_data.get("description")),
+)
+
+# 2. Validate via validate_contract.py
+# Retry up to 3 times; on final failure, use minimal stub
+for attempt in range(3):
+    validation_result = validate_contract(contract_yaml)
+    if validation_result.is_valid:
+        break
+    # Fix issues and regenerate
+    contract_yaml = fix_contract_issues(contract_yaml, validation_result.errors)
+else:
+    # Preserve diagnostic context
+    print(f"[warn] Contract validation failed after 3 attempts. Raw YAML:\n{contract_yaml}")
+    print(f"[warn] Validation errors: {validation_result.errors}")
+    contract_yaml = generate_minimal_stub_contract(ticket_id, ticket_data["title"])
+
+# 3. Embed in ticket description
+updated_description = description + "\n\n---\n\n" + f"```yaml\n# ModelTicketContract\n{contract_yaml}\n```"
+
+# 4. Update ticket with embedded contract
+mcp__linear-server__save_issue(
+    id=ticket_id,
+    description=updated_description,
+)
+```
+
 ### Step 6: Report Success <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
@@ -611,6 +692,7 @@ Ticket created successfully!
   Team: {args.team or "Omninode"}
   Parent: {args.parent or "None"}
   Blocked by: {args.blocked_by or "None"}
+  Contract: {"embedded (stub)" if is_stub else "embedded (full)"}
 """)
 ```
 
