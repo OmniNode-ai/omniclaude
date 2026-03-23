@@ -455,7 +455,7 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 ## 4. Empty Check
 
 ```
-IF candidates is empty AND branch_update_queue is empty AND polish_queue is empty (or --skip-polish):
+IF candidates is empty AND branch_update_queue is empty AND thread_resolve_queue is empty AND polish_queue is empty:
   → Print: "No actionable PRs found across <N> repos."
   → If applicable, explain filters
   → Emit ModelSkillResult(status=nothing_to_merge, filters=filters)
