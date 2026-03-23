@@ -41,12 +41,15 @@ from omniclaude.nodes.node_transition_selector_effect.node import (
     NodeTransitionSelectorEffect,
 )
 
-pytestmark = pytest.mark.integration
+_LLM_ENDPOINT = os.environ.get("LLM_CODER_FAST_URL", "")
 
-_LLM_ENDPOINT = os.environ.get(
-    "LLM_CODER_FAST_URL",
-    "http://192.168.86.201:8001",  # onex-allow-internal-ip
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _LLM_ENDPOINT,
+        reason="LLM_CODER_FAST_URL not set — skipping integration test",
+    ),
+]
 
 
 def _is_endpoint_available() -> bool:
