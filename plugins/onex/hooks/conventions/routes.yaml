@@ -1,0 +1,13 @@
+# Patterson-style file-path -> convention routing
+# Patterns match REPO-RELATIVE paths (router strips worktree prefix)
+routes:
+  - pattern: "omnidash/server/**/*.ts"
+    conventions: ["omnidash-server"]
+  - pattern: "omnidash/src/**/*.tsx"
+    conventions: ["omnidash-frontend"]
+  - pattern: "omnibase_core/src/**/*.py"
+    conventions: ["onex-contracts", "python-strict"]
+  - pattern: "omniclaude/plugins/**/*.py"
+    conventions: ["omniclaude-hooks"]
+  - pattern: "omnibase_infra/docker/**"
+    conventions: ["docker-infra"]
