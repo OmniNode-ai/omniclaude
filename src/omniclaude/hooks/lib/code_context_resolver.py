@@ -105,10 +105,14 @@ class CodeContextResolver:
     ) -> None:
         self._qdrant = qdrant_client
         self._bolt = bolt_handler
-        self._embedding_url = embedding_url or os.environ.get(
-            "LLM_EMBEDDING_URL",
-            "http://192.168.86.200:8100",  # onex-allow-internal-ip  # kafka-fallback-ok
-        )
+        resolved_url = embedding_url or os.environ.get("LLM_EMBEDDING_URL", "")
+        if not resolved_url:
+            raise RuntimeError(
+                "LLM_EMBEDDING_URL is not set. "
+                "The code context resolver requires an explicit embedding endpoint. "
+                "Set LLM_EMBEDDING_URL in ~/.omnibase/.env or your environment."
+            )
+        self._embedding_url = resolved_url
 
     async def resolve(
         self,
