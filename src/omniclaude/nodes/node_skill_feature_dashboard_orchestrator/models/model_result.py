@@ -128,11 +128,39 @@ class ModelContractYaml(BaseModel, extra="allow"):
     metadata: ModelContractMetadata | None = None
 
 
+# ---------------------------------------------------------------------------
+# Ticketize batching models (OMN-6163)
+# ---------------------------------------------------------------------------
+
+# Severity threshold: gaps at or above this level get per-skill tickets.
+# Gaps below this level are batched by identical (layer, message) key.
+BATCH_SEVERITY_THRESHOLD: frozenset[GapSeverity] = frozenset(
+    {GapSeverity.CRITICAL, GapSeverity.HIGH}
+)
+
+
+class ModelBatchedGapTicket(BaseModel, frozen=True):
+    """A single ticket descriptor produced by the ticketize batching algorithm.
+
+    Either represents a per-skill ticket (for CRITICAL/HIGH gaps) or a batched
+    ticket grouping identical LOW/MEDIUM gaps across multiple skills.
+    """
+
+    title: str
+    description: str
+    is_batched: bool = False
+    affected_skills: list[str]
+    gap_count: int
+    worst_severity: GapSeverity
+
+
 __all__ = [
     "AuditCheckName",
     "AuditCheckStatus",
+    "BATCH_SEVERITY_THRESHOLD",
     "GapSeverity",
     "ModelAuditCheck",
+    "ModelBatchedGapTicket",
     "ModelContractMetadata",
     "ModelContractYaml",
     "ModelEventBus",
