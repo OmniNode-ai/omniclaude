@@ -233,9 +233,8 @@ class TestFormatOne:
     @pytest.mark.unit
     def test_format_with_from_skill(self) -> None:
         msg = _format_one(to_skill="pr-polish", from_skill="local-review")
-        assert "pr-polish" in msg
-        assert "local-review" in msg
         assert "/onex:pr_polish" in msg
+        assert "local-review" in msg
 
     @pytest.mark.unit
     def test_format_fallback_no_from_skill(self) -> None:
@@ -316,7 +315,7 @@ class TestGetSkillSuggestions:
         result = get_skill_suggestions(
             "sess", log_path=log, progression_path=prog, db_enabled=False
         )
-        assert any("pr-polish" in s for s in result)
+        assert any("pr_polish" in s for s in result)
 
     @pytest.mark.unit
     def test_does_not_suggest_already_used_skill(self, tmp_path: Path) -> None:
@@ -330,7 +329,7 @@ class TestGetSkillSuggestions:
         result = get_skill_suggestions(
             "sess", log_path=log, progression_path=prog, db_enabled=False
         )
-        assert not any("pr-polish" in s for s in result)
+        assert not any("pr_polish" in s for s in result)
 
     @pytest.mark.unit
     def test_max_two_suggestions(self, tmp_path: Path) -> None:
@@ -452,7 +451,7 @@ class TestGetSkillSuggestions:
                 "sess", log_path=log, progression_path=prog, db_enabled=True
             )
         # Should still suggest based on local log
-        assert any("pr-polish" in s for s in result)
+        assert any("pr_polish" in s for s in result)
 
     @pytest.mark.unit
     def test_suggestion_contains_only_skill_name(self, tmp_path: Path) -> None:

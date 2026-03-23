@@ -183,8 +183,8 @@ def _load_counts_from_log(log_path: Path) -> Counter[str]:
 
 
 def _normalize_skill_name(name: str) -> str:
-    """Strip the ``onex:`` namespace prefix for progression graph lookups."""
-    return name.removeprefix("onex:")
+    """Strip the ``onex:`` namespace prefix and normalise to hyphens for progression graph lookups."""
+    return name.removeprefix("onex:").replace("_", "-")
 
 
 def _load_counts_from_db(*, session_id: str) -> Counter[str] | None:
@@ -298,13 +298,15 @@ def _fallback_basic_skills(
 
 def _format_one(*, to_skill: str, from_skill: str) -> str:
     """Format a single suggestion string."""
+    # Skill command references use underscores (e.g. /onex:pr_polish)
+    cmd_name = to_skill.replace("-", "_")
     if from_skill:
         return (
             f"Based on your usage, you might want to try: "
-            f"/onex:{to_skill} (builds on {from_skill})"
+            f"/onex:{cmd_name} (builds on {from_skill})"
         )
     # Fallback format (no prior `from` skill usage)
-    return f"You might want to try: /onex:{to_skill}"
+    return f"You might want to try: /onex:{cmd_name}"
 
 
 # ---------------------------------------------------------------------------
