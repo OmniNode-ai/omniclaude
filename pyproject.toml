@@ -10,10 +10,10 @@ license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core==0.29.0",
-    "omnibase-spi==0.18.0",
-    "omnibase-infra==0.22.0",
-    "omninode-intelligence==0.15.0",
+    "omnibase-core>=0.30.2",
+    "omnibase-spi>=0.19.1",
+    "omnibase-infra>=0.24.1",
+    "omninode-intelligence>=0.16.2",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",
@@ -91,6 +91,15 @@ Changelog = "https://github.com/OmniNode-ai/omniclaude/blob/main/CHANGELOG.md"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Override omninode-intelligence's transitive pin on omnibase-infra so our direct pin wins.
+# Required until omniintelligence publishes a release with >=0.24.1.
+override-dependencies = [
+    "omnibase-core>=0.30.2",
+    "omnibase-spi>=0.19.1",
+    "omnibase-infra>=0.24.1",
+]
 
 [tool.uv.sources]
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
