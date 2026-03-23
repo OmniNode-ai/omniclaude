@@ -18,13 +18,17 @@
 |-------|-------|----------|----------------|
 | 1 | Code Quality (ruff + mypy) | `ci.yml` | Format, lint, types |
 | 2 | Pyright Type Checking | `ci.yml` | Strict type errors |
-| 3 | Architecture Handshake | `ci.yml` | Incompatibility with omnibase_core |
-| 4 | Enum Governance | `ci.yml` | Casing, duplicates, literal-vs-enum |
-| 5 | Exports Validation | `ci.yml` | `__all__` mismatches |
-| 6 | Kafka Import Guard | `ci.yml` | Direct Kafka imports in nodes (ARCH-002) |
-| 7 | Migration Freeze | `ci.yml` | New DB migrations during freeze |
-| 8 | ONEX Compliance | `ci.yml` | Naming, contracts, signatures |
-| 9 | 12 Architecture Checks | `ci.yml` | DB in orchestrator, git outside effects, hardcoded IPs, etc. |
+| 3 | Markdown Link Check | `ci.yml` | Broken doc links |
+| 4 | Architecture Handshake | `ci.yml` | Incompatibility with omnibase_core |
+| 5 | Enum Governance | `ci.yml` | Casing, duplicates, literal-vs-enum |
+| 6 | Exports Validation | `ci.yml` | `__all__` mismatches |
+| 7 | Kafka Import Guard | `ci.yml` | Direct Kafka imports in nodes (ARCH-002) |
+| 8 | Migration Freeze | `ci.yml` | New DB migrations during freeze |
+| 9 | ONEX Compliance | `ci.yml` | Naming, contracts, signatures |
+| 10 | 12 Architecture Checks | `ci.yml` | DB in orchestrator, git outside effects, hardcoded IPs, etc. |
+| 11 | F5.1 No compact cmd topic | `ci.yml` | cmd topics with compact cleanup policy |
+| 12 | Architecture Invariants | `ci.yml` | Cross-cutting invariant violations |
+| 13 | Stale TODO Gate | `ci.yml` | Stale TODO/FIXME without tickets |
 
 ### Tests Gate
 
@@ -34,13 +38,18 @@
 | 2 | Hooks System Tests | `ci.yml` | Hook registration/execution |
 | 3 | Agent Framework Tests | `ci.yml` | Agent YAML loading |
 | 4 | Database Schema Validation | `ci.yml` | Schema drift |
+| 5 | Mode Metadata Integrity | `ci.yml` | Mode metadata consistency |
+| 6 | Skill Hygiene | `ci.yml` | Skill definition compliance |
+| 7 | Version Pin Compliance | `ci.yml` | Unpinned dependencies |
+| 8 | Cross-Repo Boundary Parity | `ci.yml` | Cross-repo interface drift |
 
 ### Security Gate
 
 | Order | Check | Workflow | What It Catches |
 |-------|-------|----------|----------------|
-| 1 | Bandit SAST | `ci.yml` | Security vulnerabilities |
+| 1 | Python Security Scan (Bandit) | `ci.yml` | Security vulnerabilities |
 | 2 | Secret Detection | `ci.yml` | Leaked credentials |
+| 3 | AI-Slop Pattern Check | `ci.yml` | AI-generated boilerplate in PR diffs |
 
 ### Omni Standards Gate
 

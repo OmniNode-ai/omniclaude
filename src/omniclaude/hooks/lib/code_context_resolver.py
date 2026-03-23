@@ -107,10 +107,10 @@ class CodeContextResolver:
         self._bolt = bolt_handler
         resolved_url = embedding_url or os.environ.get("LLM_EMBEDDING_URL", "")
         if not resolved_url:
-            raise RuntimeError(
+            logger.warning(
                 "LLM_EMBEDDING_URL is not set. "
-                "The code context resolver requires an explicit embedding endpoint. "
-                "Set LLM_EMBEDDING_URL in ~/.omnibase/.env or your environment."
+                "Semantic code context resolution will be unavailable. "
+                "Set LLM_EMBEDDING_URL in ~/.omnibase/.env to enable."
             )
         self._embedding_url = resolved_url
 
@@ -128,6 +128,12 @@ class CodeContextResolver:
         Returns:
             List of CodeContextResult ordered by similarity score.
         """
+        if not self._embedding_url:
+            logger.warning(
+                "CodeContextResolver: no embedding URL configured, returning empty results"
+            )
+            return []
+
         if self._qdrant is None:
             logger.warning(
                 "CodeContextResolver: no Qdrant client, returning empty results"

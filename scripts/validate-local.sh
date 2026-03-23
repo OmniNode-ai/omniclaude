@@ -20,10 +20,10 @@ run_check() {
     printf "%-45s " "$name"
     if "$@" > /dev/null 2>&1; then
         echo -e "${GREEN}PASS${NC}"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         echo -e "${RED}FAIL${NC}"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
@@ -46,7 +46,7 @@ run_check "no hardcoded IPs" uv run python scripts/validation/validate_no_hardco
 run_check "no DB in orchestrator" uv run python scripts/validation/validate_no_db_in_orchestrator.py
 run_check "no git outside effects" uv run python scripts/validation/validate_no_git_outside_effects.py
 run_check "no direct Kafka producer" uv run python scripts/validation/validate_no_direct_kafka_producer.py
-run_check "topic naming" uv run python scripts/validation/lint_topic_names.py
+run_check "topic naming" uv run python scripts/validation/validate_topic_naming.py
 run_check "no hardcoded Kafka broker" uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
 
 # Tests

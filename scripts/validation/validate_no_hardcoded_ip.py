@@ -32,22 +32,29 @@ _ALLOWED_PATHS: frozenset[str] = frozenset(
     }
 )
 
+# Inline suppression marker: lines containing this comment are exempt.
+_SUPPRESS_MARKER = "onex-allow-internal-ip"
+
 
 def main() -> int:
-    src = Path("src")
-    if not src.exists():
-        print("src/ directory not found", file=sys.stderr)  # noqa: T201
+    scan_dirs = [Path("src"), Path("tests"), Path("scripts")]
+    existing_dirs = [d for d in scan_dirs if d.exists()]
+    if not existing_dirs:
+        print(
+            "No scannable directories found (src/, tests/, scripts/)", file=sys.stderr
+        )  # noqa: T201
         return 1
 
     violations: list[str] = []
-    for ext in ("*.py", "*.yaml", "*.yml"):
-        for path in src.rglob(ext):
-            rel = str(path)
-            if rel in _ALLOWED_PATHS:
-                continue
-            for i, line in enumerate(path.read_text().splitlines(), 1):
-                if _IP_PATTERN.search(line):
-                    violations.append(f"  {rel}:{i}: {line.strip()}")
+    for scan_dir in existing_dirs:
+        for ext in ("*.py", "*.yaml", "*.yml"):
+            for path in scan_dir.rglob(ext):
+                rel = str(path)
+                if rel in _ALLOWED_PATHS:
+                    continue
+                for i, line in enumerate(path.read_text().splitlines(), 1):
+                    if _IP_PATTERN.search(line) and _SUPPRESS_MARKER not in line:
+                        violations.append(f"  {rel}:{i}: {line.strip()}")
 
     if violations:
         print(f"ERROR: {len(violations)} hardcoded internal IP(s) found:")  # noqa: T201
@@ -59,7 +66,8 @@ def main() -> int:
         )
         return 1
 
-    print("OK: no hardcoded internal IPs found in src/")  # noqa: T201
+    dirs_str = ", ".join(str(d) + "/" for d in existing_dirs)
+    print(f"OK: no hardcoded internal IPs found in {dirs_str}")  # noqa: T201
     return 0
 
 

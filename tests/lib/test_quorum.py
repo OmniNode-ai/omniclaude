@@ -57,7 +57,7 @@ class TestModelConfigDefaultEndpoint:
     def test_openai_compatible_default_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint."""
+        """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint (lazy)."""
         # GPU server host:port used via env var — not a Kafka address.  # onex-allow-internal-ip
         expected_host = "8000"
         monkeypatch.setenv("LLM_CODER_URL", f"http://gpu-server:{expected_host}")
@@ -65,19 +65,36 @@ class TestModelConfigDefaultEndpoint:
             name="test-model",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
-        assert config.endpoint == f"http://gpu-server:{expected_host}"
+        # Endpoint is resolved lazily via resolve_endpoint(), not at __post_init__
+        assert config.endpoint is None
+        assert config.resolve_endpoint() == f"http://gpu-server:{expected_host}"
 
     @pytest.mark.unit
     def test_openai_compatible_raises_when_env_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """ModelConfig must fail fast when LLM_CODER_URL is not set."""
+        """ModelConfig.resolve_endpoint() must fail fast when LLM_CODER_URL is not set."""
         monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        config = ModelConfig(
+            name="test-model",
+            provider=ModelProvider.OPENAI_COMPATIBLE,
+        )
+        # Construction succeeds (deferred), but resolve_endpoint() fails
         with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
-            ModelConfig(
-                name="test-model",
-                provider=ModelProvider.OPENAI_COMPATIBLE,
-            )
+            config.resolve_endpoint()
+
+    @pytest.mark.unit
+    def test_openai_compatible_construction_without_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ModelConfig can be constructed without LLM_CODER_URL set (deferred resolution)."""
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        # Must not raise at construction time
+        config = ModelConfig(
+            name="test-model",
+            provider=ModelProvider.OPENAI_COMPATIBLE,
+        )
+        assert config.endpoint is None
 
 
 class TestAIQuorumDefaultModels:
