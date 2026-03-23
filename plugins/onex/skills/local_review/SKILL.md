@@ -580,7 +580,7 @@ Task(
   prompt="A fix agent failed during local-review iteration {iteration}.
     Error: {error_details}
 
-    Invoke: Skill(skill=\"onex:systematic-debugging\")
+    Invoke: Skill(skill=\"onex:systematic_debugging\")
 
     Investigate root cause of the fix failure. Report: root cause, recommended fix, files involved."
 )

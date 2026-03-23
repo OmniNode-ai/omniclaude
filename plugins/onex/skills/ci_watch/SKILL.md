@@ -216,7 +216,7 @@ If neither inbox-wait nor `_bin/ci-status.sh` is available, use `gh run watch` d
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-watch: auto-fix introduced CI failures on PR #{pr_number} (cycle {N})",
-  prompt="Invoke: Skill(skill=\"onex:ci-fix-pipeline\",
+  prompt="Invoke: Skill(skill=\"onex:ci_fix_pipeline\",
     args=\"--pr {pr_number} --ticket-id {ticket_id}\")
 
     Failure details:
@@ -329,7 +329,7 @@ if [[ -z "$PR" ]]; then
   exit 1
 fi
 
-exec claude --skill onex:ci-watch \
+exec claude --skill onex:ci_watch \
   --arg "pr_number=${PR}" \
   --arg "ticket_id=${TICKET_ID}" \
   --arg "policy.timeout_minutes=${TIMEOUT_MINUTES}" \
@@ -341,7 +341,7 @@ exec claude --skill onex:ci-watch \
 |------------|-------------|
 | `/ci-watch --pr {N}` | Interactive: poll CI on PR N, auto-fix on failure |
 | `/ci-watch --pr {N} --no-auto-fix` | Interactive: poll CI on PR N, gate on failure |
-| `Skill(skill="onex:ci-watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
+| `Skill(skill="onex:ci_watch", args="--pr {N} --ticket-id {T}")` | Programmatic: composable invocation from orchestrator |
 | `ci-watch.sh --pr {N} --ticket-id {T} --timeout-minutes 90` | Shell: direct invocation with all parameters |
 
 ## Invocation from ticket-pipeline
@@ -366,7 +366,7 @@ Task(
   run_in_background=True,
   description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
   prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
-    Invoke: Skill(skill=\"onex:ci-watch\",
+    Invoke: Skill(skill=\"onex:ci_watch\",
       args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
     Fix any failures, push fixes. GitHub will auto-merge once CI is green."
 )

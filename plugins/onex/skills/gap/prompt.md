@@ -847,7 +847,7 @@ For each AUTO finding:
      subagent_type="onex:polymorphic-agent",
      description="gap fix: Phase 3 fix for finding <finding_id> via ticket-pipeline",
      prompt="You are executing ticket-pipeline for <ticket_id>.
-       Invoke: Skill(skill=\"onex:ticket-pipeline\", args=\"<ticket_id>\")
+       Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"<ticket_id>\")
        Finding: <finding summary>
        Repo: <primary repo from finding.repos[0]>
        Report back with: pr_url, pr_number, status, any blockers."
@@ -875,7 +875,7 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="gap fix: Phase 3 fix for finding <finding_id> via ticket-work",
   prompt="You are executing ticket-work for <ticket_id>.
-    Invoke: Skill(skill=\"onex:ticket-work\", args=\"<ticket_id>\")
+    Invoke: Skill(skill=\"onex:ticket_work\", args=\"<ticket_id>\")
     Finding: <finding summary>
     Report back with: files_changed, tests_run, any blockers."
 )
@@ -894,7 +894,7 @@ Invoke merge-sweep scoped to repos with created PRs:
 Task(
   subagent_type="onex:polymorphic-agent",
   description="gap fix: Phase 3 merge-sweep for created PRs",
-  prompt="Invoke: Skill(skill=\"onex:merge-sweep\",
+  prompt="Invoke: Skill(skill=\"onex:merge_sweep\",
     args=\"--repos <repos_with_created_prs>\")
     Report back with: status, auto_merge_set, polished, failed."
 )

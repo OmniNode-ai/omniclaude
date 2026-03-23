@@ -82,7 +82,7 @@ def get_skill_suggestions(
     -------
     list[str]
         Ready-to-inject suggestion strings, e.g.:
-        ["💡 Based on your usage, you might want to try: /onex:pr-polish "
+        ["💡 Based on your usage, you might want to try: /onex:pr_polish "
          "(builds on local-review)"]
     """
     try:

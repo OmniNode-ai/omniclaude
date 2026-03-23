@@ -1006,7 +1006,7 @@ def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
         try:
             # Call generate-ticket-contract skill
             result = Skill(
-                skill="onex:create-ticket",
+                skill="onex:create_ticket",
                 args=f"--from-contract auto {t['ticket_id']}"
             )
 

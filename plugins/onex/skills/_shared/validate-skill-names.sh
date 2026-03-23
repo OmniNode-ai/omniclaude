@@ -97,7 +97,7 @@ else
     echo "validate-skill-names: $VIOLATIONS violation(s) found." >&2
     echo "" >&2
     echo "Fix: Add onex: prefix to Skill() calls and exec claude --skill invocations." >&2
-    echo "     Examples: Skill(skill=\"onex:ticket-work\"), exec claude --skill onex:ci-watch" >&2
+    echo "     Examples: Skill(skill=\"onex:ticket_work\"), exec claude --skill onex:ci_watch" >&2
     echo "     Note: SKILL.md name: fields use bare slugs (plugin auto-prefixes)." >&2
     echo "     Note: subagent_type=\"onex:polymorphic-agent\" is ALLOWED (agent, not skill)." >&2
     exit 1

@@ -72,7 +72,7 @@ def _write_log(tmp_path: Path, entries: list[dict]) -> Path:
 class TestNormalizeSkillName:
     @pytest.mark.unit
     def test_strips_onex_prefix(self) -> None:
-        assert _normalize_skill_name("onex:local-review") == "local-review"
+        assert _normalize_skill_name("onex:local_review") == "local-review"
 
     @pytest.mark.unit
     def test_no_prefix_unchanged(self) -> None:
@@ -102,16 +102,16 @@ class TestLoadCountsFromLog:
             tmp_path,
             [
                 {
-                    "skill_name": "onex:local-review",
+                    "skill_name": "onex:local_review",
                     "timestamp": "t",
                     "session_id": "s",
                 },
                 {
-                    "skill_name": "onex:local-review",
+                    "skill_name": "onex:local_review",
                     "timestamp": "t",
                     "session_id": "s",
                 },
-                {"skill_name": "onex:ticket-work", "timestamp": "t", "session_id": "s"},
+                {"skill_name": "onex:ticket_work", "timestamp": "t", "session_id": "s"},
             ],
         )
         counts = _load_counts_from_log(log)
@@ -122,19 +122,19 @@ class TestLoadCountsFromLog:
     def test_strips_onex_prefix_in_counts(self, tmp_path: Path) -> None:
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:pr-review", "timestamp": "t", "session_id": "s"}],
+            [{"skill_name": "onex:pr_review", "timestamp": "t", "session_id": "s"}],
         )
         counts = _load_counts_from_log(log)
         assert "pr-review" in counts
-        assert "onex:pr-review" not in counts
+        assert "onex:pr_review" not in counts
 
     @pytest.mark.unit
     def test_skips_malformed_json_lines(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
         log.write_text(
-            '{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}\n'
+            '{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}\n'
             "not-valid-json\n"
-            '{"skill_name": "onex:ticket-work", "timestamp": "t", "session_id": "s"}\n',
+            '{"skill_name": "onex:ticket_work", "timestamp": "t", "session_id": "s"}\n',
             encoding="utf-8",
         )
         counts = _load_counts_from_log(log)
@@ -235,12 +235,12 @@ class TestFormatOne:
         msg = _format_one(to_skill="pr-polish", from_skill="local-review")
         assert "pr-polish" in msg
         assert "local-review" in msg
-        assert "/onex:pr-polish" in msg
+        assert "/onex:pr_polish" in msg
 
     @pytest.mark.unit
     def test_format_fallback_no_from_skill(self) -> None:
         msg = _format_one(to_skill="local-review", from_skill="")
-        assert "/onex:local-review" in msg
+        assert "/onex:local_review" in msg
         # Fallback format should NOT mention a from skill
         assert "builds on" not in msg
 
@@ -286,7 +286,7 @@ class TestGetSkillSuggestions:
             tmp_path,
             [
                 {
-                    "skill_name": "onex:local-review",
+                    "skill_name": "onex:local_review",
                     "timestamp": "t",
                     "session_id": "s",
                 },
@@ -305,7 +305,7 @@ class TestGetSkillSuggestions:
             tmp_path,
             [
                 {
-                    "skill_name": "onex:local-review",
+                    "skill_name": "onex:local_review",
                     "timestamp": "t",
                     "session_id": "s",
                 },
@@ -322,9 +322,9 @@ class TestGetSkillSuggestions:
     def test_does_not_suggest_already_used_skill(self, tmp_path: Path) -> None:
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}]
+            [{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}]
             * 5
-            + [{"skill_name": "onex:pr-polish", "timestamp": "t", "session_id": "s"}],
+            + [{"skill_name": "onex:pr_polish", "timestamp": "t", "session_id": "s"}],
         )
         prog = _write_progression(tmp_path)
         result = get_skill_suggestions(
@@ -339,15 +339,15 @@ class TestGetSkillSuggestions:
             tmp_path,
             [
                 {
-                    "skill_name": "onex:local-review",
+                    "skill_name": "onex:local_review",
                     "timestamp": "t",
                     "session_id": "s",
                 },
             ]
             * 5
-            + [{"skill_name": "onex:ticket-work", "timestamp": "t", "session_id": "s"}]
+            + [{"skill_name": "onex:ticket_work", "timestamp": "t", "session_id": "s"}]
             * 3
-            + [{"skill_name": "onex:pr-review", "timestamp": "t", "session_id": "s"}]
+            + [{"skill_name": "onex:pr_review", "timestamp": "t", "session_id": "s"}]
             * 5
             + [{"skill_name": "onex:gap-analysis", "timestamp": "t", "session_id": "s"}]
             * 2,
@@ -385,7 +385,7 @@ class TestGetSkillSuggestions:
     def test_missing_progression_yaml_returns_empty(self, tmp_path: Path) -> None:
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}]
+            [{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}]
             * 5,
         )
         prog = tmp_path / "nonexistent-progression.yaml"
@@ -408,7 +408,7 @@ class TestGetSkillSuggestions:
     def test_db_not_called_when_disabled(self, tmp_path: Path) -> None:
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}],
+            [{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}],
         )
         prog = _write_progression(tmp_path)
         with patch(
@@ -423,7 +423,7 @@ class TestGetSkillSuggestions:
     def test_db_queried_when_enabled(self, tmp_path: Path) -> None:
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}],
+            [{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}],
         )
         prog = _write_progression(tmp_path)
         with patch(
@@ -440,7 +440,7 @@ class TestGetSkillSuggestions:
         """When DB fails, should fall back to local log without crashing."""
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:local-review", "timestamp": "t", "session_id": "s"}]
+            [{"skill_name": "onex:local_review", "timestamp": "t", "session_id": "s"}]
             * 5,
         )
         prog = _write_progression(tmp_path)
@@ -459,7 +459,7 @@ class TestGetSkillSuggestions:
         """Privacy: no prompt content, file paths, or code in suggestions."""
         log = _write_log(
             tmp_path,
-            [{"skill_name": "onex:ticket-work", "timestamp": "t", "session_id": "s"}]
+            [{"skill_name": "onex:ticket_work", "timestamp": "t", "session_id": "s"}]
             * 3,
         )
         prog = _write_progression(tmp_path)

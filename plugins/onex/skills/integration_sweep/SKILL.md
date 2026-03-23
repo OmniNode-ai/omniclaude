@@ -45,7 +45,7 @@ outputs:
 
 # integration-sweep
 
-**Skill ID**: `onex:integration-sweep`
+**Skill ID**: `onex:integration_sweep`
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Ticket**: OMN-5436

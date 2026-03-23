@@ -1,6 +1,6 @@
 # contract-compliance-check prompt
 
-**Invocation**: `Skill(skill="onex:contract-compliance-check", args="<ticket_id> [--contract-path <path>]")`
+**Invocation**: `Skill(skill="onex:contract_compliance_check", args="<ticket_id> [--contract-path <path>]")`
 
 ---
 
@@ -37,7 +37,7 @@ Extract from the invocation arguments:
 
 ```
 ERROR: No contract found for {ticket_id}.
-Generate one first: Skill(skill="onex:create-ticket", args="--from-contract auto {ticket_id}")
+Generate one first: Skill(skill="onex:create_ticket", args="--from-contract auto {ticket_id}")
 ```
 
 Parse the YAML into the contract fields. Extract:

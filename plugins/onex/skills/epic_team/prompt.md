@@ -118,7 +118,7 @@ URL: {ticket_url}
 Repo: {repo} at {repo_path}
 Epic: {epic_id}  Run: {run_id}
 
-Invoke: Skill(skill="onex:ticket-pipeline", args="{ticket_id}")
+Invoke: Skill(skill="onex:ticket_pipeline", args="{ticket_id}")
 
 After ticket-pipeline completes, report back:
 - ticket_id: {ticket_id}
@@ -412,7 +412,7 @@ if len(tickets) == 0:
             description=f"epic-team: dry-run decompose empty epic {epic_id}",
             prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic in dry-run mode.
     Run ID: {run_id}
-    Invoke: Skill(skill="onex:decompose-epic", args="{epic_id} --dry-run")
+    Invoke: Skill(skill="onex:decompose_epic", args="{epic_id} --dry-run")
 
     Print the decomposition plan returned by decompose-epic.
     Do NOT create any tickets. Do NOT post Slack gate.
@@ -427,7 +427,7 @@ if len(tickets) == 0:
         description=f"epic-team: auto-decompose empty epic {epic_id}",
         prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
     Run ID: {run_id}
-    Invoke: Skill(skill="onex:decompose-epic", args="{epic_id}")
+    Invoke: Skill(skill="onex:decompose_epic", args="{epic_id}")
 
     Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{run_id}/decompose-epic.json
     Report back with: created_tickets (list of ticket IDs and titles), count."""
@@ -449,7 +449,7 @@ if len(tickets) == 0:
             subagent_type="onex:polymorphic-agent",
             description=f"epic-team: post Slack LOW_RISK gate for {epic_id}",
             prompt=f"""Post this Slack gate message and wait up to 30 minutes for a reject reply.
-    Invoke: Skill(skill="onex:slack-gate", args="--message {slack_gate_message} --timeout 30m --keyword reject")
+    Invoke: Skill(skill="onex:slack_gate", args="--message {slack_gate_message} --timeout 30m --keyword reject")
 
     If reject received: report status=rejected
     If timeout (silence): report status=approved
@@ -754,7 +754,7 @@ URL: {url}
 Repo: {repo} at {repo_path}
 Epic: {epic_id}  Run: {run_id}
 
-Invoke: Skill(skill="onex:ticket-pipeline", args="{ticket_id}")
+Invoke: Skill(skill="onex:ticket_pipeline", args="{ticket_id}")
 
 After ticket-pipeline completes, report back:
 - ticket_id: {ticket_id}
@@ -1258,10 +1258,10 @@ def execute_ticket(task):
 
         if is_triage:
             # Triage tickets: analyze and create sub-tickets, no implementation
-            result = Skill("onex:triage-ticket", args=ticket_id, cwd=worktree_path)
+            result = Skill("onex:triage_ticket", args=ticket_id, cwd=worktree_path)
         else:
             # Normal ticket: invoke ticket-work skill
-            result = Skill("onex:ticket-work", args=ticket_id, cwd=worktree_path)
+            result = Skill("onex:ticket_work", args=ticket_id, cwd=worktree_path)
 
         # Extract PR URL if present in result
         pr_url = extract_pr_url(result)

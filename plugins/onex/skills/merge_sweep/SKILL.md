@@ -325,7 +325,7 @@ def needs_thread_resolution(pr, require_approval=True) -> bool:
      acquire claim
      dispatch polymorphic-agent:
        - create worktree at ${OMNI_WORKTREES}/merge-sweep-<run_id>/<repo>-pr-<N>/
-       - Skill(skill="onex:pr-polish", args="<N> --required-clean-runs <polish_clean_runs>")
+       - Skill(skill="onex:pr_polish", args="<N> --required-clean-runs <polish_clean_runs>")
        - re-check mergeable state after polish
        - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
          (if "Pull request is in clean status" error: retry without --auto as direct merge)

@@ -23,7 +23,7 @@ mode: full
 
 # dod-verify
 
-**Skill ID**: `onex:dod-verify`
+**Skill ID**: `onex:dod_verify`
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Ticket**: OMN-5174
