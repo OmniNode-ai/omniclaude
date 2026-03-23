@@ -97,7 +97,7 @@ gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup
 
 ### Step 2: Dry-Run Preview <!-- ai-slop-ok: pre-existing step structure -->
 
-Call `/plan-to-tickets` with `--dry-run` to preview what tickets would be created.
+Call `onex:plan-to-tickets` with `--dry-run` to preview what tickets would be created.
 
 ```bash
 /plan-to-tickets <plan-file> --dry-run [--repo <repo-label>] [--project <project>]
@@ -115,7 +115,7 @@ If the preview looks wrong, stop and discuss with your partner before creating t
 
 ### Step 3: Create Tickets <!-- ai-slop-ok: pre-existing step structure -->
 
-Call `/plan-to-tickets` (without `--dry-run`) to create the Linear tickets under the epic.
+Call `onex:plan-to-tickets` (without `--dry-run`) to create the Linear tickets under the epic.
 
 ```bash
 /plan-to-tickets <plan-file> [--repo <repo-label>] [--project <project>] [--skip-existing]
@@ -140,11 +140,11 @@ Compute routing from the plan file content, not just ticket count:
 
 | Condition | Route | Why |
 |-----------|-------|-----|
-| Multiple repos touched | `/epic-team` | Cross-repo needs orchestration |
-| Migrations or deploy steps present | `/epic-team` | Infrastructure changes need coordination |
-| 3+ distinct subsystems affected | `/epic-team` | Broad blast radius |
-| 3+ tickets (fallback) | `/epic-team` | Parallel execution needed |
-| 1-2 tickets, single repo, no migrations | `/ticket-pipeline` | Lightweight |
+| Multiple repos touched | `onex:epic-team` | Cross-repo needs orchestration |
+| Migrations or deploy steps present | `onex:epic-team` | Infrastructure changes need coordination |
+| 3+ distinct subsystems affected | `onex:epic-team` | Broad blast radius |
+| 3+ tickets (fallback) | `onex:epic-team` | Parallel execution needed |
+| 1-2 tickets, single repo, no migrations | `onex:ticket-pipeline` | Lightweight |
 
 Log the routing decision: "Routing to {skill} because: {reason}"
 
@@ -163,7 +163,7 @@ ticket assignment, worktree creation, and lifecycle notifications automatically.
 /ticket-pipeline <ticket-id>
 ```
 
-Run `/ticket-pipeline` for each ticket sequentially. Each pipeline handles the full
+Run `onex:ticket-pipeline` for each ticket sequentially. Each pipeline handles the full
 implement → review → PR → CI → merge workflow autonomously.
 
 ---
@@ -213,7 +213,7 @@ When all tickets/tasks close:
 
 1. **Discover open PRs**: `gh pr list --head <branch> --json number,title,state`
 2. **If PRs have review comments**: offer `pr-polish`
-3. **Offer**: "All work complete. Run /finishing-a-development-branch? [Y/n]"
+3. **Offer**: "All work complete. Run onex:finishing-a-development-branch? [Y/n]"
 4. If Y: invoke finishing-a-development-branch
 
 This is an offer only — user must approve before dispatch.
