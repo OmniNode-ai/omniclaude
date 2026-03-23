@@ -70,7 +70,7 @@ If `--skip-sync` is set, skip pull-all.sh. Still run infra health check (read-on
 ### Sync repos
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh 2>&1 | tail -20  # local-path-ok
 ```
 
 Parse stdout to build `repo_sync_status`. On failure → HIGH finding, continue.

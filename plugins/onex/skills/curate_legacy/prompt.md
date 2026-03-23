@@ -172,7 +172,7 @@ Write `{OUTPUT_ROOT}/_implementation_status.json`:
 
 Use Bash to compute SHA-256 hashes efficiently:
 ```bash
-find "$CORPUS_ROOT" -type f \( -name "*.md" -o -name "*.py" -o -name "*.yaml" -o -name "*.json" -o -name "*.txt" \) -exec sha256sum {} \;
+find "$CORPUS_ROOT" -maxdepth 6 -type f \( -name "*.md" -o -name "*.py" -o -name "*.yaml" -o -name "*.json" -o -name "*.txt" \) | head -500 | xargs sha256sum
 ```
 
 Use Glob + Read for frontmatter extraction and type guessing. Dispatch up to 3 parallel
