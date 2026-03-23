@@ -52,7 +52,7 @@ find_python() {
         return
     fi
 
-    # 4. Lite mode: accept system Python when OMNICLAUDE_MODE is lite
+    # 4. Lite mode: accept system Python when mode is lite (or mode.sh absent)
     if command -v python3 &>/dev/null; then
         local mode_sh
         mode_sh="$(dirname "${BASH_SOURCE[0]}")/../../lib/mode.sh"
@@ -63,6 +63,14 @@ find_python() {
                 echo "python3"
                 return
             fi
+        else
+            # mode.sh absent (e.g., incomplete deploy, container install):
+            # default to lite — accept system Python rather than hard-failing.
+            # WARNING: if this is a broken full-mode deploy, hooks will run against
+            # system Python which may lack omniclaude imports. Log for visibility.
+            echo "WARN: mode.sh not found at ${mode_sh}; defaulting to lite mode (system python3)" >&2
+            echo "python3"
+            return
         fi
     fi
 
