@@ -411,7 +411,6 @@ These modules are intended for external use:
 
 | Variable | Purpose | Required |
 |----------|---------|----------|
-| `OMNICLAUDE_INJECTION_ENABLED` | Master toggle for all context injection (patterns, advisory, intent, delegation, enrichment, ticket context, handshake, skill suggestions). Agent routing is unaffected. (default: false) | No |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string | Yes (for events) |
 | `KAFKA_ENVIRONMENT` | Environment label for logging/observability (not used for topic prefixing) | No |
 | `POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD` | Database connection | No |
