@@ -61,6 +61,13 @@ if [[ "$CURRENT_MODE" == "lite" ]]; then
     exit 0
 fi
 
+# --- Injection toggle ---
+# When false (default), all context injection steps are skipped:
+#   learned patterns, pattern advisory, intent classification,
+#   local delegation, local enrichment, ticket context injection.
+# Agent routing is always active regardless of this flag.
+INJECTION_ENABLED=$(_normalize_bool "${OMNICLAUDE_INJECTION_ENABLED:-false}")
+
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 SKIP_IF_SESSION_INJECTED="${OMNICLAUDE_SESSION_SKIP_IF_INJECTED:-true}"
 
@@ -261,13 +268,17 @@ PATTERN_SUCCESS="false"
 PATTERN_COUNT=0
 COHORT="treatment"
 RETRIEVAL_MS=0
-if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    log "Injection disabled (OMNICLAUDE_INJECTION_ENABLED=${OMNICLAUDE_INJECTION_ENABLED:-false}) — skipping learned patterns"
+elif [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
     if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" check --session-id "${SESSION_ID}" >/dev/null 2>/dev/null; then
         SESSION_ALREADY_INJECTED=true
     fi
 fi
 
-if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    : # injection disabled — skip pattern loading
+elif [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     log "Loading learned patterns via context injection..."
 
     # Validate numeric env vars before passing to jq --argjson
@@ -424,7 +435,9 @@ fi
 # Respects session cooldown from OMN-2263.
 PATTERN_ADVISORY=""
 ADVISORY_FORMATTER="${HOOKS_LIB}/pattern_advisory_formatter.py"
-if [[ -f "$ADVISORY_FORMATTER" ]]; then
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    : # injection disabled — skip pattern advisory
+elif [[ -f "$ADVISORY_FORMATTER" ]]; then
     ADVISORY_INPUT=$(jq -n --arg session_id "$SESSION_ID" '{session_id: $session_id}' 2>/dev/null)
     if [[ -n "$ADVISORY_INPUT" ]]; then
         set +e
@@ -457,7 +470,9 @@ fi
 #   - Exits 0 on all failures (invariant)
 INTENT_CONTEXT=""
 INTENT_CLASSIFIER="${HOOKS_LIB}/intent_classifier.py"
-if [[ -f "$INTENT_CLASSIFIER" ]]; then
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    : # injection disabled — skip intent classification
+elif [[ -f "$INTENT_CLASSIFIER" ]]; then
     set +e
     INTENT_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 1 "$PYTHON_CMD" \
         "$INTENT_CLASSIFIER" \
@@ -569,6 +584,7 @@ fi
 # exits 0 on all failures so this block never blocks the hook.
 DELEGATION_RESULT=""
 DELEGATION_ACTIVE="false"
+# Gate: injection must be enabled for delegation to activate.
 # Delegation activates when at least one local LLM endpoint is configured.
 # This follows the connection-config-inference pattern (OMN-5510): no separate
 # boolean flags — if LLM_CODER_URL or LLM_DEEPSEEK_R1_URL is set, delegation
@@ -577,7 +593,9 @@ _DELEGATION_KILL_SWITCH=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-true}")
 _HAS_LLM_ENDPOINTS="false"
 [[ -n "${LLM_CODER_URL:-}" || -n "${LLM_DEEPSEEK_R1_URL:-}" ]] && _HAS_LLM_ENDPOINTS="true"
 
-if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "false" ]] \
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    : # injection disabled — skip local delegation
+elif [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "false" ]] \
         && [[ "$WORKFLOW_DETECTED" != "true" ]] \
         && [[ ! "$PROMPT" =~ ^/ ]]; then  # Slash commands invoke structured skills/commands — never delegate to local models
     DELEGATION_HANDLER="${HOOKS_LIB}/delegation_orchestrator.py"
@@ -709,7 +727,9 @@ ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
 ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
 INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
-if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+if [[ "$INJECTION_ENABLED" != "true" ]]; then
+    : # injection disabled — skip local enrichment
+elif [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
     # Normalize routing sentinels to empty string so Python maps them to None.
     # "NO_AGENT_DETECTED" is a jq fallback for absent/malformed routing JSON.
     # "null" is the literal string jq emits when the agent_name field is JSON null.
@@ -774,6 +794,8 @@ fi
 FIRST_PROMPT_TICKET_CONTEXT=""
 _TICKET_INJECT_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
 _TICKET_INJECT_ENABLED=$(_normalize_bool "$_TICKET_INJECT_ENABLED")
+# Gate: injection must be enabled for ticket context injection
+[[ "$INJECTION_ENABLED" != "true" ]] && _TICKET_INJECT_ENABLED="false"
 # R6: Configurable timeout in seconds (integer; sub-second becomes 1 via ceiling)
 _TICKET_INJECT_TIMEOUT_SEC="${OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC:-4}"
 [[ "$_TICKET_INJECT_TIMEOUT_SEC" =~ ^[0-9]+$ ]] || _TICKET_INJECT_TIMEOUT_SEC=4
