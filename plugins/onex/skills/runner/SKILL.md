@@ -60,27 +60,25 @@ No arguments required. The skill queries the GitHub API and SSH-inspects the CI 
 When all runners are healthy:
 
 ```
-Runner Status — 2026-03-01 14:23:07 UTC
+Runner Status — 2026-03-23
 
-+--------------------------+--------+--------------+-------------+----------+------------+---------+--------+
-| Runner                   | Status | Runner Group | Runner Ver  | gh Ver   | kubectl    | uv      | Uptime |
-+--------------------------+--------+--------------+-------------+----------+------------+---------+--------+
-| omnibase-runner-1        | idle   | omnibase-ci  | 2.314.1     | 2.44.1   | v1.29.2    | 0.5.4   | 3d 2h  |
-| omnibase-runner-2        | busy   | omnibase-ci  | 2.314.1     | 2.44.1   | v1.29.2    | 0.5.4   | 3d 2h  |
-| omnibase-runner-3        | idle   | omnibase-ci  | 2.314.1     | 2.44.1   | v1.29.2    | 0.5.4   | 3d 2h  |
-+--------------------------+--------+--------------+-------------+----------+------------+---------+--------+
++-------------------+--------+--------------+-------------+----------+------------+---------+---------+
+| Runner            | Status | Runner Group | Runner Ver  | gh Ver   | kubectl    | uv      | Uptime  |
++-------------------+--------+--------------+-------------+----------+------------+---------+---------+
+| omninode-runner-9 | idle   | (none)       | 2.331.0     | 2.67.0   | v1.32.1    | 0.6.2   | 2 weeks |
++-------------------+--------+--------------+-------------+----------+------------+---------+---------+
 
 Host metrics (192.168.86.201): <!-- onex-allow-internal-ip -->
-  /var/lib/docker disk: 42% used (126 GB / 300 GB)
-  Docker build cache: 8.3 GB
+  / disk: 38% used (650 GB / 1.8 TB)
+  Docker build cache: 0 B
 ```
 
 When alerts are triggered:
 
 ```
 ALERTS
-  [OFFLINE] omnibase-runner-2 has been offline for 12 minutes (threshold: 5m)
-  [DISK] /var/lib/docker at 74% (threshold: 70%)
+  [OFFLINE] omninode-runner-9 has been offline for 12 minutes (threshold: 5m)
+  [DISK] / at 74% (threshold: 70%)
 
 Runner Status — 2026-03-01 14:23:07 UTC
   ...
@@ -116,8 +114,9 @@ org.omninode.uv.version
 Read via:
 
 ```bash
-# SSH to CI host, inspect each container # onex-allow-internal-ip
-ssh 192.168.86.201 "docker inspect omnibase-runner-1 --format '{{json .Config.Labels}}'" # onex-allow-internal-ip
+# SSH to CI host, inspect the runner container # onex-allow-internal-ip
+# Runner names are discovered from the GitHub API (Step 1), not hardcoded
+ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}'" # onex-allow-internal-ip
 ```
 
 ### Host-Level Metrics
@@ -183,8 +182,8 @@ This returns per-runner: `id`, `name`, `status` (`online`/`offline`), `busy`,
 #### Step 2: SSH to CI host -- collect Docker labels and uptime <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 ```bash
-# For each runner container (omnibase-runner-1, omnibase-runner-2, omnibase-runner-3):
-ssh 192.168.86.201 "docker inspect omnibase-runner-1 --format '{{json .Config.Labels}}' && docker ps --filter name=omnibase-runner-1 --format '{{.Status}}'" # onex-allow-internal-ip
+# For each runner discovered from the GitHub API in Step 1:
+ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{json .Config.Labels}}' && docker ps --filter name=omninode-runner-9 --format '{{.Status}}'" # onex-allow-internal-ip
 ```
 
 Parse `org.omninode.runner.version`, `org.omninode.gh.version`, `org.omninode.kubectl.version`,
@@ -271,12 +270,12 @@ Example dry-run output:
 [DRY RUN] Runner deploy — 192.168.86.201 <!-- onex-allow-internal-ip -->
 
 Current compose config:
-  Services: omnibase-runner-1, omnibase-runner-2, omnibase-runner-3
-  Image: omnibase-ci-runner:latest (built 2026-02-28)
+  Services: omninode-runner-9
+  Image: omnibase-ci-runner:latest (built 2026-03-09)
 
 Version check:
-  Dockerfile ARG RUNNER_VERSION=2.314.1
-  Running image label: runner_version=2.314.1  up to date
+  Dockerfile ARG RUNNER_VERSION=2.331.0
+  Running image label: runner_version=2.331.0  up to date
   Dockerfile ARG NODE_VERSION=20
   Running image label: node_version=20          up to date
 
@@ -339,11 +338,11 @@ If prerequisites fail, report clearly which check failed and how to fix it. Do n
 
 ```bash
 # SSH to host and show compose config (CI_HOST=192.168.86.201) # onex-allow-internal-ip
-ssh 192.168.86.201 "cd ~/omnibase_infra/docker && docker compose -f docker-compose.runners.yml config" # onex-allow-internal-ip
+ssh 192.168.86.201 "cd ~/.omnibase/runners/docker && docker compose -f docker-compose.runners.yml config" # onex-allow-internal-ip
 
-# Compare Dockerfile ARG versions to running image labels
-ssh 192.168.86.201 "docker inspect omnibase-runner-1 --format '{{.Config.Labels}}' 2>/dev/null || echo 'container not running'" # onex-allow-internal-ip
-ssh 192.168.86.201 "grep -E '^ARG (RUNNER|NODE)_VERSION' ~/omnibase_infra/docker/runners/Dockerfile" # onex-allow-internal-ip
+# Compare Dockerfile ARG versions to running image labels (use runner name from GitHub API)
+ssh 192.168.86.201 "docker inspect omninode-runner-9 --format '{{.Config.Labels}}' 2>/dev/null || echo 'container not running'" # onex-allow-internal-ip
+ssh 192.168.86.201 "grep -E '^ARG (RUNNER|NODE)_VERSION' ~/.omnibase/runners/docker/runners/Dockerfile" # onex-allow-internal-ip
 ```
 
 Print a clear summary of: current state, what would change, and which containers would be
