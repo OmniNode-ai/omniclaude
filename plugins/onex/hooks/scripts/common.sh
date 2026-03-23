@@ -137,7 +137,9 @@ _try_inline_venv_repair() {
     # Find system python3 (must not be inside our own broken venv)
     local sys_python=""
     local candidate
-    for candidate in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3; do
+    # Fast-path candidates: common locations on macOS + Linux containers.
+    # The PATH fallback search below handles all other locations.
+    for candidate in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3 /usr/bin/python3.11 /usr/bin/python3.12 /usr/bin/python3.13; do
         if [[ -x "$candidate" ]]; then
             sys_python="$candidate"
             break
