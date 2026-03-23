@@ -21,6 +21,7 @@ from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.classifier impor
     ORCHESTRATOR_TYPES,
     UNKNOWN_TYPE,
     applicable_checks,
+    batch_gaps_for_ticketize,
     requires_event_bus,
 )
 from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.node import (
@@ -33,5 +34,6 @@ __all__ = [
     "ORCHESTRATOR_TYPES",
     "UNKNOWN_TYPE",
     "applicable_checks",
+    "batch_gaps_for_ticketize",
     "requires_event_bus",
 ]

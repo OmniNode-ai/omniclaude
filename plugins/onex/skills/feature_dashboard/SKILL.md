@@ -34,6 +34,9 @@ args:
   - name: online
     description: "true | false (default: false); verify Linear ticket existence via API (audit only)"
     default: "false"
+  - name: no-batch
+    description: "true | false (default: false); disable gap batching in ticketize mode — create one ticket per skill (pre-OMN-6163 behavior)"
+    default: "false"
 ticket: OMN-3503
 mode: full
 ---
@@ -141,15 +144,35 @@ Sort discovered skills by name (alphabetical, deterministic).
 2. Load `{output-dir}/feature-dashboard.stable.json`. Fail immediately with a clear error if:
    - File is absent, OR
    - File fails to parse as `ModelFeatureDashboardResult`
-3. For each skill where `status` is `partial` or `broken`:
-   a. Announce: "Creating ticket for {skill} ({N} gaps)"
+3. Compute ticket descriptors using `batch_gaps_for_ticketize()` from the classifier module:
+   - Pass `skills` (filtered to `partial` or `broken` status) and `batch=True` (default)
+   - If `--no-batch` is set, pass `batch=False` to preserve pre-OMN-6163 per-skill behavior
+4. For each `ModelBatchedGapTicket` returned (each includes `worst_severity` for sorting):
+   a. Announce:
+      - If `is_batched=True`: "Creating batched ticket for {gap_count} identical gaps across {len(affected_skills)} skills"
+      - If `is_batched=False`: "Creating ticket for {affected_skills[0]} ({gap_count} gaps)"
    b. Call `mcp__linear-server__save_issue` with:
-      - `title`: `[Feature Dashboard] {skill}: {worst_severity} gaps ({N} total)`
-        where `worst_severity` is the highest severity in `gaps` (CRITICAL > HIGH > MEDIUM > LOW)
-      - `description`: Markdown list of all gaps, each with `message` and `suggested_fix`
+      - `title`: the `title` field from the ticket descriptor (includes worst_severity)
+      - `description`: the `description` field from the ticket descriptor
       - `team`: value from `--team` arg (default: `OmniNode`)
    c. Log returned ticket ID.
-4. No Linear tools may be called in `audit` mode — ticketize is always a separate invocation.
+5. No Linear tools may be called in `audit` mode -- ticketize is always a separate invocation.
+
+### Gap batching algorithm (OMN-6163)
+
+When `batch=True` (default):
+
+- **CRITICAL and HIGH gaps**: Produce one ticket per skill (these require skill-specific investigation).
+- **MEDIUM and LOW gaps**: Group by identical `(layer, message)` across all affected skills.
+  - If the same gap message appears across N skills, a single batched ticket is created listing all
+    N affected skills in the description.
+  - If a LOW/MEDIUM gap is unique to one skill, it still gets its own per-skill ticket.
+
+This prevents ticket explosion when a single fix (e.g., "add `metadata.ticket` to contract.yaml")
+applies uniformly across many skills. For the OMN-6094 audit, this would have reduced 97 tickets to ~17.
+
+**Reference implementation**: `batch_gaps_for_ticketize()` in
+`src/omniclaude/nodes/node_skill_feature_dashboard_orchestrator/classifier.py`
 
 ## Node Type Classifier
 

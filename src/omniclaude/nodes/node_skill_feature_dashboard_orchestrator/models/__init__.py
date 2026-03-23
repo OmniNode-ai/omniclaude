@@ -7,10 +7,12 @@ Model Ownership:
 """
 
 from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.models.model_result import (
+    BATCH_SEVERITY_THRESHOLD,
     AuditCheckName,
     AuditCheckStatus,
     GapSeverity,
     ModelAuditCheck,
+    ModelBatchedGapTicket,
     ModelContractMetadata,
     ModelContractYaml,
     ModelEventBus,
@@ -23,8 +25,10 @@ from omniclaude.nodes.node_skill_feature_dashboard_orchestrator.models.model_res
 __all__ = [
     "AuditCheckName",
     "AuditCheckStatus",
+    "BATCH_SEVERITY_THRESHOLD",
     "GapSeverity",
     "ModelAuditCheck",
+    "ModelBatchedGapTicket",
     "ModelContractMetadata",
     "ModelContractYaml",
     "ModelEventBus",
