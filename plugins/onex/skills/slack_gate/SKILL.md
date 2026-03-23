@@ -38,8 +38,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json"
     fields:
-      - status: "success" | "failed" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "accepted" | "rejected" | "timeout"  # domain-specific granularity
+      - status: '"success" | "failed" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"accepted" | "rejected" | "timeout"  # domain-specific granularity'
       - extra: "{risk_level, reply, thread_ts, elapsed_minutes}"
 args:
   - name: risk_level

@@ -17,7 +17,7 @@ args:
     description: PR number to fix CI failures for
     required: false
   - name: --branch
-    description: Branch name to fix CI failures for (default: current branch)
+    description: "Branch name to fix CI failures for (default: current branch)"
     required: false
   - name: --skip-patterns
     description: "Comma-separated job/step name patterns to skip (e.g., 'test_*,lint')"

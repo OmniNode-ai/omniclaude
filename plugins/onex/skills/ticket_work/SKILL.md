@@ -28,8 +28,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/ticket-work.json"
     fields:
-      - status: "success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "done" | "questions_pending" | null  # domain-specific granularity
+      - status: '"success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"done" | "questions_pending" | null  # domain-specific granularity'
       - ticket_id: str
       - extra: "{pr_url, phase_reached, commits}"
 args:

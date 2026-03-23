@@ -166,6 +166,7 @@ error_handling:
 
 # Metadata
 metadata:
+  ticket: OMN-6094
   author: OmniNode Team
   license: MIT
   maturity: alpha

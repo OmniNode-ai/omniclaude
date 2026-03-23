@@ -38,8 +38,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json"
     fields:
-      - status: "success" | "gated" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "merged" | "held" | "timeout" | null  # domain-specific granularity
+      - status: '"success" | "gated" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"merged" | "held" | "timeout" | null  # domain-specific granularity'
       - pr_number: int
       - repo: str
       - ticket_id: str | null

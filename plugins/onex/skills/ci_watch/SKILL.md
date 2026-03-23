@@ -35,8 +35,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/ci-watch.json"
     fields:
-      - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "passed" | "capped" | "timeout" | null  # domain-specific granularity
+      - status: '"success" | "partial" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"passed" | "capped" | "timeout" | null  # domain-specific granularity'
       - pr_number: int
       - repo: str
       - extra: "{fix_cycles_used, elapsed_minutes, preexisting_fixes_dispatched}"

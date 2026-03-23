@@ -33,7 +33,7 @@ args:
     description: "Minimum severity to act on: WARNING | ERROR (default: WARNING)"
     required: false
   - name: --max-parallel-repos
-    description: Repos scanned in parallel (default: 4)
+    description: "Repos scanned in parallel (default: 4)"
     required: false
 inputs:
   - name: repos

@@ -33,7 +33,7 @@ args:
     description: Linear project name
     required: false
   - name: --team
-    description: Linear team name (default: Omninode)
+    description: "Linear team name (default: Omninode)"
     required: false
   - name: --allow-arch-violation
     description: Bypass architecture dependency validation

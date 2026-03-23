@@ -22,8 +22,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/decompose_epic.json"
     fields:
-      - status: "success" | "dry_run" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "created" | null  # domain-specific granularity
+      - status: '"success" | "dry_run" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"created" | null  # domain-specific granularity'
       - extra: "{epic_id, created_tickets, count}"
 args:
   - name: epic_id

@@ -12,7 +12,7 @@ tags:
 author: OmniClaude Team
 args:
   - name: team
-    description: Linear team name to query (default: Omninode)
+    description: "Linear team name to query (default: Omninode)"
     required: false
   - name: --sync
     description: "Sync MASTER_TICKET_PLAN.md with current Linear state. Reproduces former ticket-plan-sync behavior."

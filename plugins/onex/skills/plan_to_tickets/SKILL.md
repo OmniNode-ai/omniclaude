@@ -27,7 +27,7 @@ args:
     description: Skip tickets that already exist (don't ask)
     required: false
   - name: --team
-    description: Linear team name (default: Omninode)
+    description: "Linear team name (default: Omninode)"
     required: false
   - name: --repo
     description: Repository label for all tickets (e.g., omniclaude, omnibase_core)

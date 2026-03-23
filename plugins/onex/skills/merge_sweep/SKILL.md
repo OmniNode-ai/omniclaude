@@ -16,7 +16,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: Comma-separated repo names to scan (default: all repos in omni_home)
+    description: "Comma-separated repo names to scan (default: all repos in omni_home)"
     required: false
   - name: --dry-run
     description: Print candidates without enabling auto-merge or running pr-polish; zero filesystem writes including claim files
@@ -25,7 +25,7 @@ args:
     description: "Merge strategy: squash | merge | rebase (default: squash)"
     required: false
   - name: --require-approval
-    description: Require GitHub review approval (default: true)
+    description: "Require GitHub review approval (default: true)"
     required: false
   - name: --require-up-to-date
     description: "Branch update policy: always | never | repo (default: repo — respect branch protection)"
@@ -34,13 +34,13 @@ args:
     description: "Hard cap on auto-merge candidates per run (default: 0 = unlimited). Set to a positive number to limit."
     required: false
   - name: --max-parallel-prs
-    description: Concurrent auto-merge enable operations (default: 5)
+    description: "Concurrent auto-merge enable operations (default: 5)"
     required: false
   - name: --max-parallel-repos
-    description: Repos scanned in parallel (default: 3)
+    description: "Repos scanned in parallel (default: 3)"
     required: false
   - name: --max-parallel-polish
-    description: Concurrent pr-polish agents (default: 2; pr-polish is resource-intensive)
+    description: "Concurrent pr-polish agents (default: 2; pr-polish is resource-intensive)"
     required: false
   - name: --skip-polish
     description: Skip Track B entirely; only process merge-ready PRs
@@ -49,7 +49,7 @@ args:
     description: "Consecutive clean local-review passes required during pr-polish (default: 2)"
     required: false
   - name: --authors
-    description: Limit to PRs by these GitHub usernames (comma-separated; default: all)
+    description: "Limit to PRs by these GitHub usernames (comma-separated; default: all)"
     required: false
   - name: --since
     description: "Filter PRs updated after this date (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ). Avoids sweeping ancient PRs."
