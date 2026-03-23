@@ -26,7 +26,6 @@ outputs:
   - name: skill_result
     type: TriageReport
     description: "Written to $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml"
-mode: full
 ---
 
 # Linear Triage

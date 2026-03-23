@@ -2,6 +2,15 @@
 
 You are generating a prioritized master ticket plan from Linear.
 
+## Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--sync` | false | Sync ticket priorities back to Linear |
+| `--mode <mode>` | full | Plan mode: `full`, `summary`, or `delta` |
+| `--output-path <path>` | stdout | Write plan to file instead of stdout |
+| `--dry-run` | false | Preview plan without syncing to Linear |
+
 ## Initialization
 
 When `/ticket-plan [team]` is invoked:

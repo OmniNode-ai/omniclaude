@@ -41,7 +41,6 @@ outputs:
   - name: plan_path
     type: str
     description: Path to the action plan (if Phase 4 ran)
-mode: full
 ---
 
 # begin-day Skill

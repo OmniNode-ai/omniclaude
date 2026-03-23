@@ -4,7 +4,6 @@ mode: full
 level: advanced
 debug: true
 index: true
-mode: full
 ---
 
 # System Status

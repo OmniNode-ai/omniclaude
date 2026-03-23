@@ -14,7 +14,6 @@ args:
   - name: run_id
     description: "The run ID to set as active"
     required: true
-mode: full
 ---
 
 # Set Active Run

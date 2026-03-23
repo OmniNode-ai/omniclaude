@@ -23,7 +23,6 @@ args:
   - name: --max-agents
     description: "Maximum concurrent agents (default: 5)"
     required: false
-mode: full
 ---
 
 # Multi-Agent

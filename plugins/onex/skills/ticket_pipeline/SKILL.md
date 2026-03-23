@@ -39,7 +39,6 @@ args:
   - name: --docs-only
     description: "User assertion that all changes are documentation-only (.md/.yaml). Skips integration verification. Misuse can skip required checks."
     required: false
-mode: full
 ---
 
 # Ticket Pipeline

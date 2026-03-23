@@ -3,7 +3,6 @@ description: Record, query, and conflict-check architectural and design decision
 mode: full
 level: intermediate
 debug: false
-mode: full
 ---
 
 # decision-store skill

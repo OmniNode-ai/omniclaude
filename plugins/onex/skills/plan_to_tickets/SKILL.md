@@ -35,7 +35,6 @@ args:
   - name: --allow-arch-violation
     description: Bypass architecture dependency validation
     required: false
-mode: full
 ---
 
 # Batch Create Tickets from Plan

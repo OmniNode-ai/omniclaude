@@ -355,6 +355,15 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
+      # Skill contract validation (OMN-6193) — validates args parity, sub-skill refs,
+      # duplicate frontmatter, spec-prompt predicates
+      - id: skill-contract-validation
+        name: Skill Contract Validation
+        language: system
+        entry: bash scripts/validate_skill_contracts_wrapper.sh
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^plugins/onex/skills/
       # Topic naming lint — validate onex.{kind}.{producer}.{event}.v{n} convention
       # (OMN-3259) Triggers on any *.py change; always scans full source tree.
       # Pre-existing violations suppressed by scripts/validation/topic_naming_baseline.txt

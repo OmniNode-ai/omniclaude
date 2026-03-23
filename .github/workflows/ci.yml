@@ -1578,6 +1578,49 @@ jobs:
       - name: Run merge-sweep contract tests
         run: uv run pytest tests/integration/skills/merge_sweep/ -v -m "unit and not integration"
 
+  # ---------------------------------------------------------------------------
+  # Skill Contract Validation (OMN-6193)
+  # ---------------------------------------------------------------------------
+  # Validates argument parity, sub-skill references, duplicate frontmatter,
+  # and spec-prompt predicate coverage across all skills.
+  skill-contract-validation:
+    name: Skill Contract Validation
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Checkout onex_change_control validator
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          path: onex_change_control
+          sparse-checkout: |
+            scripts/validation/
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate skill contracts
+        # Initially without --strict; promote to --strict after baseline warnings are resolved
+        run: python onex_change_control/scripts/validation/validate_skill_contracts.py --skills-root plugins/onex/skills
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1629,6 +1672,8 @@ jobs:
       - mode-metadata-guard
       # Merge-sweep contract (OMN-6189)
       - merge-sweep-contract
+      # Skill contract validation (OMN-6193)
+      - skill-contract-validation
     if: always()
     steps:
       - name: Check quality results
@@ -1660,7 +1705,8 @@ jobs:
             "version-pin-check=${{ needs.version-pin-check.result }}" \
             "skill-hygiene=${{ needs.skill-hygiene.result }}" \
             "mode-metadata-guard=${{ needs.mode-metadata-guard.result }}" \
-            "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}"; do
+            "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
+            "skill-contract-validation=${{ needs.skill-contract-validation.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then

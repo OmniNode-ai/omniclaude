@@ -11,7 +11,6 @@ tags:
   - contribution
   - pull-request
 author: OmniClaude Team
-mode: full
 ---
 
 # Sharing Skills

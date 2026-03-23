@@ -3,7 +3,6 @@ description: Comprehensive PR review with strict priority-based organization and
 mode: full
 level: basic
 debug: false
-mode: full
 ---
 
 ## Dispatch Requirement

@@ -32,7 +32,6 @@ args:
   - name: --create-tickets
     description: "Create Linear tickets for CRITICAL findings (opt-in, not default)"
     required: false
-mode: full
 ---
 
 # Env Parity Checker
