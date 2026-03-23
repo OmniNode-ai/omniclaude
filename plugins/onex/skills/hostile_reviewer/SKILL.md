@@ -1,5 +1,5 @@
 ---
-description: Multi-model adversarial code review using local LLMs (DeepSeek-R1, Qwen3-Coder) and optionally Codex CLI. Returns per-model findings with attribution. Output is MANDATORY.
+description: Multi-model adversarial code review using Codex CLI (primary) and local LLMs (DeepSeek-R1) for cross-check. Returns per-model findings with attribution. Output is MANDATORY.
 mode: both
 version: 2.0.0
 level: intermediate
@@ -28,7 +28,7 @@ args:
     description: Linear ticket ID for loading TCB constraints
     required: false
   - name: models
-    description: Comma-separated model list (default deepseek-r1,qwen3-coder). Available models are deepseek-r1, qwen3-coder, qwen3-14b, codex.
+    description: Comma-separated model list (default codex,deepseek-r1). Available models are codex, deepseek-r1, qwen3-coder, qwen3-14b.
     required: false
 ---
 
@@ -50,11 +50,17 @@ Agent(
 
 ## Description
 
-Multi-model adversarial review that calls local LLMs (DeepSeek-R1, Qwen3-Coder, Qwen3-14B)
-and optionally Codex CLI to conduct independent adversarial reviews. Returns all findings
-with per-model attribution. Output is MANDATORY -- the skill always produces a result
-artifact even when verdict is `clean` (empty `findings` array is valid for `clean`).
-Cannot rubber-stamp without running the models.
+Multi-model adversarial review that calls Codex CLI (primary, ChatGPT-class model) and
+local LLMs (DeepSeek-R1) for independent cross-check. Returns all findings with per-model
+attribution. Output is MANDATORY -- the skill always produces a result artifact even when
+verdict is `clean` (empty `findings` array is valid for `clean`). Cannot rubber-stamp
+without running the models.
+
+Codex CLI is the primary reviewer because it produces high signal-to-noise findings
+(typically 5-15 precise structural observations vs 40-55 pattern-level noise from local
+models alone). DeepSeek-R1 provides a local reasoning cross-check. Additional local
+models (qwen3-coder, qwen3-14b) are available via `--models` override when broader
+coverage is needed.
 
 This skill consolidates the former `hostile-reviewer` (PR-only, Claude-only, exactly-2-risks)
 and `external-model-review` (file-only, multi-model) into a single unified skill.
@@ -86,13 +92,13 @@ This replaces the former `/external-model-review` skill.
 **PR mode (default models):**
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-coder
+  --pr <N> --repo <owner/repo> --model codex --model deepseek-r1
 ```
 
 **File mode (default models):**
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --file <path> --model deepseek-r1 --model qwen3-coder
+  --file <path> --model codex --model deepseek-r1
 ```
 
 When `--models` is provided, expand into repeated `--model` args dynamically:
@@ -111,18 +117,21 @@ uv run python -m omniintelligence.review_pairing.cli_review \
 
 ## Model Selection
 
-Default models: `deepseek-r1,qwen3-coder`
+Default models: `codex,deepseek-r1`
+
+Codex CLI is the primary reviewer (ChatGPT-class model, highest signal-to-noise ratio).
+DeepSeek-R1 provides a local reasoning cross-check without network dependency.
 
 Override with `--models`:
 ```bash
-/hostile-reviewer --pr 433 --repo OmniNode-ai/omniintelligence --models deepseek-r1,qwen3-14b,codex
+/hostile-reviewer --pr 433 --repo OmniNode-ai/omniintelligence --models codex,qwen3-coder,deepseek-r1
 ```
 
 Available models (see omniintelligence `review_pairing/models.py` for registry):
+- `codex` -- Codex CLI (ChatGPT-class model, requires `codex` binary in PATH)
 - `deepseek-r1` -- DeepSeek-R1-Distill-Qwen-32B (M2 Ultra, reasoning/code review)
 - `qwen3-coder` -- Qwen3-Coder-30B-A3B AWQ-4bit (RTX 5090, long context code)
 - `qwen3-14b` -- Qwen3-14B-AWQ (RTX 4090, mid-tier)
-- `codex` -- OpenAI Codex CLI (requires `codex` binary)
 
 ## Output Format
 
@@ -141,7 +150,7 @@ BEFORE the detailed grouped findings:
 
 ```
 DISAGREEMENT: DeepSeek-R1 flags "Missing retry logic" as CRITICAL.
-Qwen3-Coder did not flag this issue. Review the evidence below.
+Codex did not flag this issue. Review the evidence below.
 ```
 
 ### Grouped Findings
@@ -156,7 +165,7 @@ Present findings grouped by source model:
    Evidence: ...
    Proposed fix: ...
 
-## Qwen3-Coder (3 findings)
+## Codex (6 findings)
 ...
 ```
 
@@ -195,10 +204,11 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
 {
   "mode": "pr|file",
   "target": "<pr_number or file_path>",
-  "models_requested": ["deepseek-r1", "qwen3-coder"],
-  "models_succeeded": ["deepseek-r1"],
-  "models_failed": [{"model": "qwen3-coder", "error": "..."}],
+  "models_requested": ["codex", "deepseek-r1"],
+  "models_succeeded": ["codex", "deepseek-r1"],
+  "models_failed": [],
   "per_model_severity_counts": {
+    "codex": {"CRITICAL": 0, "MAJOR": 2, "MINOR": 3, "NIT": 1},
     "deepseek-r1": {"CRITICAL": 1, "MAJOR": 2, "MINOR": 1, "NIT": 0}
   },
   "findings": [
@@ -216,7 +226,7 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
       "issue": "...",
       "model_a": "deepseek-r1",
       "model_a_severity": "CRITICAL",
-      "model_b": "qwen3-coder",
+      "model_b": "codex",
       "model_b_severity": null
     }
   ],
