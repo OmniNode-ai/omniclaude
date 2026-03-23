@@ -508,6 +508,12 @@ Phase 3 flows automatically from Phase 2b convergence. It is not optional.
 - Single repo, sequential, no external deps -> ticket-pipeline
 - Multiple repos or parallel work -> plan-to-tickets + epic-team
 
+**Linear availability check**: Before launching, probe Linear MCP availability
+(see `_shared/linear-availability-check.md`). If unavailable, append `--local`
+to the executing-plans invocation. This modifies the auto-launch behavior: instead
+of creating Linear tickets, executing-plans will create local YAML stubs and dispatch
+general-purpose agents directly.
+
 **Default behavior: auto-launch.** After the pre-launch checklist passes, immediately invoke
 `onex:executing-plans` with the exact plan file path. No prompt, no confirmation gate. The entire
 chain — planning -> plan-to-tickets -> epic-team or ticket-pipeline — runs autonomously.
