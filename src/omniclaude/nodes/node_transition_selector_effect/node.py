@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Node Transition Selector Effect — local model as constrained transition selector.
 
-This effect node wires the local model (Qwen3-14B at LLM_CODER_FAST_URL) into
+This effect node wires the local model (Qwen3-14B via LLM_CODER_FAST_URL) into
 the agent graph navigation loop as a constrained transition selector. The model
 is given a bounded typed action set and selects exactly one transition.
 
@@ -56,11 +56,18 @@ logger = logging.getLogger(__name__)
 # Prompt template version — must match contract.yaml prompt_template.version
 _PROMPT_TEMPLATE_VERSION = "1.0.0"
 
-# Default model endpoint from environment, falling back to contract default
-_DEFAULT_LLM_ENDPOINT = os.environ.get(
-    "LLM_CODER_FAST_URL",
-    "http://192.168.86.201:8001",  # onex-allow-internal-ip
-)
+
+def _resolve_endpoint() -> str:
+    """Resolve LLM endpoint from environment. Fail fast if not configured."""
+    url = os.environ.get("LLM_CODER_FAST_URL", "")
+    if not url:
+        raise RuntimeError(
+            "LLM_CODER_FAST_URL is not set. "
+            "The transition selector requires an explicit LLM endpoint. "
+            "Set LLM_CODER_FAST_URL in ~/.omnibase/.env or your environment."
+        )
+    return url
+
 
 # Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds).
 # asyncio.wait_for is the authoritative timeout; httpx timeout is set slightly higher so that
@@ -92,7 +99,6 @@ class NodeTransitionSelectorEffect(NodeEffect):
             container: ONEX container for dependency injection.
         """
         super().__init__(container)
-        self._llm_endpoint = _DEFAULT_LLM_ENDPOINT
 
     # ------------------------------------------------------------------
     # Public API
@@ -141,6 +147,18 @@ class NodeTransitionSelectorEffect(NodeEffect):
             raw_output = await asyncio.wait_for(
                 self._call_model(prompt),
                 timeout=_SELECTION_TIMEOUT_SECONDS,
+            )
+        except RuntimeError as exc:
+            # Configuration error (e.g. LLM_CODER_FAST_URL not set)
+            logger.warning(
+                "transition_selector.model_unavailable",
+                extra={"correlation_id": str(correlation_id), "error": str(exc)},
+            )
+            return ModelTransitionSelectorResult(
+                error_kind=SelectionErrorKind.MODEL_UNAVAILABLE,
+                error_detail=str(exc),
+                duration_ms=time.monotonic() * 1000.0 - start_ms,
+                correlation_id=correlation_id,
             )
         except TimeoutError:
             logger.warning(
@@ -388,7 +406,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
             httpx.HTTPError: On network or HTTP errors.
             ValueError: If model returns no choices.
         """
-        endpoint = self._llm_endpoint.rstrip("/")
+        endpoint = _resolve_endpoint().rstrip("/")
         url = f"{endpoint}/v1/chat/completions"
 
         payload = {
