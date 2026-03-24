@@ -806,6 +806,8 @@ class TestEventRegistryIntegration:
             "plan.review.completed",
             # Hostile reviewer completion (OMN-5864)
             "hostile.reviewer.completed",
+            # Hostile reviewer failure (OMN-6180)
+            "hostile.reviewer.failed",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
