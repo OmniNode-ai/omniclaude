@@ -50,10 +50,11 @@ Check for consecutive no-op cycles:
   Print: "WARNING: {count + 1} consecutive autopilot cycles found zero tickets.
   Unconditional surface probes still running but ticket-gated verification has not occurred."
 
-Initialize step tracking: all 14 steps start as `not_run`, using canonical IDs:
+Initialize step tracking: all 15 steps start as `not_run`, using canonical IDs:
 ```
 A1_merge_sweep, A2_deploy_local_plugin, A3_start_environment,
 B1_dod_sweep, B2_aislop_sweep, B3_bus_audit, B4_gap_detect, B5_integration_sweep,
+B6_playwright_gate,
 C1_release, C2_redeploy,
 D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day
 ```
@@ -219,7 +220,7 @@ overall_status == UNKNOWN AND any reason is:
 overall_status == PASS                              → CONTINUE
 ```
 
-**HALT behaviour**: Record `halt`. Stop all further steps (C1-D4 become `skipped`). Print:
+**HALT behaviour**: Record `halt`. Stop all further steps (B6-D4 become `skipped`). Print:
 
 ```
 AUTOPILOT HALT: integration-sweep returned {overall_status}
@@ -236,6 +237,101 @@ Do NOT emit a Slack notification for a clean halt — the report above is suffic
 
 **CONTINUE with warning**: print a single warning line per unavailable probe, then continue.
 Record `pass`.
+
+---
+
+### B6: playwright-gate — REGRESSION GATE <!-- ai-slop-ok: skill-step-heading -->
+
+**This step is a hard gate for smoke failures. Read it carefully.**
+
+Verify that omnidash is not broken before proceeding to release. This step consumes
+the `PLAYWRIGHT_BEHAVIORAL` probe result from B5 (integration-sweep) rather than
+rerunning the full Playwright suite, avoiding duplicate test execution.
+
+**Step 1: Read the integration-sweep artifact**
+
+Read the integration-sweep artifact written by B5:
+```
+$ONEX_CC_REPO_PATH/drift/integration/{TODAY}.yaml
+```
+
+Resolve `TODAY` as `date +%Y-%m-%d`.
+
+Look for the `PLAYWRIGHT_BEHAVIORAL` surface entry in the results list.
+
+**Step 2: Determine if rerun is needed**
+
+A rerun is required when ANY of these conditions is true:
+- The `PLAYWRIGHT_BEHAVIORAL` entry is missing from the artifact (probe was not run)
+- The entry's `probed_at` timestamp is older than 10 minutes from now (stale result)
+- The entry's `status` is `UNKNOWN` with reason `PROBE_UNAVAILABLE` (Playwright was not installed during sweep)
+
+If rerun is NOT needed: use the existing result from the artifact. Skip to Step 4.
+
+**Step 3: Rerun Playwright (only when stale, missing, or unavailable)**
+
+```bash
+OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+```
+
+3a. Check Playwright is installed:
+```bash
+cd $OMNIDASH_DIR && npx playwright --version 2>&1
+```
+- If command fails: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
+  `evidence="Playwright not installed"`. Record step as `warn`, continue to C1.
+
+3b. Run smoke tests:
+```bash
+cd $OMNIDASH_DIR && npx playwright test --config playwright.smoke.config.ts 2>&1
+```
+- exit code 0: smoke_result = PASS
+- exit code non-zero: smoke_result = FAIL (capture last 20 lines as evidence)
+
+3c. Run data-flow tests (only if smoke passed):
+```bash
+cd $OMNIDASH_DIR && npx playwright test --config playwright.dataflow.config.ts 2>&1
+```
+- exit code 0: dataflow_result = PASS
+- exit code non-zero: dataflow_result = FAIL (capture last 20 lines as evidence)
+
+3d. Aggregate:
+- smoke FAIL → surface_result = FAIL
+- smoke PASS + dataflow FAIL → surface_result = PASS_WITH_WARNINGS
+- smoke PASS + dataflow PASS → surface_result = PASS
+
+**Step 4: Apply halt policy**
+
+```
+surface_result == FAIL                    → HALT (smoke tests failed — UI is broken)
+surface_result == PASS_WITH_WARNINGS      → CONTINUE with warning (data-flow failure is soft gate)
+surface_result == PASS                    → CONTINUE
+surface_result == UNKNOWN/PROBE_UNAVAILABLE → CONTINUE with warning
+```
+
+**HALT behaviour**: Record `halt`. Stop all further steps (C1-D4 become `skipped`). Print:
+
+```
+AUTOPILOT HALT: Playwright regression gate FAILED — smoke tests failing
+
+Evidence:
+  {last 20 lines of smoke test output, from artifact or rerun}
+
+Autopilot cannot proceed to release while Playwright smoke tests are failing.
+Fix the failing tests, then re-run /autopilot --mode close-out.
+```
+
+**CONTINUE with warning** (PASS_WITH_WARNINGS): Print a single warning line:
+```
+WARNING: Playwright data-flow tests failed (soft gate) — smoke tests passed.
+Data-flow evidence: {summary of failure}
+```
+Record step as `warn`.
+
+**CONTINUE** (PASS): Record step as `pass`.
+
+Increment failure counter if surface_result is FAIL.
+Check circuit breaker.
 
 ---
 
@@ -380,6 +476,7 @@ Steps:
   B3: bus-audit            — {status}
   B4: gap-detect           — {status}
   B5: integration-sweep    — {status}
+  B6: playwright-gate      — {status}
   C1: release              — {status}  {version/tag if pass}
   C2: redeploy             — {status}
   D1: verify-plugin        — {status}
@@ -407,11 +504,11 @@ AUTOPILOT_RESULT: {status} mode=close-out
 ### Write Cycle Record <!-- ai-slop-ok: skill-step-heading -->
 
 Populate `ModelAutopilotCycleRecord`:
-- Set each step's status from execution results using canonical IDs (A1-D4)
+- Set each step's status from execution results using canonical IDs (A1-D4, including B6)
 - Set `overall_status` (using `EnumAutopilotCycleStatus`):
   - `COMPLETE` if all steps are `pass`, `pass_repaired`, `warn`, or `skipped` (and every skipped step has a non-empty `reason` — the model validator enforces this)
   - `INCOMPLETE` if any step has status `not_run`, or if any step is `skipped` without a valid reason (should not happen if model validation is correct, but defense-in-depth)
-  - `HALTED` if A3, B5, C1, or C2 triggered a halt
+  - `HALTED` if A3, B5, B6, C1, or C2 triggered a halt
   - `CIRCUIT_BREAKER` if 3 consecutive failures occurred
 - Set `consecutive_noop_count` from previous cycle + 1 if no tickets found, else reset to 0
 
@@ -510,6 +607,7 @@ AUTOPILOT_RESULT: complete mode=build tickets_processed={N} integration_failures
 Execute end-to-end without stopping between steps unless explicitly halted by:
 - A3 (start-environment) failure — cannot proceed with broken infrastructure
 - B5 (integration-sweep) FAIL or HALT-class UNKNOWN
+- B6 (playwright-gate) smoke FAIL — UI is broken, cannot release
 - C1 (release) failure
 - C2 (redeploy) failure
 - Circuit breaker trigger (3 consecutive failures)

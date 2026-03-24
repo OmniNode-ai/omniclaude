@@ -1,5 +1,5 @@
 ---
-description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
+description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
 version: 2.0.0
 mode: full
 level: advanced
@@ -79,15 +79,16 @@ In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 - A2: deploy-local-plugin — activate newly merged skills/hooks for this session
 - A3: start-environment — audit-first infra startup: verify core infra (postgres, redpanda, valkey) running, migration-gate healthy (proves DB migrations current), all runtime containers healthy. Auto-fixes by running infra-up + infra-up-runtime if containers missing.
 
-**Phase B — Quality Gate (B1-B4 parallel, B5 sequential hard gate):**
+**Phase B — Quality Gate (B1-B4 parallel, B5-B6 sequential hard gates):**
 - B1: dod-sweep — audit recently closed tickets for DoD compliance
 - B2: aislop-sweep — AI anti-patterns in recent merges
 - B3: bus-audit — Kafka topic health / schema drift
 - B4: gap detect --no-fix — cross-repo integration health
 - B5: integration-sweep — **HARD GATE** (unchanged halt policy)
+- B6: playwright-gate — **HARD GATE** for smoke failures; consumes B5 Playwright result (reruns only if stale >10 min or missing)
 
 B1-B4 are read-only audits, safe to parallelize. Failures in B1-B4 are logged and increment
-the circuit breaker but do NOT halt the pipeline. Only B5 (integration-sweep) has halt authority.
+the circuit breaker but do NOT halt the pipeline. B5 and B6 have halt authority.
 
 **Phase C — Ship (sequential):**
 - C1: release — version bump + publish (gated by integration-sweep)
@@ -102,7 +103,7 @@ the circuit breaker but do NOT halt the pipeline. Only B5 (integration-sweep) ha
 D1-D3 are read-only verification. Failures are logged with warnings but do NOT halt —
 the release and redeploy already completed successfully.
 
-**Note:** This is a 14-step pipeline (A1-A3, B1-B5, C1-C2, D1-D4). Internal step IDs use the
+**Note:** This is a 15-step pipeline (A1-A3, B1-B6, C1-C2, D1-D4). Internal step IDs use the
 `{phase}{ordinal}` scheme for stable naming in cycle records, circuit breaker logs, and
 downstream debugging.
 
@@ -145,11 +146,12 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ## Circuit Breaker
 
-3 consecutive step failures (across Steps 1–13) → stop immediately + Slack notify.
+3 consecutive step failures (across Steps 1–14) → stop immediately + Slack notify.
 
 **Halt authority vs circuit breaker:**
-- **B5 (integration-sweep)** is the only step with individual halt authority — a single
-  FAIL or contract UNKNOWN halts the pipeline immediately regardless of circuit breaker state.
+- **B5 (integration-sweep)** halts on FAIL or contract UNKNOWN — integration surfaces broken.
+- **B6 (playwright-gate)** halts on smoke FAIL — UI is broken, cannot release. Data-flow
+  failure is a soft gate (warn only).
 - **A3 (start-environment)** halts on failure — cannot proceed with broken infrastructure.
 - **B1-B4 (quality sweeps)** are advisory — failures are recorded individually but do not
   individually halt.
@@ -195,6 +197,7 @@ Failures are tracked per run. The circuit breaker does NOT persist across runs.
 - **bus-audit**: B3 — Kafka topic health (parallel)
 - **gap**: B4 — cross-repo integration health (parallel)
 - **integration-sweep**: B5 — hard gate; halt on FAIL or contract UNKNOWN
+- **playwright-gate**: B6 — Playwright regression gate; consumes B5 PLAYWRIGHT_BEHAVIORAL result (reruns if stale >10 min or missing); smoke FAIL halts, data-flow FAIL warns
 
 **Phase C — Ship:**
 - **release**: C1 — version bump; gated by integration-sweep
