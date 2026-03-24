@@ -202,6 +202,23 @@ After convergence (or max passes reached):
 2. Persist results including full iteration history.
 3. Emit completion event.
 
+## Default Persona
+
+All reviews (file-mode and PR-mode) use the **analytical-strict** persona by default.
+
+This persona enforces:
+- PhD-level domain expertise posture
+- Journal-critique format (no praise, no qualifiers)
+- Contract-semantics focus: invariant gaps, integration boundary failures, missing idempotency guards
+- Specific "what to change and why" per finding (three sentences max)
+- Skeptical analytical tone: nothing is assumed correct unless proven
+
+Persona file: `omniintelligence/review_pairing/personas/analytical-strict.md`
+
+To override: pass `--persona <name>` where `<name>` matches a file in
+`omniintelligence/review_pairing/personas/`. To use no persona: pass
+`--system-prompt /dev/null` (bypasses persona loading).
+
 ## Model Selection
 
 Default models: `codex,deepseek-r1`
