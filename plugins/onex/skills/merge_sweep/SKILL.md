@@ -381,6 +381,7 @@ def needs_thread_resolution(pr, require_approval=True) -> bool:
    Skip if --skip-polish or polish_queue is empty.
    For each PR in polish_queue[]:
      acquire claim
+     fetch headRefName from gh pr view (OMN-6253 defense — never trust scan-time branch name)
      dispatch polymorphic-agent:
        - create worktree at ${OMNI_WORKTREES}/merge-sweep-<run_id>/<repo>-pr-<N>/
        - Skill(skill="onex:pr_polish", args="<N> --required-clean-runs <polish_clean_runs>")
@@ -573,6 +574,9 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | `--since` parse error | Immediate error in Step 1; show format hint |
 | Slack notification fails | Log warning only; do NOT fail skill result |
 | Cascading BEHIND after branch update | Expected; subsequent sweeps handle remaining BEHIND PRs |
+| `headRefName` API fetch fails at dispatch | Fall back to scan-time `headRefName` with WARNING; pr-polish Step 0 re-verifies independently |
+| pr-polish branch mismatch detected | pr-polish auto-corrects via `git checkout`; if checkout fails, abort that PR with FATAL |
+| Post-push SHA mismatch | WARNING logged — fixes may have been pushed to wrong branch; manual verification needed |
 
 ## Sub-skills Used
 
@@ -595,6 +599,11 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.4.0** (OMN-6253): Two-layer PR branch name defense. Dispatcher now fetches `headRefName`
+  from `gh pr view` at dispatch time instead of trusting scan-time data. pr-polish agent
+  independently verifies it is on the correct branch as Step 0 before any work begins. Post-push
+  SHA verification confirms `headRefOid` matches local HEAD. Prevents the 2026-03-24 incident
+  where all polish fixes were pushed to a non-PR branch for 4 cycles (~2 hours wasted).
 - **v3.3.0** (OMN-5134): Intelligent review thread resolution. Add `needs_thread_resolution()`
   predicate for PRs that are MERGEABLE + BLOCKED + ALL_GREEN (blocked only by
   `required_conversation_resolution`). New Phase A-resolve assesses each unresolved thread

@@ -42,6 +42,46 @@ if pr_number is None:
 
 ---
 
+## Precondition: Branch Verification (OMN-6253)
+
+**DEFENSE LAYER 2**: Before any phase runs, the agent MUST verify it is on the correct
+branch for the PR. The dispatcher may have passed a stale or incorrect branch name.
+This step is non-negotiable — it runs before pre-commit install, before conflict
+detection, before everything.
+
+```python
+# Step 0: Verify we are on the correct branch for this PR.
+# NEVER trust the branch name from the dispatcher or cwd — always fetch from API.
+if pr_number is not None:
+    # Determine repo for API call (detect from git remote if not passed explicitly)
+    repo_for_api = run("gh repo view --json nameWithOwner --jq .nameWithOwner").strip()
+
+    # Fetch the actual branch name from the PR
+    expected_branch = run(
+        f"gh pr view {pr_number} --repo {repo_for_api} --json headRefName --jq .headRefName"
+    ).strip()
+
+    # Check what branch we are actually on
+    actual_branch = run("git rev-parse --abbrev-ref HEAD").strip()
+
+    if expected_branch and actual_branch != expected_branch:
+        print(f"BRANCH MISMATCH DETECTED: on '{actual_branch}' but PR #{pr_number} "
+              f"targets branch '{expected_branch}'. Switching to correct branch.")
+        run(f"git checkout {expected_branch}")
+        actual_branch = run("git rev-parse --abbrev-ref HEAD").strip()
+        assert actual_branch == expected_branch, (
+            f"FATAL: Could not switch to PR branch '{expected_branch}'. "
+            f"Still on '{actual_branch}'. Aborting pr-polish."
+        )
+    elif not expected_branch:
+        print(f"WARNING: Could not fetch headRefName for PR #{pr_number} from API. "
+              f"Proceeding on current branch '{actual_branch}' — verify manually if push fails.")
+
+    print(f"Branch verified: on '{actual_branch}' for PR #{pr_number}")
+```
+
+---
+
 ## Precondition: pre-commit Install
 
 Before any phase runs, ensure pre-commit hooks are installed in this worktree.
@@ -268,6 +308,22 @@ if not no_push and (phase_0_status == "OK" or phase_1_status == "OK" or phase_2_
         print("  Run: git push  to push manually")
     else:
         print("Pushed to remote.")
+
+        # POST-PUSH SHA VERIFICATION (OMN-6253): Confirm the PR's headRefOid matches
+        # what we just pushed. Catches the case where we pushed to the wrong branch
+        # (e.g., dispatcher passed incorrect branch name).
+        if pr_number is not None:
+            local_sha = run("git rev-parse HEAD").strip()
+            repo_for_api = run("gh repo view --json nameWithOwner --jq .nameWithOwner").strip()
+            remote_sha = run(
+                f"gh pr view {pr_number} --repo {repo_for_api} --json headRefOid --jq .headRefOid"
+            ).strip()
+            if remote_sha and local_sha != remote_sha:
+                print(f"SHA MISMATCH after push: local HEAD={local_sha[:8]} but "
+                      f"PR #{pr_number} headRefOid={remote_sha[:8]}. "
+                      f"Fixes may have been pushed to the wrong branch!")
+            elif remote_sha:
+                print(f"Post-push verified: PR #{pr_number} headRefOid={remote_sha[:8]} matches local HEAD.")
 ```
 
 ### Final Report

@@ -861,8 +861,17 @@ for pr in polish_queue:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
     repo_full = f"{base_owner}/{base_repo_name}"
     repo_name = base_repo_name  # short name, e.g. "omniclaude"
-    branch = pr["headRefName"]
     pr_number = pr["number"]
+
+    # DEFENSE LAYER 1 (OMN-6253): Always fetch the actual PR branch name from the API.
+    # Never trust the scan-time headRefName — it may be stale or the dispatcher may
+    # have interpolated it incorrectly (caused ~2 hours of wasted polish cycles on 2026-03-24).
+    branch = run(f"gh pr view {pr_number} --repo {repo_full} --json headRefName --jq .headRefName").strip()
+    if not branch:
+        # Fallback to scan data only if API call fails
+        branch = pr["headRefName"]
+        print(f"WARNING: Could not fetch headRefName from API for {repo_full}#{pr_number}, "
+              f"falling back to scan-time value: {branch}")
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr_number)
     omni_home = os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home"))
     worktree_base = os.environ.get("OMNI_WORKTREES", str(Path(omni_home).parent / "omni_worktrees"))

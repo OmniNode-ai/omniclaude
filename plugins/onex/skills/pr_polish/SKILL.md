@@ -96,6 +96,7 @@ Agent(
 
 Three-phase PR readiness workflow that takes a branch from "open PR" to "clean and ready to merge":
 
+0. **Branch Verification** (OMN-6253) — fetch the actual PR branch name from the GitHub API and verify we are on the correct branch before any work begins. Never trust the dispatcher's branch name.
 1. **Conflict Resolution** — detect and resolve merge conflicts against the base branch
 2. **PR Review + CI Fix** — fetch all open review comments and CI failures, fix Critical/Major/Minor via `pr-review-dev`
 3. **Local Review Loop** — run `local-review` until N consecutive passes with nothing but nits (default N=4)
