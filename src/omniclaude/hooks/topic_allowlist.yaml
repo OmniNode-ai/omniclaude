@@ -515,3 +515,11 @@ allowed_extras:
       Emitted by pipeline_event_emitters.emit_hostile_reviewer_completed().
       No dedicated node contract; contract governance to follow.
     ticket: OMN-5864
+
+  - topic: "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+    lifecycle: observability
+    reason: >
+      Hostile reviewer skill failure event emitted when multi-model aggregation
+      encounters an unrecoverable error. Complements the completed event.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6192
