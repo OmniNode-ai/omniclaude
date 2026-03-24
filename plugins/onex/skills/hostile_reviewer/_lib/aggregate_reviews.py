@@ -112,6 +112,7 @@ class ModelAggregateResult(BaseModel):
     success: bool
     findings: list[ModelReviewFinding] = Field(default_factory=list)
     models_run: list[str] = Field(default_factory=list)
+    models_clean: list[str] = Field(default_factory=list)
     models_failed: list[str] = Field(default_factory=list)
     verdict: EnumReviewVerdict
     errors: list[str] = Field(default_factory=list)
@@ -167,6 +168,14 @@ def merge_findings(
     merged: list[dict[str, object]] = []
     for model_findings in per_model:
         for finding in model_findings:
+            # Skip malformed entries missing required string fields
+            if (
+                not isinstance(finding.get("description"), str)
+                or not finding["description"]
+            ):
+                continue
+            if not isinstance(finding.get("source"), str):
+                continue
             conf = _normalize_confidence(finding.get("confidence"))
             matched = next(
                 (
@@ -221,7 +230,8 @@ def compute_verdict(findings: list[dict[str, object]]) -> EnumReviewVerdict:
 # =============================================================================
 
 _GEMINI_PROMPT = (
-    "You are an adversarial code reviewer. Find exactly 2 risks in this PR diff. "
+    "You are an adversarial code reviewer. Identify all credible risks in this PR diff. "
+    "If there are no credible issues, return an empty findings list. "
     "Output ONLY valid JSON with no markdown fencing: "
     '{"findings": [{"description": "...", "confidence": "high|medium|low", "detection": "..."}]}'
 )
@@ -258,7 +268,8 @@ def run_gemini(diff: str) -> list[dict[str, str]]:
 # =============================================================================
 
 _CODEX_PROMPT = (
-    "Hostile adversarial code review. Find exactly 2 risks. "
+    "Hostile adversarial code review. Identify all credible risks. "
+    "If there are no credible issues, return an empty findings list. "
     "Output ONLY valid JSON with no markdown fencing: "
     '{"findings": [{"description": "...", "confidence": "high|medium|low", "detection": "..."}]}'
 )
@@ -336,7 +347,8 @@ def run_codex(pr_head_sha: str) -> list[dict[str, str]]:
 
 _HTTP_PROMPT_TEMPLATE = (
     "You are an adversarial code reviewer. Review this PR diff. "
-    "Find exactly 2 risks. Output ONLY valid JSON with no markdown fencing: "
+    "Identify all credible risks. If there are no credible issues, return an empty findings list. "
+    "Output ONLY valid JSON with no markdown fencing: "
     '{{"findings": [{{"description": "...", "confidence": "high|medium|low", "detection": "..."}}]}}\n\n'
     "PR diff:\n{diff}"
 )
@@ -486,6 +498,7 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
     per_model: list[list[dict[str, str]]] = []
     per_model_raw: dict[str, list[dict[str, str]]] = {}  # preserved for event bus
     models_run: list[str] = []
+    models_clean: list[str] = []  # completed successfully with zero findings
     models_failed: list[str] = []
 
     # Per-model timeouts: gemini=60s, codex=120s, http=90s — use 210s coordinator cap
@@ -512,13 +525,12 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
                     per_model.append(findings)
                     models_run.append(name)
                 else:
-                    # Driver returned [] — either silently failed or found nothing.
-                    # Don't count as successfully "run" to avoid false-clean results.
+                    # Driver returned [] — successfully reviewed and found no issues.
                     print(
-                        f"[{name}] returned empty findings (silent failure or clean)",
+                        f"[{name}] returned empty findings (clean review)",
                         file=sys.stderr,
                     )
-                    models_failed.append(name)
+                    models_clean.append(name)
             except Exception as e:
                 print(f"[{name}] exception: {e}", file=sys.stderr)
                 models_failed.append(name)
@@ -537,12 +549,13 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
         )
         for i, f in enumerate(merged)
     ]
-    # success=True only when at least one model produced valid findings.
-    # An empty models_run means all drivers either failed or returned nothing.
+    # success=True when at least one model ran (with findings) OR returned clean (zero findings).
+    # All-failed means every driver errored with no usable output.
     return ModelAggregateResult(
-        success=bool(models_run),
+        success=bool(models_run or models_clean),
         findings=review_findings,
         models_run=models_run,
+        models_clean=models_clean,
         models_failed=models_failed,
         verdict=EnumReviewVerdict(verdict),
         per_model_raw=per_model_raw,  # not in stdout; emitted to bus for observability
@@ -600,10 +613,9 @@ def emit_result(
             if result.success
             else "hostile.reviewer.failed"
         )
-        # Event bus payload is intentionally richer than stdout.
-        # Claude Code only receives the compact aggregated JSON (~500 tokens via stdout).
-        # The bus captures per-model raw findings so full model output is observable
-        # without entering Claude's context window — token savings maintained.
+        # Event bus payload is summary-only (hostile.reviewer.* routes to onex.evt.*).
+        # Full per-model raw content is NOT emitted here — it lives in per_model_raw on
+        # the result object but stays off the observability bus to avoid unbounded payloads.
         emit_fn(
             event_type,
             {
@@ -611,6 +623,7 @@ def emit_result(
                 "repo": repo,
                 "verdict": result.verdict,
                 "models_run": result.models_run,
+                "models_clean": result.models_clean,
                 "models_failed": result.models_failed,
                 "finding_count": len(result.findings),
                 "findings_aggregated": [
@@ -622,9 +635,6 @@ def emit_result(
                     }
                     for f in result.findings
                 ],
-                # Per-model raw: each model's unmerged findings before deduplication.
-                # This is what gets silenced by 2>/dev/null in prompt.md — now preserved on bus.
-                "per_model_raw": result.per_model_raw,
             },
         )
     except Exception as e:
@@ -647,4 +657,6 @@ if __name__ == "__main__":
     result = run_all_models(args.pr, args.repo)
     emit_result(result, args.pr, args.repo)  # emit_fn defaults to hooks lib
     print(result.to_json())  # Only JSON to stdout; model output went to stderr
-    sys.exit(0 if result.success else 1)
+    # Exit 0 always — degraded state is represented in JSON `success` field.
+    # Callers inspect the payload; a non-zero exit here would mask partial results.
+    sys.exit(0)
