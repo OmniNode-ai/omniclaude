@@ -34,8 +34,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/local-review.json"
     fields:
-      - status: "success" | "partial" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "clean" | "clean_with_nits" | "max_iterations_reached" | null  # domain-specific granularity
+      - status: '"success" | "partial" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"clean" | "clean_with_nits" | "max_iterations_reached" | null  # domain-specific granularity'
       - extra: "{iterations_run, issues_remaining}"
 args:
   - name: --uncommitted
@@ -580,7 +580,7 @@ Task(
   prompt="A fix agent failed during local-review iteration {iteration}.
     Error: {error_details}
 
-    Invoke: Skill(skill=\"onex:systematic-debugging\")
+    Invoke: Skill(skill=\"onex:systematic_debugging\")
 
     Investigate root cause of the fix failure. Report: root cause, recommended fix, files involved."
 )

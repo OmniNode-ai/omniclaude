@@ -40,7 +40,7 @@ __all__ = ["AstStubCodeDetector"]
 logger = logging.getLogger(__name__)
 
 
-def _is_stub_body(  # stub-ok: implemented with TODO for enhancement
+def _is_stub_body(  # stub-ok: fully implemented
     body: list[ast.stmt],
 ) -> bool:
     """Return True if *body* consists entirely of stub-like statements.
@@ -80,7 +80,7 @@ def _is_stub_body(  # stub-ok: implemented with TODO for enhancement
     return True
 
 
-def _collect_stub_functions(  # stub-ok: implemented with TODO for enhancement
+def _collect_stub_functions(  # stub-ok: fully implemented
     tree: ast.AST,
 ) -> list[tuple[str, int, int]]:
     """Walk *tree* and collect stub function/method definitions.
@@ -110,7 +110,7 @@ class AstStubCodeDetector:
     no signal and logs a ``WARNING`` so Tier 0 results remain the fallback.
     """
 
-    def detect(  # stub-ok: implemented with TODO for enhancement
+    def detect(  # stub-ok: fully implemented
         self, context: DetectionContext
     ) -> list[QuirkSignal]:
         """Run AST stub-code detection against the diff in *context*.

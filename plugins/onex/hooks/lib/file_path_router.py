@@ -1,116 +1,239 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 """File-path convention router for PreToolUse hooks.
 
-Patterson-style routing: maps file paths to domain-specific convention
-snippets that get injected into the model context during Edit/Write
-operations. Each invocation is a new process (subprocess model), so
-all state is loaded fresh from disk.
+Matches file paths against a route table (YAML config) and returns the
+matching convention snippet content. Uses stdlib only -- no PyYAML.
 
-Performance budget: <20ms for 1 YAML read + 0-2 markdown reads + fnmatch.
+Route table format (simple YAML subset):
+    routes:
+      - pattern: "some/glob/**"
+        convention: "convention-name"
+
+Convention files live in ``conventions/<name>.md`` and contain a
+``## Inject`` section whose content is returned to the caller.
+
+Usage (CLI):
+    python3 file_path_router.py /abs/path/to/file.py
+
+Returns the matched convention content on stdout (empty if no match).
+Exit code is always 0 -- never blocks a tool call.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import os
+import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
-import yaml
-
-CONVENTIONS_DIR = Path(__file__).resolve().parent.parent / "conventions"
-ROUTES_FILE = CONVENTIONS_DIR / "routes.yaml"
-MAX_SNIPPET_LINES = 50
+# ---------------------------------------------------------------------------
+# Types
+# ---------------------------------------------------------------------------
 
 
-def _find_repo_root(file_path: str) -> Path | None:
-    """Walk up from file_path looking for .git to find repo root.
+class Route(NamedTuple):
+    pattern: str
+    convention: str
 
-    Handles both regular repos (.git is a directory) and worktrees
-    (.git is a file pointing to the main repo's worktree directory).
+
+# ---------------------------------------------------------------------------
+# Simple YAML parser for the route table subset
+# ---------------------------------------------------------------------------
+
+_PATTERN_RE = re.compile(r'^\s*-\s*pattern:\s*"([^"]+)"\s*$')
+_CONVENTION_RE = re.compile(r'^\s*convention:\s*"([^"]+)"\s*$')
+
+
+def _parse_routes(text: str) -> list[Route]:
+    """Parse the simple YAML route table into Route objects.
+
+    Only supports the specific subset used by file_path_routes.yaml:
+    a ``routes:`` key containing a list of ``- pattern: / convention:`` pairs.
     """
-    p = Path(file_path).resolve()
-    for parent in [p] + list(p.parents):
-        if (parent / ".git").exists():
-            return parent
-    return None
+    routes: list[Route] = []
+    current_pattern: str | None = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped == "routes:":
+            continue
+
+        pat_match = _PATTERN_RE.match(line)
+        if pat_match:
+            current_pattern = pat_match.group(1)
+            continue
+
+        conv_match = _CONVENTION_RE.match(line)
+        if conv_match and current_pattern is not None:
+            routes.append(
+                Route(pattern=current_pattern, convention=conv_match.group(1))
+            )
+            current_pattern = None
+
+    return routes
 
 
-def _to_repo_relative(file_path: str) -> str | None:
-    """Convert absolute path to repo-relative path for route matching.
+# ---------------------------------------------------------------------------
+# Route table loading with mtime-based cache
+# ---------------------------------------------------------------------------
 
-    Returns a path like ``reponame/sub/path/file.py`` where ``reponame``
-    is the repo root directory name. For worktrees this is the checkout
-    directory name (e.g., ``omnidash``), which matches the route table
-    patterns.
+_cached_routes: list[Route] | None = None
+_cached_mtime: float = 0.0
+_cached_path: str = ""
+
+
+def _get_routes_file() -> str:
+    """Return the absolute path to the route table YAML."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "..", "config", "file_path_routes.yaml")
+
+
+def load_routes(config_path: str | None = None) -> list[Route]:
+    """Load routes from the YAML config, caching by file mtime.
+
+    If the file is missing or unparseable, returns an empty list (never raises).
     """
-    repo_root = _find_repo_root(file_path)
-    if not repo_root:
-        return None
-    relative = Path(file_path).resolve().relative_to(repo_root)
-    repo_name = repo_root.name
-    return f"{repo_name}/{relative}"
+    global _cached_routes, _cached_mtime, _cached_path  # noqa: PLW0603
 
+    path = config_path or _get_routes_file()
+    path = os.path.abspath(path)
 
-def _load_routes() -> list[dict[str, object]]:
-    """Load route table from YAML."""
-    if not ROUTES_FILE.exists():
+    try:
+        mtime = Path(path).stat().st_mtime
+    except OSError:
         return []
-    with open(ROUTES_FILE) as f:
-        data = yaml.safe_load(f)
-    return data.get("routes", []) if data else []
+
+    if _cached_routes is not None and _cached_path == path and _cached_mtime == mtime:
+        return _cached_routes
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        routes = _parse_routes(text)
+    except Exception:
+        return []
+
+    _cached_routes = routes
+    _cached_mtime = mtime
+    _cached_path = path
+    return routes
 
 
-def _load_snippet(name: str) -> str:
-    """Load a convention snippet, truncating if over MAX_SNIPPET_LINES."""
-    snippet_file = CONVENTIONS_DIR / f"{name}.md"
-    if not snippet_file.exists():
+# ---------------------------------------------------------------------------
+# Convention file loading
+# ---------------------------------------------------------------------------
+
+
+def _get_conventions_dir() -> str:
+    """Return the absolute path to the conventions directory."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(here, "..", "conventions")
+
+
+def _extract_inject_section(text: str) -> str:
+    """Extract content under the ``## Inject`` heading.
+
+    Returns everything from the line after ``## Inject`` until the next
+    ``##`` heading or end of file. Returns the full text if no ``## Inject``
+    heading is found.
+    """
+    lines = text.splitlines()
+    in_inject = False
+    result: list[str] = []
+
+    for line in lines:
+        if line.strip() == "## Inject":
+            in_inject = True
+            continue
+        if in_inject:
+            if line.startswith("## "):
+                break
+            result.append(line)
+
+    if result:
+        return "\n".join(result).strip()
+    # Fallback: return entire content (minus the title line) if no ## Inject found
+    return text.strip()
+
+
+def load_convention(name: str, conventions_dir: str | None = None) -> str:
+    """Load and return the inject section of a convention file.
+
+    Returns empty string on any error (file missing, read error, etc.).
+    """
+    base_dir = conventions_dir or _get_conventions_dir()
+    path = os.path.join(base_dir, f"{name}.md")
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        return _extract_inject_section(text)
+    except Exception:
         return ""
-    lines = snippet_file.read_text().splitlines()
-    if len(lines) > MAX_SNIPPET_LINES:
-        print(
-            f"[file_path_router] WARNING: snippet {name}.md exceeds "
-            f"{MAX_SNIPPET_LINES} lines, truncating",
-            file=sys.stderr,
-        )
-        lines = lines[:MAX_SNIPPET_LINES]
-        lines.append(f"[truncated at {MAX_SNIPPET_LINES} lines]")
-    return "\n".join(lines)
 
 
-def get_conventions(file_path: str) -> str:
-    """Return concatenated convention snippets for a file path."""
-    repo_relative = _to_repo_relative(file_path)
-    if not repo_relative:
-        return ""
+# ---------------------------------------------------------------------------
+# Matching
+# ---------------------------------------------------------------------------
 
-    routes = _load_routes()
-    matched = [
-        r
-        for r in routes
-        if isinstance(r.get("pattern"), str)
-        and fnmatch.fnmatch(repo_relative, r["pattern"])
-    ]
-    if not matched:
-        return ""
 
-    snippets: list[str] = []
-    seen: set[str] = set()
-    for route in matched:
-        for conv_name in route.get("conventions", []):
-            if conv_name not in seen:
-                seen.add(conv_name)
-                snippet = _load_snippet(conv_name)
-                if snippet:
-                    snippets.append(snippet)
+def match_file_path(
+    file_path: str,
+    config_path: str | None = None,
+    conventions_dir: str | None = None,
+) -> tuple[str, str]:
+    """Match a file path against the route table.
 
-    return "\n\n".join(snippets)
+    Returns ``(convention_name, convention_content)`` for the first matching
+    route, or ``("", "")`` if no route matches.
+
+    The file path is normalised to use forward slashes and matched against
+    each route pattern using ``fnmatch``. Both the full path and each
+    suffix of the path are tested so that absolute paths match patterns
+    written relative to a repo root.
+    """
+    routes = load_routes(config_path)
+    if not routes:
+        return ("", "")
+
+    normalised = file_path.replace("\\", "/")
+
+    # Build candidate suffixes so "/abs/path/omnidash/server/consumers/foo.py"
+    # matches a pattern like "omnidash/server/consumers/**".
+    parts = normalised.split("/")
+    candidates = [normalised]
+    for i in range(1, len(parts)):
+        candidates.append("/".join(parts[i:]))
+
+    for route in routes:
+        for candidate in candidates:
+            if fnmatch.fnmatch(candidate, route.pattern):
+                content = load_convention(route.convention, conventions_dir)
+                return (route.convention, content)
+
+    return ("", "")
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """CLI: ``python3 file_path_router.py <file_path>``."""
+    if len(sys.argv) < 2:
+        sys.exit(0)
+
+    file_path = sys.argv[1]
+    _convention_name, content = match_file_path(file_path)
+    if content:
+        print(content)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.exit(0)
-    result = get_conventions(sys.argv[1])
-    if result:
-        print(result)
+    main()

@@ -42,13 +42,13 @@ def _read_log_lines(log_path: Path) -> list[dict]:
 class TestBuildEntry:
     @pytest.mark.unit
     def test_contains_required_fields(self) -> None:
-        entry = _build_entry(skill_name="onex:ticket-pipeline", session_id="sess-abc")
+        entry = _build_entry(skill_name="onex:ticket_pipeline", session_id="sess-abc")
         assert set(entry.keys()) == {"skill_name", "timestamp", "session_id"}
 
     @pytest.mark.unit
     def test_skill_name_preserved(self) -> None:
-        entry = _build_entry(skill_name="onex:pr-review", session_id="sess-xyz")
-        assert entry["skill_name"] == "onex:pr-review"
+        entry = _build_entry(skill_name="onex:pr_review", session_id="sess-xyz")
+        assert entry["skill_name"] == "onex:pr_review"
 
     @pytest.mark.unit
     def test_session_id_preserved(self) -> None:
@@ -67,7 +67,7 @@ class TestBuildEntry:
     @pytest.mark.unit
     def test_no_extra_fields(self) -> None:
         """Log must not contain prompt content, file paths, or code."""
-        entry = _build_entry(skill_name="onex:ticket-work", session_id="s")
+        entry = _build_entry(skill_name="onex:ticket_work", session_id="s")
         for forbidden in ("prompt", "code", "file_path", "content", "args"):
             assert forbidden not in entry, f"Unexpected field {forbidden!r} in entry"
 
@@ -82,7 +82,7 @@ class TestWriteToFile:
     def test_creates_file_if_not_exists(self, tmp_path: Path) -> None:
         log = tmp_path / "skill-usage.log"
         entry = {
-            "skill_name": "onex:ticket-pipeline",
+            "skill_name": "onex:ticket_pipeline",
             "timestamp": "t",
             "session_id": "s",
         }
@@ -94,25 +94,25 @@ class TestWriteToFile:
     def test_appends_valid_json_line(self, tmp_path: Path) -> None:
         log = tmp_path / "skill-usage.log"
         entry = {
-            "skill_name": "onex:ticket-pipeline",
+            "skill_name": "onex:ticket_pipeline",
             "timestamp": "t",
             "session_id": "s",
         }
         _write_to_file(entry=entry, log_path=log)
         lines = _read_log_lines(log)
         assert len(lines) == 1
-        assert lines[0]["skill_name"] == "onex:ticket-pipeline"
+        assert lines[0]["skill_name"] == "onex:ticket_pipeline"
 
     @pytest.mark.unit
     def test_appends_multiple_lines(self, tmp_path: Path) -> None:
         log = tmp_path / "skill-usage.log"
-        for skill in ("onex:ticket-pipeline", "onex:pr-review", "onex:local-review"):
+        for skill in ("onex:ticket_pipeline", "onex:pr_review", "onex:local_review"):
             entry = {"skill_name": skill, "timestamp": "t", "session_id": "s"}
             _write_to_file(entry=entry, log_path=log)
         lines = _read_log_lines(log)
         assert len(lines) == 3
-        assert lines[0]["skill_name"] == "onex:ticket-pipeline"
-        assert lines[2]["skill_name"] == "onex:local-review"
+        assert lines[0]["skill_name"] == "onex:ticket_pipeline"
+        assert lines[2]["skill_name"] == "onex:local_review"
 
     @pytest.mark.unit
     def test_creates_parent_directory(self, tmp_path: Path) -> None:
@@ -138,7 +138,7 @@ class TestWriteToFile:
         """Each line must be valid JSON without leading/trailing whitespace."""
         log = tmp_path / "usage.log"
         entry = {
-            "skill_name": "onex:ticket-pipeline",
+            "skill_name": "onex:ticket_pipeline",
             "timestamp": "t",
             "session_id": "s",
         }
@@ -164,19 +164,19 @@ class TestAppendSkillUsage:
     def test_writes_log_entry(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
         ok = append_skill_usage(
-            "onex:ticket-pipeline", "sess-abc", log_path=log, db_enabled=False
+            "onex:ticket_pipeline", "sess-abc", log_path=log, db_enabled=False
         )
         assert ok is True
         lines = _read_log_lines(log)
         assert len(lines) == 1
-        assert lines[0]["skill_name"] == "onex:ticket-pipeline"
+        assert lines[0]["skill_name"] == "onex:ticket_pipeline"
         assert lines[0]["session_id"] == "sess-abc"
 
     @pytest.mark.unit
     def test_no_prompt_content_in_log(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
         append_skill_usage(
-            "onex:ticket-pipeline", "sess-abc", log_path=log, db_enabled=False
+            "onex:ticket_pipeline", "sess-abc", log_path=log, db_enabled=False
         )
         raw = log.read_text(encoding="utf-8")
         for forbidden in ("prompt", "code", "file_path", "content", "args"):
@@ -231,7 +231,7 @@ class TestAppendSkillUsage:
     @pytest.mark.unit
     def test_multiple_invocations_append_sequentially(self, tmp_path: Path) -> None:
         log = tmp_path / "usage.log"
-        skills = ["onex:ticket-pipeline", "onex:local-review", "onex:pr-review"]
+        skills = ["onex:ticket_pipeline", "onex:local_review", "onex:pr_review"]
         for skill in skills:
             append_skill_usage(skill, "sess-1", log_path=log, db_enabled=False)
         lines = _read_log_lines(log)
@@ -266,14 +266,14 @@ class TestMainEntryPoint:
         hook_json = json.dumps(
             {
                 "tool_name": "Skill",
-                "tool_input": {"skill": "onex:ticket-pipeline"},
+                "tool_input": {"skill": "onex:ticket_pipeline"},
                 "sessionId": "sess-cli-test",
             }
         )
         self._run_main(hook_json, log)
         lines = _read_log_lines(log)
         assert len(lines) == 1
-        assert lines[0]["skill_name"] == "onex:ticket-pipeline"
+        assert lines[0]["skill_name"] == "onex:ticket_pipeline"
         assert lines[0]["session_id"] == "sess-cli-test"
 
     @pytest.mark.unit
@@ -308,10 +308,10 @@ class TestMainEntryPoint:
         hook_json = json.dumps(
             {
                 "tool_name": "Skill",
-                "tool_input": {"name": "onex:local-review"},
+                "tool_input": {"name": "onex:local_review"},
                 "session_id": "sess-fallback",
             }
         )
         self._run_main(hook_json, log)
         lines = _read_log_lines(log)
-        assert lines[0]["skill_name"] == "onex:local-review"
+        assert lines[0]["skill_name"] == "onex:local_review"

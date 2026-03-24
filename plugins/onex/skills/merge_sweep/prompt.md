@@ -166,7 +166,7 @@ Use `_bin/pr-scan.sh` for structured JSON output via `gh` CLI:
 ${CLAUDE_PLUGIN_ROOT}/_bin/pr-scan.sh \
   --repo <repo> \
   --state open \
-  --limit 100 \
+  --limit 50 \
   ${AUTHOR:+--author $AUTHOR} \
   ${LABEL:+--label $LABEL} \
   ${SINCE:+--since $SINCE}
@@ -188,7 +188,7 @@ gh pr list \
   --repo <repo> \
   --state open \
   --json number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
-  --limit 100
+  --limit 50
 ```
 
 **IMPORTANT**: `labels`, `updatedAt`, `isDraft`, and `mergeStateStatus` are required JSON fields.
@@ -455,7 +455,7 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 ## 4. Empty Check
 
 ```
-IF candidates is empty AND branch_update_queue is empty AND polish_queue is empty (or --skip-polish):
+IF candidates is empty AND branch_update_queue is empty AND thread_resolve_queue is empty AND polish_queue is empty:
   → Print: "No actionable PRs found across <N> repos."
   → If applicable, explain filters
   → Emit ModelSkillResult(status=nothing_to_merge, filters=filters)
@@ -904,7 +904,7 @@ Steps:
 
 2. Run pr-polish from inside the worktree:
    ```
-   Skill(skill="onex:pr-polish", args="{pr_number} --required-clean-runs {polish_clean_runs}")
+   Skill(skill="onex:pr_polish", args="{pr_number} --required-clean-runs {polish_clean_runs}")
    ```
    pr-polish will resolve conflicts, fix CI failures and review comments, run local-review loop, and push.
 
@@ -1173,7 +1173,7 @@ Merge Sweep Complete — run <run_id>
 This skill can be called directly or from other orchestrators:
 
 ```
-Skill(skill="onex:merge-sweep", args={
+Skill(skill="onex:merge_sweep", args={
   repos: <scope>,
   max_total_merges: <cap>,
   max_parallel_prs: <cap>,

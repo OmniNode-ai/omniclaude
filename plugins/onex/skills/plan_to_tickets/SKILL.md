@@ -27,7 +27,7 @@ args:
     description: Skip tickets that already exist (don't ask)
     required: false
   - name: --team
-    description: Linear team name (default: Omninode)
+    description: "Linear team name (default: Omninode)"
     required: false
   - name: --repo
     description: Repository label for all tickets (e.g., omniclaude, omnibase_core)
@@ -1006,7 +1006,7 @@ def generate_contracts_for_all(results: dict, dry_run: bool) -> list[dict]:
         try:
             # Call generate-ticket-contract skill
             result = Skill(
-                skill="onex:create-ticket",
+                skill="onex:create_ticket",
                 args=f"--from-contract auto {t['ticket_id']}"
             )
 
@@ -1136,3 +1136,12 @@ report_summary(results, epic, doc.structure_type.value, args.dry_run)
 # Override architecture validation for cross-app dependencies
 /plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --repo omniclaude --allow-arch-violation
 ```
+
+## Container / Degraded Environment
+
+When running without the full omniclaude plugin (e.g., container-based Claude Code sessions):
+
+- **Cross-skill dispatch** (`Skill(skill="onex:...")`) requires the plugin's skill registry.
+  If skills are not registered, dispatch calls will fail.
+- **Linear MCP** may not be available. This skill requires Linear for ticket operations.
+  If unavailable, see `--local` mode on upstream skills (e.g., `executing-plans --local`).

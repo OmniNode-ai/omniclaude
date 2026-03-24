@@ -71,7 +71,7 @@ Phase 3: ticket-plan --sync (regenerate or patch MASTER_TICKET_PLAN.md)
 Dispatch linear-triage:
 
 ```
-Skill("onex:linear-triage", args="--threshold-days {threshold}")
+Skill("onex:linear_triage", args="--threshold-days {threshold}")
 ```
 
 On completion, display the TriageReport summary.
@@ -110,7 +110,7 @@ during this review. Handle those immediately via Linear MCP before proceeding to
 If triage found orphaned tickets (or `--skip-triage` was used with known orphans):
 
 ```
-Skill("onex:linear-epic-org", args="--triage-report {report_path}")
+Skill("onex:linear_epic_org", args="--triage-report {report_path}")
 ```
 
 `linear-epic-org` handles its own human gate for ambiguous groupings. See that skill
@@ -129,7 +129,7 @@ After triage and epic-org are complete (tickets marked done, epics created), the
 MASTER_TICKET_PLAN.md will be out of sync. Always run sync as the final step.
 
 ```
-Skill("onex:ticket-plan", args="--sync")
+Skill("onex:ticket_plan", args="--sync")
 ```
 
 Mode is auto-selected by ticket-plan --sync based on file age. Pass `--mode full` after

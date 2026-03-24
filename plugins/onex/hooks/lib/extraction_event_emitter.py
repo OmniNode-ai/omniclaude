@@ -2,16 +2,21 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Extraction pipeline event emitter (OMN-2344).
+"""Extraction pipeline event emitter (OMN-2344, OMN-6158).
 
-Emits the three extraction pipeline events required by the omnidash consumer:
+Emits the extraction pipeline events required by the omnidash consumer:
   - context.utilization  → injection_effectiveness table
   - agent.match          → injection_effectiveness table (agent-match events)
   - latency.breakdown    → latency_breakdowns table
+  - injection.recorded   → tracks injection events with source tagging
 
-All three events include the ``cohort`` field required by the omnidash
+All events include the ``cohort`` field required by the omnidash
 ``isExtractionBaseEvent()`` type guard.  Without ``cohort``, every message is
 dropped by the consumer's validation layer.
+
+The ``source`` field (OMN-6158) distinguishes injection origins:
+  - ``"pattern_injection"`` — learned patterns from the intelligence service
+  - ``"file_path_convention"`` — Patterson-style file-path convention routing
 
 CLI Usage::
 
@@ -27,7 +32,8 @@ CLI Usage::
         "retrieval_time_ms": 120,
         "injection_time_ms": 30,
         "user_visible_latency_ms": 250,
-        "cache_hit": false
+        "cache_hit": false,
+        "source": "pattern_injection"
     }' | python extraction_event_emitter.py
 
 Design notes:
@@ -37,6 +43,8 @@ Design notes:
   not available at hook completion time).
 - ``causation_id`` is generated as a new UUID per event.
 - ``entity_id`` is derived from ``session_id`` (UUID parse or deterministic hash).
+- ``injection.recorded`` events have a pre-existing consumer gap — neither
+  EventConsumer nor ReadModelConsumer subscribes to them yet (OMN-6158).
 """
 
 from __future__ import annotations
@@ -100,6 +108,7 @@ def build_context_utilization_payload(
     user_visible_latency_ms: int | None,
     cache_hit: bool,
     emitted_at: str,
+    source: str = "pattern_injection",
 ) -> dict[str, Any]:
     """Build payload for context.utilization event.
 
@@ -107,6 +116,8 @@ def build_context_utilization_payload(
     requires comparing injected identifiers against Claude's response text,
     which is not available at hook completion time.  The field is present
     to satisfy the schema; a future async post-processing step could update it.
+
+    ``source`` (OMN-6158) tags the injection origin for A/B cohort separation.
     """
     return {
         "session_id": session_id,
@@ -115,6 +126,7 @@ def build_context_utilization_payload(
         "causation_id": str(uuid.uuid4()),
         "emitted_at": emitted_at,
         "cohort": cohort,
+        "source": source,
         "injection_occurred": injection_occurred,
         "agent_name": agent_name,
         "user_visible_latency_ms": user_visible_latency_ms,
@@ -153,6 +165,38 @@ def build_agent_match_payload(
         "agent_match_score": agent_match_score,
         "confidence": routing_confidence,
         "routing_method": "event_routing",
+    }
+
+
+def build_injection_recorded_payload(
+    *,
+    session_id: str,
+    correlation_id: str,
+    cohort: str,
+    source: str,
+    injection_occurred: bool,
+    patterns_count: int,
+    emitted_at: str,
+) -> dict[str, Any]:
+    """Build payload for injection.recorded event (OMN-6158).
+
+    Tags each injection event with its ``source`` so consumers can separate
+    file-path convention injections from learned-pattern injections in A/B
+    cohort analysis.
+
+    Note: injection.recorded has a pre-existing consumer gap -- neither
+    EventConsumer nor ReadModelConsumer subscribes to this topic yet.
+    """
+    return {
+        "session_id": session_id,
+        "entity_id": _to_entity_id(session_id),
+        "correlation_id": correlation_id,
+        "causation_id": str(uuid.uuid4()),
+        "emitted_at": emitted_at,
+        "cohort": cohort,
+        "source": source,
+        "injection_occurred": injection_occurred,
+        "patterns_count": patterns_count,
     }
 
 
@@ -235,13 +279,16 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
 
 
 def emit_extraction_events(data: dict[str, Any]) -> int:
-    """Emit all three extraction events from a single data dict.
+    """Emit extraction events from a single data dict.
+
+    Emits up to 4 events: context.utilization, injection.recorded,
+    agent.match, and latency.breakdown.
 
     Args:
         data: Dictionary with session context fields (see module docstring).
 
     Returns:
-        Number of events successfully emitted (0-3).
+        Number of events successfully emitted (0-4).
     """
     if _emit_event is None:
         # emit_client_wrapper failed to import — already logged to stderr at import time.
@@ -255,6 +302,7 @@ def emit_extraction_events(data: dict[str, Any]) -> int:
     agent_name: str | None = data.get("agent_name") or None
     agent_match_score: float = _safe_float(data.get("agent_match_score"), 0.0)
     routing_confidence: float = _safe_float(data.get("routing_confidence"), 0.0)
+    source: str = str(data.get("source") or "pattern_injection")
     injection_occurred: bool = _safe_bool(data.get("injection_occurred"), False)
     patterns_count: int = _safe_int(data.get("patterns_count"), 0)
     routing_time_ms: int = _safe_int(data.get("routing_time_ms"), 0)
@@ -290,11 +338,28 @@ def emit_extraction_events(data: dict[str, Any]) -> int:
             user_visible_latency_ms=user_visible_latency_ms,
             cache_hit=cache_hit,
             emitted_at=emitted_at,
+            source=source,
         )
         if _emit_event("context.utilization", payload):
             emitted += 1
     except Exception as exc:
         logger.debug("context.utilization emission error: %s", exc)
+
+    # 1b. injection.recorded (OMN-6158) — source-tagged injection tracking
+    try:
+        payload = build_injection_recorded_payload(
+            session_id=session_id,
+            correlation_id=correlation_id,
+            cohort=cohort,
+            source=source,
+            injection_occurred=injection_occurred,
+            patterns_count=patterns_count,
+            emitted_at=emitted_at,
+        )
+        if _emit_event("injection.recorded", payload):
+            emitted += 1
+    except Exception as exc:
+        logger.debug("injection.recorded emission error: %s", exc)
 
     # 2. agent.match
     if agent_name:
@@ -359,6 +424,7 @@ if __name__ == "__main__":
 
 __all__ = [
     "build_context_utilization_payload",
+    "build_injection_recorded_payload",
     "build_agent_match_payload",
     "build_latency_breakdown_payload",
     "emit_extraction_events",

@@ -495,3 +495,23 @@ allowed_extras:
       violation with severity-weighted attribution for savings estimation.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-5549
+
+  # ---------------------------------------------------------------------------
+  # Plan review and hostile reviewer topics (OMN-6128, OMN-5864)
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.plan-review-completed.v1"
+    lifecycle: observability
+    reason: >
+      Plan review strategy run completion for omnidash /plan-reviewer dashboard.
+      Emitted by hostile-reviewer skill convergence loop.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6128
+
+  - topic: "onex.evt.omniclaude.hostile-reviewer-completed.v1"
+    lifecycle: observability
+    reason: >
+      Hostile reviewer skill completion event for omnidash hostile-reviewer view.
+      Emitted by pipeline_event_emitters.emit_hostile_reviewer_completed().
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-5864

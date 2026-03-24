@@ -187,14 +187,19 @@ with the schema defined in SKILL.md. The result MUST include:
 - `consecutive_clean_at_end` count
 - Final pass `findings`, `per_model_severity_counts`, `disagreements`
 
-## Emit Completion Event (OMN-5861)
+## Emit Completion Events (OMN-5861, OMN-6128)
 
-After writing the result artifact, emit a hostile-reviewer completion event.
-This call is fire-and-forget and must never block skill completion.
+After writing the result artifact, emit both completion events.
+These calls are fire-and-forget and must never block skill completion.
 
 ```python
-from plugins.onex.hooks.lib.pipeline_event_emitters import emit_hostile_reviewer_completed
+import os
+from plugins.onex.hooks.lib.pipeline_event_emitters import (
+    emit_hostile_reviewer_completed,
+    emit_plan_review_completed,
+)
 
+# 1. Hostile reviewer completion (omnidash /hostile-reviewer view)
 emit_hostile_reviewer_completed(
     mode=mode,                          # "pr" or "file"
     target=str(pr_number if mode == "pr" else file_path),
@@ -204,10 +209,24 @@ emit_hostile_reviewer_completed(
     total_findings=total_findings,
     critical_count=critical_count,
     major_count=major_count,
-    total_passes=pass_number,
-    convergence_verdict=convergence_verdict,
     correlation_id=os.environ.get("ONEX_CORRELATION_ID", context_id),
     session_id=os.environ.get("CLAUDE_SESSION_ID"),
+)
+
+# 2. Plan review completion (omnidash /plan-reviewer page) — OMN-6128
+emit_plan_review_completed(
+    session_id=os.environ.get("CLAUDE_SESSION_ID", ""),
+    plan_file=str(pr_number if mode == "pr" else file_path),
+    total_rounds=pass_number,
+    final_status=convergence_verdict,   # converged/capped/partially_converged/not_converged
+    findings_by_severity={
+        "CRITICAL": critical_count,
+        "MAJOR": major_count,
+        "MINOR": minor_count,
+        "NIT": nit_count,
+    },
+    models_used=succeeded_models,
+    correlation_id=os.environ.get("ONEX_CORRELATION_ID", context_id),
 )
 ```
 

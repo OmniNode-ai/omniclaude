@@ -379,6 +379,7 @@ class TestEmitFnUnavailable:
             emit_epic_run_updated,
             emit_gate_decision,
             emit_hostile_reviewer_completed,
+            emit_plan_review_completed,
             emit_pr_watch_updated,
         )
 
@@ -421,5 +422,12 @@ class TestEmitFnUnavailable:
                 mode="file",
                 target="test.py",
                 verdict="clean",
+                correlation_id="c",
+            )
+            emit_plan_review_completed(
+                session_id="s",
+                plan_file="plan.md",
+                total_rounds=2,
+                final_status="converged",
                 correlation_id="c",
             )

@@ -150,7 +150,7 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
     else
         echo "[$TS] [PostToolUse] SKILL_LOADED skill=$SKILL_NAME args=[REDACTED]" >> "$TRACE_LOG"
         # Write mode file for statusline tab label.
-        # Strips "onex:" prefix so "onex:ticket-work" displays as "ticket-work".
+        # Strips "onex:" prefix so "onex:ticket_work" displays as "ticket-work".
         if [[ -n "${ITERM_SESSION_ID:-}" ]]; then
             _mode_guid="${ITERM_SESSION_ID#*:}"
             _display_skill="${SKILL_NAME#onex:}"
@@ -571,5 +571,6 @@ check_tool_for_friction(tool_info, session_id=tool_info.get('session_id', tool_i
 ) &
 
 # Always pass through original output
+_hook_status "PASS" "$TOOL_NAME" "0"
 printf '%s\n' "$TOOL_INFO"
 exit 0

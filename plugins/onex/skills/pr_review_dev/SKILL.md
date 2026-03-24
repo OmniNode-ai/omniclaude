@@ -83,7 +83,7 @@ Filter nitpicks by default.
 ### Fix Phase -- dispatch via multi-agent parallel-build
 
 ```
-Skill(skill="onex:multi-agent --mode parallel-build")
+Skill(skill="onex:multi_agent --mode parallel-build")
 ```
 
 Pass collated issues as context.

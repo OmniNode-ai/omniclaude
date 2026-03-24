@@ -443,8 +443,8 @@ def _get_emit_event() -> Any:
                     sys.path.remove(hooks_lib_str)
                 except ValueError:
                     pass
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to import emit_client_wrapper: %s", e)
 
     return None
 

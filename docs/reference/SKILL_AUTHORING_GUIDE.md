@@ -208,3 +208,62 @@ See `plugins/onex/skills/` for the complete list. Notable skills:
 | `ci-failures` | Diagnose and fix CI pipeline failures |
 | `subagent-driven-development` | Multi-agent parallel development |
 | `verification-before-completion` | Pre-completion validation checklist |
+
+---
+
+## Output Suppression Contract
+
+Every bash block in a skill prompt that calls an external process MUST apply one of
+these patterns. Unsuppressed output enters Claude's context window on every skill
+invocation — this is a direct token cost.
+
+### Pattern A — Discard (output not needed by Claude)
+
+Use when Claude only needs to know if the command succeeded:
+
+```bash
+some-command 2>/dev/null
+some-command --quiet
+some-command > /dev/null 2>&1
+```
+
+### Pattern B — Trim (Claude needs the result, not the verbosity)
+
+Use when Claude needs to read the output but not all of it:
+
+```bash
+some-command 2>&1 | tail -50      # errors bubble to top after tail
+some-command | head -20           # take the first N matches
+docker logs --tail 20 <container> # last N log lines only
+pytest -q --tb=short              # compact test output
+gh pr list --limit 50             # cap API result sets
+```
+
+### Pattern C — Structured contract (subprocess tools)
+
+Use when invoking a standalone Python script or aggregator:
+
+```bash
+python script.py --args 2>/dev/null   # stderr silenced; stdout is JSON only
+```
+
+### Anti-patterns (NEVER use in skill prompts)
+
+- `pytest -v` — prints every test name; use `-q --tb=short`
+- `docker logs <container>` without `--tail` — unbounded stream
+- `grep -r` without `| head -N` — could return thousands of lines
+- `gh pr list --limit 100` — 100 PRs x ~2KB JSON = 200KB in context
+- `pre-commit run --all-files` without `| tail -50` — full hook output
+- `find <dir>` without `-maxdepth` or `| head -N` — unbounded filesystem scan
+
+### Reference implementation
+
+`hostile_reviewer/prompt.md` Step 1: aggregator runs all models silently,
+outputs compact JSON to stdout only. Claude reads ~500 tokens of structured
+findings regardless of how verbose the underlying models are.
+
+### Enforcement
+
+The suppression contract is regression-tested in
+`tests/unit/skills/test_output_suppression.py`. Any new skill that introduces
+unbounded output patterns will fail CI.

@@ -119,7 +119,7 @@ workflow_template:
         action: "Parallel execution via git worktrees (multiple in_progress tasks owned by this worker)"
         detail: |
           When multiple in_progress tasks owned by this worker are available, use git worktrees for isolation.
-          Skill: Skill("onex:using-git-worktrees")
+          Skill: Skill("onex:using_git_worktrees")
           Worktree root:  ../{repo}/.claude/worktrees/{epic_id}/{run_id[:8]}/{ticket_id}
           Branch naming:  epic/{epic_id}/{ticket_id}/{run_id[:8]}
           One worktree per ticket. Do not share worktrees between tickets.
@@ -127,7 +127,7 @@ workflow_template:
       - step: 5
         action: "Execute ticket work"
         detail: |
-          Skill("onex:ticket-work", args=ticket_id)
+          Skill("onex:ticket_work", args=ticket_id)
 
           On SUCCESS:
             TaskUpdate(task_id, status=completed)
@@ -171,14 +171,14 @@ capabilities:
 
 skills_available:
   ticket_work:
-    skill_name: "onex:ticket-work"
+    skill_name: "onex:ticket_work"
     when_to_use:
       - "Executing a single claimed ticket"
       - "After lease validation and explicit claim confirmed"
     args: "ticket_id"
 
   git_worktrees:
-    skill_name: "onex:using-git-worktrees"
+    skill_name: "onex:using_git_worktrees"
     when_to_use:
       - "Multiple in_progress tickets need parallel execution"
       - "Creating isolated branches per ticket"
@@ -199,8 +199,8 @@ activation_patterns:
 
 collaboration_points:
   team_lead: "agent-epic-team"
-  ticket_execution: "onex:ticket-work"
-  parallel_isolation: "onex:using-git-worktrees"
+  ticket_execution: "onex:ticket_work"
+  parallel_isolation: "onex:using_git_worktrees"
 
 success_metrics:
   - "All claimed tickets reach terminal state (completed or failed) before worker exits"

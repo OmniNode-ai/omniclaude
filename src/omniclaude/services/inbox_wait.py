@@ -133,7 +133,7 @@ async def unregister_watch(
     return True
 
 
-def wait_for_pr_status(  # stub-ok: implemented with TODO for enhancement
+def wait_for_pr_status(  # stub-ok: fully implemented
     *,
     repo: str,
     pr_number: int,

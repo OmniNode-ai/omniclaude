@@ -28,8 +28,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/ticket-work.json"
     fields:
-      - status: "success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "done" | "questions_pending" | null  # domain-specific granularity
+      - status: '"success" | "blocked" | "pending" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"done" | "questions_pending" | null  # domain-specific granularity'
       - ticket_id: str
       - extra: "{pr_url, phase_reached, commits}"
 args:
@@ -74,7 +74,7 @@ Orchestrate ticket execution through structured phases with Linear as the single
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
-> **Skill Ticket Policy**: When this ticket involves skill development (editing SKILL.md, prompt.md, or skill helpers), dispatch all implementation work to a polymorphic agent via `onex:multi-agent --mode sequential-with-review` or `onex:multi-agent --mode parallel-build`. The main agent must remain the orchestrator — never the implementer. See `onex:writing-skills` → "Polly-Dispatch Policy" for details.
+> **Skill Ticket Policy**: When this ticket involves skill development (editing SKILL.md, prompt.md, or skill helpers), dispatch all implementation work to a polymorphic agent via `onex:multi_agent --mode sequential-with-review` or `onex:multi_agent --mode parallel-build`. The main agent must remain the orchestrator — never the implementer. See `onex:writing_skills` → "Polly-Dispatch Policy" for details.
 
 ## Quick Start
 
@@ -440,7 +440,7 @@ Task(
     Error: {error_details}
     Files touched: {files_list}
 
-    Invoke: Skill(skill=\"onex:systematic-debugging\")
+    Invoke: Skill(skill=\"onex:systematic_debugging\")
 
     Use Phase 1 (Backward Tracing) to trace the root cause of the implementation failure.
     Report: root cause, fix recommendation, whether retry is safe, files involved."

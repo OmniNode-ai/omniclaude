@@ -115,6 +115,7 @@ error_handling:
 
 # Metadata
 metadata:
+  ticket: OMN-5982
   author: OmniNode Team
   license: MIT
   generated_by: generate_skill_node.py

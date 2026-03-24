@@ -151,7 +151,7 @@ Task(
 ### Phase 1: PR Review + CI Fix — invoke pr-review-dev skill
 
 ```
-Skill(skill="onex:pr-review-dev", args="{pr_number} {--no-ci if set}")
+Skill(skill="onex:pr_review_dev", args="{pr_number} {--no-ci if set}")
 ```
 
 This handles fetching PR review comments, CI failures, running multi-agent parallel-build for all Critical/Major/Minor issues, and offering to fix nitpicks.
@@ -159,7 +159,7 @@ This handles fetching PR review comments, CI failures, running multi-agent paral
 ### Phase 2: Local Review Loop — invoke local-review skill
 
 ```
-Skill(skill="onex:local-review", args="--required-clean-runs {required_clean_runs} --max-iterations {max_iterations}")
+Skill(skill="onex:local_review", args="--required-clean-runs {required_clean_runs} --max-iterations {max_iterations}")
 ```
 
 Runs until `required_clean_runs` consecutive clean passes (only nits). After clean passes, if `--no-push` is NOT set: `git push`.

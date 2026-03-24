@@ -27,7 +27,7 @@ before any merge proceeds:
 Run the `contract-compliance-check` skill against the PR:
 
 ```
-Invoke: Skill(skill="onex:contract-compliance-check", args="{ticket_id}")
+Invoke: Skill(skill="onex:contract_compliance_check", args="{ticket_id}")
 ```
 
 **Result routing**:

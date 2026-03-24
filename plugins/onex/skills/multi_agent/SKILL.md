@@ -484,7 +484,7 @@ Skill development -- editing `SKILL.md`, `prompt.md`, skill helpers -- is a prim
 
 **Pattern**:
 ```
-Skill(skill="onex:multi-agent --mode sequential-with-review")
+Skill(skill="onex:multi_agent --mode sequential-with-review")
 ```
 
 Then break the skill work into tasks:

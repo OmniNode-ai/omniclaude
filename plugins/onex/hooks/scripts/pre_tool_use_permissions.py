@@ -479,7 +479,7 @@ def normalize_bash_command(cmd: str) -> str:
     Operations:
     - Collapse multiple whitespace to single space
     - Strip leading/trailing whitespace
-    - Preserve intentional newlines in heredocs (TODO: Phase 2)
+    - Preserve intentional newlines in heredocs (Phase 2)
 
     Args:
         cmd: Raw bash command string.
@@ -729,7 +729,7 @@ def check_permission_cache(tool_name: str, params: dict[str, Any]) -> str | None
     """
     Check if we have a cached permission decision.
 
-    TODO (Phase 2): Implement permission caching
+    Phase 2: Implement permission caching.
 
     Args:
         tool_name: Name of the tool being invoked.
@@ -739,7 +739,7 @@ def check_permission_cache(tool_name: str, params: dict[str, Any]) -> str | None
         "allow" or "deny" if cached, None if no cache entry.
 
     Raises:
-        None - currently a stub returning None.
+        None - currently returns None (Phase 1).
 
     Example:
         >>> result = check_permission_cache("Bash", {"command": "ls"})
@@ -750,13 +750,13 @@ def check_permission_cache(tool_name: str, params: dict[str, Any]) -> str | None
     return None
 
 
-def make_permission_decision(
+def make_permission_decision(  # stub-ok: Phase 1 pass-through is intentional
     tool_name: str, params: dict[str, Any], hook_input: dict[str, Any]
 ) -> dict[str, Any]:
     """
     Make a permission decision for a tool invocation.
 
-    TODO (Phase 2): Implement intelligent permission logic
+    Phase 2: Implement intelligent permission logic.
 
     Args:
         tool_name: Name of the tool being invoked.

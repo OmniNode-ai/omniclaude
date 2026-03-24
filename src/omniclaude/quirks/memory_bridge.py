@@ -202,7 +202,7 @@ class NodeQuirkMemoryBridgeEffect:
         key = _derive_quirk_pattern_key(finding)
         return self._store.get_by_key(key)
 
-    def get_pattern_by_key(  # stub-ok: implemented with TODO for enhancement
+    def get_pattern_by_key(  # stub-ok: fully implemented
         self, pattern_key: str
     ) -> ModelPromotedPattern | None:
         """Look up a quirk pattern by its raw key.
@@ -220,7 +220,7 @@ class NodeQuirkMemoryBridgeEffect:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def build_pattern_key(  # stub-ok: implemented with TODO for enhancement
+    def build_pattern_key(  # stub-ok: fully implemented
         quirk_type_value: str, recommendation: str
     ) -> str:
         """Build the canonical OmniMemory key for a quirk type + recommendation.

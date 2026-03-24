@@ -8,7 +8,7 @@ mode: full
 
 # decision-store skill
 
-**Skill ID**: `onex:decision-store`
+**Skill ID**: `onex:decision_store`
 **Version**: 1.1.0
 **Owner**: omniclaude
 **Tickets**: OMN-2768 (base), OMN-2769 (Slack gate + status events)

@@ -690,8 +690,8 @@ When implementing a skill via `ticket-work` or `ticket-pipeline`:
 2. **Dispatch to polly** (high-token phases): implementation, testing, local review
 
 Use one of these skills for dispatch:
-- `onex:multi-agent --mode sequential-with-review` — for sequential task batches
-- `onex:multi-agent --mode parallel-build` — for independent parallel tasks
+- `onex:multi_agent --mode sequential-with-review` — for sequential task batches
+- `onex:multi_agent --mode parallel-build` — for independent parallel tasks
 
 ### Example dispatch for Phase 1 (implement)
 

@@ -153,7 +153,7 @@ _PHASE_CHOICES: list[str] = (
 # Derived via ``uuid5(NAMESPACE_DNS, "onex.omninode.io")`` so it is stable
 # and does NOT collide with the well-known RFC 4122 namespaces (DNS, URL, etc.).
 _ONEX_NAMESPACE = UUID("e176b05f-f761-5a9d-9a51-ac6d5a3566ee")
-# TODO: Extract to shared onex constants module when multiple consumers exist.
+# TODO(OMN-6157): Extract to shared onex constants module when multiple consumers exist.
 
 
 def _error_json(message: str) -> str:

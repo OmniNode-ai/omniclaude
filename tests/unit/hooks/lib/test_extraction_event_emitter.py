@@ -1,15 +1,16 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for extraction_event_emitter.py (OMN-2344).
+"""Unit tests for extraction_event_emitter.py (OMN-2344, OMN-6158).
 
 Tests cover:
-- build_context_utilization_payload: required fields including cohort, injection_occurred
+- build_context_utilization_payload: required fields including cohort, injection_occurred, source
+- build_injection_recorded_payload: source-tagged injection tracking (OMN-6158)
 - build_agent_match_payload: required fields including cohort, agent_match_score
 - build_latency_breakdown_payload: renamed fields (routing_time_ms, injection_time_ms,
   user_visible_latency_ms) and required cohort
-- emit_extraction_events: baseline 3-event emission, agent.match skipped without agent_name,
-  missing session_id short-circuit, count return values
+- emit_extraction_events: baseline 4-event emission, agent.match skipped without agent_name,
+  missing session_id short-circuit, count return values, source field threading
 - Graceful degradation when emit_client_wrapper is unavailable
 - Helper functions: _to_entity_id, _safe_float, _safe_int, _safe_bool
 
@@ -105,6 +106,7 @@ class TestBuildContextUtilizationPayload:
             "causation_id",
             "emitted_at",
             "cohort",
+            "source",
             "injection_occurred",
             "agent_name",
             "patterns_count",
@@ -179,9 +181,101 @@ class TestBuildContextUtilizationPayload:
         )
         assert payload["entity_id"] == sid
 
+    def test_source_defaults_to_pattern_injection(self) -> None:
+        """source field defaults to 'pattern_injection' for backwards compat (OMN-6158)."""
+        payload = eee.build_context_utilization_payload(
+            session_id=_SESSION_ID,
+            correlation_id=_CORR_ID,
+            cohort="treatment",
+            injection_occurred=True,
+            agent_name=None,
+            patterns_count=1,
+            user_visible_latency_ms=100,
+            cache_hit=False,
+            emitted_at="2026-01-01T00:00:00+00:00",
+        )
+        assert payload["source"] == "pattern_injection"
+
+    def test_source_accepts_file_path_convention(self) -> None:
+        """source field can be set to 'file_path_convention' (OMN-6158)."""
+        payload = eee.build_context_utilization_payload(
+            session_id=_SESSION_ID,
+            correlation_id=_CORR_ID,
+            cohort="treatment",
+            injection_occurred=True,
+            agent_name=None,
+            patterns_count=1,
+            user_visible_latency_ms=100,
+            cache_hit=False,
+            emitted_at="2026-01-01T00:00:00+00:00",
+            source="file_path_convention",
+        )
+        assert payload["source"] == "file_path_convention"
+
 
 # ---------------------------------------------------------------------------
-# 2. build_agent_match_payload
+# 2. build_injection_recorded_payload (OMN-6158)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildInjectionRecordedPayload:
+    """Tests for build_injection_recorded_payload()."""
+
+    def test_all_required_fields_present(self) -> None:
+        """Payload must contain source, injection_occurred, and standard envelope fields."""
+        payload = eee.build_injection_recorded_payload(
+            session_id=_SESSION_ID,
+            correlation_id=_CORR_ID,
+            cohort="treatment",
+            source="file_path_convention",
+            injection_occurred=True,
+            patterns_count=2,
+            emitted_at="2026-01-01T00:00:00+00:00",
+        )
+        required = {
+            "session_id",
+            "entity_id",
+            "correlation_id",
+            "causation_id",
+            "emitted_at",
+            "cohort",
+            "source",
+            "injection_occurred",
+            "patterns_count",
+        }
+        assert required <= set(payload.keys())
+
+    def test_source_propagated(self) -> None:
+        """source field must match input for A/B cohort separation."""
+        for src in ("pattern_injection", "file_path_convention"):
+            payload = eee.build_injection_recorded_payload(
+                session_id=_SESSION_ID,
+                correlation_id=_CORR_ID,
+                cohort="treatment",
+                source=src,
+                injection_occurred=True,
+                patterns_count=1,
+                emitted_at="2026-01-01T00:00:00+00:00",
+            )
+            assert payload["source"] == src
+
+    def test_entity_id_derived_from_session_id(self) -> None:
+        """entity_id must be session_id when valid UUID."""
+        sid = str(uuid.uuid4())
+        payload = eee.build_injection_recorded_payload(
+            session_id=sid,
+            correlation_id=_CORR_ID,
+            cohort="treatment",
+            source="pattern_injection",
+            injection_occurred=False,
+            patterns_count=0,
+            emitted_at="2026-01-01T00:00:00+00:00",
+        )
+        assert payload["entity_id"] == sid
+
+
+# ---------------------------------------------------------------------------
+# 3. build_agent_match_payload
 # ---------------------------------------------------------------------------
 
 
@@ -267,7 +361,7 @@ class TestBuildAgentMatchPayload:
 
 
 # ---------------------------------------------------------------------------
-# 3. build_latency_breakdown_payload
+# 4. build_latency_breakdown_payload
 # ---------------------------------------------------------------------------
 
 
@@ -385,24 +479,24 @@ class TestBuildLatencyBreakdownPayload:
 
 
 # ---------------------------------------------------------------------------
-# 4. emit_extraction_events — baseline flow
+# 5. emit_extraction_events — baseline flow
 # ---------------------------------------------------------------------------
 
 
 class TestEmitExtractionEventsBasic:
     """Tests for the primary emit_extraction_events() flow."""
 
-    def test_emits_three_events_when_agent_name_present(self) -> None:
-        """All three event types must be emitted when agent_name is provided."""
+    def test_emits_four_events_when_agent_name_present(self) -> None:
+        """All four event types must be emitted when agent_name is provided."""
         mock_emit = _make_emit_mock(True)
         data = _minimal_data()
         with patch.object(eee, "_emit_event", mock_emit):
             count = eee.emit_extraction_events(data)
-        assert count == 3
-        assert mock_emit.call_count == 3
+        assert count == 4
+        assert mock_emit.call_count == 4
 
     def test_event_types_emitted(self) -> None:
-        """Exactly the three omnidash-required event types must be emitted."""
+        """Exactly the four event types must be emitted."""
         called_types: list[str] = []
 
         def _capture(event_type: str, payload: Any) -> bool:
@@ -414,17 +508,18 @@ class TestEmitExtractionEventsBasic:
 
         assert set(called_types) == {
             "context.utilization",
+            "injection.recorded",
             "agent.match",
             "latency.breakdown",
         }
 
-    def test_emits_two_events_when_no_agent_name(self) -> None:
+    def test_emits_three_events_when_no_agent_name(self) -> None:
         """agent.match must be skipped when agent_name is absent/empty."""
         mock_emit = _make_emit_mock(True)
         data = _minimal_data(agent_name="")
         with patch.object(eee, "_emit_event", mock_emit):
             count = eee.emit_extraction_events(data)
-        assert count == 2
+        assert count == 3
         called_types = [call.args[0] for call in mock_emit.call_args_list]
         assert "agent.match" not in called_types
 
@@ -445,7 +540,7 @@ class TestEmitExtractionEventsBasic:
         assert count == 0
 
     def test_cohort_appears_in_all_emitted_payloads(self) -> None:
-        """All three payloads must include the cohort field to pass omnidash type guard."""
+        """All four payloads must include the cohort field to pass omnidash type guard."""
         payloads: list[dict[str, Any]] = []
 
         def _capture(event_type: str, payload: dict[str, Any]) -> bool:
@@ -455,7 +550,7 @@ class TestEmitExtractionEventsBasic:
         with patch.object(eee, "_emit_event", _capture):
             eee.emit_extraction_events(_minimal_data(cohort="control"))
 
-        assert len(payloads) == 3
+        assert len(payloads) == 4
         for p in payloads:
             assert p.get("cohort") == "control", f"cohort missing or wrong in {p}"
 
@@ -470,12 +565,45 @@ class TestEmitExtractionEventsBasic:
 
         with patch.object(eee, "_emit_event", _alternating):
             count = eee.emit_extraction_events(_minimal_data())
-        # 3 calls: 1→False, 2→True, 3→False → 1 success
-        assert count == 1
+        # 4 calls: 1→False, 2→True, 3→False, 4→True → 2 successes
+        assert count == 2
+
+    def test_source_defaults_to_pattern_injection_in_emit(self) -> None:
+        """source defaults to 'pattern_injection' when not in data (OMN-6158)."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        with patch.object(eee, "_emit_event", _capture):
+            eee.emit_extraction_events(_minimal_data())
+
+        # context.utilization and injection.recorded should have source
+        source_payloads = [p for p in payloads if "source" in p]
+        assert len(source_payloads) >= 2
+        for p in source_payloads:
+            assert p["source"] == "pattern_injection"
+
+    def test_source_file_path_convention_threaded(self) -> None:
+        """source='file_path_convention' propagates to relevant events (OMN-6158)."""
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        with patch.object(eee, "_emit_event", _capture):
+            eee.emit_extraction_events(_minimal_data(source="file_path_convention"))
+
+        source_payloads = [p for p in payloads if "source" in p]
+        assert len(source_payloads) >= 2
+        for p in source_payloads:
+            assert p["source"] == "file_path_convention"
 
 
 # ---------------------------------------------------------------------------
-# 5. Graceful degradation
+# 6. Graceful degradation
 # ---------------------------------------------------------------------------
 
 
@@ -509,7 +637,7 @@ class TestGracefulDegradation:
 
 
 # ---------------------------------------------------------------------------
-# 6. _to_entity_id helper
+# 7. _to_entity_id helper
 # ---------------------------------------------------------------------------
 
 
@@ -536,7 +664,7 @@ class TestToEntityId:
 
 
 # ---------------------------------------------------------------------------
-# 7. Helper functions
+# 8. Helper functions
 # ---------------------------------------------------------------------------
 
 

@@ -22,7 +22,7 @@ Agent(
 
 **CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
-**Skill ID**: `onex:contract-compliance-check`
+**Skill ID**: `onex:contract_compliance_check`
 **Version**: 1.0.0
 **Owner**: omniclaude
 **Ticket**: OMN-2978

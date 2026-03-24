@@ -142,13 +142,13 @@ def compute_stf_hash(code: str) -> str:
 
 # STF Commands
 @click.group()
-def cli():
+def cli():  # stub-ok: click group container
     """Debug Loop Intelligence CLI - Manage STFs and Model Pricing"""
     pass
 
 
 @cli.group()
-def stf():
+def stf():  # stub-ok: click group container
     """Solution Template Fragment (STF) management commands"""
     pass
 
@@ -536,7 +536,7 @@ def store(code: str, name: str, description: str, category: str | None, quality:
 
 # Model Commands
 @cli.group()
-def model():
+def model():  # stub-ok: click group container
     """Model pricing catalog management commands"""
     pass
 

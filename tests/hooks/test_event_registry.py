@@ -802,6 +802,10 @@ class TestEventRegistryIntegration:
             "utilization.scoring.requested",
             # Task delegation observability (OMN-5610)
             "task.delegated",
+            # Plan review completion (OMN-6128)
+            "plan.review.completed",
+            # Hostile reviewer completion (OMN-5864)
+            "hostile.reviewer.completed",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

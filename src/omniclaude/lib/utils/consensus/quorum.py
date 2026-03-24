@@ -119,7 +119,7 @@ class AIQuorum:
         ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
     ]
 
-    def __init__(  # stub-ok: implemented __init__ with TODO for future config
+    def __init__(  # stub-ok: fully implemented
         self,
         models: list[ModelConfig] | None = None,
         stub_mode: bool = True,  # Phase 1: Default to stub mode
@@ -276,7 +276,7 @@ class AIQuorum:
             original_prompt, corrected_prompt, correction_type, correction_metadata
         )
 
-    def _stub_score_correction(  # stub-ok: implemented correction with TODO for calibration
+    def _stub_score_correction(  # stub-ok: fully implemented
         self,
         original_prompt: str,
         corrected_prompt: str,

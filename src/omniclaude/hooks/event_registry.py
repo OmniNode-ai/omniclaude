@@ -934,6 +934,40 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="task_id",
         required_fields=["task_id", "violation_type", "enforcement_action"],
     ),
+    # =========================================================================
+    # Plan Review Completed (OMN-6128)
+    # =========================================================================
+    # Emitted by the hostile-reviewer skill after convergence loop completes.
+    # Consumed by omnidash /plan-reviewer page via plan_review_runs table.
+    "plan.review.completed": EventRegistration(
+        event_type="plan.review.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PLAN_REVIEW_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in review metadata
+                description="Plan review strategy run result for omnidash /plan-reviewer page",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "plan_file", "total_rounds", "final_status"],
+    ),
+    # =========================================================================
+    # Hostile Reviewer Completed (OMN-5864)
+    # =========================================================================
+    # Emitted by emit_hostile_reviewer_completed() after hostile-reviewer skill finishes.
+    # Consumed by omnidash /hostile-reviewer view via hostile_reviewer_runs table.
+    "hostile.reviewer.completed": EventRegistration(
+        event_type="hostile.reviewer.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOSTILE_REVIEWER_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in review metadata
+                description="Hostile reviewer skill completion for omnidash hostile-reviewer view",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["mode", "target", "verdict"],
+    ),
 }
 
 

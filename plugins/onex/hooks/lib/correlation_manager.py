@@ -92,8 +92,8 @@ class CorrelationRegistry:
                 with open(self.correlation_file, encoding="utf-8") as f:
                     result: dict[str, Any] = json.load(f)
                     return result
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to load correlation state: %s", e)
         return {}
 
     def _save_state(self, state: dict[str, Any]) -> None:

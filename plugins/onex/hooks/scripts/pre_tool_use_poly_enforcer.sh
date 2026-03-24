@@ -45,6 +45,7 @@ fi
 
 # Only intercept Task and Agent tool invocations
 if [[ ! "$TOOL_NAME" =~ ^(Task|Agent)$ ]]; then
+    _hook_status "PASS" "not Task/Agent ($TOOL_NAME)" "0"
     echo "$TOOL_INFO"
     exit 0
 fi
@@ -69,6 +70,7 @@ if [[ ! "$SUBAGENT_TYPE" == onex:* ]]; then
     # Output block decision JSON and exit 2 to deny the tool call.
     # Clear the error-guard EXIT trap first -- exit 2 is an intentional block,
     # not a crash. The error guard would swallow it and exit 0 instead.
+    _hook_status "BLOCKED" "$BLOCK_DETAIL" "0"
     jq -n --arg reason "$BLOCK_REASON" '{"decision": "block", "reason": $reason}'
     trap - EXIT
     exit 2
@@ -90,6 +92,7 @@ _AUDIT_VALIDATOR_OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" python3 -m omniclaud
 if [[ "$_AUDIT_VALIDATOR_EXIT" -eq 2 ]]; then
     # Python validator issued a hard block (contract binding misconfiguration).
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED by audit_dispatch_validator: $TOOL_NAME subagent_type=$SUBAGENT_TYPE" >> "$LOG_FILE"
+    _hook_status "BLOCKED" "audit_dispatch_validator rejected $SUBAGENT_TYPE" "0"
     # Pass the block JSON output from the validator directly to the caller.
     if [[ -n "$_AUDIT_VALIDATOR_OUTPUT" ]]; then
         echo "$_AUDIT_VALIDATOR_OUTPUT"
@@ -103,5 +106,6 @@ fi
 
 # Both prefix validation and contract binding validation passed.
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ALLOWED: $TOOL_NAME with subagent_type=$SUBAGENT_TYPE" >> "$LOG_FILE"
+_hook_status "PASS" "$TOOL_NAME subagent_type=$SUBAGENT_TYPE" "0"
 echo "$TOOL_INFO"
 exit 0

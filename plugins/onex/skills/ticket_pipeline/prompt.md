@@ -1995,7 +1995,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
      prompt="You are executing ticket-work for {ticket_id}.
-       Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
+       Invoke: Skill(skill=\"onex:ticket_work\", args=\"{ticket_id}\")
 
        Ticket: {ticket_id} - {title}
        Description: {description}
@@ -2094,7 +2094,7 @@ def execute_phase(phase_name, state):
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
+       Invoke: Skill(skill=\"onex:local_review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}
@@ -2537,7 +2537,7 @@ EOF
    Task(
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
-     prompt="Invoke: Skill(skill=\"onex:ci-watch\",
+     prompt="Invoke: Skill(skill=\"onex:ci_watch\",
        args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
        Report back with: status, ci_fix_cycles_used, watch_duration_minutes."
    )
@@ -2574,7 +2574,7 @@ EOF
    Task(
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
-     prompt="Invoke: Skill(skill=\"onex:pr-watch\",
+     prompt="Invoke: Skill(skill=\"onex:pr_watch\",
        args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}\")
        Report back with: status, pr_review_cycles_used, watch_duration_hours."
    )
@@ -2723,7 +2723,7 @@ and auto-merge asynchronously.
      run_in_background=True,
      description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
      prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
-       Invoke: Skill(skill=\"onex:ci-watch\",
+       Invoke: Skill(skill=\"onex:ci_watch\",
          args=\"{pr_number} {repo} --max-fix-cycles {max_ci_fix_cycles} --no-auto-fix\")
        Fix any failures, push fixes. GitHub will auto-merge once CI is green."
    )
@@ -2758,7 +2758,7 @@ and auto-merge asynchronously.
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
      prompt="You are executing pr-watch for {ticket_id}.
-       Invoke: Skill(skill=\"onex:pr-watch\",
+       Invoke: Skill(skill=\"onex:pr_watch\",
          args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}{' --fix-nits' if auto_fix_nits else ''}\")
 
        Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/pr-watch.json
@@ -3004,7 +3004,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
      prompt="You are executing auto-merge (NEEDS_GATE path) for {ticket_id}.
-       Invoke: Skill(skill=\"onex:auto-merge\",
+       Invoke: Skill(skill=\"onex:auto_merge\",
          args=\"--pr {pr_number} --ticket-id {ticket_id} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
 
        Note: NEEDS_GATE=true for this PR (hold_reason: {hold_reason}).

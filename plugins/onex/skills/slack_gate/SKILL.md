@@ -38,8 +38,8 @@ outputs:
     type: ModelSkillResult
     description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/slack-gate.json"
     fields:
-      - status: "success" | "failed" | "error"  # EnumSkillResultStatus canonical values
-      - extra_status: "accepted" | "rejected" | "timeout"  # domain-specific granularity
+      - status: '"success" | "failed" | "error"  # EnumSkillResultStatus canonical values'
+      - extra_status: '"accepted" | "rejected" | "timeout"  # domain-specific granularity'
       - extra: "{risk_level, reply, thread_ts, elapsed_minutes}"
 args:
   - name: risk_level
@@ -294,7 +294,7 @@ if [[ -n "$TIMEOUT_MINUTES" ]]; then
   TIMEOUT_ARG="--arg timeout_minutes=${TIMEOUT_MINUTES}"
 fi
 
-exec claude --skill onex:slack-gate \
+exec claude --skill onex:slack_gate \
   --arg "risk_level=${RISK_LEVEL}" \
   --arg "message=${MESSAGE}" \
   ${TIMEOUT_ARG}
@@ -304,7 +304,7 @@ exec claude --skill onex:slack-gate \
 |------------|-------------|
 | `/slack-gate LOW_RISK "Decomposed epic into 3 sub-tickets. Reply reject to cancel."` | Post LOW_RISK gate, auto-approve (no polling) |
 | `/slack-gate HIGH_RISK "Ready to merge PR #123. Reply merge to proceed."` | Post HIGH_RISK gate, poll for explicit approval |
-| `Skill(skill="onex:slack-gate", args="MEDIUM_RISK CI failed 3 times. --timeout-minutes 60")` | Programmatic: composable invocation from orchestrator |
+| `Skill(skill="onex:slack_gate", args="MEDIUM_RISK CI failed 3 times. --timeout-minutes 60")` | Programmatic: composable invocation from orchestrator |
 | `slack-gate.sh HIGH_RISK "Deploy to production?" --timeout-minutes 1440` | Shell: direct invocation with 24h timeout |
 
 ## Skill Result Output
