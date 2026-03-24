@@ -100,6 +100,12 @@ Agent(
 
 **CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
+**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
+or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
+Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
+direct tools bypasses ONEX observability, context management, and the orchestration layer. There
+is no acceptable workaround — surface the failure.
+
 > **Session lifetime**: The monitoring phase is alive only while this session runs. Use `/epic-team {epic_id} --resume` to re-enter after a disconnection.
 
 > **Architecture note (v2.0.0)**: epic-team is a thin orchestrator. All business logic lives in

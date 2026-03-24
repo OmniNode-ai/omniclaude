@@ -75,6 +75,12 @@ Agent(
 
 **CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
+**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
+or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
+Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
+direct tools bypasses ONEX observability, context management, and the orchestration layer. There
+is no acceptable workaround — surface the failure.
+
 ## Overview
 
 Full autonomous loop: Playwright audit → parallel systematic-debug → fix → PR → Linear ticket
