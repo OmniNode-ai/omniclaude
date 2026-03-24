@@ -1619,7 +1619,8 @@ jobs:
 
       - name: Validate skill contracts
         # Initially without --strict; promote to --strict after baseline warnings are resolved
-        run: python onex_change_control/scripts/validation/validate_skill_contracts.py --skills-root plugins/onex/skills
+        # Uses wrapper that gracefully skips if canonical validator not yet in onex_change_control
+        run: bash scripts/validate_skill_contracts_wrapper.sh
 
   # ============================================================================
   # GATE AGGREGATORS
