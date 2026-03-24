@@ -1,16 +1,45 @@
 ---
 description: Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
 mode: full
+version: 1.1.0
 level: advanced
 debug: false
-mode: full
 ---
 
 # Generate ONEX Node
 
 Fully automated ONEX node generation using the omniclaude codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
 
-## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+## Pre-Flight Constraint Block
+
+**This skill creates new files in a worktree. Before any tool call, confirm all three items
+below.**
+
+Emit this block verbatim as your first response. Do NOT make any tool calls until this block
+is in your output. This constraint mirrors CLAUDE.md requirements — it does not introduce
+new rules.
+
+```
+[generate-node] PRE-FLIGHT CONFIRMATION
+
+1. PLAN FILE: <path to plan or ticket contract reviewed, or "ticket contract: OMN-XXXX">
+   Status: CONFIRMED / NOT FOUND (stop if not found — run /generate-tcb OMN-XXXX first)
+
+2. MODE: build (creating new ONEX node files)
+   Node type: <effect | compute | reducer | orchestrator>
+   Output directory: <target path>
+
+3. INTEGRATION SYSTEMS:
+   - Config: Infisical (via INFISICAL_ADDR) — never hardcode credentials or DSNs
+   - Containers: ModelONEXContainer — generated nodes must follow 4-node architecture
+   - Dispatch: polymorphic-agent (subagent_type="onex:polymorphic-agent") — always
+   - Naming: Model prefix for models, Enum prefix for enums, NodeXxxType for node classes
+   - Worktree: confirm target is a proper worktree (not omni_home or main checkout)
+```
+
+**If any confirmation cannot be stated**, stop and report the blocker.
+
+## CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
 
 **DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
 

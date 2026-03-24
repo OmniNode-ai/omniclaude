@@ -1,7 +1,7 @@
 ---
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
 mode: full
-version: 2.0.0
+version: 2.1.0
 level: advanced
 debug: false
 category: workflow
@@ -13,10 +13,41 @@ args:
   - --force-kill: Combine with --force to destroy active run even with live workers
   - --resume: Re-enter monitoring; finalize if all tasks terminal; no-op if already done
   - --force-unmatched: Route unmatched tickets to omniplan as TRIAGE tasks
-mode: full
 ---
 
 # Epic Team Orchestration
+
+## Pre-Flight Constraint Block
+
+**This skill creates files in worktrees. Before any tool call, confirm all three items below.**
+
+Emit this block verbatim as your first response. Do NOT make any tool calls until this block
+is in your output. This constraint mirrors CLAUDE.md requirements — it does not introduce
+new rules.
+
+```
+[epic-team] PRE-FLIGHT CONFIRMATION
+
+1. PLAN FILE: <path to plan file reviewed, or "no plan required — epic tickets specify work">
+   Status: CONFIRMED / NOT FOUND (stop if not found — run /plan-to-tickets first)
+
+2. MODE: build
+   Confirmation: This session will create worktrees, implement tickets, and open PRs.
+   NOT close-out. NOT reporting.
+
+3. INTEGRATION SYSTEMS:
+   - Config: Infisical (via INFISICAL_ADDR) — never hardcode credentials or URLs
+   - Containers: ModelONEXContainer / ONEX node types — use established node patterns
+   - Dispatch: polymorphic-agent (subagent_type="onex:polymorphic-agent") — all sub-tasks
+   - State: $ONEX_STATE_DIR — write checkpoints before each wave dispatch
+   - Worktrees: $OMNI_WORKTREES/<ticket>/<repo>/ — standard path (see CLAUDE.md)
+```
+
+**If any confirmation cannot be stated**, stop and report the blocker. Do NOT proceed to
+dispatch until all 3 items are confirmed.
+
+**Exception**: `--dry-run` and `--resume` skips confirmation item 1 (plan review), as
+no new implementation work is initiated.
 
 ## Dispatch Requirement
 

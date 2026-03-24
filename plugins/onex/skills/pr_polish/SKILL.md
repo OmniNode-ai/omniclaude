@@ -1,7 +1,7 @@
 ---
 description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures, then iterate local-review until N consecutive clean passes
 mode: full
-version: 1.0.0
+version: 1.1.0
 level: intermediate
 debug: false
 category: workflow
@@ -40,10 +40,39 @@ args:
   - name: --no-automerge
     description: Skip enabling GitHub automerge after all phases complete
     required: false
-mode: full
 ---
 
 # PR Polish
+
+## Pre-Flight Constraint Block
+
+**This skill writes to worktrees and pushes commits. Before any tool call, confirm all three
+items below.**
+
+Emit this block verbatim as your first response. Do NOT make any tool calls until this block
+is in your output. This constraint mirrors CLAUDE.md requirements — it does not introduce
+new rules.
+
+```
+[pr-polish] PRE-FLIGHT CONFIRMATION
+
+1. PLAN FILE: N/A — pr-polish operates on an existing PR, not a new plan
+   PR: #<pr_number> | Repo: <repo> | Branch: <branch>
+
+2. MODE: close-out (fixing an existing PR, not implementing new features)
+   Confirmation: This session will resolve conflicts, fix CI, and iterate local-review.
+   NOT building new features. NOT creating new tickets.
+
+3. INTEGRATION SYSTEMS:
+   - Config: Never hardcode credentials or URLs in fixed code — use Infisical/env refs
+   - Containers: If fixing ONEX nodes, use established ModelONEXContainer patterns
+   - Dispatch: polymorphic-agent for sub-skill invocations within this skill
+   - State: $ONEX_STATE_DIR/pr-polish/<pr>/ — phase result files for idempotency
+   - PR: Always push to the existing branch; never create new branches
+```
+
+**If any confirmation cannot be stated** (e.g., cannot determine PR number or repo), stop
+and report the blocker. Do NOT proceed to dispatch until all 3 items are confirmed.
 
 ## Dispatch Requirement
 
