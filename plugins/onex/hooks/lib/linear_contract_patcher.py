@@ -210,6 +210,7 @@ def validate_contract_yaml(yaml_str: str) -> tuple[bool, str | None]:
     1. YAML parses without error
     2. Result is a dict (mapping)
     3. Required fields are present (ticket_id, phase)
+    4. No injection patterns in string field values (OMN-6373)
 
     Args:
         yaml_str: YAML string to validate.
@@ -229,6 +230,30 @@ def validate_contract_yaml(yaml_str: str) -> tuple[bool, str | None]:
     missing = required_keys - set(parsed.keys())
     if missing:
         return False, f"Missing required keys: {sorted(missing)}"
+
+    # OMN-6373: Check all string field values for injection patterns.
+    # Shallow walk: strings, lists of strings, lists of dicts with string values.
+    from plugins.onex.hooks.lib.sanitize import check_field_injection
+
+    for key, value in parsed.items():
+        if isinstance(value, str):
+            injection_err = check_field_injection(value, str(key))
+            if injection_err:
+                return False, injection_err
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                if isinstance(item, str):
+                    injection_err = check_field_injection(item, f"{key}[{i}]")
+                    if injection_err:
+                        return False, injection_err
+                elif isinstance(item, dict):
+                    for sub_key, sub_value in item.items():
+                        if isinstance(sub_value, str):
+                            injection_err = check_field_injection(
+                                sub_value, f"{key}[{i}].{sub_key}"
+                            )
+                            if injection_err:
+                                return False, injection_err
 
     return True, None
 
