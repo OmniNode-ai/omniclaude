@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Node Transition Selector Effect — local model as constrained transition selector.
 
-This effect node wires the local model (Qwen3-14B at LLM_CODER_FAST_URL) into
+This effect node wires the local model (Qwen3-14B via LLM_CODER_FAST_URL) into
 the agent graph navigation loop as a constrained transition selector. The model
 is given a bounded typed action set and selects exactly one transition.
 
@@ -56,11 +56,18 @@ logger = logging.getLogger(__name__)
 # Prompt template version — must match contract.yaml prompt_template.version
 _PROMPT_TEMPLATE_VERSION = "1.0.0"
 
-# Default model endpoint from environment, falling back to contract default
-_DEFAULT_LLM_ENDPOINT = os.environ.get(
-    "LLM_CODER_FAST_URL",
-    "http://192.168.86.201:8001",  # onex-allow-internal-ip
-)
+
+def _resolve_endpoint() -> str:
+    """Resolve LLM endpoint from environment. Fail fast if not configured."""
+    url = os.environ.get("LLM_CODER_FAST_URL", "")
+    if not url:
+        raise RuntimeError(
+            "LLM_CODER_FAST_URL is not set. "
+            "The transition selector requires an explicit LLM endpoint. "
+            "Set LLM_CODER_FAST_URL in ~/.omnibase/.env or your environment."
+        )
+    return url
+
 
 # Selection timeout in seconds (matches contract.yaml error_handling.selection_timeout_seconds).
 # asyncio.wait_for is the authoritative timeout; httpx timeout is set slightly higher so that
@@ -92,7 +99,6 @@ class NodeTransitionSelectorEffect(NodeEffect):
             container: ONEX container for dependency injection.
         """
         super().__init__(container)
-        self._llm_endpoint = _DEFAULT_LLM_ENDPOINT
 
     # ------------------------------------------------------------------
     # Public API
@@ -142,6 +148,18 @@ class NodeTransitionSelectorEffect(NodeEffect):
                 self._call_model(prompt),
                 timeout=_SELECTION_TIMEOUT_SECONDS,
             )
+        except RuntimeError as exc:
+            # Configuration error (e.g. LLM_CODER_FAST_URL not set)
+            logger.warning(
+                "transition_selector.model_unavailable",
+                extra={"correlation_id": str(correlation_id), "error": str(exc)},
+            )
+            return ModelTransitionSelectorResult(
+                error_kind=SelectionErrorKind.MODEL_UNAVAILABLE,
+                error_detail=str(exc),
+                duration_ms=time.monotonic() * 1000.0 - start_ms,
+                correlation_id=correlation_id,
+            )
         except TimeoutError:
             logger.warning(
                 "transition_selector.timeout",
@@ -150,22 +168,32 @@ class NodeTransitionSelectorEffect(NodeEffect):
                     "timeout_s": _SELECTION_TIMEOUT_SECONDS,
                 },
             )
+            endpoint = _resolve_endpoint()
             return ModelTransitionSelectorResult(
                 error_kind=SelectionErrorKind.SELECTION_TIMEOUT,
                 error_detail=(
-                    f"Model did not respond within {_SELECTION_TIMEOUT_SECONDS}s"
+                    f"LLM endpoint timed out at {endpoint} "
+                    f"after {_SELECTION_TIMEOUT_SECONDS}s "
+                    f"(configured via LLM_CODER_FAST_URL). "
+                    f"Verify the endpoint is running: curl {endpoint}/health"
                 ),
                 duration_ms=time.monotonic() * 1000.0 - start_ms,
                 correlation_id=correlation_id,
             )
         except Exception as exc:  # noqa: BLE001 — boundary: node must return error result
+            endpoint = _resolve_endpoint()
             logger.warning(
                 "transition_selector.model_unavailable",
                 extra={"correlation_id": str(correlation_id), "error": str(exc)},
             )
             return ModelTransitionSelectorResult(
                 error_kind=SelectionErrorKind.MODEL_UNAVAILABLE,
-                error_detail=f"Model call failed: {exc}",
+                error_detail=(
+                    f"LLM endpoint unreachable at {endpoint} "
+                    f"(configured via LLM_CODER_FAST_URL). "
+                    f"Verify the endpoint is running: curl {endpoint}/health. "
+                    f"Original error: {exc}"
+                ),
                 duration_ms=time.monotonic() * 1000.0 - start_ms,
                 correlation_id=correlation_id,
             )
@@ -276,6 +304,9 @@ class NodeTransitionSelectorEffect(NodeEffect):
     def _build_prompt(self, request: ModelTransitionSelectorRequest) -> str:
         """Build the versioned classification prompt.
 
+        INVARIANT: This method is pure -- no network, no env vars, no I/O.
+        It must work identically regardless of endpoint configuration.
+
         Prompt template version: 1.0.0 (matches contract.yaml).
         Only uses data from current_state, goal, action_set, context.
 
@@ -330,6 +361,28 @@ class NodeTransitionSelectorEffect(NodeEffect):
             "Do not include any other text."
         )
         return prompt
+
+    # ------------------------------------------------------------------
+    # Endpoint Health Probing
+    # ------------------------------------------------------------------
+
+    async def _probe_endpoint(self, timeout: float = 2.0) -> bool:
+        """Probe LLM endpoint health. Returns True if reachable.
+
+        Best-effort: assumes the configured endpoint exposes a simple health path.
+        Must not become a hidden dependency for prompt building or other pure node behavior.
+        If endpoint implementations vary, treat probe failure as informational, not blocking.
+        """
+        endpoint = _resolve_endpoint()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{endpoint}/health",
+                    timeout=timeout,
+                )
+                return resp.status_code == 200
+        except (httpx.TimeoutException, httpx.NetworkError, OSError):
+            return False
 
     # ------------------------------------------------------------------
     # Model Call
@@ -388,7 +441,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
             httpx.HTTPError: On network or HTTP errors.
             ValueError: If model returns no choices.
         """
-        endpoint = self._llm_endpoint.rstrip("/")
+        endpoint = _resolve_endpoint().rstrip("/")
         url = f"{endpoint}/v1/chat/completions"
 
         payload = {

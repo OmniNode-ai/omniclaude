@@ -44,6 +44,9 @@ Parse from `$ARGUMENTS` (after stripping the `detect` subcommand):
 | `--max-best-effort <n>` | 50 | Cap on BEST_EFFORT findings |
 | `--dry-run` | false | Skip ticket creation/commenting |
 | `--output <fmt>` | md | `json` or `md` |
+| `--max-iterations <n>` | 3 | Maximum fix-and-recheck iterations |
+| `--skip-infra-probes` | false | Skip infrastructure probes |
+| `--include-auth-probes` | false | Include auth/identity probes |
 
 Generate a `run_id` = first 12 chars of a UUID4.
 

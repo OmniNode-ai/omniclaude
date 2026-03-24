@@ -16,6 +16,7 @@ Coverage:
 from __future__ import annotations
 
 import asyncio
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -380,12 +381,15 @@ class TestSelectMocked:
             await asyncio.sleep(99)
             return '{"selected": 1}'
 
-        with patch.object(node, "_call_model", new=slow_call):
-            with patch(
-                "omniclaude.nodes.node_transition_selector_effect.node._SELECTION_TIMEOUT_SECONDS",
-                0.01,
-            ):
-                result = await node.select(req)
+        with patch.dict(
+            os.environ, {"LLM_CODER_FAST_URL": "http://test-endpoint:8001"}
+        ):
+            with patch.object(node, "_call_model", new=slow_call):
+                with patch(
+                    "omniclaude.nodes.node_transition_selector_effect.node._SELECTION_TIMEOUT_SECONDS",
+                    0.01,
+                ):
+                    result = await node.select(req)
 
         assert result.success is False
         assert result.error_kind == SelectionErrorKind.SELECTION_TIMEOUT
@@ -441,8 +445,11 @@ class TestSelectMocked:
         async def failing_call(prompt: str) -> str:
             raise ConnectionRefusedError("Connection refused")
 
-        with patch.object(node, "_call_model", new=failing_call):
-            result = await node.select(req)
+        with patch.dict(
+            os.environ, {"LLM_CODER_FAST_URL": "http://test-endpoint:8001"}
+        ):
+            with patch.object(node, "_call_model", new=failing_call):
+                result = await node.select(req)
 
         assert result.success is False
         assert result.error_kind == SelectionErrorKind.MODEL_UNAVAILABLE

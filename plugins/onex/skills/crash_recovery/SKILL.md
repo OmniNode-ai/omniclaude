@@ -21,7 +21,6 @@ args:
   - name: --json
     description: "Output as JSON instead of a markdown table"
     required: false
-mode: full
 ---
 
 # Crash Recovery

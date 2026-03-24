@@ -3,7 +3,6 @@ description: Daily deep dive reports and velocity-based project completion estim
 mode: full
 level: intermediate
 debug: false
-mode: full
 args:
   - name: --mode
     description: "Report mode: deep-dive (default) | close-day | project | velocity | suggest | pipeline | github | all"

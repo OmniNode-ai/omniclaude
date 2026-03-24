@@ -12,7 +12,6 @@ tags:
   - pipeline
   - governance
 author: OmniClaude Team
-mode: full
 ---
 
 # Release Readiness Handshake (RRH) Skill

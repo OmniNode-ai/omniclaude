@@ -27,6 +27,7 @@ dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 auto_merge = "--auto-merge" in args
 require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
+docs_only = "--docs-only" in args  # Only generate/update documentation, skip implementation
 
 skip_to = None
 if "--skip-to" in args:

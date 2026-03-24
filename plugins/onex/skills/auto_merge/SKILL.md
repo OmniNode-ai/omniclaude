@@ -63,7 +63,6 @@ args:
   - name: --ticket-id
     description: Linear ticket ID to mark Done after merge (e.g. OMN-1234)
     required: false
-mode: full
 ---
 
 # Auto Merge
