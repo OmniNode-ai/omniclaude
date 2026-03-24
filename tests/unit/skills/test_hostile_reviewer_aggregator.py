@@ -255,33 +255,31 @@ def test_run_all_models_handles_coordinator_timeout(
     The function must catch it, collect completed futures, add remaining to
     models_failed, and return a valid ModelAggregateResult (not crash).
 
-    Strategy: patch `as_completed` to raise immediately AND patch the driver
-    functions (run_gemini, run_codex) to block on a threading Event so their
-    futures are still pending (not done) when the TimeoutError is caught.
-    This ensures the `not f.done()` check correctly populates models_failed.
+    Strategy: patch `as_completed` to raise immediately AND replace
+    ThreadPoolExecutor.submit with a mock that returns permanently-pending
+    futures. This avoids thread-scheduling races where real futures might
+    complete before the done-check runs.
     """
-    import threading
+    from concurrent.futures import Future
+    from unittest.mock import patch
 
     import aggregate_reviews
-
-    # Block drivers so futures are still pending when TimeoutError fires
-    block = threading.Event()
-
-    def blocking_gemini(diff: str) -> list[dict[str, str]]:
-        block.wait(timeout=5)
-        return []
-
-    def blocking_codex(sha: str) -> list[dict[str, str]]:
-        block.wait(timeout=5)
-        return []
-
-    monkeypatch.setattr(aggregate_reviews, "run_gemini", blocking_gemini)
-    monkeypatch.setattr(aggregate_reviews, "run_codex", blocking_codex)
 
     def fake_as_completed(fs: object, timeout: float) -> object:
         raise TimeoutError("simulated coordinator cap")
 
     monkeypatch.setattr(aggregate_reviews, "as_completed", fake_as_completed)
+
+    # Return futures that are permanently pending (never done)
+    pending_futures: list[Future[object]] = []
+
+    def fake_submit(
+        self: object, fn: object, *args: object, **kwargs: object
+    ) -> Future[object]:
+        f: Future[object] = Future()
+        # Do NOT set a result — future stays in PENDING state
+        pending_futures.append(f)
+        return f
 
     class FakeDiff:
         stdout = "+def foo(): pass\n"
@@ -302,9 +300,15 @@ def test_run_all_models_handles_coordinator_timeout(
     monkeypatch.delenv("LLM_CODER_URL", raising=False)
     monkeypatch.delenv("LLM_DEEPSEEK_R1_URL", raising=False)
 
-    result = aggregate_reviews.run_all_models("99", "org/repo")
-    # Unblock the drivers so the thread pool can shut down cleanly
-    block.set()
+    from concurrent.futures import ThreadPoolExecutor
+
+    with patch.object(ThreadPoolExecutor, "submit", fake_submit):
+        result = aggregate_reviews.run_all_models("99", "org/repo")
+
+    # Cancel pending futures so the thread pool shuts down cleanly
+    for f in pending_futures:
+        f.cancel()
+
     # Must return a valid ModelAggregateResult (no raise), with models_failed populated
     assert isinstance(result, aggregate_reviews.ModelAggregateResult)
     assert len(result.models_failed) > 0, (
