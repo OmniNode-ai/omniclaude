@@ -150,6 +150,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/file-path-convention-inject.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(mcp__linear-server__save_issue|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_workflow_guard.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
