@@ -21,6 +21,16 @@ omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninod
 
 **Bare clone root**: `$OMNI_HOME` (typically `/Volumes/PRO-G40/Code/omni_home`)  <!-- local-path-ok -->
 
+## Preamble: Pull bare clones
+
+Before scanning, pull all bare clones to ensure findings reflect the latest `main`:
+
+```bash
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
+```
+
+If `pull-all.sh` exits non-zero, **abort the sweep immediately** with an error message explaining that stale clones may produce ghost findings. Do not silently continue with stale data.
+
 ## Discovery
 
 For each repo, discover all contract files from the `main` branch:
