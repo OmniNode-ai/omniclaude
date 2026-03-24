@@ -22,6 +22,9 @@ set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
+# Capture original working directory before CWD normalization
+_ORIGINAL_PWD="${PWD}"
+
 # Ensure stable CWD
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
@@ -62,7 +65,7 @@ PYTHON_CMD="${PYTHON_CMD:-python3}"
 set +e
 GUARD_OUTPUT=$(echo "$TOOL_INFO" | \
     CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
-    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}" \
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_ORIGINAL_PWD}" \
     $PYTHON_CMD -m omniclaude.hooks.pre_tool_use_workflow_guard 2>>"$LOG_FILE")
 GUARD_EXIT=$?
 set -e
