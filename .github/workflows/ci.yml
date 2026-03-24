@@ -1605,7 +1605,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: OmniNode-ai/onex_change_control
-          ref: 1b0d2f0374bca1f39d9bab22a02251208cdce196  # pragma: allowlist secret
+          ref: main
           token: ${{ secrets.CROSS_REPO_PAT || github.token }}
           path: onex_change_control
           sparse-checkout: |
@@ -1619,8 +1619,7 @@ jobs:
 
       - name: Validate skill contracts
         # Initially without --strict; promote to --strict after baseline warnings are resolved
-        # Uses wrapper that gracefully skips if canonical validator not yet in onex_change_control
-        run: bash scripts/validate_skill_contracts_wrapper.sh
+        run: python onex_change_control/scripts/validation/validate_skill_contracts.py --skills-root plugins/onex/skills
 
   # ============================================================================
   # GATE AGGREGATORS
