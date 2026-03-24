@@ -86,6 +86,16 @@ By default, the current repository is detected and added as a label:
 
 Override with `--repo` or disable with `--no-repo-label`.
 
+## Contract Template Injection
+
+Every ticket description created by this skill **must** include a `ModelTicketContract` YAML template
+block at the end (see the "Contract" section in the description template below). This is a hard
+requirement — never omit it, even in `--dry-run` output.
+
+The template is intentionally left blank for the engineer to fill in. Do **not** auto-populate
+fields with guessed values. The only field that may be inferred is `is_seam_ticket` (set to `true`
+if the issue description mentions Kafka topics, schemas, cross-repo interfaces, or API endpoints).
+
 ## Ticket Format
 
 Each created ticket follows this format:
@@ -114,6 +124,30 @@ Missing password validation in authentication flow.
 - [ ] Issue addressed in code
 - [ ] Tests added/updated if applicable
 - [ ] PR created and reviewed
+
+---
+
+## Contract
+
+_ModelTicketContract — fill in before starting work_
+
+    schema_version: "1.0.0"
+    ticket_id: ""  # e.g. "OMN-1234" — fill in after ticket is created
+    summary: ""    # one-line summary of what this ticket delivers
+
+    is_seam_ticket: false   # true if this touches cross-repo interfaces
+    interface_change: false # true if public contracts / topics / schemas change
+    interfaces_touched: []  # valid values: events | topics | protocols | envelopes | public_api
+
+    evidence_requirements:
+      - kind: "tests"       # valid values: tests | docs | ci | benchmark | manual
+        description: ""     # what proof must exist for DoD
+        command: ""         # optional: how to reproduce / verify
+
+    emergency_bypass:
+      enabled: false
+      justification: ""
+      follow_up_ticket_id: ""
 ```
 
 **Priority Mapping**:
