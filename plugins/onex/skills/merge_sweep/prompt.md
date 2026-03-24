@@ -28,6 +28,7 @@ When `/merge-sweep [args]` is invoked:
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
    - `--run-id <id>` — default: generate new; provided by parent pipeline for claim ownership
+   - `--qpm-mode <mode>` — default: off; run QPM as Phase 0 (shadow | label_gated | auto)
 
 3. **Generate or restore run_id**:
    - If `--run-id` provided: use it (resume mode — no ledger for merge-sweep, but claim registry uses it)
@@ -53,6 +54,20 @@ if deleted:
        "repos": repo_list or [],
    }
    ```
+
+---
+
+## Phase 0: Queue Priority Manager (optional)
+
+If `--qpm-mode` is provided (shadow | label_gated | auto):
+
+1. Run QPM: `plugins/onex/skills/_bin/qpm-run.sh --repo omniclaude --mode {qpm_mode} --repos {repos}`
+2. Parse the JSON output for promoted PRs
+3. Track promoted PR numbers in a set: `promoted_prs`
+4. In Phase A, skip any PR in `promoted_prs` (already handled by QPM)
+5. In Phase A, process remaining accelerator-scored PRs before normal PRs
+
+If `--qpm-mode` is not provided, skip Phase 0 entirely.
 
 ---
 
