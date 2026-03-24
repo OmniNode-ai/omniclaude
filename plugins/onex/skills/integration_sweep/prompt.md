@@ -107,6 +107,7 @@ Map each `interfaces_touched` value to `EnumIntegrationSurface`:
 | `plugin` / `omniclaude` / `skill` | `PLUGIN` |
 | `github_ci` / `branch_protection` | `GITHUB_CI` |
 | `script` / `scripts` / `bash` | `SCRIPT` |
+| `cross_repo_boundary` / `cross_repo` / `kafka_boundary` | `CROSS_REPO_BOUNDARY` |
 
 Any value not matching the table above: record `status=UNKNOWN`, `reason=NOT_APPLICABLE`, continue.
 
@@ -223,7 +224,54 @@ Runtime health expectations are profile-scoped. Only endpoints expected for the 
 
 3. Aggregate: any FAIL = surface FAIL. All PASS = surface PASS. Endpoints not in the active profile's expected set do not contribute.
 
-Append both probe results to the main results list before proceeding to Step 6.
+### CROSS_REPO_BOUNDARY
+
+This probe runs unconditionally on every sweep invocation. It verifies that cross-repo Kafka
+boundaries defined in `kafka_boundaries.yaml` have not drifted since the last merge.
+
+**Gate doctrine**: The static boundary tests (`test_topic_constants_match.py` and
+`test_kafka_schema_roundtrip.py`) are a mandatory hard gate — failure here means a cross-repo
+contract is broken and the sweep MUST record FAIL. The live pipeline test
+(`test_kafka_live_pipeline.py`) requires a running Kafka broker; it skips gracefully when the
+broker is unavailable and is treated as best-effort (skip = PASS for this probe).
+
+1. Verify the test directory exists:
+   ```bash
+   ls $ONEX_CC_REPO_PATH/tests/integration/cross_repo/ 2>&1
+   ```
+   - If directory does not exist: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
+     `evidence="cross_repo test directory not found"`. Skip remaining sub-steps.
+
+2. Run static boundary parity tests (no broker required):
+   ```bash
+   cd $ONEX_CC_REPO_PATH && uv run pytest tests/integration/cross_repo/test_topic_constants_match.py tests/integration/cross_repo/test_kafka_schema_roundtrip.py -v 2>&1
+   ```
+   - exit code 0 (all pass or skip): static result = PASS
+   - exit code non-zero (any failure or error): static result = FAIL
+   - Capture last 20 lines of output as evidence on FAIL
+
+3. Run live pipeline test (requires broker at `localhost:19092`):
+   ```bash
+   cd $ONEX_CC_REPO_PATH && KAFKA_BOOTSTRAP_SERVERS=localhost:19092 uv run pytest tests/integration/cross_repo/test_kafka_live_pipeline.py -v 2>&1
+   ```
+   - exit code 0 (pass or skip): live result = PASS
+   - exit code non-zero and output contains "skipped": live result = PASS (broker unavailable, skip is expected)
+   - exit code non-zero and output does not contain "skipped": live result = FAIL
+   - Capture last 20 lines of output as evidence on FAIL
+
+4. Report boundary count from manifest:
+   ```bash
+   grep -c "^  - topic_name:" $ONEX_CC_REPO_PATH/src/onex_change_control/boundaries/kafka_boundaries.yaml 2>/dev/null || echo "0"
+   ```
+   Include in evidence: `"N cross-repo boundaries verified from kafka_boundaries.yaml"`
+
+5. Aggregate surface result:
+   - static FAIL → surface `FAIL` (hard gate; live result ignored)
+   - static PASS + live FAIL → surface `FAIL`
+   - static PASS + live PASS (including skip) → surface `PASS`
+   - PROBE_UNAVAILABLE (test directory missing) → surface `UNKNOWN/PROBE_UNAVAILABLE`
+
+Append all three probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY) to the main results list before proceeding to Step 6.
 
 ---
 
@@ -349,11 +397,13 @@ If `--dry-run`, append ` [dry-run]`.
 **`omniclaude-only` mode** (default):
 - Only probe surfaces: `PLUGIN`, `GITHUB_CI`, `SCRIPT`, `CI`
 - Skip `KAFKA` and `DB` probes (record as UNKNOWN/NOT_APPLICABLE)
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, and `RUNTIME_HEALTH` run unconditionally in all modes
 
 **`full-infra` mode**:
-- Probe all six surfaces
+- Probe all surfaces including `KAFKA` and `DB`
 - Requires local Docker infra running (`infra-up` must have been executed)
 - If infra not reachable: record affected surfaces as UNKNOWN/PROBE_UNAVAILABLE, continue
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, and `RUNTIME_HEALTH` run unconditionally in all modes
 
 ---
 
