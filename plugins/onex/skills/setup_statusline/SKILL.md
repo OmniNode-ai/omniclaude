@@ -7,7 +7,6 @@ debug: true
 category: configuration
 tags: [statusline, setup, configuration]
 author: OmniClaude Team
-mode: full
 ---
 
 # Setup ONEX Status Line

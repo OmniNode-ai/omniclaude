@@ -99,6 +99,15 @@
         ]
       },
       {
+        "matcher": "^(Edit|Write|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_dispatch_guard.sh"
+          }
+        ]
+      },
+      {
         "matcher": "^(Task|Agent)$",
         "hooks": [
           {
@@ -130,6 +139,24 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_dod_completion_guard.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "^(Edit|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/file-path-convention-inject.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "^(mcp__linear-server__save_issue|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_workflow_guard.sh"
           }
         ]
       }

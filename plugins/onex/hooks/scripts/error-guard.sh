@@ -57,6 +57,20 @@ _log() {
         >> "$_ERROR_GUARD_LOG_FILE" 2>/dev/null || true
 }
 
+# Opt-in verbose mode: emit hook status to stderr when OMNICLAUDE_HOOK_VERBOSE=1
+_hook_status() {
+    if [[ "${OMNICLAUDE_HOOK_VERBOSE:-0}" == "1" ]]; then
+        local status="$1"
+        local detail="${2:-}"
+        local elapsed="${3:-?}"
+        if [[ -n "$detail" ]]; then
+            echo "[$_OMNICLAUDE_HOOK_NAME] $status: $detail (${elapsed}ms)" >&2 || true
+        else
+            echo "[$_OMNICLAUDE_HOOK_NAME] $status (${elapsed}ms)" >&2 || true
+        fi
+    fi
+}
+
 # --- ERR trap ---
 # Captures the failing command and line number BEFORE the EXIT trap fires.
 # Stores in a variable that the EXIT trap can read.

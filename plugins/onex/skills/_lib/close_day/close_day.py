@@ -109,7 +109,7 @@ def fetch_merged_prs_for_repo(
 # ---------------------------------------------------------------------------
 
 
-def _extract_omn_ref(text: str) -> str | None:
+def _extract_omn_ref(text: str) -> str | None:  # stub-ok
     """Extract first OMN-XXXX reference from *text*, or None."""
     import re
 
@@ -151,7 +151,7 @@ def build_actual_by_repo(
 # ---------------------------------------------------------------------------
 
 
-def detect_drift(
+def detect_drift(  # stub-ok
     repo_prs: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Return drift_detected entries for PRs missing an OMN-XXXX ref."""

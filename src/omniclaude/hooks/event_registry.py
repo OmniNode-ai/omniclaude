@@ -952,21 +952,32 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "plan_file", "total_rounds", "final_status"],
     ),
     # =========================================================================
-    # Hostile Reviewer Completed (OMN-5864)
+    # Multi-model hostile reviewer events (OMN-6188)
+    # Emitted by aggregate_reviews.py on review completion or failure.
     # =========================================================================
-    # Emitted by emit_hostile_reviewer_completed() after hostile-reviewer skill finishes.
-    # Consumed by omnidash /hostile-reviewer view via hostile_reviewer_runs table.
     "hostile.reviewer.completed": EventRegistration(
         event_type="hostile.reviewer.completed",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.HOSTILE_REVIEWER_COMPLETED,
-                transform=None,  # Passthrough — no sensitive data in review metadata
-                description="Hostile reviewer skill completion for omnidash hostile-reviewer view",
+                transform=None,  # Passthrough — review findings are not sensitive
+                description="Multi-model hostile review aggregated result",
             ),
         ],
-        partition_key_field="session_id",
-        required_fields=["mode", "target", "verdict"],
+        partition_key_field="pr_number",
+        required_fields=["pr_number", "repo", "verdict"],
+    ),
+    "hostile.reviewer.failed": EventRegistration(
+        event_type="hostile.reviewer.failed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOSTILE_REVIEWER_FAILED,
+                transform=None,  # Passthrough — failure metadata is not sensitive
+                description="Multi-model hostile review failure event",
+            ),
+        ],
+        partition_key_field="pr_number",
+        required_fields=["pr_number", "repo"],
     ),
 }
 

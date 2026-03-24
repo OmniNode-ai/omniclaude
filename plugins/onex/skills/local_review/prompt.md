@@ -23,6 +23,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 | `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 | `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to $ONEX_STATE_DIR/review-suppressions.yml (exits immediately after writing) |
+| `--guided` | false | Interactive guided mode with step-by-step prompts |
 | `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home against any worktree. |
 
 **Examples**:

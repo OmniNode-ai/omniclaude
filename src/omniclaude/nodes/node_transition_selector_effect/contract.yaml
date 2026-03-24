@@ -106,7 +106,7 @@ handler_routing:
     - backend: qwen3_fast
       handler_key: qwen3_fast
       endpoint_env: LLM_CODER_FAST_URL
-      default_endpoint: "http://192.168.86.201:8001"  # onex-allow-internal-ip
+      default_endpoint: null  # REQUIRED: set LLM_CODER_FAST_URL in environment
       model: qwen3-14b
 
 # Error handling

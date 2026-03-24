@@ -37,7 +37,7 @@ class ModelSkillCompletionEvent(BaseModel):
             ``"claude_code"`` or ``"local_llm"``.
         backend_detail: Implementation-level detail about the backend selection,
             e.g. ``"claude_subprocess"`` or an LLM endpoint ID such as
-            ``"http://192.168.86.201:8001"``.  # onex-allow-internal-ip
+            ``"${LLM_CODER_FAST_URL}"``.  # resolved from environment
         working_directory: Filesystem path the skill ran in, or ``None`` if
             not applicable.
         duration_ms: Wall-clock time from dispatch to completion in milliseconds.

@@ -21,6 +21,7 @@ Parse from `$ARGUMENTS`:
 | `--max-agents` | 10 | Parallel agent cap |
 | `--deep-read` | none | Categories for deep archive code reading |
 | `--dry-run` | false | Preview only |
+| `--status-scan-repos` | none | Comma-separated repos to scan for status |
 
 ### Default Corpus Roots
 

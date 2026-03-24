@@ -2,6 +2,12 @@
 
 You are executing multi-agent in parallel-build mode. This defines the complete orchestration logic.
 
+## Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--max-agents <n>` | 5 | Maximum parallel agents to spawn |
+
 ## Phase 1: Context Detection
 
 Analyze the **current conversation context** to determine what needs to be done:

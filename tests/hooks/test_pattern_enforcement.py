@@ -700,6 +700,17 @@ class TestEmitComplianceEvaluate:
 class TestEnforcePatternsEmit:
     """Integration tests for the full enforcement pipeline (async-emit model)."""
 
+    @pytest.fixture(autouse=True)
+    def _disable_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Set a generous time budget so CI runners never hit the 300ms limit.
+
+        The production budget (300ms) can be exceeded on resource-constrained
+        GitHub Actions runners when the test runner is under heavy load,
+        causing enforce_patterns() to bail out before reaching the emit step.
+        All HTTP calls are mocked, so the budget is irrelevant for correctness.
+        """
+        monkeypatch.setattr("pattern_enforcement._TOTAL_BUDGET_MS", 60_000)
+
     def _make_pattern(self, pid: str = "p-001") -> dict[str, Any]:
         return {
             "id": pid,
@@ -1290,6 +1301,11 @@ class TestTopicsCompliance:
 @pytest.mark.unit
 class TestEmitPatternEnforcementEvent:
     """Tests for _emit_pattern_enforcement_event — canonical evt topic emission."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Set a generous time budget so CI runners never hit the 300ms limit."""
+        monkeypatch.setattr("pattern_enforcement._TOTAL_BUDGET_MS", 60_000)
 
     def _make_pattern(self, pid: str, domain: str = "python") -> dict[str, Any]:
         return {

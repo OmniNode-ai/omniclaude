@@ -24,7 +24,6 @@ args:
   - name: --exclude
     description: "Explicit skill exclusion (comma-separated names)"
     required: false
-mode: full
 ---
 
 # Deploy Local Plugin Skill

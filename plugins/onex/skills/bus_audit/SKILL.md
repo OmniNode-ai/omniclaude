@@ -29,7 +29,6 @@ args:
   - name: --sample-count
     description: "Number of messages to sample per topic (default: 20)"
     required: false
-mode: full
 ---
 
 # Bus Audit

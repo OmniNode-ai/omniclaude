@@ -3,7 +3,6 @@ description: Comprehensive PR review with strict priority-based organization and
 mode: full
 level: basic
 debug: false
-mode: full
 ---
 
 ## Dispatch Requirement
@@ -50,7 +49,7 @@ Fallback: $OMNI_HOME/onex_change_control/contracts/{ticket_id}.yaml
 ```
 
 **If contract not found:**
-- PR touches Kafka topic strings or event schemas → add MAJOR finding: "Seam signals detected but no contract found — run /generate-ticket-contract"
+- PR touches Kafka topic strings or event schemas → add MAJOR finding: "Seam signals detected but no contract found — run onex:generate-ticket-contract"
 - No seam signals → skip silently (not an error)
 
 ### 3. If contract found AND is_seam_ticket=true

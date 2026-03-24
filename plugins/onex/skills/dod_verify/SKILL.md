@@ -18,7 +18,6 @@ args:
   - name: --contract-path
     description: Override path to contract YAML (default auto-detect)
     required: false
-mode: full
 ---
 
 # dod-verify
@@ -52,7 +51,7 @@ a ticket as Done.
 1. **Locate ticket contract:**
    - If `--contract-path` is provided, use that path directly
    - Otherwise, check `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
-   - If neither works, offer to run `/generate-ticket-contract {ticket_id}` first
+   - If neither works, offer to run `onex:generate-ticket-contract {ticket_id}` first
 
 2. **Load contract and extract `dod_evidence[]`:**
    - Parse the YAML contract

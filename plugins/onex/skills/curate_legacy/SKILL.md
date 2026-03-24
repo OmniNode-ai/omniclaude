@@ -41,7 +41,6 @@ args:
     description: "Comma-separated repo names to limit Phase 0.5 scanning (default: all repos). Example: --status-scan-repos omnibase_core,omniclaude for fast iteration."
     required: false
     default: all
-mode: full
 ---
 
 # Curate Legacy

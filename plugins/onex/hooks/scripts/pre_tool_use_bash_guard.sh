@@ -62,6 +62,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash guard hook invoked for tool: $TOOL
 
 # Only intercept Bash tool invocations
 if [[ "$TOOL_NAME" != "Bash" ]]; then
+    _hook_status "PASS" "not Bash ($TOOL_NAME)" "0"
     echo "$TOOL_INFO"
     exit 0
 fi
@@ -78,14 +79,17 @@ set -e
 # Handle exit codes
 if [ $EXIT_CODE -eq 0 ]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash command ALLOWED" >> "$LOG_FILE"
+    _hook_status "PASS" "Bash command allowed" "0"
     echo "$RESULT"
 elif [ $EXIT_CODE -eq 2 ]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Bash command BLOCKED by guard" >> "$LOG_FILE"
+    _hook_status "BLOCKED" "Bash command rejected" "0"
     printf '\a' >&2   # BEL to stderr — audible/visual alert in terminal emulators
     echo "$RESULT"    # JSON response to stdout (not mixed with bell)
     exit 2
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: Bash guard failed with code $EXIT_CODE, failing open" >> "$LOG_FILE"
+    _hook_status "PASS" "guard error, failing open (exit=$EXIT_CODE)" "0"
     echo "$TOOL_INFO"
     exit 0
 fi

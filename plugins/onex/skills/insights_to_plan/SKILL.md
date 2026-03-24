@@ -23,7 +23,6 @@ args:
   - name: --dry-run
     description: Print resolved paths and extraction counts; write nothing (overrides all other flags)
     required: false
-mode: full
 ---
 
 # Insights to Plan
@@ -36,9 +35,9 @@ actionable `design-to-plan`-compatible plan document. The skill produces two art
 1. **Registry archive** — `docs/registry/insights/YYYY-MM-DD.html` + one NDJSON IdeaCard line
    appended to `docs/registry/_idea_cards.ndjson`
 2. **Plan document** — `docs/plans/YYYY-MM-DD-insights-plan.md` structured for direct use
-   with `/executing-plans` or `/plan-to-tickets`
+   with `executing-plans` or `plan-to-tickets`
 
-Optionally, pass `--tickets` to immediately invoke `/plan-to-tickets` after the plan is written.
+Optionally, pass `--tickets` to immediately invoke `onex:plan-to-tickets` after the plan is written.
 
 ---
 
@@ -272,9 +271,9 @@ Only execute this step if `--tickets` is set.
    ```
    Create Linear tickets from docs/plans/YYYY-MM-DD-insights-plan.md? [y/N]
    ```
-3. If confirmed (`y` or `yes`): invoke `/plan-to-tickets` with the plan file path:
+3. If confirmed (`y` or `yes`): invoke `onex:plan-to-tickets` with the plan file path:
    ```
-   /plan-to-tickets docs/plans/YYYY-MM-DD-insights-plan.md
+   onex:plan-to-tickets docs/plans/YYYY-MM-DD-insights-plan.md
    ```
 4. If not confirmed: print `Skipping ticket creation.` and exit cleanly.
 

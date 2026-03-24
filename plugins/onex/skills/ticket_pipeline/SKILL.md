@@ -39,7 +39,6 @@ args:
   - name: --docs-only
     description: "User assertion that all changes are documentation-only (.md/.yaml). Skips integration verification. Misuse can skip required checks."
     required: false
-mode: full
 ---
 
 # Ticket Pipeline
@@ -1058,3 +1057,17 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `$ONEX_STATE_DIR/epic-team/repo_manifest.yaml` (cross-repo detection, OMN-2519)
 - `$ONEX_STATE_DIR/pipelines/ledger.json` (ticket-run ledger)
 - Linear MCP tools (`mcp__linear-server__*`)
+
+## Container / Degraded Environment
+
+When running without the full omniclaude plugin (e.g., container-based Claude Code sessions):
+
+- **`onex:polymorphic-agent`** silently falls back to `general-purpose`. ONEX intelligence
+  integration, action logging, and observability will be inactive. Skill instructions still
+  execute correctly — only metadata and telemetry are affected.
+- **Cross-skill dispatch** (`Skill(skill="onex:...")`) requires the plugin's skill registry.
+  If skills are not registered, dispatch calls will fail. Verify: check if the skill
+  appears in the system-reminder skills list.
+- **Hook enforcement** (poly_enforcer, authorization_shim, bash_guard) will not be active.
+- **Linear MCP** may not be available. See `--local` mode (if applicable) for offline
+  ticket management.

@@ -19,6 +19,7 @@ skip_pr_review   = False         # --skip-pr-review
 skip_local_review = False        # --skip-local-review
 no_ci            = False         # --no-ci
 no_push          = False         # --no-push
+no_automerge     = False         # --no-automerge
 
 # Parse
 for token in $ARGUMENTS.split():
