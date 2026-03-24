@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from merge_planner.audit import list_recent_audits, read_audit, write_audit
@@ -31,7 +32,7 @@ def sample_audit() -> ModelQPMAuditEntry:
 @pytest.mark.unit
 class TestAuditRoundTrip:
     def test_write_read_round_trip(
-        self, sample_audit: ModelQPMAuditEntry, tmp_path: pytest.TempPathFactory
+        self, sample_audit: ModelQPMAuditEntry, tmp_path: Path
     ) -> None:
         path = write_audit(sample_audit, root=tmp_path)
         assert path.exists()
@@ -40,17 +41,17 @@ class TestAuditRoundTrip:
         assert restored.run_id == sample_audit.run_id
         assert restored.promotions_executed == 1
 
-    def test_read_missing_returns_none(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_read_missing_returns_none(self, tmp_path: Path) -> None:
         assert read_audit("nonexistent", root=tmp_path) is None
 
     def test_write_idempotent(
-        self, sample_audit: ModelQPMAuditEntry, tmp_path: pytest.TempPathFactory
+        self, sample_audit: ModelQPMAuditEntry, tmp_path: Path
     ) -> None:
         write_audit(sample_audit, root=tmp_path)
         write_audit(sample_audit, root=tmp_path)  # No error on overwrite
         assert read_audit("qpm-test123", root=tmp_path) is not None
 
-    def test_list_recent_ordering(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_list_recent_ordering(self, tmp_path: Path) -> None:
         now = datetime.now(UTC)
         for i in range(5):
             entry = ModelQPMAuditEntry(
@@ -69,7 +70,7 @@ class TestAuditRoundTrip:
         recent = list_recent_audits(limit=3, root=tmp_path)
         assert len(recent) == 3
 
-    def test_list_empty_root(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_list_empty_root(self, tmp_path: Path) -> None:
         empty = tmp_path / "empty"
         result = list_recent_audits(root=empty)
         assert result == []

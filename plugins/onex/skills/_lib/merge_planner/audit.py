@@ -8,15 +8,24 @@ Each run gets its own directory under the audit root.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from merge_planner.models import ModelQPMAuditEntry
 
 DEFAULT_AUDIT_ROOT = Path.home() / ".claude" / "qpm-audit" / "runs"
 
 
+def _validate_run_id(run_id: str) -> None:
+    """Reject run_id values that could cause path traversal."""
+    p = PurePosixPath(run_id)
+    if ".." in p.parts or p.is_absolute() or "/" in run_id or "\\" in run_id:
+        msg = f"Invalid run_id (path traversal attempt): {run_id!r}"
+        raise ValueError(msg)
+
+
 def write_audit(entry: ModelQPMAuditEntry, *, root: Path | None = None) -> Path:
     """Write audit entry to disk. Returns path to written file."""
+    _validate_run_id(entry.run_id)
     audit_root = root or DEFAULT_AUDIT_ROOT
     run_dir = audit_root / entry.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -27,6 +36,7 @@ def write_audit(entry: ModelQPMAuditEntry, *, root: Path | None = None) -> Path:
 
 def read_audit(run_id: str, *, root: Path | None = None) -> ModelQPMAuditEntry | None:
     """Read audit entry. Returns None if not found."""
+    _validate_run_id(run_id)
     audit_root = root or DEFAULT_AUDIT_ROOT
     audit_path = audit_root / run_id / "audit.json"
     if not audit_path.exists():
