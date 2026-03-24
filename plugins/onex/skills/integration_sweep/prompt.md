@@ -352,7 +352,58 @@ If `schema_ok` is false, report the `missing_in_db` and `missing_on_disk` arrays
 - Check 1 PASS + Check 2 PASS (or unavailable) --> surface `PASS`
 - PROBE_UNAVAILABLE (omnidash directory missing) --> surface `UNKNOWN/PROBE_UNAVAILABLE`
 
-Append all five probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL, SCHEMA_PARITY) to the main results list before proceeding to Step 6.
+---
+
+### WIRING_VERIFICATION
+
+Structural topology probe for declared emitter/consumer/writer completeness.
+
+WIRING_VERIFICATION is a structural topology probe, not a behavioral runtime proof.
+It catches obvious missing consumers or writers by scanning file declarations, not
+by verifying end-to-end data flow. Comments or dead code can satisfy both checks.
+It is designed to surface dead declarations and obviously incomplete wiring topology,
+not to replace end-to-end integration testing.
+
+**Check 1 -- Emitter-to-consumer pairing:**
+For each `emit_*` function in `src/omniclaude/hooks/emitters/`, extract the topic
+it publishes to. Cross-reference with `kafka_boundaries.yaml` consumer entries.
+Flag any emitter whose topic has no consumer boundary entry.
+
+```bash
+# Extract emitter topics
+grep -rn "topic=" src/omniclaude/hooks/emitters/ --include="*.py" | grep -oP 'topic="[^"]*"'
+# Cross-reference with kafka_boundaries.yaml consumer entries
+```
+
+- For each emitter topic with no consumer boundary entry:
+  - Record finding: `check="emitter_consumer_pairing"`, `status=WARN`,
+    `evidence="emit_{name} publishes to {topic} but no consumer boundary found"`
+
+**Check 2 -- Projection table coverage:**
+For each table in `omnidash/shared/intelligence-schema.ts`, verify there is at least
+one handler in `omnidash/server/consumers/read-model/` that writes to it (search for
+the table name in INSERT/upsert statements). Flag tables with no writer.
+
+```bash
+# Extract table names from intelligence-schema.ts
+grep -oP 'pgTable\("(\w+)"' omnidash/shared/intelligence-schema.ts
+# Search for table references in consumer handlers
+grep -rn "{table_name}" omnidash/server/consumers/read-model/ --include="*.ts"
+```
+
+- For each table with no writer found:
+  - Record finding: `check="projection_table_coverage"`, `status=WARN`,
+    `evidence="table {name} in intelligence-schema.ts has no write handler"`
+
+**Halt policy:** WARN only (do not halt pipeline). This probe generates remediation
+backlog for incomplete wiring topology, not immediate release-risk findings.
+
+Aggregate WIRING_VERIFICATION surface result:
+- Any finding --> surface `PASS_WITH_WARNINGS` (non-halting; findings logged for backlog)
+- No findings --> surface `PASS`
+- Probe error (files not found) --> surface `UNKNOWN/PROBE_UNAVAILABLE`
+
+Append all six probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL, SCHEMA_PARITY, WIRING_VERIFICATION) to the main results list before proceeding to Step 6.
 
 ---
 

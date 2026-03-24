@@ -103,7 +103,7 @@ the circuit breaker but do NOT halt the pipeline. B5 and B6 have halt authority.
 D1-D3 are read-only verification. Failures are logged with warnings but do NOT halt —
 the release and redeploy already completed successfully.
 
-**Note:** This is a 15-step pipeline (A1-A3, B1-B6, C1-C2, D1-D4). Internal step IDs use the
+**Note:** This is an 18-step pipeline (A1-A3, B1-B8, C1-C2, D1-D5). Internal step IDs use the
 `{phase}{ordinal}` scheme for stable naming in cycle records, circuit breaker logs, and
 downstream debugging.
 
@@ -146,7 +146,7 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ## Circuit Breaker
 
-3 consecutive step failures (across Steps 1–14) → stop immediately + Slack notify.
+3 consecutive step failures (across Steps 1–17) → stop immediately + Slack notify.
 
 **Halt authority vs circuit breaker:**
 - **B5 (integration-sweep)** halts on FAIL or contract UNKNOWN — integration surfaces broken.
@@ -198,6 +198,8 @@ Failures are tracked per run. The circuit breaker does NOT persist across runs.
 - **gap**: B4 — cross-repo integration health (parallel)
 - **integration-sweep**: B5 — hard gate; halt on FAIL or contract UNKNOWN
 - **playwright-gate**: B6 — Playwright regression gate; consumes B5 PLAYWRIGHT_BEHAVIORAL result (reruns if stale >10 min or missing); smoke FAIL halts, data-flow FAIL warns
+- **friction-triage**: B7 — recurring friction pattern remediation (non-halting)
+- **duplication-sweep**: B8 — structural collision detection; halt on FAIL
 
 **Phase C — Ship:**
 - **release**: C1 — version bump; gated by integration-sweep
@@ -208,4 +210,5 @@ Failures are tracked per run. The circuit breaker does NOT persist across runs.
 - **container-health**: D2 — verify all runtime containers healthy after redeploy (parallel)
 - **dashboard-sweep**: D3 — verify omnidash pages work (parallel)
 - **close-day**: D4 — day audit artifact
+- **insights-to-plan**: D5 — opportunistic insights-to-plan auto-trigger (non-halting)
 - **ModelIntegrationRecord**: written by integration-sweep; read by autopilot to determine halt
