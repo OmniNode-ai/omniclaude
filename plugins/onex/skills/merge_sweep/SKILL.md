@@ -78,6 +78,10 @@ and continue to the next. Only pause for: (a) credentials not available in the s
 (b) a destructive action not explicitly covered by the plan, or (c) an explicit user gate in
 the plan. Do not exit plan mode or stop to "await direction" in any other circumstance.
 
+**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, or any execution
+error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit, or Glob calls.** Report
+the exact error to the user and wait for direction.
+
 ---
 
 ## Overview
