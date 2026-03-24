@@ -515,3 +515,31 @@ allowed_extras:
       Emitted by pipeline_event_emitters.emit_hostile_reviewer_completed().
       No dedicated node contract; contract governance to follow.
     ticket: OMN-5864
+
+  # ---------------------------------------------------------------------------
+  # QPM (Queue Priority Management) topics (OMN-6242)
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.cmd.omniclaude.qpm-run.v1"
+    lifecycle: command
+    reason: >
+      QPM run command topic for triggering queue priority management classification.
+      Emitted by QPM skill to invoke priority scoring pipeline.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6242
+
+  - topic: "onex.evt.omniclaude.qpm-classified.v1"
+    lifecycle: observability
+    reason: >
+      QPM classification event emitted after PR/ticket priority scoring completes.
+      Used by omnidash pipeline budget and merge-queue views.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6242
+
+  - topic: "onex.evt.omniclaude.qpm-promotion-decided.v1"
+    lifecycle: observability
+    reason: >
+      QPM promotion decision event emitted when a PR is promoted or deprioritized
+      in the merge queue based on priority scoring.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6242
