@@ -1,22 +1,51 @@
 ---
 description: Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
 mode: full
-version: 2.0.0
+version: 2.1.0
 level: advanced
 debug: false
 category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
 args:
   - epic_id (required): Linear epic ID (e.g., OMN-2000)
+  - --mode (required): Workflow mode — must be "build". Epic-team is exclusively a BUILD-mode skill. Omitting --mode emits a usage error.
   - --dry-run: Print decomposition plan (includes unmatched reason), no spawning
   - --force: Pause if active tasks remain; archive state and restart
   - --force-kill: Combine with --force to destroy active run even with live workers
   - --resume: Re-enter monitoring; finalize if all tasks terminal; no-op if already done
   - --force-unmatched: Route unmatched tickets to omniplan as TRIAGE tasks
-mode: full
 ---
 
 # Epic Team Orchestration
+
+## Mode Declaration
+
+**This skill operates in BUILD mode only.**
+
+Valid `--mode` values: `build`
+
+**If `--mode` is omitted or set to any value other than `build`**, emit the following usage
+error and stop — do NOT proceed to dispatch:
+
+```
+ERROR: /epic-team requires --mode build
+
+Usage: /epic-team <epic_id> --mode build [options]
+
+Valid modes:
+  build    Orchestrate autonomous implementation of a Linear epic across repos
+
+This skill is BUILD mode only. For close-out or reporting tasks:
+  Close-out: /merge-sweep --mode close-out
+  Reporting: /linear-insights --mode deep-dive
+```
+
+**First output line** when mode is valid must be:
+```
+[epic-team] MODE: build | epic: <epic_id>
+```
+
+No tool calls, file reads, or bash commands may precede this output.
 
 ## Dispatch Requirement
 
