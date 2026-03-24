@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# QPM (Queue Priority Manager) topic manifest
+# Registered in TopicBase enum (src/omniclaude/hooks/topics.py)
+# OMN-6242
+
+topics:
+  - name: QPM_RUN
+    canonical: onex.cmd.omniclaude.qpm-run.v1
+    kind: cmd
+    producer: omniclaude
+    description: Command to trigger a QPM run (classify + score + decide + promote).
+
+  - name: QPM_CLASSIFIED
+    canonical: onex.evt.omniclaude.qpm-classified.v1
+    kind: evt
+    producer: omniclaude
+    description: >
+      Emitted after QPM classification and scoring completes for all queried repos.
+      Payload includes per-PR classification, score, and accelerator tier.
+
+  - name: QPM_PROMOTION_DECIDED
+    canonical: onex.evt.omniclaude.qpm-promotion-decided.v1
+    kind: evt
+    producer: omniclaude
+    description: >
+      Emitted after QPM promotion decision is executed or held for each PR.
+      Payload includes decision (promote/hold/skip/block), reason, and audit reference.

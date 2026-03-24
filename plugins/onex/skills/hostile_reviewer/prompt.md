@@ -93,14 +93,41 @@ model_args = " ".join(f"--model {m}" for m in models)
 
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --pr {pr_number} --repo {repo} {model_args}
+  --pr {pr_number} --repo {repo} --persona analytical-strict {model_args}
 ```
 
 #### File Mode
 
+**STEP 0: Validate target file path (MANDATORY — do not skip)**
+
+Before invoking cli_review, execute this validation block:
+
+```python
+from pathlib import Path
+import sys
+
+raw_path = "{file_path}"
+resolved = Path(raw_path).expanduser().resolve()
+
+if not resolved.exists():
+    print(f"ERROR: File not found: {resolved}", file=sys.stderr)
+    print(f"  Raw input was: {raw_path}", file=sys.stderr)
+    print("  hostile-reviewer --file requires an existing file. Refusing to substitute.", file=sys.stderr)
+    sys.exit(1)
+
+if not resolved.is_file():
+    print(f"ERROR: Path is not a regular file: {resolved}", file=sys.stderr)
+    sys.exit(1)
+
+TARGET_FILE = str(resolved)
+```
+
+If the script exits non-zero, **stop immediately**. Do NOT proceed. Do NOT substitute a different file.
+The `target` field in the result JSON MUST equal `TARGET_FILE` (the resolved absolute path).
+
 ```bash
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --file {file_path} {model_args}
+  --file {TARGET_FILE} --persona analytical-strict {model_args}
 ```
 
 Parse the JSON output from stdout. The CLI returns a `ModelMultiReviewResult` with
@@ -181,6 +208,11 @@ Use `--request-changes` instead of `--comment` if the final pass verdict is `blo
 
 Write JSON result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`
 with the schema defined in SKILL.md. The result MUST include:
+
+**File mode invariant**: `target` field MUST equal `str(Path(file_path).expanduser().resolve())`.
+Never write a raw user-supplied path or a different file's path in the `target` field.
+If file validation (STEP 0 above) was skipped and a different file was reviewed, this is a hard failure.
+
 - `iteration_history` array with per-pass data
 - `convergence_verdict` field
 - `total_passes` count
