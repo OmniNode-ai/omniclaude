@@ -1291,6 +1291,26 @@ if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
         fi
     fi
 
+    # --- Env var health check (non-blocking, OMN-6266) ---
+    ENV_HEALTH_WARNING=""
+    if [[ -f "${HOOKS_LIB}/env_health_check_wrapper.py" ]]; then
+        ENV_HEALTH_JSON=$("$PYTHON_CMD" "${HOOKS_LIB}/env_health_check_wrapper.py" 2>>"${LOG_FILE:-/dev/null}") || ENV_HEALTH_JSON='{}'
+        if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+            ENV_HEALTH_WARNING=$(echo "$ENV_HEALTH_JSON" | jq -r '.warning // ""' 2>/dev/null) || ENV_HEALTH_WARNING=""
+        else
+            ENV_HEALTH_WARNING=$(echo "$ENV_HEALTH_JSON" | "$PYTHON_CMD" -c "import sys,json; print(json.load(sys.stdin).get('warning',''))" 2>/dev/null) || ENV_HEALTH_WARNING=""
+        fi
+        if [[ -n "$ENV_HEALTH_WARNING" ]]; then
+            if [[ -n "$COMBINED_CONTEXT" ]]; then
+                COMBINED_CONTEXT="${COMBINED_CONTEXT}
+
+${ENV_HEALTH_WARNING}"
+            else
+                COMBINED_CONTEXT="$ENV_HEALTH_WARNING"
+            fi
+        fi
+    fi
+
     # Combine handshake, ticket context, and skill suggestions if present
     HAS_HANDSHAKE="false"
     HAS_TICKET="false"
