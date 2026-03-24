@@ -5,7 +5,6 @@ version: 1.0.0
 level: intermediate
 debug: false
 category: workflow
-mode: full
 ---
 
 # planning-context-resolver

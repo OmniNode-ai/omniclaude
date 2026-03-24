@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from omniclaude.lib.utils.consensus.quorum import AIQuorum, ModelConfig, ModelProvider
+from omniclaude.lib.utils.consensus.quorum import (
+    AIQuorum,
+    ModelConfig,
+    ModelProvider,
+    _resolve_llm_coder_url,
+)
 
 
 class TestModelProviderEnum:
@@ -52,7 +57,7 @@ class TestModelConfigDefaultEndpoint:
     def test_openai_compatible_default_endpoint(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint."""
+        """OPENAI_COMPATIBLE uses LLM_CODER_URL env var as default endpoint (lazy)."""
         # GPU server host:port used via env var — not a Kafka address.  # onex-allow-internal-ip
         expected_host = "8000"
         monkeypatch.setenv("LLM_CODER_URL", f"http://gpu-server:{expected_host}")
@@ -60,35 +65,36 @@ class TestModelConfigDefaultEndpoint:
             name="test-model",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
-        assert config.endpoint == f"http://gpu-server:{expected_host}"
+        # Endpoint is resolved lazily via resolve_endpoint(), not at __post_init__
+        assert config.endpoint is None
+        assert config.resolve_endpoint() == f"http://gpu-server:{expected_host}"
 
     @pytest.mark.unit
-    def test_openai_compatible_hardcoded_fallback(
+    def test_openai_compatible_raises_when_env_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Falls back to LLM_CODER_URL default when env var is unset."""
+        """ModelConfig.resolve_endpoint() must fail fast when LLM_CODER_URL is not set."""
         monkeypatch.delenv("LLM_CODER_URL", raising=False)
         config = ModelConfig(
             name="test-model",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
-        # Endpoint should be set (not None) — fallback is the GPU server
-        assert config.endpoint is not None
-        assert "8000" in config.endpoint  # vLLM port
+        # Construction succeeds (deferred), but resolve_endpoint() fails
+        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
+            config.resolve_endpoint()
 
     @pytest.mark.unit
-    def test_openai_compatible_no_ollama_endpoint(
+    def test_openai_compatible_construction_without_env(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """OPENAI_COMPATIBLE endpoint is NOT the old Ollama localhost:11434."""
+        """ModelConfig can be constructed without LLM_CODER_URL set (deferred resolution)."""
         monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        # Must not raise at construction time
         config = ModelConfig(
             name="test-model",
             provider=ModelProvider.OPENAI_COMPATIBLE,
         )
-        assert "localhost:11434" not in (config.endpoint or ""), (
-            "Endpoint uses deprecated Ollama URL. Use LLM_CODER_URL instead."
-        )
+        assert config.endpoint is None
 
 
 class TestAIQuorumDefaultModels:
@@ -116,3 +122,20 @@ class TestAIQuorumDefaultModels:
             "No OPENAI_COMPATIBLE model in DEFAULT_MODELS. "
             "Expected at least one vLLM/local code model."
         )
+
+
+class TestResolveLlmCoderUrl:
+    """Tests for _resolve_llm_coder_url() fail-fast behavior."""
+
+    @pytest.mark.unit
+    def test_requires_llm_coder_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Quorum must not silently fall back to hardcoded IP."""
+        monkeypatch.delenv("LLM_CODER_URL", raising=False)
+        with pytest.raises(RuntimeError, match="LLM_CODER_URL"):
+            _resolve_llm_coder_url()
+
+    @pytest.mark.unit
+    def test_returns_url_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Returns the configured URL."""
+        monkeypatch.setenv("LLM_CODER_URL", "http://gpu-server:8000")
+        assert _resolve_llm_coder_url() == "http://gpu-server:8000"

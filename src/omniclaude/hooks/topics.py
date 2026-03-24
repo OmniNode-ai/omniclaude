@@ -370,10 +370,26 @@ class TopicBase(StrEnum):
     """Emitted after hostile-reviewer convergence loop completes."""
 
     # ==========================================================================
-    # Hostile reviewer topics (OMN-5864)
+    # Multi-model hostile reviewer topics (OMN-6188)
+    # Emitted by aggregate_reviews.py on review completion or failure.
     # ==========================================================================
     HOSTILE_REVIEWER_COMPLETED = "onex.evt.omniclaude.hostile-reviewer-completed.v1"
-    """Emitted on hostile-reviewer skill completion (any mode)."""
+    """Emitted when multi-model hostile review completes with aggregated findings."""
+
+    HOSTILE_REVIEWER_FAILED = "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+    """Emitted when multi-model hostile review fails (no models produced results)."""
+
+    # ==========================================================================
+    # QPM (Queue Priority Manager) topics (OMN-6242)
+    # ==========================================================================
+    QPM_RUN = "onex.cmd.omniclaude.qpm-run.v1"
+    """Command to trigger a QPM run (classify + score + decide + promote)."""
+
+    QPM_CLASSIFIED = "onex.evt.omniclaude.qpm-classified.v1"
+    """Emitted after QPM classification and scoring completes for all queried repos."""
+
+    QPM_PROMOTION_DECIDED = "onex.evt.omniclaude.qpm-promotion-decided.v1"
+    """Emitted after QPM promotion decision is executed or held for each PR."""
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:

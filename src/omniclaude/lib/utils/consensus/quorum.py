@@ -28,6 +28,18 @@ except ImportError:
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 
+def _resolve_llm_coder_url() -> str:
+    """Resolve LLM_CODER_URL from environment. Fail fast if not configured."""
+    url = os.environ.get("LLM_CODER_URL", "")
+    if not url:
+        raise RuntimeError(
+            "LLM_CODER_URL is not set. "
+            "The quorum system requires an explicit LLM endpoint. "
+            "Set LLM_CODER_URL in ~/.omnibase/.env or your environment."
+        )
+    return url
+
+
 class ModelProvider(Enum):
     """Supported AI model providers."""
 
@@ -53,19 +65,33 @@ class ModelConfig:
     timeout: float = 10.0
 
     def __post_init__(self) -> None:
-        """Validate and set defaults."""
+        """Validate and set defaults.
+
+        Note: OPENAI_COMPATIBLE endpoint resolution is deferred to
+        ``resolve_endpoint()`` so that importing or constructing ModelConfig
+        does not require LLM_CODER_URL to be set at module-load time (needed
+        for CI environments that don't have local LLM endpoints).
+        """
         if self.endpoint is None:
-            if self.provider == ModelProvider.OPENAI_COMPATIBLE:
-                # Uses vLLM-hosted Qwen3-Coder-30B-A3B (RTX 5090, 64K context).
-                # See CLAUDE.md: LLM_CODER_URL. Ollama endpoint decommissioned (OMN-4798).
-                self.endpoint = os.getenv(
-                    "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
-                )
-            elif self.provider == ModelProvider.GEMINI:
+            if self.provider == ModelProvider.GEMINI:
                 self.endpoint = "https://generativelanguage.googleapis.com/v1beta"
 
         if self.api_key is None and self.provider == ModelProvider.GEMINI:
             self.api_key = os.getenv("GEMINI_API_KEY", "")
+
+    def resolve_endpoint(self) -> str:
+        """Return the endpoint URL, resolving lazily for OPENAI_COMPATIBLE.
+
+        Raises:
+            RuntimeError: If the provider is OPENAI_COMPATIBLE and
+                LLM_CODER_URL is not set.
+        """
+        if self.endpoint is not None:
+            return self.endpoint
+        if self.provider == ModelProvider.OPENAI_COMPATIBLE:
+            self.endpoint = _resolve_llm_coder_url()
+            return self.endpoint
+        raise RuntimeError(f"No endpoint configured for provider {self.provider}")
 
 
 @dataclass
@@ -119,7 +145,7 @@ class AIQuorum:
         ModelConfig(name="gemini-2.5-flash", provider=ModelProvider.GEMINI, weight=1.0),
     ]
 
-    def __init__(  # stub-ok: implemented __init__ with TODO for future config
+    def __init__(  # stub-ok: implemented __init__
         self,
         models: list[ModelConfig] | None = None,
         stub_mode: bool = True,  # Phase 1: Default to stub mode
@@ -212,13 +238,11 @@ class AIQuorum:
                 if provider == ModelProvider.OPENAI and "base_url" in model_data:
                     endpoint = model_data["base_url"]
                 elif provider == ModelProvider.OPENAI_COMPATIBLE:
-                    # Allow per-model endpoint override; fall back to LLM_CODER_URL
+                    # Allow per-model endpoint override; LLM_CODER_URL resolved
+                    # lazily via ModelConfig.resolve_endpoint() at call time.
                     if "base_url" in model_data:
                         endpoint = model_data["base_url"]
-                    else:
-                        endpoint = os.getenv(
-                            "LLM_CODER_URL", "http://192.168.86.201:8000"  # onex-allow-internal-ip kafka-fallback-ok
-                        )
+                    # else: endpoint stays None, resolved lazily
 
                 model_config = ModelConfig(
                     name=model_data.get("name", model_name),
@@ -249,7 +273,10 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[
+            str, Any
+        ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Score a correction using AI quorum consensus.
@@ -276,12 +303,15 @@ class AIQuorum:
             original_prompt, corrected_prompt, correction_type, correction_metadata
         )
 
-    def _stub_score_correction(  # stub-ok: implemented correction with TODO for calibration
+    def _stub_score_correction(  # stub-ok: implemented correction
         self,
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[
+            str, Any
+        ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Stub implementation for Phase 1 testing.
@@ -334,7 +364,10 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        correction_metadata: dict[str, Any] | None = None,  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        correction_metadata: dict[
+            str, Any
+        ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        | None = None,
     ) -> QuorumScore:
         """
         Full AI model scoring (Phase 3-4).
@@ -381,7 +414,9 @@ class AIQuorum:
         original_prompt: str,
         corrected_prompt: str,
         correction_type: str,
-        metadata: dict[str, Any],  # ONEX_EXCLUDE: dict_str_any - generic metadata container
+        metadata: dict[
+            str, Any
+        ],  # ONEX_EXCLUDE: dict_str_any - generic metadata container
     ) -> str:
         """
         Generate prompt for AI model scoring.
@@ -482,7 +517,7 @@ Provide your evaluation:"""
         Returns:
             Tuple of (model, score_dict).
         """
-        url = f"{model.endpoint}/v1/chat/completions"
+        url = f"{model.resolve_endpoint()}/v1/chat/completions"
 
         payload = {
             "model": model.name,
@@ -545,7 +580,7 @@ Provide your evaluation:"""
         Returns:
             Tuple of (model, score_dict)
         """
-        url = f"{model.endpoint}/models/{model.name}:generateContent"
+        url = f"{model.resolve_endpoint()}/models/{model.name}:generateContent"
 
         headers = {"Content-Type": "application/json"}
 
@@ -607,7 +642,9 @@ Provide your evaluation:"""
             Tuple of (model, score_dict)
         """
         # Use base_url if provided, otherwise default OpenAI endpoint
-        base_url = model.endpoint or "https://api.openai.com/v1"
+        base_url = (
+            model.resolve_endpoint() if model.endpoint else "https://api.openai.com/v1"
+        )
         url = f"{base_url}/chat/completions"
 
         payload = {

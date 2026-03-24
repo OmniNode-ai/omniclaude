@@ -35,7 +35,6 @@ args:
   - name: --allow-arch-violation
     description: Bypass architecture dependency validation
     required: false
-mode: full
 ---
 
 # Batch Create Tickets from Plan
@@ -1136,3 +1135,12 @@ report_summary(results, epic, doc.structure_type.value, args.dry_run)
 # Override architecture validation for cross-app dependencies
 /plan-to-tickets $ONEX_STATE_DIR/plans/my-plan.md --repo omniclaude --allow-arch-violation
 ```
+
+## Container / Degraded Environment
+
+When running without the full omniclaude plugin (e.g., container-based Claude Code sessions):
+
+- **Cross-skill dispatch** (`Skill(skill="onex:...")`) requires the plugin's skill registry.
+  If skills are not registered, dispatch calls will fail.
+- **Linear MCP** may not be available. This skill requires Linear for ticket operations.
+  If unavailable, see `--local` mode on upstream skills (e.g., `executing-plans --local`).

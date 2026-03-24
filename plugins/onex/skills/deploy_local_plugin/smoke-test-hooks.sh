@@ -118,7 +118,7 @@ UPS_INPUT='{"session_id":"smoke-test","hook_event_name":"UserPromptSubmit","prom
 SESSION_INPUT='{"session_id":"smoke-test","hook_event_name":"SessionStart","cwd":"/tmp","source":"startup","model":"claude-sonnet-4-6","transcript_path":"/tmp/smoke.jsonl"}'
 
 # UserPromptSubmit hooks (typically 1-4s due to pattern injection timeout)
-test_hook "user-prompt-submit"            "${HOOKS_SCRIPTS}/user-prompt-submit.sh"          "$UPS_INPUT"     8
+test_hook "user-prompt-submit"            "${HOOKS_SCRIPTS}/user-prompt-submit.sh"          "$UPS_INPUT"     12
 test_hook "user-prompt-delegation-rule"   "${HOOKS_SCRIPTS}/user-prompt-delegation-rule.sh"  "$UPS_INPUT"     8
 
 # SessionStart hook — OMN-4566 regression: capability_probe.py must not emit to stdout

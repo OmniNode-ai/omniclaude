@@ -9,9 +9,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   merge_group:
   workflow_dispatch:
 
@@ -791,6 +791,45 @@ jobs:
       - name: Check no datetime.utcnow() usage
         run: uv run python scripts/validation/validate_no_utcnow.py
 
+  arch-no-hardcoded-ip:
+    name: "Arch: No hardcoded internal IPs (check 12)"
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Check no hardcoded internal IPs
+        run: uv run python scripts/validation/validate_no_hardcoded_ip.py
+
   # ============================================================================
   # F5 ARCHITECTURAL CHECKS (OMN-2595: Consumer Group Rules)
   # ============================================================================
@@ -1534,6 +1573,93 @@ jobs:
       - name: Check version pin compliance
         run: python onex_change_control/standards/check_version_pins.py --repo omniclaude --root onex_change_control --repo-path .
 
+  # ---------------------------------------------------------------------------
+  # Merge-Sweep Contract Tests (OMN-6189)
+  # ---------------------------------------------------------------------------
+  # Structural regression tests for the merge-sweep skill prompt contract.
+  # Prevents Track B dispatch bugs (e.g., --skip-polish leaking into empty check).
+  merge-sweep-contract:
+    name: Merge-Sweep Contract
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run merge-sweep contract tests
+        run: uv run pytest tests/integration/skills/merge_sweep/ -v -m "unit and not integration"
+
+  # ---------------------------------------------------------------------------
+  # Skill Contract Validation (OMN-6193)
+  # ---------------------------------------------------------------------------
+  # Validates argument parity, sub-skill references, duplicate frontmatter,
+  # and spec-prompt predicate coverage across all skills.
+  skill-contract-validation:
+    name: Skill Contract Validation
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Checkout onex_change_control validator
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          ref: main
+          token: ${{ secrets.CROSS_REPO_PAT || github.token }}
+          path: onex_change_control
+          sparse-checkout: |
+            scripts/validation/
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate skill contracts
+        # Initially without --strict; promote to --strict after baseline warnings are resolved
+        run: python onex_change_control/scripts/validation/validate_skill_contracts.py --skills-root plugins/onex/skills
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1573,6 +1699,7 @@ jobs:
       - arch-cost-ledger-structure
       - arch-no-direct-kafka-producer
       - arch-no-utcnow
+      - arch-no-hardcoded-ip
       # F5 checks (OMN-2595)
       - arch-no-compact-cmd-topic
       # CDQA-07 (OMN-2977)
@@ -1583,6 +1710,10 @@ jobs:
       - skill-hygiene
       # Mode metadata integrity (OMN-5402)
       - mode-metadata-guard
+      # Merge-sweep contract (OMN-6189)
+      - merge-sweep-contract
+      # Skill contract validation (OMN-6193)
+      - skill-contract-validation
     if: always()
     steps:
       - name: Check quality results
@@ -1609,11 +1740,14 @@ jobs:
             "arch-cost-ledger-structure=${{ needs.arch-cost-ledger-structure.result }}" \
             "arch-no-direct-kafka-producer=${{ needs.arch-no-direct-kafka-producer.result }}" \
             "arch-no-utcnow=${{ needs.arch-no-utcnow.result }}" \
+            "arch-no-hardcoded-ip=${{ needs.arch-no-hardcoded-ip.result }}" \
             "arch-no-compact-cmd-topic=${{ needs.arch-no-compact-cmd-topic.result }}" \
             "arch-invariants=${{ needs.arch-invariants.result }}" \
             "version-pin-check=${{ needs.version-pin-check.result }}" \
             "skill-hygiene=${{ needs.skill-hygiene.result }}" \
-            "mode-metadata-guard=${{ needs.mode-metadata-guard.result }}"; do
+            "mode-metadata-guard=${{ needs.mode-metadata-guard.result }}" \
+            "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
+            "skill-contract-validation=${{ needs.skill-contract-validation.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then

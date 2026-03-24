@@ -62,7 +62,6 @@ args:
   - name: --fix-nits
     description: Also auto-fix Nit-level comments
     required: false
-mode: full
 ---
 
 # PR Watch

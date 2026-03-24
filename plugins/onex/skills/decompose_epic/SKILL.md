@@ -32,7 +32,6 @@ args:
   - name: --dry-run
     description: Print decomposition plan without creating tickets
     required: false
-mode: full
 ---
 
 # Decompose Epic

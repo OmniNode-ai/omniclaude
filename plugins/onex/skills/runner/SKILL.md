@@ -29,7 +29,6 @@ args:
   - name: --dry-run
     description: "Show compose diff + which containers will be recreated, without deploying"
     required: false
-mode: full
 ---
 
 # Runner

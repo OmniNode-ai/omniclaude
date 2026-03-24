@@ -6,7 +6,7 @@ Tests against the live local model endpoint (LLM_CODER_FAST_URL).
 These tests are skipped in CI unless the endpoint is available.
 
 Requires:
-    - LLM_CODER_FAST_URL env var or default http://192.168.86.201:8001  # onex-allow-internal-ip
+    - LLM_CODER_FAST_URL env var (no default; test skips if unset)
     - Qwen3-14B model serving the OpenAI-compatible API
 
 Marker: integration (excluded from unit test runs)
@@ -41,12 +41,15 @@ from omniclaude.nodes.node_transition_selector_effect.node import (
     NodeTransitionSelectorEffect,
 )
 
-pytestmark = pytest.mark.integration
+_LLM_ENDPOINT = os.environ.get("LLM_CODER_FAST_URL", "")
 
-_LLM_ENDPOINT = os.environ.get(
-    "LLM_CODER_FAST_URL",
-    "http://192.168.86.201:8001",  # onex-allow-internal-ip
-)
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not _LLM_ENDPOINT,
+        reason="LLM_CODER_FAST_URL not set — skipping integration test",
+    ),
+]
 
 
 def _is_endpoint_available() -> bool:

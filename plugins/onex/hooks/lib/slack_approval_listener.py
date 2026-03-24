@@ -34,7 +34,7 @@ class SlackApprovalListener:
         self.token = token
         self.pid_file = pid_file
 
-    def start(self) -> None:
+    def start(self) -> None:  # stub-ok: intentional placeholder
         """Not implemented — stub only. Raises NotImplementedError always."""
         raise NotImplementedError(
             "SlackApprovalListener is not yet implemented. "

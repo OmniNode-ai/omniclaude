@@ -105,10 +105,14 @@ class CodeContextResolver:
     ) -> None:
         self._qdrant = qdrant_client
         self._bolt = bolt_handler
-        self._embedding_url = embedding_url or os.environ.get(
-            "LLM_EMBEDDING_URL",
-            "http://192.168.86.200:8100",  # onex-allow-internal-ip  # kafka-fallback-ok
-        )
+        resolved_url = embedding_url or os.environ.get("LLM_EMBEDDING_URL", "")
+        if not resolved_url:
+            logger.warning(
+                "LLM_EMBEDDING_URL is not set. "
+                "Semantic code context resolution will be unavailable. "
+                "Set LLM_EMBEDDING_URL in ~/.omnibase/.env to enable."
+            )
+        self._embedding_url = resolved_url
 
     async def resolve(
         self,
@@ -124,6 +128,12 @@ class CodeContextResolver:
         Returns:
             List of CodeContextResult ordered by similarity score.
         """
+        if not self._embedding_url:
+            logger.warning(
+                "CodeContextResolver: no embedding URL configured, returning empty results"
+            )
+            return []
+
         if self._qdrant is None:
             logger.warning(
                 "CodeContextResolver: no Qdrant client, returning empty results"

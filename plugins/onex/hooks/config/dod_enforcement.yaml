@@ -49,8 +49,8 @@ mode: soft
 #                     actionable, no false positives, UNKNOWN rates acceptable,
 #                     exemption volume stable or shrinking.
 layers:
-  pipeline_gate: advisory          # PreToolUse hook blocking Edit/Write without active pipeline
-  pipeline_gate_contract: advisory # Pre_flight contract check — graduates with pipeline_gate
+  pipeline_gate: soft              # PreToolUse hook blocking Edit/Write without active pipeline
+  pipeline_gate_contract: soft     # Pre_flight contract check — graduates with pipeline_gate
   pipeline_dod_verify: null        # ticket-pipeline dod_verify phase
   epic_audit: null                 # epic-team DoD audit wave
   completion_guard: null           # PreToolUse hook blocking Done without DoD receipt

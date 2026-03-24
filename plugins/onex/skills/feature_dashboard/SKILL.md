@@ -38,7 +38,6 @@ args:
     description: "true | false (default: false); disable gap batching in ticketize mode — create one ticket per skill (pre-OMN-6163 behavior)"
     default: "false"
 ticket: OMN-3503
-mode: full
 ---
 
 # Feature Dashboard

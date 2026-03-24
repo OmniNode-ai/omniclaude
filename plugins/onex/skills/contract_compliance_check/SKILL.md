@@ -3,7 +3,6 @@ description: Pre-merge seam validation — reads a ModelTicketContract, diffs th
 mode: full
 level: advanced
 debug: false
-mode: full
 ---
 
 # contract-compliance-check skill

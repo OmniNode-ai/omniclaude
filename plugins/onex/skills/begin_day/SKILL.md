@@ -41,7 +41,6 @@ outputs:
   - name: plan_path
     type: str
     description: Path to the action plan (if Phase 4 ran)
-mode: full
 ---
 
 # begin-day Skill
@@ -57,7 +56,7 @@ mode: full
 2. **Phase 1** — Sync repos via `pull-all.sh` + check infra health (~2min)
 3. **Phase 2** — Dispatch 7 parallel investigation probes (~8min wall-clock)
 4. **Phase 3** — Aggregate all findings into a `ModelDayOpen` YAML (~1min)
-5. **Phase 4** — Feed findings into `/design-to-plan` (optional)
+5. **Phase 4** — Feed findings into `onex:design-to-plan` (optional)
 
 ## Quick Start
 
@@ -109,7 +108,7 @@ Phase 3: Aggregate & Model (sequential, ~1min)
   └── Write day_open.yaml + update latest symlink
 
 Phase 4: Plan Generation (optional)
-  └── Feed findings into /design-to-plan
+  └── Feed findings into onex:design-to-plan
 ```
 
 ## Artifact Structure
@@ -170,7 +169,7 @@ $ONEX_STATE_DIR/begin-day/
   ├── carries forward as HIGH findings
   └── writes day_open.yaml with aggregated findings
 
-/design-to-plan (Phase 4)
+onex:design-to-plan (Phase 4)
   └── converts findings into prioritized action plan
 ```
 

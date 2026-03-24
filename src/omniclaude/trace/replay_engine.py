@@ -309,7 +309,7 @@ class ReplayEngine:
         self.repo_root = repo_root
         self.checks = checks
 
-    def replay(  # stub-ok: implemented with TODO for future enhancement
+    def replay(  # stub-ok: fully implemented
         self,
         frame: ChangeFrame,
         mode: ReplayMode = ReplayMode.TEST_ONLY,

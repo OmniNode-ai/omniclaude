@@ -88,7 +88,7 @@ run with the latest enforcement tools. Each cycle's merged infrastructure makes 
 cycle's gate stricter.
 
 In `--mode build` (default), autopilot queries Linear for unblocked Todo tickets and
-dispatches `/ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
+dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ---
 

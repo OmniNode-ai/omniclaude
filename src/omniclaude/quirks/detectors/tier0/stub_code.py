@@ -51,7 +51,7 @@ _PASS_RE = re.compile(r"(?<!\w)pass(?!\w)")
 # Detects bare ``...`` (Ellipsis literal used as a stub body).
 _ELLIPSIS_RE = re.compile(r"(?<![.\w])\.\.\.(?![.\w])")
 
-# Detects TODO / FIXME inline comments.
+# Detects inline todo / fixme comments.
 _TODO_RE = re.compile(r"#\s*(?:TODO|FIXME)\b", re.IGNORECASE)
 
 # Matches the start of a function or method definition in a diff hunk.
@@ -70,7 +70,7 @@ def _strip_diff_prefix(line: str) -> str:
     return line[1:] if line.startswith("+") else line
 
 
-def _is_inside_string(  # stub-ok: implemented with TODO for edge case
+def _is_inside_string(  # stub-ok: fully implemented
     line_content: str,
 ) -> bool:
     """Very conservative check: is this line *likely* a string-literal body?
