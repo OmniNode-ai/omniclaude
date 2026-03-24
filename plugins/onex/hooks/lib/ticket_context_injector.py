@@ -251,11 +251,25 @@ def build_ticket_context(
 
         data: ContractData = raw_data
 
-        # Extract fields with defaults
-        title = data.get("title", "Untitled")
-        repo = data.get("repo", "unknown")
-        branch = data.get("branch") or "not created"
-        phase = data.get("phase", "unknown")
+        # Extract fields with defaults, sanitizing untrusted content (OMN-6374)
+        try:
+            from plugins.onex.hooks.lib.sanitize import sanitize_field
+        except ImportError:
+            # When running as a standalone script (subprocess), resolve
+            # sanitize.py from the same directory as this file.
+            import importlib.util
+
+            _sanitize_path = Path(__file__).parent / "sanitize.py"
+            _spec = importlib.util.spec_from_file_location("sanitize", _sanitize_path)
+            assert _spec is not None and _spec.loader is not None
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            sanitize_field = _mod.sanitize_field  # type: ignore[assignment]
+
+        title = sanitize_field(data.get("title", "Untitled"))
+        repo = sanitize_field(data.get("repo", "unknown"))
+        branch = sanitize_field(data.get("branch") or "not created")
+        phase = sanitize_field(data.get("phase", "unknown"))
 
         # Count pending questions (where answer is null/empty)
         questions = data.get("questions", [])
