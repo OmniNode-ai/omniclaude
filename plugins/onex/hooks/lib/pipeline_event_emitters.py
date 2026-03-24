@@ -445,6 +445,40 @@ def emit_plan_review_completed(
         pass  # Telemetry must never block pipeline execution
 
 
+def emit_dod_sweep_completed(
+    *,
+    run_id: str,
+    overall_status: str,
+    total_tickets: int,
+    passed: int,
+    failed: int,
+    exempted: int,
+    lookback_days: int,
+    correlation_id: str | None = None,
+) -> None:
+    """Emit dod.sweep.completed event. Fire-and-forget; never blocks."""
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "run_id": run_id,
+            "overall_status": overall_status,
+            "total_tickets": total_tickets,
+            "passed": passed,
+            "failed": failed,
+            "exempted": exempted,
+            "lookback_days": lookback_days,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if correlation_id is not None:
+            payload["correlation_id"] = correlation_id
+        emit_fn("dod.sweep.completed", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
 __all__ = [
     "emit_epic_run_updated",
     "emit_pr_watch_updated",
@@ -453,4 +487,5 @@ __all__ = [
     "emit_circuit_breaker_tripped",
     "emit_hostile_reviewer_completed",
     "emit_plan_review_completed",
+    "emit_dod_sweep_completed",
 ]
