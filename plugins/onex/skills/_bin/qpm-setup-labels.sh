@@ -14,13 +14,22 @@ REPOS=(
     OmniNode-ai/omnidash
 )
 
+failed=0
 for repo in "${REPOS[@]}"; do
     echo "Creating qpm-accelerate label on $repo..."
-    gh label create "qpm-accelerate" \
+    if ! gh label create "qpm-accelerate" \
         --repo "$repo" \
         --description "QPM: promote this PR ahead in merge queue" \
         --color "0E8A16" \
-        --force 2>/dev/null || echo "  (label already exists or error)"
+        --force; then
+        echo "  failed to create/update label on $repo" >&2
+        failed=$((failed + 1))
+    fi
 done
+
+if [ "$failed" -gt 0 ]; then
+    echo "Completed with $failed failure(s)." >&2
+    exit 1
+fi
 
 echo "Done. Verify: gh label list --repo OmniNode-ai/omnibase_core | grep qpm"
