@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1852,7 +1852,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.30.2"
+version = "0.31.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1866,9 +1866,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/d3/7da4de1756e08909e0cda979837c71a66342d96a9fe432db8ba5dd49aad8/omnibase_core-0.30.2.tar.gz", hash = "sha256:bb2fbf85d5a8f3dad1797680b46dbd9e90351617234b34a7277a47bc3afb930d", size = 8010899, upload-time = "2026-03-23T00:15:37.501Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/99/0e3d3e90d2d654cadb6054290cf5bf35efa40917c37d88e036081c9c76af/omnibase_core-0.31.0.tar.gz", hash = "sha256:6cb6a7007a5d6413cdd51f7e42c8a2a65e167bf271febaa4a802d7730209cad0", size = 8022464, upload-time = "2026-03-24T20:12:12.99Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/84/8d5feacc720668bb2caddc0daf952e4622e5fb4aba39a3f4222034fe87c9/omnibase_core-0.30.2-py3-none-any.whl", hash = "sha256:74def267fa9d1305f71b90b7504e60e0c3027d8d92ee3077e650273e28d0bec1", size = 5205149, upload-time = "2026-03-23T00:15:40.325Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/ed/c3b1cbf3085d47966d00be6faea7e66163c0ba938bb4cea9e53fcdb0c92b/omnibase_core-0.31.0-py3-none-any.whl", hash = "sha256:bda1c300d0530b55f463d417de6a01f00d38316ba3e7db78a29879175979b090", size = 5216447, upload-time = "2026-03-24T20:12:15.936Z" },
 ]
 
 [[package]]
