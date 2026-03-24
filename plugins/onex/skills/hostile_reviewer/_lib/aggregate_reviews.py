@@ -518,7 +518,7 @@ def _load_emit_fn() -> EmitFn | None:
     Connection failure = daemon down (non-fatal, handled in emit_result).
     The two cases are intentionally distinguished.
     """
-    hooks_lib = Path(__file__).parents[2] / "hooks" / "lib"
+    hooks_lib = Path(__file__).parents[3] / "hooks" / "lib"
     try:
         if str(hooks_lib) not in sys.path:
             sys.path.insert(0, str(hooks_lib))
