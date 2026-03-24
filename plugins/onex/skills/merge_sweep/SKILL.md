@@ -96,6 +96,40 @@ Proceed? (default: yes — merge-sweep is safe to run concurrently)
 ```
 Then proceed without waiting for input (this is a headless-compatible warning, not a gate).
 
+## Headless Mode (Overnight Pipelines)
+
+Use `plugins/onex/skills/merge_sweep/run.sh` for overnight/unattended runs:
+
+```bash
+# Full headless sweep
+plugins/onex/skills/merge_sweep/run.sh
+
+# Limit repos
+plugins/onex/skills/merge_sweep/run.sh --repos omniclaude,omnibase_core
+
+# Skip polish (fast, merge-only sweep)
+plugins/onex/skills/merge_sweep/run.sh --skip-polish
+```
+
+**Minimum tool allowlist for headless merge-sweep:**
+```
+Bash, Read, Write, Edit, Glob, Grep, Task, TaskCreate, TaskUpdate,
+TaskGet, TaskList, SendMessage, mcp__linear-server__save_comment
+```
+
+**Failure doctrine in headless mode:**
+- **Missing credentials** (`gh auth` not configured): exit 2 immediately, structured JSON to stderr
+- **Ambiguity** (conflicting PR state, claim race): write
+  `$ONEX_STATE_DIR/merge-sweep/ambiguity_<ts>.json`, exit 3 — never guess
+- **Blocked tool** (not in allowlist): log denial, exit 4 — never silently substitute
+- **Partial failure** (some repos failed): record in ModelSkillResult `details` array and
+  continue remaining repos — partial completion is acceptable; exit 5 only if ALL repos fail
+- **Slack notification failure**: log warning only — never fail the skill for notification issues
+
+**Idempotency**: The claim registry and idempotency ledger in
+`$ONEX_STATE_DIR/pr-queue/<date>/run_<run_id>.json` ensure safe re-runs. Re-running
+merge-sweep with the same `--run-id` skips PRs already processed in the current run.
+
 ## Execution Rules
 
 Execute end-to-end without stopping between tasks. If blocked on one task, record a skip note

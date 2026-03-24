@@ -47,6 +47,44 @@ This skill is BUILD mode only. For close-out or reporting tasks:
 
 No tool calls, file reads, or bash commands may precede this output.
 
+## Headless Mode (Overnight Pipelines)
+
+Use `plugins/onex/skills/epic_team/run.sh` for overnight/unattended runs:
+
+```bash
+# Full headless run
+plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build
+
+# Dry run (no spawning)
+plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build --dry-run
+
+# Resume after context limit or crash
+plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build --resume
+```
+
+**Minimum tool allowlist for headless epic-team:**
+```
+mcp__linear-server__get_issue, mcp__linear-server__list_issues,
+mcp__linear-server__save_issue, mcp__linear-server__save_comment,
+mcp__linear-server__list_projects, mcp__linear-server__get_project,
+mcp__linear-server__list_teams, Bash, Read, Write, Edit, Glob, Grep,
+Task, TaskCreate, TaskUpdate, TaskGet, TaskList, SendMessage
+```
+
+**Failure doctrine in headless mode:**
+- **Missing epic_id**: exit 1, structured JSON error — no partial run ever started
+- **Missing credentials** (`LINEAR_API_KEY`): exit 2 immediately, no retries
+- **Ambiguity** (cannot determine epic state, conflicting lock files): write
+  `$ONEX_STATE_DIR/epics/<id>/ambiguity_<ts>.json`, exit 3 — never guess
+- **Blocked tool** (not in allowlist): log denial, exit 4 — never silently substitute
+- **Context limit**: checkpoint to `$ONEX_STATE_DIR/epics/<id>/state.yaml` before stopping;
+  re-run with `--resume` to continue from last completed wave
+
+**Checkpointable state:**
+All in-progress state is written to `$ONEX_STATE_DIR/epics/<epic_id>/state.yaml` before
+each wave and updated after each ticket completion. A coordinator killed at any point can be
+resumed by re-running with `--resume` against the same `state.yaml`.
+
 ## Dispatch Requirement
 
 When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
