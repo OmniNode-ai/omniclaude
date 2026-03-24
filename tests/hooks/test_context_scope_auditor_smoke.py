@@ -93,6 +93,10 @@ def test_context_scope_auditor_no_module_error_on_bare_python(tmp_path: Path) ->
     env["PLUGIN_PYTHON_BIN"] = str(shim)
     env["LOG_FILE"] = str(tmp_path / "hooks.log")
     env["ONEX_STATE_DIR"] = str(tmp_path / "onex_state")
+    # Force full mode so the lite-mode guard (OMN-5398) does not exit 0 early.
+    # In CI the cwd is not under omni_home/omni_worktrees, so mode.sh defaults
+    # to "lite" which skips the entire hook — producing empty stdout.
+    env["OMNICLAUDE_MODE"] = "full"
     # Strip omniclaude from the system path so the test exercises the hook's actual
     # venv resolution rather than falling back to a CI interpreter that already has
     # omniclaude installed.  The hook must succeed purely via PLUGIN_PYTHON_BIN or
