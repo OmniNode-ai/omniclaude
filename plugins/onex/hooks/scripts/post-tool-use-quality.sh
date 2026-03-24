@@ -571,5 +571,6 @@ check_tool_for_friction(tool_info, session_id=tool_info.get('session_id', tool_i
 ) &
 
 # Always pass through original output
+_hook_status "PASS" "$TOOL_NAME" "0"
 printf '%s\n' "$TOOL_INFO"
 exit 0
