@@ -141,13 +141,33 @@ def _similarity(a: str, b: str) -> float:
     return len(words_a & words_b) / max(len(words_a), len(words_b))
 
 
+def _normalize_confidence(raw: str | None) -> str:
+    """Normalize LLM-provided confidence to a valid enum value.
+
+    Handles case variations ("HIGH", "Medium"), None, and unknown values
+    by falling back to "medium" rather than raising.
+    """
+    if raw is None:
+        return "medium"
+    normalized = raw.strip().lower()
+    if normalized in {"high", "medium", "low"}:
+        return normalized
+    return "medium"
+
+
 def merge_findings(
     per_model: list[list[dict[str, str]]],
 ) -> list[dict[str, object]]:
-    """Weighted union: deduplicate by similarity, tag sources."""
+    """Weighted union: deduplicate by similarity, tag sources.
+
+    Per-model confidences are preserved as a list on each merged finding so
+    that compute_verdict can use the highest confidence across all agreeing
+    models rather than whichever model happened to finish first.
+    """
     merged: list[dict[str, object]] = []
     for model_findings in per_model:
         for finding in model_findings:
+            conf = _normalize_confidence(finding.get("confidence"))
             matched = next(
                 (
                     m
@@ -162,15 +182,27 @@ def merge_findings(
                 assert isinstance(sources, list)
                 if finding["source"] not in sources:
                     sources.append(finding["source"])
+                # Preserve all per-model confidences for verdict computation
+                conf_list = matched["confidences"]
+                assert isinstance(conf_list, list)
+                conf_list.append(conf)
             else:
                 merged.append(
                     {
                         "description": finding["description"],
-                        "confidence": finding.get("confidence", "medium"),
+                        "confidence": conf,
+                        "confidences": [conf],
                         "sources": [finding["source"]],
                         "detection": finding.get("detection", ""),
                     }
                 )
+    # Resolve merged confidence: use the highest across all contributing models.
+    # Order: high > medium > low
+    _conf_rank = {"high": 2, "medium": 1, "low": 0}
+    for m in merged:
+        conf_list = m["confidences"]
+        assert isinstance(conf_list, list)
+        m["confidence"] = max(conf_list, key=lambda c: _conf_rank.get(c, 0))  # type: ignore[arg-type]
     return merged
 
 
@@ -475,9 +507,18 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
             name = futures[future]
             try:
                 findings = future.result(timeout=5)
-                per_model.append(findings)
                 per_model_raw[name] = findings  # raw, pre-dedup — for bus emission only
-                models_run.append(name)
+                if findings:
+                    per_model.append(findings)
+                    models_run.append(name)
+                else:
+                    # Driver returned [] — either silently failed or found nothing.
+                    # Don't count as successfully "run" to avoid false-clean results.
+                    print(
+                        f"[{name}] returned empty findings (silent failure or clean)",
+                        file=sys.stderr,
+                    )
+                    models_failed.append(name)
             except Exception as e:
                 print(f"[{name}] exception: {e}", file=sys.stderr)
                 models_failed.append(name)
@@ -488,14 +529,18 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
         ModelReviewFinding(
             id=i + 1,
             description=str(f["description"]),
-            confidence=EnumReviewConfidence(f.get("confidence", "medium")),
+            confidence=EnumReviewConfidence(
+                _normalize_confidence(f.get("confidence"))  # type: ignore[arg-type]
+            ),
             sources=[str(s) for s in f.get("sources", [])],
             detection=str(f.get("detection", "")),
         )
         for i, f in enumerate(merged)
     ]
+    # success=True only when at least one model produced valid findings.
+    # An empty models_run means all drivers either failed or returned nothing.
     return ModelAggregateResult(
-        success=True,
+        success=bool(models_run),
         findings=review_findings,
         models_run=models_run,
         models_failed=models_failed,
