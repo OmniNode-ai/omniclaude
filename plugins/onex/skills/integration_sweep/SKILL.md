@@ -1,5 +1,5 @@
 ---
-description: Contract-driven post-merge integration verification — reads ModelTicketContract.dod_evidence for recently completed tickets, probes each integration surface (KAFKA, DB, CI, PLUGIN, GITHUB_CI, SCRIPT, CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY), and writes a ModelIntegrationRecord artifact to onex_change_control
+description: Contract-driven post-merge integration verification — reads ModelTicketContract.dod_evidence for recently completed tickets, probes each integration surface (KAFKA, DB, CI, PLUGIN, GITHUB_CI, SCRIPT, CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL), and writes a ModelIntegrationRecord artifact to onex_change_control
 version: 1.0.0
 mode: full
 level: advanced
@@ -15,6 +15,7 @@ tags:
   - database
   - ci
   - autonomous
+  - playwright
 author: OmniClaude Team
 composable: true
 args:
@@ -93,6 +94,7 @@ The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 | `CONTAINER_HEALTH` | Docker container state — all expected containers running (unconditional, every invocation) |
 | `RUNTIME_HEALTH` | HTTP health endpoints for runtime services (unconditional, every invocation) |
 | `CROSS_REPO_BOUNDARY` | Cross-repo Kafka boundary parity (topic constants + schema roundtrip) and live pipeline probe; reports boundary count from kafka_boundaries.yaml — unconditional, every invocation [OMN-6286] |
+| `PLAYWRIGHT_BEHAVIORAL` | Playwright smoke and data-flow E2E tests — smoke (no infra) and data-flow (live infra); unconditional, every invocation [OMN-6302] |
 
 ---
 
@@ -105,6 +107,7 @@ The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 | `UNKNOWN` | `INCONCLUSIVE` | Halt — probe returned ambiguous result |
 | `UNKNOWN` | `PROBE_UNAVAILABLE` | Continue with warning — tool not available |
 | `UNKNOWN` | `NOT_APPLICABLE` | Continue — surface not touched by ticket |
+| `PASS_WITH_WARNINGS` | any | Continue — probe passed with non-blocking warnings (e.g., PLAYWRIGHT_BEHAVIORAL data-flow failure in local env) |
 
 ---
 

@@ -108,6 +108,7 @@ Map each `interfaces_touched` value to `EnumIntegrationSurface`:
 | `github_ci` / `branch_protection` | `GITHUB_CI` |
 | `script` / `scripts` / `bash` | `SCRIPT` |
 | `cross_repo_boundary` / `cross_repo` / `kafka_boundary` | `CROSS_REPO_BOUNDARY` |
+| `playwright` / `playwright_behavioral` / `e2e` | `PLAYWRIGHT_BEHAVIORAL` |
 
 Any value not matching the table above: record `status=UNKNOWN`, `reason=NOT_APPLICABLE`, continue.
 
@@ -271,7 +272,55 @@ broker is unavailable and is treated as best-effort (skip = PASS for this probe)
    - static PASS + live PASS (including skip) → surface `PASS`
    - PROBE_UNAVAILABLE (test directory missing) → surface `UNKNOWN/PROBE_UNAVAILABLE`
 
-Append all three probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY) to the main results list before proceeding to Step 6.
+### PLAYWRIGHT_BEHAVIORAL
+
+This probe runs unconditionally on every sweep invocation. It executes Playwright smoke
+and data-flow E2E test suites to verify that omnidash pages render correctly and that
+data flows end-to-end from Kafka through projections to rendered page content.
+
+**Gate doctrine**: Smoke tests (no infrastructure required) are a hard gate — failure means
+the UI is broken and the sweep MUST record FAIL. Data-flow tests require live infrastructure
+(Kafka, projections); failure is treated as `PASS_WITH_WARNINGS` because local environments
+may not have all infra running.
+
+1. Locate the omnidash repo:
+   ```bash
+   OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+   ```
+   - If directory does not exist: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
+     `evidence="omnidash directory not found at $OMNIDASH_DIR"`. Skip remaining sub-steps.
+
+2. Check Playwright is installed:
+   ```bash
+   cd $OMNIDASH_DIR && npx playwright --version 2>&1
+   ```
+   - If command fails: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
+     `evidence="Playwright not installed — run npx playwright install"`. Skip remaining sub-steps.
+
+3. Run smoke tests (no infra required):
+   ```bash
+   cd $OMNIDASH_DIR && npx playwright test --config playwright.smoke.config.ts 2>&1
+   ```
+   - exit code 0: smoke result = PASS
+   - exit code non-zero: smoke result = FAIL
+   - Capture last 20 lines of output as evidence on FAIL
+
+4. Run data-flow tests (requires live infra):
+   ```bash
+   cd $OMNIDASH_DIR && npx playwright test --config playwright.dataflow.config.ts 2>&1
+   ```
+   - exit code 0: dataflow result = PASS
+   - exit code non-zero: dataflow result = FAIL
+   - Capture last 20 lines of output as evidence on FAIL
+
+5. Aggregate surface result:
+   - smoke FAIL → surface `FAIL` (hard gate; data-flow result ignored)
+   - smoke PASS + dataflow FAIL → surface `PASS_WITH_WARNINGS`
+     (acceptable: local environments may lack live infra)
+   - smoke PASS + dataflow PASS → surface `PASS`
+   - PROBE_UNAVAILABLE (Playwright not installed or omnidash missing) → surface `UNKNOWN/PROBE_UNAVAILABLE`
+
+Append all four probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL) to the main results list before proceeding to Step 6.
 
 ---
 
@@ -397,13 +446,13 @@ If `--dry-run`, append ` [dry-run]`.
 **`omniclaude-only` mode** (default):
 - Only probe surfaces: `PLUGIN`, `GITHUB_CI`, `SCRIPT`, `CI`
 - Skip `KAFKA` and `DB` probes (record as UNKNOWN/NOT_APPLICABLE)
-- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, and `RUNTIME_HEALTH` run unconditionally in all modes
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, and `PLAYWRIGHT_BEHAVIORAL` run unconditionally in all modes
 
 **`full-infra` mode**:
 - Probe all surfaces including `KAFKA` and `DB`
 - Requires local Docker infra running (`infra-up` must have been executed)
 - If infra not reachable: record affected surfaces as UNKNOWN/PROBE_UNAVAILABLE, continue
-- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, and `RUNTIME_HEALTH` run unconditionally in all modes
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, and `PLAYWRIGHT_BEHAVIORAL` run unconditionally in all modes
 
 ---
 
