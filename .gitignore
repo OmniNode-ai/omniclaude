@@ -412,3 +412,8 @@ Thumbs.db
 # Temporary files (root-specific)
 *.tmp
 *.temp
+
+# Plugin runtime cache relocation (opt-in via deploy --relocate-cache) [OMN-6367]
+# When enabled, the plugin cache is symlinked from ~/.claude/plugins/cache/ to this
+# directory to avoid HITL prompts on writes inside ~/.claude/
+.plugin-runtime/
