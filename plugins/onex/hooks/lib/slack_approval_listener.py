@@ -37,9 +37,14 @@ class SlackApprovalListener:
     def start(  # stub-ok: intentional placeholder for future Slack listener
         self,
     ) -> None:
-        """Not implemented -- raises RuntimeError always."""
-        raise RuntimeError(
+        """Not implemented -- raises NotImplementedError always.
+
+        Full implementation requires a follow-up ticket (see module docstring).
+        Use channel: terminal or channel: chat instead.
+        """
+        raise NotImplementedError(
             "SlackApprovalListener is not yet available. "
+            "Full implementation requires a follow-up ticket. "
             "Use channel: terminal (fully implemented) or channel: chat (procedurally defined) instead."
         )
 
