@@ -310,6 +310,29 @@ Generate standardized ticket description:
 - [ ] Code reviewed and approved
 - [ ] Documentation updated (if applicable)
 - [ ] No regressions introduced
+
+---
+
+## Contract
+
+    # ModelTicketContract — update ticket_id after creation; review inferred fields
+    schema_version: "1.0.0"
+    ticket_id: ""  # populate with the assigned OMN-XXXX after ticket is created
+    summary: "{title}"
+    is_seam_ticket: {inferred}  # true if Kafka/topics/schemas/cross-repo APIs detected
+    interface_change: {inferred}
+    interfaces_touched: {inferred}  # events | topics | protocols | envelopes | public_api
+    evidence_requirements:
+      - kind: "tests"
+        description: "Unit tests pass"
+        command: "uv run pytest tests/ -m unit -x"
+      - kind: "ci"
+        description: "CI pipeline green"
+        command: "gh pr checks"
+    emergency_bypass:
+      enabled: false
+      justification: ""
+      follow_up_ticket_id: ""
 ```
 
 ### Building Description
@@ -393,6 +416,53 @@ def build_ticket_description(ticket_data: dict, args) -> str:
     lines.append("- [ ] Code reviewed and approved")
     lines.append("- [ ] Documentation updated (if applicable)")
     lines.append("- [ ] No regressions introduced")
+
+    # --- ModelTicketContract block (injected by create_ticket) ---
+    # Infer is_seam_ticket and interfaces_touched from title+description keywords.
+    text = (ticket_data.get('title', '') + ' ' + ticket_data.get('description', '')).lower()
+    seam_signals = {
+        'kafka': 'topics', 'topic': 'topics', 'consumer': 'topics', 'producer': 'topics',
+        'schema': 'events', 'payload': 'events', 'event model': 'events', 'modelhook': 'events',
+        'spi': 'protocols', 'protocol': 'protocols',
+        'envelope': 'envelopes',
+        'endpoint': 'public_api', 'route': 'public_api', ' api': 'public_api', 'rest': 'public_api',
+    }
+    inferred_interfaces = list(dict.fromkeys(v for k, v in seam_signals.items() if k in text))
+    is_seam = 'true' if inferred_interfaces else 'false'
+    interfaces_yaml = (
+        '\n'.join(f'  - "{s}"' for s in inferred_interfaces)
+        if inferred_interfaces else '  []'
+    )
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    lines.append("## Contract")
+    lines.append("")
+    lines.append("```yaml")
+    lines.append("# ModelTicketContract — update ticket_id after creation; review inferred fields")
+    lines.append(f"schema_version: \"1.0.0\"")
+    lines.append(f"ticket_id: \"\"  # populate with the assigned OMN-XXXX after ticket is created")
+    lines.append(f"summary: \"{ticket_data['title']}\"")
+    lines.append(f"is_seam_ticket: {is_seam}")
+    lines.append(f"interface_change: {'true' if inferred_interfaces else 'false'}")
+    lines.append("interfaces_touched:")
+    lines.append(interfaces_yaml if inferred_interfaces else "  []")
+    lines.append("evidence_requirements:")
+    lines.append("  - kind: \"tests\"")
+    lines.append("    description: \"Unit tests pass\"")
+    lines.append("    command: \"uv run pytest tests/ -m unit -x\"")
+    lines.append("  - kind: \"ci\"")
+    lines.append("    description: \"CI pipeline green\"")
+    lines.append("    command: \"gh pr checks\"")
+    lines.append("emergency_bypass:")
+    lines.append("  enabled: false")
+    lines.append("  justification: \"\"")
+    lines.append("  follow_up_ticket_id: \"\"")
+    lines.append("```")
+    lines.append("")
+    lines.append("> After creation, set `ticket_id` to the assigned Linear ID and validate:")
+    lines.append("> `uv run python -c \"from onex_change_control.models.model_ticket_contract import ModelTicketContract; import yaml; ModelTicketContract.model_validate(yaml.safe_load(open('contract.yaml').read()))\"`")
 
     return "\n".join(lines)
 ```

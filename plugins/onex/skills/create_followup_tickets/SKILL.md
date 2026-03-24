@@ -92,9 +92,13 @@ Every ticket description created by this skill **must** include a `ModelTicketCo
 block at the end (see the "Contract" section in the description template below). This is a hard
 requirement — never omit it, even in `--dry-run` output.
 
-The template is intentionally left blank for the engineer to fill in. Do **not** auto-populate
-fields with guessed values. The only field that may be inferred is `is_seam_ticket` (set to `true`
-if the issue description mentions Kafka topics, schemas, cross-repo interfaces, or API endpoints).
+The `ticket_id` field must be set to the assigned Linear ID after the ticket is created.
+Infer `is_seam_ticket: true` (and populate `interfaces_touched`) if the issue description contains
+Kafka/topic/schema/cross-repo/API keywords. Default `evidence_requirements` are always injected
+with unit and CI test commands. Do not invent other field values.
+
+After populating `ticket_id`, validate the block with:
+`uv run python -c "from onex_change_control.models.model_ticket_contract import ModelTicketContract; import yaml; ModelTicketContract.model_validate(yaml.safe_load(open('contract.yaml').read()))"`
 
 ## Ticket Format
 
@@ -129,25 +133,29 @@ Missing password validation in authentication flow.
 
 ## Contract
 
-_ModelTicketContract — fill in before starting work_
+```yaml
+# ModelTicketContract — update ticket_id after creation; review inferred fields
+schema_version: "1.0.0"
+ticket_id: ""  # populate with the assigned OMN-XXXX after ticket is created
+summary: ""    # replace with one-line summary of what this ticket delivers
+is_seam_ticket: false  # set true if issue involves Kafka/topics/schemas/cross-repo APIs
+interface_change: false
+interfaces_touched: []  # infer from description: events | topics | protocols | envelopes | public_api
+evidence_requirements:
+  - kind: "tests"
+    description: "Unit tests pass"
+    command: "uv run pytest tests/ -m unit -x"
+  - kind: "ci"
+    description: "CI pipeline green"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+```
 
-    schema_version: "1.0.0"
-    ticket_id: ""  # e.g. "OMN-1234" — fill in after ticket is created
-    summary: ""    # one-line summary of what this ticket delivers
-
-    is_seam_ticket: false   # true if this touches cross-repo interfaces
-    interface_change: false # true if public contracts / topics / schemas change
-    interfaces_touched: []  # valid values: events | topics | protocols | envelopes | public_api
-
-    evidence_requirements:
-      - kind: "tests"       # valid values: tests | docs | ci | benchmark | manual
-        description: ""     # what proof must exist for DoD
-        command: ""         # optional: how to reproduce / verify
-
-    emergency_bypass:
-      enabled: false
-      justification: ""
-      follow_up_ticket_id: ""
+> After creation, set `ticket_id` to the assigned Linear ID and validate:
+> `uv run python -c "from onex_change_control.models.model_ticket_contract import ModelTicketContract; import yaml; ModelTicketContract.model_validate(yaml.safe_load(open('contract.yaml').read()))"`
 ```
 
 **Priority Mapping**:
