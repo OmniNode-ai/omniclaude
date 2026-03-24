@@ -880,6 +880,18 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "ticket_id"],
     ),
+    "dod.sweep.completed": EventRegistration(
+        event_type="dod.sweep.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DOD_SWEEP_COMPLETED,
+                transform=None,  # Passthrough — sweep metadata contains no secrets
+                description="DoD batch sweep result for omnidash /dod dashboard",
+            ),
+        ],
+        partition_key_field="run_id",
+        required_fields=["run_id", "overall_status", "total_tickets"],
+    ),
     # =========================================================================
     # Correlation Trace Spans (OMN-5047 - omnidash /trace page)
     # =========================================================================

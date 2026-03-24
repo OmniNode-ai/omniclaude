@@ -160,8 +160,26 @@ results before proceeding to B5.
 For each sweep:
 - On success: record result as `pass`, continue.
 - On warning: record result as `warn`, continue.
-- On error: record result as `fail`, log the failure, increment failure counter. Do NOT halt — these are
-  informational quality audits. Only B5 (integration-sweep) can halt.
+- On error: record result as `fail`, log the failure, increment failure counter.
+
+**B1 DoD-sweep halt policy**: After all four sweeps complete, evaluate B1 separately.
+If B1 (dod-sweep) returned `FAIL`, **HALT**. DoD failures indicate unresolved evidence
+debt and block release. Print:
+```
+AUTOPILOT HALT: dod-sweep returned FAIL
+
+Failing tickets:
+  - {ticket_id}: {failed_checks}
+
+Autopilot cannot proceed to release while DoD checks are failing.
+Resolve the failures above, then re-run /autopilot --mode close-out.
+```
+Record B1 as `halt`. Mark remaining steps (B5-D4) as `skipped`. Check circuit breaker.
+
+If B1 returned `UNKNOWN`: print summary as warning, continue. UNKNOWN is non-blocking
+because exemptions are a legitimate source of UNKNOWN status.
+
+B2, B3, B4 remain advisory — their failures do NOT halt.
 
 **Phase B batch summary:** Record both individual advisory step outcomes AND
 a batch-level advisory summary reflecting the worst advisory outcome (e.g., "B-batch: fail
