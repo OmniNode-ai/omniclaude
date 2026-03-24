@@ -1,7 +1,7 @@
 ---
 description: Queue Priority Manager — classify PRs by type, score queue priority, and promote accelerator PRs in GitHub merge queues
 mode: full
-version: 0.1.0
+version: 1.0.0
 level: advanced
 debug: false
 category: workflow
