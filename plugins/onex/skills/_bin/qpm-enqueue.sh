@@ -122,9 +122,24 @@ if [[ -n "$QUEUE_ENTRY" && "$QUEUE_ENTRY" != "null" ]]; then
     POSITION=$(echo "$QUEUE_ENTRY" | jq -r '.position // "unknown"')
     echo "INFO: PR #${PR_NUMBER} is already in merge queue at position ${POSITION}"
     if [[ "$JUMP" == "true" ]]; then
-        echo "INFO: --jump requested but PR is already queued. No action needed."
+        echo "INFO: --jump requested for already-queued PR. Dequeuing then re-enqueuing at front..."
+        # Dequeue first using the PR node ID
+        DEQUEUE_RESULT=$(gh api graphql -f query='
+          mutation($pullRequestId: ID!) {
+            dequeuePullRequest(input: {id: $pullRequestId}) {
+              mergeQueueEntry { id }
+            }
+          }
+        ' -f pullRequestId="$PR_NODE_ID" 2>&1) || {
+            echo "ERROR: dequeuePullRequest failed" >&2
+            echo "$DEQUEUE_RESULT" >&2
+            exit 1
+        }
+        echo "INFO: Dequeued PR #${PR_NUMBER}. Re-enqueuing with jump..."
+        # Fall through to enqueue logic below
+    else
+        exit 0
     fi
-    exit 0
 fi
 
 # ---------------------------------------------------------------------------
@@ -159,9 +174,8 @@ ENQUEUE_RESULT=$(gh api graphql -f query='
     exit 1
 }
 
-# Check for GraphQL errors
-ERRORS=$(echo "$ENQUEUE_RESULT" | jq -r '.errors // empty' 2>/dev/null) || true
-if [[ -n "$ERRORS" && "$ERRORS" != "null" && "$ERRORS" != "" ]]; then
+# Check for GraphQL errors (non-null and non-empty array)
+if echo "$ENQUEUE_RESULT" | jq -e '.errors | if . then length > 0 else false end' >/dev/null 2>&1; then
     echo "ERROR: GraphQL errors in enqueuePullRequest:" >&2
     echo "$ENQUEUE_RESULT" | jq '.errors' >&2
     exit 1
