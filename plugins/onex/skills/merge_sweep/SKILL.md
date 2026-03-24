@@ -60,9 +60,6 @@ args:
   - name: --run-id
     description: "Pipeline run ID for claim registry ownership. Generated if not provided."
     required: false
-  - name: --qpm-mode
-    description: "Run QPM as Phase 0: shadow | label_gated | auto (default: off -- no QPM pre-pass)"
-    required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to scan; empty list means all"

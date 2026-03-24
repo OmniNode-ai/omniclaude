@@ -28,7 +28,6 @@ When `/merge-sweep [args]` is invoked:
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
    - `--run-id <id>` — default: generate new; provided by parent pipeline for claim ownership
-   - `--qpm-mode <mode>` — default: off; run QPM as Phase 0 (shadow | label_gated | auto)
 
 3. **Generate or restore run_id**:
    - If `--run-id` provided: use it (resume mode — no ledger for merge-sweep, but claim registry uses it)
@@ -57,17 +56,50 @@ if deleted:
 
 ---
 
-## Phase 0: Queue Priority Manager (optional)
+## QPM Auto-Classification (Inline)
 
-If `--qpm-mode` is provided (shadow | label_gated | auto):
+QPM classification runs automatically as part of the classify step — no flag required.
+After standard Track A/B classification, every non-draft PR is also scored for acceleration:
 
-1. Run QPM: `plugins/onex/skills/_bin/qpm-run.sh --repo omniclaude --mode {qpm_mode} --repos {repos}`
-2. Parse the JSON output for promoted PRs
-3. Track promoted PR numbers in a set: `promoted_prs`
-4. In Phase A, skip any PR in `promoted_prs` (already handled by QPM)
-5. In Phase A, process remaining accelerator-scored PRs before normal PRs
+```python
+from merge_planner.classifier import PRContext, classify_pr
+from merge_planner.scorer import score_pr, PROMOTION_THRESHOLD
+from merge_planner.models import EnumPRQueueClass
 
-If `--qpm-mode` is not provided, skip Phase 0 entirely.
+def qpm_classify_and_label(pr, repo_full, queue_depth=0):
+    """Classify PR for acceleration and auto-label if promoted.
+
+    Called inline during the classify step for every non-draft PR.
+    Returns True if PR was labeled as accelerator.
+    """
+    ctx = PRContext(
+        number=pr["number"],
+        repo=repo_full,
+        title=pr["title"],
+        is_draft=pr.get("isDraft", False),
+        ci_status="success" if is_green(pr) else "failure",
+        review_state=pr.get("reviewDecision", "none").lower(),
+        changed_files=[f["path"] for f in pr.get("files", [])],
+        labels=[l["name"] for l in pr.get("labels", [])],
+    )
+
+    queue_class = classify_pr(ctx)
+    if queue_class != EnumPRQueueClass.ACCELERATOR:
+        return False
+
+    score = score_pr(ctx, queue_class, queue_depth)
+    if score.net_score < PROMOTION_THRESHOLD:
+        return False
+
+    # Auto-apply qpm-accelerate label
+    run(["gh", "pr", "edit", str(pr["number"]),
+         "--repo", repo_full, "--add-label", "qpm-accelerate"])
+    return True
+```
+
+In Phase A, PRs with the `qpm-accelerate` label get priority enqueue via
+`qpm-enqueue.sh --jump` instead of normal `gh pr merge --auto`. This is transparent —
+no separate phase, no flag, no user action required.
 
 ---
 
@@ -339,6 +371,26 @@ Classification results (evaluated in order — first match wins):
 but BEHIND/UNKNOWN on `mergeStateStatus` needs its branch updated before auto-merge can
 proceed. Arming auto-merge on such PRs creates a chicken-and-egg deadlock when strict branch
 protection (`strict: true`) is enabled.
+
+### QPM Auto-Label Pass (after classification, before claim check)
+
+After Track A/B classification, run `qpm_classify_and_label()` on every non-draft PR
+that landed in `candidates_pre_claim[]` or `branch_update_queue_pre_claim[]`.
+This auto-applies the `qpm-accelerate` label to accelerator PRs so Phase A can
+use `jump=true` enqueue. The label persists on the PR — subsequent sweeps see it
+without re-classifying.
+
+```python
+accelerator_count = 0
+for pr in candidates_pre_claim + branch_update_queue_pre_claim:
+    repo_full = pr["baseRepository"]["nameWithOwner"]
+    if qpm_classify_and_label(pr, repo_full, queue_depth=len(candidates_pre_claim)):
+        accelerator_count += 1
+
+if accelerator_count > 0:
+    print(f"[merge-sweep] QPM: labeled {accelerator_count} accelerator PR(s) with qpm-accelerate")
+```
+
 
 ### Branch Protection Drift Pre-Scan
 
@@ -721,14 +773,18 @@ for pr in candidates:
         continue
 
     try:
+        # QPM: check if this PR has qpm-accelerate label (auto-applied during classification)
+        pr_labels = {l["name"] for l in pr.get("labels", [])}
+        is_accelerator = "qpm-accelerate" in pr_labels
+
         # Detect merge queue: repos with merge queues need enqueue_to_merge_queue()
         # from _lib/pr-safety/helpers.md — `gh pr merge --auto` does NOT enqueue
         # into merge queues. (OMN-5635)
         # Repos without merge queues continue using `gh pr merge --auto` as before.
         if has_merge_queue(repo_full):
             # Use pr-safety helper: enqueue_to_merge_queue(repo_full, pr_number)
-            # (GraphQL enqueuePullRequest mutation lives in _lib/pr-safety/helpers.md)
-            enqueue = enqueue_to_merge_queue(repo_full, pr["number"])
+            # Accelerator PRs get jump=true for priority placement in merge queue
+            enqueue = enqueue_to_merge_queue(repo_full, pr["number"], jump=is_accelerator)
 
             if enqueue["status"] == "enqueued":
                 auto_merge_results.append({
