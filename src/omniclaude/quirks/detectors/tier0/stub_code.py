@@ -51,7 +51,7 @@ _PASS_RE = re.compile(r"(?<!\w)pass(?!\w)")
 # Detects bare ``...`` (Ellipsis literal used as a stub body).
 _ELLIPSIS_RE = re.compile(r"(?<![.\w])\.\.\.(?![.\w])")
 
-# Detects inline task-marker comments (e.g. "to-do" / "fix-me").  # noqa: TD
+# Detects inline todo / fixme comments.
 _TODO_RE = re.compile(r"#\s*(?:TODO|FIXME)\b", re.IGNORECASE)
 
 # Matches the start of a function or method definition in a diff hunk.
@@ -115,7 +115,7 @@ class StubCodeDetector:
         - 0.5  inline TODO / FIXME comment
     """
 
-    def detect(  # stub-ok: fully implemented
+    def detect(  # stub-ok: implemented with TODO for enhancement
         self, context: DetectionContext
     ) -> list[QuirkSignal]:
         """Run stub-code detection against the diff in *context*.

@@ -34,17 +34,11 @@ class SlackApprovalListener:
         self.token = token
         self.pid_file = pid_file
 
-    def start(  # stub-ok: intentional placeholder for future Slack listener
-        self,
-    ) -> None:
-        """Not implemented -- raises NotImplementedError always.
-
-        Full implementation requires a follow-up ticket (see module docstring).
-        Use channel: terminal or channel: chat instead.
-        """
+    def start(self) -> None:  # stub-ok: intentional placeholder
+        """Not implemented — stub only. Raises NotImplementedError always."""
         raise NotImplementedError(
-            "SlackApprovalListener is not yet available. "
-            "Full implementation requires a follow-up ticket. "
+            "SlackApprovalListener is not yet implemented. "
+            "This is a stub for follow-up implementation. "
             "Use channel: terminal (fully implemented) or channel: chat (procedurally defined) instead."
         )
 

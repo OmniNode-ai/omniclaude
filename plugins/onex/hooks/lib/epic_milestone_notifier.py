@@ -89,7 +89,7 @@ from pipeline_slack_notifier import (  # noqa: E402
 _EPIC_TEAM_SEGMENT = "epic-team"
 
 
-def _make_prefix(epic_id: str, run_id: str) -> str:  # stub-ok: fully implemented
+def _make_prefix(epic_id: str, run_id: str) -> str:  # stub-ok
     """Format the correlation prefix for epic-team Slack messages.
 
     Format: [OMN-XXXX][epic-team][run:abcd-1234]

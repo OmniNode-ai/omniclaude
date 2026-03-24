@@ -1,3 +1,31 @@
+## v0.13.0 (2026-03-24)
+
+### Added
+- feat(hooks): add plan.review.completed and hostile.reviewer.completed event types [OMN-6128, OMN-6153] (#804)
+- feat(hooks): add source field and injection.recorded event to extraction emitter [OMN-6158] (#801)
+- feat(feature-dashboard): batch identical LOW gaps in ticketize mode [OMN-6163] (#802)
+- feat(skills): apply output suppression contract across omniclaude skills [OMN-6191] (#808)
+- feat(hooks): add file-path convention routing to PreToolUse [OMN-6155] (#800)
+
+### Fixed
+- fix(deploy): increase user-prompt-submit smoke test timeout to 12s (#817)
+- fix: Crenshaw architecture review fixes [OMN-6095] (#795)
+- fix(skill): replace hyphenated skill refs with underscored names [OMN-6190] (#806)
+- fix(merge-sweep): decouple --skip-polish gate from Step 4 empty check [OMN-6189] (#803)
+- fix(deps): update stale cross-repo version pins [OMN-6112] (#794)
+- fix(hooks): add logging to silent except-pass blocks [OMN-6110] (#793)
+
+### Changed
+- chore(ci): standardize CI triggers to canonical block [OMN-6217] (#815)
+- chore(deps): bump the actions group with 4 updates (#816)
+- ci: wire skill-contract-validation and fix violations [OMN-6193] (#813)
+- chore(hooks): graduate pipeline gate from advisory to soft [OMN-5970] (#811)
+- test(merge-sweep): add Track B dispatch regression test + CI gate [OMN-6189] (#810)
+
+### Dependencies
+- omnibase-infra >= 0.25.0
+- omninode-intelligence >= 0.17.0
+
 ## v0.10.0 (2026-03-20)
 
 ### Added

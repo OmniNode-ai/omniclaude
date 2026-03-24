@@ -153,7 +153,7 @@ def wait_for_pr_status(  # stub-ok: fully implemented
 
     In EVENT_BUS mode:
     1. Assumes watch is already registered via ``register_watch()``
-    2. Waits for Kafka inbox message (TODO: implement consumer)
+    2. Waits for Kafka inbox message (TODO(OMN-2826): implement consumer)
 
     Args:
         repo: Full repo slug.

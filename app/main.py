@@ -216,7 +216,7 @@ async def health_check():
         200: Service is healthy
         503: Service is unhealthy
     """
-    # TODO(OMN-6157): Add actual health checks for dependencies
+    # TODO(OMN-6230): Add actual health checks for dependencies
     # - Database connectivity
     # - Kafka connectivity
     # - Cache connectivity
@@ -260,7 +260,7 @@ async def metrics():
 # API v1 Routes (Placeholder for future endpoints)
 # ============================================================================
 
-# TODO(OMN-6157): Add API v1 routes
+# TODO(OMN-6230): Add API v1 routes
 # - Agent routing endpoints
 # - Action logging endpoints
 # - Manifest injection endpoints

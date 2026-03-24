@@ -192,9 +192,9 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
             self.send_response(503)
             self.end_headers()
 
-    def log_message(self, format, *args):  # noqa: A002
+    def log_message(self, format, *args):  # stub-ok
         """Suppress access logs."""
-        return  # intentionally silent -- health-check noise reduction
+        pass
 
 
 class AgentActionsConsumer:
