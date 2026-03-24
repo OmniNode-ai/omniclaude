@@ -1,7 +1,7 @@
 ---
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
 mode: full
-version: 3.3.0
+version: 3.4.0
 level: advanced
 debug: false
 category: workflow
@@ -69,6 +69,31 @@ outputs:
 ---
 
 # Merge Sweep
+
+## Mode Declaration
+
+**This skill operates in CLOSE-OUT mode only.**
+
+Merge-sweep is not a build skill. It does not create new features, implement tickets, or modify
+application logic. Its purpose is to drain the PR queue by enabling auto-merge on ready PRs and
+polishing PRs with fixable blocking issues.
+
+**First output line** must always be:
+```
+[merge-sweep] MODE: close-out | run: <run_id>
+```
+
+No tool calls, file reads, or bash commands may precede this output. Announce this line
+immediately when the skill is invoked, before any scanning or classification.
+
+**Pre-condition check**: Merge-sweep must not be invoked in a session that is actively running
+epic-team (build mode). If the session has an active epic run (`$ONEX_STATE_DIR/epics/*/state.yaml`
+with `status: monitoring`), emit a warning:
+```
+WARNING: Active epic run detected. Merge-sweep during active build may conflict with in-flight PRs.
+Proceed? (default: yes — merge-sweep is safe to run concurrently)
+```
+Then proceed without waiting for input (this is a headless-compatible warning, not a gate).
 
 ## Execution Rules
 

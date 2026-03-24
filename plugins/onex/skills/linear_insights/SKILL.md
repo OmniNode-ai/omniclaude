@@ -1,6 +1,7 @@
 ---
 description: Daily deep dive reports and velocity-based project completion estimates using Linear data
 mode: full
+version: 1.1.0
 level: intermediate
 debug: false
 args:
@@ -10,6 +11,38 @@ args:
 ---
 
 # Linear Insights
+
+## Mode Declaration
+
+**This skill operates in REPORTING mode only.**
+
+Linear-insights is not a build skill and not a close-out skill. It reads data — from Linear,
+GitHub, and git history — and produces reports. It does not implement features, merge PRs,
+or modify worktrees.
+
+Valid `--mode` values:
+- `deep-dive` (default) — comprehensive daily work analysis
+- `close-day` — end-of-day reconciliation (ModelDayClose YAML)
+- `project` — project health dashboard
+- `velocity` — milestone ETA calculations
+- `suggest` — priority backlog recommendations
+- `pipeline` — rework ratio, cycle time, CI stability
+- `github` — PR counts, commit velocity, LOC metrics
+- `all` — run every mode, produce combined report
+
+**First output line** must always be:
+```
+[linear-insights] MODE: reporting | submode: <mode-value>
+```
+
+No tool calls, file reads, or bash commands may precede this output.
+
+If an unrecognized `--mode` value is passed, emit:
+```
+ERROR: Unknown --mode value: <value>
+Valid modes: deep-dive | close-day | project | velocity | suggest | pipeline | github | all
+```
+Then stop.
 
 Unified analytics and reporting for the OmniNode platform. All reporting modes are subcommands of this single skill.
 
