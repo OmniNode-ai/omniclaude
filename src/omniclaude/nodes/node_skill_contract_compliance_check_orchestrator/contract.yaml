@@ -68,6 +68,8 @@ event_bus:
   publish_topics:
     - "onex.evt.omniclaude.contract-compliance-check-completed.v1"
     - "onex.evt.omniclaude.contract-compliance-check-failed.v1"
+  consumed_events:
+    - "onex.evt.onex-change-control.contract-drift-detected.v1"
 # Capabilities
 capabilities:
   - name: skill.contract_compliance_check
