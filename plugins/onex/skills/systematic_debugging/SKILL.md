@@ -309,7 +309,12 @@ Runs tests one-by-one, stops at first polluter. See script for usage.
 4. **If Fix Doesn't Work**
    - STOP
    - Count: How many fixes have you tried?
-   - If < 3: Return to Phase 2, re-analyze with new information
+   - State the counter explicitly: "Fix attempt 1 of 2" / "Fix attempt 2 of 2 — diagnosis required before continuing"
+   - **If ≥ 2: Invoke the Two-Strike Diagnosis Protocol (see CLAUDE.md)**:
+     1. Write `docs/diagnosis-{issue}.md` with four sections: What is known, What was tried and why it failed, Root cause hypothesis, Proposed fix with rationale
+     2. Create `.onex_state/diagnosis-required.flag` with ticket ID and attempt count
+     3. Do NOT attempt further fixes until the user has reviewed the diagnosis document
+   - If < 2: Return to Phase 2, re-analyze with new information
    - **If ≥ 3: STOP and question the architecture (step 5 below)**
    - DON'T attempt Fix #4 without architectural discussion
 

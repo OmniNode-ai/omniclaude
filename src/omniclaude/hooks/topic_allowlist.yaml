@@ -543,3 +543,11 @@ allowed_extras:
       in the merge queue based on priority scoring.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6242
+
+  - topic: "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+    lifecycle: observability
+    reason: >
+      Hostile reviewer skill failure event emitted when multi-model aggregation
+      encounters an unrecoverable error. Complements the completed event.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6180

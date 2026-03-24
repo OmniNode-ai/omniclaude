@@ -176,10 +176,10 @@ evaluation window for breaker purposes (see circuit breaker doctrine in SKILL.md
 
 **This step is the hard gate. Read it carefully.**
 
-Run integration-sweep in omniclaude-only mode:
+Run integration-sweep in full-infra mode (includes Kafka and DB probes):
 
 ```
-/integration-sweep --mode=omniclaude-only
+/integration-sweep --mode=full-infra
 ```
 
 After the sweep completes, read the artifact at:
