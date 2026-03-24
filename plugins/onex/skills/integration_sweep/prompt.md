@@ -109,6 +109,7 @@ Map each `interfaces_touched` value to `EnumIntegrationSurface`:
 | `script` / `scripts` / `bash` | `SCRIPT` |
 | `cross_repo_boundary` / `cross_repo` / `kafka_boundary` | `CROSS_REPO_BOUNDARY` |
 | `playwright` / `playwright_behavioral` / `e2e` | `PLAYWRIGHT_BEHAVIORAL` |
+| `schema_parity` / `drizzle` / `orm_parity` | `SCHEMA_PARITY` |
 
 Any value not matching the table above: record `status=UNKNOWN`, `reason=NOT_APPLICABLE`, continue.
 
@@ -320,7 +321,38 @@ may not have all infra running.
    - smoke PASS + dataflow PASS → surface `PASS`
    - PROBE_UNAVAILABLE (Playwright not installed or omnidash missing) → surface `UNKNOWN/PROBE_UNAVAILABLE`
 
-Append all four probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL) to the main results list before proceeding to Step 6.
+### SCHEMA_PARITY
+
+`SCHEMA_PARITY` is an umbrella probe combining a hard static schema-definition
+parity check with a soft runtime schema-health observation. These are related
+but different classes of evidence -- the probe name is shorthand, not a claim
+that both checks are the same class.
+
+Verify Drizzle schema definitions match migration DDL.
+
+**Check 1 -- Run omnidash parity script:**
+```bash
+OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+cd $OMNIDASH_DIR && npm run db:check-drizzle-parity
+```
+Exit 0 = PASS. Exit 1 = FAIL with specific table mismatches.
+
+**Check 2 -- Run schema health endpoint (if omnidash is running):**
+```bash
+curl -sf http://localhost:3000/api/health/schema | jq '.schema_ok'
+```
+If `schema_ok` is false, report the `missing_in_db` and `missing_on_disk` arrays.
+
+**Halt policy:** HALT on Check 1 FAIL (static analysis). WARN on Check 2 failure
+(runtime check, may not be available in all environments).
+
+**Aggregate surface result:**
+- Check 1 FAIL --> surface `FAIL` (hard gate)
+- Check 1 PASS + Check 2 FAIL --> surface `PASS_WITH_WARNINGS`
+- Check 1 PASS + Check 2 PASS (or unavailable) --> surface `PASS`
+- PROBE_UNAVAILABLE (omnidash directory missing) --> surface `UNKNOWN/PROBE_UNAVAILABLE`
+
+Append all five probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL, SCHEMA_PARITY) to the main results list before proceeding to Step 6.
 
 ---
 
@@ -446,13 +478,13 @@ If `--dry-run`, append ` [dry-run]`.
 **`omniclaude-only` mode** (default):
 - Only probe surfaces: `PLUGIN`, `GITHUB_CI`, `SCRIPT`, `CI`
 - Skip `KAFKA` and `DB` probes (record as UNKNOWN/NOT_APPLICABLE)
-- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, and `PLAYWRIGHT_BEHAVIORAL` run unconditionally in all modes
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, `PLAYWRIGHT_BEHAVIORAL`, and `SCHEMA_PARITY` run unconditionally in all modes
 
 **`full-infra` mode**:
 - Probe all surfaces including `KAFKA` and `DB`
 - Requires local Docker infra running (`infra-up` must have been executed)
 - If infra not reachable: record affected surfaces as UNKNOWN/PROBE_UNAVAILABLE, continue
-- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, and `PLAYWRIGHT_BEHAVIORAL` run unconditionally in all modes
+- `CROSS_REPO_BOUNDARY`, `CONTAINER_HEALTH`, `RUNTIME_HEALTH`, `PLAYWRIGHT_BEHAVIORAL`, and `SCHEMA_PARITY` run unconditionally in all modes
 
 ---
 
