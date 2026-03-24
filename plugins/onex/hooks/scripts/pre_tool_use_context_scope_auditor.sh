@@ -34,6 +34,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR 
 LOG_FILE="${ONEX_HOOK_LOG}"
 mkdir -p "$(dirname "$LOG_FILE")"
 
+HOOKS_DIR="${PLUGIN_ROOT}/hooks"
+source "${HOOKS_DIR}/scripts/common.sh"
+
+export OMNICLAUDE_HOOK_CRITICALITY="advisory"
+
 # Read stdin
 INPUT=$(cat)
 
@@ -43,11 +48,12 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Running contex
 # The handler reads the hook JSON from stdin, audits it, and either:
 #   - Prints the original JSON and exits 0 (allow)
 #   - Prints a block decision JSON and exits 2 (block)
-PYTHON_CMD="${PYTHON_CMD:-python3}"
+
+cd "$HOME" 2>/dev/null || cd /tmp || true
 
 EXIT_CODE=0
-RESULT=$(echo "$INPUT" | PYTHONPATH="${PLUGIN_ROOT}/../../src:${PYTHONPATH:-}" \
-    "$PYTHON_CMD" -m omniclaude.hooks.handlers.context_scope_auditor 2>>"$LOG_FILE") \
+RESULT=$(echo "$INPUT" \
+    | "$PYTHON_CMD" -m omniclaude.hooks.handlers.context_scope_auditor 2>>"$LOG_FILE") \
     || EXIT_CODE=$?
 
 if [[ $EXIT_CODE -eq 2 ]]; then
