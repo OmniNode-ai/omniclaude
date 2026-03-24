@@ -1,7 +1,7 @@
 ---
 description: Full PR readiness loop — resolve merge conflicts, address all review comments and CI failures, then iterate local-review until N consecutive clean passes
 mode: full
-version: 1.0.0
+version: 1.1.0
 level: intermediate
 debug: false
 category: workflow
@@ -43,6 +43,39 @@ args:
 ---
 
 # PR Polish
+
+## Headless Mode (Overnight Pipelines)
+
+pr-polish is designed for headless invocation by merge-sweep during overnight pipeline runs.
+It does not require interactive approval gates and is safe to run via `claude -p`.
+
+**Minimum tool set for headless pr-polish:**
+
+```bash
+ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskGet,TaskList,SendMessage"
+claude -p --allowedTools "${ALLOWED_TOOLS}" \
+  "Run the pr-polish skill for PR #<N> --required-clean-runs 2."
+```
+
+**Failure doctrine in headless mode:**
+- **Ambiguity** (cannot determine which PR, conflicting state): write
+  `$ONEX_STATE_DIR/pr-polish/ambiguity_<pr>_<ts>.json` and exit non-zero — never guess
+- **Missing credentials** (gh not authed, no push access): emit structured error JSON to stderr,
+  exit 2 — never silently degrade to read-only
+- **Blocked tool** (tool not in allowlist): log the denied tool name and exit 4 — never
+  substitute an unpermitted tool or silently skip the step
+- **Max iterations hit** (cannot reach N clean passes): emit `status: partial` result to
+  `$ONEX_STATE_DIR/pr-polish/result_<pr>.json` and exit 5 — do NOT re-run phases already
+  completed (idempotency via phase result files)
+- **Unresolvable conflict** (3-way merge cannot be auto-resolved): emit `status: blocked`,
+  write diagnosis, exit 6 — do NOT leave a partially resolved conflict
+
+**Checkpointable state:** Each phase writes its result before starting the next:
+- `$ONEX_STATE_DIR/pr-polish/<pr>/phase1_conflicts.json` — conflict resolution result
+- `$ONEX_STATE_DIR/pr-polish/<pr>/phase2_review.json` — PR review + CI result
+- `$ONEX_STATE_DIR/pr-polish/<pr>/phase3_local_review.json` — local-review loop result
+
+On re-run, phases with existing `status: completed` result files are skipped (idempotent).
 
 ## Dispatch Requirement
 
