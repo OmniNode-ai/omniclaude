@@ -327,6 +327,9 @@ class TopicBase(StrEnum):
     DOD_GUARD_FIRED = "onex.evt.omniclaude.dod-guard-fired.v1"
     """Emitted on every DoD guard interception (pre-tool-use hook)."""
 
+    DOD_SWEEP_COMPLETED = "onex.evt.omniclaude.dod-sweep-completed.v1"
+    """Emitted after a batch DoD compliance sweep completes."""
+
     # ==========================================================================
     # Context integrity audit topics (OMN-5230)
     # Emitted by audit hooks for dispatch validation, scope enforcement,

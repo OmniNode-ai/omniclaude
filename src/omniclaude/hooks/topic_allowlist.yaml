@@ -418,6 +418,13 @@ allowed_extras:
       No dedicated node contract; contract governance to follow.
     ticket: OMN-5197
 
+  - topic: "onex.evt.omniclaude.dod-sweep-completed.v1"
+    lifecycle: telemetry
+    reason: >
+      DoD batch sweep result event. Emitted by /dod-sweep skill. Pre-governance
+      allowlisted; will be governed via contract in a future phase.
+    ticket: OMN-6276
+
   - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
     lifecycle: telemetry
     reason: >
