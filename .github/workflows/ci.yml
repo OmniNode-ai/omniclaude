@@ -272,6 +272,44 @@ jobs:
       - name: Validate exports
         run: uv run python scripts/validation/validate_exports.py
 
+  env-var-registry:
+    name: "Env Var Registry (OMN-6263)"
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check env var registry completeness
+        run: |
+          echo "================================================================"
+          echo "Env Var Registry: os.getenv refs vs .env.example (OMN-6263)"
+          echo "================================================================"
+          python scripts/ci/check_env_var_registry.py \
+            --scan-dirs src/omniclaude plugins/onex/hooks/lib \
+            --registry .env.example \
+            --allowlist-file .env.allowlist \
+            --format text
+
   cross-repo-validation:
     name: Kafka Import Guard
     # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
@@ -1685,6 +1723,7 @@ jobs:
       - check-handshake
       - enum-governance
       - exports-validation
+      - env-var-registry
       - cross-repo-validation
       - migration-freeze
       - onex-validation
@@ -1727,6 +1766,7 @@ jobs:
             "check-handshake=${{ needs.check-handshake.result }}" \
             "enum-governance=${{ needs.enum-governance.result }}" \
             "exports-validation=${{ needs.exports-validation.result }}" \
+            "env-var-registry=${{ needs.env-var-registry.result }}" \
             "cross-repo-validation=${{ needs.cross-repo-validation.result }}" \
             "migration-freeze=${{ needs.migration-freeze.result }}" \
             "onex-validation=${{ needs.onex-validation.result }}" \
