@@ -442,16 +442,55 @@ Build mode drives autonomous ticket execution:
 2. For each ticket (in priority order):
    a. Claim the ticket (set state=In Progress)
    b. Dispatch /ticket-pipeline for the ticket ID
-   c. Wait for ticket-pipeline to complete
+   c1. Wait for ticket-pipeline to complete
+   c2. Run per-repo integration tests (see below)
    d. Clean up worktree
 3. Repeat until no unblocked Todo tickets remain
 ```
 
+### Step c2: Per-Repo Integration Tests [OMN-6294]
+
+After each ticket-pipeline completes, run the repo's integration test suite in the
+worktree to catch regressions immediately:
+
+**Python repos** (omnibase_core, omnibase_infra, omnibase_spi, omniclaude, etc.):
+```bash
+uv run pytest tests/ -m integration --timeout=120
+```
+
+**TypeScript repos** (omnidash):
+```bash
+npx playwright test --config playwright.smoke.config.ts
+```
+
+**Result handling — non-halting:**
+- On PASS: log "Integration tests passed for {repo}", continue to next ticket.
+- On FAIL: do NOT halt build mode. Instead:
+  1. Log the failure details (which tests failed, stderr output).
+  2. Create a follow-up Linear ticket in Active Sprint with:
+     - Title: `fix(integration): {repo} integration test failure after {ticket-id}`
+     - Description must include: which ticket just completed, which tests failed,
+       and the statement "This regression was observed immediately after {ticket-id}
+       completion and may be causally related."
+     - Priority: High
+     - Label: the repo name
+  3. Continue to the next ticket.
+
+**Causality doctrine:** Non-halting integration failures in build mode are a throughput
+policy choice, not a claim that the failure is benign. Follow-up tickets must explicitly
+record that the regression was observed immediately after the ticket's completion and
+may be causally related.
+
+**Timeout:** 120 seconds. If the test suite exceeds this, treat as FAIL and create the
+follow-up ticket with "timeout exceeded" as the failure reason.
+
 Circuit breaker applies: 3 consecutive ticket-pipeline failures → stop.
+Integration test failures do NOT count toward the circuit breaker (they are follow-up
+tickets, not pipeline failures).
 
 Emit result line:
 ```
-AUTOPILOT_RESULT: complete mode=build tickets_processed={N}
+AUTOPILOT_RESULT: complete mode=build tickets_processed={N} integration_failures={M}
 ```
 
 ---
