@@ -130,10 +130,25 @@ def sanitize_field(value: str) -> str:
 
     result = value
 
-    # Remove trust boundary marker tags
+    # Remove trust boundary marker blocks (tags + content between them).
+    # Forged trust blocks must be removed entirely -- not just the tags --
+    # to prevent content within a forged trust="system" block from leaking.
+    result = re.sub(
+        r"<omniclaude-context[^>]*>.*?</omniclaude-context>",
+        "",
+        result,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Also strip orphaned tags (opening without closing, or vice versa)
     result = re.sub(r"</?omniclaude-context[^>]*>", "", result, flags=re.IGNORECASE)
 
-    # Remove system prompt tags
+    # Remove system prompt blocks (tags + content) and orphaned tags
+    result = re.sub(
+        r"<(?:system|system-prompt)>.*?</(?:system|system-prompt)>",
+        "",
+        result,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     result = re.sub(r"</?(?:system|system-prompt)>", "", result, flags=re.IGNORECASE)
 
     # Truncate long equals-sign separators to 3 chars

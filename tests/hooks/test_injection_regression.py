@@ -102,11 +102,20 @@ def test_user_prompt_submit_uses_trust_boundary_markers() -> None:
     assert _UPS_SCRIPT.exists(), f"Script not found: {_UPS_SCRIPT}"
     content = _UPS_SCRIPT.read_text()
 
-    # Must contain trust boundary markers
-    assert 'trust="system"' in content, "Missing trust=system marker"
-    assert 'trust="external"' in content, "Missing trust=external marker"
-    assert "<omniclaude-context" in content, "Missing omniclaude-context tags"
-    assert "</omniclaude-context>" in content, "Missing closing omniclaude-context tags"
+    # Must contain trust boundary markers.
+    # In bash source, quotes are escaped as \" so match both forms.
+    assert 'trust="system"' in content or 'trust=\\"system\\"' in content, (
+        "Missing trust=system marker"
+    )
+    assert 'trust="external"' in content or 'trust=\\"external\\"' in content, (
+        "Missing trust=external marker"
+    )
+    assert "<omniclaude-context" in content or "omniclaude-context" in content, (
+        "Missing omniclaude-context tags"
+    )
+    assert "</omniclaude-context>" in content or "omniclaude-context>" in content, (
+        "Missing closing omniclaude-context tags"
+    )
 
 
 @pytest.mark.unit
