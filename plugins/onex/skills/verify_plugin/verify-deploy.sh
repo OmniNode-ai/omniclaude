@@ -132,6 +132,18 @@ done < <(jq -r '.hooks | to_entries[].value.hooks[].command | split("/")[-1]' \
   "$PLUGIN_ROOT/hooks/hooks.json" 2>/dev/null | sort -u)
 check "hook_smoke: $hook_pass hooks pass, $hook_fail fail (exec+shape only)" test "$hook_fail" -eq 0
 
+# CHECK: post-deploy smoke test (OMN-6376)
+# Run the comprehensive smoke test runner if available at the expected path.
+SMOKE_SCRIPT="$PLUGIN_ROOT/tests/smoke_deploy.sh"
+if [[ -f "$SMOKE_SCRIPT" ]]; then
+  check "smoke_test: smoke_deploy.sh passes" bash "$SMOKE_SCRIPT" "$PLUGIN_ROOT"
+else
+  # Missing smoke script on a current deploy target is a failure.
+  # SKIP only for explicit legacy-target verification (pre-smoke deployments).
+  results+=("${red}✗${reset} smoke_test: smoke_deploy.sh not found at $SMOKE_SCRIPT")
+  ((fail_count++)) || true
+fi
+
 # --- Print results ---
 echo ""
 for r in "${results[@]}"; do echo -e "  $r"; done
