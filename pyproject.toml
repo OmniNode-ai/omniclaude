@@ -3,7 +3,7 @@
 
 [project]
 name = "omninode-claude"
-version = "0.12.0"
+version = "0.13.0"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
 license = { text = "MIT" }
@@ -12,8 +12,8 @@ keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
     "omnibase-core>=0.30.2",
     "omnibase-spi>=0.19.1",
-    "omnibase-infra>=0.24.1",
-    "omninode-intelligence>=0.16.2",
+    "omnibase-infra>=0.25.0",
+    "omninode-intelligence>=0.17.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",

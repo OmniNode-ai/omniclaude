@@ -122,7 +122,7 @@ def status_cmd() -> None:
 @click.option(
     "--notes", default=None, help="Optional notes to attach to the audit record."
 )
-def promote_cmd(  # stub-ok: implemented with TODO for future enhancement
+def promote_cmd(  # stub-ok: fully implemented
     quirk_type: str,
     to_stage: str,
     finding_count: int,
