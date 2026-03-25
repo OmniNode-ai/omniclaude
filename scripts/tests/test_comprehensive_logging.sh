@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Test configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HOOKS_LIB="$HOME/.claude/hooks/lib"
+HOOKS_LIB="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/plugins/cache/omninode-tools/onex/latest}/hooks/lib"
 
 # Configurable wait times (can be overridden via environment variables)
 KAFKA_WAIT_TIME="${KAFKA_WAIT_TIME:-2}"
@@ -398,7 +398,7 @@ echo -e "${GREEN}✓ All comprehensive logging tests PASSED${NC}"
 echo "======================================================================="
 echo ""
 echo "Next steps:"
-echo "  1. View logs: tail -f ~/.claude/hooks/logs/post-tool-use.log"
+echo "  1. View logs: tail -f \$ONEX_STATE_DIR/logs/post-tool-use.log"
 echo "  2. Query data: psql ... -c \"SELECT * FROM agent_actions WHERE correlation_id = '$TEST_CORRELATION_ID';\""
 echo "  3. Use agent history browser: python3 agents/lib/agent_history_browser.py"
 echo ""
