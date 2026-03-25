@@ -365,3 +365,112 @@ Categories: 6
 | stale-ignores | 12 | 12 | 0 | 3 |
 | **TOTAL** | **3,180** | **351** | **2,829** | **53** |
 ```
+
+## Execution Flow
+
+### Execution Discipline
+
+Process findings incrementally by category and repo. For each category:
+1. Resolve or create the epic
+2. Load existing dedup keys for that epic
+3. For each repo: scan -> group -> filter -> create tickets
+4. Print category subtotals before moving to the next category
+
+This prevents the model from accumulating thousands of findings in working state
+before any dedup or ticket creation occurs.
+
+### Parse arguments
+
+```python
+# Pseudocode -- the LLM reads arguments from skill invocation context
+repo_filter = args.repo or None
+category_filter = args.categories.split(",") if args.categories else None
+dry_run = args.dry_run == "true"
+project = args.project or "Active Sprint"
+
+ALL_CATEGORIES = ["type-ignore", "noqa", "todo-fixme", "any-types", "skipped-tests", "stale-ignores"]
+
+categories = [c.strip() for c in category_filter] if category_filter else ALL_CATEGORIES
+
+# Validate categories -- exit on unknown
+for c in categories:
+    if c not in ALL_CATEGORIES:
+        print(f"Unknown category: {c}. Valid: {', '.join(ALL_CATEGORIES)}")
+        # STOP -- do not proceed with partial categories
+        return
+
+# Validate repo filter -- exit if repo doesn't exist
+if repo_filter:
+    repos = discover_repos(omni_home, repo_filter)
+    if not repos:
+        print(f"Repo '{repo_filter}' not found or has no src/ directory")
+        # STOP -- do not proceed
+        return
+```
+
+### Discover repos
+
+```python
+# Pseudocode -- executed via Bash ls + Glob tool calls
+repos = discover_repos(omni_home, repo_filter)
+print(f"Discovered {len(repos)} repos")
+```
+
+### Process each category incrementally
+
+```python
+# Pseudocode -- the LLM processes one category at a time
+summary = {}
+
+for category in categories:
+    print(f"\n--- Processing category: {category} ---")
+
+    # Resolve or create epic for this category
+    epic = resolve_or_create_epic(EPIC_TITLES[category], "Omninode", project, dry_run)
+
+    # Load existing dedup keys once per category
+    existing_keys = load_existing_dedup_keys(epic["id"]) if not dry_run else set()
+
+    category_total = 0
+    category_new = 0
+    category_tickets = 0
+
+    for repo in repos:
+        # Scan this repo for this category
+        findings = scan_category(category, repo)
+        if not findings:
+            continue
+
+        # Group by top-level directory
+        groups = group_by_directory(findings)
+
+        for directory, group_findings in groups.items():
+            new_findings = [f for f in group_findings if f.dedup_key not in existing_keys]
+            category_total += len(group_findings)
+
+            if not new_findings:
+                continue
+
+            category_new += len(new_findings)
+
+            if dry_run:
+                print(f"  [DRY RUN] {repo.name}/{directory}: {len(new_findings)} new of {len(group_findings)} total")
+                continue
+
+            create_debt_ticket(category, repo.name, directory, new_findings, epic, project)
+            category_tickets += 1
+
+    summary[category] = {
+        "total": category_total,
+        "new": category_new,
+        "tracked": category_total - category_new,
+        "tickets": category_tickets,
+    }
+
+    print(f"  Category {category}: {category_total} found, {category_new} new, {category_tickets} tickets created")
+```
+
+### Print summary report
+
+Print the summary table (see Summary Report section above).
+Include stale-ignores skip count if any repos were skipped.
