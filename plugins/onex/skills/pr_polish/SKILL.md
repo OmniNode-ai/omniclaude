@@ -206,8 +206,8 @@ Task(
 
 Before resolving any review threads, the agent MUST follow this 4-step sequence:
 
-1. **Fetch all review comments**: `gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate`
-2. **Fetch review threads**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate`
+1. **Fetch all review threads**: `gh pr view {number} --json reviews,reviewThreads`
+2. **Identify unresolved threads**: filter `reviewThreads` where `isResolved == false`
 3. **For each unresolved thread**:
    a. Read the comment body and understand the requested change
    b. If the comment is valid and actionable: implement the fix, commit, then reply acknowledging the fix
