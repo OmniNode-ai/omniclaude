@@ -69,7 +69,7 @@ is no acceptable workaround — surface the failure.
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -260,8 +260,10 @@ stateDiagram-v2
     local_review --> create_pr : auto (2 confirmed-clean runs)
     create_pr --> ci_watch : auto (policy)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
-    pr_review_loop --> integration_verification_gate : auto (approved)
+    pr_review_loop --> review_gate : auto (approved)
     pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
+    review_gate --> integration_verification_gate : pass (no MAJOR+ findings)
+    review_gate --> [*] : blocked (MAJOR+ finding, max 2 iterations)
     integration_verification_gate --> auto_merge : pass or warn
     integration_verification_gate --> [*] : BLOCK held (bypass required)
     auto_merge --> [*] : merged (ledger cleared) or held (Slack waiting)

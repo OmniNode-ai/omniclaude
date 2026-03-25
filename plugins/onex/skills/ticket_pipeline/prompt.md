@@ -205,7 +205,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "create_pr", "ci_watch", "pr_review_loop", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -2600,6 +2600,34 @@ EOF
 
 ---
 
+### Phase 5.5: REVIEW_GATE (OMN-6535)
+
+**Trigger**: pr_review_loop complete (all human review comments addressed)
+**Skip if**: `--docs-only` flag is set (documentation-only changes don't need adversarial review)
+
+Dispatch the review gate skill to run 3 parallel adversarial review agents (scope, correctness,
+conventions) against the PR:
+
+```
+Skill(skill="onex:review_gate", args="{pr_number} {repo}")
+```
+
+Read result from `~/.claude/skill-results/{context_id}/review-gate.json`.
+
+- If `extra_status == "passed"`: advance to integration_verification_gate
+- If `extra_status == "blocked"`:
+  - Post findings as a PR comment (formatted markdown table of CRITICAL/MAJOR findings)
+  - Dispatch fix agent for each CRITICAL/MAJOR finding
+  - Re-run review gate (max 2 iterations)
+  - If still blocked after 2 iterations: mark ticket as `review_gate_blocked` in state.yaml,
+    skip to next ticket
+
+**State artifacts:**
+- `phases.review_gate.status` (completed/blocked)
+- `phases.review_gate.artifacts` (gate_verdict, total_findings, blocking_count, iterations)
+
+---
+
 ### Phase 5.75: INTEGRATION_VERIFICATION_GATE
 
 Runs inline in the orchestrator (OMN-3341). See the authoritative spec in the
@@ -2611,6 +2639,7 @@ Runs inline in the orchestrator (OMN-3341). See the authoritative spec in the
 
 **Invariants:**
 - Phase 5 (pr_review_loop) is completed with approved status
+- Phase 5.5 (review_gate) is completed with passed status (or skipped for --docs-only)
 - `state["pr_url"]` is set (populated by Phase 3)
 - `state["auto_merge_armed"]` reflects Phase 3 exception-check result
 - Phase 5.75 (integration_verification_gate) is completed (pass or warn)
