@@ -596,9 +596,13 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
         fi
 
         # Fallback: direct Python invocation (~ 3s cold start)
+        # OMN-6486: Bumped from 8s to 12s — LLM delegation check takes 5-9s
+        # depending on model latency; 8s caused flaky smoke test failures.
+        # Configurable via OMNICLAUDE_DELEGATION_TIMEOUT_SEC.
+        _DELEGATION_TIMEOUT_SEC="${OMNICLAUDE_DELEGATION_TIMEOUT_SEC:-12}"
         if [[ -z "$DELEGATION_RESULT" ]] || ! jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
             set +e
-            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" 2>>"$LOG_FILE")"
+            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout "$_DELEGATION_TIMEOUT_SEC" "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" 2>>"$LOG_FILE")"
             set -e
         fi
 
