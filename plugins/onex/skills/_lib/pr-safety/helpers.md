@@ -821,6 +821,48 @@ class BoundaryViolationError(Exception):
 
 ---
 
+## resolve_branch(pr_number, repo)
+
+**MANDATORY** before any `git worktree add`, `git checkout`, or `git push` to a PR branch.
+Never construct branch names from ticket IDs or PR titles -- always fetch from GitHub API.
+See OMN-6364 and memory rule `feedback_always_fetch_branch_name.md`.
+
+```python
+def resolve_branch(pr_number: int | str, repo: str) -> str:
+    """
+    Fetch the actual branch name for a PR from the GitHub API.
+
+    This MUST be called before creating worktrees or pushing to PR branches.
+    Constructing branch names from ticket IDs or PR titles is forbidden --
+    it causes branch name mismatches that waste cycles pushing to wrong branches.
+
+    Args:
+        pr_number: PR number (int or string).
+        repo: Repository in 'owner/repo' format.
+
+    Returns:
+        The headRefName string from GitHub.
+
+    Raises:
+        subprocess.CalledProcessError -- gh CLI failed
+        ValueError -- empty headRefName returned
+    """
+    result = subprocess.run(
+        ["gh", "pr", "view", str(pr_number), "--repo", repo,
+         "--json", "headRefName", "--jq", ".headRefName"],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    branch = result.stdout.strip()
+    if not branch:
+        raise ValueError(
+            f"resolve_branch: gh pr view returned empty headRefName for "
+            f"PR #{pr_number} in {repo}"
+        )
+    return branch
+```
+
+---
+
 ## get_worktree(pr_key, run_id)
 
 Acquire claim before `git worktree add`. Release on failure.
