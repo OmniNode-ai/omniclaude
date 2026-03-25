@@ -166,9 +166,10 @@ class TestModelAgentChatMessage:
             msg.body = "modified"  # type: ignore[misc]
 
     @pytest.mark.unit
-    def test_extra_fields_forbidden(self) -> None:
-        with pytest.raises(Exception):
-            _make_msg(unknown_field="bad")
+    def test_extra_fields_ignored(self) -> None:
+        """Extra fields are silently ignored (extra='ignore' in ConfigDict)."""
+        msg = _make_msg(unknown_field="bad")
+        assert not hasattr(msg, "unknown_field")
 
     @pytest.mark.unit
     def test_naive_datetime_rejected(self) -> None:

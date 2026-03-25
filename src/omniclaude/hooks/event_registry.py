@@ -991,6 +991,22 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="pr_number",
         required_fields=["pr_number", "repo"],
     ),
+    # =========================================================================
+    # Agent chat broadcast (OMN-3972)
+    # Emitted by HandlerChatPublisher for multi-terminal coordination.
+    # =========================================================================
+    "agent.chat.broadcast": EventRegistration(
+        event_type="agent.chat.broadcast",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AGENT_CHAT_BROADCAST,
+                transform=None,  # Passthrough — chat messages are not sensitive
+                description="Agent chat broadcast for multi-terminal coordination",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "agent_id", "body"],
+    ),
 }
 
 
