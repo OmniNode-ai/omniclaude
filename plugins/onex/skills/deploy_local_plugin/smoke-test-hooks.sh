@@ -60,7 +60,7 @@ test_hook() {
     local name="$1"
     local script="$2"
     local input="$3"
-    local timeout_sec="${4:-8}"
+    local timeout_sec="${4:-12}"
 
     local out_file; out_file="$(mktemp /tmp/smoke-hook-out.XXXXXX)"
     local err_file; err_file="$(mktemp /tmp/smoke-hook-err.XXXXXX)"

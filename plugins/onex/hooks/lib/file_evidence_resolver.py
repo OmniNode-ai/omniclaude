@@ -12,7 +12,13 @@ Part of OMN-2092: Evidence-Driven Injection Decisions.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# Ensure parent directory is on sys.path for subprocess invocations
+_LIB_DIR = str(Path(__file__).resolve().parent)
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
 
 from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
 

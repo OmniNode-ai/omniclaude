@@ -19,8 +19,15 @@ for downstream consumers.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal
+
+# Ensure parent directory is on sys.path for subprocess invocations
+_LIB_DIR = str(Path(__file__).resolve().parent)
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
 
 from omnibase_spi.contracts.measurement.contract_measurement_context import (
     derive_baseline_key,
