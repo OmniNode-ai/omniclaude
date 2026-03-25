@@ -88,7 +88,7 @@ fi
 _AUDIT_VALIDATOR_EXIT=0
 _AUDIT_VALIDATOR_OUTPUT=""
 _stderr_tmp=$(mktemp)
-_AUDIT_VALIDATOR_OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" python3 -m omniclaude.hooks.handlers.audit_dispatch_validator \
+_AUDIT_VALIDATOR_OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" "$PYTHON_CMD" -m omniclaude.hooks.handlers.audit_dispatch_validator \
     --subagent-type "$SUBAGENT_TYPE" \
     2>"$_stderr_tmp") || _AUDIT_VALIDATOR_EXIT=$?
 # Append stderr to log file and check for degradation signals (OMN-6567)
