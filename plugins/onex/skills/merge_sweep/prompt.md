@@ -198,6 +198,7 @@ request = ModelGitRequest(
         "reviewDecision", "headRefName", "baseRefName",
         "baseRepository", "headRepository", "headRefOid",
         "author", "labels", "updatedAt", "isDraft",
+        "autoMergeRequest",
     ],
     list_filters=ModelPRListFilters(state="open", limit=100),
 )
@@ -234,7 +235,7 @@ If neither `node_git_effect` nor `_bin/pr-scan.sh` is available, fall back to ra
 gh pr list \
   --repo <repo> \
   --state open \
-  --json number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft \
+  --json number,title,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,headRefName,baseRefName,baseRepository,headRepository,headRefOid,author,labels,updatedAt,isDraft,autoMergeRequest \
   --limit 50
 ```
 
@@ -476,6 +477,46 @@ if accelerator_count > 0:
 ```
 
 
+### Auto-Merge Enrollment Detection (F41)
+
+After classification, identify open non-draft PRs that should have auto-merge enabled but
+do not. A PR needs auto-merge enrollment if:
+- It is not a draft (`isDraft == false`)
+- It has `autoMergeRequest: null` (auto-merge not enabled)
+- It is not already in `candidates[]` or `branch_update_queue[]` (those get auto-merge armed in Phase A)
+- It is not in `polish_queue[]` (those get auto-merge armed after polish succeeds)
+- It passes all active filters (since, label, author)
+
+```python
+auto_merge_missing = []
+
+for repo, prs in repo_scan_results.items():
+    if not prs:
+        continue
+    for pr in prs:
+        if pr.get("isDraft", False):
+            continue
+        if pr.get("autoMergeRequest") is not None:
+            continue  # already enrolled
+        pr_number = pr["number"]
+        # Skip PRs already handled by other tracks
+        if pr in candidates_pre_claim or pr in branch_update_queue_pre_claim or pr in polish_queue_pre_claim:
+            continue
+        if not passes_since_filter(pr, since) or not passes_label_filter(pr, filter_labels):
+            continue
+        auto_merge_missing.append(pr)
+
+if auto_merge_missing:
+    print(f"[merge-sweep] F41: {len(auto_merge_missing)} PR(s) missing auto-merge enrollment")
+```
+
+In Phase A (Step 6), before processing `candidates[]`, arm auto-merge on PRs in the
+`auto_merge_missing` bucket using the same logic (merge queue detection, claim registry,
+`gh pr merge --auto` or `enqueue_to_merge_queue`). These PRs are processed with the same
+parallelism limits as regular candidates.
+
+---
+
 ### Branch Protection Drift Pre-Scan
 
 After classification, detect PRs that are BLOCKED despite all visible checks passing.
@@ -606,7 +647,7 @@ The polish queue is NOT capped (polishing is best-effort and additive).
 ## 4. Empty Check
 
 ```
-IF candidates is empty AND branch_update_queue is empty AND thread_resolve_queue is empty AND polish_queue is empty:
+IF candidates is empty AND branch_update_queue is empty AND thread_resolve_queue is empty AND polish_queue is empty AND auto_merge_missing is empty:
   → Print: "No actionable PRs found across <N> repos."
   → If applicable, explain filters
   → Emit ModelSkillResult(status=nothing_to_merge, filters=filters)
@@ -671,7 +712,7 @@ and Phase B without any intermediate confirmation.
 - Do not include any conditional or opt-out phrasing ("unless", "if you want",
   "let me know", "proceeding unless you object") between tables and Phase A.
 - Track B (pr-polish) runs automatically unless `--skip-polish` is passed.
-- Do not present Track A and Track B as separate choices. Both execute in sequence.
+- Do not present Track A and Track B as separate choices. Both execute concurrently.
 - After printing Track A/Track B tables in non-dry-run mode, do not print any question,
   invitation, or statement ending with a question mark. The next heading rendered must
   be the Phase A heading.
@@ -1014,7 +1055,13 @@ if post_merge_branches_updated:
 
 ---
 
-## Step 7 — Phase B: Polish PRs with Blocking Issues (Parallel)
+## Step 7 — Phase B: Polish PRs with Blocking Issues (Parallel, Concurrent with Phase A)
+
+**Concurrency note (F34):** Phase B runs concurrently with Steps 5b, 6, and 6a (Phase A).
+After classification (Step 3), the empty check (Step 4), and the dry-run check (Step 5),
+dispatch Phase A (Steps 5b + 6 + 6a) and Phase B (Step 7) as parallel Agent calls in a
+single message. This eliminates the sequential bottleneck where Phase B waited for all
+Phase A merges to complete before starting polish work.
 
 Skip this entire phase if `--skip-polish` is set or `polish_queue` is empty.
 
@@ -1129,6 +1176,17 @@ Return a JSON result:
 ```
 
 Wait for all polish agents to complete. Collect results into `polish_results[]`.
+
+---
+
+## 7a. Synchronization Barrier (F34)
+
+**Wait for both Track A and Track B agents to complete before collecting results.**
+
+Both Phase A (Steps 5b + 6 + 6a) and Phase B (Step 7) were dispatched concurrently.
+Do not proceed to Step 8 until all parallel agents from both tracks have returned.
+This ensures `auto_merge_results`, `branch_update_results`, and `polish_results` are
+all fully populated before computing aggregate counts and status.
 
 ---
 
