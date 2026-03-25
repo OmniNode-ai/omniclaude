@@ -448,6 +448,13 @@ fi
 log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
 
+# Hook health probe [F32] — verify all Python hook handlers can import
+PROBE_RESULT=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") || true
+PROBE_FAILURES=$(echo "$PROBE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('failures',0))" 2>/dev/null || echo "0")
+if [[ "$PROBE_FAILURES" != "0" ]]; then
+    log "WARNING: $PROBE_FAILURES hook handler(s) failed import check. See hooks.log for details."
+fi
+
 # Extract session information
 # Claude Code API (2026-02+): snake_case field names (session_id, cwd, etc.)
 # Claude Code API (pre-2026-02): camelCase field names (sessionId, projectPath, etc.)

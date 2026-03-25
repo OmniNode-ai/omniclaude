@@ -56,11 +56,38 @@ RESULT=$(echo "$INPUT" \
     | "$PYTHON_CMD" -m omniclaude.hooks.handlers.context_scope_auditor 2>>"$LOG_FILE") \
     || EXIT_CODE=$?
 
+# --- Error counter tracking [F32] ---
+ERROR_COUNT_DIR="${HOME}/.onex_state/hooks/error-counts"
+mkdir -p "$ERROR_COUNT_DIR"
+ERROR_COUNT_FILE="${ERROR_COUNT_DIR}/${_OMNICLAUDE_HOOK_NAME}.count"
+
 if [[ $EXIT_CODE -eq 2 ]]; then
+    # Intentional block — reset error counter
+    echo "0" > "$ERROR_COUNT_FILE" 2>/dev/null || true
     echo "$RESULT"
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED by context scope auditor" >> "$LOG_FILE"
     exit 2
+elif [[ $EXIT_CODE -ne 0 ]]; then
+    # Python handler crashed — fail-open but log distinctly [F33]
+    CURRENT_COUNT=$(cat "$ERROR_COUNT_FILE" 2>/dev/null || echo "0")
+    NEW_COUNT=$((CURRENT_COUNT + 1))
+    echo "$NEW_COUNT" > "$ERROR_COUNT_FILE"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] [HOOK_CRASH] Python handler exited $EXIT_CODE — allowing tool call (fail-open, consecutive=$NEW_COUNT)" >> "$LOG_FILE"
+    if [[ $NEW_COUNT -ge 5 ]]; then
+        mkdir -p "${HOME}/.onex_state/hooks"
+        {
+            echo "hook: $_OMNICLAUDE_HOOK_NAME"
+            echo "consecutive_errors: $NEW_COUNT"
+            echo "last_error_at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "last_exit_code: $EXIT_CODE"
+        } > "${HOME}/.onex_state/hooks/hook-health-degraded.flag"
+    fi
+    echo "$INPUT"  # pass through original input
+    exit 0
 fi
+
+# Success — reset error counter
+echo "0" > "$ERROR_COUNT_FILE" 2>/dev/null || true
 
 # Pass through (allow)
 echo "$RESULT"
