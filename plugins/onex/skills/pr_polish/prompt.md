@@ -181,6 +181,63 @@ else:
 
 ---
 
+## Phase 0.5: Address Review Comments
+
+Before invoking pr-review-dev (Phase 1), handle all unresolved review threads on the PR.
+This prevents the pattern where CI gets fixed but review comments sit unresolved for hours.
+
+```python
+if pr_number is None:
+    print("Phase 0.5: Skipped (no PR number)")
+    goto Phase 1
+
+if skip_pr_review:
+    print("Phase 0.5: Skipped (--skip-pr-review)")
+    goto Phase 1
+
+print(f"Phase 0.5: Checking for unresolved review comments on PR #{pr_number}...")
+
+repo_full = run("gh repo view --json nameWithOwner --jq .nameWithOwner").strip()
+
+# 1. Fetch all review data (reviews + threads) via gh pr view
+review_data = run(
+    f"gh pr view {pr_number} --json reviews,reviewThreads"
+)
+
+# 2. Extract unresolved review threads
+unresolved_threads = run(
+    f"gh pr view {pr_number} --json reviewThreads "
+    f"--jq '.reviewThreads[] | select(.isResolved == false) | "
+    f"{{id: .id, comments: [.comments[].body], path: .comments[0].path, line: .comments[0].line}}'"
+)
+
+if not unresolved_threads.strip():
+    print("Phase 0.5: No unresolved review threads — skipped")
+    goto Phase 1
+
+print(f"Phase 0.5: Found unresolved review threads — addressing...")
+
+# 3. For each unresolved thread:
+#    a. Read the comment content and understand the requested change
+#    b. If the feedback is valid and actionable: implement the fix, commit, and reply acknowledging the change
+#    c. If the feedback is not applicable (e.g., already addressed, incorrect suggestion, or out of scope):
+#       reply explaining why, with specific reasoning
+#    d. After addressing or replying to ALL comments in a thread, resolve the thread
+
+# CRITICAL: Never auto-resolve threads without first addressing or replying to every comment.
+# Resolving without addressing is the exact anti-pattern this phase prevents.
+
+# 4. Commit all review-driven fixes in a single commit:
+if fixes_made:
+    run("git add -A")
+    run(f'git commit -m "fix: address review comments on PR #{pr_number}"')
+    print(f"Phase 0.5: Committed review comment fixes")
+
+phase_0_5_status = "OK"
+```
+
+---
+
 ## Phase 1: PR Review + CI Fix
 
 ### 1.1 — Check preconditions
