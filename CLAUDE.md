@@ -12,6 +12,47 @@
 
 ---
 
+## Workflow Dispatch Rules
+
+- When executing plans or tasks, ALWAYS use the correct skill/workflow (hostile-reviewer, design-to-plan, epic-team, merge-sweep, ticket-pipeline) rather than ad-hoc implementation. Never replicate a skill's logic inline — dispatch to the skill.
+- When dispatching work to sub-agents or polymorphic agents, verify: (1) correct handoff file is referenced, (2) parent epic is set on tickets, (3) agent uses polymorphic dispatch. Do not blindly dispatch without understanding the situation first.
+- When working with Linear tickets in bulk, use rate-limit-aware batching (max 5-10 per batch with delays). Always set parent epic when creating tickets in bulk.
+
+---
+
+## Scope Boundaries
+
+- Never over-scope changes. When asked to disable or fix one thing, do NOT touch adjacent systems.
+- If unsure about scope boundaries, list what you WILL and WILL NOT touch before proceeding.
+- Prefer atomic, minimal changes. A fix for X should not also refactor Y.
+
+---
+
+## Debugging Protocol
+
+- When diagnosing issues, verify assumptions with actual system state (logs, `docker ps -a`, process checks, API calls) before concluding a service is down or a fix is correct.
+- Do not guess at root causes. Run the diagnostic command first.
+- Follow the Two-Strike Diagnosis Protocol (already in ~/.claude/CLAUDE.md).
+
+---
+
+## Naming Conventions (Enforcement)
+
+- All models: `Model` prefix, Pydantic `BaseModel`, `ConfigDict(frozen=True, extra="forbid")`
+- All enums: `Enum` prefix, `str, Enum` base
+- No `@dataclass`. No `str` literal fields for finite sets — use enums.
+- Check existing code for conventions before creating new files or classes.
+
+---
+
+## Session Discipline
+
+- For bulk operations (>10 Linear tickets, >5 PRs, >3 repos), pre-chunk into batches of 5-10 with explicit checkpoints between batches.
+- Before starting a long-running operation, estimate the number of API calls and compare against known rate limits (Linear: ~100/min, GitHub: ~30/min).
+- If a session will run >1 hour unattended, ensure auto-checkpoints are enabled.
+
+---
+
 ## Repo Boundaries
 
 | This repo owns | Another repo owns |
