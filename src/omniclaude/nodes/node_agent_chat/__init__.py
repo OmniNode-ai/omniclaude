@@ -43,6 +43,8 @@ Related tickets:
 """
 
 from .enums import EnumChatChannel, EnumChatMessageType, EnumChatSeverity
+from .handler_chat_publisher import HandlerChatPublisher
+from .handler_chat_reader import HandlerChatReader, format_message, format_messages
 from .handler_file_chat_store import HandlerFileChatStore
 from .models import ModelAgentChatMessage
 
@@ -54,5 +56,10 @@ __all__ = [
     "EnumChatMessageType",
     "EnumChatSeverity",
     # Handlers
+    "HandlerChatPublisher",
+    "HandlerChatReader",
     "HandlerFileChatStore",
+    # Functions
+    "format_message",
+    "format_messages",
 ]
