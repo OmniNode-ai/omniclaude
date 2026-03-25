@@ -285,6 +285,89 @@ if repos_failed > 0:
 - The `repos_scanned` and `repos_failed` counters are included in `ModelSkillResult`.
 - The Slack sweep summary includes a scan failure warning when `repos_failed > 0`.
 
+### Stack Detection (Post-Scan, Pre-Classification)
+
+After scanning all open PRs across repos, detect stacked PR chains before classification.
+Stacked PRs where the root is blocked should not be independently polished — only the root
+needs attention.
+
+```python
+def detect_stacked_chains(repo_scan_results):
+    """Detect stacked PR chains by matching baseRefName to headRefName.
+
+    Returns:
+        stacked_blocked: set of PR numbers whose root PR is not merge-ready
+        chain_warnings: list of warning strings for deep stacks
+    """
+    # Build headRefName -> PR mapping per repo
+    stacked_blocked = set()
+    chain_warnings = []
+
+    for repo, prs in repo_scan_results.items():
+        if not prs:
+            continue
+
+        head_to_pr = {}
+        for pr in prs:
+            head_to_pr[pr.get("headRefName", "")] = pr
+
+        # Build dependency graph: PR B depends on PR A if B.baseRefName == A.headRefName
+        depends_on = {}  # pr_number -> parent_pr_number
+        for pr in prs:
+            base = pr.get("baseRefName", "main")
+            if base != "main" and base in head_to_pr:
+                parent = head_to_pr[base]
+                depends_on[pr["number"]] = parent["number"]
+
+        # Find chains and their roots
+        def find_root(pr_number, visited=None):
+            if visited is None:
+                visited = set()
+            if pr_number in visited:
+                return pr_number  # cycle detected
+            visited.add(pr_number)
+            parent = depends_on.get(pr_number)
+            if parent is None:
+                return pr_number
+            return find_root(parent, visited)
+
+        # Group chains
+        chains = {}  # root -> [chain members in order]
+        for pr in prs:
+            if pr["number"] in depends_on:
+                root = find_root(pr["number"])
+                chains.setdefault(root, []).append(pr["number"])
+
+        for root_number, members in chains.items():
+            chain_depth = len(members) + 1  # +1 for root
+            root_pr = next((p for p in prs if p["number"] == root_number), None)
+
+            print(f"[merge-sweep] Stacked PR chain detected in {repo}: "
+                  f"root=#{root_number} depth={chain_depth} "
+                  f"members={[f'#{m}' for m in members]}")
+
+            if chain_depth > 3:
+                chain_warnings.append(
+                    f"WARNING: Stack depth {chain_depth} in {repo} "
+                    f"(root=#{root_number}) exceeds recommended max of 3. "
+                    f"Consider collapsing."
+                )
+
+            # If root is not merge-ready, mark all downstream as STACKED_BLOCKED
+            if root_pr and not is_merge_ready(root_pr):
+                for member in members:
+                    stacked_blocked.add((repo, member))
+
+    return stacked_blocked, chain_warnings
+
+stacked_blocked, chain_warnings = detect_stacked_chains(repo_scan_results)
+for warning in chain_warnings:
+    print(f"[merge-sweep] {warning}")
+```
+
+During classification below, PRs in `stacked_blocked` are skipped (not routed to Track B).
+They are logged as `STACKED_BLOCKED` — only the root PR receives polish or merge attention.
+
 For each PR returned from successfully scanned repos, apply classification:
 
 ### PR Classification Logic
@@ -361,6 +444,7 @@ def passes_label_filter(pr, filter_labels):
 ```
 
 Classification results (evaluated in order — first match wins):
+- `(repo, pr["number"]) in stacked_blocked` → log as `STACKED_BLOCKED`, skip entirely (root PR will be processed independently; do not dispatch pr-polish for downstream PRs)
 - `needs_branch_update()` AND passes filters → add to `branch_update_queue_pre_claim[]` (Track A-update; includes UNKNOWN mergeable PRs)
 - `is_merge_ready()` AND passes filters → add to `candidates_pre_claim[]` (Track A)
 - `needs_polish()` AND passes filters → add to `polish_queue_pre_claim[]` (Track B)
