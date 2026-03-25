@@ -24,6 +24,7 @@ Parse from `$ARGUMENTS`:
 | `--mode <mode>` | `build` | `build` or `close-out` |
 | `--autonomous` | `true` | No human gates |
 | `--require-gate` | `false` | Opt-in Slack HIGH_RISK gate before release |
+| `--reconcile-tags` | `false` | Auto-create git tags to align with pyproject.toml versions (F40) |
 
 If `--mode` is not provided, default to `build`.
 
@@ -127,6 +128,49 @@ Run merge-sweep to drain open PRs before release:
 - On `nothing_to_merge`: record `warn`, continue (no PRs to drain; this is expected).
 
 Check circuit breaker: if consecutive_failures >= 3 → HALT + Slack notify.
+
+---
+
+### A1a: Merge Queue Drain Wait (F39) <!-- ai-slop-ok: skill-step-heading -->
+
+After merge-sweep completes, wait for all merge queues to drain before proceeding.
+PRs that were enqueued (auto-merge armed) need time for CI to run and merge to complete.
+
+**Skip condition**: If merge-sweep returned `nothing_to_merge` or `error`, skip this step
+entirely. There are no queued PRs to wait for.
+
+**Polling logic**:
+```python
+import time
+
+MAX_DRAIN_WAIT_SECONDS = 15 * 60  # 15 minutes
+POLL_INTERVAL_SECONDS = 60
+
+elapsed = 0
+while elapsed < MAX_DRAIN_WAIT_SECONDS:
+    # Check all repos for PRs with active autoMergeRequest that haven't merged
+    pending_prs = []
+    for repo in repo_list:
+        prs = gh_pr_list(repo, state="open", json_fields=["number", "autoMergeRequest"])
+        for pr in prs:
+            if pr.get("autoMergeRequest") is not None:
+                pending_prs.append(f"{repo}#{pr['number']}")
+
+    if not pending_prs:
+        print(f"[autopilot] Merge queues drained in {elapsed}s. All enqueued PRs merged or dequeued.")
+        break
+
+    print(f"[autopilot] Waiting for {len(pending_prs)} PR(s) in merge queue: {pending_prs[:5]}{'...' if len(pending_prs) > 5 else ''} ({elapsed}s elapsed)")
+    time.sleep(POLL_INTERVAL_SECONDS)
+    elapsed += POLL_INTERVAL_SECONDS
+else:
+    print(f"WARNING: [autopilot] Merge queue drain timed out after {MAX_DRAIN_WAIT_SECONDS}s. "
+          f"{len(pending_prs)} PR(s) still pending: {pending_prs}")
+```
+
+- On drain complete: record `pass`, continue.
+- On timeout: record `warn` with message listing pending PRs. Do NOT halt. Continue to A2.
+- On skip: record `pass` with note "No merge-sweep PRs to drain."
 
 ---
 
@@ -428,6 +472,73 @@ Check circuit breaker.
 
 ---
 
+### C0: Tag Drift Detection (F40) <!-- ai-slop-ok: skill-step-heading -->
+
+Before releasing, verify that git tags are aligned with `pyproject.toml` versions across
+all repos. Tag drift indicates a prior release that was not tagged, or a version bump that
+was not released.
+
+**Detection logic**:
+```python
+import tomllib
+from pathlib import Path
+
+tag_drift_warnings = []
+
+for repo in repo_list:
+    repo_path = Path(omni_home) / repo.split("/")[-1]
+    pyproject_path = repo_path / "pyproject.toml"
+
+    if not pyproject_path.exists():
+        continue  # not a Python repo (e.g., omnidash)
+
+    # Get pyproject version
+    with open(pyproject_path, "rb") as f:
+        pyproject = tomllib.load(f)
+    pyproject_version = pyproject.get("project", {}).get("version", "0.0.0")
+
+    # Get latest git tag
+    latest_tag = run(f"git -C {repo_path} describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0'").strip()
+    tag_version = latest_tag.lstrip("v")
+
+    # Compare minor versions
+    pyproject_parts = [int(x) for x in pyproject_version.split(".")[:3]]
+    tag_parts = [int(x) for x in tag_version.split(".")[:3]]
+
+    minor_drift = abs(pyproject_parts[1] - tag_parts[1])
+    if minor_drift > 1 or pyproject_parts[0] != tag_parts[0]:
+        tag_drift_warnings.append({
+            "repo": repo,
+            "pyproject_version": pyproject_version,
+            "latest_tag": latest_tag,
+            "drift": f"{minor_drift} minor versions" if pyproject_parts[0] == tag_parts[0] else "major version mismatch",
+        })
+
+for w in tag_drift_warnings:
+    print(f"WARNING: Tag drift in {w['repo']}: pyproject={w['pyproject_version']} tag={w['latest_tag']} ({w['drift']})")
+```
+
+**`--reconcile-tags` flag**: If passed, create missing tags to align with pyproject versions:
+```bash
+git -C {repo_path} tag -a "v{pyproject_version}" -m "chore: reconcile tag to pyproject version {pyproject_version}"
+git -C {repo_path} push origin "v{pyproject_version}"
+```
+
+Add to the autopilot argument table:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--reconcile-tags` | `false` | Auto-create git tags to align with pyproject.toml versions |
+
+**Halt policy**: NEVER halt. Tag drift is informational. Log warnings and continue to C1.
+
+- On no drift: record `pass`, continue.
+- On drift detected (no reconcile): record `warn`, log warnings, continue.
+- On drift reconciled: record `pass` with note listing reconciled tags.
+- On error: record `fail`, log error, continue (do NOT halt).
+
+---
+
 ### C1: release <!-- ai-slop-ok: skill-step-heading -->
 
 Integration-sweep passed. Proceed to release.
@@ -558,6 +669,55 @@ the file has been validated as high-quality input.
 
 ---
 
+### Step 8a: Friction Diary (F38) <!-- ai-slop-ok: skill-step-heading -->
+
+After all steps complete (or halt), capture friction events from the current run before
+the completion summary. This step NEVER halts the pipeline.
+
+**Friction identification**: scan the current cycle's step results for:
+- Steps that recorded `fail` (non-halting failures)
+- Steps that recorded `pass_repaired` (recovered infrastructure)
+- Steps that recorded `warn` (advisory warnings)
+- Any errors logged during scan, classification, or agent dispatch
+- Branch update failures or claim race conditions from merge-sweep
+
+**Write friction diary**:
+```bash
+TODAY=$(date +%Y-%m-%d)
+SESSION_ID="${cycle_id}"
+FRICTION_DIR="docs/tracking/friction"
+mkdir -p "$FRICTION_DIR"
+```
+
+Append to `docs/tracking/friction/{TODAY}-closeout-{session_id}.md`:
+```markdown
+# Friction Diary: {cycle_id}
+
+Date: {TODAY}
+Mode: close-out
+Friction events: {count}
+
+| Step | Status | Friction |
+|------|--------|----------|
+| {step_id} | {status} | {description of what went wrong or required recovery} |
+...
+```
+
+Only include rows for steps that had friction (fail, warn, pass_repaired). Steps with
+clean `pass` are omitted.
+
+**Integration with completion summary**: include a friction count line:
+```
+Friction events captured: {count} (see docs/tracking/friction/{TODAY}-closeout-{session_id}.md)
+```
+
+If zero friction events occurred, skip the file write and print:
+```
+Friction events captured: 0 (clean run)
+```
+
+---
+
 ### Circuit Breaker Check <!-- ai-slop-ok: skill-step-heading -->
 
 After all steps complete, if `consecutive_failures >= 3` was triggered at any point:
@@ -608,6 +768,7 @@ Steps:
   D5: insights-to-plan     — {status}
 
 Ship provenance: {version/tag/commit from C1, or "N/A — no ship occurred"}
+Friction events captured: {friction_count} {friction_file_path or "(clean run)"}
 
 Status: {complete|halted|circuit_breaker}
 ```
