@@ -680,6 +680,24 @@ The v3.0.0 design intentionally removed all human gates. Absence of `--dry-run` 
 
 ---
 
+## Merge Queue Policy (OMN-6488)
+
+**CRITICAL**: Never dequeue a PR from the merge queue to re-enqueue it.
+If a PR is already in the merge queue (`mergeQueueEntry` is non-null in the GraphQL
+response), leave it alone. Dequeue/re-enqueue doubles CI time because both CI runs
+must complete (the concurrency group uses `cancel-in-progress` only for merge_group
+events, not for the original PR run).
+
+If a PR in the merge queue has failing CI:
+- Wait for the current run to complete
+- If it fails, the merge queue will automatically dequeue it
+- Then address the failure via Track B (pr-polish)
+
+When classifying PRs, treat PRs with `mergeQueueEntry != null` as **IN_MERGE_QUEUE**
+and skip them entirely from both Track A and Track B.
+
+---
+
 ## Step 5b — Phase A-update: Proactive Branch Updates (Sequential)
 
 **Before enabling auto-merge**, update branches that are BEHIND or UNKNOWN. PRs with stale
