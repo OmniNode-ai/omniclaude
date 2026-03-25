@@ -394,6 +394,12 @@ class TopicBase(StrEnum):
     QPM_PROMOTION_DECIDED = "onex.evt.omniclaude.qpm-promotion-decided.v1"
     """Emitted after QPM promotion decision is executed or held for each PR."""
 
+    # ==========================================================================
+    # Agent chat broadcast topics (OMN-3972)
+    # ==========================================================================
+    AGENT_CHAT_BROADCAST = "onex.evt.omniclaude.agent-chat-broadcast.v1"
+    """Broadcast chat message for multi-terminal agent coordination."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

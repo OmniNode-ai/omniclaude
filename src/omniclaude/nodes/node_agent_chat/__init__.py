@@ -43,6 +43,7 @@ Related tickets:
 """
 
 from .enums import EnumChatChannel, EnumChatMessageType, EnumChatSeverity
+from .handler_file_chat_store import HandlerFileChatStore
 from .models import ModelAgentChatMessage
 
 __all__ = [
@@ -52,4 +53,6 @@ __all__ = [
     "EnumChatChannel",
     "EnumChatMessageType",
     "EnumChatSeverity",
+    # Handlers
+    "HandlerFileChatStore",
 ]
