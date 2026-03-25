@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+  SPDX-License-Identifier: MIT
+
+  CI Recovery Overnight - launchd plist
+  Runs /onex:ci_recovery every 30 minutes during overnight hours (10 PM - 8 AM PT).
+
+  Install:
+    cp scripts/ci-recovery-overnight.plist ~/Library/LaunchAgents/ai.omninode.ci-recovery-overnight.plist
+    launchctl load ~/Library/LaunchAgents/ai.omninode.ci-recovery-overnight.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/ai.omninode.ci-recovery-overnight.plist
+    rm ~/Library/LaunchAgents/ai.omninode.ci-recovery-overnight.plist
+
+  Logs:
+    /tmp/ci-recovery-overnight.log
+    /tmp/ci-recovery-overnight.err
+
+  Ticket: OMN-6537
+  Depends on: OMN-6534 (CI recovery skill must be implemented first)
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.omninode.ci-recovery-overnight</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/claude</string>
+        <string>-p</string>
+        <string>Run /onex:ci_recovery. Poll all open PRs across all repos, classify CI failures, re-trigger flaky tests, attempt fixes for config errors, and escalate real failures after 2 attempts.</string>
+        <string>--allowedTools</string>
+        <string>Bash,Read,Edit,Write,Glob,Grep,Skill,mcp__linear-server__save_issue,mcp__linear-server__list_issues,mcp__linear-server__get_issue</string>
+    </array>
+
+    <!-- Run every 30 minutes -->
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <!-- Only run during overnight hours (10 PM - 8 AM PT) -->
+    <!-- Note: launchd StartCalendarInterval doesn't support ranges directly.
+         Use a wrapper script with hour checks for precise overnight gating.
+         This interval fires every 30 min; the ci_recovery skill should
+         self-gate based on local time if needed. -->
+
+    <key>StandardOutPath</key>
+    <string>/tmp/ci-recovery-overnight.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/ci-recovery-overnight.err</string>
+
+    <!-- Environment variables needed for headless mode -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>HOME</key>
+        <string>/Users/jonah</string>
+    </dict>
+
+    <!-- Don't restart if claude exits with error -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Timeout: kill after 20 minutes if still running -->
+    <key>TimeOut</key>
+    <integer>1200</integer>
+
+    <!-- Start disabled — enable manually after CI recovery skill is implemented -->
+    <key>Disabled</key>
+    <true/>
+</dict>
+</plist>
