@@ -68,14 +68,39 @@ def _detect_mode() -> str:
 
 
 def _load_auth(session_id: str) -> dict | None:
+    """Load authorization token for this session, with propagation fallback.
+
+    Resolution order:
+    1. Exact session auth file ({session_id}.json)
+    2. Any token with allow_propagation=true that hasn't expired (OMN-6487)
+    """
+    # 1. Exact session match
     auth_path = Path(AUTH_DIR) / f"{session_id}.json"
-    if not auth_path.is_file():
-        return None
-    try:
-        with auth_path.open() as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return None
+    if auth_path.is_file():
+        try:
+            with auth_path.open() as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # 2. Propagation fallback: check all tokens for allow_propagation=true
+    auth_dir = Path(AUTH_DIR)
+    if auth_dir.is_dir():
+        now = datetime.now(UTC)
+        for token_path in auth_dir.glob("*.json"):
+            try:
+                with token_path.open() as f:
+                    token = json.load(f)
+                if not token.get("allow_propagation", False):
+                    continue
+                expires_str = token.get("expires_at", "")
+                expires_at = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
+                if expires_at > now:
+                    return token
+            except (json.JSONDecodeError, OSError, ValueError, AttributeError):
+                continue
+
+    return None
 
 
 def decide(tool_name: str, file_path: str, session_id: str, mode: str) -> dict:
