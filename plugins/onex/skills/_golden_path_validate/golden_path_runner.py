@@ -311,7 +311,7 @@ class GoldenPathRunner:
     Args:
         bootstrap_servers: Kafka bootstrap servers string.
         artifact_base_dir: Base directory for evidence artifacts.
-            Defaults to ``~/.claude/golden-path``.
+            Defaults to ``$ONEX_STATE_DIR/golden-path``.
     """
 
     def __init__(
