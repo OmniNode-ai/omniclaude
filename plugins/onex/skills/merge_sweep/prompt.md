@@ -360,12 +360,56 @@ def passes_label_filter(pr, filter_labels):
     return bool(pr_labels & set(filter_labels))
 ```
 
+### Track A-rebase: Auto-Rebase for CONFLICTING PRs (F10/OMN-6475)
+
+Before routing a CONFLICTING PR to Track B (pr-polish), attempt a lightweight rebase
+using `gh pr update-branch`. This resolves most DIRTY states without the heavyweight
+pr-polish cycle.
+
+```python
+def attempt_rebase(pr, repo_full):
+    """Attempt lightweight rebase for CONFLICTING PR.
+
+    Returns:
+        "MERGEABLE" if rebase succeeded and PR is now mergeable
+        "CONFLICTING" if rebase failed or PR is still conflicting
+    """
+    if pr["mergeable"] != "CONFLICTING":
+        return pr["mergeable"]
+
+    print(f"[merge-sweep] Track A-rebase: attempting update-branch for #{pr['number']} in {repo_full}")
+    result = run(f"gh pr update-branch {pr['number']} --repo {repo_full} 2>&1")
+
+    if result.returncode != 0:
+        print(f"[merge-sweep] Track A-rebase: update-branch failed for #{pr['number']} — routing to Track B")
+        return "CONFLICTING"
+
+    # Wait for GitHub to recalculate mergeable status
+    import time
+    time.sleep(30)
+
+    # Re-check mergeable status
+    new_mergeable = run(
+        f"gh pr view {pr['number']} --repo {repo_full} --json mergeable --jq .mergeable"
+    ).strip()
+
+    if new_mergeable == "MERGEABLE":
+        print(f"[merge-sweep] Track A-rebase: #{pr['number']} is now MERGEABLE after update-branch")
+        return "MERGEABLE"
+    else:
+        print(f"[merge-sweep] Track A-rebase: #{pr['number']} still {new_mergeable} after update-branch — routing to Track B")
+        return new_mergeable
+```
+
 Classification results (evaluated in order — first match wins):
 - `needs_branch_update()` AND passes filters → add to `branch_update_queue_pre_claim[]` (Track A-update; includes UNKNOWN mergeable PRs)
 - `is_merge_ready()` AND passes filters → add to `candidates_pre_claim[]` (Track A)
+- `is_conflicting_but_rebaseable()` AND passes filters → attempt `attempt_rebase(pr, repo_full)`: if result is MERGEABLE, reclassify to `candidates_pre_claim[]` (Track A); otherwise add to `polish_queue_pre_claim[]` (Track B)
 - `needs_polish()` AND passes filters → add to `polish_queue_pre_claim[]` (Track B)
 - Draft PRs → ignore silently
 - Otherwise (e.g., `REVIEW_REQUIRED`) → ignore silently
+
+Where `is_conflicting_but_rebaseable(pr)` is: `pr["mergeable"] == "CONFLICTING" and not pr["isDraft"]`.
 
 **Note**: `needs_branch_update()` is checked BEFORE `is_merge_ready()`. A PR that is MERGEABLE
 but BEHIND/UNKNOWN on `mergeStateStatus` needs its branch updated before auto-merge can
