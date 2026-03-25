@@ -161,7 +161,7 @@ class AIQuorum:
             stub_mode: If True, use fixed scores for testing (Phase 1)
             enable_ai_scoring: If True, use actual AI models (Phase 3-4)
             parallel_execution: If True, score models in parallel
-            config_path: Path to config.yaml (defaults to ~/.claude/hooks/config.yaml)
+            config_path: Path to config.yaml (defaults to $ONEX_STATE_DIR/hooks/config.yaml)
         """
         # Load from config.yaml if no models provided
         if models is None:
@@ -191,7 +191,7 @@ class AIQuorum:
         Load model configurations from config.yaml.
 
         Args:
-            config_path: Path to config file (defaults to ~/.claude/hooks/config.yaml)
+            config_path: Path to config file (defaults to $ONEX_STATE_DIR/hooks/config.yaml)
 
         Returns:
             List of ModelConfig objects

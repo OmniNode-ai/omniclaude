@@ -30,7 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
-LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "FATAL: ONEX_STATE_DIR not set" >&2; exit 1; }
+LOG_FILE="${LOG_FILE:-${ONEX_HOOK_LOG}}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
 

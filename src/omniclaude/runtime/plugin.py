@@ -288,7 +288,7 @@ class PluginClaude:
         - decision-record subscriber (OMN-2720): subscribes to
           ``onex.cmd.omniintelligence.decision-recorded.v1`` and appends full
           DecisionRecord payloads to the local audit log
-          ``~/.claude/decision_audit.jsonl``.
+          ``$ONEX_STATE_DIR/decision_audit.jsonl``.
 
         Skips gracefully when ``KAFKA_BOOTSTRAP_SERVERS`` is not set.
         """

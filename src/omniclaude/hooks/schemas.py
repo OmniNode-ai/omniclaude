@@ -1881,7 +1881,7 @@ class ModelStaticContextEditDetectedPayload(BaseModel):
         - ``changed_files`` contains only file paths and git stat summaries,
           never file content, to avoid leaking secrets.
         - The raw content snapshot (for non-versioned files) is stored locally
-          in ~/.claude/snapshots/ and is NOT included in this event.
+          in $ONEX_STATE_DIR/snapshots/ and is NOT included in this event.
 
     Attributes:
         entity_id: Session identifier as UUID (partition key for ordering).

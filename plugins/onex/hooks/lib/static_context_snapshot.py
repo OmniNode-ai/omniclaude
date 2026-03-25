@@ -17,13 +17,13 @@ emit daemon.
 
 Storage Layout::
 
-    ~/.claude/snapshots/
+    $ONEX_STATE_DIR/snapshots/
         static_context.json    # Index: {file_path: {hash, session_id, path}}
 
 Design Decisions:
   - Fail-open: any file I/O or git error is logged and skipped.
   - Hooks must never block; this module exits 0 on all infrastructure failures.
-  - Snapshot directory is ``~/.claude/snapshots/`` (persistent, not /tmp/).
+  - Snapshot directory is ``$ONEX_STATE_DIR/snapshots/`` (persistent, not /tmp/).
   - Only the SHA-256 hash is stored (never file content) to detect changes without persisting secrets.
   - Git diff uses ``--stat`` (summary only) to avoid capturing secrets.
 
@@ -693,7 +693,7 @@ def scan_and_snapshot(
         project_path: Optional project root directory. Used to discover
             versioned CLAUDE.md files and project-local .local.md files.
         snapshot_dir: Override for the snapshot storage directory.
-            Defaults to ~/.claude/snapshots/.
+            Defaults to $ONEX_STATE_DIR/snapshots/.
         emit: Whether to emit a Kafka event when changes are detected.
             Set to False in tests.
 

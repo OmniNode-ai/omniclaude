@@ -4,7 +4,7 @@
 """
 Skill Suggestion Injector — OMN-3455
 
-Reads ~/.claude/onex-skill-usage.log (or queries Postgres when available),
+Reads $ONEX_STATE_DIR/onex-skill-usage.log (or queries Postgres when available),
 loads the static progression graph from progression.yaml, and returns 1-2
 "next skill" suggestions to inject into the session context on SessionStart.
 
@@ -71,7 +71,7 @@ def get_skill_suggestions(
     session_id:
         Current Claude session identifier (used for Postgres query if enabled).
     log_path:
-        Override for ~/.claude/onex-skill-usage.log (mainly for tests).
+        Override for $ONEX_STATE_DIR/onex-skill-usage.log (mainly for tests).
     progression_path:
         Override for skills/progression.yaml (mainly for tests).
     db_enabled:

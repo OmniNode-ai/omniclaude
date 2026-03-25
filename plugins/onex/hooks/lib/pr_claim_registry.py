@@ -6,7 +6,7 @@ The claim file is the shared lock that all runs read and write; the per-run ledg
 is the audit log.
 
 Architecture:
-    ~/.claude/pr-queue/claims/<filesystem_key>.json
+    $ONEX_STATE_DIR/pr-queue/claims/<filesystem_key>.json
 
     filesystem_key = canonical_pr_key with '/' and '#' replaced by '--'
     e.g. "omninode-ai/omniclaude#247" → "omninode-ai--omniclaude--247.json"
@@ -215,7 +215,7 @@ class ClaimRegistry:
     """Global claim registry for PR mutation mutual exclusion.
 
     All public methods accept a ``dry_run`` parameter. When dry_run=True,
-    no filesystem writes occur (zero I/O to ~/.claude/).
+    no filesystem writes occur (zero I/O to $ONEX_STATE_DIR/).
     """
 
     def __init__(self, claims_dir: Path | None = None) -> None:

@@ -40,8 +40,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 _DEFAULT_MAX_ATTEMPTS = 3
 _DEFAULT_CI_STATUS_SCRIPT = "_bin/ci-status.sh"
-_DEFAULT_INBOX_DIR = "~/.claude/inbox"
-_DEFAULT_STATE_DIR = "~/.claude/state/ci-repair"
 _CI_RERUN_WAIT_SECONDS = 30
 _CI_RERUN_MAX_WAIT_SECONDS = 300
 
@@ -69,16 +67,16 @@ def _ci_status_script() -> str:
 
 def _inbox_dir() -> Path:
     """Return the inbox directory path."""
-    return Path(
-        os.path.expanduser(os.environ.get("CI_REPAIR_INBOX_DIR", _DEFAULT_INBOX_DIR))
-    )
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
+
+    return ensure_state_dir("inbox")
 
 
 def _state_dir() -> Path:
     """Return the state directory for repair runs."""
-    return Path(
-        os.path.expanduser(os.environ.get("CI_REPAIR_STATE_DIR", _DEFAULT_STATE_DIR))
-    )
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
+
+    return ensure_state_dir("state", "ci-repair")
 
 
 def _now_iso() -> str:

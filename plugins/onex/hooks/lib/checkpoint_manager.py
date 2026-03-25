@@ -20,7 +20,7 @@ Design Decisions:
 
 Storage Layout::
 
-    ~/.claude/checkpoints/{ticket_id}/{run_id}/phase_{N}_{name}_a{attempt}.yaml
+    $ONEX_STATE_DIR/checkpoints/{ticket_id}/{run_id}/phase_{N}_{name}_a{attempt}.yaml
 
 CLI Usage::
 

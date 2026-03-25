@@ -53,7 +53,7 @@ def _get_default_registry_path() -> str:
     Priority:
     1. AGENT_REGISTRY_PATH environment variable
     2. REGISTRY_PATH environment variable (Docker compatibility)
-    3. Default: ~/.claude/agents/onex/agent-registry.yaml
+    3. Default: $ONEX_STATE_DIR/agents/onex/agent-registry.yaml
 
     Returns:
         Path to agent registry file

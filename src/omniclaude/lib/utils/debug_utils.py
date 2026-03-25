@@ -324,7 +324,11 @@ def check_network_connectivity() -> dict[str, Any]:
 
 def check_pattern_tracking_files() -> dict[str, Any]:
     """Check if pattern tracking files exist and are accessible"""
-    hooks_dir = os.path.expanduser("~/.claude/hooks")
+    hooks_dir = os.path.join(
+        os.environ.get("CLAUDE_PLUGIN_ROOT", os.path.expanduser("~/.claude/plugins/onex")),
+        "hooks",
+        "lib",
+    )
 
     required_files = [
         "pattern_tracker.py",

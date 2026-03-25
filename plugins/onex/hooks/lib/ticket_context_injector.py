@@ -11,7 +11,7 @@ Part of OMN-1830: Ticket context injection for session enrichment.
 
 DEPRECATION NOTICE (OMN-3216):
     find_active_ticket() uses an mtime heuristic to pick the most recently
-    modified contract.yaml under ~/.claude/tickets/. This is unreliable because
+    modified contract.yaml under $ONEX_STATE_DIR/tickets/. This is unreliable because
     completed tickets accumulate without cleanup, causing stale tickets (e.g.
     OMN-2068) to surface as ghost injections in new sessions.
 
@@ -139,12 +139,12 @@ class ContractData(TypedDict, total=False):
 def find_active_ticket(tickets_dir: Path | None = None) -> str | None:
     """Find the active ticket by searching for the most recently modified contract.
 
-    Searches `~/.claude/tickets/` directory for all `contract.yaml` files in
+    Searches `$ONEX_STATE_DIR/tickets/` directory for all `contract.yaml` files in
     subdirectories and returns the ticket_id from the most recently modified one.
 
     Args:
         tickets_dir: Override the default tickets directory. If None, uses
-            ~/.claude/tickets/
+            $ONEX_STATE_DIR/tickets/
 
     Returns:
         The ticket_id of the most recently modified contract, or None if no
@@ -213,13 +213,13 @@ def build_ticket_context(
 ) -> str:
     """Build markdown context for an active ticket.
 
-    Loads the contract from `~/.claude/tickets/{ticket_id}/contract.yaml`,
+    Loads the contract from `$ONEX_STATE_DIR/tickets/{ticket_id}/contract.yaml`,
     parses YAML to extract ticket metadata, and formats it as a markdown summary.
 
     Args:
         ticket_id: The ticket ID to load.
         tickets_dir: Override the default tickets directory. If None, uses
-            ~/.claude/tickets/
+            $ONEX_STATE_DIR/tickets/
 
     Returns:
         Formatted markdown context string, or empty string if contract not found

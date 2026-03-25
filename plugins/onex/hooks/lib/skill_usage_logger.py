@@ -4,7 +4,7 @@
 """
 Skill Usage Logger — OMN-3454
 
-Appends a structured JSON line to ~/.claude/onex-skill-usage.log whenever the
+Appends a structured JSON line to $ONEX_STATE_DIR/onex-skill-usage.log whenever the
 PostToolUse hook fires for a ``Skill`` tool invocation.  Optionally writes to a
 ``skill_usage`` PostgreSQL table when ``ENABLE_POSTGRES=true`` and the DB is
 reachable.
@@ -63,7 +63,7 @@ def append_skill_usage(
     session_id:
         Claude session identifier extracted from the hook payload.
     log_path:
-        Override the default log path (``~/.claude/onex-skill-usage.log``).
+        Override the default log path (``$ONEX_STATE_DIR/onex-skill-usage.log``).
         Primarily used in tests.
     db_enabled:
         Override ``ENABLE_POSTGRES`` env-var detection.  ``None`` means read

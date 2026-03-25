@@ -93,7 +93,7 @@ def _resolve_agent_configs_dir() -> Path:
     Resolution order:
     1. CLAUDE_PLUGIN_ROOT/agents/configs (if set and valid)
     2. Script-relative path detection
-    3. Legacy fallback (~/.claude/agents/omniclaude)
+    3. Legacy fallback ($ONEX_STATE_DIR/agents/omniclaude)
 
     Returns:
         Path to the agent configs directory

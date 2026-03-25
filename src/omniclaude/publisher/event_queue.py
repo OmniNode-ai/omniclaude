@@ -12,7 +12,7 @@ Queue Behavior:
     4. Dequeue prioritizes memory queue, then disk spool (FIFO ordering)
 
 Disk Spool Format:
-    - Directory: ~/.claude/event-spool/ (configurable)
+    - Directory: $ONEX_STATE_DIR/event-spool/ (configurable)
     - Files: {timestamp}_{event_id}.json (one event per file)
     - Sorted by filename for FIFO ordering
 

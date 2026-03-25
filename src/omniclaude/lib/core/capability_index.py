@@ -64,7 +64,7 @@ class CapabilityIndex:
             yaml.YAMLError: If the registry contains invalid YAML.
 
         Example:
-            >>> index = CapabilityIndex("~/.claude/agents/onex/agent-registry.yaml")
+            >>> index = CapabilityIndex("$ONEX_STATE_DIR/agents/onex/agent-registry.yaml")
             >>> print(index.stats())
         """
         self.registry_path = registry_path
