@@ -1368,8 +1368,8 @@ ${SKILL_SUGGESTIONS}"
     _CHAT_INJECTION="${OMNICLAUDE_CHAT_INJECTION:-1}"
     if [[ "$_CHAT_INJECTION" == "1" ]]; then
         _CHAT_CONTEXT=""
-        if command -v python3 &>/dev/null; then
-            _CHAT_CONTEXT=$(python3 -c "
+        if command -v "${PYTHON_CMD:-python3}" &>/dev/null; then
+            _CHAT_CONTEXT=$("${PYTHON_CMD:-python3}" -c "
 import sys
 try:
     from omniclaude.nodes.node_agent_chat import HandlerChatReader

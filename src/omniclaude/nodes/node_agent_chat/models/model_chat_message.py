@@ -50,7 +50,7 @@ class ModelAgentChatMessage(BaseModel):
         metadata: Optional structured metadata for downstream consumers.
     """
 
-    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     schema_version: str = Field(
         default="1",
