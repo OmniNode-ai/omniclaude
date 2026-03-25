@@ -90,6 +90,17 @@ class TestFrictionAutofixModels:
         assert len(plan.tasks) == 1
         assert plan.tasks[0].action == "create"
 
+    def test_model_micro_plan_empty_tasks_rejected(self) -> None:
+        from friction_autofix.models import ModelMicroPlan
+
+        with pytest.raises(Exception):
+            ModelMicroPlan(
+                surface_key="x:y",
+                title="No tasks",
+                tasks=[],
+                target_repo="omniclaude",
+            )
+
     def test_model_micro_plan_max_tasks(self) -> None:
         from friction_autofix.models import ModelMicroPlan, ModelMicroPlanTask
 
