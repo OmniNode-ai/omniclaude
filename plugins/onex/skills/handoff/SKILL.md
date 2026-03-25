@@ -80,3 +80,41 @@ Default is OFF (`0`). Without the toggle, session-start.sh skips handoff injecti
   }
 }
 ```
+
+## Auto-Checkpoint Fallback
+
+When invoked, `/handoff` checks for auto-checkpoint files at `~/.claude/handoffs/checkpoint-*.md`
+(produced by the auto-checkpoint hook, OMN-6528). These are used as **fallback enrichment only**
+when the user did not provide explicit handoff context.
+
+### Precedence Rules
+
+1. **Explicit handoff** (user-provided `--message` or active session context) is always authoritative
+2. **Auto-checkpoints** fill gaps only — they never override explicit handoff content
+3. If a manual handoff is newer than the latest checkpoint, checkpoints are ignored entirely
+4. If no explicit context exists but checkpoints are present, merge the latest checkpoint into the manifest
+
+### Integration Behavior
+
+When building the handoff manifest:
+
+```python
+# After gathering explicit session context...
+if not context.get("recent_commits") and not context.get("message"):
+    # No explicit context — check for auto-checkpoints
+    checkpoint_dir = Path.home() / ".claude" / "handoffs"
+    checkpoints = sorted(checkpoint_dir.glob("checkpoint-*.md"), reverse=True)
+    if checkpoints:
+        latest = checkpoints[0]
+        # Parse frontmatter for commit_hash, branch
+        # Merge into context as fallback
+        context["_source"] = "auto-checkpoint"
+        context["_checkpoint_file"] = str(latest)
+```
+
+### Recovery Path
+
+After a session crash or `/clear` without explicit `/handoff`:
+1. Next session's `/onex:crash_recovery` reads the latest auto-checkpoint
+2. Provides: last commit, branch, files changed, PR status
+3. This makes session resumption seamless even without explicit handoff
