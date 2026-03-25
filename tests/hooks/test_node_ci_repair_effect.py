@@ -156,7 +156,7 @@ class TestExecuteEffect:
     """Test the main effect execution."""
 
     def test_creates_run_state(self, tmp_path: Path) -> None:
-        with patch.dict(os.environ, {"CI_REPAIR_STATE_DIR": str(tmp_path)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             event = CIFailureEvent(
                 pr_number=42, repo="org/repo", branch="main", run_id="old-run"
             )
@@ -169,19 +169,20 @@ class TestExecuteEffect:
             assert state.started_at != ""
 
     def test_persists_state_to_disk(self, tmp_path: Path) -> None:
-        with patch.dict(os.environ, {"CI_REPAIR_STATE_DIR": str(tmp_path)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             event = CIFailureEvent(pr_number=42, repo="org/repo", branch="main")
             state = execute_effect(event)
 
-            # Verify file exists on disk
-            state_files = list(tmp_path.glob("ci-repair-*.json"))
+            # State is saved under $ONEX_STATE_DIR/state/ci-repair/
+            state_dir = tmp_path / "state" / "ci-repair"
+            state_files = list(state_dir.glob("ci-repair-*.json"))
             assert len(state_files) == 1
 
     def test_custom_max_attempts(self, tmp_path: Path) -> None:
         with patch.dict(
             os.environ,
             {
-                "CI_REPAIR_STATE_DIR": str(tmp_path),
+                "ONEX_STATE_DIR": str(tmp_path),
                 "CI_REPAIR_MAX_ATTEMPTS": "5",
             },
         ):
@@ -224,10 +225,7 @@ class TestRecordAttemptResult:
     def test_records_success(self, tmp_path: Path) -> None:
         with patch.dict(
             os.environ,
-            {
-                "CI_REPAIR_STATE_DIR": str(tmp_path),
-                "CI_REPAIR_INBOX_DIR": str(tmp_path / "inbox"),
-            },
+            {"ONEX_STATE_DIR": str(tmp_path)},
         ):
             state = self._make_state(tmp_path)
             updated = record_attempt_result(
@@ -244,10 +242,7 @@ class TestRecordAttemptResult:
     def test_records_exhaustion(self, tmp_path: Path) -> None:
         with patch.dict(
             os.environ,
-            {
-                "CI_REPAIR_STATE_DIR": str(tmp_path),
-                "CI_REPAIR_INBOX_DIR": str(tmp_path / "inbox"),
-            },
+            {"ONEX_STATE_DIR": str(tmp_path)},
         ):
             state = self._make_state(tmp_path)
             updated = record_attempt_result(
@@ -261,10 +256,7 @@ class TestRecordAttemptResult:
     def test_intermediate_attempt_stays_in_progress(self, tmp_path: Path) -> None:
         with patch.dict(
             os.environ,
-            {
-                "CI_REPAIR_STATE_DIR": str(tmp_path),
-                "CI_REPAIR_INBOX_DIR": str(tmp_path / "inbox"),
-            },
+            {"ONEX_STATE_DIR": str(tmp_path)},
         ):
             state = self._make_state(tmp_path)
             updated = record_attempt_result(
@@ -275,7 +267,7 @@ class TestRecordAttemptResult:
             assert updated.status == "in_progress"
 
     def test_invalid_attempt_number_returns_unchanged(self, tmp_path: Path) -> None:
-        with patch.dict(os.environ, {"CI_REPAIR_STATE_DIR": str(tmp_path)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             state = self._make_state(tmp_path)
             updated = record_attempt_result(state, attempt_number=99)
             assert updated.status == "in_progress"
@@ -292,10 +284,7 @@ class TestFinalizeWithError:
     def test_sets_error_status(self, tmp_path: Path) -> None:
         with patch.dict(
             os.environ,
-            {
-                "CI_REPAIR_STATE_DIR": str(tmp_path),
-                "CI_REPAIR_INBOX_DIR": str(tmp_path / "inbox"),
-            },
+            {"ONEX_STATE_DIR": str(tmp_path)},
         ):
             state = RepairRunState(
                 run_id="test-err",
@@ -317,8 +306,7 @@ class TestInboxNotification:
     """Test inbox notification writing."""
 
     def test_writes_notification_file(self, tmp_path: Path) -> None:
-        inbox = tmp_path / "inbox"
-        with patch.dict(os.environ, {"CI_REPAIR_INBOX_DIR": str(inbox)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             state = RepairRunState(
                 run_id="test-notify",
                 pr_number=42,
@@ -327,6 +315,8 @@ class TestInboxNotification:
             )
             result = send_inbox_notification(state, "Test message")
             assert result is True
+            # Inbox is at $ONEX_STATE_DIR/inbox/
+            inbox = tmp_path / "inbox"
             files = list(inbox.glob("ci-repair-*.json"))
             assert len(files) == 1
 
@@ -345,7 +335,7 @@ class TestStatePersistence:
     """Test save/load round-trip."""
 
     def test_round_trip(self, tmp_path: Path) -> None:
-        with patch.dict(os.environ, {"CI_REPAIR_STATE_DIR": str(tmp_path)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             state = RepairRunState(
                 run_id="test-persist",
                 pr_number=42,
@@ -370,7 +360,7 @@ class TestStatePersistence:
             assert loaded.attempts[0].files_changed == ["a.py"]
 
     def test_load_nonexistent_returns_none(self, tmp_path: Path) -> None:
-        with patch.dict(os.environ, {"CI_REPAIR_STATE_DIR": str(tmp_path)}):
+        with patch.dict(os.environ, {"ONEX_STATE_DIR": str(tmp_path)}):
             assert load_repair_state("nonexistent") is None
 
 
