@@ -70,6 +70,50 @@ D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day, D5_insi
 
 ---
 
+### Cycle Mutex (F11) <!-- ai-slop-ok: skill-step-heading -->
+
+At the START of every cycle:
+1. Check `.onex_state/autopilot/cycle.lock`
+2. If the lock exists and `started_at` is less than 45 minutes ago: **SKIP THIS CYCLE**. Log "Skipping — previous cycle still running (started {started_at})".
+3. If the lock exists and `started_at` is >= 45 minutes ago: treat as stale, delete it.
+4. Create `.onex_state/autopilot/cycle.lock` with contents:
+   ```yaml
+   started_at: <ISO timestamp>
+   cycle_id: <unique id>
+   ```
+5. At the END of every cycle (success, failure, or no-op): delete the lock file.
+
+**Ownership rule:** `cycle.lock` is owned only by the active autopilot cycle. No other process may remove a live lock opportunistically. Only stale recovery (>= 45 min) permits deletion by a new cycle.
+
+---
+
+### Cross-Cycle State <!-- ai-slop-ok: skill-step-heading -->
+
+Before starting any cycle, read `.onex_state/autopilot/cycle-state.yaml`.
+
+#### Strike Tracker (F13)
+
+Before attempting to fix any BLOCKED PR:
+1. Read `strike_tracker[<repo>/<pr_number>]` from cycle-state.yaml
+2. If count >= 2: DO NOT attempt fixes. Write a diagnosis document per Two-Strike Protocol. Skip this PR.
+3. If count < 2: proceed with fix attempt. After pushing, increment the counter and write back to cycle-state.yaml.
+
+Strike counters reset when:
+- The PR merges (remove the entry)
+- The root cause changes (e.g., a dependency was updated — reset to 0 with a note)
+
+#### Pending Redeploy Detection (F30)
+
+At the START of every cycle (before merge-sweep), check:
+1. For each repo with a release workflow, get the latest git tag
+2. Compare against `last_deploy_version[<repo>]` in cycle-state.yaml
+3. If tag > deployed version, add to `pending_redeploy[]`
+4. If `pending_redeploy` is non-empty, run redeploy BEFORE merge-sweep
+
+This ensures missed redeploys are caught on the next cycle, not lost.
+
+---
+
 ### A1: merge-sweep <!-- ai-slop-ok: skill-step-heading -->
 
 Run merge-sweep to drain open PRs before release:
@@ -604,6 +648,24 @@ skipped downstream steps remain auditable across sessions.
 
 If `overall_status == "incomplete"`:
   Print: "CYCLE INCOMPLETE: Steps {list of not_run steps} were never executed."
+
+---
+
+### Cycle Completion State Write <!-- ai-slop-ok: skill-step-heading -->
+
+After every cycle (including no-ops), update `.onex_state/autopilot/cycle-state.yaml`:
+- Set `last_cycle_id` to current ISO timestamp
+- Set `last_cycle_status` to the cycle outcome
+- Update `strike_tracker` (remove merged PRs, increment attempted PRs)
+- Update `last_release_tag` if a release was published
+- Update `last_deploy_version` if redeploy completed
+- Clear `pending_redeploy` entries that were deployed
+- Deduplicate `pending_redeploy` before writing
+
+Then delete `.onex_state/autopilot/cycle.lock` to release the mutex.
+
+If `cycle-state.yaml` has `last_cycle_id != null`, preserve existing data and merge
+updates rather than overwriting. This is durable coordination state.
 
 ---
 
