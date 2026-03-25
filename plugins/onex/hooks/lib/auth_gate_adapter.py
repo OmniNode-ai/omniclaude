@@ -90,7 +90,7 @@ def _load_auth(session_id: str) -> dict | None:
         for token_path in auth_dir.glob("*.json"):
             try:
                 with token_path.open() as f:
-                    token = json.load(f)
+                    token = json.load(f)  # secret-ok: auth token data, not a secret
                 if not token.get("allow_propagation", False):
                     continue
                 expires_str = token.get("expires_at", "")
