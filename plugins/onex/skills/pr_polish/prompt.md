@@ -199,14 +199,12 @@ print(f"Phase 0.5: Checking for unresolved review comments on PR #{pr_number}...
 
 repo_full = run("gh repo view --json nameWithOwner --jq .nameWithOwner").strip()
 
-# 1. Fetch all review comments
-reviews = run(f"gh api repos/{repo_full}/pulls/{pr_number}/reviews --jq '.[].body'")
-inline_comments = run(
-    f"gh api repos/{repo_full}/pulls/{pr_number}/comments "
-    f"--jq '.[] | {{id: .id, path: .path, line: .line, body: .body, in_reply_to_id: .in_reply_to_id}}'"
+# 1. Fetch all review data (reviews + threads) via gh pr view
+review_data = run(
+    f"gh pr view {pr_number} --json reviews,reviewThreads"
 )
 
-# 2. Fetch unresolved review threads
+# 2. Extract unresolved review threads
 unresolved_threads = run(
     f"gh pr view {pr_number} --json reviewThreads "
     f"--jq '.reviewThreads[] | select(.isResolved == false) | "
