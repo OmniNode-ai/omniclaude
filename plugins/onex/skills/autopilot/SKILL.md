@@ -184,6 +184,40 @@ Failures are tracked per run. The circuit breaker does NOT persist across runs.
 
 ---
 
+## Authorization Passthrough (OMN-6469)
+
+When dispatching subagents for release or other high-risk operations:
+
+1. **Pass `--autonomous` flag through**: If the parent skill was invoked with `--autonomous`, all child dispatches must include it:
+   ```
+   Task(
+     subagent_type="onex:polymorphic-agent",
+     prompt="Run /release --autonomous for omnibase_core"
+   )
+   ```
+
+2. **Include run ID for audit trail**: Always pass `ONEX_RUN_ID` to establish the authorization chain:
+   ```
+   The parent autopilot run ID is {run_id}. This run was authorized with --autonomous.
+   Proceed with release execution without additional human gates.
+   ```
+
+3. **Subagent verification**: Subagents receiving `--autonomous` with a valid run ID should proceed without requesting additional approval. The authorization was granted at the parent level.
+
+---
+
+## Merge Queue Non-Interference (OMN-6468)
+
+**NEVER** dequeue a PR from the merge queue. If a PR is in the merge queue (`mergeStateStatus: QUEUED`):
+1. Do NOT run `gh pr merge --disable-auto-merge`
+2. Do NOT dequeue and re-enqueue — this doubles CI time
+3. Simply wait for the merge queue to process the PR
+4. If the merge queue run fails, the PR will be dequeued automatically by GitHub
+
+**Rationale**: Dequeuing and re-enqueuing creates a second CI run. The concurrency group has `cancel-in-progress: false`, so both runs execute sequentially, wasting ~10 min per unnecessary dequeue.
+
+---
+
 ## Integration Points
 
 **Phase A — Prepare:**

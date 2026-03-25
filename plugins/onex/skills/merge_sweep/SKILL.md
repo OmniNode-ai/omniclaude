@@ -274,6 +274,63 @@ def needs_thread_resolution(pr, require_approval=True) -> bool:
 4. `needs_polish()` -- Track B (fixable blocking issues)
 5. Draft / `REVIEW_REQUIRED` / other BLOCKED -- skip silently
 
+### Stacked PR Chain Detection (OMN-6458)
+
+Before classifying a PR, check if it is part of a stacked chain:
+
+```bash
+# Get the PR's base branch
+BASE=$(gh pr view {number} --json baseRefName -q '.baseRefName')
+
+# If base is not main/master, this PR is stacked
+if [[ "$BASE" != "main" && "$BASE" != "master" ]]; then
+  # Find the base PR
+  BASE_PR=$(gh pr list --head "$BASE" --json number -q '.[0].number')
+  # Fix the base PR first — skip this PR until base is merged
+  echo "STACKED: PR #{number} depends on PR #${BASE_PR} (base: ${BASE})"
+fi
+```
+
+**Rules for stacked chains:**
+1. Always fix the root PR first (the one targeting main)
+2. Skip downstream PRs until their base is merged
+3. Hard cap: warn if stack depth exceeds 3 — suggest collapsing
+
+**Stack depth check:**
+```bash
+DEPTH=0; CURRENT_BASE="$BASE"
+while [[ "$CURRENT_BASE" != "main" && "$CURRENT_BASE" != "master" && $DEPTH -lt 5 ]]; do
+  DEPTH=$((DEPTH + 1))
+  CURRENT_BASE=$(gh pr list --head "$CURRENT_BASE" --json baseRefName -q '.[0].baseRefName' 2>/dev/null || echo "main")
+done
+if [[ $DEPTH -gt 3 ]]; then
+  echo "::warning::Stack depth $DEPTH exceeds recommended max of 3"
+fi
+```
+
+### Track A-rebase: DIRTY PRs (OMN-6459)
+
+**Detection**: `gh pr view {number} --json mergeStateStatus -q '.mergeStateStatus'` returns `DIRTY`
+
+**Action**:
+1. Create worktree: `git worktree add /tmp/rebase-{number} {branch}`
+2. Attempt rebase: `git rebase origin/main`
+3. If rebase succeeds (no conflicts): force-push with lease: `git push --force-with-lease`
+4. If rebase fails (conflicts): classify as Track B (needs manual polish)
+5. Clean up worktree: `git worktree remove /tmp/rebase-{number}`
+
+**Budget**: 1 rebase attempt per PR per cycle. If rebase fails, do not retry — route to Track B.
+
+### Merge Queue Non-Interference (OMN-6468)
+
+**NEVER** dequeue a PR from the merge queue. If a PR is in the merge queue (`mergeStateStatus: QUEUED`):
+1. Do NOT run `gh pr merge --disable-auto-merge`
+2. Do NOT dequeue and re-enqueue — this doubles CI time
+3. Simply wait for the merge queue to process the PR
+4. If the merge queue run fails, the PR will be dequeued automatically by GitHub
+
+**Rationale**: Dequeuing and re-enqueuing creates a second CI run. The concurrency group has `cancel-in-progress: false`, so both runs execute sequentially, wasting ~10 min per unnecessary dequeue (F18).
+
 ## Arguments
 
 | Argument | Default | Description |
