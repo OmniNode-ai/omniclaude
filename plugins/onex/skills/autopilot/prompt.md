@@ -348,7 +348,7 @@ Run friction-triage to surface recurring friction patterns as Linear tickets:
 for recurring friction patterns). It does not surface immediate release risk.
 Log the number of tickets created.
 
-**Skip condition:** If `~/.claude/state/friction/friction.ndjson` does not exist
+**Skip condition:** If `$ONEX_STATE_DIR/state/friction/friction.ndjson` does not exist
 or is empty, skip with message "No friction events recorded."
 
 - On success: record `pass`, continue.
