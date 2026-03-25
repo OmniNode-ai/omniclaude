@@ -532,6 +532,86 @@ slack_notify() {
 }
 
 # =============================================================================
+# Degraded Hook Notification (OMN-6567)
+# =============================================================================
+# Send a Slack notification when a hook exits 0 but ran in degraded mode
+# (e.g. Python subprocess hit ModuleNotFoundError/ImportError). Complements
+# error-guard.sh which only catches non-zero exits.
+#
+# Debounce key: {hook_name}:{sha256_of_first_error_line} — different errors
+# from the same hook are tracked separately.
+# Debounce window: 15 minutes (longer than error-guard's 5 min because
+# degraded errors repeat on every tool call).
+#
+# Dependencies: curl (best-effort). No Python, no jq.
+# Must not write to stdout (hooks use stdout for Claude Code communication).
+# Always call from a backgrounded subshell: ( notify_hook_degraded "foo" "msg" ) &
+#
+# Usage: ( notify_hook_degraded "$_OMNICLAUDE_HOOK_NAME" "$(head -1 "$_stderr_tmp")" ) &
+
+notify_hook_degraded() {
+    local hook_name="$1"
+    local error_message="$2"
+    local webhook_url="${SLACK_WEBHOOK_URL:-}"
+
+    # No-op if webhook not configured
+    [[ -z "$webhook_url" ]] && return 0
+
+    # Build debounce key: hook_name:sha256(first_line_of_error)
+    # Use shasum (macOS) or sha256sum (Linux) for the hash
+    local error_hash
+    if command -v shasum >/dev/null 2>&1; then
+        error_hash=$(printf '%s' "$error_message" | shasum -a 256 2>/dev/null | cut -c1-16)
+    elif command -v sha256sum >/dev/null 2>&1; then
+        error_hash=$(printf '%s' "$error_message" | sha256sum 2>/dev/null | cut -c1-16)
+    else
+        # Fallback: use a simple tr-based sanitization as key
+        error_hash=$(printf '%s' "$error_message" | tr -cd 'a-zA-Z0-9' | cut -c1-32)
+    fi
+    [[ -z "$error_hash" ]] && error_hash="unknown"
+
+    # Sanitize hook name for safe filename
+    local safe_hook
+    safe_hook=$(printf '%s' "$hook_name" | tr -cd 'a-zA-Z0-9_-')
+    [[ -z "$safe_hook" ]] && safe_hook="unknown"
+
+    local safe_key="${safe_hook}_${error_hash}"
+
+    # Rate limiting: 15-minute window per debounce key
+    local rate_dir="/tmp/omniclaude-slack-rate"
+    mkdir -p "$rate_dir" 2>/dev/null || true
+    local rate_file="${rate_dir}/degraded-${safe_key}.last"
+
+    if [[ -f "$rate_file" ]]; then
+        local last_sent
+        last_sent=$(cat "$rate_file" 2>/dev/null) || last_sent=0
+        [[ "$last_sent" =~ ^[0-9]+$ ]] || last_sent=0
+        local now
+        now=$(date -u +%s)
+        if (( now - last_sent < 900 )); then
+            return 0  # Rate limited, skip
+        fi
+    fi
+
+    # JSON-escape the message: backslashes first, then quotes, then control chars
+    local escaped
+    escaped=$(printf '%s' "[hook-degraded][${_SLACK_HOST}] Hook '${hook_name}' running degraded: ${error_message}" \
+        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+        | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')
+
+    # Send with strict timeouts (connect 1s, total 2s).
+    if curl -s -S --connect-timeout 1 --max-time 2 \
+        -H 'Content-Type: application/json' \
+        -d "{\"text\": \"${escaped}\"}" \
+        --url "$webhook_url" >/dev/null 2>&1; then
+        # Record send time for rate limiting
+        date -u +%s > "$rate_file" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # Emit Daemon Helper (OMN-1631, OMN-1632)
 # =============================================================================
 # Emit event via emit daemon for fast, non-blocking Kafka emission.

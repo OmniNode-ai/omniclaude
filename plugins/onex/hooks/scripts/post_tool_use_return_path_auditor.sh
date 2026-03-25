@@ -81,12 +81,19 @@ export PYTHONPATH="${PROJECT_ROOT}/src:${PLUGIN_ROOT}/lib:${PYTHONPATH:-}"
 
 # Invoke Python auditor
 AUDIT_RESULT=""
+_stderr_tmp=$(mktemp)
 set +e
 AUDIT_RESULT=$(printf '%s\n' "$HOOK_EVENT" \
     | "$PYTHON_CMD" -m omniclaude.hooks.handlers.return_path_auditor \
-        2>>"$LOG_FILE")
+        2>"$_stderr_tmp")
 EXIT_CODE=$?
 set -e
+# Append stderr to log file and check for degradation signals (OMN-6567)
+cat "$_stderr_tmp" >> "$LOG_FILE" 2>/dev/null || true
+if grep -qE "ModuleNotFoundError|ImportError|Traceback" "$_stderr_tmp" 2>/dev/null; then
+    ( notify_hook_degraded "$_OMNICLAUDE_HOOK_NAME" "$(head -1 "$_stderr_tmp")" ) &
+fi
+rm -f "$_stderr_tmp"
 
 if [[ $EXIT_CODE -ne 0 || -z "$AUDIT_RESULT" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] return-path-auditor: Python handler failed (exit=$EXIT_CODE), passing through" >> "$LOG_FILE"

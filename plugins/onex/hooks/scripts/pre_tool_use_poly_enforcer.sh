@@ -29,8 +29,10 @@ SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
+PROJECT_ROOT="${PROJECT_ROOT:-}"
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
 LOG_FILE="${ONEX_HOOK_LOG}"
+source "${HOOKS_DIR}/scripts/common.sh"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -85,9 +87,16 @@ fi
 # can locate agent YAML configs and wrappers without guessing paths.
 _AUDIT_VALIDATOR_EXIT=0
 _AUDIT_VALIDATOR_OUTPUT=""
+_stderr_tmp=$(mktemp)
 _AUDIT_VALIDATOR_OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" python3 -m omniclaude.hooks.handlers.audit_dispatch_validator \
     --subagent-type "$SUBAGENT_TYPE" \
-    2>>"$LOG_FILE") || _AUDIT_VALIDATOR_EXIT=$?
+    2>"$_stderr_tmp") || _AUDIT_VALIDATOR_EXIT=$?
+# Append stderr to log file and check for degradation signals (OMN-6567)
+cat "$_stderr_tmp" >> "$LOG_FILE" 2>/dev/null || true
+if grep -qE "ModuleNotFoundError|ImportError|Traceback" "$_stderr_tmp" 2>/dev/null; then
+    ( notify_hook_degraded "$_OMNICLAUDE_HOOK_NAME" "$(head -1 "$_stderr_tmp")" ) &
+fi
+rm -f "$_stderr_tmp"
 
 if [[ "$_AUDIT_VALIDATOR_EXIT" -eq 2 ]]; then
     # Python validator issued a hard block (contract binding misconfiguration).
