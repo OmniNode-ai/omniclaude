@@ -102,7 +102,22 @@ is no acceptable workaround — surface the failure.
 
 Three-phase PR readiness workflow that takes a branch from "open PR" to "clean and ready to merge":
 
-0. **Branch Verification** (OMN-6253) — fetch the actual PR branch name from the GitHub API and verify we are on the correct branch before any work begins. Never trust the dispatcher's branch name.
+0. **Branch Verification** (OMN-6253, OMN-6457) — fetch the actual PR branch name from the GitHub API and verify we are on the correct branch before any work begins. Never trust the dispatcher's branch name.
+
+### Branch Name Verification (mandatory — OMN-6457)
+
+**CRITICAL**: Before creating a worktree or pushing to a branch, ALWAYS fetch the current branch name:
+
+```bash
+BRANCH=$(gh pr view {pr_number} --json headRefName -q '.headRefName')
+```
+
+**NEVER**:
+- Use a branch name from a previous step, variable, or cached value
+- Assume the branch name from the ticket ID or PR title
+- Use a branch name provided in the initial dispatch prompt without re-verifying
+
+This prevents the 4-cycle waste observed in F5 where agents pushed to the wrong branch.
 1. **Conflict Resolution** — detect and resolve merge conflicts against the base branch
 2. **PR Review + CI Fix** — fetch all open review comments and CI failures, fix Critical/Major/Minor via `pr-review-dev`
 3. **Local Review Loop** — run `local-review` until N consecutive passes with nothing but nits (default N=4)
@@ -186,6 +201,21 @@ Task(
     Report: list of resolved files and brief description of resolution strategy for each."
 )
 ```
+
+### Review Comment Handling (mandatory before thread resolution — OMN-6456)
+
+Before resolving any review threads, the agent MUST follow this 4-step sequence:
+
+1. **Fetch all review comments**: `gh api repos/{owner}/{repo}/pulls/{number}/comments --paginate`
+2. **Fetch review threads**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews --paginate`
+3. **For each unresolved thread**:
+   a. Read the comment body and understand the requested change
+   b. If the comment is valid and actionable: implement the fix, commit, then reply acknowledging the fix
+   c. If the comment is not applicable (e.g., CodeRabbit suggestion that doesn't apply): reply with a specific reason why, then resolve
+   d. **NEVER** resolve a thread without either fixing the issue or replying with a reason
+4. **After all threads addressed**: push fixes, then resolve threads that were fixed
+
+**Hard rule**: `gh api ... -X PUT` to resolve a thread is FORBIDDEN unless the thread has a reply from this agent explaining what was done.
 
 ### Phase 1: PR Review + CI Fix — invoke pr-review-dev skill
 
