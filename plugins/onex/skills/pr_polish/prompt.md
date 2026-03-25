@@ -302,7 +302,22 @@ if pr_number:
 
 ```python
 if not no_push and (phase_0_status == "OK" or phase_1_status == "OK" or phase_2_status == "OK"):
-    result = run("git push")
+    # CRITICAL (F5/OMN-6473): Always re-fetch the canonical branch name from the PR API
+    # before pushing. Never rely on locally-cached branch names or git tracking config.
+    # This prevents the 4-cycle branch mismatch bug where pushes went to the wrong branch.
+    if pr_number is not None:
+        repo_for_push = run("gh repo view --json nameWithOwner --jq .nameWithOwner").strip()
+        push_branch = run(
+            f"gh pr view {pr_number} --repo {repo_for_push} --json headRefName --jq .headRefName"
+        ).strip()
+        if push_branch:
+            result = run(f"git push origin HEAD:{push_branch}")
+        else:
+            print("WARNING: Could not fetch headRefName from PR API — falling back to bare git push")
+            result = run("git push")
+    else:
+        result = run("git push")
+
     if result.returncode != 0:
         print("Warning: push failed — changes are committed locally")
         print("  Run: git push  to push manually")
