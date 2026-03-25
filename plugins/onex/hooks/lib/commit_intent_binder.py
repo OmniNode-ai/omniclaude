@@ -16,10 +16,10 @@ Design constraints:
 
 CLI:
     echo '<tool_info_json>' | python commit_intent_binder.py \\
-        --session-id <uuid> [--state-dir ~/.claude/hooks/.state]
+        --session-id <uuid> [--state-dir $ONEX_STATE_DIR/hooks/.state]
 
 Storage layout (read-only):
-    ~/.claude/hooks/.state/correlation_id.json   (written by intent_classifier)
+    $ONEX_STATE_DIR/hooks/.state/correlation_id.json   (written by intent_classifier)
 
 Emit event type: ``intent.commit.bound`` (added to SUPPORTED_EVENT_TYPES)
 """

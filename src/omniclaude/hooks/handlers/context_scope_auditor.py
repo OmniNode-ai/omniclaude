@@ -401,7 +401,7 @@ class ContextScopeAuditor:
 
         Args:
             enforcement_mode: Override enforcement mode (default: from env).
-            state_dir: Override state directory (default: ~/.claude/hooks/.state).
+            state_dir: Override state directory (default: $ONEX_STATE_DIR/hooks/.state).
         """
         self.enforcement_mode = (
             enforcement_mode

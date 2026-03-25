@@ -4,7 +4,7 @@
 # Copyright (c) 2025 OmniNode Team
 """File-based evidence resolver (OMN-2092).
 
-Reads gate results from ~/.claude/baselines/ via the metrics aggregator.
+Reads gate results from $ONEX_STATE_DIR/baselines/ via the metrics aggregator.
 Lives in the plugin layer because it depends on metrics_aggregator.
 
 Part of OMN-2092: Evidence-Driven Injection Decisions.
@@ -24,7 +24,7 @@ from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
 
 
 class FileEvidenceResolver:
-    """Reads gate results from ~/.claude/baselines/ via load_latest_gate_result()."""
+    """Reads gate results from $ONEX_STATE_DIR/baselines/ via load_latest_gate_result()."""
 
     def __init__(self, baselines_root: Path | None = None) -> None:
         self._baselines_root = baselines_root

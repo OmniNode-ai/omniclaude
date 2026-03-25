@@ -12,7 +12,7 @@ or divergent fixes.
 
 File-based distributed lock keyed on the issue fingerprint:  # ai-slop-ok: module description
 
-    ``~/.claude/pipeline-locks/preexisting/<fingerprint>.lock``
+    ``$ONEX_STATE_DIR/pipeline-locks/preexisting/<fingerprint>.lock``
 
 Lock lifecycle:
     - **Acquire**: before starting a 'chore: fix pre-existing' commit
@@ -83,7 +83,7 @@ class PreexistingFixLock:
 
     Args:
         lock_dir: Directory for lock files. Defaults to
-            ``~/.claude/pipeline-locks/preexisting/``.
+            ``$ONEX_STATE_DIR/pipeline-locks/preexisting/``.
         timeout_seconds: Seconds after which a lock is considered stale and may be
             forcibly released. Defaults to 1800 (30 minutes).
     """

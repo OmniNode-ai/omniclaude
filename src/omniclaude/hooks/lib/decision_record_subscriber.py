@@ -7,7 +7,7 @@
 Subscribes to ``onex.cmd.omniintelligence.decision-recorded.v1``, deserializes
 full ``DecisionRecord`` payloads (including ``agent_rationale`` and
 ``reproducibility_snapshot``), and writes them to a local append-only JSONL
-audit log at ``~/.claude/decision_audit.jsonl``.
+audit log at ``$ONEX_STATE_DIR/decision_audit.jsonl``.
 
 This is the consumer side of the Decision Provenance restricted data path
 (OMN-2465). ``omniclaude`` registers ``DECISION_RECORDED_CMD`` in its
@@ -22,7 +22,7 @@ Design principles (consistent with the rest of omniclaude hooks lib):
   subscriber logs and returns — decision records may be lost, but the UI
   is never blocked.
 - **Append-only**: records are written as newline-delimited JSON (JSONL) to
-  ``~/.claude/decision_audit.jsonl`` using O_APPEND semantics. This is safe
+  ``$ONEX_STATE_DIR/decision_audit.jsonl`` using O_APPEND semantics. This is safe
   for concurrent writers within a single process; do not use from multiple
   processes without an external lock.
 - **No secrets in logs**: ``agent_rationale`` is retained (this is the audit

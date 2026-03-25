@@ -36,7 +36,7 @@ from typing import TypedDict
 
 # Configure logging to stderr (stdout reserved for JSON output)
 # Also log to LOG_FILE if set (per CLAUDE.md: "Failures must be logged to
-# ~/.claude/hooks.log when LOG_FILE environment variable is set")
+# $ONEX_STATE_DIR/logs/hooks.log when LOG_FILE environment variable is set")
 _handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
 _log_file = os.environ.get("LOG_FILE")
 if _log_file:

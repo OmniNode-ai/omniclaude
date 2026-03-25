@@ -112,7 +112,7 @@ def load_frame_from_jsonl(
     Args:
         session_id: Session identifier (matches JSONL filename)
         frame_id: UUID of the frame to load
-        trace_dir: Override for the trace directory (default: ~/.claude/trace)
+        trace_dir: Override for the trace directory (default: $ONEX_STATE_DIR/trace)
 
     Returns:
         ChangeFrame if found, None if not found

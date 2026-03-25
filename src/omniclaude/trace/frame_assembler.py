@@ -583,7 +583,7 @@ def assemble_change_frame(
 def persist_frame_to_jsonl(frame: ChangeFrame, session_id: str) -> Path:
     """Append a ChangeFrame to the session JSONL file.
 
-    File location: ~/.claude/trace/{session_id}.jsonl
+    File location: $ONEX_STATE_DIR/trace/{session_id}.jsonl
 
     Args:
         frame: The assembled ChangeFrame to persist

@@ -8,8 +8,8 @@ optional ContractPromotionGate into ContractMeasuredAttribution.
 Per "compose, don't extend" -- ContractAttributionRecord is NOT modified.
 
 Storage layout:
-    ~/.claude/attributions/{pattern_id}/record.json          (input)
-    ~/.claude/attributions/{pattern_id}/{run_id}.measured.json (output)
+    $ONEX_STATE_DIR/attributions/{pattern_id}/record.json          (input)
+    $ONEX_STATE_DIR/attributions/{pattern_id}/{run_id}.measured.json (output)
 """
 
 from __future__ import annotations

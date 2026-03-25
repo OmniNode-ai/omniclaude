@@ -47,7 +47,7 @@ class CorrelationRegistry:
         """Initialize correlation manager.
 
         Args:
-            state_dir: Directory for state files (default: ~/.claude/hooks/.state)
+            state_dir: Directory for state files (default: $ONEX_STATE_DIR/hooks/.state)
             emit_fn: Optional callable(event_type, payload) for event emission.
                      If None, events are logged but not emitted.
         """

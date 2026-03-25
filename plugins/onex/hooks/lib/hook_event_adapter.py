@@ -313,7 +313,7 @@ class HookEventAdapter:
         if not self._kafka_available or _ConfluentProducer is None:
             raise OnexError(
                 code=EnumCoreErrorCode.EXTERNAL_SERVICE_ERROR,
-                message="Kafka is not available. Run: ~/.claude/hooks/setup-venv.sh",
+                message="Kafka is not available. Ensure confluent-kafka is installed.",
             )
 
         if self._producer is None:

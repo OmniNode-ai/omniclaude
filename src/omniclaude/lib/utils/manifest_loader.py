@@ -84,7 +84,7 @@ def load_manifest(
         # manifest_injector not found - installation issue
         return (
             f"System Manifest: Not available (import error: {str(e)})\n"
-            "Install manifest_injector.py to ~/.claude/agents/lib/"
+            "Install manifest_injector.py to $ONEX_STATE_DIR/agents/lib/"
         )
 
     except Exception as e:

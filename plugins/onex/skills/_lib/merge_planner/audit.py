@@ -12,7 +12,11 @@ from pathlib import Path, PurePosixPath
 
 from merge_planner.models import ModelQPMAuditEntry
 
-DEFAULT_AUDIT_ROOT = Path.home() / ".claude" / "qpm-audit" / "runs"
+
+def _default_audit_root() -> Path:
+    from omniclaude.hooks.lib.onex_state import ensure_state_dir
+
+    return ensure_state_dir("qpm-audit", "runs")
 
 
 def _validate_run_id(run_id: str) -> None:
@@ -26,7 +30,7 @@ def _validate_run_id(run_id: str) -> None:
 def write_audit(entry: ModelQPMAuditEntry, *, root: Path | None = None) -> Path:
     """Write audit entry to disk. Returns path to written file."""
     _validate_run_id(entry.run_id)
-    audit_root = root or DEFAULT_AUDIT_ROOT
+    audit_root = root or _default_audit_root()
     run_dir = audit_root / entry.run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     audit_path = run_dir / "audit.json"
@@ -37,7 +41,7 @@ def write_audit(entry: ModelQPMAuditEntry, *, root: Path | None = None) -> Path:
 def read_audit(run_id: str, *, root: Path | None = None) -> ModelQPMAuditEntry | None:
     """Read audit entry. Returns None if not found."""
     _validate_run_id(run_id)
-    audit_root = root or DEFAULT_AUDIT_ROOT
+    audit_root = root or _default_audit_root()
     audit_path = audit_root / run_id / "audit.json"
     if not audit_path.exists():
         return None
@@ -48,7 +52,7 @@ def list_recent_audits(
     *, limit: int = 20, root: Path | None = None
 ) -> list[ModelQPMAuditEntry]:
     """List recent audit entries sorted by directory mtime, newest first."""
-    audit_root = root or DEFAULT_AUDIT_ROOT
+    audit_root = root or _default_audit_root()
     if not audit_root.exists():
         return []
     dirs = sorted(

@@ -4,7 +4,7 @@
 
 """Session State Effect Node - Declarative filesystem I/O for session state.
 
-G1 node: All filesystem operations on ~/.claude/state/.
+G1 node: All filesystem operations on $ONEX_STATE_DIR/state/.
 
 Provides:
     - Atomic writes (tmp + fsync + rename)

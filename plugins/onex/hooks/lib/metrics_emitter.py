@@ -124,7 +124,7 @@ def get_redact_secrets() -> Callable[[str], str]:
     Note:
         The import path ``plugins.onex.hooks.lib.secret_redactor`` requires
         the repository root on ``sys.path``. In deployed environments (plugin
-        cache under ``~/.claude/``), this path will not resolve and the
+        cache under ``$ONEX_STATE_DIR/``), this path will not resolve and the
         lightweight fallback is used instead. This is by design — the fallback
         is the expected redactor in deployed mode.
     """
@@ -412,7 +412,7 @@ def write_metrics_artifact(
 ) -> Path | None:
     """Write metrics as a local file artifact for crash recovery.
 
-    File path: ~/.claude/pipelines/{ticket_id}/metrics/{run_id}/{phase}_{attempt}.metrics.json
+    File path: $ONEX_STATE_DIR/pipelines/{ticket_id}/metrics/{run_id}/{phase}_{attempt}.metrics.json
 
     Persisted via model_dump(mode="json"). Survives daemon outage.
     Uses atomic write (temp file + rename) which is safe on local POSIX

@@ -49,10 +49,8 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-#: Default inbox root directory — resolved via ONEX_STATE_DIR.
-DEFAULT_INBOX_ROOT: str = (
-    os.environ.get("ONEX_STATE_DIR", os.path.expanduser("~/.claude")) + "/agent-inboxes"
-)
+#: Sentinel — use ``None`` to signal "resolve from ONEX_STATE_DIR at runtime".
+DEFAULT_INBOX_ROOT: str = ""
 
 #: Subdirectory for broadcast messages.
 BROADCAST_DIR: str = "_broadcast"
@@ -81,7 +79,12 @@ class HandlerStandaloneInbox:
     """
 
     def __init__(self, inbox_root: str | None = None) -> None:
-        self._inbox_root = Path(inbox_root or DEFAULT_INBOX_ROOT)
+        if inbox_root:
+            self._inbox_root = Path(inbox_root)
+        else:
+            from omniclaude.hooks.lib.onex_state import ensure_state_dir
+
+            self._inbox_root = ensure_state_dir("agent-inboxes")
 
     # -- ProtocolAgentInbox interface ----------------------------------------
 
