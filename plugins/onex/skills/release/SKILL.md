@@ -107,6 +107,15 @@ force the gate for safety-critical autonomous runs.
 | `--autonomous` | flag | false | Skip Slack HIGH_RISK gate; intended for nightly autopilot runs |
 | `--require-gate` | flag | false | Force Slack gate even when `--autonomous` is set |
 
+## Authorization Passthrough (OMN-6469)
+
+When this skill is invoked by autopilot with `--autonomous`:
+
+1. The `--autonomous` flag indicates the parent autopilot run has been authorized
+2. `ONEX_RUN_ID` from the parent establishes the authorization chain
+3. Do not request additional human approval when `--autonomous` is set with a valid run ID
+4. The `--require-gate` flag overrides `--autonomous` if both are present (explicit opt-in)
+
 ## Dependency Graph (Tier Order)
 
 Repos are released in strict tier order. Within a tier, repos are released sequentially

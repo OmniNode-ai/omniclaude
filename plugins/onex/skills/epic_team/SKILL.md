@@ -143,6 +143,31 @@ Never dispatch more than 5 tickets in a single wave, even if more are independen
 
 ---
 
+## Sequential PR Chaining (OMN-6458)
+
+When creating PRs for sequential tasks that modify the same files:
+1. PR N+1 should target PR N's branch (not main) if they share modified files
+2. Maximum chain depth: 3 PRs
+3. If chain would exceed 3, wait for earlier PRs to merge before creating more
+
+**Detection**: Before creating a PR, check if another open PR from the same epic modifies any of the same files:
+```bash
+# Get files in current change
+CHANGED_FILES=$(git diff --name-only main...)
+
+# Check open PRs from same epic for overlapping files
+for PR_NUM in $(gh pr list --label "epic:OMN-XXXX" --json number -q '.[].number'); do
+  PR_FILES=$(gh pr view $PR_NUM --json files -q '.files[].path')
+  OVERLAP=$(comm -12 <(echo "$CHANGED_FILES" | sort) <(echo "$PR_FILES" | sort))
+  if [[ -n "$OVERLAP" ]]; then
+    echo "Overlapping files with PR #$PR_NUM: $OVERLAP"
+    echo "Target PR #$PR_NUM's branch instead of main"
+  fi
+done
+```
+
+---
+
 ## Composable Sub-Skills
 
 epic-team orchestrates these independently-invocable primitives:
