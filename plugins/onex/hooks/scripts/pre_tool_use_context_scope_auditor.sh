@@ -52,9 +52,16 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Running contex
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 EXIT_CODE=0
+_stderr_tmp=$(mktemp)
 RESULT=$(echo "$INPUT" \
-    | "$PYTHON_CMD" -m omniclaude.hooks.handlers.context_scope_auditor 2>>"$LOG_FILE") \
+    | "$PYTHON_CMD" -m omniclaude.hooks.handlers.context_scope_auditor 2>"$_stderr_tmp") \
     || EXIT_CODE=$?
+# Append stderr to log file and check for degradation signals (OMN-6567)
+cat "$_stderr_tmp" >> "$LOG_FILE" 2>/dev/null || true
+if grep -qE "ModuleNotFoundError|ImportError|Traceback" "$_stderr_tmp" 2>/dev/null; then
+    ( notify_hook_degraded "$_OMNICLAUDE_HOOK_NAME" "$(head -1 "$_stderr_tmp")" ) &
+fi
+rm -f "$_stderr_tmp"
 
 # --- Error counter tracking [F32] ---
 ERROR_COUNT_DIR="${HOME}/.onex_state/hooks/error-counts"
