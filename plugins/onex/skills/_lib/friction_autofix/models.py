@@ -76,9 +76,11 @@ class ModelMicroPlan(BaseModel):
 
     @field_validator("tasks")
     @classmethod
-    def validate_max_tasks(
+    def validate_task_count(
         cls, v: list[ModelMicroPlanTask]
     ) -> list[ModelMicroPlanTask]:
+        if len(v) < 1:
+            raise ValueError("Micro-plans require at least 1 task")
         if len(v) > 3:
             raise ValueError("Micro-plans are limited to 3 tasks maximum")
         return v
