@@ -43,6 +43,7 @@ Related tickets:
 """
 
 from .enums import EnumChatChannel, EnumChatMessageType, EnumChatSeverity
+from .handler_auto_emit import emit_ci_alert, emit_progress, emit_status
 from .handler_chat_publisher import HandlerChatPublisher
 from .handler_chat_reader import HandlerChatReader, format_message, format_messages
 from .handler_file_chat_store import HandlerFileChatStore
@@ -59,7 +60,11 @@ __all__ = [
     "HandlerChatPublisher",
     "HandlerChatReader",
     "HandlerFileChatStore",
-    # Functions
+    # Auto-emit functions
+    "emit_ci_alert",
+    "emit_progress",
+    "emit_status",
+    # Formatting functions
     "format_message",
     "format_messages",
 ]

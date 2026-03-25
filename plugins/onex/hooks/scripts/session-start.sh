@@ -1361,6 +1361,40 @@ ${SKILL_SUGGESTIONS}"
         HAS_SKILL_SUGGESTIONS="true"
     fi
 
+    # ── Agent chat injection (OMN-3972) ────────────────────────────────────────
+    # Inject recent agent chat messages into session context so new sessions
+    # see what other agents have been saying.
+    # Toggle gate: OMNICLAUDE_CHAT_INJECTION (default ON)
+    _CHAT_INJECTION="${OMNICLAUDE_CHAT_INJECTION:-1}"
+    if [[ "$_CHAT_INJECTION" == "1" ]]; then
+        _CHAT_CONTEXT=""
+        if command -v python3 &>/dev/null; then
+            _CHAT_CONTEXT=$(python3 -c "
+import sys
+try:
+    from omniclaude.nodes.node_agent_chat import HandlerChatReader
+    reader = HandlerChatReader()
+    block = reader.read_context_block(n=10)
+    if block:
+        print(block)
+except Exception:
+    pass
+" 2>/dev/null) || _CHAT_CONTEXT=""
+        fi
+        if [[ -n "$_CHAT_CONTEXT" ]]; then
+            if [[ -n "$COMBINED_CONTEXT" ]]; then
+                COMBINED_CONTEXT="${COMBINED_CONTEXT}
+
+---
+
+${_CHAT_CONTEXT}"
+            else
+                COMBINED_CONTEXT="$_CHAT_CONTEXT"
+            fi
+            log "Agent chat context injected (OMN-3972)"
+        fi
+    fi
+
     # ── Handoff injection (OMN-5118) ─────────────────────────────────────────
     # Toggle gate: OMNICLAUDE_SESSION_HANDOFF (default OFF)
     # When enabled, inject the handoff manifest written by /handoff into
