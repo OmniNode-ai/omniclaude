@@ -50,13 +50,13 @@ Check for consecutive no-op cycles:
   Print: "WARNING: {count + 1} consecutive autopilot cycles found zero tickets.
   Unconditional surface probes still running but ticket-gated verification has not occurred."
 
-Initialize step tracking: all 15 steps start as `not_run`, using canonical IDs:
+Initialize step tracking: all 18 steps start as `not_run`, using canonical IDs:
 ```
 A1_merge_sweep, A2_deploy_local_plugin, A3_start_environment,
 B1_dod_sweep, B2_aislop_sweep, B3_bus_audit, B4_gap_detect, B5_integration_sweep,
-B6_playwright_gate,
+B6_playwright_gate, B7_friction_triage, B8_duplication_sweep,
 C1_release, C2_redeploy,
-D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day
+D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day, D5_insights_to_plan
 ```
 
 **Step result vocabulary** (stable, for cycle records and completion summary):
@@ -331,6 +331,55 @@ Record step as `warn`.
 **CONTINUE** (PASS): Record step as `pass`.
 
 Increment failure counter if surface_result is FAIL.
+
+Check circuit breaker.
+
+---
+
+### B7: friction-triage <!-- ai-slop-ok: skill-step-heading -->
+
+Run friction-triage to surface recurring friction patterns as Linear tickets:
+
+```
+/friction-triage --window_days 7
+```
+
+**Halt policy:** NEVER halt. Friction triage generates remediation backlog (Linear tickets
+for recurring friction patterns). It does not surface immediate release risk.
+Log the number of tickets created.
+
+**Skip condition:** If `~/.claude/state/friction/friction.ndjson` does not exist
+or is empty, skip with message "No friction events recorded."
+
+- On success: record `pass`, continue.
+- On skip: record `pass` with note "No friction events recorded."
+- On error: record `fail`. Log the failure, increment failure counter. Do NOT halt.
+
+Check circuit breaker.
+
+---
+
+### B8: duplication-sweep <!-- ai-slop-ok: skill-step-heading -->
+
+Run duplication-sweep to detect structural collisions across repos:
+
+```
+/duplication-sweep --omni-home $OMNI_HOME
+```
+
+**Halt policy:** HALT on any FAIL finding from checks D1-D4. WARN findings
+are logged but do not halt. B8 halts because duplicate Drizzle tables, topic
+registration conflicts, and migration collisions are immediate structural defects
+that can cause silent data routing failures in the current release.
+
+**Skip condition:** If $OMNI_HOME is not set or the directory does not exist,
+skip with warning "OMNI_HOME not available for duplication sweep."
+
+- On success (all PASS/WARN): record `pass`, continue.
+- On FAIL: record `halt`. **HALT**. Report failing checks (D1-D4) and their findings.
+- On skip: record `pass` with warning note.
+- On error: record `fail`. Increment failure counter.
+
 Check circuit breaker.
 
 ---
@@ -438,6 +487,33 @@ Run:
 
 ---
 
+### D5: insights-to-plan (optional) <!-- ai-slop-ok: skill-step-heading -->
+
+Check if today's insights report exists at `docs/registry/insights/YYYY-MM-DD.html`
+(replace YYYY-MM-DD with today's date, e.g., 2026-03-24).
+
+**If file exists:** Run `/insights-to-plan --file docs/registry/insights/YYYY-MM-DD.html --tickets`.
+
+**If file does not exist:** Run `/linear-insights --mode deep-dive --save` to generate
+today's deep dive report first. Then check if a Claude Code insights HTML was generated
+during this session. If found, run `/insights-to-plan --file <path> --tickets`.
+If no insights file is available, skip with message "No insights report for today."
+
+**Halt policy:** NEVER halt. This step generates strategic follow-up tickets,
+not release-risk findings.
+
+**Caveat:** Step D5 is opportunistic automation based on report availability,
+not proof that the generated insights are complete, fresh, or uniquely
+authoritative for the session. It runs because a file exists, not because
+the file has been validated as high-quality input.
+
+- On success: record `pass`, continue.
+- On skip: record `pass` with note "No insights report for today."
+- On error: record `fail`. Log the failure but do NOT halt. Insights-to-plan is strategic;
+  a failure here does not invalidate the release and redeploy.
+
+---
+
 ### Circuit Breaker Check <!-- ai-slop-ok: skill-step-heading -->
 
 After all steps complete, if `consecutive_failures >= 3` was triggered at any point:
@@ -477,12 +553,15 @@ Steps:
   B4: gap-detect           — {status}
   B5: integration-sweep    — {status}
   B6: playwright-gate      — {status}
+  B7: friction-triage      — {status}
+  B8: duplication-sweep    — {status}
   C1: release              — {status}  {version/tag if pass}
   C2: redeploy             — {status}
   D1: verify-plugin        — {status}
   D2: container-health     — {status}
   D3: dashboard-sweep      — {status}
   D4: close-day            — {status}
+  D5: insights-to-plan     — {status}
 
 Ship provenance: {version/tag/commit from C1, or "N/A — no ship occurred"}
 
