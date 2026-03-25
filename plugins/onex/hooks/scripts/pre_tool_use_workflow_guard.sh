@@ -58,8 +58,7 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Checking $TOOL_NAME for workflow preconditions" >> "$LOG_FILE"
 
 # Locate Python
-source "${HOOKS_DIR}/scripts/common.sh" 2>/dev/null || true
-PYTHON_CMD="${PYTHON_CMD:-python3}"
+source "${HOOKS_DIR}/scripts/common.sh"
 
 # Run Python guard
 set +e
