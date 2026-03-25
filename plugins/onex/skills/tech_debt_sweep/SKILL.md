@@ -189,3 +189,179 @@ def dedup_key(category: str, repo: str, file_path: str, line_content: str) -> st
     content = f"{category}:{repo}:{file_path}:{line_content.strip()}"
     return hashlib.sha256(content.encode()).hexdigest()[:12]
 ```
+
+## Ticket Grouping
+
+Findings are grouped into tickets by: `{category} x {repo} x {top_level_dir}`.
+
+Directory grouping is an operational batching heuristic intended to produce closeable
+tickets of reasonable size. It is not a semantic ownership model and may be refined for
+repos whose layouts do not map cleanly to the default grouping rule.
+
+Top-level directory is the first directory component under `src/{package}/`:
+- `src/omnibase_infra/runtime/service_kernel.py` -> directory = `runtime`
+- `src/omnibase_infra/event_bus/event_bus_kafka.py` -> directory = `event_bus`
+- `src/omnibase_infra/models/foo.py` -> directory = `models`
+
+For `skipped-tests`, grouping is by test directory:
+- `tests/unit/runtime/test_foo.py` -> directory = `unit/runtime`
+
+Each group becomes one ticket. The ticket title format is:
+
+```
+[Tech Debt] {category_label}: {repo}/{directory} ({count} findings)
+```
+
+Example: `[Tech Debt] Type Suppressions: omnibase_infra/runtime (14 findings)`
+
+## Epic Management
+
+One epic per category. Epic titles are fixed:
+
+| Category | Epic Title |
+|----------|------------|
+| `type-ignore` | Tech Debt: Type Suppressions |
+| `noqa` | Tech Debt: Lint Suppressions |
+| `todo-fixme` | Tech Debt: Deferred Work |
+| `any-types` | Tech Debt: Any Type Narrowing |
+| `skipped-tests` | Tech Debt: Skipped Tests |
+| `stale-ignores` | Tech Debt: Stale Suppressions |
+
+**Epic resolution:** For each category with findings:
+1. Search Linear for existing epic by exact title match
+2. If found: use it (tickets accumulate under it over time)
+3. If not found: create it
+
+## Dedup Against Existing Tickets
+
+Dedup operates only against open tickets under the category epic. This is an intentional
+scoping choice for Phase 1 -- it does not attempt global project-wide duplicate detection
+across unrelated epics or manually created tickets.
+
+Before creating a ticket, check all open tickets under the category's epic for
+overlapping dedup keys.
+
+### List open tickets under the epic
+
+```python
+# Pseudocode -- executed via mcp__linear-server__list_issues tool call
+existing_tickets = mcp__linear-server__list_issues(
+    parentId=epic_id,
+    state="Backlog,Todo,In Progress",
+    limit=250,
+)
+```
+
+### Extract existing dedup keys from descriptions
+
+Each ticket's description contains a footer block:
+
+```html
+<!-- techdebt-keys: a3f9c2,b7e1d4,c9f2a8,... -->
+```
+
+Parse this to get the set of already-tracked keys. If a ticket's description is missing
+the `techdebt-keys` marker or the marker is malformed (no comma-separated hashes), treat
+that ticket as having zero tracked keys -- do not skip findings because of it, and do not
+error out.
+
+### Filter findings
+
+For each group (potential ticket):
+- Compute dedup keys for all findings in the group
+- Remove any finding whose key already appears in ANY open ticket under this epic
+- If all findings are already tracked: skip (don't create ticket)
+- If some are new: create ticket with only the new findings
+
+### Build ticket description
+
+```markdown
+## {category_label}: {repo}/{directory}
+
+**{count} findings** in `{repo}/src/{package}/{directory}/`
+
+| File | Line | Content | Severity |
+|------|------|---------|----------|
+| `service_kernel.py` | 1170 | `consumption_source=event_bus,  # type: ignore[arg-type]` | high |
+| `service_kernel.py` | 1171 | `event_bus=event_bus,  # type: ignore[arg-type]` | medium |
+| ... | | | |
+
+### How to fix
+
+[Category-specific remediation guidance -- see below]
+
+### Definition of Done
+
+- [ ] All findings in this ticket resolved (removed or justified with inline comment)
+- [ ] No new findings introduced in the same directory
+- [ ] Tests pass after changes
+
+<!-- techdebt-keys: a3f9c2,b7e1d4,c9f2a8 -->
+```
+
+### Remediation Guidance Per Category
+
+| Category | Guidance |
+|----------|----------|
+| `type-ignore` | For each suppression: (1) check if mypy still needs it (`--warn-unused-ignores`), (2) if needed, add a `# Why:` comment explaining the safety argument, (3) if not needed, remove it |
+| `noqa` | For each suppression: fix the underlying lint issue if possible. If the suppression is intentional, ensure the specific error code is present (no bare `# noqa`) |
+| `todo-fixme` | Triage each marker: (1) if the work is done, remove the comment, (2) if it's still needed, create a proper ticket and reference it, (3) if it's a HACK, evaluate whether refactoring is warranted |
+| `any-types` | Narrow `Any` to the most specific type possible. Common patterns: `dict[str, Any]` -> typed dict or Pydantic model, `-> Any` -> concrete return type |
+| `skipped-tests` | For each skip: (1) if the test is obsolete, delete it, (2) if it tests a feature that now works, unskip and verify, (3) if it's blocked on infrastructure, add a clear `reason=` string |
+| `stale-ignores` | Simply remove the suppression -- mypy confirms it's no longer needed |
+
+## Ticket Creation
+
+For each group that has net-new findings:
+
+```python
+# Pseudocode -- executed via mcp__linear-server__save_issue tool call
+mcp__linear-server__save_issue(
+    title=f"[Tech Debt] {category_label}: {repo}/{directory} ({new_count} findings)",
+    team="Omninode",
+    project=project or "Active Sprint",
+    parentId=epic_id,
+    labels=[repo_label],
+    priority=max_severity_to_priority(findings),
+    description=build_description(findings, category, repo, directory),
+)
+```
+
+Priority mapping:
+- Any `high` finding in the group -> priority 2 (High)
+- All `medium` -> priority 3 (Medium)
+- All `low` -> priority 4 (Low)
+
+## Closing Behavior
+
+When a ticket is closed (developer fixed the findings):
+- The dedup keys for that ticket are no longer in any open ticket
+- If the code was actually fixed, the scanner won't re-detect those findings
+- If the ticket was closed without fixing, the next sweep re-detects and creates a fresh ticket
+- This is correct behavior -- the debt is either gone or re-tracked
+
+## Summary Report
+
+After all categories are processed, print a summary including:
+- repos scanned (and repos skipped for stale-ignores, if any)
+- per-category: total findings, net-new, already tracked, tickets created
+
+```
+============================================================
+Tech Debt Sweep Summary
+============================================================
+
+Repos scanned: 7
+Stale-ignores skipped: 1 (omnibase_compat -- mypy failed)
+Categories: 6
+
+| Category | Findings | New | Already Tracked | Tickets Created |
+|----------|----------|-----|-----------------|-----------------|
+| type-ignore | 602 | 45 | 557 | 8 |
+| noqa | 1,007 | 120 | 887 | 15 |
+| todo-fixme | 163 | 30 | 133 | 6 |
+| any-types | 747 | 89 | 658 | 12 |
+| skipped-tests | 649 | 55 | 594 | 9 |
+| stale-ignores | 12 | 12 | 0 | 3 |
+| **TOTAL** | **3,180** | **351** | **2,829** | **53** |
+```
