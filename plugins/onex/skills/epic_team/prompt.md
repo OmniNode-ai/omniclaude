@@ -76,6 +76,76 @@ def build_waves(assignments, cross_repo_splits):
     return waves
 ```
 
+### Sequential PR Chaining (Within and Across Waves) — F15/OMN-6476
+
+After wave construction, detect file overlap between tickets to chain PRs that
+modify the same files. This prevents duplicate fixes when sequential tickets
+touch the same files and all target `main` independently.
+
+```python
+def detect_file_overlap_chains(waves, ticket_metadata):
+    """Detect file overlap between tickets and build PR chaining instructions.
+
+    Args:
+        waves: list of waves, each wave is a list of (repo, ticket_id) tuples
+        ticket_metadata: dict mapping ticket_id -> {files_changed: [str], task_number: int}
+
+    Returns:
+        chain_targets: dict mapping ticket_id -> base_branch (the branch of the
+                       preceding ticket in the chain, instead of main)
+    """
+    chain_targets = {}  # ticket_id -> base_branch_ticket_id
+    chain_depth = {}    # ticket_id -> depth in chain (root = 0)
+
+    # Flatten all tickets in order (wave 0 first, then wave 1, etc.)
+    all_tickets_ordered = []
+    for wave in waves:
+        for repo, ticket_id in wave:
+            all_tickets_ordered.append((repo, ticket_id))
+
+    # For each pair, check file overlap (only same-repo pairs)
+    for i, (repo_a, ticket_a) in enumerate(all_tickets_ordered):
+        meta_a = ticket_metadata.get(ticket_a, {})
+        files_a = set(meta_a.get("files_changed", []))
+        task_num_a = meta_a.get("task_number", i)
+
+        for j, (repo_b, ticket_b) in enumerate(all_tickets_ordered):
+            if j <= i or repo_b != repo_a:
+                continue  # only check later tickets in the same repo
+
+            meta_b = ticket_metadata.get(ticket_b, {})
+            files_b = set(meta_b.get("files_changed", []))
+
+            overlap = files_a & files_b
+            if not overlap:
+                continue
+
+            # ticket_b should target ticket_a's branch (if not already chained deeper)
+            if ticket_b in chain_targets:
+                continue  # already chained to an earlier ticket
+
+            # Check chain depth limit: max 3 levels
+            depth_a = chain_depth.get(ticket_a, 0)
+            if depth_a >= 3:
+                print(f"[epic-team] Chain depth limit reached for {ticket_b} "
+                      f"(would be depth {depth_a + 1}). Targeting main independently.")
+                continue
+
+            chain_targets[ticket_b] = ticket_a
+            chain_depth[ticket_b] = depth_a + 1
+            print(f"[epic-team] PR chaining: {ticket_b} will target {ticket_a}'s branch "
+                  f"(shared files: {overlap})")
+            break  # only chain to the first overlapping predecessor
+
+    return chain_targets
+
+# NOTE: ticket-pipeline does not currently support --base-branch.
+# This chaining logic is recorded here for documentation and future use.
+# A follow-up task is needed to add --base-branch support to ticket-pipeline's
+# `gh pr create` call. Until then, the chain_targets dict is logged but
+# not enforced during dispatch.
+```
+
 ### Circuit Breaker / Heartbeat Timeout
 
 Long-running agent dispatches can stall indefinitely (context exhaustion, infinite loops,
