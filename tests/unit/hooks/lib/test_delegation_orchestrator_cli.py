@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 import sys
+import types
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -43,7 +44,7 @@ _STUB_MODS = [
     "omniclaude.lib.utils.debug_utils",
     "omniclaude.lib.utils.quality_enforcer",
 ]
-_saved: dict[str, object] = {}
+_saved: dict[str, types.ModuleType] = {}
 _injected: list[str] = []
 for _mod in _STUB_MODS:
     if _mod in sys.modules:
