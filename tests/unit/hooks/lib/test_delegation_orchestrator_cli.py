@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import json
 import sys
+import types
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -30,20 +31,40 @@ if str(_HOOKS_LIB) not in sys.path:
 # Multiple modules in omniclaude.lib.utils (debug_utils, quality_enforcer)
 # access `settings.<attr>` at module level, but `settings` is the module object
 # (not the Settings instance) during the circular import chain triggered by
-# conftest.py adding src/ to sys.path. This is a pre-existing issue on main
-# that also breaks test_delegation_orchestrator.py.
-# We only need main() + orchestrate_delegation for CLI tests, so stubbing
-# the problematic utils package is safe.
+# conftest.py adding src/ to sys.path.
+#
+# OMN-5542: The stubs are saved and restored after import to prevent test
+# pollution — prior approach left MagicMock objects in sys.modules which
+# caused downstream tests (test_quality_enforcer_*.py) to see a mock instead
+# of the real module. We capture only the keys we inject, import the module
+# we need, then remove our stubs so other tests get the real modules.
 from unittest.mock import MagicMock as _MagicMock
 
-for _mod in [
+_STUB_MODS = [
     "omniclaude.lib.utils.debug_utils",
     "omniclaude.lib.utils.quality_enforcer",
-]:
-    if _mod not in sys.modules:
-        sys.modules[_mod] = _MagicMock()
+]
+_saved: dict[str, types.ModuleType] = {}
+_injected: dict[str, object] = {}
+for _mod in _STUB_MODS:
+    if _mod in sys.modules:
+        _saved[_mod] = sys.modules[_mod]
+    else:
+        _stub = _MagicMock()
+        _injected[_mod] = _stub
+        sys.modules[_mod] = _stub
 
-import delegation_orchestrator  # noqa: E402 I001
+try:
+    import delegation_orchestrator  # noqa: E402 I001
+finally:
+    # Clean up: remove only stubs we injected (identity check prevents
+    # removing a real module that was loaded during the import).
+    for _mod, _stub in _injected.items():
+        if sys.modules.get(_mod) is _stub:
+            sys.modules.pop(_mod, None)
+    # Restore modules that existed before stubbing.
+    for _mod, _orig in _saved.items():
+        sys.modules[_mod] = _orig
 
 
 @pytest.mark.unit
