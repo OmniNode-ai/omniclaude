@@ -173,6 +173,8 @@ auto-detects and converts:
 ```
 
 Conversion rule: group by `severity` field into the standard buckets (case-insensitive).
+Map `suggestion` to `context`. The `category` field is preserved as metadata but not
+used for dedup matching.
 
 ### Adapter: Contract Sweep Format
 
@@ -181,14 +183,14 @@ The contract-sweep skill outputs a YAML report. The skill auto-detects and conve
 ```yaml
 findings:
   - repo: omniclaude
-    file: src/omniclaude/nodes/node_example.py
+    path: src/omniclaude/nodes/node_example.py
     severity: CRITICAL
     check: MISSING_CONTRACT
     message: "Node has no contract YAML"
 ```
 
-Conversion rule: group by `severity` field, map `message` to `description`, map `check`
-to `keyword`.
+Conversion rule: group by `severity` field, map `path` to `file`, map `message` to
+`description`, map `check` to `keyword`.
 
 ### Adapter: DoD Sweep Format
 
@@ -225,7 +227,8 @@ Conversion rule: each `FAIL` check becomes a finding. Severity mapping:
 ## Deduplication
 
 Before creating any ticket, the skill queries Linear for existing tickets that match
-the finding. A finding is considered a duplicate if ANY of these conditions are met:
+the finding. A finding is considered a duplicate when it matches an open ticket with
+the same source label, same file, and overlapping keyword or description:
 
 ### Dedup Strategy
 
@@ -600,7 +603,7 @@ if failed:
 | No findings available | Report error, suggest running a sweep first |
 | Invalid findings format | Report parse error with expected format |
 | Linear API error | Log error, continue with remaining findings |
-| Rate limit hit | Pause and retry with exponential backoff |
+| Rate limit hit | Pause 1s between batches of 5; on HTTP 429, wait and retry once |
 | Label not found | Create label if possible, warn if not |
 | Source not detected | Report error, require `--source` arg |
 
