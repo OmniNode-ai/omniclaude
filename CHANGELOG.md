@@ -1,3 +1,27 @@
+## v0.16.0 (2026-03-26)
+
+### Added
+- feat: add tech-debt-sweep skill for automated debt scanning and ticketing [OMN-6557] (#892)
+- feat(chat): agent chat broadcast system for multi-session coordination [OMN-3972] (#889)
+- feat(release): add scope verification before tagging [F24] (#904)
+
+### Fixed
+- fix(tests): clean up sys.modules stubs to prevent test pollution [OMN-5542] (#900)
+
+### Changed
+- chore: fix stale type-ignore suppression codes [OMN-6694] (#903)
+- chore: standardize TODO markers with ticket references [OMN-6655] (#902)
+- chore: bump omnibase-spi to 0.20.1
+- chore(deps): bump omnibase_core to 0.33.0
+- chore(deps): bump omnibase_infra to 0.27.1
+- chore(deps): bump omninode-intelligence to 0.19.0
+
+### Dependencies
+- omnibase-core 0.32.0 -> 0.33.0
+- omnibase-spi 0.20.0 -> 0.20.1
+- omnibase-infra 0.27.0 -> 0.27.1
+- omninode-intelligence 0.18.0 -> 0.19.0
+
 ## v0.15.0 (2026-03-25)
 
 ### Added
