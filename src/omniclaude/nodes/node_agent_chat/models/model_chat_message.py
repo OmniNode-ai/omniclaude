@@ -50,6 +50,11 @@ class ModelAgentChatMessage(BaseModel):
         metadata: Optional structured metadata for downstream consumers.
     """
 
+    # NOTE: extra="ignore" is intentional — NOT "forbid".  Chat messages are
+    # deserialized from Kafka and the local JSONL store, both of which may
+    # contain fields added by newer schema_version producers.  Rejecting
+    # unknown fields would break forward-compatibility for consumers that
+    # haven't been upgraded yet.  See schema_version field below.
     model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
     schema_version: str = Field(

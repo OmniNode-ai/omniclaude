@@ -167,6 +167,30 @@ def transform_passthrough(payload: dict[str, object]) -> dict[str, object]:
     return payload
 
 
+def _transform_chat_broadcast(payload: dict[str, object]) -> dict[str, object]:
+    """Sanitize chat broadcast payload before publishing to Kafka.
+
+    Strips the raw ``body`` field (which may contain PII, secrets, or
+    sensitive operational context) and replaces it with a length and a
+    sanitized preview.  All other fields are passed through unchanged.
+
+    Args:
+        payload: Original chat broadcast payload containing ``body``.
+
+    Returns:
+        Transformed payload with ``body`` removed and ``body_length`` /
+        ``body_preview`` added.
+    """
+    result: dict[str, object] = dict(payload)
+    body = payload.get("body", "")
+    if not isinstance(body, str):
+        body = str(body) if body is not None else ""
+    result["body_length"] = len(body)
+    result["body_preview"] = _sanitize_prompt_preview(body, max_length=200)
+    result.pop("body", None)
+    return result
+
+
 # =============================================================================
 # Fan-Out Rule Models
 # =============================================================================
@@ -1000,7 +1024,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.AGENT_CHAT_BROADCAST,
-                transform=None,  # Passthrough — chat messages are not sensitive
+                transform=_transform_chat_broadcast,
                 description="Agent chat broadcast for multi-terminal coordination",
             ),
         ],
