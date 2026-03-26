@@ -41,14 +41,14 @@ SINCE_DAYS="${SINCE_DAYS:-7}"
 
 **If `--since-last-cycle` is set:**
 
-Read the last cycle timestamp from `$ONEX_STATE_DIR/state/autopilot/cycle-state.yaml`:
+Read the last cycle timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml`:
 
 ```python
 import yaml
 from datetime import datetime, UTC, timedelta
 from pathlib import Path
 
-cycle_state_path = Path(os.environ.get("ONEX_STATE_DIR", "")) / "state/autopilot/cycle-state.yaml"
+cycle_state_path = Path(os.environ.get("ONEX_STATE_DIR", "")) / "autopilot/cycle-state.yaml"
 
 if cycle_state_path.exists():
     with open(cycle_state_path) as f:

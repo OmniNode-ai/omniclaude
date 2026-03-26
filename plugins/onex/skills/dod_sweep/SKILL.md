@@ -37,7 +37,7 @@ two modes: **batch** (retroactive sweep of recently completed tickets) and
   window via `mcp__linear-server__list_issues`, filter by `completedAt`.
 - **Batch since-last-cycle** (`/dod-sweep --since-last-cycle`): Query Linear for
   tickets completed since the last autopilot close-out cycle. Reads the last cycle
-  timestamp from `$ONEX_STATE_DIR/state/autopilot/cycle-state.yaml` field
+  timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml` field
   `last_cycle_id`. Falls back to `--since-days 7` if no prior cycle exists.
 - **Targeted** (`/dod-sweep OMN-1234`): If the target is an epic, expand child
   tickets. If a single ticket, sweep just that one.

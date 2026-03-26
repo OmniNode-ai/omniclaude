@@ -233,7 +233,8 @@ results before proceeding to B5.
 
 This queries Linear for tickets completed since the last close-out cycle, runs
 `dod-verify` individually against each, flags any with incomplete DoD evidence,
-and reports a summary before continuing to B2-B4 and the integration sweep (B5).
+and reports a summary. Continue to B2-B4 and B5 only when B1 is non-FAIL
+(PASS/UNKNOWN); HALT on B1 FAIL per policy below.
 Falls back to `--since-days 7` if no prior cycle state exists.
 
 **B2: aislop-sweep**
