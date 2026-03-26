@@ -789,7 +789,7 @@ class TestBadOutputRecovery:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 
-        # TODO: refactor to pytest.mark.parametrize (deferred, low priority)
+        # TODO(OMN-6655): refactor to pytest.mark.parametrize (deferred, low priority)
         for prompt, score_fn in [
             (_DOC_GEN_PROMPT, _doc_gen_score),
             (_BOILERPLATE_PROMPT, _boilerplate_score),

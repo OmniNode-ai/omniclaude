@@ -6,19 +6,19 @@ SSRF (Server-Side Request Forgery) protection tests.
 
 Tests that Qdrant URL validation properly rejects malicious URLs that could:
 - Access internal network resources (non-whitelisted hosts)
-- Read local files (file:// protocol - TODO)
+- Read local files (file:// protocol - TODO(OMN-6655))
 - Connect to arbitrary external services
 - Scan dangerous ports (SSH, DB, Kafka, etc.)
 
 **IMPORTANT**: Tests validate the whitelist-based URL validation in qdrant_helper.
-All tests should PASS (except skipped tests marked as production code TODOs).
+All tests should PASS (except skipped tests marked as production code TODOs).  # TODO_FORMAT_EXEMPT: documents test status
 
 Current implementation:
   - Whitelist-based host validation
   - Dangerous port blocking (SSH, PostgreSQL, Redis, Kafka, etc.)
   - HTTPS enforcement in production
-  - File protocol blocking (TODO - currently skipped)
-  - Redirect blocking (TODO - requires HTTP request mocking, currently skipped)
+  - File protocol blocking (TODO(OMN-6655) - currently skipped)
+  - Redirect blocking (TODO(OMN-6655) - requires HTTP request mocking, currently skipped)
 
 Created: 2025-11-20
 Updated: 2025-11-24 (stabilized environment-dependent tests)
@@ -107,7 +107,7 @@ class TestSSRFProtection:
         NOTE: Current implementation only validates hostname against whitelist.
         File protocol URLs would need explicit scheme validation to block.
 
-        TODO: Add scheme validation to validate_qdrant_url (allow only http/https).
+        TODO(OMN-6655): Add scheme validation to validate_qdrant_url (allow only http/https).
         """
         malicious_urls = [
             "file:///etc/passwd",
@@ -133,7 +133,7 @@ class TestSSRFProtection:
         1. HTTP client configuration to disable automatic redirects, OR
         2. A custom redirect handler that validates each redirect target
 
-        TODO: Implement redirect protection in qdrant_helper HTTP client usage:
+        TODO(OMN-6655): Implement redirect protection in qdrant_helper HTTP client usage:
         - Use urllib with a custom redirect handler
         - Or switch to httpx/requests with follow_redirects=False
         - Validate redirect targets against the same whitelist as initial URLs
