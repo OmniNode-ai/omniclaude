@@ -215,13 +215,10 @@ class PipelineSlackNotifier:
 
         Returns None if omnibase_infra is not available or Slack is not configured.
         """
-        webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
         bot_token = os.getenv("SLACK_BOT_TOKEN", "")
 
-        if not webhook_url and not bot_token:
-            logger.debug(
-                "Slack not configured (no SLACK_WEBHOOK_URL or SLACK_BOT_TOKEN)"
-            )
+        if not bot_token:
+            logger.debug("Slack not configured (no SLACK_BOT_TOKEN)")
             return None
 
         try:

@@ -180,7 +180,7 @@ def _format_slack_message(payload: dict[str, object]) -> str:
 
 
 def _send_via_handler(
-    webhook_url: str,
+    _webhook_url: str,  # Unused; retained for call-site parity with urllib fallback
     message: str,
     correlation_id_str: str | None = None,
     agent_name: str | None = None,
