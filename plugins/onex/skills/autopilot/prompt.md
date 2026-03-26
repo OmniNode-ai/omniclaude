@@ -226,10 +226,16 @@ Increment failure counter on error. Check circuit breaker.
 Run B1 through B4 concurrently. Invoke all four skills simultaneously and collect
 results before proceeding to B5.
 
-**B1: dod-sweep**
+**B1: dod-sweep** (Step 1.5 -- between merge-sweep and integration-sweep) [OMN-6728]
 ```
-/dod-sweep --since-days 7
+/dod-sweep --since-last-cycle --per-ticket-verify
 ```
+
+This queries Linear for tickets completed since the last close-out cycle, runs
+`dod-verify` individually against each, flags any with incomplete DoD evidence,
+and reports a summary. Continue to B2-B4 and B5 only when B1 is non-FAIL
+(PASS/UNKNOWN); HALT on B1 FAIL per policy below.
+Falls back to `--since-days 7` if no prior cycle state exists.
 
 **B2: aislop-sweep**
 ```
