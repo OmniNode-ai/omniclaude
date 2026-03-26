@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: chat
+# Source of truth for this skill's Kafka topics.
+
+topics:
+  - onex.evt.omniclaude.agent-chat-broadcast.v1

@@ -809,6 +809,8 @@ class TestEventRegistryIntegration:
             "hostile.reviewer.completed",
             # Hostile reviewer failure (OMN-6180)
             "hostile.reviewer.failed",
+            # Agent chat broadcast (OMN-3972)
+            "agent.chat.broadcast",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

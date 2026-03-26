@@ -94,6 +94,11 @@ allowed_extras:
     reason: Hook adapter observability topic (OMN-1552); predates contract governance.
     ticket: OMN-3294
 
+  - topic: "onex.evt.omniclaude.agent-chat-broadcast.v1"
+    lifecycle: integration
+    reason: Agent chat broadcast topic for multi-terminal coordination (OMN-3972). No dedicated contract yet.
+    ticket: OMN-3972
+
   - topic: "onex.evt.omniclaude.agent-execution-logs.v1"
     lifecycle: observability
     reason: Execution logs observability topic (OMN-1552); predates contract governance.

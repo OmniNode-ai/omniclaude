@@ -271,6 +271,25 @@ intelligence_integration:
     - "Multi-Dimensional Analysis: Comprehensive intelligence synthesis"
     - "Pattern-Driven Improvement: Continuous enhancement through learning"
 
+# ── Agent Chat Awareness (OMN-3972) ──────────────────────────────────────────
+# Behavioral guidance for agent chat — reinforces awareness but does not
+# enforce usage.  Agents should check chat context when it is injected at
+# session start and broadcast significant events (blockers, CI failures,
+# progress milestones) so peer sessions can react.
+agent_chat:
+  overview: |
+    Agent chat is a lightweight broadcast channel shared across all Claude Code
+    sessions on the same machine.  Messages are file-backed JSONL with optional
+    Kafka fan-out for observability.
+  behavioral_directives:
+    - "When session-start context includes an '## Agent Chat' block, READ it before beginning work — it may contain blockers, CI alerts, or coordination notes from other sessions."
+    - "When discovering a CI failure, use emit_ci_alert() to broadcast it so parallel sessions can avoid the same breakage."
+    - "When completing a wave or milestone in an epic, use emit_progress() to broadcast status."
+    - "When encountering a blocker that affects multiple sessions, broadcast with severity WARN or ERROR."
+    - "Do NOT spam the chat channel with routine status — reserve broadcasts for events that peers would act on."
+  skill_reference: "/chat — send or read broadcast messages (see plugins/onex/skills/chat/)"
+  api_reference: "omniclaude.nodes.node_agent_chat — emit_ci_alert(), emit_status(), emit_progress()"
+
 activation_patterns:
   explicit_triggers:
     - "Complex task decomposition requests"
