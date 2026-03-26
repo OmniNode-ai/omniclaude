@@ -1046,30 +1046,35 @@ exclusively in helpers.md per CI enforcement rules.
 
 #### Sub-Step 10b: Release Scope Verification (F24)
 
-Before creating any tag, verify that all PRs in the release scope have merged
-and are reachable from the current HEAD. This prevents the scenario where a tag
-is cut before a dependent commit lands.
+Before creating this repo's tag, verify that this repo's release PR(s) have merged
+and their merge commit(s) are reachable from the current HEAD of this repo. This
+prevents the scenario where a tag is cut before a dependent commit lands.
 
-1. List all PRs that were part of this release cycle (from the changelog or PR list).
-2. For each PR, verify `state == MERGED` via `gh pr view`:
+This check runs **per-repo inside the release loop** (not globally). Each repo
+only verifies PRs that belong to it -- it does not block on PRs for other repos
+that may not have merged yet.
+
+1. Determine the PR(s) for the current repo (`${repo}`) in this release run
+   (from `state.pr_number`, or the repo-local PR list in the changelog).
+2. For each repo-local PR, verify `state == MERGED` via `gh pr view`:
    ```bash
    PR_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json state --jq '.state')
    if [ "$PR_STATE" != "MERGED" ]; then
-     echo "  ERROR: PR #${PR_NUMBER} is not merged (state=${PR_STATE}). Cannot tag."
+     echo "  ERROR: PR #${PR_NUMBER} in ${repo} is not merged (state=${PR_STATE}). Cannot tag."
      exit 1
    fi
    ```
-3. For each merged PR, verify the merge commit is an ancestor of the current HEAD:
+3. For each merged PR, verify the merge commit is an ancestor of this repo's current HEAD:
    ```bash
    MERGE_SHA=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json mergeCommit --jq '.mergeCommit.oid')
    if ! git -C "${REPO_PATH}" merge-base --is-ancestor "${MERGE_SHA}" HEAD; then
-     echo "  ERROR: Merge commit ${MERGE_SHA} for PR #${PR_NUMBER} is not in HEAD ancestry. Cannot tag."
+     echo "  ERROR: Merge commit ${MERGE_SHA} for PR #${PR_NUMBER} in ${repo} is not in HEAD ancestry. Cannot tag."
      exit 1
    fi
    ```
-4. If any PR is not merged or not in HEAD's ancestry: **HALT. Do not tag.**
+4. If any current-repo PR fails either check: **HALT. Do not tag this repo.**
 
-Only proceed to Sub-Step 11 (TAG) when all scope PRs pass both checks.
+Only proceed to Sub-Step 11 (TAG) for `${repo}` when all of its scope PRs pass both checks.
 
 #### Sub-Step 11: TAG
 
@@ -1339,7 +1344,8 @@ release logic. This is intentional:
 3. The human already approved the entire plan at the Slack gate
 4. Individual operations (git, gh, uv) are lightweight CLI calls
 
-**Rule**: The release orchestrator runs all 13 sub-steps inline using Bash commands.
+**Rule**: The release orchestrator runs all 12 sub-steps (plus lettered sub-steps
+2b, 9b, and 10b) inline using Bash commands.
 It does NOT dispatch to polymorphic agents for individual steps.
 
 **Exception**: The Slack gate (Phase 2) may invoke the `slack-gate` skill's poll script.
