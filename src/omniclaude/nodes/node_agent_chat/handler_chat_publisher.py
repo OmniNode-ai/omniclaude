@@ -43,7 +43,7 @@ def _emit_to_kafka(message: ModelAgentChatMessage) -> bool:
         # and may not be on sys.path in all contexts. The import path
         # 'emit_client_wrapper' works because plugins/onex/hooks/lib/ is
         # added to sys.path by the hook framework.
-        from emit_client_wrapper import emit_event  # type: ignore[import-untyped]
+        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
 
         payload = {
             "message_id": str(message.message_id),
