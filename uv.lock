@@ -11,7 +11,7 @@ resolution-markers = [
 overrides = [
     { name = "omnibase-core", specifier = "==0.32.0" },
     { name = "omnibase-infra", specifier = "==0.27.0" },
-    { name = "omnibase-spi", specifier = ">=0.19.1" },
+    { name = "omnibase-spi", specifier = "==0.20.0" },
 ]
 
 [[package]]
@@ -1928,16 +1928,16 @@ wheels = [
 
 [[package]]
 name = "omnibase-spi"
-version = "0.19.1"
+version = "0.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/58/cd/c59725d13599dde6d5c0f5d534f1075bbc333c650b35fe4b138ed047bc4d/omnibase_spi-0.19.1.tar.gz", hash = "sha256:e6b51ad013cd225fd9fe16300c9b2696d2705fd91f76f4a21810e2e1876f369c", size = 1119413, upload-time = "2026-03-22T23:25:19.212Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/ba/0696c8990f857be2861773be61e3ce8d27753a02cb2769d6b389eb451ff5/omnibase_spi-0.20.0.tar.gz", hash = "sha256:6ae5283422ee4a1f01f966e1b9e65573cd1a1c8b096c6f620efff6fa365dbd35", size = 1119582, upload-time = "2026-03-24T20:14:02.494Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/47/3b/273b4f4d1879f366ada923f6d091ef217e42bf0e53af038cec2e995ef7d8/omnibase_spi-0.19.1-py3-none-any.whl", hash = "sha256:fe2b5d3d2ea30ca5c542f17af64bc501bc0411b904442b8ec406d4aa82321305", size = 758303, upload-time = "2026-03-22T23:25:20.679Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/70/8f348c610a80808ae879f7a2afd3d794a9cc6804cfc35bf5fa6a85beda1f/omnibase_spi-0.20.0-py3-none-any.whl", hash = "sha256:9c54251444eefd8ff15ee3fa2a0e46244821ccd654664e3d5eaff916769bdf0b", size = 758304, upload-time = "2026-03-24T20:14:00.358Z" },
 ]
 
 [[package]]
@@ -2005,7 +2005,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = "==0.32.0" },
     { name = "omnibase-infra", specifier = "==0.27.0" },
-    { name = "omnibase-spi", specifier = ">=0.19.1" },
+    { name = "omnibase-spi", specifier = "==0.20.0" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=omniintelligence%2Fv0.18.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
