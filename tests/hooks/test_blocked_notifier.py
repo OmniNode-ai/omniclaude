@@ -447,7 +447,7 @@ class TestSlackDelivery:
         )
 
         class _FakeHandler:
-            def __init__(self, webhook_url: str) -> None:
+            def __init__(self, **kwargs: object) -> None:
                 pass
 
             async def handle(self, alert: object) -> None:
@@ -504,7 +504,7 @@ class TestSlackDelivery:
         )
 
         class _FakeHandler:
-            def __init__(self, webhook_url: str) -> None:
+            def __init__(self, **kwargs: object) -> None:
                 pass
 
             async def handle(self, alert: object) -> None:

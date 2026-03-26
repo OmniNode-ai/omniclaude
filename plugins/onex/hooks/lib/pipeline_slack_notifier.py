@@ -232,9 +232,12 @@ class PipelineSlackNotifier:
             )
             handler_cls = mod.HandlerSlackWebhook
 
-            # When OMN-2157 lands, HandlerSlackWebhook will accept bot_token
-            # and default_channel params for Web API mode. For now, webhook only.
-            handler: SlackHandlerProtocol = handler_cls(webhook_url=webhook_url or None)
+            # OMN-2157: HandlerSlackWebhook uses bot_token + default_channel
+            # from env vars (SLACK_BOT_TOKEN / SLACK_CHANNEL_ID). No more webhook_url.
+            handler: SlackHandlerProtocol = handler_cls(
+                bot_token=bot_token or None,
+                default_channel=None,
+            )
             return handler
         except ImportError:
             logger.warning(

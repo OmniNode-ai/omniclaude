@@ -208,7 +208,9 @@ def _send_via_handler(
     mod = importlib.import_module("omnibase_infra.handlers.handler_slack_webhook")
     handler_cls = mod.HandlerSlackWebhook
 
-    handler = handler_cls(webhook_url=webhook_url)
+    # HandlerSlackWebhook no longer accepts webhook_url — it uses bot_token
+    # and reads SLACK_BOT_TOKEN / SLACK_CHANNEL_ID from env vars (OMN-2157).
+    handler = handler_cls()
 
     # Build structured details dict — only include fields with meaningful values.
     # Exclude the "unknown" sentinel to avoid surfacing unresolved env vars as fields.
