@@ -45,21 +45,26 @@ _STUB_MODS = [
     "omniclaude.lib.utils.quality_enforcer",
 ]
 _saved: dict[str, types.ModuleType] = {}
-_injected: list[str] = []
+_injected: dict[str, object] = {}
 for _mod in _STUB_MODS:
     if _mod in sys.modules:
         _saved[_mod] = sys.modules[_mod]
     else:
-        _injected.append(_mod)
-        sys.modules[_mod] = _MagicMock()
+        _stub = _MagicMock()
+        _injected[_mod] = _stub
+        sys.modules[_mod] = _stub
 
-import delegation_orchestrator  # noqa: E402 I001
-
-# Clean up: remove stubs we injected, restore anything we overwrote.
-for _mod in _injected:
-    sys.modules.pop(_mod, None)
-for _mod, _orig in _saved.items():
-    sys.modules[_mod] = _orig
+try:
+    import delegation_orchestrator  # noqa: E402 I001
+finally:
+    # Clean up: remove only stubs we injected (identity check prevents
+    # removing a real module that was loaded during the import).
+    for _mod, _stub in _injected.items():
+        if sys.modules.get(_mod) is _stub:
+            sys.modules.pop(_mod, None)
+    # Restore modules that existed before stubbing.
+    for _mod, _orig in _saved.items():
+        sys.modules[_mod] = _orig
 
 
 @pytest.mark.unit
