@@ -50,6 +50,10 @@ Build a list of `(repo, path)` pairs. Record the total count.
 
 ## Phase 2: Drift detection via check-drift CLI
 
+**Note**: All commands use `uv run python3` if `uv` is available in the
+`onex_change_control` repo; otherwise fall back to `python3` directly.
+Snapshot files are stored at `$OMNI_HOME/onex_change_control/drift/<repo>.sha256`.
+
 For each repo, run the check-drift script to compute a canonical hash of all
 event-related contract sections (`published_events`, `event_bus`):
 
@@ -182,7 +186,7 @@ drift_findings:
     non_breaking_changes: ["<summary>", ...]
     summary: "<one-line>"
 boundary_findings:
-  - topic_name: "<topic>"
+  - boundary_name: "<topic>"
     issue: "<producer_file_missing|consumer_file_missing|pattern_not_found>"
     producer_repo: "<repo>"
     consumer_repo: "<repo>"
@@ -191,6 +195,7 @@ boundary_findings:
     message: "<human-readable description>"
 by_severity: {BREAKING: 0, ADDITIVE: 0, NON_BREAKING: 0}
 stale_boundaries: 0
+repos_not_found: []
 baseline_missing: ["<repo>", ...]
 overall_status: "<clean|drifted|breaking>"
 tickets_created: []

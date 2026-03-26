@@ -73,12 +73,11 @@ For CLI-level invocation, it uses:
 # Per-repo hash check
 python3 onex_change_control/scripts/validation/check_contract_drift.py \
   --root <repo>/src --check <snapshot-file>
-
-# Cross-repo boundary parity
-python3 onex_change_control/scripts/validation/check_boundary_parity.py \
-  --boundaries onex_change_control/src/onex_change_control/boundaries/kafka_boundaries.yaml \
-  --omni-home $OMNI_HOME
 ```
+
+Boundary staleness is validated by reading `kafka_boundaries.yaml` and checking
+each declared boundary with `git show` and `grep` commands against the actual
+repo contents (see prompt.md Phase 4 for the exact procedure).
 
 ## Drift Classification
 
@@ -152,6 +151,8 @@ boundary_findings:
     message: "<description>"
 by_severity: {BREAKING: 0, ADDITIVE: 0, NON_BREAKING: 0}
 stale_boundaries: 0
+repos_not_found: []
+baseline_missing: []
 overall_status: "<clean|drifted|breaking>"
 tickets_created: []
 ```
