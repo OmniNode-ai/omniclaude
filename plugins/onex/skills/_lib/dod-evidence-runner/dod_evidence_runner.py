@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -407,7 +408,7 @@ def write_evidence_receipt(
     return receipt_path
 
 
-def _get_emit_event() -> Any:
+def _get_emit_event() -> Callable[..., bool] | None:
     """Lazily import emit_event from the emit client wrapper.
 
     The emit client wrapper lives in the hooks/lib directory. Since the

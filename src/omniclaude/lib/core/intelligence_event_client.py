@@ -11,6 +11,7 @@ import math
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from types import TracebackType
 from typing import Any, cast
 from uuid import uuid4
 
@@ -256,7 +257,7 @@ class IntelligenceEventClientContext:
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: TracebackType | None,
     ) -> bool:
         await self.client.stop()
         return False

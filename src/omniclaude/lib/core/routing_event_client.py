@@ -16,6 +16,7 @@ Public API:
 from __future__ import annotations
 
 import logging
+from types import TracebackType
 from typing import Any, cast
 from uuid import uuid4
 
@@ -195,7 +196,7 @@ class RoutingEventClientContext:
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any,
+        exc_tb: TracebackType | None,
     ) -> bool:
         await self.client.stop()
         return False

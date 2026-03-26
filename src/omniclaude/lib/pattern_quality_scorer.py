@@ -15,14 +15,15 @@ Composite Score: Weighted average of dimensions
 
 import asyncio
 import re
+import types
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from omniclaude.config import settings
 
-psycopg2: Any | None = None
-Json: Any | None = None
+psycopg2: types.ModuleType | None = None
+Json: type | None = None
 try:
     import psycopg2 as _psycopg2
     from psycopg2.extras import Json as _Json

@@ -22,10 +22,10 @@ Design Philosophy:
 import json
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 # Always import requests for sync methods
@@ -81,7 +81,7 @@ except ImportError:
 
 # Import pattern tracker for configuration
 HAS_PATTERN_TRACKER = False
-get_tracker: Any = None
+get_tracker: Callable[..., "PatternTrackerConfig"] | None = None
 try:
     from .pattern_tracker import PatternTrackerConfig, get_tracker
 
@@ -153,7 +153,7 @@ class Phase4HealthChecker:
 
         self.log_file = ensure_state_path("hooks", "logs", "health-checks.log")
 
-    def _log(self, level: str, message: str, **kwargs: Any) -> None:
+    def _log(self, level: str, message: str, **kwargs: str | int | float | bool | None) -> None:
         """Internal logging method for health check events."""
         timestamp = datetime.now(UTC).isoformat()
         log_entry = {

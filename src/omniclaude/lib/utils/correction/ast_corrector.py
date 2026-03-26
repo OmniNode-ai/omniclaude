@@ -20,7 +20,10 @@ Date: 2025-09-30
 import ast
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import libcst as cst
 
 from .framework_detector import FrameworkMethodDetector
 
@@ -86,21 +89,21 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
             original_tree: Original AST tree for framework detection
         """
         super().__init__()
-        self.corrections: dict[tuple[Any, Any, Any], Any] = corrections
+        self.corrections: dict[tuple[int, int, str], str] = corrections  # type: ignore[assignment]
         self.framework_detector = framework_detector
         self.original_tree = original_tree
         self.corrections_applied = 0
         self.corrections_skipped = 0
         self.framework_methods_preserved = 0
-        self.current_function: Any = None
-        self.current_class: Any = None
+        self.current_function: cst.FunctionDef | None = None
+        self.current_class: cst.ClassDef | None = None
 
-    def visit_ClassDef(self, node: Any) -> bool:  # noqa: N802
+    def visit_ClassDef(self, node: cst.ClassDef) -> bool:  # noqa: N802
         """Track current class for framework context."""
         self.current_class = node
         return True
 
-    def leave_ClassDef(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
+    def leave_ClassDef(self, original_node: cst.ClassDef, updated_node: cst.ClassDef) -> cst.ClassDef:  # noqa: N802
         """Handle class name renaming and exit class context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -122,12 +125,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         self.current_class = None
         return updated_node
 
-    def visit_FunctionDef(self, node: Any) -> bool:  # noqa: N802
+    def visit_FunctionDef(self, node: cst.FunctionDef) -> bool:  # noqa: N802
         """Track current function for framework context."""
         self.current_function = node
         return True
 
-    def leave_FunctionDef(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
+    def leave_FunctionDef(self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef) -> cst.FunctionDef:  # noqa: N802
         """Handle function name renaming and exit function context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -211,7 +214,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
 
         return None
 
-    def _is_in_framework_context(self, node: Any, pos: Any) -> bool:
+    def _is_in_framework_context(self, node: cst.CSTNode, pos: metadata.CodePosition) -> bool:
         """
         Check if the current node is in a framework method context.
 
