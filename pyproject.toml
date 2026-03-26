@@ -12,7 +12,7 @@ keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
     "omnibase-core==0.32.0",
     "omnibase-spi==0.20.0",
-    "omnibase-infra==0.27.0",
+    "omnibase-infra==0.1.2",
     "omninode-intelligence==0.18.0",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
@@ -98,7 +98,7 @@ build-backend = "hatchling.build"
 override-dependencies = [
     "omnibase-core==0.32.0",
     "omnibase-spi==0.20.0",
-    "omnibase-infra==0.27.0",
+    "omnibase-infra==0.1.2",
 ]
 
 [tool.uv.sources]
