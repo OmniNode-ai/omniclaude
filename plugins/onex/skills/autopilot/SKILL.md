@@ -1,5 +1,5 @@
 ---
-description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
+description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
 version: 2.0.0
 mode: full
 level: advanced
@@ -80,7 +80,7 @@ In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 - A3: start-environment — audit-first infra startup: verify core infra (postgres, redpanda, valkey) running, migration-gate healthy (proves DB migrations current), all runtime containers healthy. Auto-fixes by running infra-up + infra-up-runtime if containers missing.
 
 **Phase B — Quality Gate (B1-B4 parallel, B5-B6 sequential hard gates):**
-- B1: dod-sweep — audit recently closed tickets for DoD compliance
+- B1: dod-sweep — query tickets completed since last cycle, run dod-verify against each, flag incomplete DoD evidence
 - B2: aislop-sweep — AI anti-patterns in recent merges
 - B3: bus-audit — Kafka topic health / schema drift
 - B4: gap detect --no-fix — cross-repo integration health
@@ -226,7 +226,7 @@ When dispatching subagents for release or other high-risk operations:
 - **start-environment**: A3 — audit-first infra startup with auto-fix
 
 **Phase B — Quality Gate:**
-- **dod-sweep**: B1 — DoD compliance audit (parallel)
+- **dod-sweep**: B1 — DoD compliance audit with per-ticket verification (parallel) [OMN-6728]
 - **aislop-sweep**: B2 — AI anti-pattern detection (parallel)
 - **bus-audit**: B3 — Kafka topic health (parallel)
 - **gap**: B4 — cross-repo integration health (parallel)

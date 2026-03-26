@@ -1,6 +1,6 @@
 ---
 description: "DoD compliance sweep -- retroactive batch audit or targeted pre-close gate"
-version: 1.0.0
+version: 1.1.0
 mode: full
 level: advanced
 debug: false
@@ -13,6 +13,12 @@ args:
     required: false
   - name: --since-days
     description: "Look-back window for batch mode (default: 7)"
+    required: false
+  - name: --since-last-cycle
+    description: "Use the last autopilot close-out cycle timestamp as the look-back boundary (overrides --since-days)"
+    required: false
+  - name: --per-ticket-verify
+    description: "Run dod-verify individually against each discovered ticket (default: false)"
     required: false
   - name: --dry-run
     description: "Report only, no follow-up tickets"
@@ -29,8 +35,29 @@ two modes: **batch** (retroactive sweep of recently completed tickets) and
 
 - **Batch** (`/dod-sweep`): Query Linear for tickets completed in the lookback
   window via `mcp__linear-server__list_issues`, filter by `completedAt`.
+- **Batch since-last-cycle** (`/dod-sweep --since-last-cycle`): Query Linear for
+  tickets completed since the last autopilot close-out cycle. Reads the last cycle
+  timestamp from `$ONEX_STATE_DIR/state/autopilot/cycle-state.yaml` field
+  `last_cycle_id`. Falls back to `--since-days 7` if no prior cycle exists.
 - **Targeted** (`/dod-sweep OMN-1234`): If the target is an epic, expand child
   tickets. If a single ticket, sweep just that one.
+
+## Per-Ticket Verification Mode
+
+When `--per-ticket-verify` is passed (or when invoked from autopilot as Step B1),
+the sweep runs `dod-verify` individually against each discovered ticket instead of
+delegating to the batch `check_dod_compliance.py` handler. This provides granular
+evidence receipts per ticket.
+
+Flow:
+1. Discover tickets (via batch or since-last-cycle query)
+2. For each ticket, invoke the `dod-verify` skill logic:
+   - Locate ticket contract at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+   - If contract exists with `dod_evidence[]`, run evidence checks via the shared
+     runner at `plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`
+   - Write evidence receipt to `.evidence/{ticket_id}/dod_report.json`
+3. Flag any tickets with incomplete DoD evidence (failed or missing checks)
+4. Aggregate results and report summary
 
 ## Check Confidence Tiers
 
