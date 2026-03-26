@@ -152,6 +152,11 @@ For each boundary entry in the YAML:
 
 Record all stale boundaries with their specific failure reason.
 
+4. **Undeclared cross-repo topics**:
+   Scan producer/consumer files for topic string literals that match the
+   `onex.evt.*` naming convention but are NOT declared in `kafka_boundaries.yaml`.
+   Each undeclared topic is recorded as an `undeclared_boundary` finding (MAJOR).
+
 ## Phase 5: Triage and report
 
 ### Build findings list
@@ -193,8 +198,14 @@ boundary_findings:
     producer_file: "<path>"
     consumer_file: "<path>"
     message: "<human-readable description>"
+undeclared_boundaries:
+  - topic: "<onex.evt.*.v1>"
+    repo: "<repo>"
+    file: "<path>"
+    message: "<human-readable description>"
 by_severity: {BREAKING: 0, ADDITIVE: 0, NON_BREAKING: 0}
 stale_boundaries: 0
+undeclared_boundary_count: 0
 repos_not_found: []
 baseline_missing: ["<repo>", ...]
 overall_status: "<clean|drifted|breaking>"
