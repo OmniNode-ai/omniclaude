@@ -157,24 +157,28 @@ auto-detects and converts:
 
 ```json
 {
-  "round": 1,
-  "model": "deepseek-r1",
+  "mode": "pr",
+  "target": "433",
+  "total_passes": 3,
+  "convergence_verdict": "converged",
   "findings": [
     {
       "severity": "CRITICAL",
-      "category": "security",
-      "file": "src/api.py",
-      "line": 45,
-      "description": "SQL injection via unsanitized input",
-      "suggestion": "Use parameterized queries"
+      "category": "architecture",
+      "evidence": "Missing retry logic in event producer",
+      "proposed_fix": "Add exponential backoff wrapper"
     }
-  ]
+  ],
+  "per_model_severity_counts": {
+    "codex": {"CRITICAL": 1, "MAJOR": 0, "MINOR": 0, "NIT": 0}
+  }
 }
 ```
 
 Conversion rule: group by `severity` field into the standard buckets (case-insensitive).
-Map `suggestion` to `context`. The `category` field is preserved as metadata but not
-used for dedup matching.
+Map `evidence` to `description`, map `proposed_fix` to `context`. The `category` field
+is preserved as metadata but not used for dedup matching. Note: hostile-review findings
+do not include `file`/`line` fields -- dedup falls back to keyword + description matching.
 
 ### Adapter: Contract Sweep Format
 
@@ -603,7 +607,7 @@ if failed:
 | No findings available | Report error, suggest running a sweep first |
 | Invalid findings format | Report parse error with expected format |
 | Linear API error | Log error, continue with remaining findings |
-| Rate limit hit | Pause 1s between batches of 5; on HTTP 429, wait and retry once |
+| Rate limit hit | Pause 1s between batches of 5 to avoid hitting rate limits |
 | Label not found | Create label if possible, warn if not |
 | Source not detected | Report error, require `--source` arg |
 
