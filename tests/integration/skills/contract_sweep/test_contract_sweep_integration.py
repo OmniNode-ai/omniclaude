@@ -4,6 +4,9 @@
 
 Tests verify skill spec completeness via static analysis.
 All tests are @pytest.mark.unit (no live scanning, network calls, or repo access).
+
+Updated for v2.0.0: skill now wraps the check-drift CLI from onex_change_control
+for contract drift detection and boundary staleness validation.
 """
 
 from __future__ import annotations
@@ -42,42 +45,40 @@ class TestSkillMd:
         content = _read(_SKILL_MD)
         assert "--dry-run" in content
 
-    def test_all_checks_documented(self) -> None:
+    def test_drift_classification_documented(self) -> None:
         content = _read(_SKILL_MD)
-        checks = [
-            "Contract class identification",
-            "ambiguous loader directories",
-            "superseded scaffolds",
-            "Required fields present",
-            "Node-specific fields",
-            "Handler-specific fields",
-            "node-only fields on handlers",
-            "duplicate contracts",
-            "orphaned contracts",
-            "Package contract location",
+        classifications = [
+            "BREAKING",
+            "ADDITIVE",
+            "NON_BREAKING",
         ]
-        for check in checks:
-            assert check.lower() in content.lower(), f"SKILL.md missing check: {check}"
+        for classification in classifications:
+            assert classification in content, (
+                f"SKILL.md missing drift classification: {classification}"
+            )
 
-    def test_severity_levels_documented(self) -> None:
+    def test_severity_and_ticket_creation_documented(self) -> None:
         content = _read(_SKILL_MD)
-        for level in ("CRITICAL", "ERROR", "WARNING", "INFO"):
-            assert level in content, f"SKILL.md missing severity level: {level}"
+        assert "Ticket Priority" in content or "ticket creation" in content.lower()
+        assert "Critical" in content
+        assert "Major" in content
 
-    def test_contract_class_doctrine_documented(self) -> None:
+    def test_drift_detection_pipeline_documented(self) -> None:
         content = _read(_SKILL_MD)
-        assert "Contract Class Doctrine" in content
-        assert "Node contract" in content
-        assert "Handler contract" in content
-        assert "Package-level" in content
+        assert "check-drift" in content or "check_contract_drift" in content
+        assert "handler_drift_analysis" in content
+        assert "NodeContractDriftCompute" in content
 
-    def test_exception_policy_documented(self) -> None:
+    def test_boundary_staleness_documented(self) -> None:
         content = _read(_SKILL_MD)
-        assert "Exception Policy" in content
-        assert (
-            "explanatory comment" in content.lower()
-            or "minimality comment" in content.lower()
-        )
+        assert "boundary" in content.lower()
+        assert "kafka_boundaries.yaml" in content
+        assert "staleness" in content.lower() or "stale" in content.lower()
+
+    def test_sensitivity_levels_documented(self) -> None:
+        content = _read(_SKILL_MD)
+        for level in ("STRICT", "STANDARD", "LAX"):
+            assert level in content, f"SKILL.md missing sensitivity level: {level}"
 
     def test_repos_arg_documented(self) -> None:
         content = _read(_SKILL_MD)
@@ -87,6 +88,26 @@ class TestSkillMd:
         content = _read(_SKILL_MD)
         assert "--severity-threshold" in content
 
+    def test_sensitivity_arg_documented(self) -> None:
+        content = _read(_SKILL_MD)
+        assert "--sensitivity" in content
+
+    def test_check_boundaries_arg_documented(self) -> None:
+        content = _read(_SKILL_MD)
+        assert "--check-boundaries" in content
+
+    def test_output_format_documented(self) -> None:
+        content = _read(_SKILL_MD)
+        assert "report.yaml" in content
+        assert "drift_findings" in content
+        assert "boundary_findings" in content
+
+    def test_status_determination_documented(self) -> None:
+        content = _read(_SKILL_MD)
+        assert "clean" in content
+        assert "drifted" in content
+        assert "breaking" in content.lower()
+
 
 @pytest.mark.unit
 class TestPromptMd:
@@ -95,10 +116,12 @@ class TestPromptMd:
         phases = [
             "Announce",
             "Parse arguments",
-            "Discovery",
-            "Validation",
-            "Triage",
-            "Report",
+            "Phase 1",
+            "Phase 2",
+            "Phase 3",
+            "Phase 4",
+            "Phase 5",
+            "Phase 6",
         ]
         for phase in phases:
             assert phase in content, f"prompt.md missing phase: {phase}"
@@ -118,12 +141,16 @@ class TestPromptMd:
         for repo in repos:
             assert repo in content, f"prompt.md missing repo: {repo}"
 
-    def test_scan_exclusions_present(self) -> None:
+    def test_check_drift_cli_referenced(self) -> None:
         content = _read(_PROMPT_MD)
-        assert "Exception policy" in content or "exception policy" in content.lower()
-        assert "tests/" in content
-        assert "fixtures/" in content
-        assert "examples/" in content
+        assert "check_contract_drift.py" in content
+        assert "handler_drift_analysis" in content or "field-level" in content.lower()
+
+    def test_boundary_validation_present(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "kafka_boundaries.yaml" in content
+        assert "producer_file" in content.lower() or "Producer file" in content
+        assert "consumer_file" in content.lower() or "Consumer file" in content
 
     def test_output_path_uses_onex_state_dir(self) -> None:
         content = _read(_PROMPT_MD)
@@ -134,24 +161,19 @@ class TestPromptMd:
         content = _read(_PROMPT_MD)
         assert "dedup" in content.lower() or "Ticket dedup" in content
 
-    def test_severity_escalation_rule_present(self) -> None:
+    def test_drift_classification_in_prompt(self) -> None:
         content = _read(_PROMPT_MD)
-        assert "escalation" in content.lower()
+        assert "BREAKING" in content
+        assert "ADDITIVE" in content
+        assert "NON_BREAKING" in content
 
-    def test_ten_checks_referenced(self) -> None:
+    def test_error_handling_present(self) -> None:
         content = _read(_PROMPT_MD)
-        # All 10 checks should be referenced
-        check_names = [
-            "Check 1",
-            "Check 2",
-            "Check 3",
-            "Check 4",
-            "Check 5",
-            "Check 6",
-            "Check 7",
-            "Check 8",
-            "Check 9",
-            "Check 10",
-        ]
-        for check in check_names:
-            assert check in content, f"prompt.md missing: {check}"
+        assert "Error handling" in content or "error handling" in content.lower()
+
+    def test_ticket_format_documented(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "Drift ticket format" in content or "drift ticket" in content.lower()
+        assert (
+            "Boundary ticket format" in content or "boundary ticket" in content.lower()
+        )

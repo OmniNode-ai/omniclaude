@@ -1,14 +1,16 @@
 ---
-description: Automated contract health audit — scans all repos for deficient ONEX contracts, validates required fields, detects duplicates and orphans
-version: 1.0.0
+description: Cross-repo contract drift detection — wraps the check-drift CLI from onex_change_control to scan all repos for drifted contracts and stale boundaries
+version: 2.0.0
 mode: full
 level: advanced
 debug: false
 category: verification
 tags:
   - contracts
-  - health-check
+  - drift
+  - boundaries
   - cross-repo
+  - health-check
 author: OmniClaude Team
 composable: true
 args:
@@ -19,97 +21,200 @@ args:
     description: "Print findings only, no ticket creation"
     required: false
   - name: --severity-threshold
-    description: "Min severity for tickets: CRITICAL | ERROR | WARNING (default: ERROR)"
+    description: "Min severity for tickets: BREAKING | ADDITIVE | NON_BREAKING (default: BREAKING)"
+    required: false
+  - name: --sensitivity
+    description: "Drift sensitivity: STRICT | STANDARD | LAX (default: STANDARD)"
+    required: false
+  - name: --check-boundaries
+    description: "Also validate Kafka boundary parity (default: true)"
     required: false
 ---
 
 # contract_sweep
 
-Automated ONEX contract health audit. Scans bare clones in `omni_home` for deficient, duplicate, orphaned, or misclassified contracts. Produces a structured YAML report and optionally creates Linear tickets for findings above threshold.
+Cross-repo contract drift detection. Wraps the `check-drift` infrastructure from
+`onex_change_control` to scan all repos for contracts that have drifted from their
+pinned baselines and Kafka boundaries that have become stale.
+
+This skill combines two detection modes:
+
+1. **Contract drift** -- Uses `check_contract_drift.py` and the `handler_drift_analysis`
+   handler from `onex_change_control` to compute canonical hashes of all contracts and
+   compare them against pinned snapshots. When drift is detected, performs field-level
+   analysis to classify changes as BREAKING, ADDITIVE, or NON_BREAKING.
+
+2. **Boundary staleness** -- Validates that cross-repo Kafka topic boundaries declared in
+   `kafka_boundaries.yaml` still match the actual producer/consumer files in each repo.
 
 ## Usage
 
 ```
 /contract-sweep --dry-run
 /contract-sweep --repos omnibase_infra,omnibase_core
-/contract-sweep --severity-threshold WARNING
+/contract-sweep --severity-threshold ADDITIVE
+/contract-sweep --sensitivity STRICT
+/contract-sweep --check-boundaries false
 ```
 
-## Contract Class Doctrine
+## Drift Detection Pipeline
 
-The sweep classifies every contract into exactly one of three classes:
+The skill delegates to the ONEX contract drift node pipeline in `onex_change_control`:
 
-| Class | Required Fields | Forbidden Fields | Detection Rule |
-|-------|----------------|------------------|----------------|
-| **Node contract** | `name`, `contract_version`, `description`, `node_type`, `node_version`, `input_model`, `output_model` | `handler_id`, `descriptor` | Has top-level `node_type` |
-| **Handler contract** | `name`, `contract_version`, `description`, `handler_id`, `descriptor` (with `purity`, `timeout_ms`) | Top-level `node_type`, `node_version` | Has top-level `handler_id` |
-| **Package-level architecture contract** | `name`, `contract_version`, `description` | None forbidden, but node/handler fields optional | Explicitly marked with `# Package-level architecture contract` comment AND located at repo/package root |
+```
+NodeContractDriftCompute (detect + classify)
+    -> NodeContractDriftReducer (accumulate history)
+    -> NodeContractDriftEffect (emit events)
+```
 
-A contract that has BOTH `node_type` and `handler_id` at top level is a hybrid violation (ERROR).
+For CLI-level invocation, it uses:
 
-## Checks Performed
+```bash
+# Per-repo hash check
+python3 onex_change_control/scripts/validation/check_contract_drift.py \
+  --root <repo>/src --check <snapshot-file>
+```
 
-### Phase A: Contract class and loader truth (highest impact)
+Boundary staleness is validated by reading `kafka_boundaries.yaml` and checking
+each declared boundary with `git show` and `grep` commands against the actual
+repo contents (see prompt.md Phase 4 for the exact procedure).
 
-1. **Contract class identification** -- Detect whether each contract is node, handler, or package-level based on field presence. Flag hybrids (both `node_type` and `handler_id` at top level) as ERROR.
+## Drift Classification
 
-2. **No ambiguous loader directories** -- Directories containing multiple contract-candidate files (`contract.yaml` + `handler_contract.yaml` etc.) that would cause loader ambiguity (ERROR).
+Field-level changes are classified using the `handler_drift_analysis` module:
 
-3. **No superseded scaffolds** -- Stub contracts that are superseded by a richer canonical contract elsewhere in the repo (ERROR).
+| Classification | Root Keys | Meaning |
+|---------------|-----------|---------|
+| **BREAKING** | `algorithm`, `input_schema`, `output_schema`, `type`, `required`, `parallel_processing`, `transaction_management` | Changes to the observable contract interface |
+| **ADDITIVE** | New fields not in breaking paths | Non-breaking additions |
+| **NON_BREAKING** | `description`, `docs`, `changelog`, `comments`, `author`, `license` | Documentation/metadata changes |
 
-### Phase B: Class-specific field validation
+Sensitivity levels control which changes surface:
 
-4. **Required fields present** -- `name`, `contract_version`, `description` (CRITICAL if missing).
+| Sensitivity | Surfaces |
+|-------------|----------|
+| **STRICT** | All changes including NON_BREAKING |
+| **STANDARD** | BREAKING + ADDITIVE (default) |
+| **LAX** | BREAKING only |
 
-5. **Node-specific fields** -- `node_type`, `node_version`, `input_model`, `output_model` present (ERROR if missing on COMPUTE/EFFECT/ORCHESTRATOR).
+## Boundary Staleness Checks
 
-6. **Handler-specific fields** -- `handler_id` at top level (not buried in metadata), `descriptor` with `purity` and `timeout_ms` (ERROR if missing).
+When `--check-boundaries` is enabled (default), the skill also validates:
 
-7. **No node-only fields on handlers** -- Handler contracts must NOT carry top-level `node_type` or `node_version` (ERROR if present).
+1. **Producer file exists** -- The declared producer file still exists in the producer repo
+2. **Consumer file exists** -- The declared consumer file still exists in the consumer repo
+3. **Topic pattern match** -- The topic regex still matches content in both files
+4. **No undeclared cross-repo topics** -- Topics in code that cross repo boundaries but are not in the boundary manifest
 
-### Phase C: Cross-contract and location
+## Severity and Ticket Creation
 
-8. **No duplicate contracts** -- Same `handler_id` at multiple paths (ERROR).
+| Drift Severity | Ticket Priority | Action |
+|---------------|-----------------|--------|
+| **BREAKING** | Critical | Always create ticket |
+| **ADDITIVE** | Major | Create if threshold <= ADDITIVE |
+| **NON_BREAKING** | Minor | Create if threshold <= NON_BREAKING |
+| **Stale boundary** | Critical | Always create ticket (boundary mismatch = potential runtime failure) |
+| **Undeclared boundary** | Major | Create if threshold <= ADDITIVE |
 
-9. **No orphaned contracts** -- YAML exists but no corresponding Python handler/node file (WARNING).
-
-10. **Package contract location** -- Must be at repo root or `src/<package>/contract.yaml`; must carry explicit `# Package-level architecture contract` marker (WARNING if unmarked).
-
-## Severity Classification
-
-| Severity | Criteria | Action |
-|----------|----------|--------|
-| **CRITICAL** | Missing name/contract_version/description (contract is unidentifiable) | Always create ticket |
-| **ERROR** | Missing input_model, hybrid style, no descriptor on handler, duplicate contracts, ambiguous loader directories, superseded scaffolds with runtime references | Create ticket above threshold |
-| **WARNING** | Missing node_version, orphaned contracts with no runtime impact, unmarked package-level contracts | Create ticket if threshold is WARNING |
-| **INFO** | Test/fixture/example contracts with explicit minimality comments | Never create ticket |
-
-### Severity escalation rule
-
-Orphaned or duplicate contracts that can affect runtime resolution or loader ambiguity escalate above WARNING to ERROR, even if the contract is otherwise structurally valid.
-
-## Exception Policy
-
-Directory alone never grants exemption. Path-based downgrade applies only after explanatory-comment qualification. Files in `tests/`, `fixtures/`, or `examples/` without the required comment are validated at normal severity. The explanatory comment is part of the validation surface, not optional documentation.
+Ticket dedup: keyed by `(repo, contract_path, drift_type)`. Before creating, search Linear
+for an open ticket matching the same key. If found, update or comment. If prior ticket is
+closed but same drift recurs, create new ticket referencing the prior closure.
 
 ## Output
 
-Structured YAML report written to `$ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml`.
+### Report file
 
-Summary table printed to stdout with per-repo counts by severity.
+Written to `$ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml`:
+
+```yaml
+run_id: "<YYYYMMDD-HHMMSS>"
+timestamp: "<ISO-8601>"
+repos_scanned: ["omnibase_core", ...]
+sensitivity: "STANDARD"
+total_contracts: <count>
+drift_findings:
+  - repo: "<repo>"
+    path: "<contract-path>"
+    severity: "BREAKING"
+    current_hash: "<sha256>"
+    pinned_hash: "<sha256>"
+    field_changes:
+      - path: "input_schema.type"
+        change_type: "modified"
+        is_breaking: true
+    summary: "<one-line>"
+boundary_findings:
+  - boundary_name: "<topic>"
+    issue: "producer_file_missing"
+    producer_repo: "<repo>"
+    consumer_repo: "<repo>"
+    message: "<description>"
+by_severity: {BREAKING: 0, ADDITIVE: 0, NON_BREAKING: 0}
+stale_boundaries: 0
+repos_not_found: []
+baseline_missing: []
+overall_status: "<clean|drifted|breaking>"
+tickets_created: []
+```
+
+### Summary output
+
+```
+Contract Drift Sweep Results
+=============================
+Repos scanned: 8
+Total contracts: <N>
+Sensitivity: STANDARD
+
+Drift findings:
+  BREAKING:     <N>
+  ADDITIVE:     <N>
+  NON_BREAKING: <N>
+
+Boundary findings:
+  Stale:      <N>
+  Undeclared: <N>
+
+Overall status: <clean|drifted|breaking>
+```
+
+### Status determination
+
+- `clean` -- No drift detected, all boundaries valid
+- `drifted` -- ADDITIVE or NON_BREAKING drift only, no boundary issues
+- `breaking` -- Any BREAKING drift or stale boundary found
 
 ## Integration
 
-This skill is designed to integrate with:
-
-- **close-day**: Run as part of end-of-day verification
-- **integration-sweep**: Complementary check (integration-sweep validates DoD evidence; contract-sweep validates contract structure)
+- **close-day**: Run as end-of-day contract health check
+- **integration-sweep**: Complementary (integration-sweep validates DoD; contract-sweep validates drift)
+- **ci-watch**: Can be triggered after CI passes to verify no contract drift was introduced
 
 ## Repo List
 
-Hardcoded scan targets (8 repos):
+Default scan targets (8 repos):
 
 ```
 omnibase_core, omnibase_infra, omniclaude, omniintelligence,
 omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
+
+## Architecture
+
+```
+SKILL.md   -> descriptive documentation (this file)
+prompt.md  -> execution instructions for the agent
+```
+
+The skill wraps:
+- `onex_change_control/scripts/validation/check_contract_drift.py` (hash-based drift)
+- `onex_change_control/handlers/handler_drift_analysis.py` (field-level analysis)
+- `onex_change_control/boundaries/kafka_boundaries.yaml` (boundary manifest)
+
+## See Also
+
+- `contract-compliance-check` skill -- Pre-merge seam validation (per-ticket, per-branch)
+- `NodeContractDriftCompute` in `onex_change_control` -- The underlying ONEX node
+- `kafka_boundaries.yaml` -- Cross-repo Kafka boundary manifest
+- OMN-5162 -- Original check-drift script
+- OMN-6725 -- This skill's tracking ticket
