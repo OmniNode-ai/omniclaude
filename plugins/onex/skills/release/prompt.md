@@ -1044,6 +1044,33 @@ exclusively in helpers.md per CI enforcement rules.
 
 **State update**: Set phase to `MERGED`.
 
+#### Sub-Step 10b: Release Scope Verification (F24)
+
+Before creating any tag, verify that all PRs in the release scope have merged
+and are reachable from the current HEAD. This prevents the scenario where a tag
+is cut before a dependent commit lands.
+
+1. List all PRs that were part of this release cycle (from the changelog or PR list).
+2. For each PR, verify `state == MERGED` via `gh pr view`:
+   ```bash
+   PR_STATE=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json state --jq '.state')
+   if [ "$PR_STATE" != "MERGED" ]; then
+     echo "  ERROR: PR #${PR_NUMBER} is not merged (state=${PR_STATE}). Cannot tag."
+     exit 1
+   fi
+   ```
+3. For each merged PR, verify the merge commit is an ancestor of the current HEAD:
+   ```bash
+   MERGE_SHA=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_ORG}/${repo}" --json mergeCommit --jq '.mergeCommit.oid')
+   if ! git -C "${REPO_PATH}" merge-base --is-ancestor "${MERGE_SHA}" HEAD; then
+     echo "  ERROR: Merge commit ${MERGE_SHA} for PR #${PR_NUMBER} is not in HEAD ancestry. Cannot tag."
+     exit 1
+   fi
+   ```
+4. If any PR is not merged or not in HEAD's ancestry: **HALT. Do not tag.**
+
+Only proceed to Sub-Step 11 (TAG) when all scope PRs pass both checks.
+
 #### Sub-Step 11: TAG
 
 ```bash
@@ -1312,7 +1339,7 @@ release logic. This is intentional:
 3. The human already approved the entire plan at the Slack gate
 4. Individual operations (git, gh, uv) are lightweight CLI calls
 
-**Rule**: The release orchestrator runs all 12 sub-steps inline using Bash commands.
+**Rule**: The release orchestrator runs all 13 sub-steps inline using Bash commands.
 It does NOT dispatch to polymorphic agents for individual steps.
 
 **Exception**: The Slack gate (Phase 2) may invoke the `slack-gate` skill's poll script.
@@ -1362,8 +1389,9 @@ It does NOT dispatch to polymorphic agents for individual steps.
   │   ├─ Sub-Step 7:  COMMIT
   │   ├─ Sub-Step 8:  PUSH
   │   ├─ Sub-Step 9:  PR (dedupe check, pr-safety guards)
-  │   ├─ Sub-Step 10: MERGE (wait for CI, squash merge)
-  │   ├─ Sub-Step 11: TAG (dedupe check)
+  │   ├─ Sub-Step 10:  MERGE (wait for CI, squash merge)
+  │   ├─ Sub-Step 10b: SCOPE VERIFY (all PRs merged + in HEAD ancestry)
+  │   ├─ Sub-Step 11:  TAG (dedupe check)
   │   └─ Sub-Step 12: PUBLISH (trigger release.yml, optional PyPI wait)
   │
   └─ Phase 4: Cleanup + Summary
