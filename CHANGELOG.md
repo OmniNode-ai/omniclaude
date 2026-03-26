@@ -1,3 +1,58 @@
+## v0.15.0 (2026-03-25)
+
+### Added
+- feat(friction_autofix): add friction classifier with FIXABLE/ESCALATE rules [OMN-6635] (#896)
+- feat(friction_autofix): add test conftest.py and package init [OMN-6633] (#894)
+- feat(autopilot): close-out hardening — concurrent tracks, queue drain, friction tracking [OMN-6613] (#891)
+- feat(hooks): add debounced Slack notifications for degraded hook operation [OMN-6567] (#890)
+- feat(autopilot): add cross-cycle state tracking, strike tracker, and cycle mutex (F11, F13, F30) (#887)
+- feat: automated enforcement hooks, skills, and CLAUDE.md rules [OMN-6521] (#883)
+- feat(authorize): add propagation flag for subagent auth passthrough [OMN-6487] (#882)
+- feat: add stacked PR detection, DIRTY rebase, merge queue guard, and auth passthrough [OMN-6458, OMN-6459, OMN-6468, OMN-6469] (#874)
+- feat(pr-polish): require review comment handling + branch fetch mandate [OMN-6456, OMN-6457] (#873)
+- feat(skills): add SCHEMA_PARITY probe to integration-sweep [OMN-6436] (#870)
+- feat(skills): add duplication-sweep skill, wire B7/B8/D5 into autopilot [OMN-6416] (#869)
+- feat(tests): add failure-path verification tests for smoke runner [OMN-6377] (#867)
+- feat(deploy): wire smoke test into verify-deploy.sh [OMN-6376] (#866)
+- feat(tests): add end-to-end injection regression suite [OMN-6375] (#865)
+- feat(hooks): extract shared sanitization module [OMN-6372] (#860)
+- feat(hooks): add injection detection to validate_contract_yaml() [OMN-6373] (#863)
+- feat(tests): add pytest wrapper for smoke test CI [OMN-6370] (#862)
+- feat(deploy): create post-deploy smoke test runner [OMN-6369] (#858)
+- feat(hooks): add trust boundary markers to context assembly [OMN-6371] (#859)
+- feat(skills): add --relocate-cache flag to deploy-local-plugin skill [OMN-6368] (#857)
+- feat(skills): add Playwright regression gate to autopilot close-out [OMN-6310] (#855)
+- feat(skills): add PLAYWRIGHT_BEHAVIORAL probe to integration-sweep [OMN-6302] (#854)
+- feat(skills): add per-repo integration test execution to autopilot build mode [OMN-6294] (#849)
+
+### Fixed
+- fix(friction_autofix): enforce minimum task count in ModelMicroPlan validator [OMN-6634] (#895)
+- fix(hooks): source common.sh in poly_enforcer to use venv Python (#888)
+- fix(skills): add resolve_branch guard to pr-safety helpers [OMN-6364] (#893)
+- fix(hooks): add sys.path guard in hook lib __init__.py for subprocess imports [OMN-6482] (#880)
+- fix(pr-polish): add review comment handling before CI fix phase [F4] (#875)
+- fix(hooks): bump delegation timeout from 8s to 12s for LLM latency [OMN-6486] (#881)
+- fix(merge-sweep): auto-rebase DIRTY PRs before routing to pr-polish [F10] (#878)
+- fix(merge-sweep): add never-dequeue policy for merge queue PRs [OMN-6488] (#884)
+- fix(hooks): source common.sh for Python resolution, add health probe and crash handling (F31, F32, F33) (#885)
+- fix(epic-team): chain sequential PRs targeting same files [F15] (#879)
+- fix(merge-sweep): detect stacked PR chains, fix root first [F9] (#877)
+- fix(pr-polish): force branch name fetch from PR metadata before push [F5] (#876)
+- fix: bump smoke test timeout to 12s and fix hook lib imports [OMN-6455] (#872)
+- fix(hooks): sanitize ticket context in build_ticket_context() [OMN-6374] (#864)
+- test(hooks): add smoke test for context_scope_auditor deploy-path bug class [OMN-6360] (#851)
+
+### Changed
+- refactor: migrate ONEX state paths from ~/.claude/ to ONEX_STATE_DIR (#886)
+- chore: contract health Phase A cleanup [OMN-6335, OMN-6338] (#853)
+- chore: add .plugin-runtime/ to .gitignore [OMN-6367] (#856)
+- feat: declare contract drift event consumption in compliance check contract [OMN-6387] (#861)
+
+### Dependencies
+- omnibase-core == 0.32.0
+- omnibase-infra == 0.27.0
+- omninode-intelligence == 0.18.0
+
 ## v0.13.0 (2026-03-24)
 
 ### Added
