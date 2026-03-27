@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: database-sweep
+# This skill reads from omnidash_analytics PostgreSQL.
+# It emits completion/failure events for observability.
+
+topics:
+  - onex.cmd.omniclaude.database-sweep.v1
+  - onex.evt.omniclaude.database-sweep-completed.v1
+  - onex.evt.omniclaude.database-sweep-failed.v1

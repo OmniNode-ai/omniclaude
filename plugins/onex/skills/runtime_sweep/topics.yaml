@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: runtime-sweep
+# This skill reads contract YAMLs and topics.yaml files across repos.
+# It emits completion/failure events for observability.
+
+topics:
+  - onex.cmd.omniclaude.runtime-sweep.v1
+  - onex.evt.omniclaude.runtime-sweep-completed.v1
+  - onex.evt.omniclaude.runtime-sweep-failed.v1

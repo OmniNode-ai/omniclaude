@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: data-flow-sweep
+# This skill reads from Redpanda and omnidash_analytics DB.
+# It emits completion/failure events for observability.
+
+topics:
+  - onex.cmd.omniclaude.data-flow-sweep.v1
+  - onex.evt.omniclaude.data-flow-sweep-completed.v1
+  - onex.evt.omniclaude.data-flow-sweep-failed.v1
