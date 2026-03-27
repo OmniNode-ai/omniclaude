@@ -1,5 +1,5 @@
 ---
-description: Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers are wired in dispatch, all topics have both producer and consumer. Auto-creates Linear tickets for unwired handlers.
+description: Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers are wired in dispatch, all topics have both producer and consumer, and container logs are free of repeated errors. Auto-creates Linear tickets for unwired handlers and error-heavy containers.
 mode: full
 version: "1.0.0"
 level: advanced
@@ -28,6 +28,7 @@ Runtime registration and wiring verification. Ensures:
 2. All contract-declared handlers are wired in the dispatch engine
 3. All Kafka topics have both a producer AND a consumer
 4. Projection handlers in omnidash map to actual topic subscriptions
+5. Container logs are free of repeated ERROR/FATAL/traceback patterns
 
 ## Announce
 
@@ -105,9 +106,42 @@ Scan all contract YAMLs and topics.yaml files for topics listed under
 - `CONSUMER_ONLY`: topic has a subscriber but no publisher
 - `SYMMETRIC`: both sides exist
 
-## Phase 4 — Report + Ticket Creation
+## Phase 4 — Docker Log Analysis
 
-Emit three summary tables:
+For each running container, pull recent logs and scan for error patterns.
+Uses `docker_helper.py` from `plugins/onex/skills/_shared/docker_helper.py`.
+
+**Step 4a: List running containers**
+
+Use `list_containers()` to get all running ONEX infrastructure containers
+(filter: `omnibase-infra-|omninode-`).
+
+**Step 4b: Pull and scan logs**
+
+For each container, call `get_container_logs(container_name, tail=100)`.
+The helper already detects lines matching: `error`, `exception`, `failed`,
+`fatal`, `critical`.
+
+**Step 4c: Classify containers**
+
+- `CLEAN`: 0 error lines in last 100 log lines
+- `NOISY`: 1-5 error lines (may be transient)
+- `ERROR_HEAVY`: >5 error lines — repeated errors indicate a real problem
+- `CRASH_LOOP`: container state is `restarting` or restart count > 3
+
+**Step 4d: Cross-reference with service health**
+
+For each `ERROR_HEAVY` or `CRASH_LOOP` container, call
+`check_container_health(container_name)` and `get_container_status(container_name)`.
+Correlate log errors with health status:
+
+- `ERROR_HEAVY` + `unhealthy` → critical finding
+- `ERROR_HEAVY` + `healthy` → warn (errors not affecting health checks yet)
+- `CRASH_LOOP` + any health → critical finding
+
+## Phase 5 — Report + Ticket Creation
+
+Emit four summary tables:
 
 ### Node Descriptions
 | Contract | Node | Description Status |
@@ -118,8 +152,11 @@ Emit three summary tables:
 ### Topic Symmetry
 | Topic | Producer | Consumer | Symmetry Status |
 
-For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`, or
-`CONSUMER_ONLY`, auto-create a Linear ticket:
+### Docker Log Health
+| Container | Error Lines | Classification | Health Status | Restart Count |
+
+For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`,
+`CONSUMER_ONLY`, `ERROR_HEAVY`, or `CRASH_LOOP`, auto-create a Linear ticket:
 
 Title: `fix(wiring): {finding_type} — {subject}`
 Project: Active Sprint
@@ -128,7 +165,7 @@ Description: include evidence (file paths, topic names, handler names)
 
 Skip ticket creation for:
 - `--dry-run` mode
-- `REAL` / `WIRED` / `SYMMETRIC` findings (healthy)
+- `REAL` / `WIRED` / `SYMMETRIC` / `CLEAN` / `NOISY` findings (healthy or transient)
 
 ## Dispatch Rules
 

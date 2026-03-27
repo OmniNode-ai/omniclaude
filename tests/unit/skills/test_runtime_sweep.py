@@ -40,9 +40,9 @@ class TestRuntimeSweepSkill:
         assert "runtime" in fm["tags"]
 
     def test_skill_md_has_required_phases(self) -> None:
-        """SKILL.md must define all 4 phases."""
+        """SKILL.md must define all 5 phases."""
         content = (SKILL_DIR / "SKILL.md").read_text()
-        for phase in ["Phase 1", "Phase 2", "Phase 3", "Phase 4"]:
+        for phase in ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5"]:
             assert phase in content, f"Missing {phase}"
 
     def test_skill_md_checks_node_descriptions(self) -> None:
@@ -87,3 +87,16 @@ class TestRuntimeSweepSkill:
         assert "--scope" in content
         assert "omnidash-only" in content
         assert "all-repos" in content
+
+    def test_skill_md_has_docker_log_analysis(self) -> None:
+        """SKILL.md must include docker log analysis phase."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        assert "Docker Log Analysis" in content
+        assert "get_container_logs" in content
+        assert "docker_helper" in content.lower()
+
+    def test_skill_md_classifies_container_log_health(self) -> None:
+        """SKILL.md must define container log classification statuses."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        for status in ["CLEAN", "NOISY", "ERROR_HEAVY", "CRASH_LOOP"]:
+            assert status in content, f"Missing container classification: {status}"
