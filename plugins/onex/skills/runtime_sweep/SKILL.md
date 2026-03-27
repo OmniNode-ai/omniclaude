@@ -1,5 +1,5 @@
 ---
-description: Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers wired in dispatch engine, all topics have both producer and consumer. Auto-creates Linear tickets for unwired handlers.
+description: Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers are wired in dispatch, all topics have both producer and consumer. Auto-creates Linear tickets for unwired handlers.
 mode: full
 version: "1.0.0"
 level: advanced
@@ -20,27 +20,6 @@ args:
 # Runtime Sweep
 
 **Skill ID**: `onex:runtime-sweep`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6763
-**Epic**: OMN-6760
-
----
-
-## Dispatch Requirement
-
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT
-read files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run runtime-sweep",
-  prompt="Run the runtime-sweep skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
 ## Purpose
 
@@ -50,30 +29,23 @@ Runtime registration and wiring verification. Ensures:
 3. All Kafka topics have both a producer AND a consumer
 4. Projection handlers in omnidash map to actual topic subscriptions
 
-**Announce at start:** "I'm using the runtime-sweep skill to verify runtime registration and wiring integrity."
+## Announce
+
+"I'm using the runtime-sweep skill to verify runtime registration and wiring integrity."
 
 ## Usage
 
-```
 /runtime-sweep
 /runtime-sweep --dry-run
 /runtime-sweep --scope omnidash-only
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` | false | Report only, no Linear tickets created |
-| `--scope` | `all-repos` | `omnidash-only` limits to omnidash wiring; `all-repos` scans all ONEX repos |
-
----
 
 ## Phase 1 — Node Description Audit
 
 Scan all ONEX contract YAMLs across repos for node descriptions:
 
 ```bash
-# Find all contract.yaml files (resolve omni_home from working directory)
-find "$OMNI_HOME"/*/src -name "contract.yaml" -path "*/nodes/*"  # local-path-ok
+# Find all contract.yaml files
+find "$OMNI_HOME"/*/src -name "contract.yaml" -path "*/nodes/*"
 ```
 
 For each contract, extract the `description` field. Flag descriptions that:
@@ -86,19 +58,17 @@ Classify:
 - `PLACEHOLDER`: auto-generated or placeholder text
 - `MISSING`: no description field
 
----
-
 ## Phase 2 — Handler Wiring Audit
 
 For omnidash specifically, verify every projection handler is wired:
 
-### Step 2a: List all projection files
+**Step 2a: List all projection files**
 
 ```bash
 ls omnidash/server/projections/*.ts | grep -v __tests__ | grep -v index
 ```
 
-### Step 2b: Check each handler is referenced in topics.yaml and consumer
+**Step 2b: Check each handler is referenced in read-model-consumer.ts**
 
 For each projection file (e.g., `agent-routing-projection.ts`), verify:
 - The handler function it exports is listed in `omnidash/topics.yaml` handler field
@@ -109,80 +79,62 @@ Classify:
 - `UNWIRED`: handler exists but not in topics.yaml or consumer
 - `ORPHAN_TOPIC`: topic in topics.yaml but no handler file
 
-### Step 2c: Cross-repo handler check (if --scope all-repos)
+**Step 2c: Cross-repo handler check (if --scope all-repos)**
 
 For each repo under `omni_home/`, find contract YAMLs that declare
 `subscribe` or `publish` topics. Verify the handler referenced in the
 contract exists as an actual Python function.
 
----
-
 ## Phase 3 — Topic Symmetry Audit
 
 For every topic in the ONEX ecosystem, verify both sides exist:
 
-### Step 3a: Collect all published topics
+**Step 3a: Collect all published topics**
 
 Scan all contract YAMLs and topics.yaml files for topics listed under
 `publish` or `topics` keys.
 
-### Step 3b: Collect all subscribed topics
+**Step 3b: Collect all subscribed topics**
 
 Scan all contract YAMLs and topics.yaml files for topics listed under
 `subscribe` keys. Include `omnidash/topics.yaml` entries.
 
-### Step 3c: Find asymmetries
+**Step 3c: Find asymmetries**
 
 - `PRODUCER_ONLY`: topic has a publisher but no subscriber
 - `CONSUMER_ONLY`: topic has a subscriber but no publisher
 - `SYMMETRIC`: both sides exist
-
----
 
 ## Phase 4 — Report + Ticket Creation
 
 Emit three summary tables:
 
 ### Node Descriptions
-
 | Contract | Node | Description Status |
-|----------|------|--------------------|
 
 ### Handler Wiring
-
 | Handler File | Topic | Wiring Status |
-|--------------|-------|---------------|
 
 ### Topic Symmetry
-
 | Topic | Producer | Consumer | Symmetry Status |
-|-------|----------|----------|-----------------|
 
 For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`, or
-`CONSUMER_ONLY`, auto-create a Linear ticket unless `--dry-run` is set:
+`CONSUMER_ONLY`, auto-create a Linear ticket:
 
-```
-Title: fix(wiring): {finding_type} — {subject}
+Title: `fix(wiring): {finding_type} — {subject}`
 Project: Active Sprint
 Labels: wiring, runtime-sweep
 Description: include evidence (file paths, topic names, handler names)
-```
 
 Skip ticket creation for:
 - `--dry-run` mode
 - `REAL` / `WIRED` / `SYMMETRIC` findings (healthy)
 
----
-
 ## Dispatch Rules
 
-```
-RULE: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent".
-RULE: NEVER modify files directly from the orchestrator context.
-RULE: --dry-run produces zero side effects: no tickets, no PRs, no file changes.
-```
-
----
+- ALL work dispatched through `onex:polymorphic-agent`
+- NEVER edit files directly from orchestrator context
+- `--dry-run` produces zero side effects (no tickets)
 
 ## Integration Points
 

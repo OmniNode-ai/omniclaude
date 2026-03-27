@@ -23,27 +23,6 @@ args:
 # Data Flow Sweep
 
 **Skill ID**: `onex:data-flow-sweep`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6761
-**Epic**: OMN-6760
-
----
-
-## Dispatch Requirement
-
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT
-read files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run data-flow-sweep",
-  prompt="Run the data-flow-sweep skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
 ## Purpose
 
@@ -58,24 +37,16 @@ Producer (omniclaude/omnibase_infra/omniintelligence)
         → Dashboard page (localhost:3000)
 ```
 
-**Announce at start:** "I'm using the data-flow-sweep skill to verify end-to-end data flow for all omnidash projections."
+## Announce
+
+"I'm using the data-flow-sweep skill to verify end-to-end data flow for all omnidash projections."
 
 ## Usage
 
-```
 /data-flow-sweep
 /data-flow-sweep --dry-run
 /data-flow-sweep --topic onex.evt.omniclaude.session-outcome.v1
 /data-flow-sweep --skip-playwright
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` | false | Report only, no Linear tickets created |
-| `--topic` | _(all)_ | Check a single topic instead of all |
-| `--skip-playwright` | false | Skip Phase 4 dashboard page verification |
-
----
 
 ## Phase 1 — Topic Discovery
 
@@ -86,13 +57,7 @@ Map each handler to its projection file in `omnidash/server/projections/`.
 Map each projection to its target DB table(s) in `omnidash/shared/intelligence-schema.ts`.
 
 Output: topic manifest with columns:
-
 | Topic | Handler | Projection File | DB Table(s) | Dashboard Route |
-|-------|---------|-----------------|-------------|-----------------|
-
-If `--topic` is set, filter the manifest to that single topic.
-
----
 
 ## Phase 2 — Producer Verification
 
@@ -109,8 +74,6 @@ Classify each topic:
 - `ACTIVE`: topic exists, has recent messages (offset > 0)
 - `EMPTY`: topic exists but 0 messages
 - `MISSING`: topic does not exist in Redpanda
-
----
 
 ## Phase 3 — Consumer + DB Verification
 
@@ -137,8 +100,6 @@ Classify each flow:
 - `EMPTY_TABLE`: messages in topic but 0 rows in DB
 - `MISSING_TABLE`: table does not exist
 
----
-
 ## Phase 4 — Dashboard Page Verification (optional)
 
 Skip if `--skip-playwright` is set.
@@ -154,8 +115,6 @@ Classify:
 - `EMPTY_PAGE`: page loads but shows no data despite DB having rows
 - `BROKEN_PAGE`: JS errors or HTTP failures
 
----
-
 ## Phase 5 — Report + Ticket Creation
 
 Emit a summary table:
@@ -163,14 +122,12 @@ Emit a summary table:
 | Topic | Producer | Consumer | DB | Dashboard | Status |
 |-------|----------|----------|----|-----------|--------|
 
-For each broken flow (anything not FLOWING+VISIBLE), auto-create a Linear ticket
-unless `--dry-run` is set:
+For each broken flow (anything not FLOWING+VISIBLE), auto-create a Linear ticket:
 
-```
-Title: fix(data-flow): {topic} — {failure_classification}
+Title: `fix(data-flow): {topic} — {failure_classification}`
 Project: Active Sprint
 Labels: data-flow, sweep
-Description:
+Description template:
   - Topic: {topic}
   - Handler: {handler}
   - Projection: {projection_file}
@@ -178,19 +135,12 @@ Description:
   - Dashboard route: {route}
   - Failure point: {classification}
   - Evidence: {rpk output / psql output / screenshot}
-```
-
----
 
 ## Dispatch Rules
 
-```
-RULE: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent".
-RULE: NEVER modify files directly from the orchestrator context.
-RULE: --dry-run produces zero side effects: no tickets, no PRs, no file changes.
-```
-
----
+- ALL work dispatched through `onex:polymorphic-agent`
+- NEVER edit files directly from orchestrator context
+- `--dry-run` produces zero side effects (no tickets, no PRs)
 
 ## Integration Points
 

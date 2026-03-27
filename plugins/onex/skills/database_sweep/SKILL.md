@@ -23,51 +23,22 @@ args:
 # Database Sweep
 
 **Skill ID**: `onex:database-sweep`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6762
-**Epic**: OMN-6760
-
----
-
-## Dispatch Requirement
-
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT
-read files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run database-sweep",
-  prompt="Run the database-sweep skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
 
 ## Purpose
 
 Projection table health check for the `omnidash_analytics` read-model database.
 For each projection table, verify it has data and that data is fresh.
 
-**Announce at start:** "I'm using the database-sweep skill to check projection table health in omnidash_analytics."
+## Announce
+
+"I'm using the database-sweep skill to check projection table health in omnidash_analytics."
 
 ## Usage
 
-```
 /database-sweep
 /database-sweep --dry-run
 /database-sweep --table agent_routing_decisions
 /database-sweep --staleness-threshold 48
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--dry-run` | false | Report only, no Linear tickets created |
-| `--table` | _(all)_ | Check a single table instead of all |
-| `--staleness-threshold` | 24 | Hours before data is considered stale |
-
----
 
 ## Phase 1 — Table Discovery
 
@@ -83,10 +54,6 @@ Cross-reference with Drizzle schema definitions in `omnidash/shared/intelligence
 to identify expected tables vs actual tables.
 
 Output: table manifest with expected vs actual comparison.
-
-If `--table` is set, filter the manifest to that single table.
-
----
 
 ## Phase 2 — Health Check
 
@@ -116,8 +83,6 @@ Classify each table:
 - `ORPHAN`: exists in DB but not in Drizzle schema
 - `NO_TIMESTAMP`: has rows but no timestamp column (report row count only)
 
----
-
 ## Phase 3 — Report + Ticket Creation
 
 Emit a summary table:
@@ -128,38 +93,30 @@ Emit a summary table:
 For each non-HEALTHY table, look up the corresponding projection handler in
 `omnidash/server/projections/` and the upstream Kafka topic in `omnidash/topics.yaml`.
 
-For `EMPTY` and `STALE` tables, auto-create a Linear ticket unless `--dry-run` is set:
+For `EMPTY` and `STALE` tables, auto-create a Linear ticket:
 
-```
-Title: fix(projection): {table} — {status}
+Title: `fix(projection): {table} — {status}`
 Project: Active Sprint
 Labels: projection, database-sweep
-Description:
+Description template:
   - Table: {table}
   - Status: {status}
   - Row count: {count}
   - Latest row: {timestamp or N/A}
   - Projection handler: {handler_file}
   - Upstream topic: {topic}
-  - Drizzle schema: omnidash/shared/intelligence-schema.ts
-```
+  - Drizzle schema: `omnidash/shared/intelligence-schema.ts`
 
 Skip ticket creation for:
 - `--dry-run` mode
-- `ORPHAN` tables (document only, no ticket)
+- `ORPHAN` tables (document only)
 - `NO_TIMESTAMP` tables with row_count > 0 (healthy by count)
-
----
 
 ## Dispatch Rules
 
-```
-RULE: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent".
-RULE: NEVER modify files directly from the orchestrator context.
-RULE: --dry-run produces zero side effects: no tickets, no PRs, no file changes.
-```
-
----
+- ALL work dispatched through `onex:polymorphic-agent`
+- NEVER edit files directly from orchestrator context
+- `--dry-run` produces zero side effects (no tickets)
 
 ## Integration Points
 
