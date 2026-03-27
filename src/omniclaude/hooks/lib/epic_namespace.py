@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -58,10 +59,37 @@ _DEFAULT_STATE_DIR = os.path.expanduser("~/.onex_state")
 _LOCK_FILENAME = "active_namespace.yaml"
 
 
+def _read_lock_data(lock_file: Path) -> dict[str, object] | None:
+    """Read and parse lock file content, trying yaml then json."""
+    content = lock_file.read_text()
+    try:
+        import yaml
+
+        return yaml.safe_load(content)  # type: ignore[no-any-return]
+    except ImportError:
+        pass
+    import json
+
+    return json.loads(content)  # type: ignore[no-any-return]
+
+
+def _serialize_lock(lock: ModelEpicNamespaceLock) -> str:
+    """Serialize lock to yaml (preferred) or json."""
+    try:
+        import yaml
+
+        return yaml.dump(lock.model_dump(mode="json"), default_flow_style=False)
+    except ImportError:
+        import json
+
+        return json.dumps(lock.model_dump(mode="json"), indent=2)
+
+
 def _lock_path() -> Path:
     """Resolve the namespace lock file path."""
-    state_dir = os.environ.get(_STATE_DIR_ENV, _DEFAULT_STATE_DIR)
-    return Path(state_dir) / "epics" / _LOCK_FILENAME
+    raw = os.environ.get(_STATE_DIR_ENV, _DEFAULT_STATE_DIR).strip()
+    state_dir = raw or _DEFAULT_STATE_DIR
+    return Path(state_dir).expanduser().resolve() / "epics" / _LOCK_FILENAME
 
 
 def acquire_namespace(
@@ -93,9 +121,7 @@ def acquire_namespace(
     # Check for existing lock
     if lock_file.exists():
         try:
-            import yaml
-
-            existing = yaml.safe_load(lock_file.read_text())
+            existing = _read_lock_data(lock_file)
             if existing and existing.get("epic_id") != epic_id:
                 logger.warning(
                     "Namespace locked by %s (run %s), cannot acquire for %s",
@@ -104,10 +130,24 @@ def acquire_namespace(
                     epic_id,
                 )
                 return False
+            # Same epic but different run — don't overwrite
+            if (
+                existing
+                and existing.get("epic_id") == epic_id
+                and existing.get("run_id") != run_id
+            ):
+                logger.warning(
+                    "Namespace locked by same epic %s but different run %s, "
+                    "cannot acquire for run %s",
+                    epic_id,
+                    existing.get("run_id"),
+                    run_id,
+                )
+                return False
         except Exception:  # noqa: BLE001 — best-effort lock check
             logger.warning("Failed to read existing namespace lock, overwriting")
 
-    # Write lock
+    # Write lock atomically via temp file + rename
     lock = ModelEpicNamespaceLock(
         epic_id=epic_id,
         run_id=run_id,
@@ -116,30 +156,32 @@ def acquire_namespace(
     )
 
     lock_file.parent.mkdir(parents=True, exist_ok=True)
+
+    lock_content = _serialize_lock(lock)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(lock_file.parent), suffix=".tmp", prefix=".lock-"
+    )
     try:
-        import yaml
-
-        lock_file.write_text(
-            yaml.dump(lock.model_dump(mode="json"), default_flow_style=False)
-        )
-    except ImportError:
-        # Fallback to JSON if yaml not available
-        import json
-
-        lock_file.write_text(json.dumps(lock.model_dump(mode="json"), indent=2))
+        with os.fdopen(fd, "w") as f:
+            f.write(lock_content)
+        Path(tmp_path).replace(lock_file)
+    except Exception:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
     logger.info("Namespace acquired for %s (run %s)", epic_id, run_id)
     return True
 
 
-def release_namespace(epic_id: str) -> bool:
+def release_namespace(epic_id: str, *, run_id: str | None = None) -> bool:
     """Release the epic namespace lock.
 
     Called by epic-team at the end of a run. Only releases if the lock
-    belongs to the given epic_id.
+    belongs to the given epic_id (and optionally run_id).
 
     Args:
         epic_id: The epic that owns the lock.
+        run_id: If provided, also validate run ownership.
 
     Returns:
         True if the lock was released.
@@ -150,18 +192,28 @@ def release_namespace(epic_id: str) -> bool:
         return True
 
     try:
-        import yaml
+        existing = _read_lock_data(lock_file)
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "Failed to read namespace lock for ownership check, refusing to release"
+        )
+        return False
 
-        existing = yaml.safe_load(lock_file.read_text())
-        if existing and existing.get("epic_id") != epic_id:
-            logger.warning(
-                "Cannot release namespace: owned by %s, not %s",
-                existing.get("epic_id"),
-                epic_id,
-            )
-            return False
-    except Exception:  # noqa: BLE001 — best-effort ownership check
-        pass
+    if existing and existing.get("epic_id") != epic_id:
+        logger.warning(
+            "Cannot release namespace: owned by %s, not %s",
+            existing.get("epic_id"),
+            epic_id,
+        )
+        return False
+
+    if run_id and existing and existing.get("run_id") != run_id:
+        logger.warning(
+            "Cannot release namespace: owned by run %s, not %s",
+            existing.get("run_id"),
+            run_id,
+        )
+        return False
 
     lock_file.unlink(missing_ok=True)
     logger.info("Namespace released for %s", epic_id)
@@ -180,15 +232,7 @@ def get_active_namespace() -> ModelEpicNamespaceLock | None:
         return None
 
     try:
-        import yaml
-
-        data = yaml.safe_load(lock_file.read_text())
-        if data:
-            return ModelEpicNamespaceLock(**data)
-    except ImportError:
-        import json
-
-        data = json.loads(lock_file.read_text())
+        data = _read_lock_data(lock_file)
         if data:
             return ModelEpicNamespaceLock(**data)
     except Exception:  # noqa: BLE001 — best-effort read
