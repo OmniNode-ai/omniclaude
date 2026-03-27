@@ -1,5 +1,2 @@
 topics:
-  - name: onex.evt.omniclaude.dep-cascade-dedup-completed.v1
-    description: Emitted when dep cascade dedup finishes with count of closed/kept PRs
-    schema: ModelDepCascadeDedupCompleted
-    access: broad
+  - onex.evt.omniclaude.dep-cascade-dedup-completed.v1

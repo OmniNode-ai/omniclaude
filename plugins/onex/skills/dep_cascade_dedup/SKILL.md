@@ -108,7 +108,7 @@ Also check: if the package at the target version is already in the repo's lock f
 For each superseded PR:
 
 ```bash
-gh pr close {number} --repo OmniNode-ai/{repo} --comment "Superseded by #{keeper_number} which targets {package}@{newer_version}. Closed by dep-cascade-dedup [OMN-6740]."
+gh pr close {number} --repo OmniNode-ai/{repo} --comment "${close_comment:-Superseded by #${keeper_number} which targets ${package}@${newer_version}. Closed by dep-cascade-dedup [OMN-6740].}"
 ```
 
 ### Step 5: Report <!-- ai-slop-ok: skill-step-heading -->
