@@ -449,14 +449,19 @@ def triage_pr(
 
         severity = classify_severity(body)
 
+        _tid = int(str(thread_id_raw)) if thread_id_raw else None
+
         if is_resolved:
             threads.append(
                 ModelTriagedThread(
                     comment_id=comment_id,
-                    thread_id=int(str(thread_id_raw)) if thread_id_raw else None,
+                    thread_id=_tid,
                     body_preview=body[:200],
                     severity=severity,
                     action=EnumTriageAction.SKIPPED_ALREADY_RESOLVED,
+                    reply_posted=False,
+                    thread_resolved=False,
+                    error=None,
                 )
             )
             already_resolved += 1
@@ -467,12 +472,13 @@ def triage_pr(
                 threads.append(
                     ModelTriagedThread(
                         comment_id=comment_id,
-                        thread_id=int(str(thread_id_raw)) if thread_id_raw else None,
+                        thread_id=_tid,
                         body_preview=body[:200],
                         severity=severity,
                         action=EnumTriageAction.AUTO_REPLIED,
                         reply_posted=False,
                         thread_resolved=False,
+                        error=None,
                     )
                 )
                 auto_replied += 1
@@ -490,12 +496,13 @@ def triage_pr(
                 threads.append(
                     ModelTriagedThread(
                         comment_id=comment_id,
-                        thread_id=int(str(thread_id_raw)) if thread_id_raw else None,
+                        thread_id=_tid,
                         body_preview=body[:200],
                         severity=severity,
                         action=EnumTriageAction.AUTO_REPLIED,
                         reply_posted=True,
                         thread_resolved=resolved_ok,
+                        error=None,
                     )
                 )
                 auto_replied += 1
@@ -503,10 +510,12 @@ def triage_pr(
                 threads.append(
                     ModelTriagedThread(
                         comment_id=comment_id,
-                        thread_id=int(str(thread_id_raw)) if thread_id_raw else None,
+                        thread_id=_tid,
                         body_preview=body[:200],
                         severity=severity,
                         action=EnumTriageAction.ERROR,
+                        reply_posted=False,
+                        thread_resolved=False,
                         error="Failed to post reply",
                     )
                 )
@@ -515,10 +524,13 @@ def triage_pr(
             threads.append(
                 ModelTriagedThread(
                     comment_id=comment_id,
-                    thread_id=int(str(thread_id_raw)) if thread_id_raw else None,
+                    thread_id=_tid,
                     body_preview=body[:200],
                     severity=severity,
                     action=EnumTriageAction.SKIPPED_REQUIRES_FIX,
+                    reply_posted=False,
+                    thread_resolved=False,
+                    error=None,
                 )
             )
             requires_fix += 1
