@@ -83,10 +83,10 @@ For each repo:
 
 ### Phase 3: CLAUDE.md Cross-Reference (if not --broken-only)
 
-```
+```text
 For each repo:
   1. Find CLAUDE.md
-  2. Run claude_md_cross_ref checker
+  2. Extract and resolve all file paths, commands, and conventions
   3. Report broken paths, invalid commands, stale conventions
 ```
 
