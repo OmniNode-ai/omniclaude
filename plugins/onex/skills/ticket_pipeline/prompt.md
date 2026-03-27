@@ -7,7 +7,7 @@ You are executing the ticket-pipeline skill. This prompt defines the complete or
 Parse arguments from the skill invocation:
 
 ```
-/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate]
+/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate] [--require-tests]
 ```
 
 ```python
@@ -27,13 +27,14 @@ dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 auto_merge = "--auto-merge" in args
 require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
+require_tests = "--require-tests" in args  # Hard-gate test coverage: block pipeline if changed files lack tests
 docs_only = "--docs-only" in args  # Only generate/update documentation, skip implementation
 
 skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -129,6 +130,14 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+  test_coverage_gate:   # OMN-6730
+    started_at: null
+    completed_at: null
+    artifacts: {}       # changed_source_files, files_with_tests, files_without_tests, uncovered_files, coverage_pct, gate_mode
+    blocked_reason: null
+    block_kind: null
+    last_error: null
+    last_error_at: null
   create_pr:
     started_at: null
     completed_at: null
@@ -205,7 +214,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -352,6 +361,7 @@ else:
             "merge_gate_timeout_hours": 48,
             "merge_strategy": "squash",
             "delete_branch_on_merge": True,
+            "require_tests": require_tests,
         },
         # PR identity — populated by Phase 3 after PR creation
         "pr_url": None,
@@ -1078,6 +1088,16 @@ def build_phase_payload(phase_name, state, result):
             "policy_mode": artifacts.get("policy_mode", "advisory"),
         }
 
+    elif phase_name == "test_coverage_gate":
+        return {
+            "changed_source_files": artifacts.get("changed_source_files", 0),
+            "files_with_tests": artifacts.get("files_with_tests", 0),
+            "files_without_tests": artifacts.get("files_without_tests", 0),
+            "uncovered_files": list(artifacts.get("uncovered_files", [])),
+            "coverage_pct": artifacts.get("coverage_pct"),
+            "gate_mode": artifacts.get("gate_mode", "advisory"),
+        }
+
     elif phase_name == "create_pr":
         return {
             "pr_url": artifacts.get("pr_url", ""),
@@ -1097,6 +1117,14 @@ def build_phase_payload(phase_name, state, result):
             "status": artifacts.get("status", ""),
             "pr_review_cycles_used": artifacts.get("pr_review_cycles_used", 0),
             "watch_duration_hours": artifacts.get("watch_duration_hours", 0),
+        }
+
+    elif phase_name == "review_gate":
+        return {
+            "gate_verdict": artifacts.get("gate_verdict", ""),
+            "total_findings": artifacts.get("total_findings", 0),
+            "blocking_count": artifacts.get("blocking_count", 0),
+            "iterations": artifacts.get("iterations", 0),
         }
 
     elif phase_name == "integration_verification_gate":
@@ -1163,6 +1191,20 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "local_review":
         artifacts["iterations"] = payload.get("iteration_count", 1)
         artifacts["last_clean_sha"] = payload.get("last_clean_sha", "")
+    elif phase == "dod_verify":
+        artifacts["dod_total"] = payload.get("dod_total", 0)
+        artifacts["dod_verified"] = payload.get("dod_verified", 0)
+        artifacts["dod_failed"] = payload.get("dod_failed", 0)
+        artifacts["dod_skipped"] = payload.get("dod_skipped", 0)
+        artifacts["receipt_path"] = payload.get("receipt_path", "")
+        artifacts["policy_mode"] = payload.get("policy_mode", "advisory")
+    elif phase == "test_coverage_gate":
+        artifacts["changed_source_files"] = payload.get("changed_source_files", 0)
+        artifacts["files_with_tests"] = payload.get("files_with_tests", 0)
+        artifacts["files_without_tests"] = payload.get("files_without_tests", 0)
+        artifacts["uncovered_files"] = payload.get("uncovered_files", [])
+        artifacts["coverage_pct"] = payload.get("coverage_pct")
+        artifacts["gate_mode"] = payload.get("gate_mode", "advisory")
     elif phase == "create_pr":
         artifacts["pr_url"] = payload.get("pr_url", "")
         artifacts["pr_number"] = payload.get("pr_number", 0)
@@ -1173,6 +1215,11 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
         artifacts["status"] = payload.get("status", "")
         artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
         artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0)
+    elif phase == "review_gate":
+        artifacts["gate_verdict"] = payload.get("gate_verdict", "")
+        artifacts["total_findings"] = payload.get("total_findings", 0)
+        artifacts["blocking_count"] = payload.get("blocking_count", 0)
+        artifacts["iterations"] = payload.get("iterations", 0)
     elif phase == "integration_verification_gate":
         artifacts["integration_gate_status"] = payload.get("integration_gate_status", "")
         artifacts["integration_gate_stage"] = payload.get("integration_gate_stage", 1)
@@ -1563,9 +1610,11 @@ def execute_phase(phase_name, state):
         "implement": execute_implement,
         "local_review": execute_local_review,
         "dod_verify": execute_dod_verify,
+        "test_coverage_gate": execute_test_coverage_gate,
         "create_pr": execute_create_pr,
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
+        "review_gate": execute_review_gate,
         "integration_verification_gate": execute_integration_verification_gate,
         "auto_merge": execute_auto_merge,
         # Kept for backward compat when resuming old-format (v1.0) state files
@@ -2195,9 +2244,87 @@ def execute_phase(phase_name, state):
 
 ---
 
+### Phase 2.75: TEST COVERAGE GATE (OMN-6730) <!-- ai-slop-ok: skill-step-heading -->
+
+**Invariants:**
+- Phase 2.5 (dod_verify) is completed (or skipped)
+- Working directory has reviewed, clean code
+
+**Purpose:** Verify that new/modified code has corresponding test coverage before creating
+a PR. Default mode is advisory (warn but proceed). With `--require-tests`, this becomes
+a hard gate that blocks the pipeline when changed files lack tests.
+
+**Actions:**
+
+1. **Identify changed files:**
+   ```bash
+   git diff --name-only origin/main...HEAD -- '*.py' | grep '^src/'
+   ```
+   Filter to Python source files under `src/` (exclude tests, configs, scripts).
+
+2. **Check for corresponding tests:**
+   For each changed source file `src/{package}/{module}.py`, check if ANY of these exist:
+   - `tests/unit/test_{module}.py`
+   - `tests/unit/{subdir}/test_{module}.py`
+   - `tests/integration/test_{module}.py`
+   - Any test file that imports from the changed module
+
+   A file is considered **covered** if at least one matching test file exists.
+
+3. **Run coverage on changed files (if pytest-cov available):**
+   ```bash
+   uv run pytest tests/ -m unit --cov=src/ --cov-report=json -q 2>/dev/null || true
+   ```
+   If `coverage.json` is produced, extract coverage for changed files specifically.
+
+4. **Evaluate:**
+   - If ALL changed source files have corresponding tests: PASS
+   - If ANY changed source file has NO corresponding test:
+     - Log which files lack tests
+     - **Default: advisory** -- warn but proceed to Phase 3
+     - **With `--require-tests`**: block pipeline until tests are added
+
+5. **Store artifacts:**
+   ```python
+   artifacts = {
+       "changed_source_files": len(changed_files),
+       "files_with_tests": len(covered_files),
+       "files_without_tests": len(uncovered_files),
+       "uncovered_files": uncovered_files,  # list of file paths
+       "coverage_pct": overall_coverage_pct,  # from coverage.json if available
+       "gate_mode": "hard" if state["policy"].get("require_tests") else "advisory",
+   }
+   ```
+
+6. **Append to PR description (in Phase 3):**
+   If uncovered files exist, add a section:
+   ```markdown
+   ## Test Coverage
+
+   | File | Tests | Status |
+   |------|-------|--------|
+   | src/pkg/module.py | tests/unit/test_module.py | covered |
+   | src/pkg/new_feat.py | (none) | MISSING |
+
+   Coverage gate: advisory (2/3 files covered)
+   ```
+
+**Mutations:**
+- `phases.test_coverage_gate.started_at`
+- `phases.test_coverage_gate.completed_at`
+- `phases.test_coverage_gate.artifacts`
+
+**Exit conditions:**
+- **Completed:** All files covered, or gate_mode is advisory
+- **Blocked:** `--require-tests` and uncovered files exist
+- **Skipped:** No Python source files changed (docs-only, config-only)
+
+---
+
 ### Phase 3: CREATE PR
 
 **Invariants:**
+- Phase 2.75 (test_coverage_gate) is completed (or skipped)
 - Phase 2.5 (dod_verify) is completed (or skipped if no contract)
 - `policy.auto_push == true` AND `policy.auto_pr_create == true` (checked before acting)
 
