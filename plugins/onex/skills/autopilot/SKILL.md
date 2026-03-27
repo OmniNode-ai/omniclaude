@@ -79,11 +79,16 @@ In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 - A2: deploy-local-plugin — activate newly merged skills/hooks for this session
 - A3: start-environment — audit-first infra startup: verify core infra (postgres, redpanda, valkey) running, migration-gate healthy (proves DB migrations current), all runtime containers healthy. Auto-fixes by running infra-up + infra-up-runtime if containers missing.
 
-**Phase B — Quality Gate (B1-B4 parallel, B5-B6 sequential hard gates):**
+**Phase B — Quality Gate (B1-B4 parallel, B4b data verification parallel advisory, B5-B6 sequential hard gates):**
 - B1: dod-sweep — query tickets completed since last cycle, run dod-verify against each, flag incomplete DoD evidence
 - B2: aislop-sweep — AI anti-patterns in recent merges
 - B3: bus-audit — Kafka topic health / schema drift
 - B4: gap detect --no-fix — cross-repo integration health
+- B4b: data-verification (advisory, parallel with B1-B4) — runs all three data sweeps in dry-run:
+  - `/database-sweep --dry-run` — projection table health
+  - `/data-flow-sweep --dry-run --skip-playwright` — end-to-end pipeline check
+  - `/runtime-sweep --dry-run` — node registration and wiring integrity
+  Findings appended to close-day report. Non-blocking — does NOT halt pipeline.
 - B5: integration-sweep — **HARD GATE** (unchanged halt policy)
 - B6: playwright-gate — **HARD GATE** for smoke failures; consumes B5 Playwright result (reruns only if stale >10 min or missing)
 
@@ -230,6 +235,9 @@ When dispatching subagents for release or other high-risk operations:
 - **aislop-sweep**: B2 — AI anti-pattern detection (parallel)
 - **bus-audit**: B3 — Kafka topic health (parallel)
 - **gap**: B4 — cross-repo integration health (parallel)
+- **data-flow-sweep**: B4b — end-to-end Kafka->DB->UI pipeline verification (parallel, advisory)
+- **database-sweep**: B4b — projection table health check (parallel, advisory)
+- **runtime-sweep**: B4b — node registration and wiring verification (parallel, advisory)
 - **integration-sweep**: B5 — hard gate; halt on FAIL or contract UNKNOWN
 - **playwright-gate**: B6 — Playwright regression gate; consumes B5 PLAYWRIGHT_BEHAVIORAL result (reruns if stale >10 min or missing); smoke FAIL halts, data-flow FAIL warns
 - **friction-triage**: B7 — recurring friction pattern remediation (non-halting)
