@@ -1,5 +1,5 @@
 ---
-description: Projection table health verification — checks row count, latest timestamp, and staleness for every table in omnidash_analytics. Flags tables with 0 rows or data older than 24h. Auto-creates Linear tickets for stale/empty tables.
+description: Projection table health and migration tracking — checks row count, staleness for every table in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state, schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
 mode: full
 version: "1.0.0"
 level: advanced
@@ -26,8 +26,9 @@ args:
 
 ## Purpose
 
-Projection table health check for the `omnidash_analytics` read-model database.
+Projection table health check and migration tracking across all ONEX databases.
 For each projection table, verify it has data and that data is fresh.
+For each database, verify migrations are fully applied and schema is consistent.
 
 ## Announce
 
@@ -83,12 +84,102 @@ Classify each table:
 - `ORPHAN`: exists in DB but not in Drizzle schema
 - `NO_TIMESTAMP`: has rows but no timestamp column (report row count only)
 
-## Phase 3 — Report + Ticket Creation
+## Phase 3 — Migration Tracking
 
-Emit a summary table:
+For each ONEX database, verify migration state is clean.
 
+**Database inventory:**
+
+| Repo | Database | Migration Path | Migration Tool |
+|------|----------|---------------|----------------|
+| omnibase_infra | `omnibase_infra` | `omnibase_infra/src/omnibase_infra/migrations/` | Alembic |
+| omniintelligence | `omniintelligence` | `omniintelligence/src/omniintelligence/migrations/` | Alembic |
+| omnimemory | `omnimemory_db` | `omnimemory/src/omnimemory/migrations/` | Alembic |
+| omnidash | `omnidash_analytics` | `omnidash/migrations/` | Drizzle |
+
+**Step 3a: Count migrations on disk vs applied**
+
+For Alembic repos, count migration files on disk:
+
+```bash
+ls {migration_path}/versions/*.py | wc -l
+```
+
+Then query the `alembic_version` table for the current head:
+
+```sql
+SELECT version_num FROM alembic_version;
+```
+
+Walk the Alembic revision chain from the on-disk head back to base and count
+revisions. Compare on-disk count with applied head position.
+
+For omnidash (Drizzle), count migration files:
+
+```bash
+ls omnidash/migrations/*.sql | wc -l
+```
+
+Query the Drizzle migrations journal:
+
+```sql
+SELECT count(*) FROM drizzle.__drizzle_migrations;
+```
+
+**Step 3b: Flag pending/unapplied migrations**
+
+Compare disk count vs applied count. If disk > applied, migrations are pending.
+
+Classify each database:
+- `CURRENT`: all migrations applied, head matches latest on disk
+- `PENDING`: unapplied migrations exist (disk > applied)
+- `AHEAD`: applied version not found on disk (possible branch divergence)
+- `FAILED`: migration marked as failed in state table
+- `NO_TABLE`: `alembic_version` / `drizzle.__drizzle_migrations` table missing
+
+**Step 3c: Verify schema fingerprint**
+
+For each database, capture a schema fingerprint by hashing the sorted list of
+tables and their column definitions:
+
+```sql
+SELECT table_name, column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+```
+
+Compare this fingerprint across runs to detect schema drift (changes not
+captured by migrations).
+
+**Step 3d: Check for failed migration state**
+
+For Alembic repos, check if any migration is in a partially-applied state:
+
+```sql
+-- Multiple heads = branching issue
+SELECT count(*) FROM alembic_version;
+-- Should be exactly 1
+```
+
+For Drizzle, check for failed entries:
+
+```sql
+SELECT * FROM drizzle.__drizzle_migrations
+WHERE created_at = (SELECT max(created_at) FROM drizzle.__drizzle_migrations);
+```
+
+## Phase 4 — Report + Ticket Creation
+
+Emit two summary tables:
+
+### Table Health
 | Table | Row Count | Latest Row | Status | Drizzle Defined | Handler |
 |-------|-----------|------------|--------|-----------------|---------|
+
+### Migration State
+| Database | Repo | Disk Migrations | Applied Migrations | Status | Head |
+|----------|------|-----------------|-------------------|--------|------|
 
 For each non-HEALTHY table, look up the corresponding projection handler in
 `omnidash/server/projections/` and the upstream Kafka topic in `omnidash/topics.yaml`.
@@ -107,10 +198,25 @@ Description template:
   - Upstream topic: {topic}
   - Drizzle schema: `omnidash/shared/intelligence-schema.ts`
 
+For `PENDING`, `AHEAD`, `FAILED`, or `NO_TABLE` migration states, auto-create a Linear ticket:
+
+Title: `fix(migration): {database} — {migration_status}`
+Project: Active Sprint
+Labels: migration, database-sweep
+Description template:
+  - Database: {database}
+  - Repo: {repo}
+  - Migration status: {status}
+  - Disk migrations: {disk_count}
+  - Applied migrations: {applied_count}
+  - Current head: {head_version}
+  - Migration path: {migration_path}
+
 Skip ticket creation for:
 - `--dry-run` mode
 - `ORPHAN` tables (document only)
 - `NO_TIMESTAMP` tables with row_count > 0 (healthy by count)
+- `CURRENT` migration state (healthy)
 
 ## Dispatch Rules
 

@@ -40,9 +40,9 @@ class TestDatabaseSweepSkill:
         assert "database" in fm["tags"]
 
     def test_skill_md_has_required_phases(self) -> None:
-        """SKILL.md must define all 3 phases."""
+        """SKILL.md must define all 4 phases."""
         content = (SKILL_DIR / "SKILL.md").read_text()
-        for phase in ["Phase 1", "Phase 2", "Phase 3"]:
+        for phase in ["Phase 1", "Phase 2", "Phase 3", "Phase 4"]:
             assert phase in content, f"Missing {phase}"
 
     def test_skill_md_has_staleness_threshold(self) -> None:
@@ -77,3 +77,36 @@ class TestDatabaseSweepSkill:
         """SKILL.md must reference intelligence-schema.ts as table source."""
         content = (SKILL_DIR / "SKILL.md").read_text()
         assert "intelligence-schema" in content
+
+    def test_skill_md_has_migration_tracking(self) -> None:
+        """SKILL.md must include migration tracking phase."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        assert "Migration Tracking" in content
+        assert "alembic_version" in content
+        assert (
+            "schema fingerprint" in content.lower()
+            or "schema_fingerprint" in content.lower()
+        )
+
+    def test_skill_md_covers_all_databases(self) -> None:
+        """SKILL.md must cover all ONEX databases including correct names."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        for db in [
+            "omnibase_infra",
+            "omniintelligence",
+            "omnimemory_db",
+            "omnidash_analytics",
+        ]:
+            assert db in content, f"Missing database: {db}"
+
+    def test_skill_md_classifies_migration_state(self) -> None:
+        """SKILL.md must define migration classification statuses."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        for status in ["CURRENT", "PENDING", "AHEAD", "FAILED", "NO_TABLE"]:
+            assert status in content, f"Missing migration classification: {status}"
+
+    def test_skill_md_handles_drizzle_migrations(self) -> None:
+        """SKILL.md must handle Drizzle migrations for omnidash."""
+        content = (SKILL_DIR / "SKILL.md").read_text()
+        assert "drizzle" in content.lower()
+        assert "omnidash/migrations/" in content
