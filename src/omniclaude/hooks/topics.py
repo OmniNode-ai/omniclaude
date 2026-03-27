@@ -264,6 +264,9 @@ class TopicBase(StrEnum):
     SKILL_COMPLETED = "onex.evt.omniclaude.skill-completed.v1"
     """Emitted after skill dispatch (success or failure); join key is run_id."""
 
+    SKILL_INVOKED = "onex.evt.omniclaude.skill-invoked.v1"
+    """Derived from skill.completed; consumed by omnidash skill_invocations projection (OMN-6800)."""
+
     # ==========================================================================
     # Friction observation topics (OMN-5747)
     # ==========================================================================

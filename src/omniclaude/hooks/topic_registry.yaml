@@ -398,6 +398,8 @@ topics:
     topic: "onex.evt.omniclaude.skill-completed.v1"
     topic_base_constant: "SKILL_COMPLETED"
     description: "Skill invocation completed (success or failure)"
+    # NOTE: skill.completed also fans out to SKILL_INVOKED topic (OMN-6800)
+    # for omnidash skill_invocations projection. See event_registry.py.
 
   # ---------------------------------------------------------------------------
   # Wave 2 pipeline observability topics (OMN-2922)
