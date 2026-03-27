@@ -252,6 +252,11 @@ echo "$PYTHON_CMD"
     if result.returncode == 0:
         python_path = result.stdout.strip().splitlines()[-1]
         assert python_path, "PYTHON_CMD must not be empty"
+    else:
+        # If it fails, there should be an actionable error message
+        assert result.stderr or result.stdout, (
+            "find_python() failure must produce an actionable error message"
+        )
 
 
 @pytest.mark.unit
