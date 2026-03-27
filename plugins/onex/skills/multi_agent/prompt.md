@@ -214,6 +214,43 @@ Generate final summary across **all polymorphic agent cycles**:
    - Manual intervention required
    - Recommendations for next steps
 
+## Phase 7b: Dashboard Verification Wave (OMN-6746) <!-- ai-slop-ok: skill-step-heading -->
+
+**Mandatory final wave** -- runs after all implementation waves complete and before
+user-controlled next steps.
+
+If ANY ticket in the epic touches code in repos that feed data to omnidash
+(omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnidash), auto-generate
+a Playwright dashboard verification step:
+
+1. **Detect dashboard impact**: Check if any completed ticket modified:
+   - Kafka event schemas or topics
+   - API endpoints consumed by omnidash
+   - omnidash frontend components or routes
+   - Event emission code in hooks
+
+2. **If dashboard-impacting changes detected**, dispatch a verification agent:
+   ```
+   Agent(
+     subagent_type="onex:polymorphic-agent",
+     description="Dashboard verification for epic completion",
+     prompt="Run /dashboard-sweep --triage-only to verify all omnidash pages render correctly after the changes from this epic. Report any pages that show errors, missing data, or regressions. This is a mandatory DoD criterion -- the epic is not complete until dashboard pages are verified."
+   )
+   ```
+
+3. **Record result**: The dashboard verification result is a mandatory DoD criterion.
+   - On PASS: record in cycle summary, proceed to Phase 8
+   - On FAIL: report which pages failed, create a follow-up ticket, but do NOT block
+     the epic (advisory gate, not hard gate). Flag in the final report.
+   - On SKIP (no dashboard-impacting changes): record "N/A -- no dashboard impact"
+
+4. **Always include in Phase 7 final report**:
+   ```
+   Dashboard Verification: {PASS|FAIL|N/A}
+   Pages checked: {count}
+   Issues found: {count}
+   ```
+
 ## Phase 8: User-Controlled Next Steps
 
 **IMPORTANT: NEVER automatically commit changes**
