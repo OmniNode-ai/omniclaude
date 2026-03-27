@@ -309,6 +309,13 @@ allowed_extras:
     reason: Skill lifecycle topic (OMN-2773); predates contract governance.
     ticket: OMN-3294
 
+  - topic: "onex.evt.omniclaude.skill-invoked.v1"
+    lifecycle: observability
+    reason: >
+      Derived from skill.completed via fan-out (OMN-6800). Consumed by omnidash
+      skill_invocations projection. Carries same payload as skill-completed.
+    ticket: OMN-6800
+
   - topic: "onex.evt.omniclaude.skill-started.v1"
     lifecycle: observability
     reason: Skill lifecycle topic (OMN-2773); predates contract governance.

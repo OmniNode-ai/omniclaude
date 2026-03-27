@@ -774,6 +774,14 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
                 transform=None,  # Passthrough — no sensitive data in skill metadata
                 description="Skill invocation completed (success or failure); emitted after task_dispatcher",
             ),
+            # OMN-6800: Fan-out to skill-invoked topic for omnidash skill_invocations projection.
+            # The skill-invoked topic carries the same payload as skill-completed — omnidash
+            # projectSkillInvoked handler reads skill_name, session_id, duration_ms, status.
+            FanOutRule(
+                topic_base=TopicBase.SKILL_INVOKED,
+                transform=None,  # Passthrough — same payload fields consumed by omnidash
+                description="Skill invocation record for omnidash skill_invocations table (OMN-6800)",
+            ),
         ],
         partition_key_field="run_id",
         required_fields=["run_id", "skill_name", "correlation_id", "status"],
