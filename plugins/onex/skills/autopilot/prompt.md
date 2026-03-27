@@ -57,7 +57,7 @@ A1_merge_sweep, A2_deploy_local_plugin, A3_start_environment,
 B1_dod_sweep, B2_aislop_sweep, B3_bus_audit, B4_gap_detect, B5_integration_sweep,
 B6_playwright_gate, B7_friction_triage, B8_duplication_sweep,
 C1_release, C2_redeploy,
-D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day, D5_insights_to_plan
+D1_verify_plugin, D2_container_health, D3_dashboard_sweep, D4_close_day, D5_insights_to_plan, D6_friction_autofix
 ```
 
 **Step result vocabulary** (stable, for cycle records and completion summary):
@@ -675,6 +675,27 @@ the file has been validated as high-quality input.
 
 ---
 
+### D6: friction-autofix (self-healing) <!-- ai-slop-ok: skill-step-heading -->
+
+Run friction autofix to resolve any structurally-fixable friction accumulated during
+this run or prior runs:
+
+```
+/friction-autofix --window-days 7
+```
+
+- On success: record `pass`. Report fix count in completion summary.
+- On skip (no friction above threshold): record `pass` with note "No friction to fix."
+- On error: record `fail`. Log the failure but do NOT halt. Friction autofix is best-effort;
+  a failure here does not invalidate the close-out sequence.
+
+This step is non-blocking: any failure is logged but does not increment the
+circuit breaker counter.
+
+If `--dry-run` was passed to autopilot: pass `--dry-run` to friction_autofix as well.
+
+---
+
 ### Step 8a: Friction Diary (F38) <!-- ai-slop-ok: skill-step-heading -->
 
 After all steps complete (or halt), capture friction events from the current run before
@@ -772,6 +793,7 @@ Steps:
   D3: dashboard-sweep      — {status}
   D4: close-day            — {status}
   D5: insights-to-plan     — {status}
+  D6: friction-autofix     — {status}
 
 Ship provenance: {version/tag/commit from C1, or "N/A — no ship occurred"}
 Friction events captured: {friction_count} {friction_file_path or "(clean run)"}
@@ -926,6 +948,12 @@ follow-up ticket with "timeout exceeded" as the failure reason.
 Circuit breaker applies: 3 consecutive ticket-pipeline failures → stop.
 Integration test failures do NOT count toward the circuit breaker (they are follow-up
 tickets, not pipeline failures).
+
+4. After all tickets processed, run friction autofix:
+   ```
+   /friction-autofix
+   ```
+   Non-blocking — failures logged but do not affect build-mode outcome.
 
 Emit result line:
 ```

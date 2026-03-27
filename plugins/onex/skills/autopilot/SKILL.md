@@ -253,4 +253,5 @@ When dispatching subagents for release or other high-risk operations:
 - **dashboard-sweep**: D3 — verify omnidash pages work (parallel)
 - **close-day**: D4 — day audit artifact
 - **insights-to-plan**: D5 — opportunistic insights-to-plan auto-trigger (non-halting)
+- **friction-autofix**: D6 — non-blocking self-healing after close-day (OMN-6651)
 - **ModelIntegrationRecord**: written by integration-sweep; read by autopilot to determine halt
