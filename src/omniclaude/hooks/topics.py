@@ -370,6 +370,13 @@ class TopicBase(StrEnum):
     """Emitted when a validator (poly-enforcer, bash-guard, pre-commit) catches an issue."""
 
     # ==========================================================================
+    # Friction autofix topics (OMN-6648)
+    # Emitted when friction_autofix resolves a friction surface automatically.
+    # ==========================================================================
+    FRICTION_RESOLVED = "onex.evt.omniclaude.friction-resolved.v1"
+    """Emitted when a friction surface is resolved by the autofix pipeline."""
+
+    # ==========================================================================
     # Plan review topics (OMN-6128)
     # ==========================================================================
     PLAN_REVIEW_COMPLETED = "onex.evt.omniclaude.plan-review-completed.v1"
