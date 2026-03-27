@@ -27,13 +27,14 @@ dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 auto_merge = "--auto-merge" in args
 require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
+require_tests = "--require-tests" in args  # Hard-gate test coverage: block pipeline if changed files lack tests
 docs_only = "--docs-only" in args  # Only generate/update documentation, skip implementation
 
 skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -360,6 +361,7 @@ else:
             "merge_gate_timeout_hours": 48,
             "merge_strategy": "squash",
             "delete_branch_on_merge": True,
+            "require_tests": require_tests,
         },
         # PR identity — populated by Phase 3 after PR creation
         "pr_url": None,
@@ -1086,6 +1088,16 @@ def build_phase_payload(phase_name, state, result):
             "policy_mode": artifacts.get("policy_mode", "advisory"),
         }
 
+    elif phase_name == "test_coverage_gate":
+        return {
+            "changed_source_files": artifacts.get("changed_source_files", 0),
+            "files_with_tests": artifacts.get("files_with_tests", 0),
+            "files_without_tests": artifacts.get("files_without_tests", 0),
+            "uncovered_files": list(artifacts.get("uncovered_files", [])),
+            "coverage_pct": artifacts.get("coverage_pct"),
+            "gate_mode": artifacts.get("gate_mode", "advisory"),
+        }
+
     elif phase_name == "create_pr":
         return {
             "pr_url": artifacts.get("pr_url", ""),
@@ -1105,6 +1117,14 @@ def build_phase_payload(phase_name, state, result):
             "status": artifacts.get("status", ""),
             "pr_review_cycles_used": artifacts.get("pr_review_cycles_used", 0),
             "watch_duration_hours": artifacts.get("watch_duration_hours", 0),
+        }
+
+    elif phase_name == "review_gate":
+        return {
+            "gate_verdict": artifacts.get("gate_verdict", ""),
+            "total_findings": artifacts.get("total_findings", 0),
+            "blocking_count": artifacts.get("blocking_count", 0),
+            "iterations": artifacts.get("iterations", 0),
         }
 
     elif phase_name == "integration_verification_gate":
@@ -1171,6 +1191,13 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "local_review":
         artifacts["iterations"] = payload.get("iteration_count", 1)
         artifacts["last_clean_sha"] = payload.get("last_clean_sha", "")
+    elif phase == "test_coverage_gate":
+        artifacts["changed_source_files"] = payload.get("changed_source_files", 0)
+        artifacts["files_with_tests"] = payload.get("files_with_tests", 0)
+        artifacts["files_without_tests"] = payload.get("files_without_tests", 0)
+        artifacts["uncovered_files"] = payload.get("uncovered_files", [])
+        artifacts["coverage_pct"] = payload.get("coverage_pct")
+        artifacts["gate_mode"] = payload.get("gate_mode", "advisory")
     elif phase == "create_pr":
         artifacts["pr_url"] = payload.get("pr_url", "")
         artifacts["pr_number"] = payload.get("pr_number", 0)
@@ -1181,6 +1208,11 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
         artifacts["status"] = payload.get("status", "")
         artifacts["pr_review_cycles_used"] = payload.get("pr_review_cycles_used", 0)
         artifacts["watch_duration_hours"] = payload.get("watch_duration_hours", 0)
+    elif phase == "review_gate":
+        artifacts["gate_verdict"] = payload.get("gate_verdict", "")
+        artifacts["total_findings"] = payload.get("total_findings", 0)
+        artifacts["blocking_count"] = payload.get("blocking_count", 0)
+        artifacts["iterations"] = payload.get("iterations", 0)
     elif phase == "integration_verification_gate":
         artifacts["integration_gate_status"] = payload.get("integration_gate_status", "")
         artifacts["integration_gate_stage"] = payload.get("integration_gate_stage", 1)
@@ -1571,9 +1603,11 @@ def execute_phase(phase_name, state):
         "implement": execute_implement,
         "local_review": execute_local_review,
         "dod_verify": execute_dod_verify,
+        "test_coverage_gate": execute_test_coverage_gate,
         "create_pr": execute_create_pr,
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
+        "review_gate": execute_review_gate,
         "integration_verification_gate": execute_integration_verification_gate,
         "auto_merge": execute_auto_merge,
         # Kept for backward compat when resuming old-format (v1.0) state files
@@ -2250,7 +2284,7 @@ a PR. This is a hard gate -- PRs without tests for new code are flagged.
        "files_without_tests": len(uncovered_files),
        "uncovered_files": uncovered_files,  # list of file paths
        "coverage_pct": overall_coverage_pct,  # from coverage.json if available
-       "gate_mode": "advisory",  # or "hard" if --require-tests
+       "gate_mode": "hard" if state["policy"].get("require_tests") else "advisory",
    }
    ```
 
