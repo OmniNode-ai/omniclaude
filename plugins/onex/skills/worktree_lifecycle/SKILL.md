@@ -83,7 +83,8 @@ A worktree is stale when:
 | `--execute` | false | Remove stale worktrees (vs dry-run) |
 | `--schedule` | none | Cron interval for recurring GC |
 | `--verbose` | false | Show active/skipped worktrees |
-| `--worktrees-root` | (system default) | Override worktrees root | <!-- local-path-ok -->
+| `--worktrees-root` | (system default) | Override worktrees root |
+<!-- local-path-ok -->
 
 ### Step 2: Run prune-worktrees.sh <!-- ai-slop-ok: skill-step-heading -->
 
@@ -104,18 +105,17 @@ The script:
 
 Output summary:
 
-```
-Worktree Lifecycle Report
-=========================
+```text
+Active: 5
+Stale: 3
+Skipped: 1
+Errors: 0
 
-Stale (removed):
-  /omni_worktrees/OMN-1234/omniclaude — PR #42 merged 2d ago
-  /omni_worktrees/OMN-1235/omnibase_core — remote branch deleted
+REMOVED: /omni_worktrees/OMN-1234/omniclaude
+REMOVED: /omni_worktrees/OMN-1235/omnibase_core
+REMOVED: /omni_worktrees/OMN-1236/omnibase_infra
 
-Active (kept):
-  /omni_worktrees/OMN-1300/omniclaude — PR #55 open
-
-Removed: 2 | Active: 1 | Total: 3
+Removed: 3 / 3 stale worktrees.
 ```
 
 ### Step 4: Schedule recurring GC (if --schedule) <!-- ai-slop-ok: skill-step-heading -->
