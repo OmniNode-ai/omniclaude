@@ -291,11 +291,12 @@ echo "PYTHON_CMD=$PYTHON_CMD"
     )
     # Should fail (exit 1) with an actionable message
     # OR succeed with a warning if system python3 is found in lite mode fallback
-    combined = result.stdout + result.stderr
-    # The key assertion: either it hard-fails or it warns — never silent
-    assert (
-        result.returncode != 0 or "WARN" in combined or "python" in combined.lower()
-    ), "find_python() must not silently succeed when all paths are invalid"
+    combined = f"{result.stdout}\n{result.stderr}"
+    warned = "WARN" in combined or "mode.sh not found" in combined
+    # Either hard-fail, or succeed only with an explicit warning signal.
+    assert result.returncode != 0 or warned, (
+        "find_python() must not silently succeed when all paths are invalid"
+    )
 
 
 # =============================================================================
@@ -322,14 +323,19 @@ def test_all_hook_scripts_source_error_guard() -> None:
         "user-prompt-delegation-rule.sh",
     ]
     missing = []
+    missing_files = []
     for hook_name in expected_hooks:
         hook_path = SCRIPTS_DIR / hook_name
         if not hook_path.exists():
+            missing_files.append(hook_name)
             continue
         content = hook_path.read_text()
         if "error-guard.sh" not in content:
             missing.append(hook_name)
 
+    assert not missing_files, (
+        f"Expected hook scripts are missing (update test list or hook layout): {missing_files}"
+    )
     assert not missing, (
         f"These hooks do NOT source error-guard.sh (error visibility regression): {missing}"
     )
