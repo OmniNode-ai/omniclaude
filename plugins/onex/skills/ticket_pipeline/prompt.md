@@ -7,7 +7,7 @@ You are executing the ticket-pipeline skill. This prompt defines the complete or
 Parse arguments from the skill invocation:
 
 ```
-/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate]
+/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate] [--require-tests]
 ```
 
 ```python
@@ -1191,6 +1191,13 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "local_review":
         artifacts["iterations"] = payload.get("iteration_count", 1)
         artifacts["last_clean_sha"] = payload.get("last_clean_sha", "")
+    elif phase == "dod_verify":
+        artifacts["dod_total"] = payload.get("dod_total", 0)
+        artifacts["dod_verified"] = payload.get("dod_verified", 0)
+        artifacts["dod_failed"] = payload.get("dod_failed", 0)
+        artifacts["dod_skipped"] = payload.get("dod_skipped", 0)
+        artifacts["receipt_path"] = payload.get("receipt_path", "")
+        artifacts["policy_mode"] = payload.get("policy_mode", "advisory")
     elif phase == "test_coverage_gate":
         artifacts["changed_source_files"] = payload.get("changed_source_files", 0)
         artifacts["files_with_tests"] = payload.get("files_with_tests", 0)
@@ -2244,7 +2251,8 @@ def execute_phase(phase_name, state):
 - Working directory has reviewed, clean code
 
 **Purpose:** Verify that new/modified code has corresponding test coverage before creating
-a PR. This is a hard gate -- PRs without tests for new code are flagged.
+a PR. Default mode is advisory (warn but proceed). With `--require-tests`, this becomes
+a hard gate that blocks the pipeline when changed files lack tests.
 
 **Actions:**
 
