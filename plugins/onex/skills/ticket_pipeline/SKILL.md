@@ -39,6 +39,9 @@ args:
   - name: --docs-only
     description: "User assertion that all changes are documentation-only (.md/.yaml). Skips integration verification. Misuse can skip required checks."
     required: false
+  - name: --require-tests
+    description: "Hard-gate test coverage: block PR creation if new code has no corresponding tests (default: advisory)"
+    required: false
 ---
 
 # Ticket Pipeline
