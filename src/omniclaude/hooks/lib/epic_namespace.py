@@ -93,7 +93,7 @@ def acquire_namespace(
     # Check for existing lock
     if lock_file.exists():
         try:
-            import yaml  # type: ignore[import-untyped]
+            import yaml
 
             existing = yaml.safe_load(lock_file.read_text())
             if existing and existing.get("epic_id") != epic_id:
@@ -117,7 +117,7 @@ def acquire_namespace(
 
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         lock_file.write_text(
             yaml.dump(lock.model_dump(mode="json"), default_flow_style=False)
@@ -150,7 +150,7 @@ def release_namespace(epic_id: str) -> bool:
         return True
 
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         existing = yaml.safe_load(lock_file.read_text())
         if existing and existing.get("epic_id") != epic_id:
@@ -180,7 +180,7 @@ def get_active_namespace() -> ModelEpicNamespaceLock | None:
         return None
 
     try:
-        import yaml  # type: ignore[import-untyped]
+        import yaml
 
         data = yaml.safe_load(lock_file.read_text())
         if data:
