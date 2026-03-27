@@ -33,7 +33,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -129,6 +129,14 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+  test_coverage_gate:   # OMN-6730
+    started_at: null
+    completed_at: null
+    artifacts: {}       # changed_source_files, files_with_tests, files_without_tests, uncovered_files, coverage_pct, gate_mode
+    blocked_reason: null
+    block_kind: null
+    last_error: null
+    last_error_at: null
   create_pr:
     started_at: null
     completed_at: null
@@ -205,7 +213,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -2195,9 +2203,86 @@ def execute_phase(phase_name, state):
 
 ---
 
+### Phase 2.75: TEST COVERAGE GATE (OMN-6730) <!-- ai-slop-ok: skill-step-heading -->
+
+**Invariants:**
+- Phase 2.5 (dod_verify) is completed (or skipped)
+- Working directory has reviewed, clean code
+
+**Purpose:** Verify that new/modified code has corresponding test coverage before creating
+a PR. This is a hard gate -- PRs without tests for new code are flagged.
+
+**Actions:**
+
+1. **Identify changed files:**
+   ```bash
+   git diff --name-only origin/main...HEAD -- '*.py' | grep '^src/'
+   ```
+   Filter to Python source files under `src/` (exclude tests, configs, scripts).
+
+2. **Check for corresponding tests:**
+   For each changed source file `src/{package}/{module}.py`, check if ANY of these exist:
+   - `tests/unit/test_{module}.py`
+   - `tests/unit/{subdir}/test_{module}.py`
+   - `tests/integration/test_{module}.py`
+   - Any test file that imports from the changed module
+
+   A file is considered **covered** if at least one matching test file exists.
+
+3. **Run coverage on changed files (if pytest-cov available):**
+   ```bash
+   uv run pytest tests/ -m unit --cov=src/ --cov-report=json -q 2>/dev/null || true
+   ```
+   If `coverage.json` is produced, extract coverage for changed files specifically.
+
+4. **Evaluate:**
+   - If ALL changed source files have corresponding tests: PASS
+   - If ANY changed source file has NO corresponding test:
+     - Log which files lack tests
+     - **Default: advisory** -- warn but proceed to Phase 3
+     - **With `--require-tests`**: block pipeline until tests are added
+
+5. **Store artifacts:**
+   ```python
+   artifacts = {
+       "changed_source_files": len(changed_files),
+       "files_with_tests": len(covered_files),
+       "files_without_tests": len(uncovered_files),
+       "uncovered_files": uncovered_files,  # list of file paths
+       "coverage_pct": overall_coverage_pct,  # from coverage.json if available
+       "gate_mode": "advisory",  # or "hard" if --require-tests
+   }
+   ```
+
+6. **Append to PR description (in Phase 3):**
+   If uncovered files exist, add a section:
+   ```markdown
+   ## Test Coverage
+
+   | File | Tests | Status |
+   |------|-------|--------|
+   | src/pkg/module.py | tests/unit/test_module.py | covered |
+   | src/pkg/new_feat.py | (none) | MISSING |
+
+   Coverage gate: advisory (2/3 files covered)
+   ```
+
+**Mutations:**
+- `phases.test_coverage_gate.started_at`
+- `phases.test_coverage_gate.completed_at`
+- `phases.test_coverage_gate.artifacts`
+
+**Exit conditions:**
+- **Completed:** All files covered, or gate_mode is advisory
+- **Blocked:** `--require-tests` and uncovered files exist
+- **Skipped:** No Python source files changed (docs-only, config-only)
+
+---
+
 ### Phase 3: CREATE PR
 
 **Invariants:**
+- Phase 2.75 (test_coverage_gate) is completed (or skipped)
 - Phase 2.5 (dod_verify) is completed (or skipped if no contract)
 - `policy.auto_push == true` AND `policy.auto_pr_create == true` (checked before acting)
 
