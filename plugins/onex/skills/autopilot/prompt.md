@@ -829,6 +829,40 @@ After every cycle (including no-ops), update `.onex_state/autopilot/cycle-state.
 - Clear `pending_redeploy` entries that were deployed
 - Deduplicate `pending_redeploy` before writing
 
+#### Cross-Cycle Decision Tracking (OMN-6742) <!-- ai-slop-ok: skill-step-heading -->
+
+Additionally, maintain these cross-cycle fields in `cycle-state.yaml`:
+
+```yaml
+# Cycles since last release — incremented every cycle, reset to 0 when C1_release passes
+cycles_since_last_release: 0
+
+# Deferred decisions — items explicitly deferred to a future cycle
+# Each entry has: decision, deferred_at (ISO), reason, expires_at (ISO, optional)
+deferred_decisions:
+  - decision: "Upgrade pydantic to v3"
+    deferred_at: "2026-03-25T10:00:00Z"
+    reason: "Waiting for omnibase_core migration"
+    expires_at: "2026-04-01T00:00:00Z"
+
+# Friction count — running tally of friction events across cycles
+# Reset when a friction-reduction ticket is completed
+cumulative_friction_count: 0
+friction_by_category: {}
+#   pre_commit_failure: 3
+#   ci_flake: 2
+#   merge_conflict: 1
+```
+
+Update rules:
+- `cycles_since_last_release`: increment by 1 every cycle. Reset to 0 when C1_release
+  step completes with `pass`. This surfaces "how long since we shipped" as a persistent metric.
+- `deferred_decisions`: append new deferrals, remove expired ones (past `expires_at`).
+  When a deferred decision expires, log a warning: "Deferred decision expired: {decision}".
+- `cumulative_friction_count`: add this cycle's friction count to the running total.
+  Update `friction_by_category` with per-category counts. This enables trend analysis
+  across cycles without reading individual cycle records.
+
 Then delete `.onex_state/autopilot/cycle.lock` to release the mutex.
 
 If `cycle-state.yaml` has `last_cycle_id != null`, preserve existing data and merge
