@@ -804,6 +804,18 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "surface", "severity"],
     ),
+    "friction.autofix.resolved": EventRegistration(
+        event_type="friction.autofix.resolved",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.FRICTION_RESOLVED,
+                transform=None,  # Passthrough
+                description="Friction autofix resolution telemetry (OMN-6647)",
+            ),
+        ],
+        partition_key_field="surface_key",
+        required_fields=["surface_key", "outcome", "ticket_id"],
+    ),
     # =========================================================================
     # Wave 2 Pipeline Observability Events (OMN-2922)
     # Consumed by omnidash Wave 2 projection nodes.
