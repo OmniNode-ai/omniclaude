@@ -326,12 +326,18 @@ def fetch_coderabbit_comments(repo: str, pr_number: int) -> list[dict[str, objec
 
 
 def post_reply(
-    repo: str, comment_id: int, body: str, *, is_inline: bool = True
+    repo: str,
+    pr_number: int,
+    comment_id: int,
+    body: str,
+    *,
+    is_inline: bool = True,
 ) -> bool:
     """Post a reply to a review comment.
 
     Args:
         repo: GitHub repo in "owner/name" format.
+        pr_number: The PR number.
         comment_id: The comment ID to reply to.
         body: Reply body text.
         is_inline: Whether this is an inline review comment (vs issue comment).
@@ -344,23 +350,12 @@ def post_reply(
             _run_gh(
                 [
                     "api",
-                    f"repos/{repo}/pulls/comments/{comment_id}/replies",
+                    f"repos/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
                     "-f",
                     f"body={body}",
                 ]
             )
         else:
-            # For issue comments, we post a new issue comment
-            # (GitHub doesn't support reply threading on issue comments)
-            pr_number_raw = _run_gh(
-                [
-                    "api",
-                    f"repos/{repo}/pulls/comments/{comment_id}",
-                    "--jq",
-                    ".pull_request_url",
-                ]
-            ).strip()
-            pr_number = pr_number_raw.rstrip("/").split("/")[-1]
             _run_gh(
                 [
                     "api",
@@ -485,7 +480,9 @@ def triage_pr(
                 continue
 
             # Post acknowledgment reply
-            reply_ok = post_reply(repo, comment_id, _ACK_REPLY, is_inline=has_path)
+            reply_ok = post_reply(
+                repo, pr_number, comment_id, _ACK_REPLY, is_inline=has_path
+            )
 
             # Resolve the thread if it has a thread ID
             resolved_ok = False

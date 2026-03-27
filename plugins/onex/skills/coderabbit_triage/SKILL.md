@@ -34,8 +34,8 @@ substantive fixes.
 ## Usage
 
 ```
-/coderabbit-triage OmniNode-ai/omniclaude 42
-/coderabbit-triage OmniNode-ai/omniclaude 42 --dry-run
+/coderabbit_triage OmniNode-ai/omniclaude 42
+/coderabbit_triage OmniNode-ai/omniclaude 42 --dry-run
 ```
 
 ## Severity Classification
