@@ -21,6 +21,10 @@ set -euo pipefail
 ENFORCEMENT="${DOD_ENFORCEMENT:-advisory}"
 EVIDENCE_DIR="${ONEX_STATE_DIR:-.onex_state}/evidence"
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
+# Fallback for CI detached HEAD state
+if [[ "$BRANCH" == "HEAD" || -z "$BRANCH" ]]; then
+  BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
+fi
 
 # Extract ticket ID from branch name (e.g., jonahgabriel/omn-1234-description -> OMN-1234)
 TICKET_ID=""
@@ -39,7 +43,7 @@ RECEIPT_PATH="${EVIDENCE_DIR}/${TICKET_ID}/dod_report.json"
 if [[ -f "$RECEIPT_PATH" ]]; then
   # Evidence exists — check if it passed
   if command -v jq &>/dev/null; then
-    FAILED=$(jq -r '.failed // 0' "$RECEIPT_PATH" 2>/dev/null || echo "0")
+    FAILED=$(jq -r '.result.failed // 0' "$RECEIPT_PATH" 2>/dev/null || echo "0")
     if [[ "$FAILED" != "0" ]]; then
       echo "WARNING: DoD evidence for ${TICKET_ID} has ${FAILED} failed check(s)"
       echo "  Receipt: ${RECEIPT_PATH}"
