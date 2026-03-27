@@ -283,6 +283,15 @@ repos:
         always_run: true
         stages: [pre-push]
 
+      # OMN-6747: Advisory DoD evidence check before push
+      - id: dod-evidence-check
+        name: DoD evidence advisory check
+        entry: bash scripts/dod-pre-push-check.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: no-internal-ips
         name: Block hardcoded internal IPs
         language: system
