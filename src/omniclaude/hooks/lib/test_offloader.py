@@ -168,7 +168,7 @@ def _run_direct(command: str, cmd_type: str) -> ModelOffloadDecision:
     try:
         result = subprocess.run(
             command,
-            shell=True,  # noqa: S602
+            shell=True,  # noqa: S602  # nosec B602 — test commands are constructed internally, not from user input
             capture_output=True,
             text=True,
             timeout=300,
