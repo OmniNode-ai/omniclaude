@@ -224,6 +224,7 @@ def process_tool_info(tool_info: dict) -> dict:
 
 # CLI entry point: reads JSON from stdin, writes (possibly modified) JSON to stdout
 if __name__ == "__main__":
+    raw = ""
     try:
         raw = sys.stdin.read()
         tool_info = json.loads(raw)
