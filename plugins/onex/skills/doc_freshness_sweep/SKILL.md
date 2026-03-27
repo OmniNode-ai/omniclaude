@@ -15,9 +15,9 @@ tags:
 author: OmniClaude Team
 composable: true
 inputs:
-  - name: repos
+  - name: repo
     type: str
-    description: "Comma-separated list of repo names to scan (default: all repos under omni_home)"
+    description: "Repo name to scan (default: all repos under omni_home)"
     required: false
 args:
   - name: --repo
@@ -154,3 +154,13 @@ Stale references: 34
 - Used by close-out autopilot (--claude-md-only mode)
 - Emits `onex.evt.onex-change-control.doc-freshness-swept.v1` event
 - Reports consumed by omnidash `/status` page Doc Freshness card
+
+## External Dependencies
+
+This skill depends on modules from the `onex_change_control` package:
+
+- `onex_change_control.scanners.doc_reference_extractor` — pattern matching for file paths, class names, function names, shell commands, URLs, env vars
+- `onex_change_control.scanners.doc_reference_resolver` — resolves extracted references against the codebase
+- `onex_change_control.scanners.doc_staleness_detector` — staleness scoring and verdict assignment
+- `onex_change_control.models.model_doc_freshness_sweep_report.ModelDocFreshnessSweepReport` — report output model
+- Event schema `onex.evt.onex-change-control.doc-freshness-swept.v1` is owned by `onex_change_control`
