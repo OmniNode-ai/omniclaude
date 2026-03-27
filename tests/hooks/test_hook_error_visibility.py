@@ -266,29 +266,42 @@ def test_find_python_fails_loudly_when_all_paths_invalid() -> None:
     With PLUGIN_PYTHON_BIN pointing to nonexistent file, no plugin venv,
     no OMNICLAUDE_PROJECT_ROOT, and full mode (not lite), it should exit 1.
     """
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            f"""
+    # Create a temp dir with bash symlink but NO python3 to ensure
+    # find_python() cannot find any Python interpreter at all.
+    with tempfile.TemporaryDirectory() as isolated_bin:
+        bash_real = subprocess.run(
+            ["which", "bash"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        Path(isolated_bin, "bash").symlink_to(bash_real)
+        # Also need 'date' and 'command' builtins — bash has them, but some
+        # scripts use /usr/bin/date so provide that too if it exists.
+        for tool in ["date", "dirname", "basename", "cat", "mktemp", "uname"]:
+            tool_path = Path(f"/usr/bin/{tool}")
+            if tool_path.exists():
+                Path(isolated_bin, tool).symlink_to(tool_path)
+
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f"""
 export PLUGIN_ROOT='/nonexistent/plugin'
 export PLUGIN_PYTHON_BIN='/nonexistent/python3'
 unset OMNICLAUDE_PROJECT_ROOT
 source '{COMMON_SH}'
 echo "PYTHON_CMD=$PYTHON_CMD"
 """,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-        env={
-            "HOME": os.environ.get("HOME", "/tmp"),
-            # Keep /usr/bin for bash/date but remove python3 from PATH
-            "PATH": "/usr/bin:/bin",
-            "PLUGIN_PYTHON_BIN": "/nonexistent/python3",
-        },
-    )
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            env={
+                "HOME": os.environ.get("HOME", "/tmp"),
+                "PATH": isolated_bin,
+                "PLUGIN_PYTHON_BIN": "/nonexistent/python3",
+            },
+        )
     # Should fail (exit 1) with an actionable message
     # OR succeed with a warning if system python3 is found in lite mode fallback
     combined = f"{result.stdout}\n{result.stderr}"
