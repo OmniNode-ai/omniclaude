@@ -1,3 +1,25 @@
+## v0.17.0 (2026-03-27)
+
+### Added
+- feat(skills): add test coverage gate to ticket-pipeline [OMN-6730] (#925)
+- feat(ci): add DoD pre-push hook and advisory CI check [OMN-6747] (#924)
+- feat(skills): add code_review_sweep skill [OMN-6756] (#926)
+- feat(hooks): CodeRabbit thread auto-triage hook [OMN-6739] (#914)
+- feat(skills): add dashboard DoD criterion as mandatory final wave in epic-team [OMN-6746] (#923)
+- feat(hooks): add skill output suppression hook [OMN-6733] (#915)
+- feat(skills): add cross-cycle decision tracking to autopilot state [OMN-6742] (#922)
+- feat(skills): wrap check-drift CLI as contract_sweep skill [OMN-6725] (#911)
+- feat: auto-ticket creation from sweep findings [OMN-6729] (#910)
+- feat(autopilot): add DoD sweep as standard step with per-ticket verification [OMN-6728] (#912)
+
+### Fixed
+- fix(hooks): epic namespace isolation for parallel dispatch [OMN-6743] (#917)
+- fix: update HandlerSlackWebhook init calls for bot_token API [OMN-6715] (#908)
+
+### Changed
+- chore: narrow Any types to concrete types in lib/ [OMN-6702] (#909)
+- chore(deps): bump omnibase_core to 0.33.1, omnibase_spi to 0.20.2, omnibase_infra to 0.28.0, omniintelligence to 0.19.1
+
 ## v0.16.0 (2026-03-26)
 
 ### Added
