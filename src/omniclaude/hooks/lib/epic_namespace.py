@@ -28,6 +28,7 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -59,7 +60,7 @@ _DEFAULT_STATE_DIR = os.path.expanduser("~/.onex_state")
 _LOCK_FILENAME = "active_namespace.yaml"
 
 
-def _read_lock_data(lock_file: Path) -> dict[str, object] | None:
+def _read_lock_data(lock_file: Path) -> dict[str, Any] | None:
     """Read and parse lock file content, trying yaml then json."""
     content = lock_file.read_text()
     try:
