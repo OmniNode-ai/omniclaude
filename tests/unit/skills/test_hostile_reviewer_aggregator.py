@@ -428,10 +428,14 @@ def test_cli_stdout_is_valid_json_stderr_gets_errors(
         sys.stderr = old_stderr
 
     stdout_text = captured_out.getvalue()
+    stderr_text = captured_err.getvalue()
     parsed = json.loads(stdout_text)
     assert "success" in parsed, "stdout JSON must contain 'success' field"
     assert "verdict" in parsed, "stdout JSON must contain 'verdict' field"
     assert parsed["success"] is False, "Empty diff should yield success=False"
+    assert stderr_text.strip(), (
+        "Expected errors/logs on stderr for failed subprocess calls"
+    )
 
 
 @pytest.mark.unit
@@ -506,6 +510,9 @@ def test_run_all_models_stderr_captures_driver_errors(
     stderr_text = captured_err.getvalue()
     # At minimum, failed models should appear in models_failed
     assert len(result.models_failed) > 0, "Failed models must be tracked"
+    assert stderr_text.strip(), (
+        "Driver errors must appear on stderr, not be silently swallowed"
+    )
 
 
 @pytest.mark.unit
