@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Kafka topics for friction_autofix skill
+# Follows ONEX topic naming: onex.{kind}.{producer}.{event-name}.v{n}
+
+skill: friction_autofix
+version: "1.0.0"
+
+topics:
+  # Command topic — triggers friction_autofix execution
+  - name: onex.cmd.omniclaude.friction_autofix.v1
+    kind: cmd
+    producer: omniclaude
+    description: Trigger friction autofix skill execution
+    consumer_group: omniclaude.skill.friction_autofix
+
+  # Completion events
+  - name: onex.evt.omniclaude.friction_autofix-completed.v1
+    kind: evt
+    producer: omniclaude
+    description: Friction autofix skill completed successfully
+
+  - name: onex.evt.omniclaude.friction_autofix-failed.v1
+    kind: evt
+    producer: omniclaude
+    description: Friction autofix skill failed
+
+  # Resolution telemetry
+  - name: onex.evt.omniclaude.friction-resolved.v1
+    kind: evt
+    producer: omniclaude
+    description: Individual friction surface resolved by autofix
