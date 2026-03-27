@@ -56,11 +56,11 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.data_flow_sweep.v1"
-    consumer_group: "omniclaude.skill.data_flow_sweep"
+    topic: "onex.cmd.omniclaude.data-flow-sweep.v1"
+    consumer_group: "omniclaude.skill.data-flow-sweep"
   publish:
-    success_topic: "onex.evt.omniclaude.data_flow_sweep-completed.v1"
-    failure_topic: "onex.evt.omniclaude.data_flow_sweep-failed.v1"
+    success_topic: "onex.evt.omniclaude.data-flow-sweep-completed.v1"
+    failure_topic: "onex.evt.omniclaude.data-flow-sweep-failed.v1"
 
 # Capabilities
 capabilities:

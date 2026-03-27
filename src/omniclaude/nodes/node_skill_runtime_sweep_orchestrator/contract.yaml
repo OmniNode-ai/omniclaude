@@ -56,11 +56,11 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.runtime_sweep.v1"
-    consumer_group: "omniclaude.skill.runtime_sweep"
+    topic: "onex.cmd.omniclaude.runtime-sweep.v1"
+    consumer_group: "omniclaude.skill.runtime-sweep"
   publish:
-    success_topic: "onex.evt.omniclaude.runtime_sweep-completed.v1"
-    failure_topic: "onex.evt.omniclaude.runtime_sweep-failed.v1"
+    success_topic: "onex.evt.omniclaude.runtime-sweep-completed.v1"
+    failure_topic: "onex.evt.omniclaude.runtime-sweep-failed.v1"
 
 # Capabilities
 capabilities:

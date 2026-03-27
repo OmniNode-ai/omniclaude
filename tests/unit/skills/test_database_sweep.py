@@ -53,7 +53,14 @@ class TestDatabaseSweepSkill:
     def test_skill_md_classifies_tables(self) -> None:
         """SKILL.md must define table classification statuses."""
         content = (SKILL_DIR / "SKILL.md").read_text()
-        for status in ["HEALTHY", "STALE", "EMPTY", "MISSING", "ORPHAN"]:
+        for status in [
+            "HEALTHY",
+            "STALE",
+            "EMPTY",
+            "MISSING",
+            "ORPHAN",
+            "NO_TIMESTAMP",
+        ]:
             assert status in content, f"Missing classification: {status}"
 
     def test_topics_yaml_exists(self) -> None:

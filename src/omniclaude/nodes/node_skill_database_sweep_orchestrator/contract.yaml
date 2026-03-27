@@ -56,11 +56,11 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.database_sweep.v1"
-    consumer_group: "omniclaude.skill.database_sweep"
+    topic: "onex.cmd.omniclaude.database-sweep.v1"
+    consumer_group: "omniclaude.skill.database-sweep"
   publish:
-    success_topic: "onex.evt.omniclaude.database_sweep-completed.v1"
-    failure_topic: "onex.evt.omniclaude.database_sweep-failed.v1"
+    success_topic: "onex.evt.omniclaude.database-sweep-completed.v1"
+    failure_topic: "onex.evt.omniclaude.database-sweep-failed.v1"
 
 # Capabilities
 capabilities:
