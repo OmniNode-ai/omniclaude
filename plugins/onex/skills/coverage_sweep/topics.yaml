@@ -1,5 +1,2 @@
 topics:
-  - name: onex.evt.omniclaude.coverage-sweep-completed.v1
-    description: Emitted when a coverage sweep finishes with summary metrics
-    schema: ModelCoverageSweepCompleted
-    access: broad
+  - onex.evt.omniclaude.coverage-sweep-completed.v1

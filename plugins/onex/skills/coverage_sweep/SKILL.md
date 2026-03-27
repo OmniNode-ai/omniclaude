@@ -88,12 +88,12 @@ For each repo, run:
 
 ```bash
 cd $OMNI_HOME/{repo} # local-path-ok
-uv run pytest tests/ -m unit --cov=src/ --cov-report=json --cov-report=term -q 2>/dev/null || true
+uv run pytest tests/ -m unit --cov=src/ --cov-report=json:coverage.json --cov-report=term -q || true
 ```
 
 If `--skip-install` is not set, run `uv sync --group dev` first.
 
-Parse the generated `coverage.json` to extract per-module coverage percentages.
+Parse the generated `coverage.json` (written to the repo root by `--cov-report=json:coverage.json`) to extract per-module coverage percentages.
 
 ### Step 3: Evaluate against threshold <!-- ai-slop-ok: skill-step-heading -->
 
@@ -124,7 +124,7 @@ Threshold: 60%
 Summary: 2 PASS, 1 GAP, 1 MISSING across 2 repos
 ```
 
-Write the full report to `$ONEX_STATE_DIR/coverage-sweep/latest-report.json`.
+Ensure `$ONEX_STATE_DIR/coverage-sweep/` exists (create if needed), then write the full report to `$ONEX_STATE_DIR/coverage-sweep/latest-report.json`.
 
 ### Step 5: Auto-ticket gaps (unless --dry-run) <!-- ai-slop-ok: skill-step-heading -->
 
@@ -164,9 +164,9 @@ Write skill result to `$ONEX_STATE_DIR/skill-results/{context_id}/coverage_sweep
 
 ## Error Handling
 
-- If `uv run pytest` fails for a repo: log the error, mark all modules as UNKNOWN, continue
+- If a repo has no `src/` directory: skip it with a warning before running pytest
+- If `uv run pytest` fails for a repo: log the error, mark all modules as UNKNOWN (coverage undetermined), continue
 - If Linear API is unavailable: report gaps but skip ticket creation, exit cleanly
-- If a repo has no `src/` directory: skip it with a warning
 
 ---
 
