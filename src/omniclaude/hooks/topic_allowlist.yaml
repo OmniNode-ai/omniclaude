@@ -570,3 +570,17 @@ allowed_extras:
       encounters an unrecoverable error. Complements the completed event.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6180
+
+  # ---------------------------------------------------------------------------
+  # Friction autofix topics (OMN-6648)
+  # Resolution telemetry emitted by the friction_autofix skill pipeline.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.friction-resolved.v1"
+    lifecycle: telemetry
+    reason: >
+      Friction autofix resolution telemetry emitted when a friction surface is
+      automatically resolved by the friction_autofix skill pipeline. Fan-out
+      target from friction.autofix.resolved event. No dedicated node contract
+      topic_base; contract governance to follow.
+    ticket: OMN-6648
