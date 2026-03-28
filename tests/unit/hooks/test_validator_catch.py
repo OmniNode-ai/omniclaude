@@ -19,6 +19,7 @@ class TestModelValidatorCatchPayload:
     def _make_payload(self, **overrides: object) -> ModelValidatorCatchPayload:
         defaults = {
             "session_id": "sess-001",
+            "correlation_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
             "validator_type": "pre_commit",
             "validator_name": "ruff",
             "catch_description": "Import sorting violation in module.py",

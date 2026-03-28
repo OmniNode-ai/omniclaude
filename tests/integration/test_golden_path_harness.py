@@ -758,6 +758,7 @@ class TestGoldenPathStandalone:
             ModelSessionOutcome.model_validate(
                 {
                     "session_id": gp_ids.session_id,
+                    "correlation_id": str(gp_ids.correlation_id),
                     "outcome": "success",
                     "emitted_at": T0.isoformat(),
                     "unexpected_field": "should_fail",

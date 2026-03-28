@@ -58,6 +58,7 @@ class ModelDodGuardFiredEvent(BaseModel):
     Attributes:
         ticket_id: Linear ticket identifier.
         session_id: Claude Code session identifier.
+        correlation_id: End-to-end correlation identifier (OMN-6884).
         guard_outcome: Guard decision — allowed, warned, or blocked.
         policy_mode: DoD enforcement policy — advisory, soft, or hard.
         receipt_age_seconds: Seconds since the last DoD receipt (None if no receipt).
@@ -69,6 +70,9 @@ class ModelDodGuardFiredEvent(BaseModel):
 
     ticket_id: str
     session_id: str
+    # OMN-6884: correlation_id was missing. Guard firings always occur
+    # within a session context, so correlation_id is required for tracing.
+    correlation_id: str
     guard_outcome: str  # allowed | warned | blocked
     policy_mode: str
     receipt_age_seconds: float | None

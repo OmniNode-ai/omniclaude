@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
@@ -105,6 +106,7 @@ class TestRoutingFeedbackSchema:
         now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome="success",
             feedback_status="produced",
             skip_reason=None,
@@ -123,6 +125,7 @@ class TestRoutingFeedbackSchema:
         now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome="success",
             feedback_status="produced",
             skip_reason=None,
@@ -144,6 +147,7 @@ class TestRoutingFeedbackSchema:
         now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome="unknown",
             feedback_status="skipped",
             skip_reason="NO_INJECTION",
@@ -162,6 +166,7 @@ class TestRoutingFeedbackSchema:
         now = datetime(2026, 2, 28, 12, 0, 0, tzinfo=UTC)
         event = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome="success",
             feedback_status="produced",
             skip_reason=None,

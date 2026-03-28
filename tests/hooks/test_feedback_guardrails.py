@@ -16,6 +16,8 @@ Part of OMN-1892: Add feedback loop with guardrails.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from plugins.onex.hooks.lib.feedback_guardrails import (
@@ -773,6 +775,7 @@ class TestRoutingFeedbackEmissionPath:
         now = datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC)
         payload = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome=str(result.details["session_outcome"]),
             feedback_status="produced",
             skip_reason=None,
@@ -810,6 +813,7 @@ class TestRoutingFeedbackEmissionPath:
 
         payload = ModelRoutingFeedbackPayload(
             session_id="def12345-5678-abcd-1234-567890abcdef",
+            correlation_id=uuid4(),
             outcome="failed",
             feedback_status="produced",
             skip_reason=None,
@@ -843,6 +847,7 @@ class TestRoutingFeedbackEmissionPath:
 
         payload = ModelRoutingFeedbackPayload(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome="success",
             feedback_status="skipped",
             skip_reason=result.skip_reason,

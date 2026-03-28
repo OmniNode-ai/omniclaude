@@ -10,6 +10,7 @@ Tests:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
@@ -26,6 +27,7 @@ class TestSessionOutcomeEnrichment:
         """All 9 enrichment fields present in serialized output when provided."""
         event = ModelSessionOutcome(
             session_id="sess-123",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
             intent_class="code_generation",
@@ -54,6 +56,7 @@ class TestSessionOutcomeEnrichment:
         """Events without enrichment fields still validate (None defaults)."""
         event = ModelSessionOutcome(
             session_id="sess-456",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.FAILED,
             emitted_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
         )
@@ -77,6 +80,7 @@ class TestSessionOutcomeEnrichment:
         """Some enrichment fields can be provided while others remain None."""
         event = ModelSessionOutcome(
             session_id="sess-789",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
             duration_ms=30000,
@@ -93,6 +97,7 @@ class TestSessionOutcomeEnrichment:
         with pytest.raises(Exception):
             ModelSessionOutcome(
                 session_id="sess-bad",
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 emitted_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
                 outcome_score=1.5,
@@ -102,6 +107,7 @@ class TestSessionOutcomeEnrichment:
         """Roundtrip: model -> JSON -> model preserves all fields."""
         event = ModelSessionOutcome(
             session_id="sess-rt",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.ABANDONED,
             emitted_at=datetime(2026, 3, 17, 12, 0, 0, tzinfo=UTC),
             intent_class="debugging",
