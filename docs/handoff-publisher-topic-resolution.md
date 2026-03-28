@@ -17,7 +17,7 @@
 ### 2. Topics Are Bare ONEX Suffixes
 - Wire topic = TopicBase enum value directly (e.g., `onex.evt.omniclaude.session-started.v1`)
 - NO environment prefix (`dev.`, `prod.`, etc.) -- realm-agnostic per OMN-1972 TopicResolver
-- `build_topic(prefix, base)` in `topics.py` is NOT used by the publisher
+- `build_topic(base)` in `topics.py` validates and returns canonical topic names (prefix parameter removed in OMN-5212)
 - `build_full_topic(env, namespace, suffix)` in omnibase_infra is dead code with zero production callers
 
 ### 3. Six Missing Event Registrations Added
