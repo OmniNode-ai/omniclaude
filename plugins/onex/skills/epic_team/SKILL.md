@@ -494,6 +494,23 @@ breaker trips:
 This prevents the first autopilot close-out failure mode where a release dispatch stalled
 for 1+ hour with zero output.
 
+### Agent Health-Check Integration (OMN-6889)
+
+The `agent_healthcheck` skill provides more sophisticated stall detection beyond the simple
+timeout circuit breaker. During wave monitoring, epic-team checks agent health using three
+heuristics:
+
+1. **Inactivity**: No tool calls for 10 minutes (configurable)
+2. **Context overflow**: Context window usage > 80% (preemptive recovery before hard limit)
+3. **Rate limits**: Agent encounters rate-limit errors
+
+On stall detection, the health-check module:
+- Snapshots progress to a checkpoint file (using the checkpoint protocol from OMN-6887)
+- Summarizes completed vs remaining work
+- Relaunches a fresh agent with the summary and remaining tasks only
+
+See `@skills/agent_healthcheck/SKILL.md` for the full detection and recovery protocol.
+
 ## Failure Taxonomy and Recovery Strategies
 
 | Failure Class | Symptoms | Recovery Strategy |
