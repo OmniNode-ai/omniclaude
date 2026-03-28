@@ -1,3 +1,32 @@
+## v0.18.0 (2026-03-28)
+
+### Added
+- feat: add coordination signal emission and consumption [OMN-6857] (#959)
+- feat: add set-session skill and TaskBinding service [OMN-6855] (#957)
+- feat: add bare-clone fetch step to merge-sweep before scan [OMN-6869] (#958)
+- feat: inject ONEX_TASK_ID into daemon emission path [OMN-6852] (#954)
+- feat: add task_id field to hook event payloads [OMN-6851] (#948)
+- feat(test): add emission wiring presence tests for all emitter modules [OMN-6866] (#951)
+- test(data-flow-sweep): add classification and node scaffold tests [OMN-6761] (#949)
+- feat: autopilot hardening -- cycle state, mutex, strike tracker, PR classifier, hook probe [OMN-6490] (#946)
+- feat: wire enrich_contract execution logic in prompt.md [OMN-6836] (#942)
+- feat: add contract generator module for onex_change_control YAML [OMN-6831] (#936)
+- feat(hooks): auto-refresh plugin cache on SessionStart [F58] (#932)
+- feat(hooks): add skill-invoked fan-out from skill.completed [OMN-6800] (#930)
+- feat: add doc_freshness_sweep skill (#929)
+- feat: data verification sweeps -- data-flow, database, runtime [OMN-6765] (#928)
+
+### Fixed
+- fix(hooks): add hostile-reviewer topics to topic_registry.yaml [OMN-6805] (#944)
+- fix(ci-status): filter to required workflows only on default branch [OMN-6812] (#933)
+
+### Changed
+- chore(deps): bump omnibase-core to 0.34.0, omnibase-infra to 0.29.0
+
+### Dependencies
+- omnibase-core 0.33.1 -> 0.34.0
+- omnibase-infra 0.28.0 -> 0.29.0
+
 ## v0.17.0 (2026-03-27)
 
 ### Added
