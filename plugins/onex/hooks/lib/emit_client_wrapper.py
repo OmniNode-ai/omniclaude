@@ -440,6 +440,14 @@ def emit_event(
         )
         return False
 
+    # Inject ONEX_TASK_ID into the payload if not already set (OMN-6852).
+    # This ensures events emitted from shell scripts or plugin hooks that
+    # bypass handler_event_emitter still carry the task binding.
+    if isinstance(payload, dict) and "task_id" not in payload:
+        _task_id = os.getenv("ONEX_TASK_ID")
+        if _task_id:
+            payload["task_id"] = _task_id
+
     client = _get_client()
     if client is None:
         logger.debug("EmitClient not available, event dropped")
