@@ -24,6 +24,7 @@ Design:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid5
@@ -215,7 +216,8 @@ def should_emit_conflict_signal(
         List of ModelFileConflict for each task with overlapping files.
     """
     current_id = str(current_task.get("task_id", ""))
-    current_files = set(current_task.get("files_touched", []))  # type: ignore[arg-type]
+    raw_current = current_task.get("files_touched", [])
+    current_files = set(raw_current) if isinstance(raw_current, Iterable) else set()
     if not current_files:
         return []
 
@@ -224,7 +226,8 @@ def should_emit_conflict_signal(
         other_id = str(other.get("task_id", ""))
         if other_id == current_id:
             continue
-        other_files = set(other.get("files_touched", []))  # type: ignore[arg-type]
+        raw_other = other.get("files_touched", [])
+        other_files = set(raw_other) if isinstance(raw_other, Iterable) else set()
         overlap = sorted(current_files & other_files)
         if overlap:
             signal_id = _compute_conflict_signal_id(current_id, other_id, overlap)
