@@ -285,3 +285,90 @@ class SessionRegistryClient:
                 lines.append(f"- {dec}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def format_full_resume_context(
+        entry: ModelSessionRegistryRow,
+        related_decisions: list[dict[str, object]] | None = None,
+        conflicts: list[dict[str, object]] | None = None,
+        coordination_signals: list[dict[str, object]] | None = None,
+    ) -> str:
+        """Build complete resume context combining all three stores.
+
+        Combines:
+            1. Session state from Postgres (task progress, files, phase)
+            2. File conflicts from Memgraph (other tasks touching same files)
+            3. Related decisions from Qdrant (semantic nearest-neighbor)
+            4. Recent coordination signals (what happened while session was inactive)
+
+        Doctrine D7: Qdrant decisions are enrichment only -- included when
+        available but never required for a valid resume context.
+
+        Args:
+            entry: Session registry row from Postgres.
+            related_decisions: Qdrant semantic recall results. Each dict has
+                ``task_id``, ``decision_text``, and ``score`` keys.
+            conflicts: File conflicts from Memgraph. Each dict has
+                ``other_task_id`` and ``shared_files`` keys.
+            coordination_signals: Recent signals. Each dict has
+                ``signal_type``, ``task_id``, and ``reason`` keys.
+
+        Returns:
+            Multi-line markdown string with full resume context.
+        """
+        lines: list[str] = []
+
+        # -- Header: session state from Postgres --
+        lines.append(f"## Resuming {entry.task_id}")
+        phase = entry.current_phase or "unknown"
+        activity = (
+            entry.last_activity.strftime("%Y-%m-%d %H:%M UTC")
+            if entry.last_activity is not None
+            else "unknown"
+        )
+        lines.append(f"**Phase:** {phase} | **Last activity:** {activity}")
+
+        if entry.files_touched:
+            files_str = ", ".join(entry.files_touched)
+            lines.append(f"**Files touched:** {files_str}")
+
+        # -- Decisions made (from Postgres session state) --
+        if entry.decisions:
+            lines.append("")
+            lines.append("### Decisions made")
+            for dec in entry.decisions:
+                lines.append(f"- {dec}")
+
+        # -- Related decisions from Qdrant (Doctrine D7: enrichment only) --
+        if related_decisions:
+            lines.append("")
+            lines.append("### Related decisions from other tasks")
+            for rd in related_decisions:
+                task = rd.get("task_id", "unknown")
+                text = rd.get("decision_text", "")
+                score = rd.get("score", 0.0)
+                lines.append(f"- {task} ({score:.2f}): {text}")
+
+        # -- Conflicts from Memgraph --
+        if conflicts:
+            lines.append("")
+            lines.append("### Conflicts")
+            for conflict in conflicts:
+                other = conflict.get("other_task_id", "unknown")
+                shared = conflict.get("shared_files", [])
+                if isinstance(shared, list):
+                    files_str = ", ".join(str(f) for f in shared)
+                else:
+                    files_str = str(shared)
+                lines.append(f"- Warning: {other} also touching {files_str}")
+
+        # -- Coordination signals (while you were gone) --
+        if coordination_signals:
+            lines.append("")
+            lines.append("### While you were gone")
+            for sig in coordination_signals:
+                sig_task = sig.get("task_id", "unknown")
+                reason = sig.get("reason", "")
+                lines.append(f"- {sig_task}: {reason}")
+
+        return "\n".join(lines)
