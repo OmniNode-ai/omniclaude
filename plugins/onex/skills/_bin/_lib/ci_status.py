@@ -5,6 +5,10 @@
 
 Checks CI/CD status for a specific PR or the default branch.
 Uses `gh pr checks` or `gh run list` for data.
+
+When checking the default branch (no --pr), only required workflows are
+considered.  Auxiliary workflows (release, nightly, pin cascade, etc.) are
+excluded so that the integration sweep does not flag them as failures.
 """
 
 from __future__ import annotations
@@ -19,6 +23,37 @@ from .base import (
     run_gh,
     script_main,
 )
+
+# ---------------------------------------------------------------------------
+# Required workflow filter (OMN-6812)
+# ---------------------------------------------------------------------------
+# Only these workflow names are considered when checking CI on the default
+# branch.  Auxiliary workflows (release, nightly, plugin-pin-cascade, etc.)
+# are ignored because they may legitimately have never run on main and should
+# not cause the integration sweep to flag a FAIL.
+#
+# Names are matched case-insensitively against the ``name`` field returned by
+# ``gh run list --json name,...``.
+
+REQUIRED_WORKFLOW_NAMES: list[str] = ["ci.yml", "CI"]
+
+# Auxiliary workflow names explicitly skipped.  Listed for documentation and
+# test assertions — the actual filter is an allowlist (REQUIRED_WORKFLOW_NAMES),
+# not a denylist.
+AUXILIARY_WORKFLOW_NAMES: list[str] = [
+    "Release",
+    "Plugin Pin Cascade",
+    "Nightly Tests",
+    "release.yml",
+    "plugin-pin-cascade.yml",
+    "nightly.yml",
+]
+
+
+def _is_required_workflow(name: str) -> bool:
+    """Return True if *name* matches a required workflow (case-insensitive)."""
+    name_lower = name.lower()
+    return any(rw.lower() == name_lower for rw in REQUIRED_WORKFLOW_NAMES)
 
 
 def _run(
@@ -98,7 +133,12 @@ def _run(
                 "databaseId,name,status,conclusion,createdAt,updatedAt,headBranch",
             ]
         )
-        runs = json.loads(result.stdout) if result.stdout.strip() else []
+        all_runs = json.loads(result.stdout) if result.stdout.strip() else []
+
+        # Filter to required workflows only (OMN-6812).  Auxiliary workflows
+        # (release, nightly, etc.) are excluded so they don't cause false
+        # FAIL signals in the integration sweep.
+        runs = [r for r in all_runs if _is_required_workflow(r.get("name", ""))]
 
         parsed_checks = [
             {
@@ -117,7 +157,7 @@ def _run(
             1 for r in runs if r.get("conclusion") in ("failure", "cancelled")
         )
         pending = sum(1 for r in runs if r.get("status") in ("queued", "in_progress"))
-        skipped = 0
+        skipped = len(all_runs) - len(runs)
 
         failing_names = [
             r.get("name", "unknown")
@@ -125,7 +165,13 @@ def _run(
             if r.get("conclusion") in ("failure", "cancelled")
         ]
 
-        inputs_dict = {"repo": repo_slug, "branch": "main", "limit": 10}
+        inputs_dict: dict[str, Any] = {
+            "repo": repo_slug,
+            "branch": "main",
+            "limit": 10,
+            "required_workflows": REQUIRED_WORKFLOW_NAMES,
+            "auxiliary_skipped": skipped,
+        }
 
     script_result = SkillScriptResult(
         meta=meta,
