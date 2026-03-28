@@ -687,6 +687,7 @@ def _emit_delegation_event(
             delegation_success=delegation_success,
             estimated_savings_usd=max(0.0, savings_usd),
             latency_ms=max(0, latency_ms),
+            task_id=os.getenv("ONEX_TASK_ID"),
         )
 
         from emit_client_wrapper import emit_event

@@ -38,6 +38,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.hooks.schemas import (
     EnumAgentState,
@@ -219,7 +220,7 @@ class TestTaskIdMaxLength:
         assert len(payload.task_id) == 64  # type: ignore[arg-type]
 
     def test_task_id_over_max_length_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ModelHookSessionStartedPayload(
                 **_base_tracing(),
                 working_directory="/workspace",
@@ -234,7 +235,5 @@ class TestTaskIdExcludedFromInfraPayloads:
 
     def test_trace_span_has_no_task_id(self) -> None:
         """ModelCorrelationTraceSpanPayload is tracing-only and must not carry task_id."""
-        assert not hasattr(ModelCorrelationTraceSpanPayload.model_fields, "task_id")
-        # Also verify it's not accepted as a field
         fields = ModelCorrelationTraceSpanPayload.model_fields
         assert "task_id" not in fields
