@@ -356,6 +356,17 @@ repos:
         types_or: [python, markdown]
         pass_filenames: true
         stages: [pre-commit]
+      # Auto-generate ONEX orchestrator nodes for new skills (OMN-6815)
+      # Detects skills with SKILL.md but no corresponding node directory and
+      # scaffolds the node automatically via generate_skill_node.py.
+      - id: auto-generate-skill-nodes
+        name: Auto-generate skill orchestrator nodes
+        entry: uv run python scripts/auto_generate_skill_nodes.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^plugins/onex/skills/
+
       # Skill hygiene (OMN-5200) — validates skill dir naming, structure, Python separation
       - id: skill-hygiene
         name: Skill Hygiene
