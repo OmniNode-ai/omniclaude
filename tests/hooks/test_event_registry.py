@@ -811,6 +811,8 @@ class TestEventRegistryIntegration:
             "hostile.reviewer.failed",
             # Agent chat broadcast (OMN-3972)
             "agent.chat.broadcast",
+            # Cross-session coordination signal (OMN-6857)
+            "coordination.signal",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
