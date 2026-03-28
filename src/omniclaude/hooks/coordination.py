@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Coordination signal models for multi-session awareness (OMN-6857).
+"""Coordination signal models and conflict detection for multi-session awareness.
 
 Coordination signals enable concurrent Claude Code sessions to share awareness
 of each other's work via Kafka events. Signals are emitted at key pipeline
@@ -12,21 +12,27 @@ Doctrine D5: Signals use ModelCoordinationSignalPayload with typed fields
 (repo, file_paths, pr_number, related_task_id, reason), not bare dict.
 
 Doctrine D6: Conflict signals from graph projector are advisory hints,
-not control events.
+not control events. Emission must remain idempotent (same conflict = same
+signal_id via deterministic uuid5).
 
 Design:
     - emitted_at must be explicitly injected (no datetime.now default)
     - All models are frozen (immutable after construction)
     - Signal-specific extras use dict[str, object] for extensibility
+    - should_emit_conflict_signal() is a pure function for file overlap detection (OMN-6861)
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Namespace UUID for deterministic conflict signal IDs (OMN-6861).
+# Same conflict (task pair + sorted shared files) always produces the same signal_id.
+_CONFLICT_NAMESPACE = UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
 
 class EnumCoordinationSignalType(StrEnum):
@@ -141,8 +147,101 @@ class ModelCoordinationSignal(BaseModel):
     )
 
 
+class ModelFileConflict(BaseModel):
+    """A detected file-level conflict between two tasks (OMN-6861).
+
+    Attributes:
+        other_task_id: The task that shares files with the current task.
+        shared_files: Sorted list of file paths both tasks touch.
+        signal_id: Deterministic UUID5 for idempotent emission (Doctrine D6).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    other_task_id: str = Field(
+        ...,
+        description="Task ID of the conflicting session",
+    )
+    shared_files: list[str] = Field(
+        ...,
+        description="Sorted list of shared file paths",
+    )
+    signal_id: UUID = Field(
+        ...,
+        description="Deterministic UUID5 for idempotent emission",
+    )
+
+
+def _compute_conflict_signal_id(
+    task_id_a: str,
+    task_id_b: str,
+    shared_files: list[str],
+) -> UUID:
+    """Compute a deterministic signal_id for a file conflict (Doctrine D6).
+
+    The same pair of tasks with the same shared files always produces
+    the same UUID, ensuring idempotent emission.
+    """
+    # Sort task IDs so order doesn't matter (A vs B == B vs A)
+    sorted_tasks = sorted([task_id_a, task_id_b])
+    # Files are already sorted by caller, but sort defensively
+    sorted_files = sorted(shared_files)
+    name = f"{sorted_tasks[0]}:{sorted_tasks[1]}:{','.join(sorted_files)}"
+    return uuid5(_CONFLICT_NAMESPACE, name)
+
+
+def should_emit_conflict_signal(
+    current_task: dict[str, object],
+    other_tasks: list[dict[str, object]],
+) -> list[ModelFileConflict]:
+    """Detect file-level conflicts between the current task and other active tasks.
+
+    Pure function that compares file overlap. Returns a list of conflicts
+    with ``other_task_id``, ``shared_files``, and a deterministic ``signal_id``.
+    Empty list means no conflicts detected.
+
+    This is an advisory detection function per Doctrine D6 -- the results are
+    hints, not authoritative control events.
+
+    Args:
+        current_task: Dict with ``task_id`` (str) and ``files_touched`` (list[str]).
+        other_tasks: List of dicts, each with ``task_id`` and ``files_touched``.
+
+    Returns:
+        List of ModelFileConflict for each task with overlapping files.
+    """
+    current_id = str(current_task.get("task_id", ""))
+    current_files = set(current_task.get("files_touched", []))  # type: ignore[arg-type]
+    if not current_files:
+        return []
+
+    conflicts: list[ModelFileConflict] = []
+    for other in other_tasks:
+        other_id = str(other.get("task_id", ""))
+        if other_id == current_id:
+            continue
+        other_files = set(other.get("files_touched", []))  # type: ignore[arg-type]
+        overlap = sorted(current_files & other_files)
+        if overlap:
+            signal_id = _compute_conflict_signal_id(current_id, other_id, overlap)
+            conflicts.append(
+                ModelFileConflict(
+                    other_task_id=other_id,
+                    shared_files=overlap,
+                    signal_id=signal_id,
+                )
+            )
+    return conflicts
+
+
 __all__ = [
     "EnumCoordinationSignalType",
     "ModelCoordinationSignal",
     "ModelCoordinationSignalPayload",
+    "ModelFileConflict",
+    "should_emit_conflict_signal",
 ]
