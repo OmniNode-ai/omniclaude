@@ -61,7 +61,7 @@ class EnumGhostRecoveryResult(StrEnum):
 class ModelGhostAutoMergeStatus(BaseModel):
     """Status of a single PR's ghost auto-merge check."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     repo: str = Field(..., description="Repository slug (org/name)")
     pr_number: int = Field(..., description="PR number")
@@ -317,7 +317,7 @@ def _disable_auto_merge(repo: str, pr_number: int) -> None:
 
 
 def _enable_auto_merge(repo: str, pr_number: int) -> None:
-    """Re-enable auto-merge on a PR via ``gh pr merge --auto``."""
+    """Re-enable auto-merge on a PR via ``gh pr merge --auto --squash``."""
     run_gh(
         [
             "pr",
@@ -326,12 +326,13 @@ def _enable_auto_merge(repo: str, pr_number: int) -> None:
             "--repo",
             repo,
             "--auto",
+            "--squash",
         ]
     )
 
 
 def _direct_merge(repo: str, pr_number: int) -> None:
-    """Merge a PR directly via ``gh pr merge`` (no --auto)."""
+    """Merge a PR directly via ``gh pr merge --squash`` (no --auto)."""
     run_gh(
         [
             "pr",
@@ -339,6 +340,7 @@ def _direct_merge(repo: str, pr_number: int) -> None:
             str(pr_number),
             "--repo",
             repo,
+            "--squash",
         ]
     )
 

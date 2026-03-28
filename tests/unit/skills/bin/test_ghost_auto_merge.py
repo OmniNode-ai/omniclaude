@@ -135,8 +135,10 @@ class TestDetectGhostAutoMerge:
         assert status.is_ghost is True
 
     @patch("_lib.ghost_auto_merge.run_gh")
-    def test_missing_enabled_at_defaults_to_ghost(self, mock_run: MagicMock) -> None:
-        """If enabledAt is missing but auto-merge and CLEAN, treat conservatively."""
+    def test_missing_enabled_at_defaults_to_not_ghost(
+        self, mock_run: MagicMock
+    ) -> None:
+        """If enabledAt is missing, minutes_stuck stays 0 so PR is not ghost."""
         mock_run.return_value = _mock_gh_result(
             {
                 "autoMergeRequest": {},
