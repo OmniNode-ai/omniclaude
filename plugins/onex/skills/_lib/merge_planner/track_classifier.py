@@ -167,10 +167,22 @@ def classify_prs(
     return results
 
 
+def is_in_merge_queue(pr: ModelPRClassificationInput) -> bool:
+    """Check if a PR is currently in the merge queue.
+
+    Use this guard before any operation that would dequeue the PR
+    (e.g., disableAutoMerge, re-enqueue). Dequeuing and re-enqueuing
+    doubles CI time because the concurrency group runs both CI jobs
+    sequentially (OMN-6468).
+    """
+    return pr.in_merge_queue
+
+
 __all__ = [
     "EnumMergeSweepTrack",
     "ModelPRClassificationInput",
     "ModelPRClassificationResult",
     "classify_pr_track",
     "classify_prs",
+    "is_in_merge_queue",
 ]
