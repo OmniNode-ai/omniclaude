@@ -41,7 +41,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -1643,6 +1643,7 @@ def execute_phase(phase_name, state):
     """
     handlers = {
         "pre_flight": execute_pre_flight,
+        "generate_contract": execute_generate_contract,
         "implement": execute_implement,
         "enrich_contract": execute_enrich_contract,
         "local_review": execute_local_review,
@@ -1898,6 +1899,77 @@ def execute_phase(phase_name, state):
 **Exit conditions:**
 - **Completed:** pre-commit and mypy issues resolved or deferred (AUTO-ADVANCE)
 - **Failed:** pre-flight tooling errors out unexpectedly
+
+---
+
+### Phase: GENERATE_CONTRACT
+
+**Contract generation for integration-sweep verification.**
+
+This phase creates a skeleton onex_change_control governance contract for the ticket.
+It runs after pre_flight and before implement. Failure is non-fatal -- the pipeline
+continues without a contract.
+
+1. Auto-detect onex_change_control repo path:
+   ```bash
+   if [ -z "$ONEX_CC_REPO_PATH" ]; then
+     TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
+     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+     for candidate in \
+       "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
+       "$REGISTRY_BASE/onex_change_control"; do
+       if [ -d "$candidate/contracts" ]; then
+         ONEX_CC_REPO_PATH="$candidate"
+         break
+       fi
+     done
+   fi
+   ```
+
+2. Check if contract exists: `ls $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml 2>/dev/null`
+   - If exists: skip this phase (contract already generated, possibly by plan-to-tickets)
+   - If not: continue
+
+3. Fetch ticket metadata:
+   - Use Linear MCP `get_issue` to get ticket title and description
+   - Parse description for seam indicators: look for keywords "cross-repo", "kafka", "topic",
+     "event", "api", "interface" in title or description
+   - If any seam keywords found: `is_seam_ticket=True`, scan description for interface types
+
+4. Generate contract:
+   ```python
+   import sys
+   sys.path.insert(0, f"{os.environ.get('CLAUDE_PLUGIN_ROOT', os.environ.get('OMNICLAUDE_PROJECT_ROOT', ''))}/skills/_lib/contract_generator")
+   from generate_contract import generate_skeleton_contract
+
+   yaml_str = generate_skeleton_contract(
+       ticket_id="{ticket_id}",
+       summary="{ticket_title}",
+       is_seam_ticket={is_seam_ticket},
+       interfaces_touched={interfaces_list},
+   )
+   ```
+
+5. Write contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+
+6. Commit:
+   ```bash
+   cd $ONEX_CC_REPO_PATH && git add contracts/{ticket_id}.yaml && git commit -m "contract: add {ticket_id} skeleton [auto-generated]"
+   ```
+
+**On failure:** Log warning "Contract generation failed: {error}". Continue pipeline -- this
+phase is non-fatal.
+
+**State artifacts:**
+- `phases.generate_contract.started_at`
+- `phases.generate_contract.completed_at`
+- `phases.generate_contract.artifacts` (contract_path, skipped)
+
+**Exit conditions:**
+- **Completed:** Contract written and committed (AUTO-ADVANCE)
+- **Skipped:** Contract already exists (AUTO-ADVANCE)
+- **Failed:** Non-fatal warning, pipeline continues (AUTO-ADVANCE)
 
 ---
 
