@@ -1,6 +1,6 @@
 ---
-description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
-version: 2.0.0
+description: Autonomous close-out orchestrator — 4-phase pipeline with worktree health sweep, full merge-sweep with DIRTY PR triage and queue stall detection, infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
+version: 3.0.0
 mode: full
 level: advanced
 debug: false
@@ -38,9 +38,9 @@ outputs:
 # autopilot
 
 **Skill ID**: `onex:autopilot`
-**Version**: 2.0.0
+**Version**: 3.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-5438
+**Ticket**: OMN-6872
 **Epic**: OMN-5431
 
 ---
@@ -75,7 +75,9 @@ Top-level autonomous close-out orchestrator.
 In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 
 **Phase A — Prepare (sequential):**
-- A1: merge-sweep — drain open PRs
+- A0: worktree-health — sweep worktrees for lost uncommitted work, auto-clean merged worktrees, create recovery tickets for dirty worktrees [OMN-6867]
+- A1: merge-sweep — drain open PRs (full merge-sweep skill: Track A auto-merge, Track A-update branch refresh, Track A-resolve thread resolution, Track B pr-polish for fixable blockers)
+- A1b: dirty-pr-triage — explicit DIRTY/CONFLICTING PR detection, auto-close stale PRs (>24h), queue stall detection, missing auto-merge detection [OMN-6872]
 - A2: deploy-local-plugin — activate newly merged skills/hooks for this session
 - A3: start-environment — audit-first infra startup: verify core infra (postgres, redpanda, valkey) running, migration-gate healthy (proves DB migrations current), all runtime containers healthy. Auto-fixes by running infra-up + infra-up-runtime if containers missing.
 
@@ -108,7 +110,7 @@ the circuit breaker but do NOT halt the pipeline. B5 and B6 have halt authority.
 D1-D3 are read-only verification. Failures are logged with warnings but do NOT halt —
 the release and redeploy already completed successfully.
 
-**Note:** This is an 18-step pipeline (A1-A3, B1-B8, C1-C2, D1-D5). Internal step IDs use the
+**Note:** This is a 20-step pipeline (A0-A3 including A1b, B1-B8, C1-C2, D1-D5). Internal step IDs use the
 `{phase}{ordinal}` scheme for stable naming in cycle records, circuit breaker logs, and
 downstream debugging.
 
@@ -151,7 +153,7 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ## Circuit Breaker
 
-3 consecutive step failures (across Steps 1–17) → stop immediately + Slack notify.
+3 consecutive step failures (across Steps A0–D5) → stop immediately + Slack notify.
 
 **Halt authority vs circuit breaker:**
 - **B5 (integration-sweep)** halts on FAIL or contract UNKNOWN — integration surfaces broken.
@@ -226,7 +228,9 @@ When dispatching subagents for release or other high-risk operations:
 ## Integration Points
 
 **Phase A — Prepare:**
-- **merge-sweep**: A1 — drains open PRs before release
+- **worktree-health**: A0 — sweep worktrees for lost work, auto-clean merged, create recovery tickets [OMN-6867]
+- **merge-sweep**: A1 — drains open PRs before release (full skill: Track A/B/A-update/A-resolve)
+- **dirty-pr-triage**: A1b — DIRTY/CONFLICTING PR detection, auto-close stale >24h, queue stall detection, missing auto-merge [OMN-6872]
 - **deploy-local-plugin**: A2 — activates newly merged skills/hooks
 - **start-environment**: A3 — audit-first infra startup with auto-fix
 
