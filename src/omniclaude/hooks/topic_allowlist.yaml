@@ -570,3 +570,17 @@ allowed_extras:
       encounters an unrecoverable error. Complements the completed event.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6180
+
+  - topic: "onex.evt.omniclaude.sprint-auto-pull-completed.v1"
+    lifecycle: observability
+    reason: >
+      Emitted by refill-sprint skill after pulling tech debt tickets from Future
+      into Active Sprint. Skill-level emission with no dedicated node contract.
+    ticket: OMN-6870
+
+  - topic: "onex.evt.omniclaude.tech-debt-queue-empty.v1"
+    lifecycle: observability
+    reason: >
+      Emitted by refill-sprint skill when no eligible tech debt tickets remain
+      in Future project. Used for alerting and pipeline idle detection.
+    ticket: OMN-6870
