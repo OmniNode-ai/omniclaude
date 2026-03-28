@@ -28,11 +28,51 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 import psycopg2
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Read-only model for session registry rows
+# ---------------------------------------------------------------------------
+
+
+class ModelSessionRegistryRow(BaseModel):
+    """Read-only projection of a session_registry Postgres row.
+
+    This is a local read model -- the authoritative write model lives in
+    omnibase_infra. Fields mirror the session_registry table columns
+    returned by SELECT queries.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    task_id: str = Field(..., description="Linear ticket ID (e.g., 'OMN-1234').")
+    status: str = Field(default="active", description="Current task status.")
+    current_phase: str | None = Field(
+        default=None, description="Current lifecycle phase."
+    )
+    worktree_path: str | None = Field(default=None, description="Git worktree path.")
+    files_touched: list[str] = Field(
+        default_factory=list, description="Files modified."
+    )
+    depends_on: list[str] = Field(
+        default_factory=list, description="Dependency task_ids."
+    )
+    session_ids: list[str] = Field(default_factory=list, description="CLI session_ids.")
+    correlation_ids: list[str] = Field(
+        default_factory=list, description="Correlation UUIDs."
+    )
+    decisions: list[str] = Field(default_factory=list, description="Key decisions.")
+    last_activity: datetime | None = Field(
+        default=None, description="Most recent activity."
+    )
+    created_at: datetime | None = Field(
+        default=None, description="Entry creation time."
+    )
+
 
 # ---------------------------------------------------------------------------
 # D4: Typed lookup results -- Found / NotFound / Unavailable
@@ -43,7 +83,7 @@ logger = logging.getLogger(__name__)
 class ModelSessionFound:
     """Session registry entry was found."""
 
-    entry: dict[str, Any]
+    entry: ModelSessionRegistryRow
 
 
 @dataclass(frozen=True)
@@ -85,6 +125,37 @@ WHERE status = 'active'
 ORDER BY last_activity DESC NULLS LAST
 """
 
+# Column names returned by SELECT queries (must match SQL column order)
+_COLUMNS = (
+    "task_id",
+    "status",
+    "current_phase",
+    "worktree_path",
+    "files_touched",
+    "depends_on",
+    "session_ids",
+    "correlation_ids",
+    "decisions",
+    "last_activity",
+    "created_at",
+)
+
+
+def _row_to_model(row: tuple[object, ...]) -> ModelSessionRegistryRow:
+    """Convert a psycopg2 row tuple to a ModelSessionRegistryRow."""
+    raw = dict(zip(_COLUMNS, row, strict=True))
+    # Normalize Postgres arrays to Python lists
+    for key in (
+        "files_touched",
+        "depends_on",
+        "session_ids",
+        "correlation_ids",
+        "decisions",
+    ):
+        val = raw.get(key)
+        raw[key] = list(val) if val is not None else []
+    return ModelSessionRegistryRow.model_validate(raw)
+
 
 class SessionRegistryClient:
     """Synchronous read-only client for the session_registry Postgres table.
@@ -106,12 +177,6 @@ class SessionRegistryClient:
             msg = "OMNIBASE_INFRA_DB_URL not set and no db_url provided"
             raise ConnectionError(msg)
         return psycopg2.connect(self._db_url)
-
-    @staticmethod
-    def _row_to_dict(row: tuple[Any, ...], description: Any) -> dict[str, Any]:
-        """Convert a psycopg2 row + cursor.description to a dict."""
-        columns = [col.name for col in description]
-        return dict(zip(columns, row, strict=True))
 
     def get_session(self, task_id: str) -> ModelSessionLookupResult:
         """Look up a session registry entry by task_id.
@@ -136,20 +201,7 @@ class SessionRegistryClient:
                 row = cur.fetchone()
                 if row is None:
                     return ModelSessionNotFound(task_id=task_id)
-                entry = self._row_to_dict(row, cur.description)
-                # Normalize Postgres arrays to Python lists
-                for key in (
-                    "files_touched",
-                    "depends_on",
-                    "session_ids",
-                    "correlation_ids",
-                    "decisions",
-                ):
-                    if entry.get(key) is not None:
-                        entry[key] = list(entry[key])
-                    else:
-                        entry[key] = []
-                return ModelSessionFound(entry=entry)
+                return ModelSessionFound(entry=_row_to_model(row))
         except (psycopg2.Error, OSError) as exc:
             logger.warning(
                 "session_registry_query_failed",
@@ -159,11 +211,13 @@ class SessionRegistryClient:
         finally:
             conn.close()
 
-    def list_active_sessions(self) -> list[dict[str, Any]] | ModelRegistryUnavailable:
+    def list_active_sessions(
+        self,
+    ) -> list[ModelSessionRegistryRow] | ModelRegistryUnavailable:
         """List all active session registry entries.
 
         Returns:
-            List of entry dicts on success.
+            List of ModelSessionRegistryRow on success.
             ModelRegistryUnavailable on connection/query failure.
         """
         try:
@@ -179,22 +233,7 @@ class SessionRegistryClient:
             with conn.cursor() as cur:
                 cur.execute(_SELECT_ACTIVE)
                 rows = cur.fetchall()
-                entries = []
-                for row in rows:
-                    entry = self._row_to_dict(row, cur.description)
-                    for key in (
-                        "files_touched",
-                        "depends_on",
-                        "session_ids",
-                        "correlation_ids",
-                        "decisions",
-                    ):
-                        if entry.get(key) is not None:
-                            entry[key] = list(entry[key])
-                        else:
-                            entry[key] = []
-                    entries.append(entry)
-                return entries
+                return [_row_to_model(row) for row in rows]
         except (psycopg2.Error, OSError) as exc:
             logger.warning(
                 "session_registry_list_failed",
@@ -205,56 +244,44 @@ class SessionRegistryClient:
             conn.close()
 
     @staticmethod
-    def format_resume_context(entry: dict[str, Any]) -> str:
+    def format_resume_context(entry: ModelSessionRegistryRow) -> str:
         """Format a registry entry into a human-readable resume context string.
 
         Used by the resume_session skill to display session state to the user.
 
         Args:
-            entry: A session registry entry dict (from get_session().entry).
+            entry: A session registry row (from get_session().entry).
 
         Returns:
             Multi-line string summarizing the session state.
         """
-        task_id = entry.get("task_id", "unknown")
-        status = entry.get("status", "unknown")
-        phase = entry.get("current_phase", "unknown")
-        files = entry.get("files_touched", [])
-        depends = entry.get("depends_on", [])
-        decisions = entry.get("decisions", [])
-        sessions = entry.get("session_ids", [])
-        last_activity = entry.get("last_activity")
-
         lines: list[str] = []
-        lines.append(f"## Session Resume: {task_id}")
+        lines.append(f"## Session Resume: {entry.task_id}")
         lines.append("")
-        lines.append(f"**Status:** {status}")
-        lines.append(f"**Phase:** {phase}")
+        lines.append(f"**Status:** {entry.status}")
+        lines.append(f"**Phase:** {entry.current_phase or 'unknown'}")
 
-        if last_activity:
-            if isinstance(last_activity, datetime):
-                lines.append(f"**Last Activity:** {last_activity.isoformat()}")
-            else:
-                lines.append(f"**Last Activity:** {last_activity}")
+        if entry.last_activity is not None:
+            lines.append(f"**Last Activity:** {entry.last_activity.isoformat()}")
 
-        lines.append(f"**Sessions:** {len(sessions)} session(s)")
+        lines.append(f"**Sessions:** {len(entry.session_ids)} session(s)")
 
-        if files:
+        if entry.files_touched:
             lines.append("")
             lines.append("**Files Touched:**")
-            for f in files:
+            for f in entry.files_touched:
                 lines.append(f"- `{f}`")
 
-        if depends:
+        if entry.depends_on:
             lines.append("")
             lines.append("**Dependencies:**")
-            for dep in depends:
+            for dep in entry.depends_on:
                 lines.append(f"- {dep}")
 
-        if decisions:
+        if entry.decisions:
             lines.append("")
             lines.append("**Decisions:**")
-            for dec in decisions:
+            for dec in entry.decisions:
                 lines.append(f"- {dec}")
 
         return "\n".join(lines)
