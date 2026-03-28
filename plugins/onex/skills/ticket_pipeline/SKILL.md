@@ -447,6 +447,25 @@ ticket-pipeline OMN-XXXX
 
 **Cross-repo detection heuristic**: Implementation touches files in repos not matching the ticket's labeled repo (from `$ONEX_STATE_DIR/epic-team/repo_manifest.yaml`).
 
+### Phase: enrich_contract
+
+**When:** After implement, before local_review
+**Purpose:** Populate dod_evidence[] from actual implementation artifacts
+**Skip condition:** No contract exists at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+
+**Steps:**
+1. Read existing contract YAML
+2. Discover test files: `git diff --name-only origin/main...HEAD -- 'tests/'`
+3. Build test command from discovered test files
+4. Call `enrich_contract_with_evidence()` with discovered artifacts
+5. Write enriched contract back to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+6. `cd $ONEX_CC_REPO_PATH && git add contracts/{ticket_id}.yaml && git commit -m "contract: enrich {ticket_id} with dod_evidence [auto-generated]"`
+
+**Dispatch:** `onex:polymorphic-agent` via Task()
+
+**Failure:** Non-fatal warning -- pipeline continues. Contract will have empty dod_evidence
+but integration-sweep can still check the contract exists.
+
 ### Phase 2: local_review
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
