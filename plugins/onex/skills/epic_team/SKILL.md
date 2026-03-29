@@ -234,7 +234,9 @@ epic-team OMN-XXXX
       Wave 0: independent tickets + cross-repo Part 1 splits (run in parallel)
       Wave 1: cross-repo Part 2 splits (run after Wave 0 completes)
   → For each wave: dispatch ticket-pipeline per ticket as Task() from team-lead session
+  → Start stall-detection watchdog for the wave [OMN-6987]
   → Await all Task() calls in wave before starting next wave
+  → If watchdog detects stall: cancel stalled task, log to state, retry in next wave
   → Collect results (status, pr_url, branch) from each Task()
   → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
@@ -331,6 +333,81 @@ Task(
 **DEPRECATED**: Spawning per-repo workers via `TeamCreate` + `Task(team_name=...)` + a
 `WORKER_TEMPLATE` is no longer used. See `prompt.md` for the deprecated WORKER_TEMPLATE
 preserved for historical reference.
+
+## Stall Detection in Wave Dispatch [OMN-6987]
+
+After dispatching all Task() calls in a wave, the team lead monitors for stalled agents
+using the `dispatch_watchdog` skill. This prevents a single stalled agent from blocking
+the entire wave indefinitely.
+
+### Monitoring Loop
+
+```
+# After dispatching wave N tasks:
+wave_start_time = now()
+stall_timeout = 300  # 5 minutes with no tool calls
+
+while any_task_still_running(wave_tasks):
+    # Check each running task
+    for task in wave_tasks:
+        if task.status == "in_progress":
+            elapsed_since_last_activity = now() - task.last_tool_call_time
+
+            if elapsed_since_last_activity > stall_timeout:
+                # Stall detected
+                log("[epic-team] STALL: {task.ticket_id} idle for {elapsed}s")
+                write_stall_event(epic_id, task.ticket_id, elapsed)
+
+                # Recovery: mark as failed, retry in next wave
+                task.status = "stalled"
+                task.retry_in_next_wave = true
+
+    # Check wave-level timeout (30 minutes total)
+    if now() - wave_start_time > 1800:
+        log("[epic-team] WAVE TIMEOUT: cancelling remaining tasks")
+        for task in wave_tasks:
+            if task.status == "in_progress":
+                task.status = "timeout"
+                task.retry_in_next_wave = true
+        break
+
+    sleep(60)  # Check every minute
+```
+
+### Stall State in state.yaml
+
+```yaml
+waves:
+  - wave_id: 0
+    dispatched_at: "2026-03-29T10:00:00Z"
+    completed_at: "2026-03-29T10:15:00Z"
+    tasks:
+      - ticket_id: OMN-2001
+        status: merged
+        pr_url: "https://github.com/..."
+      - ticket_id: OMN-2002
+        status: stalled
+        stall_detected_at: "2026-03-29T10:08:00Z"
+        idle_seconds: 480
+        retry_wave: 1
+```
+
+### Retry Policy
+
+- Stalled tasks are retried **once** in the next wave
+- If a task stalls twice: mark as `blocked`, add Linear comment, skip
+- Timeout tasks (wave-level) are always retried once
+- Maximum retry count per ticket: 1 (prevents infinite retry loops)
+
+### Integration with dispatch_watchdog Skill
+
+The monitoring logic above is the inline version for the team-lead session.
+For more sophisticated monitoring (e.g., headless overnight runs), invoke
+the `dispatch_watchdog` skill as a composable sub-skill:
+
+```
+Skill(skill="onex:dispatch_watchdog", args="--epic-id {epic_id} --timeout 300 --action report")
+```
 
 ## Skill Result Communication
 
