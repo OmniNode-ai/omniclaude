@@ -86,6 +86,7 @@ class AgenticStatus(Enum):
     TIMEOUT = "timeout"
     LLM_ERROR = "llm_error"
     NO_BACKEND = "no_backend"
+    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
 @dataclass
@@ -107,11 +108,35 @@ class AgenticResult:
     status: AgenticStatus = AgenticStatus.SUCCESS
     tool_names_used: set[str] = field(default_factory=set)
     error: str | None = None
+    total_message_bytes: int = 0
 
 
 # ---------------------------------------------------------------------------
 # Core ReAct loop
 # ---------------------------------------------------------------------------
+
+
+def _estimate_message_bytes(messages: list[_JsonDict]) -> int:
+    """Estimate the total byte size of the messages list."""
+    total = 0
+    for msg in messages:
+        content = msg.get("content") or ""
+        if isinstance(content, str):
+            total += len(content.encode("utf-8", errors="replace"))
+        tool_calls = msg.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                total += len(
+                    str(func.get("name", "")).encode("utf-8", errors="replace")
+                )
+                total += len(
+                    str(func.get("arguments", "")).encode("utf-8", errors="replace")
+                )
+    return total
+
+
+_DEFAULT_CONTEXT_BUDGET_BYTES = 128 * 1024
 
 
 def run_agentic_loop(
@@ -124,6 +149,7 @@ def run_agentic_loop(
     timeout_s: float = 60.0,
     model: str | None = None,
     backend: Any | None = None,
+    context_budget_bytes: int = _DEFAULT_CONTEXT_BUDGET_BYTES,
 ) -> AgenticResult:
     """Execute a ReAct-style agentic loop with tool calling.
 
@@ -263,6 +289,24 @@ def run_agentic_loop(
                 iteration + 1,
             )
 
+        # Check context budget after all tool results appended
+        current_bytes = _estimate_message_bytes(messages)
+        if current_bytes >= context_budget_bytes:
+            logger.info(
+                "Agentic loop hit context budget (%d >= %d bytes)",
+                current_bytes,
+                context_budget_bytes,
+            )
+            return AgenticResult(
+                content=_extract_last_assistant_content(messages),
+                iterations=iterations,
+                tool_calls_count=total_tool_calls,
+                status=AgenticStatus.BUDGET_EXHAUSTED,
+                tool_names_used=tool_names_used,
+                error=f"Context budget exhausted ({current_bytes} >= {context_budget_bytes} bytes)",
+                total_message_bytes=current_bytes,
+            )
+
     # Exhausted max iterations
     logger.info(
         "Agentic loop hit max iterations (%d), %d tool calls, %.1fs",
@@ -277,6 +321,7 @@ def run_agentic_loop(
         status=AgenticStatus.MAX_ITERATIONS,
         tool_names_used=tool_names_used,
         error=f"Reached max iterations ({max_iterations})",
+        total_message_bytes=_estimate_message_bytes(messages),
     )
 
 

