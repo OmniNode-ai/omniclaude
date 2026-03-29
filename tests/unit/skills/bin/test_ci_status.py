@@ -16,7 +16,12 @@ import pytest
 _BIN_DIR = Path(__file__).resolve().parents[4] / "plugins" / "onex" / "skills" / "_bin"
 sys.path.insert(0, str(_BIN_DIR))
 
-from _lib.ci_status import _run  # noqa: E402
+from _lib.ci_status import (  # noqa: E402
+    AUXILIARY_WORKFLOW_NAMES,
+    REQUIRED_WORKFLOW_NAMES,
+    _is_required_workflow,
+    _run,
+)
 
 
 def _mock_gh_result(data: list[dict]) -> MagicMock:
@@ -103,3 +108,128 @@ class TestCiStatusBranch:
 
         assert status.value == "OK"
         assert result.summary["passing"] == 1
+
+    @patch("_lib.ci_status.run_gh")
+    def test_auxiliary_workflows_excluded(self, mock_run: MagicMock) -> None:
+        """Auxiliary workflows (Release, Nightly) must be filtered out (OMN-6812)."""
+        runs = [
+            {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+            {
+                "name": "Release",
+                "status": "completed",
+                "conclusion": "failure",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+            {
+                "name": "Nightly Tests",
+                "status": "completed",
+                "conclusion": "failure",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+        ]
+        mock_run.return_value = _mock_gh_result(runs)
+        status, result, msg = _run("x/y", "r1", {"pr": None})
+
+        # Only the CI workflow should be counted
+        assert status.value == "OK"
+        assert result.summary["total"] == 1
+        assert result.summary["passing"] == 1
+        assert result.summary["failing"] == 0
+        assert result.summary["all_green"] is True
+        # Auxiliary skipped count recorded in inputs
+        assert result.inputs["auxiliary_skipped"] == 2
+
+    @patch("_lib.ci_status.run_gh")
+    def test_only_auxiliary_workflows_returns_no_checks(
+        self, mock_run: MagicMock
+    ) -> None:
+        """If only auxiliary workflows exist, result should be 'No CI checks found'."""
+        runs = [
+            {
+                "name": "Release",
+                "status": "completed",
+                "conclusion": "success",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+            {
+                "name": "Plugin Pin Cascade",
+                "status": "completed",
+                "conclusion": "success",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+        ]
+        mock_run.return_value = _mock_gh_result(runs)
+        status, result, msg = _run("x/y", "r1", {"pr": None})
+
+        assert status.value == "WARN"
+        assert result.summary["total"] == 0
+        assert "No CI checks found" in msg
+
+    @patch("_lib.ci_status.run_gh")
+    def test_ci_yml_name_matches(self, mock_run: MagicMock) -> None:
+        """The 'ci.yml' workflow name should also be accepted."""
+        runs = [
+            {
+                "name": "ci.yml",
+                "status": "completed",
+                "conclusion": "success",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "updatedAt": "2026-01-01T00:01:00Z",
+                "headBranch": "main",
+            },
+        ]
+        mock_run.return_value = _mock_gh_result(runs)
+        status, result, msg = _run("x/y", "r1", {"pr": None})
+
+        assert status.value == "OK"
+        assert result.summary["passing"] == 1
+
+
+@pytest.mark.unit
+class TestWorkflowFilter:
+    """Tests for the workflow name filter (OMN-6812)."""
+
+    def test_ci_is_required(self) -> None:
+        assert _is_required_workflow("CI") is True
+
+    def test_ci_yml_is_required(self) -> None:
+        assert _is_required_workflow("ci.yml") is True
+
+    def test_case_insensitive(self) -> None:
+        assert _is_required_workflow("ci") is True
+        assert _is_required_workflow("Ci.Yml") is True
+
+    def test_release_is_not_required(self) -> None:
+        assert _is_required_workflow("Release") is False
+
+    def test_nightly_is_not_required(self) -> None:
+        assert _is_required_workflow("Nightly Tests") is False
+
+    def test_plugin_pin_cascade_is_not_required(self) -> None:
+        assert _is_required_workflow("Plugin Pin Cascade") is False
+
+    def test_empty_name_is_not_required(self) -> None:
+        assert _is_required_workflow("") is False
+
+    def test_required_workflow_names_has_expected_entries(self) -> None:
+        assert "ci.yml" in REQUIRED_WORKFLOW_NAMES
+        assert "CI" in REQUIRED_WORKFLOW_NAMES
+
+    def test_auxiliary_names_documented(self) -> None:
+        assert len(AUXILIARY_WORKFLOW_NAMES) > 0
+        assert "Release" in AUXILIARY_WORKFLOW_NAMES
