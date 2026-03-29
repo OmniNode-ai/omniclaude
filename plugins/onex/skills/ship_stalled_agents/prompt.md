@@ -1,5 +1,7 @@
 # Ship Stalled Agents — Execution Prompt
 
+> **PR Safety**: This skill uses `@_lib/pr-safety/helpers.md` for all PR mutations.
+
 You are executing the `ship_stalled_agents` skill. Follow these steps exactly.
 
 ## Step 1: Parse arguments <!-- ai-slop-ok: skill-step-heading -->
@@ -69,31 +71,26 @@ Create a Linear ticket:
 
 ### 4b: Push (if unpushed commits exist)
 
-```bash
-git push -u origin <branch>
+Use the pr-safety mutation surface (`@_lib/pr-safety/helpers.md`) to push:
+
+```
+mutate_pr(pr_key, action="push_fix", run_id, fn=<push logic>, ...)
 ```
 
 Record `action_taken = PUSHED`.
 
 ### 4c: Create PR (if pushed but no PR exists)
 
-```bash
-gh pr create \
-  --title "[auto-shipped] <branch>" \
-  --body "Auto-shipped by agent-idle shipper skill (OMN-6868).
+Create the PR via `gh pr create`, then enable auto-merge using the pr-safety
+mutation surface (`@_lib/pr-safety/helpers.md`):
 
-Stalled worktree detected with uncommitted work. This PR was created
-automatically. Please review and run hostile review before merging.
-
-**Ticket**: <ticket_id>" \
-  --head <branch> \
-  --base main
+```
+mutate_pr(pr_key, action="merge", run_id, fn=<enable auto-merge>, ...)
 ```
 
-Then enable auto-merge:
-```bash
-gh pr merge <pr_number> --auto --squash
-```
+The PR should have:
+- Title: `[auto-shipped] <branch>`
+- Body: reference OMN-6868 and note it was auto-shipped from a stalled worktree
 
 Record `action_taken = PR_CREATED` and capture the PR URL.
 
