@@ -326,7 +326,7 @@ class TestGoldenEpicRunUpdated:
         assert_valid_status(payload, GOLDEN_SCHEMAS["epic.run.updated"])
 
     def test_rejects_empty_run_id(self) -> None:
-        """Caller must provide a real run_id, not empty string."""
+        """Empty run_id is rejected before emit -- no event emitted (OMN-6907)."""
         mock_fn, captured = make_capture_mock()
         with patch(
             "plugins.onex.hooks.lib.pipeline_event_emitters._get_emit_fn",
@@ -343,12 +343,10 @@ class TestGoldenEpicRunUpdated:
                 correlation_id="corr-001",
             )
 
-        assert len(captured) == 1
-        _, payload = captured[0]
-        with pytest.raises(AssertionError, match="empty string"):
-            assert_no_sentinels(
-                payload, GOLDEN_SCHEMAS["epic.run.updated"]["sentinel_fields"]
-            )
+        # OMN-6907: sentinel defaults eliminated -- empty run_id now causes
+        # the emitter to skip emission entirely rather than emitting a
+        # payload with sentinel values.
+        assert len(captured) == 0
 
 
 @pytest.mark.unit
