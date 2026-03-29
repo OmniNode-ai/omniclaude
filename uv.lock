@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -10,7 +10,7 @@ resolution-markers = [
 [manifest]
 overrides = [
     { name = "omnibase-core", specifier = "==0.33.1" },
-    { name = "omnibase-infra", specifier = "==0.28.0" },
+    { name = "omnibase-infra", specifier = "==0.29.0" },
     { name = "omnibase-spi", specifier = "==0.20.2" },
 ]
 
@@ -1873,7 +1873,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-infra"
-version = "0.28.0"
+version = "0.29.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1921,9 +1921,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/93/03022afdbc3a1eda3de33239ca3aeee233867529d4ddbd4203ebdf9355e9/omnibase_infra-0.28.0.tar.gz", hash = "sha256:b5d640ae87600c43854430f04e2605c23bbc46f82bace3b13abf459d257eb29e", size = 6825024, upload-time = "2026-03-27T05:31:22.872Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/31/c8/71bb5ce447eaf64dc868d67d058e1ab66124d92690d6c4153d6f3a2d347f/omnibase_infra-0.29.0.tar.gz", hash = "sha256:8ddfec0c1cde3dd0bb5c4e42739cbd02fe0a60d7da46ff327bff863c51e0fe6d", size = 6855566, upload-time = "2026-03-28T23:46:10.001Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/ff/1bd8208bdddbb42819548fc5649786ad6d4d20b800b510b3c8bb98d8caf6/omnibase_infra-0.28.0-py3-none-any.whl", hash = "sha256:c234dabf3c1a36a6558cfe1a962554cd37d6bbaf563058e5507ed33f24b4ae0d", size = 4035099, upload-time = "2026-03-27T05:31:25.339Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/86/047a2ac70d1a9687fe2971f79e91a91cc32ef258c8b62fd735df607062d5/omnibase_infra-0.29.0-py3-none-any.whl", hash = "sha256:e9e5cfd934bd7998e62d9d8853f061c625e588e31c890e9c081c2e48dd099ee3", size = 4067024, upload-time = "2026-03-28T23:46:12.345Z" },
 ]
 
 [[package]]
@@ -2004,7 +2004,7 @@ requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = "==0.33.1" },
-    { name = "omnibase-infra", specifier = "==0.28.0" },
+    { name = "omnibase-infra", specifier = "==0.29.0" },
     { name = "omnibase-spi", specifier = "==0.20.2" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.19.1" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
