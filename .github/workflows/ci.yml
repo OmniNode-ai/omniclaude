@@ -1406,12 +1406,12 @@ jobs:
           echo "Database schema validation passed"
 
   # ============================================================================
-  # DOD EVIDENCE VALIDATION (OMN-6747) — advisory, non-required
+  # DOD EVIDENCE VALIDATION (OMN-6747) — hard mode (OMN-6117)
   # ============================================================================
 
   dod-evidence-check:
-    name: DoD Evidence Check (Advisory)
-    # Self-hosted runner only — advisory check, not a required gate
+    name: DoD Evidence Check
+    # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
       ${{
         (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
@@ -1428,9 +1428,8 @@ jobs:
 
       - name: Run DoD evidence check
         run: bash scripts/dod-pre-push-check.sh
-        continue-on-error: true
         env:
-          DOD_ENFORCEMENT: advisory
+          DOD_ENFORCEMENT: hard
 
   # ============================================================================
   # COVERAGE (runs after test matrix)
