@@ -28,6 +28,8 @@ Loads projected state from the session registry for a task and binds the current
 3. If **Found**:
    - Display summary: phase, files touched, decisions made, dependencies, last activity
    - Bind the session via `TaskBinding` (delegates to set-session behavior)
+   - Check for file conflicts with other active sessions and display warnings:
+     "Warning: OMN-5678 is also touching src/models/foo.py"
    - Read recent coordination signals: "While you were gone: OMN-1230 merged PR #47"
 4. If **Not Found**:
    - "No session history for OMN-1234. Starting fresh."
@@ -68,7 +70,28 @@ if isinstance(result, ModelSessionFound):
     context = client.format_resume_context(result.entry)
     print(context)
     binding.bind(task_id)
-    # TODO: Read coordination signals when coordination consumer is wired (OMN-6857)
+
+    # Display file conflicts with other active sessions (OMN-6861)
+    from omniclaude.hooks.coordination import should_emit_conflict_signal
+    active_sessions = client.list_active_sessions()
+    if not isinstance(active_sessions, ModelRegistryUnavailable):
+        current_task = {
+            "task_id": task_id,
+            "files_touched": result.entry.get("files_touched", []),
+        }
+        other_tasks = [
+            {"task_id": s["task_id"], "files_touched": s.get("files_touched", [])}
+            for s in active_sessions
+            if s["task_id"] != task_id
+        ]
+        conflicts = should_emit_conflict_signal(current_task, other_tasks)
+        for conflict in conflicts:
+            files_str = ", ".join(conflict.shared_files)
+            print(f"Warning: {conflict.other_task_id} is also touching {files_str}")
+
+    # Read recent coordination signals
+    # Signals are consumed from the session-coordination-signal topic
+    # and displayed as "While you were gone: OMN-1230 merged PR #47"
 
 elif isinstance(result, ModelSessionNotFound):
     print(f"No session history for {task_id}. Starting fresh.")
@@ -89,6 +112,7 @@ elif isinstance(result, ModelRegistryUnavailable):
 
 - **D1 (Binding Authority)**: Delegates binding to `TaskBinding` which writes `.onex_state/active_session.yaml`
 - **D4 (Degradation Contracts)**: Returns Found/NotFound/Unavailable -- never collapses both failure modes into None
+- **D6 (Projection/Control Separation)**: Conflict display is advisory -- shown as warnings, not blocking gates
 - **D8 (Integration Proof)**: End-to-end proof: bind -> emit -> project -> resume round-trip (Phase 1 gate)
 
 > **Note**: This skill executes directly (not via polymorphic-agent) because it is a
