@@ -22,7 +22,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
+    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -78,7 +78,7 @@ is no acceptable workaround — surface the failure.
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> test_iterate -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> generate_contract -> decision_context_load -> conflict_gate -> implement -> enrich_contract -> local_review -> create_pr -> test_iterate -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -259,11 +259,13 @@ claude -p "Run ticket-pipeline for OMN-1234 --skip-to local_review" ...
 ```mermaid
 stateDiagram-v2
     [*] --> pre_flight
-    pre_flight --> decision_context_load : auto (policy)
+    pre_flight --> generate_contract : auto (policy)
+    generate_contract --> decision_context_load : auto (policy)
     decision_context_load --> conflict_gate : auto (policy)
     conflict_gate --> implement : no conflicts / LOW / MEDIUM / proceed
     conflict_gate --> [*] : HIGH conflict held (operator "hold" reply)
-    implement --> local_review : auto (policy)
+    implement --> enrich_contract : auto (policy)
+    enrich_contract --> local_review : auto (policy)
     implement --> cross_repo_split : cross-repo detected (MEDIUM_RISK gate)
     cross_repo_split --> [*] : epic-team takes over
     local_review --> create_pr : auto (2 confirmed-clean runs)
@@ -324,6 +326,24 @@ contract exists:
 - AUTO-FIX: <=10 files, same subsystem, low-risk → fix, commit as `chore(pre-existing): fix pre-existing issues [OMN-XXXX]`
 - DEFER: creates Linear sub-ticket, notes in PR description
 - AUTO-ADVANCE to Phase 0.5
+
+### Phase: generate_contract
+
+**When:** After pre_flight, before decision_context_load
+**Purpose:** Create onex_change_control governance contract for this ticket
+**Skip condition:** Contract already exists at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+
+**Steps:**
+1. Read ticket metadata from Linear via `get_issue`
+2. Determine `is_seam_ticket` from ticket labels or description keywords
+3. Generate skeleton contract YAML via `generate_skeleton_contract()`
+4. Write to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+5. `cd $ONEX_CC_REPO_PATH && git add contracts/{ticket_id}.yaml && git commit -m "contract: add {ticket_id} skeleton [auto-generated]"`
+
+**Dispatch:** `onex:polymorphic-agent` via Task()
+
+**Failure:** Non-fatal warning -- pipeline continues without contract. Integration-sweep
+will report UNKNOWN/NO_CONTRACT but the pipeline itself is not blocked.
 
 ### Phase 0.5: DecisionContextLoader (after intake)
 
