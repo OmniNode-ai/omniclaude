@@ -99,6 +99,7 @@ class TestModuleImport:
             "hostile.reviewer.completed",  # OMN-6188 - Multi-model hostile review result
             "hostile.reviewer.failed",  # OMN-6188 - Multi-model hostile review failure
             "agent.chat.broadcast",  # OMN-3972 - Agent chat broadcast for multi-terminal coordination
+            "coordination.signal",  # OMN-6857 - Cross-session coordination signal
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

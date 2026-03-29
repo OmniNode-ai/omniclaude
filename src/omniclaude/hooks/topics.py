@@ -403,6 +403,17 @@ class TopicBase(StrEnum):
     AGENT_CHAT_BROADCAST = "onex.evt.omniclaude.agent-chat-broadcast.v1"
     """Broadcast chat message for multi-terminal agent coordination."""
 
+    # ==========================================================================
+    # Session coordination topics (OMN-6857)
+    # Multi-session awareness signals for concurrent session coordination.
+    # Consumed by session registry projector and graph projector.
+    # ==========================================================================
+    SESSION_COORDINATION_SIGNAL = "onex.evt.omniclaude.session-coordination-signal.v1"
+    """Coordination signal emitted between sessions (PR merged, conflict detected, etc.)."""
+
+    SESSION_STATUS_CHANGED = "onex.evt.omniclaude.session-status-changed.v1"
+    """Session status change event for coordination projectors."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

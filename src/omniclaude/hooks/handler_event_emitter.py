@@ -668,6 +668,7 @@ async def emit_session_started_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -761,6 +762,7 @@ async def emit_session_ended_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -854,6 +856,7 @@ async def emit_prompt_submitted_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -951,6 +954,7 @@ async def emit_tool_executed_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),

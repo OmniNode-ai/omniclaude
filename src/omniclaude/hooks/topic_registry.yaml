@@ -428,3 +428,21 @@ topics:
     topic: "onex.evt.omniclaude.circuit-breaker-tripped.v1"
     topic_base_constant: "CIRCUIT_BREAKER_TRIPPED"
     description: "Kafka circuit breaker transitioned to OPEN state"
+
+  # ---------------------------------------------------------------------------
+  # Hostile reviewer and plan review topics (OMN-6188, OMN-6128)
+  # ---------------------------------------------------------------------------
+  - event_type: "hostile.reviewer.completed"
+    topic: "onex.evt.omniclaude.hostile-reviewer-completed.v1"
+    topic_base_constant: "HOSTILE_REVIEWER_COMPLETED"
+    description: "Multi-model hostile review aggregated result"
+
+  - event_type: "hostile.reviewer.failed"
+    topic: "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+    topic_base_constant: "HOSTILE_REVIEWER_FAILED"
+    description: "Multi-model hostile review failure event"
+
+  - event_type: "plan.review.completed"
+    topic: "onex.evt.omniclaude.plan-review-completed.v1"
+    topic_base_constant: "PLAN_REVIEW_COMPLETED"
+    description: "Plan review strategy run result for omnidash /plan-reviewer page"
