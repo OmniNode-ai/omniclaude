@@ -96,7 +96,7 @@ repos:
 
       - id: ruff-format
         name: ruff format (staged files)
-        entry: uv run ruff format
+        entry: bash scripts/uv-run-worktree-safe.sh ruff format
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -104,7 +104,7 @@ repos:
 
       - id: ruff-fix
         name: ruff check --fix (staged files)
-        entry: uv run ruff check --fix --exit-non-zero-on-fix
+        entry: bash scripts/uv-run-worktree-safe.sh ruff check --fix --exit-non-zero-on-fix
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -112,7 +112,7 @@ repos:
 
       - id: ruff-check
         name: ruff check (staged files)
-        entry: uv run ruff check
+        entry: bash scripts/uv-run-worktree-safe.sh ruff check
         language: system
         types: [python]
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
@@ -187,7 +187,7 @@ repos:
 
       - id: bandit-security
         name: bandit security scan
-        entry: uv run bandit -r -c .bandit
+        entry: bash scripts/uv-run-worktree-safe.sh bandit -r -c .bandit
         language: system
         types: [python]
         exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*|lib/.*'
@@ -200,7 +200,7 @@ repos:
         # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
         #   entry: bash -c 'uv run mypy src/omniclaude/ --ignore-missing-imports'
         # Exclusion: lib/ contains legacy code that will be deleted post-Beta
-        entry: bash -c 'uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
+        entry: bash -c 'bash scripts/uv-run-worktree-safe.sh mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
         language: system
         pass_filenames: false
         always_run: true
@@ -210,7 +210,7 @@ repos:
         name: pyright (type checking - complements mypy)
         # Pyright provides complementary type checking to mypy, catching different error categories.
         # Uses pyrightconfig.json for configuration (basic mode with incremental strictness).
-        entry: bash -c 'uv run pyright src/omniclaude'
+        entry: bash -c 'bash scripts/uv-run-worktree-safe.sh pyright src/omniclaude'
         language: system
         pass_filenames: false
         always_run: true
@@ -218,7 +218,7 @@ repos:
 
       - id: onex-validate
         name: ONEX validation
-        entry: uv run python scripts/validate_onex.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validate_onex.py
         language: system
         pass_filenames: false
         always_run: true
@@ -235,7 +235,7 @@ repos:
 
       - id: validate-secrets
         name: ONEX Secret Detection
-        entry: uv run python scripts/validation/validate_secrets.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_secrets.py
         language: system
         pass_filenames: true
         types: [python]
@@ -244,7 +244,7 @@ repos:
 
       - id: validate-no-duplicate-models
         name: No duplicate model filenames
-        entry: uv run python scripts/validation/validate_no_duplicate_models.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_duplicate_models.py
         language: system
         pass_filenames: false
         always_run: true
@@ -253,7 +253,7 @@ repos:
       - id: validate-pydantic-patterns
         name: Pydantic pattern validation
         # Exit 2 = warnings only (non-blocking); exit 1 = errors (blocking)
-        entry: bash -c 'uv run python scripts/validation/validate_pydantic_patterns.py; rc=$?; [ $rc -eq 2 ] && exit 0 || exit $rc'
+        entry: bash -c 'bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_pydantic_patterns.py; rc=$?; [ $rc -eq 2 ] && exit 0 || exit $rc'
         language: system
         pass_filenames: false
         always_run: true
@@ -261,7 +261,7 @@ repos:
 
       - id: validate-single-class-per-file
         name: Single class per file
-        entry: uv run python scripts/validation/validate_single_class_per_file.py --quiet
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_single_class_per_file.py --quiet
         language: system
         pass_filenames: false
         always_run: true
@@ -269,7 +269,7 @@ repos:
 
       - id: validate-enum-governance
         name: ONEX Enum Governance Validation
-        entry: uv run python scripts/validation/validate_enum_governance.py --quiet
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_enum_governance.py --quiet
         language: system
         pass_filenames: false
         always_run: true
@@ -277,7 +277,7 @@ repos:
 
       - id: validate-exports
         name: Validate __all__ exports
-        entry: uv run python scripts/validation/validate_exports.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_exports.py
         language: system
         pass_filenames: false
         always_run: true
@@ -352,7 +352,7 @@ repos:
       - id: check-ai-slop
         name: Check for AI-slop patterns
         language: system
-        entry: uv run python scripts/validation/check_ai_slop.py --strict
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/check_ai_slop.py --strict
         types_or: [python, markdown]
         pass_filenames: true
         stages: [pre-commit]
@@ -361,7 +361,7 @@ repos:
       # scaffolds the node automatically via generate_skill_node.py.
       - id: auto-generate-skill-nodes
         name: Auto-generate skill orchestrator nodes
-        entry: uv run python scripts/auto_generate_skill_nodes.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/auto_generate_skill_nodes.py
         language: system
         pass_filenames: false
         stages: [pre-commit]
@@ -402,7 +402,7 @@ repos:
       # Suppression: add `# onex-allow-kafka-broker` to the flagged line.
       - id: no-hardcoded-kafka-broker
         name: Block hardcoded Kafka broker URL fallbacks
-        entry: uv run python scripts/validation/validate_no_hardcoded_kafka_broker.py
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_kafka_broker.py
         language: system
         pass_filenames: false
         always_run: true
@@ -432,7 +432,7 @@ repos:
 
       - id: validate-spdx-headers
         name: ONEX SPDX Header Requirement
-        entry: uv run onex spdx validate
+        entry: bash scripts/uv-run-worktree-safe.sh onex spdx validate
         language: system
         pass_filenames: true
         files: ^(src|tests|scripts|examples)/.*\.(py|sh|bash|yml|yaml|toml)$
@@ -444,7 +444,7 @@ repos:
       # Configuration: .markdown-link-check.json (ignore patterns ported from lychee excludes)
       - id: onex-validate-links
         name: Validate markdown links
-        entry: uv run onex-validate-links --verbose
+        entry: bash scripts/uv-run-worktree-safe.sh onex-validate-links --verbose
         language: system
         types: [markdown]
         pass_filenames: false
@@ -455,7 +455,7 @@ repos:
       - id: no-untyped-metadata
         name: No untyped metadata dict fields
         language: system
-        entry: uv run check-no-untyped-metadata
+        entry: bash scripts/uv-run-worktree-safe.sh check-no-untyped-metadata
         types: [python]
         exclude: ^tests/|^examples/|^scripts/
 
