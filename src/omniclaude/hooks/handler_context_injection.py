@@ -28,6 +28,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -1102,6 +1103,7 @@ class HandlerContextInjection:
                 retrieval_duration_ms=retrieval_ms,
                 action_description=_action_desc,
                 tokens_injected=tokens_injected,
+                task_id=os.getenv("ONEX_TASK_ID"),
             )
             await emit_hook_event(payload)
             logger.debug(
