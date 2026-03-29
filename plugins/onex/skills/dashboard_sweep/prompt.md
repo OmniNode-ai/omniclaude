@@ -549,6 +549,8 @@ After all debug agents complete, for each domain with `status=fix_ready` in its 
 
 ### 4.1 Create PR
 
+**PR Title Rule**: The title MUST contain an `OMN-XXXX` ticket reference. The `PR Title Check` CI workflow blocks merge without it.
+
 ```bash
 cd ~/Code/omni_worktrees/OMN-5057/{repo}-{domain_id}
 git push -u origin jonah/omn-5057-fix-{domain_id}

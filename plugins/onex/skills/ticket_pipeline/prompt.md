@@ -231,7 +231,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "test_iterate", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "generate_contract", "implement", "enrich_contract", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "test_iterate", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
