@@ -264,6 +264,34 @@ Task(
 )
 ```
 
+## Pre-Dispatch Verification Preamble [OMN-6990]
+
+**Before dispatching any ticket in a wave**, the team lead performs a lightweight verification
+pass to catch misaligned tickets early -- before they consume a full pipeline run.
+
+### Verification Steps (per ticket, before Task() dispatch)
+
+1. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
+   - Description is non-empty and contains actionable content
+   - Repo target is identifiable (from title, description, or labels)
+   - No blocking dependencies are in non-Done state
+
+2. **Approach sanity check**: For each ticket, state in the dispatch prompt:
+   - What the ticket requires (1-sentence summary)
+   - Which repo and approximate files will be modified
+   - Any known constraints or patterns to follow
+
+3. **Skip unready tickets**: If a ticket fails verification:
+   - Mark as `skipped` in `state.yaml` with reason: `"verification_failed: {detail}"`
+   - Add a Linear comment: "Skipped by epic-team: {reason}"
+   - Do NOT dispatch -- move to next ticket in wave
+   - Unready tickets are re-evaluated in the next wave (dependency may have resolved)
+
+### Verification in the Dispatch Prompt
+
+The verification context is injected directly into each Task() dispatch prompt so the
+ticket-pipeline agent starts with pre-validated understanding rather than re-deriving it.
+
 ## Dispatch: Ticket-Pipeline per Ticket (Direct Dispatch Pattern)
 
 For each ticket in a wave, dispatch ticket-pipeline as a Task() from the team-lead session:
@@ -278,6 +306,12 @@ Task(
     URL: {url}
     Repo: {repo} at {repo_path}
     Epic: {epic_id}  Run: {run_id}
+
+    VERIFIED CONTEXT (from epic-team pre-dispatch check):
+    - Summary: {verified_summary}
+    - Target files: {verified_file_targets}
+    - Pattern to follow: {verified_pattern_reference}
+    - Dependencies met: {dependency_status}
 
     Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"{ticket_id}\")
 
