@@ -282,3 +282,122 @@ class TestWave2EventTypesInRegistry:
         reg = EVENT_REGISTRY["circuit.breaker.tripped"]
         assert reg.fan_out[0].topic_base == TopicBase.CIRCUIT_BREAKER_TRIPPED
         assert reg.partition_key_field == "session_id"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Hostile reviewer event wiring (OMN-6805)
+# ---------------------------------------------------------------------------
+
+HOSTILE_REVIEWER_TOPIC_CONSTANTS = [
+    "HOSTILE_REVIEWER_COMPLETED",
+    "HOSTILE_REVIEWER_FAILED",
+    "PLAN_REVIEW_COMPLETED",
+]
+
+HOSTILE_REVIEWER_TOPIC_VALUES = {
+    "HOSTILE_REVIEWER_COMPLETED": "onex.evt.omniclaude.hostile-reviewer-completed.v1",
+    "HOSTILE_REVIEWER_FAILED": "onex.evt.omniclaude.hostile-reviewer-failed.v1",
+    "PLAN_REVIEW_COMPLETED": "onex.evt.omniclaude.plan-review-completed.v1",
+}
+
+HOSTILE_REVIEWER_EVENT_TYPES = [
+    "hostile.reviewer.completed",
+    "hostile.reviewer.failed",
+    "plan.review.completed",
+]
+
+
+class TestHostileReviewerTopicConstants:
+    """Validate hostile reviewer topic constants are correctly defined in TopicBase."""
+
+    @pytest.mark.parametrize("constant_name", HOSTILE_REVIEWER_TOPIC_CONSTANTS)
+    def test_constant_exists_in_topic_base(self, constant_name: str) -> None:
+        from omniclaude.hooks.topics import TopicBase
+
+        assert hasattr(TopicBase, constant_name), (
+            f"TopicBase is missing hostile reviewer constant: {constant_name}"
+        )
+
+    @pytest.mark.parametrize(
+        ("constant_name", "expected_value"), HOSTILE_REVIEWER_TOPIC_VALUES.items()
+    )
+    def test_constant_value(self, constant_name: str, expected_value: str) -> None:
+        from omniclaude.hooks.topics import TopicBase
+
+        actual = getattr(TopicBase, constant_name).value
+        assert actual == expected_value, (
+            f"TopicBase.{constant_name} = '{actual}', expected '{expected_value}'"
+        )
+
+
+class TestHostileReviewerEventTypesInWrapper:
+    """Validate hostile reviewer event types are in SUPPORTED_EVENT_TYPES."""
+
+    @pytest.mark.parametrize("event_type", HOSTILE_REVIEWER_EVENT_TYPES)
+    def test_event_type_in_supported(self, event_type: str) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "emit_client_wrapper", EMIT_WRAPPER_PATH
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+
+        supported: frozenset[str] = mod.SUPPORTED_EVENT_TYPES  # type: ignore[attr-defined]
+        assert event_type in supported, (
+            f"emit_client_wrapper.SUPPORTED_EVENT_TYPES is missing '{event_type}'"
+        )
+
+
+class TestHostileReviewerEventTypesInRegistry:
+    """Validate hostile reviewer event types are registered in EVENT_REGISTRY."""
+
+    @pytest.mark.parametrize("event_type", HOSTILE_REVIEWER_EVENT_TYPES)
+    def test_event_type_in_event_registry(self, event_type: str) -> None:
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        assert event_type in EVENT_REGISTRY, (
+            f"event_registry.EVENT_REGISTRY is missing '{event_type}'"
+        )
+
+    def test_hostile_reviewer_completed_fan_out_topic(self) -> None:
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from omniclaude.hooks.topics import TopicBase
+
+        reg = EVENT_REGISTRY["hostile.reviewer.completed"]
+        assert len(reg.fan_out) == 1
+        assert reg.fan_out[0].topic_base == TopicBase.HOSTILE_REVIEWER_COMPLETED
+        assert reg.partition_key_field == "pr_number"
+        assert "pr_number" in reg.required_fields
+        assert "repo" in reg.required_fields
+        assert "verdict" in reg.required_fields
+
+    def test_hostile_reviewer_failed_fan_out_topic(self) -> None:
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from omniclaude.hooks.topics import TopicBase
+
+        reg = EVENT_REGISTRY["hostile.reviewer.failed"]
+        assert len(reg.fan_out) == 1
+        assert reg.fan_out[0].topic_base == TopicBase.HOSTILE_REVIEWER_FAILED
+        assert reg.partition_key_field == "pr_number"
+        assert "pr_number" in reg.required_fields
+        assert "repo" in reg.required_fields
+
+    def test_plan_review_completed_fan_out_topic(self) -> None:
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from omniclaude.hooks.topics import TopicBase
+
+        reg = EVENT_REGISTRY["plan.review.completed"]
+        assert len(reg.fan_out) == 1
+        assert reg.fan_out[0].topic_base == TopicBase.PLAN_REVIEW_COMPLETED
+        assert reg.partition_key_field == "session_id"
+        assert "session_id" in reg.required_fields
+
+    def test_hostile_reviewer_topics_in_registry_yaml(
+        self, registry_topics: list[dict[str, Any]]
+    ) -> None:
+        """Verify hostile reviewer topics exist in topic_registry.yaml."""
+        event_types = {e["event_type"] for e in registry_topics}
+        for et in HOSTILE_REVIEWER_EVENT_TYPES:
+            assert et in event_types, f"topic_registry.yaml is missing entry for '{et}'"

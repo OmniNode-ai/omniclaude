@@ -287,6 +287,7 @@ class TestDecisionRecordPrivacySplit:
             "has_rationale",
             "emitted_at",
             "session_id",
+            "task_id",
         }
         assert set(data.keys()) == expected_keys, (
             f"Unexpected keys in evt payload: {set(data.keys()) - expected_keys}"

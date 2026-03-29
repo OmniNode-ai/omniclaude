@@ -109,6 +109,20 @@ The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 | `UNKNOWN` | `NOT_APPLICABLE` | Continue — surface not touched by ticket |
 | `PASS_WITH_WARNINGS` | any | Continue — probe passed with non-blocking warnings (e.g., PLAYWRIGHT_BEHAVIORAL data-flow failure in local env) |
 
+**Auto-generated contracts:**
+
+Contracts produced by `generate_contract` / `enrich_contract` pipeline phases may contain:
+- Evidence items with `source: "generated"` -- these are machine-produced and should be probed
+  normally (not skipped)
+- Evidence items with `status: "pending"` -- these have not been verified yet; probe them and
+  update status based on the probe result
+
+**Contract with empty dod_evidence[]:**
+A contract that exists and validates against the schema but has empty `dod_evidence[]`
+is treated as PASS for the CONTRACT surface (the contract exists) with a WARNING that
+evidence is missing. This distinguishes "no contract" (HALT via `NO_CONTRACT`) from
+"contract exists but unenriched" (CONTINUE with warning).
+
 ---
 
 ## Output Artifact
