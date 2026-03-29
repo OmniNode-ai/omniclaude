@@ -369,7 +369,22 @@ except AutomationError as e:
 
 **Actions:**
 1. Verify branch is checked out (should already exist from transition automation)
-2. **Dispatch implementation to a separate agent:**
+2. **Mandatory code tracing (OMN-6819):** Before dispatching implementation, the agent
+   MUST read and trace the relevant code paths identified during research. This is NOT
+   optional. For each file in `context.relevant_files`:
+   - Read the file using the Read tool
+   - Identify relevant functions, classes, and data flow
+   - Note constraints, patterns, or conventions used
+   - Record trace findings in the dispatch prompt
+
+   Minimum trace requirement: at least 2 files from `context.relevant_files` must be
+   read before dispatching the implementation agent. If `context.relevant_files` has
+   fewer than 2 entries, trace all of them.
+
+   **Rationale:** Agents that propose fixes without understanding existing code paths
+   cause regressions, break integrations, and waste review cycles. Tracing first
+   prevents superficial analysis.
+3. **Dispatch implementation to a separate agent:**
    ```
    Task(
      subagent_type="onex:polymorphic-agent",
@@ -382,6 +397,13 @@ except AutomationError as e:
        Relevant files:
        {context.relevant_files}
 
+       Code trace findings (from mandatory pre-implementation tracing):
+       {code_trace_findings}
+
+       The code trace findings above summarize what the orchestrator learned by reading
+       the relevant files. Use these findings to understand existing patterns and
+       constraints before making changes.
+
        Execute the implementation. Do NOT commit changes (the orchestrator handles git).
        Report: files changed, what was implemented, any issues encountered."
    )
@@ -389,8 +411,8 @@ except AutomationError as e:
 
    This spawns a polymorphic agent with its own context window to implement the requirements.
 
-3. After the implementation agent completes, commit changes (append to `commits[]`)
-4. Update `pr_url` if PR created
+4. After the implementation agent completes, commit changes (append to `commits[]`)
+5. Update `pr_url` if PR created
 
 **Implementation via Task dispatch:**
 - Requirements from the contract are passed to a polymorphic agent via Task()

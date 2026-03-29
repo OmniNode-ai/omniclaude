@@ -125,7 +125,9 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 git push -u origin "$HEAD_BRANCH"
 
 # Create PR — resolve number from URL (deterministic anchor)
-PR_URL=$(gh pr create --title "<title>" --repo "$REPO" --body "$(cat <<'EOF'
+# PR Title Rule: The title MUST contain an OMN-XXXX ticket reference unless the
+# PR is a dependency bump or release. The PR Title Check CI workflow blocks merge without it.
+PR_URL=$(gh pr create --title "<conventional commit>: <description> [OMN-XXXX]" --repo "$REPO" --body "$(cat <<'EOF'
 ## Summary
 <2-3 bullets of what changed>
 
