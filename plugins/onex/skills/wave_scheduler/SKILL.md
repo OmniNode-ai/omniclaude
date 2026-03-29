@@ -454,6 +454,145 @@ Wave 2: [OMN-6890]                        (depends on OMN-6889)
 
 ---
 
+## Acceptance Test: Diamond Dependency Pattern (15 Tasks, 3 Repos)
+
+This test validates correct wave computation, cross-repo locking, and failure propagation
+using a realistic diamond dependency pattern across 3 repositories.
+
+### Test Plan File
+
+```yaml
+# test-plan-diamond-15.yaml
+epic_id: TEST-DIAMOND-15
+title: "Diamond dependency acceptance test"
+
+tickets:
+  # Wave 0 — 5 tickets, no dependencies (roots)
+  - id: T-001
+    title: "Init shared types"
+    repo: omnibase_core
+    depends_on: []
+  - id: T-002
+    title: "Init API schema"
+    repo: omninode_infra
+    depends_on: []
+  - id: T-003
+    title: "Init frontend scaffold"
+    repo: omnidash
+    depends_on: []
+  - id: T-004
+    title: "Init event bus topic registration"
+    repo: omnibase_core
+    depends_on: []
+  - id: T-005
+    title: "Init DB migration framework"
+    repo: omninode_infra
+    depends_on: []
+
+  # Wave 1 — 4 tickets, single dependencies
+  - id: T-006
+    title: "Implement core models"
+    repo: omnibase_core
+    depends_on: [T-001]
+  - id: T-007
+    title: "Implement API routes"
+    repo: omninode_infra
+    depends_on: [T-002]
+  - id: T-008
+    title: "Wire event consumers"
+    repo: omnibase_core
+    depends_on: [T-004]
+  - id: T-009
+    title: "Create DB schema"
+    repo: omninode_infra
+    depends_on: [T-005]
+
+  # Wave 2 — 3 tickets, diamond top (multiple dependencies converge)
+  - id: T-010
+    title: "API integration with core models"
+    repo: omninode_infra
+    depends_on: [T-006, T-007]        # Diamond: two parents
+  - id: T-011
+    title: "Dashboard data layer"
+    repo: omnidash
+    depends_on: [T-003, T-007]        # Cross-repo diamond
+  - id: T-012
+    title: "Event-driven DB sync"
+    repo: omninode_infra
+    depends_on: [T-008, T-009]        # Same-repo diamond
+
+  # Wave 3 — 2 tickets, deeper convergence
+  - id: T-013
+    title: "End-to-end API + dashboard wiring"
+    repo: omnidash
+    depends_on: [T-010, T-011]        # Second diamond layer
+  - id: T-014
+    title: "Event replay with DB state"
+    repo: omnibase_core
+    depends_on: [T-010, T-012]        # Cross-repo convergence
+
+  # Wave 4 — 1 ticket, final convergence (all paths join)
+  - id: T-015
+    title: "Full integration verification"
+    repo: omninode_infra
+    depends_on: [T-013, T-014]        # Grand convergence
+```
+
+### Expected Wave Schedule
+
+```
+Wave 0: [T-001, T-002, T-003, T-004, T-005]   5 tickets (all roots)
+Wave 1: [T-006, T-007, T-008, T-009]           4 tickets (single deps satisfied)
+Wave 2: [T-010, T-011, T-012]                  3 tickets (diamond tops)
+Wave 3: [T-013, T-014]                         2 tickets (deeper convergence)
+Wave 4: [T-015]                                1 ticket  (final convergence)
+
+Total: 15 tickets across 5 waves
+Sequential estimate: 15 x avg_ticket_time
+Parallel estimate: 5 x avg_ticket_time (5 waves)
+Speedup: ~3x
+```
+
+### Cross-Repo Lock Behavior
+
+In Wave 0, T-001 and T-004 both target `omnibase_core`. With `defer_repo_conflicts=true`:
+- T-001 acquires the `omnibase_core` lock (fewer downstream dependents: 2 vs 2, tie-break by order)
+- T-004 is deferred to a new Wave 0b
+- Net effect: Wave 0 = [T-001, T-002, T-003, T-005], Wave 0b = [T-004]
+
+With `defer_repo_conflicts=false` (default for worktree-isolated repos):
+- Both T-001 and T-004 run in Wave 0 in separate worktrees
+- No lock contention because each ticket gets its own worktree
+
+### Failure Propagation
+
+If T-007 fails in Wave 1:
+- T-010 is **blocked** (depends on T-007)
+- T-011 is **blocked** (depends on T-007)
+- T-013 is **blocked** (depends on T-010 and T-011, both blocked)
+- T-014 is **blocked** (depends on T-010, which is blocked)
+- T-015 is **blocked** (depends on T-013 and T-014, both blocked)
+- **Total cascade**: 1 failure blocks 5 downstream tickets
+- T-006, T-008, T-009, T-012 continue unaffected
+
+### Expected Summary Report
+
+```yaml
+status: partial
+waves_completed: 5
+tickets_completed: 9
+tickets_failed: 1
+tickets_blocked: 5
+wall_clock_minutes: 150    # 5 waves x 30 min avg
+sequential_estimate_minutes: 450  # 15 tickets x 30 min avg
+speedup_factor: 3.0
+failure_cascade:
+  root_failure: T-007
+  blocked_tickets: [T-010, T-011, T-013, T-014, T-015]
+```
+
+---
+
 ## See Also
 
 - `epic-team` skill (current ad-hoc wave execution, to be replaced)
