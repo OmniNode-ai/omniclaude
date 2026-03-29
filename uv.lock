@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -9,7 +9,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = "==0.33.1" },
+    { name = "omnibase-core", specifier = "==0.34.0" },
     { name = "omnibase-infra", specifier = "==0.29.0" },
     { name = "omnibase-spi", specifier = "==0.20.2" },
 ]
@@ -1852,7 +1852,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.33.1"
+version = "0.34.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1866,9 +1866,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/de/22/a622ae3b2634a81765345271b8e8a3f7a34d9517423e25a2dd9634a4872e/omnibase_core-0.33.1.tar.gz", hash = "sha256:d781bff756377fc789d63de06e00f5d2a6b3aba53c6c37ce5bf48071d5acc0bb", size = 8070185, upload-time = "2026-03-27T04:31:35.13Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/a0/6a11a3f9c626fd462cb76f82918b7b5a65111ca8427c6b9867abaf77eb48/omnibase_core-0.34.0.tar.gz", hash = "sha256:1e363e6d6db1b237b02d447478c96a18906485a6941398b563c8643a63ddb731", size = 8072369, upload-time = "2026-03-28T19:32:11.042Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/70/0d5145518017d36815034a547bf0649aff68eb40732001a5f55b06fafa31/omnibase_core-0.33.1-py3-none-any.whl", hash = "sha256:fbad19a34f6c8b3d95cee38c3ece42bcaf3385b9a694b56abbbc9935e7bfc832", size = 5272605, upload-time = "2026-03-27T04:31:32.884Z" },
+    { url = "https://files.pythonhosted.org/packages/75/cb/56600b5e438417148a787eb82995dfec37b23380c78aeef64baa6ea38237/omnibase_core-0.34.0-py3-none-any.whl", hash = "sha256:99bacd85b40d49d1f875b199fc6775e79708b92a7891b9186a09dea1cabe1dc2", size = 5274122, upload-time = "2026-03-28T19:32:08.709Z" },
 ]
 
 [[package]]
@@ -1942,7 +1942,7 @@ wheels = [
 
 [[package]]
 name = "omninode-claude"
-version = "0.17.0"
+version = "0.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2003,7 +2003,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = "==0.33.1" },
+    { name = "omnibase-core", specifier = "==0.34.0" },
     { name = "omnibase-infra", specifier = "==0.29.0" },
     { name = "omnibase-spi", specifier = "==0.20.2" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.19.1" },
