@@ -158,33 +158,70 @@ sessions with 1-2 passes.
 
 ### Pattern 2: Headless Cron (recommended for production)
 
-Uses `claude -p` (print mode) via `scripts/cron-closeout.sh`. Each invocation is a
-fresh process with zero accumulated context. State persists via checkpoint files in
-`.onex_state/pipeline_checkpoints/`.
+Uses `claude -p` (print mode) via `scripts/cron-closeout.sh`. Each phase gets a
+**fresh context window** via a separate `claude -p` invocation. State persists via
+`.onex_state/autopilot/cycle-state.yaml` and per-run output files.
+
+Architecture follows the headless decomposition pattern from
+`omnibase_infra/docs/patterns/headless_decomposition.md`:
+- **One task per invocation** (bounded context, <15 min timeout)
+- **State handoff via files** (no shared session state)
+- **Idempotent** (safe to re-run at any point)
+- **Lock-file concurrency guard** (prevents overlapping runs)
 
 ```bash
-# Direct invocation (one pass)
+# Direct invocation (one full close-out cycle)
 ./scripts/cron-closeout.sh
 
-# Dry run
+# Dry run — prints phases without executing claude -p
 ./scripts/cron-closeout.sh --dry-run
-
-# Cap at 5 passes
-./scripts/cron-closeout.sh --max-passes 5
 
 # Via crontab (every 30 minutes)
 */30 * * * * $OMNI_HOME/omniclaude/scripts/cron-closeout.sh >> /tmp/cron-closeout.log 2>&1  # local-path-ok: crontab example
 
 # Via launchd (macOS)
-# See scripts/com.omninode.cron-closeout.plist for the launchd agent template
+# Create ~/Library/LaunchAgents/com.omninode.cron-closeout.plist
 ```
 
-**Checkpoint protocol**:
-- State file: `.onex_state/pipeline_checkpoints/cron-closeout-state.yaml`
-- Lock file: `.onex_state/pipeline_checkpoints/cron-closeout.lock`
-- Each invocation reads checkpoint, executes one cycle, writes checkpoint, exits
-- Circuit breaker: 3 consecutive failures halt further invocations
-- Lock timeout: 45 minutes (matches autopilot cycle mutex)
+**State layout**:
+```
+.onex_state/autopilot/
+  cycle-state.yaml                     # Cross-run state (deployed versions, strikes)
+  cron-closeout.lock                   # Concurrency guard (auto-removed on exit)
+  runs/
+    closeout-2026-03-28T22-00-00Z/     # Per-run directory
+      A1_merge_sweep.txt               # Phase output
+      A2_deploy_plugin.txt
+      A3_start_env.txt
+      B5_integration.txt               # Hard gate output
+      C1_release_check.txt
+      C2_redeploy_check.txt
+      D3_dashboard_sweep.txt
+      pending_redeploys.txt            # F30 detection result
+      summary.txt                      # Run summary
+```
+
+**Phases executed** (each a separate `claude -p` invocation):
+
+| Phase | Name | Gate? | Description |
+|-------|------|-------|-------------|
+| A1 | merge-sweep | No | Drain open PRs with passing CI |
+| A2 | deploy-plugin | No | Copy plugin to cache |
+| A3 | infra-health | No | Verify postgres, redpanda, valkey |
+| B5 | integration-gate | **Hard** | Postgres + Redpanda must be healthy |
+| C1 | release-check | No | Report unreleased commits per repo |
+| C2 | redeploy-check | Conditional | Only if F30 detects version drift |
+| D3 | dashboard-sweep | No | Non-blocking health check |
+
+**F30 pending redeploy detection**: Before Phase C, the script compares git tags
+in each repo against `last_deploy_version` in `cycle-state.yaml`. If any tag has
+advanced beyond the recorded version, the repo is flagged for redeploy.
+
+**Circuit breaker**: 3 consecutive phase failures → pipeline halts with exit code 2.
+Resets on any successful integration gate pass.
+
+**Lock timeout**: 45 minutes. If a previous run's lock is older than this, it is
+treated as stale and removed.
 
 **Pros**: No context accumulation, survives session crashes, externally observable
 state, can run unattended for days.
