@@ -157,6 +157,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "hostile.reviewer.completed",  # OMN-6188 - Multi-model hostile review result
         "hostile.reviewer.failed",  # OMN-6188 - Multi-model hostile review failure
         "agent.chat.broadcast",  # OMN-3972 - Agent chat broadcast for multi-terminal coordination
+        "coordination.signal",  # OMN-6857 - Cross-session coordination signal (PR merged, conflict, etc.)
     ]
 )
 
@@ -439,6 +440,14 @@ def emit_event(
             "unsupported_event_type",
         )
         return False
+
+    # Inject ONEX_TASK_ID into the payload if not already set (OMN-6852).
+    # This ensures events emitted from shell scripts or plugin hooks that
+    # bypass handler_event_emitter still carry the task binding.
+    if isinstance(payload, dict) and "task_id" not in payload:
+        _task_id = os.getenv("ONEX_TASK_ID")
+        if _task_id:
+            payload["task_id"] = _task_id
 
     client = _get_client()
     if client is None:

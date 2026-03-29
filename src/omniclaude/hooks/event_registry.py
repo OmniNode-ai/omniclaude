@@ -1039,6 +1039,23 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "agent_id", "body"],
     ),
+    # =========================================================================
+    # Coordination Signal Events (OMN-6857)
+    # Multi-session awareness signals. Fan-out to SESSION_COORDINATION_SIGNAL
+    # for projector consumption.
+    # =========================================================================
+    "coordination.signal": EventRegistration(
+        event_type="coordination.signal",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.SESSION_COORDINATION_SIGNAL,
+                transform=None,  # Passthrough — no sensitive data in coordination signals
+                description="Coordination signal for session registry projector",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "signal_type", "task_id"],
+    ),
 }
 
 

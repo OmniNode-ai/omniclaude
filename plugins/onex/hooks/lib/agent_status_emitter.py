@@ -142,6 +142,7 @@ def emit_agent_status(
             blocking_reason=blocking_reason,
             emitted_at=datetime.now(UTC),
             metadata=metadata or {},
+            task_id=os.getenv("ONEX_TASK_ID"),
         )
 
         # Serialize to flat dict for daemon transport

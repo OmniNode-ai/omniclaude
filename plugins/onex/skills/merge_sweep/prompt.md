@@ -153,6 +153,29 @@ hardcoded list above.
 
 ---
 
+## 2b. Fetch Bare Clones (OMN-6869)
+
+Before scanning or checking merge status, fetch latest `main` in each bare clone to
+prevent stale-ref false positives (e.g., branch-contains checks against an outdated main).
+
+```bash
+OMNI_HOME="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+
+for repo in "${repo_list[@]}"; do
+  repo_name="${repo#*/}"  # strip org prefix
+  bare_clone="$OMNI_HOME/$repo_name"
+  if [ -f "$bare_clone/HEAD" ]; then
+    git -C "$bare_clone" fetch origin main:main --quiet 2>/dev/null &
+  fi
+done
+wait
+```
+
+This runs in parallel and completes in seconds. If a fetch fails (network issue), the
+scan proceeds with whatever refs are already cached — no hard failure.
+
+---
+
 ## 3. Scan Phase (Parallel, Tier-Aware)
 
 Scan up to `--max-parallel-repos` repos concurrently. The scan method depends on the

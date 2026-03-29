@@ -474,6 +474,18 @@ class ModelHookSessionStartedPayload(BaseModel):
         description="ID of the event or trigger that caused this event",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command. Used to "
+            "correlate all work on a logical task regardless of how many CLI sessions "
+            "it spans."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -572,6 +584,16 @@ class ModelHookSessionEndedPayload(BaseModel):
     causation_id: UUID = Field(
         ...,
         description="ID of the previous event in the session chain",
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
@@ -954,6 +976,16 @@ class ModelHookPromptSubmittedPayload(BaseModel):
         description="ID of the previous event in the session chain",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -1083,6 +1115,16 @@ class ModelHookToolExecutedPayload(BaseModel):
         description="ID of the prompt event that triggered this tool use",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -1203,6 +1245,16 @@ class ModelHookContextInjectedPayload(BaseModel):
     causation_id: UUID = Field(
         ...,
         description="ID of the prompt event that triggered context injection",
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
@@ -1743,6 +1795,16 @@ class ModelHookManifestInjectedPayload(BaseModel):
         description="ID of the prompt event that triggered manifest injection",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps
     emitted_at: TimezoneAwareDatetime = Field(
         ...,
@@ -2134,6 +2196,16 @@ class ModelAgentStatusPayload(BaseModel):
         description="Durable instance ID to disambiguate parallel agents with same name",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # State
     state: EnumAgentState = Field(
         ...,
@@ -2434,6 +2506,16 @@ class ModelTaskDelegatedPayload(BaseModel):
     correlation_id: UUID = Field(
         ...,
         description="Correlation ID for distributed tracing",
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
     # Timestamps — MUST be explicitly injected (no default_factory for testability)
@@ -2817,6 +2899,16 @@ class ModelHookDecisionRecordedPayload(BaseModel):
             "Optional session identifier for correlation with Claude Code hook events. "
             "None when the decision originated outside a hook session."
         ),
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
 
