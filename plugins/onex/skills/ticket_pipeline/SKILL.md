@@ -1,5 +1,5 @@
 ---
-description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, CI watching, PR review loop, integration verification gate, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
+description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, test-iterate loop, CI watching, PR review loop, integration verification gate, and auto-merge into a single unattended workflow with Slack notifications and policy guardrails
 mode: full
 version: 5.0.0
 level: intermediate
@@ -22,7 +22,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
+    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -41,6 +41,12 @@ args:
     required: false
   - name: --require-tests
     description: "Hard-gate test coverage: block PR creation if new code has no corresponding tests (default: advisory)"
+    required: false
+  - name: --max-test-iterations
+    description: "Maximum test-fix-rerun cycles before flagging for human review (default: 5)"
+    required: false
+  - name: --skip-test-iterate
+    description: "Skip the test-iterate phase entirely (use when tests are known to require infrastructure not available locally)"
     required: false
 ---
 
@@ -72,7 +78,7 @@ is no acceptable workaround — surface the failure.
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> decision_context_load -> conflict_gate -> implement -> local_review -> create_pr -> test_iterate -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -261,7 +267,9 @@ stateDiagram-v2
     implement --> cross_repo_split : cross-repo detected (MEDIUM_RISK gate)
     cross_repo_split --> [*] : epic-team takes over
     local_review --> create_pr : auto (2 confirmed-clean runs)
-    create_pr --> ci_watch : auto (policy)
+    create_pr --> test_iterate : auto (policy)
+    test_iterate --> ci_watch : tests pass or --skip-test-iterate
+    test_iterate --> ci_watch : max iterations reached (failure report attached)
     ci_watch --> pr_review_loop : auto (CI green or capped with warning)
     pr_review_loop --> review_gate : auto (approved)
     pr_review_loop --> [*] : capped/timeout (Slack MEDIUM_RISK + stop)
@@ -503,6 +511,98 @@ If any check fails, fix the issue first. Do NOT create the PR.
 - Idempotent: skips creation if PR already exists on branch
 - Pre-checks: clean tree, branch tracks remote, branch name pattern, gh auth, realm/topic invariant
 - Pushes branch, creates PR via `gh`, updates Linear status
+- AUTO-ADVANCE to Phase 3.7
+
+### Phase 3.7: test_iterate (OMN-6891)
+
+Autonomous test-fix-rerun loop that runs after PR creation and before CI watch. Detects the
+repo's test framework, runs the full test suite, and iteratively fixes failures up to
+`max_test_iterations` (default 5).
+
+**Skip conditions:**
+- `--skip-test-iterate` flag is passed
+- `--docs-only` mode is active (no code to test)
+- No test framework detected (no `pyproject.toml` with pytest, no `package.json` with test script)
+
+**Test framework auto-detection** (first match wins):
+1. `pyproject.toml` exists with `[tool.pytest]` or `pytest` in dependencies → `uv run pytest`
+2. `package.json` exists with `scripts.test` containing `vitest` → `npx vitest run`
+3. `package.json` exists with `scripts.test` containing `jest` → `npx jest`
+4. `playwright.config.ts` or `playwright.config.js` exists → `npx playwright test`
+5. No framework detected → skip phase with advisory log
+
+**Iteration loop:**
+
+```
+For iteration = 1 to max_test_iterations:
+  1. Run detected test command (capture stdout + stderr)
+  2. If all tests pass:
+       Record: test_iterate_status=pass, iterations_used={iteration}
+       AUTO-ADVANCE to Phase 4
+  3. If tests fail:
+       a. Parse failure output to extract:
+          - Failed test names and file paths
+          - Error messages and stack traces
+          - Assertion mismatches (expected vs actual)
+       b. Classify each failure:
+          - IMPORT_ERROR: missing import, wrong module path
+          - TYPE_MISMATCH: type error, wrong argument type, schema validation failure
+          - MISSING_CONFIG: missing env var, config key, fixture
+          - LOGIC_ERROR: assertion failure from incorrect business logic
+          - INFRASTRUCTURE: network, database, service unavailability
+       c. For IMPORT_ERROR, TYPE_MISMATCH, MISSING_CONFIG:
+          - Generate targeted fix for SOURCE code (not test code, unless
+            test expectations changed intentionally due to the ticket's changes)
+          - Apply fix, commit as: "fix(tests): {failure_category} - {brief_description} [{ticket_id}]"
+       d. For LOGIC_ERROR:
+          - Attempt source code fix based on test expectation and ticket context
+          - If fix is ambiguous (multiple valid interpretations): flag for human review,
+            do NOT guess
+       e. For INFRASTRUCTURE:
+          - Do NOT attempt to fix (environment-dependent)
+          - Log as skipped, exclude from iteration count
+       f. Re-run ONLY failed tests (not full suite) to validate fix:
+          - pytest: `uv run pytest {failed_test_paths} -x`
+          - vitest: `npx vitest run {failed_test_files}`
+          - jest: `npx jest {failed_test_files}`
+       g. If targeted re-run passes: run full suite to check for regressions
+       h. If targeted re-run still fails: continue to next iteration
+```
+
+**After max_test_iterations exhausted:**
+1. Generate failure report containing:
+   - Each failed test with its error message
+   - All fix attempts made and their outcomes
+   - Root cause hypothesis for remaining failures
+   - Suggested manual investigation steps
+2. Attach failure report to Linear ticket as a comment via `mcp__linear-server__save_comment`
+3. Record: `test_iterate_status=max_iterations_reached`, `failure_report_path=...`
+4. Post Slack `MEDIUM_RISK` notification:
+   ```
+   [MEDIUM_RISK] ticket-pipeline: test-iterate exhausted {max_test_iterations} iterations for {ticket_id}
+   {N} tests still failing. Failure report attached to ticket.
+   Continuing to CI watch — CI may catch additional issues.
+   ```
+5. AUTO-ADVANCE to Phase 4 (do not block — CI watch and PR review provide additional safety nets)
+
+**Metrics** (emitted via `@_lib/pipeline-metrics/helpers.md`):
+- `test_iterate.first_pass_result`: pass | fail (was the first run green?)
+- `test_iterate.iterations_used`: 0-5 (0 = first pass green)
+- `test_iterate.failure_categories`: dict of category → count
+- `test_iterate.fixes_applied`: count of successful fixes
+- `test_iterate.final_status`: pass | max_iterations_reached | skipped
+
+**State artifacts** (written to `phases.test_iterate.artifacts`):
+```yaml
+test_iterate_status: pass | max_iterations_reached | skipped
+test_framework: pytest | vitest | jest | playwright | none
+iterations_used: 0
+first_pass_result: pass | fail
+failure_categories: {}
+fixes_applied: 0
+failure_report_path: null  # set only on max_iterations_reached
+```
+
 - AUTO-ADVANCE to Phase 4
 
 ### Phase 4: ci_watch
@@ -619,6 +719,8 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `stop_on_cross_repo` | `false` | Auto-split via decompose-epic instead of stopping |
 | `cross_repo_gate_timeout_minutes` | `10` | Minutes to wait for Slack reply before handing off to epic-team |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
+| `test_iterate_enabled` | `true` | Run test-iterate loop after PR creation (Phase 3.7). Set to `false` or use `--skip-test-iterate` to skip. |
+| `max_test_iterations` | `5` | Maximum test-fix-rerun cycles before generating failure report and advancing |
 | `auto_fix_ci` | `true` | Dispatch background ci-watch agent on CI failure (Phase 4) |
 | `ci_watch_timeout_minutes` | `60` | Pass-through to background ci-watch agent: max minutes it waits for CI (not a pipeline-blocking timer) |
 | `max_ci_fix_cycles` | `3` | Pass-through to background ci-watch agent: max fix attempts before capping |
@@ -944,6 +1046,66 @@ Task(
 
 No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
 
+### Phase 3.7: test_iterate — dispatch to polymorphic agent (OMN-6891)
+
+Dispatches to a polymorphic agent that runs the test-fix-rerun loop in its own context window.
+Skipped when `--skip-test-iterate` or `--docs-only` is active, or when no test framework is detected.
+
+```
+# Inline orchestrator actions for Phase 3.7:
+# 1. If --skip-test-iterate or --docs-only: skip, record test_iterate_status=skipped, advance
+# 2. Detect test framework:
+#      a. Check {repo_path}/pyproject.toml for pytest config/dep → framework=pytest
+#      b. Check {repo_path}/package.json scripts.test for vitest → framework=vitest
+#      c. Check {repo_path}/package.json scripts.test for jest → framework=jest
+#      d. Check {repo_path}/playwright.config.{ts,js} → framework=playwright
+#      e. None found → skip, record test_iterate_status=skipped, advance
+# 3. Dispatch test-iterate agent (see below)
+# 4. Read result from agent response
+# 5. Record artifacts in state.yaml phases.test_iterate
+# 6. If max_iterations_reached: attach failure report to Linear ticket, post MEDIUM_RISK Slack
+# 7. Update state.yaml: phase=ci_watch
+# AUTO-ADVANCE to Phase 4
+```
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="ticket-pipeline: Phase 3.7 test-iterate for {ticket_id}",
+  prompt="You are executing the test-iterate loop for {ticket_id}.
+
+    Branch: {branch_name}
+    Repo: {repo_path}
+    Test framework: {detected_framework}
+    Max iterations: {max_test_iterations}
+
+    Run the test suite using: {test_command}
+
+    LOOP (up to {max_test_iterations} iterations):
+      1. Run tests. If all pass, report success and stop.
+      2. On failure, parse output to identify:
+         - Failed test names and file paths
+         - Error messages and stack traces
+         - Failure category: IMPORT_ERROR | TYPE_MISMATCH | MISSING_CONFIG | LOGIC_ERROR | INFRASTRUCTURE
+      3. For fixable categories (IMPORT_ERROR, TYPE_MISMATCH, MISSING_CONFIG, LOGIC_ERROR):
+         - Fix SOURCE code, not test code (unless test expectations changed due to this ticket)
+         - Commit fix: 'fix(tests): {category} - {description} [{ticket_id}]'
+         - Push to branch
+      4. For INFRASTRUCTURE failures: skip (log as unfixable), exclude from iteration count
+      5. Re-run ONLY failed tests to validate fix
+      6. If targeted re-run passes, run full suite to check for regressions
+      7. If still failing, continue to next iteration
+
+    If all iterations exhausted:
+      Generate failure report with: each failed test, error message, all fix attempts,
+      root cause hypothesis, suggested manual steps.
+
+    Report back with: test_iterate_status (pass|max_iterations_reached),
+      iterations_used, first_pass_result (pass|fail), failure_categories,
+      fixes_applied count, failure_report (if applicable)."
+)
+```
+
 ### Phase 4: ci_watch — runs inline (non-blocking; background dispatch only on failure)
 
 Phase 4 runs inline in the orchestrator. No blocking dispatch is used. See `prompt.md` lines
@@ -1053,6 +1215,7 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `local-review` skill (Phase 2)
 - `hostile-reviewer` skill (Phase 2.4, OMN-3107)
 - `_lib/pipeline-metrics/helpers.md` (phase transition + TCB outcome metrics, OMN-3107)
+- test-iterate loop (Phase 3.7, OMN-6891) — autonomous test-fix-rerun after PR creation
 - `ci-watch` skill (Phase 4, OMN-2523)
 - `pr-watch` skill (Phase 5, OMN-2524)
 - `contract-compliance-check` skill (Phase 5.5 Gate 1, OMN-2978)
