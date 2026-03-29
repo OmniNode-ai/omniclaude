@@ -28,7 +28,7 @@ Delegates repo-specific mechanics to existing skills.
 
 ## Steps
 
-### Step 1: Merge Sweep
+### Merge Sweep
 
 Invoke `/merge_sweep` to drain all open PRs with passing CI.
 
@@ -36,7 +36,7 @@ Invoke `/merge_sweep` to drain all open PRs with passing CI.
 - Skip PRs with failing CI or unresolved review comments
 - Log merged PRs and skipped PRs with reasons
 
-### Step 2: Integration Sweep (Hard Gate)
+### Integration Sweep (Hard Gate)
 
 Invoke `/integration_sweep` to verify all recently merged work.
 
@@ -44,7 +44,7 @@ Invoke `/integration_sweep` to verify all recently merged work.
 - Continue only on PASS or NOT_APPLICABLE
 - If halted: write diagnosis to `docs/diagnosis-close-out-<date>.md` and stop
 
-### Step 3: Release
+### Release
 
 Invoke `/release` for each repo that has unreleased changes.
 
@@ -52,7 +52,7 @@ Invoke `/release` for each repo that has unreleased changes.
 - Each repo release is independent after tier ordering
 - Verify PyPI publish success before proceeding
 
-### Step 4: Redeploy
+### Redeploy
 
 Invoke `/redeploy` to refresh the runtime with new versions.
 
@@ -61,7 +61,7 @@ Invoke `/redeploy` to refresh the runtime with new versions.
 - Seed Infisical if contracts changed
 - Verify health endpoints respond
 
-### Step 5: Verification
+### Verification
 
 - Confirm all PRs from Step 1 are merged (not just attempted)
 - Confirm all releases from Step 3 have published tags
