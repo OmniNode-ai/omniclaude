@@ -282,6 +282,51 @@ stateDiagram-v2
     auto_merge --> [*] : merged (ledger cleared) or held (Slack waiting)
 ```
 
+### Phase -1: Verification Preamble [OMN-6989]
+
+**Before any implementation begins**, the pipeline verifies that the ticket's requirements
+are understood and the proposed approach is sound. This prevents the "implement first, discover
+mismatch later" failure mode that wastes entire pipeline runs.
+
+**Step 0 (ticket comprehension check):**
+
+1. Fetch the ticket from Linear via `mcp__linear-server__get_issue`
+2. Extract and echo back:
+   - **Summary**: one sentence describing what this ticket requires
+   - **Acceptance criteria**: bulleted list from ticket description (or "none specified")
+   - **Repo target**: which repo(s) this ticket modifies
+   - **Dependencies**: tickets that must be completed first (from ticket relations)
+3. If the ticket description is empty or has no actionable content:
+   - Log: "VERIFY-WARN: Ticket {ticket_id} has no description or acceptance criteria"
+   - In non-headless mode: pause and ask the user to confirm intent
+   - In headless mode: proceed with caution flag set in state
+
+**Step 1 (approach verification):**
+
+1. Before writing any code, state the planned approach:
+   - Which files will be created or modified
+   - What pattern is being followed (link to existing similar implementation if possible)
+   - What will NOT be changed (explicit scope boundary)
+2. Check for existing implementations that overlap:
+   ```bash
+   # Search for similar functionality already in the codebase
+   grep -r "<key terms from ticket>" --include="*.py" src/ | head -20
+   ```
+3. If overlap is found: note it in the state file and adjust approach to extend rather
+   than duplicate
+
+**Step 2 (dependency gate):**
+
+1. Check if dependent tickets (from Linear relations) are completed
+2. If dependencies are not met:
+   - `PIPELINE_GATE_MODE=hard`: HALT with "blocked by {dep_ticket_id}"
+   - `PIPELINE_GATE_MODE=soft`: log warning, proceed with caution
+3. Record dependency status in `phases.verification.artifacts.dependency_check`
+
+**AUTO-ADVANCE** to Phase 0 after verification completes.
+
+---
+
 ### Phase 0: pre_flight
 
 **Step 0 (contract verification):** Before any other pre_flight work, verify a ticket
