@@ -132,6 +132,67 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ---
 
+## Invocation Patterns: CronCreate vs Headless Cron
+
+There are two supported patterns for recurring autopilot execution. The headless cron
+pattern is **preferred** for production use because it avoids context accumulation.
+
+### Pattern 1: CronCreate (in-session, context-accumulating)
+
+Uses Claude Code's built-in `CronCreate` to fire autopilot on a schedule within an
+active interactive session. Each firing shares the session's context window.
+
+```
+/loop 30m /autopilot --mode close-out
+```
+
+**Pros**: Simple setup, immediate, no external dependencies.
+**Cons**: Context accumulates across invocations. After 2-3 passes the session hits
+`context_window_exceeded` errors (9 recorded friction events). Only viable for short
+sessions with 1-2 passes.
+
+**When to use**: Quick interactive close-out sessions where you will monitor and
+`/clear` between passes.
+
+### Pattern 2: Headless Cron (recommended for production)
+
+Uses `claude -p` (print mode) via `scripts/cron-closeout.sh`. Each invocation is a
+fresh process with zero accumulated context. State persists via checkpoint files in
+`.onex_state/pipeline_checkpoints/`.
+
+```bash
+# Direct invocation (one pass)
+./scripts/cron-closeout.sh
+
+# Dry run
+./scripts/cron-closeout.sh --dry-run
+
+# Cap at 5 passes
+./scripts/cron-closeout.sh --max-passes 5
+
+# Via crontab (every 30 minutes)
+*/30 * * * * $OMNI_HOME/omniclaude/scripts/cron-closeout.sh >> /tmp/cron-closeout.log 2>&1  # local-path-ok: crontab example
+
+# Via launchd (macOS)
+# See scripts/com.omninode.cron-closeout.plist for the launchd agent template
+```
+
+**Checkpoint protocol**:
+- State file: `.onex_state/pipeline_checkpoints/cron-closeout-state.yaml`
+- Lock file: `.onex_state/pipeline_checkpoints/cron-closeout.lock`
+- Each invocation reads checkpoint, executes one cycle, writes checkpoint, exits
+- Circuit breaker: 3 consecutive failures halt further invocations
+- Lock timeout: 45 minutes (matches autopilot cycle mutex)
+
+**Pros**: No context accumulation, survives session crashes, externally observable
+state, can run unattended for days.
+**Cons**: Requires `claude` CLI and environment variables configured externally.
+
+**When to use**: Overnight close-out, unattended pipeline operation, any run
+expected to exceed 2-3 passes.
+
+---
+
 ## Integration-Sweep Halt Policy
 
 | `overall_status` | `reason` | Action |
