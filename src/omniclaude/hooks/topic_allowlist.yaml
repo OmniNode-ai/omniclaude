@@ -592,3 +592,40 @@ allowed_extras:
       session binds/unbinds a task_id. Consumed by session registry projector.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6857
+
+  # ---------------------------------------------------------------------------
+  # Team lifecycle topics (OMN-7026)
+  # Unified event schema for all dispatch surfaces. Consumed by omnidash
+  # team timeline projections.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.team-task-assigned.v1"
+    lifecycle: observability
+    reason: >
+      Team task assignment event emitted when a task is assigned to an agent
+      on any dispatch surface (team_worker, headless_claude, local_llm).
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-task-progress.v1"
+    lifecycle: observability
+    reason: >
+      Team task progress event emitted at phase transitions during execution.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-evidence-written.v1"
+    lifecycle: observability
+    reason: >
+      Team evidence artifact written event emitted when evidence files are
+      persisted to disk during task execution.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-task-completed.v1"
+    lifecycle: observability
+    reason: >
+      Team task completion event emitted when a task reaches a terminal state
+      with a verification verdict.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
