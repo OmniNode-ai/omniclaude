@@ -9,12 +9,12 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from omniclaude.shared.models.model_team_events import (
+from omniclaude.shared.models.model_evidence_written_event import (
     ModelEvidenceWrittenEvent,
-    ModelTaskAssignedEvent,
-    ModelTaskCompletedEvent,
-    ModelTaskProgressEvent,
 )
+from omniclaude.shared.models.model_task_assigned_event import ModelTaskAssignedEvent
+from omniclaude.shared.models.model_task_completed_event import ModelTaskCompletedEvent
+from omniclaude.shared.models.model_task_progress_event import ModelTaskProgressEvent
 
 
 @pytest.mark.unit
