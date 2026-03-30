@@ -306,11 +306,73 @@ Report HEALTHY or UNHEALTHY for each service. Do NOT attempt to restart anything
 fi
 
 # ===========================================================================
-# Phase B: Integration gate (hard gate)
+# Phase B: Infrastructure sweep gates (hard gates) [OMN-7002]
 # ===========================================================================
 
-log "=== Phase B: Integration health gate ==="
+log "=== Phase B: Infrastructure sweep gates ==="
 
+# B1: Runtime sweep — verify runtime containers healthy and node dispatch alive
+if ! run_phase "B1_runtime_sweep" \
+  "Run runtime health verification. Check:
+1. All required containers healthy: docker ps -a --format '{{.Names}}\t{{.Status}}' | check for omninode-runtime, omnibase-infra-postgres, omnibase-infra-redpanda, omnibase-infra-valkey
+2. No containers stuck in 'starting' state
+3. Runtime health endpoint: curl -sf http://localhost:8085/health
+4. Node registration evidence: docker logs --since 30m omninode-runtime | grep -i 'registration\|introspection\|dispatch'
+
+If ALL checks pass, print: INTEGRATION: PASS
+If ANY critical check fails, print: INTEGRATION: FAIL" \
+  "Bash,Read"; then
+  record_strike "B1_runtime_sweep"
+fi
+
+if phase_failed "B1_runtime_sweep"; then
+  log "HALT: Runtime sweep reported failures."
+  log "Review output: ${RUN_DIR}/B1_runtime_sweep.txt"
+  update_cycle_state "halted_runtime_sweep"
+  exit 1
+fi
+
+# B2: Data flow sweep — verify Kafka consumer groups active and projections populated
+if ! run_phase "B2_data_flow_sweep" \
+  "Run data flow verification. Check:
+1. Kafka consumer groups active: docker exec omnibase-infra-redpanda rpk group list | grep runtime
+2. Registration projections exist: psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections'
+3. No stuck consumers (lag check): docker exec omnibase-infra-redpanda rpk group describe <group> for runtime groups
+
+If projections > 0 and consumer groups active, print: INTEGRATION: PASS
+If projections = 0 or no consumer groups, print: INTEGRATION: FAIL" \
+  "Bash,Read"; then
+  record_strike "B2_data_flow_sweep"
+fi
+
+if phase_failed "B2_data_flow_sweep"; then
+  log "HALT: Data flow sweep reported failures."
+  log "Review output: ${RUN_DIR}/B2_data_flow_sweep.txt"
+  update_cycle_state "halted_data_flow_sweep"
+  exit 1
+fi
+
+# B3: Database sweep — verify projection tables populated
+if ! run_phase "B3_database_sweep" \
+  "Run database health verification. Check projection tables in omnibase_infra:
+1. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections' (must be > 0)
+2. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM agent_actions' (informational)
+3. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(tablename) FROM pg_tables WHERE schemaname='\''public'\''' (total tables)
+
+If registration_projections > 0, print: INTEGRATION: PASS
+If registration_projections = 0, print: INTEGRATION: FAIL" \
+  "Bash,Read"; then
+  record_strike "B3_database_sweep"
+fi
+
+if phase_failed "B3_database_sweep"; then
+  log "HALT: Database sweep reported failures."
+  log "Review output: ${RUN_DIR}/B3_database_sweep.txt"
+  update_cycle_state "halted_database_sweep"
+  exit 1
+fi
+
+# B5: Integration gate (original) — verify critical services
 if ! run_phase "B5_integration" \
   "Run integration health checks. For each service, test and report PASS or FAIL:
 1. PostgreSQL: psql -h localhost -p 5436 -U postgres -d omnibase_infra -c 'SELECT 1'
@@ -337,7 +399,7 @@ if phase_failed "B5_integration"; then
 fi
 
 reset_strikes
-log "Integration gate PASSED"
+log "All infrastructure sweep gates PASSED"
 
 # ===========================================================================
 # Phase C: Release and redeploy (conditional)
@@ -408,6 +470,9 @@ Phase Results:
   A1 merge-sweep:      $(test -f "${RUN_DIR}/A1_merge_sweep.txt" && echo "executed" || echo "missing")
   A2 deploy-plugin:    $(test -f "${RUN_DIR}/A2_deploy_plugin.txt" && echo "executed" || echo "missing")
   A3 infra-health:     $(test -f "${RUN_DIR}/A3_start_env.txt" && echo "executed" || echo "missing")
+  B1 runtime-sweep:    $(test -f "${RUN_DIR}/B1_runtime_sweep.txt" && echo "executed" || echo "missing")
+  B2 data-flow-sweep:  $(test -f "${RUN_DIR}/B2_data_flow_sweep.txt" && echo "executed" || echo "missing")
+  B3 database-sweep:   $(test -f "${RUN_DIR}/B3_database_sweep.txt" && echo "executed" || echo "missing")
   B5 integration-gate: $(test -f "${RUN_DIR}/B5_integration.txt" && echo "executed" || echo "missing")
   C1 release-check:    $(test -f "${RUN_DIR}/C1_release_check.txt" && echo "executed" || echo "missing")
   C2 redeploy-check:   $(test -f "${RUN_DIR}/C2_redeploy_check.txt" && echo "executed" || echo "missing")

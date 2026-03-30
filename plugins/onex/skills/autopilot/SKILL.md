@@ -208,6 +208,9 @@ Architecture follows the headless decomposition pattern from
 | A1 | merge-sweep | No | Drain open PRs with passing CI |
 | A2 | deploy-plugin | No | Copy plugin to cache |
 | A3 | infra-health | No | Verify postgres, redpanda, valkey |
+| B1 | runtime-sweep | **Hard** | Containers healthy, node dispatch alive [OMN-7002] |
+| B2 | data-flow-sweep | **Hard** | Kafka consumers active, projections populated [OMN-7002] |
+| B3 | database-sweep | **Hard** | Projection tables have data [OMN-7002] |
 | B5 | integration-gate | **Hard** | Postgres + Redpanda must be healthy |
 | C1 | release-check | No | Report unreleased commits per repo |
 | C2 | redeploy-check | Conditional | Only if F30 detects version drift |
