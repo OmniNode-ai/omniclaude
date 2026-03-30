@@ -433,6 +433,14 @@ class TopicBase(StrEnum):
     """Session status change event for coordination projectors."""
 
     # ==========================================================================
+    # Delegation pipeline command topics (OMN-7040)
+    # Thin /delegate skill publishes to this topic; consumed by
+    # node_delegation_orchestrator on the omnibase_infra runtime.
+    # ==========================================================================
+    DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
+    """Command to request task delegation through the node-based pipeline."""
+
+    # ==========================================================================
     # Team lifecycle topics (OMN-7026)
     # Unified event schema for all dispatch surfaces (team_worker,
     # headless_claude, local_llm). Consumed by omnidash team timeline.
