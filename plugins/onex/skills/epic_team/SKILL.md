@@ -85,32 +85,9 @@ All in-progress state is written to `$ONEX_STATE_DIR/epics/<epic_id>/state.yaml`
 each wave and updated after each ticket completion. A coordinator killed at any point can be
 resumed by re-running with `--resume` against the same `state.yaml`.
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
-files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run epic-team for <epic_id>",
-  prompt="Run the epic-team skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
-
-> **Session lifetime**: The monitoring phase is alive only while this session runs. Use `/epic-team {epic_id} --resume` to re-enter after a disconnection.
-
-> **Architecture note (v2.0.0)**: epic-team is a thin orchestrator. All business logic lives in
-> independently-invocable composable sub-skills. epic-team's job is coordination, state, and routing
-> — not implementation.
+**Target**: Agent Teams
 
 ## Overview
 

@@ -404,6 +404,17 @@ class TopicBase(StrEnum):
     """Broadcast chat message for multi-terminal agent coordination."""
 
     # ==========================================================================
+    # Sprint auto-pull topics (OMN-6870)
+    # Emitted by refill-sprint skill when tech debt tickets are pulled
+    # from Future into Active Sprint.
+    # ==========================================================================
+    SPRINT_AUTO_PULL_COMPLETED = "onex.evt.omniclaude.sprint-auto-pull-completed.v1"
+    """Emitted after refill-sprint completes a pull cycle."""
+
+    TECH_DEBT_QUEUE_EMPTY = "onex.evt.omniclaude.tech-debt-queue-empty.v1"
+    """Emitted when no eligible tech debt tickets remain in Future."""
+
+    # ==========================================================================
     # Session coordination topics (OMN-6857)
     # Multi-session awareness signals for concurrent session coordination.
     # Consumed by session registry projector and graph projector.

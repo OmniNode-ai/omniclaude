@@ -45,26 +45,9 @@ outputs:
 
 ---
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
-files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run autopilot [--mode <mode>]",
-  prompt="Run the autopilot skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
+**Target**: Headless claude -p
 
 ---
 
@@ -205,6 +188,7 @@ Architecture follows the headless decomposition pattern from
 
 | Phase | Name | Gate? | Description |
 |-------|------|-------|-------------|
+| A0 | worktree-health | No | `prune-worktrees.sh --execute` — clean merged worktrees, skip unpushed/dirty [OMN-7021] |
 | A1 | merge-sweep | No | Drain open PRs with passing CI |
 | A2 | deploy-plugin | No | Copy plugin to cache |
 | A3 | infra-health | No | Verify postgres, redpanda, valkey |
@@ -329,7 +313,7 @@ When dispatching subagents for release or other high-risk operations:
 ## Integration Points
 
 **Phase A — Prepare:**
-- **worktree-health**: A0 — sweep worktrees for lost work, auto-clean merged, create recovery tickets [OMN-6867]
+- **worktree-health**: A0 — `scripts/prune-worktrees.sh --execute`: auto-clean merged worktrees, skip worktrees with unpushed commits or dirty state, skip detached HEAD and missing upstream [OMN-6867, OMN-7021]
 - **merge-sweep**: A1 — drains open PRs before release (full skill: Track A/B/A-update/A-resolve)
 - **dirty-pr-triage**: A1b — DIRTY/CONFLICTING PR detection, auto-close stale >24h, queue stall detection, missing auto-merge [OMN-6872]
 - **deploy-local-plugin**: A2 — activates newly merged skills/hooks

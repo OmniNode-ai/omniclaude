@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -479,7 +478,7 @@ def _dispatch_list_dir(args: dict[str, Any]) -> str:
         return f"Error: not a directory: {path_str}"
 
     try:
-        entries = sorted(os.listdir(path))
+        entries = sorted(e.name for e in path.iterdir())
     except OSError as exc:
         return f"Error listing directory: {exc}"
 

@@ -15,19 +15,9 @@ author: OmniClaude Team
 
 # Executing Plans
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Execute plan <plan-name>",
-  prompt="Run the executing-plans skill. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+**Target**: Agent Teams
 
 ## Overview
 

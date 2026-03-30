@@ -26,19 +26,9 @@ args:
 
 # mergeability-gate
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Mergeability gate PR #<N>",
-  prompt="Run the mergeability-gate skill for PR #<N> in <repo>. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+**Target**: Agent Teams
 
 ## Description
 Evaluate a PR's mergeability and label it appropriately. Outputs one of three statuses:
