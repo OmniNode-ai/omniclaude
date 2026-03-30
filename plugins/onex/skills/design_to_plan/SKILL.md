@@ -278,14 +278,14 @@ git commit -m "feat: add specific feature"
 
 ### Adversarial Review Loop (Phase 2b)
 
-After draft plan is generated, run structured R1-R7 review in rounds until convergence.
+After draft plan is generated, run structured R1-R8 review in rounds until convergence.
 
 **Convergence criteria**: No new CRITICAL or MAJOR findings. MINOR and NIT are acceptable.
 
 **Hard cap**: 3 rounds maximum. After round 3, if CRITICAL/MAJOR persist, present the unresolved list to the user and STOP -- do not continue reviewing internally.
 
 **Per-round flow**:
-1. Run R1-R7 checks against the current plan draft
+1. Run R1-R8 checks against the current plan draft
 2. Classify each finding: CRITICAL / MAJOR / MINOR / NIT
 3. If CRITICAL or MAJOR exist: fix inline, re-save plan, increment round counter
 4. If only MINOR/NIT: converged -- announce and proceed to Phase 3
@@ -293,7 +293,7 @@ After draft plan is generated, run structured R1-R7 review in rounds until conve
 **Round output format**:
 ```
 Review round N/3:
-R1: [result]  R2: [result]  R3: [result]  R4: [result]  R5: [result]  R6: [result]
+R1: [result]  R2: [result]  R3: [result]  R4: [result]  R5: [result]  R6: [result]  R7: [result]  R8: [result]
 Findings: X CRITICAL, Y MAJOR, Z MINOR, W NIT
 [if CRITICAL/MAJOR: fixing and re-reviewing...]
 [if only MINOR/NIT: converged -- proceeding to Phase 3]
@@ -388,6 +388,33 @@ Common failures to flag:
 - Creating a new Protocol when an existing base class already defines the interface
 - Proposing a new contract YAML for a type that already has one
 
+#### R8 -- Runtime State Grounding
+
+For plans that reference runtime state (DB tables/columns, Kafka consumer groups, topic names),
+every assumption MUST be grounded with a source-of-truth citation. Uncited runtime assumptions
+are the #1 cause of probes shipping with fabricated schema or naming.
+
+**Required citations by reference type:**
+
+- **DB tables/columns**: MUST cite the exact migration file and line number where the column is
+  defined (e.g., `docker/migrations/forward/001_registration_projection.sql:14`). "The table has
+  a `node_name` column" without a migration citation is a fabricated assumption.
+- **Consumer group IDs**: MUST cite the config chain that produces the group ID OR include actual
+  `rpk group list` output showing the group exists. Fabricated group IDs (e.g., hardcoded
+  `dev.omnibase_infra.foo.consume.v1` without tracing through `compute_consumer_group_id()` and
+  `runtime_config.yaml`) are CRITICAL.
+- **Topic names**: MUST cite the topic resolver, contract YAML, or `TopicBase` enum entry that
+  defines the topic. Bare topic strings without provenance are ungrounded.
+
+**Severity:**
+
+- Missing migration citation for a SQL column reference = **CRITICAL**
+- Fabricated consumer group without config trace = **CRITICAL**
+- Topic name without resolver/contract grounding = **MAJOR**
+
+**Hard gate:** Plans with uncited runtime assumptions CANNOT proceed to Phase 3. Every DB column,
+consumer group, and topic referenced in the plan must have an explicit source-of-truth pointer.
+
 ---
 
 #### Review Output Format
@@ -404,6 +431,7 @@ R4: checked -- [issue: added __init__.py re-export for contract module path] OR 
 R5: checked -- [issue: Ticket 2 creates DB table without IF NOT EXISTS] OR [clean (dedup keys: ticket=title, table=PK)]
 R6: checked -- [issue: "pytest passes" was sole proof for schema -- added \d+ introspection] OR [clean (strongest proof: strong)]
 R7: checked -- [issue: ModelFooConfig duplicates ModelFooSettings (src/pkg/settings.py:23) -- replaced with extension] OR [clean (N new types, all justified against inventory)]
+R8: checked -- [issue: plan references `node_name` column without migration citation -- CRITICAL, added citation to 001_registration_projection.sql] OR [clean (all DB/Kafka references grounded with source citations)]
 
 Summary: [N] issues found and fixed. Plan re-saved.
 ```
@@ -414,16 +442,16 @@ Do not claim "clean" for a category that was not explicitly checked with evidenc
 
 #### Smoke Test (Verification)
 
-Run these instructions against the following known-bad mini-plan and confirm all six catches:
+Run these instructions against the following known-bad mini-plan and confirm all seven catches:
 
 > "This plan creates **4 tickets** (Tickets 1, 2, 3, 4a, 4b).
-> Ticket 2 (DB-only migration): acceptance criteria: kill switch enforced via FEATURE_FLAG env var check in Python handler. Verification: pytest passes.
+> Ticket 2 (DB-only migration): acceptance criteria: kill switch enforced via FEATURE_FLAG env var check in Python handler. Verification: pytest passes. Query: `SELECT node_name FROM registration_projections WHERE node_name = 'foo'`.
 > Contract module: omnibase_infra.nodes.foo.models.
-> Ticket 3: No mention of models/__init__.py.
+> Ticket 3: No mention of models/__init__.py. Consumes from consumer group `dev.omnibase_infra.foo.consume.v1`.
 > Ticket 4a: Create `ModelNodeConfig` with fields `name`, `version`, `enabled`.
 > No Known Types Inventory section. No justification for new type."
 
-Expected catches by category: R1, R2, R3, R4, R6, R7.
+Expected catches by category: R1, R2, R3, R4, R6, R7, R8.
 
 - **R1**: "4 tickets" but five identifiers listed (1, 2, 3, 4a, 4b) -- count mismatch, flag
 - **R2**: "pytest passes" is weak and vague -- does not assert specific behavior
@@ -431,30 +459,31 @@ Expected catches by category: R1, R2, R3, R4, R6, R7.
 - **R4**: Contract module path unverified, no re-export step mentioned -- add re-export or full path
 - **R6**: "pytest passes" is weak (grade: weak) as sole proof for a DB migration -- needs schema introspection
 - **R7**: No Known Types Inventory section (Repository Discovery Scan skipped -- CRITICAL). `ModelNodeConfig` introduced without justification (MAJOR) -- must check if similar config model already exists in the repo.
+- **R8**: Ticket 2 references `node_name` column without citing a migration file (CRITICAL -- column does not exist in `registration_projections`). Ticket 3 fabricates consumer group `dev.omnibase_infra.foo.consume.v1` without tracing through `compute_consumer_group_id()` or `runtime_config.yaml` (CRITICAL).
 
 R5 is clean in this mini-plan (no idempotency claims without dedup keys). That is an acceptable clean result.
 
-If the review instructions do not catch all six expected items, tighten the instructions before shipping.
+If the review instructions do not catch all seven expected items, tighten the instructions before shipping.
 
 ---
 
 ### Multi-Model Adversarial Review (Phase 2c)
 
-After R1-R7 converges (Phase 2b), invoke the hostile-reviewer skill in file mode for
+After R1-R8 converges (Phase 2b), invoke the hostile-reviewer skill in file mode for
 an independent adversarial challenge from non-Claude models (DeepSeek-R1, Qwen3-Coder).
 
 **Flow:**
 
-1. R1-R7 converges (Phase 2b complete)
+1. R1-R8 converges (Phase 2b complete)
 2. Invoke `/hostile-reviewer --file <plan_file_path>`
 3. Triage external findings (see policy below)
-4. If actionable CRITICAL/MAJOR with concrete evidence: run ONE additional R1-R7 pass
+4. If actionable CRITICAL/MAJOR with concrete evidence: run ONE additional R1-R8 pass
 5. If only MINOR/NIT: note them and proceed to Phase 3
 6. If all models failed: log warning and proceed
 
 **Triage policy (not mechanical obedience):**
 
-- Only clearly actionable CRITICAL/MAJOR findings trigger the extra R1-R7 pass
+- Only clearly actionable CRITICAL/MAJOR findings trigger the extra R1-R8 pass
 - The finding MUST cite a specific plan section or design flaw (concrete evidence)
 - Vague concerns ("might be fragile", "could have issues") are noted but do NOT
   force re-review
@@ -471,7 +500,7 @@ an independent adversarial challenge from non-Claude models (DeepSeek-R1, Qwen3-
 **Constraints:**
 
 - Maximum 1 external review round (prevents infinite loops)
-- External review runs AFTER R1-R7 convergence, never during
+- External review runs AFTER R1-R8 convergence, never during
 - External model failure does not block the workflow
 
 **Observability:**
@@ -479,7 +508,7 @@ an independent adversarial challenge from non-Claude models (DeepSeek-R1, Qwen3-
 Record in the plan output or review artifact:
 - Whether external review ran
 - Which models succeeded and which degraded
-- Whether the extra R1-R7 pass was triggered and why
+- Whether the extra R1-R8 pass was triggered and why
 - Total external findings by severity
 
 ---
@@ -487,7 +516,7 @@ Record in the plan output or review artifact:
 ### Stop Conditions
 
 - After adversarial review converges (or caps at 3 rounds), proceed to multi-model adversarial review (Phase 2c).
-- At most one additional R1-R7 pass is allowed only when Phase 2c returns actionable CRITICAL/MAJOR findings with concrete evidence.
+- At most one additional R1-R8 pass is allowed only when Phase 2c returns actionable CRITICAL/MAJOR findings with concrete evidence.
 - After that optional extra pass, proceed to Phase 3 with no further re-review loops.
 - If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
 - After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
