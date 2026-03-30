@@ -150,11 +150,19 @@ class TestTeamObservabilityTopics:
 
         from omniclaude.hooks.topics import TopicBase
 
-        assert TopicBase.TEAM_TASK_ASSIGNED == "onex.evt.omniclaude.task-assigned.v1"
-        assert TopicBase.TEAM_TASK_PROGRESS == "onex.evt.omniclaude.task-progress.v1"
-        assert TopicBase.TEAM_TASK_COMPLETED == "onex.evt.omniclaude.task-completed.v1"
         assert (
-            TopicBase.TEAM_EVIDENCE_WRITTEN == "onex.evt.omniclaude.evidence-written.v1"
+            TopicBase.TEAM_TASK_ASSIGNED == "onex.evt.omniclaude.team-task-assigned.v1"
+        )
+        assert (
+            TopicBase.TEAM_TASK_PROGRESS == "onex.evt.omniclaude.team-task-progress.v1"
+        )
+        assert (
+            TopicBase.TEAM_TASK_COMPLETED
+            == "onex.evt.omniclaude.team-task-completed.v1"
+        )
+        assert (
+            TopicBase.TEAM_EVIDENCE_WRITTEN
+            == "onex.evt.omniclaude.team-evidence-written.v1"
         )
 
 
