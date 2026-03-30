@@ -85,43 +85,80 @@ All in-progress state is written to `$ONEX_STATE_DIR/epics/<epic_id>/state.yaml`
 each wave and updated after each ticket completion. A coordinator killed at any point can be
 resumed by re-running with `--resume` against the same `state.yaml`.
 
-## Dispatch Requirement
+## Dispatch Surface: Agent Teams
 
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
-files, run bash, or take any other action before dispatching.
+epic-team uses Claude Code Agent Teams for all worker dispatch. The team lead (this session)
+creates a named team, generates task contracts, dispatches workers, monitors for stalls, and
+shuts down the team on completion.
+
+### Lifecycle
 
 ```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run epic-team for <epic_id>",
-  prompt="Run the epic-team skill. <full context and args>"
-)
+1. TeamCreate(team_name="epic-{epic_id}")
+2. For each ticket in wave:
+   a. Generate a ModelTaskContract from the ticket's Linear DoD and inject into the worker prompt
+   b. TaskCreate(subject="{ticket_id}: {title}", description=ticket_requirements)
+   c. Agent(name="worker-{ticket_id}", team_name="epic-{epic_id}",
+            prompt="Execute ticket-pipeline for {ticket_id}. Task contract: {contract_json}")
+3. Workers execute in background, report progress via SendMessage(to="team-lead")
+4. Team lead monitors progress, handles stalls (OMN-6937 pattern: 5-min inactivity timeout)
+5. On each worker completion: verification chain runs (see below)
+6. TeamDelete(team_name="epic-{epic_id}") after all tasks complete or are terminal
 ```
 
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+### Task Contract Generation
 
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
+Before dispatching each worker, the team lead generates a task contract:
+
+1. Fetch ticket DoD from Linear (description, acceptance criteria)
+2. Build `ModelTaskContract` with mechanical checks (test pass, lint clean, type-check clean)
+3. Inject the serialized contract into the worker's dispatch prompt
+4. The contract travels with the worker — it is the single source of truth for what "done" means
+
+### Verification Chain (Part 2 Reference)
+
+Each worker task must produce evidence through the full Part 2 verification chain:
+
+1. **Task contract** — `ModelTaskContract` persisted before dispatch
+2. **Self-check** — worker runs `SelfCheckResult` against its own contract checks
+3. **Verifier** — independent verifier agent validates self-check evidence
+4. **Quorum gate** — `ModelQuorumResult` evaluates self-check + verifier verdicts
+5. **Completion event** — `ModelTaskCompletedEvent` emitted with evidence to unified event stream
+
+A worker is not considered complete until all five artifacts are present. Missing evidence
+triggers a re-verification pass before the task is marked done.
+
+### Stall Detection (OMN-6937 Pattern)
+
+After dispatching workers in a wave, the team lead monitors for stalls:
+
+- **Inactivity timeout**: 5 minutes with no tool calls from a worker → stall detected
+- **On stall**: Log friction event to `.onex_state/friction/`, cancel stalled worker, mark task
+  for retry in next wave
+- **Retry policy**: Each ticket gets 1 retry. If stalled twice → mark `blocked`, add Linear
+  comment, skip
+- **Wave timeout**: 30 minutes total per wave. Remaining in-progress tasks are timed out and
+  retried once
+
+### Failure on Dispatch
+
+If Agent Teams dispatch fails (TeamCreate error, Agent tool unavailable, auth error):
+**STOP immediately.** Report the exact error to the user and wait for direction. Do NOT fall
+back to direct Bash, Read, Edit, Write, or Glob calls — falling back bypasses observability,
+context management, and the orchestration layer.
 
 > **Session lifetime**: The monitoring phase is alive only while this session runs. Use `/epic-team {epic_id} --resume` to re-enter after a disconnection.
 
-> **Architecture note (v2.0.0)**: epic-team is a thin orchestrator. All business logic lives in
+> **Architecture note (v3.0.0)**: epic-team is a thin orchestrator. All business logic lives in
 > independently-invocable composable sub-skills. epic-team's job is coordination, state, and routing
-> — not implementation.
+> — not implementation. Workers are Agent Teams members, not poly-agent subagents.
 
 ## Overview
 
 Decompose a Linear epic into per-repo workstreams and autonomously drive them to completion.
 The team lead (this session) owns planning, dispatch, state persistence, and lifecycle
-notifications. Tickets are executed by dispatching `ticket-pipeline` as sequential `Task()`
-subagents directly from the team-lead session, in dependency-respecting waves.
-
-**Key constraint**: Workers spawned as team members (via `TeamCreate` + `Task(team_name=...)`)
-go idle immediately and never process tasks. The proven working pattern is **direct dispatch
-from the team-lead session** — see the Architecture section below.
+notifications. Tickets are executed by dispatching workers via Agent Teams (`TeamCreate` +
+`Agent(team_name=...)`) in dependency-respecting waves.
 
 **If the epic has zero child tickets**, epic-team invokes `decompose-epic` to create sub-tickets,
 then posts a Slack LOW_RISK gate. Silence for 30 minutes = proceed.
@@ -254,15 +291,15 @@ epic-team OMN-XXXX
 When epic has 0 child tickets:
 
 ```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="epic-team: auto-decompose empty epic {epic_id}",
+Agent(
+  name="decompose-{epic_id}",
+  team_name="epic-{epic_id}",
   prompt="The epic {epic_id} has no child tickets.
 
     Invoke: Skill(skill=\"onex:decompose_epic\", args=\"{epic_id}\")
 
     Read result from $ONEX_STATE_DIR/skill-results/{context_id}/decompose-epic.json
-    Report back: created_tickets (list of IDs and titles), count."
+    Report back via SendMessage: created_tickets (list of IDs and titles), count."
 )
 ```
 
@@ -294,14 +331,22 @@ pass to catch misaligned tickets early -- before they consume a full pipeline ru
 The verification context is injected directly into each Task() dispatch prompt so the
 ticket-pipeline agent starts with pre-validated understanding rather than re-deriving it.
 
-## Dispatch: Ticket-Pipeline per Ticket (Direct Dispatch Pattern)
+## Dispatch: Ticket-Pipeline per Ticket (Agent Teams Pattern)
 
-For each ticket in a wave, dispatch ticket-pipeline as a Task() from the team-lead session:
+For each ticket in a wave, generate a task contract and dispatch a worker via Agent Teams:
 
 ```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="epic-team: ticket-pipeline for {ticket_id} [{repo}]",
+# 1. Generate task contract from Linear DoD
+contract = generate_task_contract(ticket_id, ticket_description, ticket_acceptance_criteria)
+# Persist contract to $ONEX_STATE_DIR/epics/{epic_id}/contracts/{ticket_id}.json
+
+# 2. Create a task for tracking
+TaskCreate(subject="{ticket_id}: {title}", description=ticket_requirements)
+
+# 3. Dispatch worker as Agent Teams member
+Agent(
+  name="worker-{ticket_id}",
+  team_name="epic-{epic_id}",
   prompt="You are executing ticket {ticket_id} for epic {epic_id}.
 
     Ticket: {ticket_id} - {title}
@@ -309,30 +354,37 @@ Task(
     Repo: {repo} at {repo_path}
     Epic: {epic_id}  Run: {run_id}
 
+    TASK CONTRACT (source of truth for done):
+    {contract_json}
+
     VERIFIED CONTEXT (from epic-team pre-dispatch check):
     - Summary: {verified_summary}
     - Target files: {verified_file_targets}
     - Pattern to follow: {verified_pattern_reference}
     - Dependencies met: {dependency_status}
 
+    VERIFICATION CHAIN — you must produce ALL of these before reporting done:
+    1. Run self-check against the task contract (SelfCheckResult)
+    2. Evidence is verified by an independent verifier agent
+    3. Quorum gate evaluates self-check + verifier verdicts (ModelQuorumResult)
+    4. Emit ModelTaskCompletedEvent with all evidence
+
     Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"{ticket_id}\")
 
-    After ticket-pipeline completes, report back:
+    After ticket-pipeline completes, report back via SendMessage(to=\"team-lead\"):
     - ticket_id: {ticket_id}
     - status: (merged/failed/blocked)
     - pr_url: (if available)
-    - branch: (branch name used)"
+    - branch: (branch name used)
+    - verification_verdict: (PASS/FAIL/INCOMPLETE)"
 )
 ```
 
-**Wave parallelism**: All Task() calls within a wave MUST be dispatched in the same response
+**Wave parallelism**: All Agent() calls within a wave MUST be dispatched in the same response
 (same message) for true parallelism. Do NOT dispatch tickets sequentially within a wave.
 
-**Wave serialization**: Wave N+1 starts only after all Task() calls from Wave N have returned.
-
-**DEPRECATED**: Spawning per-repo workers via `TeamCreate` + `Task(team_name=...)` + a
-`WORKER_TEMPLATE` is no longer used. See `prompt.md` for the deprecated WORKER_TEMPLATE
-preserved for historical reference.
+**Wave serialization**: Wave N+1 starts only after all workers from Wave N have reported back
+via SendMessage or been timed out by stall detection.
 
 ## Stall Detection in Wave Dispatch [OMN-6987]
 
@@ -564,7 +616,7 @@ epic-team is a thin composition layer. It owns:
 - Epic decomposition (via `decompose-epic`)
 - Ticket-to-repo assignment (via repo_manifest)
 - Wave construction (group tickets by dependency into parallel waves)
-- Direct Task() dispatch of ticket-pipeline per ticket (from team-lead session)
+- Agent Teams dispatch of ticket-pipeline per ticket (TeamCreate + Agent with team_name)
 - State persistence (`$ONEX_STATE_DIR/epics/{epic_id}/state.yaml`)
 - Slack lifecycle notifications (started, ticket done, epic done)
 
