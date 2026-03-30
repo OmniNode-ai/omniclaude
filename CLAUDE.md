@@ -129,7 +129,7 @@ What happens when infrastructure is unavailable:
 
 **Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.
 
-**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `OMNICLAUDE_PROJECT_ROOT`). See OMN-2051.
+**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `PLUGIN_PYTHON_BIN`). See OMN-2051.
 
 **Logging**: Failures are logged to `~/.claude/hooks.log` when `LOG_FILE` is set.
 
@@ -430,8 +430,8 @@ ls -la plugins/onex/hooks/scripts/*.sh                              # Check scri
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | Events not emitting | Daemon not started | SessionStart hook must run first to start the daemon |
-| Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
-| Routing returns default agent for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
+| Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `PLUGIN_PYTHON_BIN` |
+| Routing returns `polymorphic-agent` for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
 | Context injection empty | Database unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env`; injection has 1s timeout |
 
 ---
@@ -476,7 +476,7 @@ These modules are intended for external use:
 | `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
-| `OMNICLAUDE_PROJECT_ROOT` | Explicit project root for dev-mode Python venv resolution | No (dev only) |
+| `OMNICLAUDE_PROJECT_ROOT` | **REMOVED (2026-03-30)** — caused hooks to resolve through bare clone instead of plugin cache. `CLAUDE_PLUGIN_ROOT` is now set exclusively by Claude Code's native plugin system. Removed from `settings.json` automatically by `deploy.sh`. | No |
 | `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
 | `INTELLIGENCE_SERVICE_URL` | Overrides default context injection API URL (http://localhost:8053); ignored if `OMNICLAUDE_CONTEXT_API_URL` is explicitly set | No |
 | `OMNICLAUDE_CONTEXT_API_URL` | Overrides the omniintelligence HTTP API base URL used for context injection (default: `INTELLIGENCE_SERVICE_URL` or http://localhost:8053) | No |
