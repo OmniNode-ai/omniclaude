@@ -344,6 +344,48 @@ CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # =============================================================================
 
 
+CANONICAL_WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+
+
+def _check_worktree_path(command: str) -> str | None:
+    """Check if a ``git worktree add`` targets the canonical root.
+
+    Returns a block reason string if the command should be blocked,
+    or ``None`` if it is allowed (or not a worktree add command).
+
+    Phase 1 supports the common form: ``git worktree add <path> [-b <branch>]``.
+    Flags before the path (``--lock``, ``--detach``) cause the path to be
+    unparseable, which triggers a conservative block (fail closed).
+    """
+    if not _WORKTREE_ADD_RE.search(command):
+        return None
+
+    # Tokenize and extract the first non-flag argument after "add"
+    tokens = command.split()
+    worktree_path = ""
+    past_add = False
+    for token in tokens:
+        if past_add and not token.startswith("-"):
+            worktree_path = token
+            break
+        if token == "add":  # noqa: S105
+            past_add = True
+
+    if not worktree_path:
+        return (
+            "BLOCKED: Could not parse worktree path from command. "
+            "Use: git worktree add <path> [-b <branch>]"
+        )
+
+    if not worktree_path.startswith(f"{CANONICAL_WORKTREE_ROOT}/"):
+        return (
+            f"BLOCKED: Worktrees must be created under {CANONICAL_WORKTREE_ROOT}. "
+            f"Got: {worktree_path}"
+        )
+
+    return None
+
+
 def matches_any(command: str, patterns: list[re.Pattern[str]]) -> bool:
     """Return ``True`` if *command* matches at least one compiled pattern.
 
@@ -594,6 +636,24 @@ def main() -> int:
             # Wait briefly so the Slack message arrives before the block response
             # is consumed by Claude Code and the session potentially ends.
             notifier.join(timeout=9)
+        print(json.dumps(block_response))
+        return 2
+
+    # ------------------------------------------------------------------
+    # Tier 1b — WORKTREE_PATH_ENFORCEMENT (OMN-7018)
+    # Phase 1: supports common `git worktree add <path> [-b <branch>]`.
+    # Unsupported flag/order variants fail closed (block).
+    # ------------------------------------------------------------------
+    worktree_result = _check_worktree_path(command)
+    if worktree_result is not None:
+        block_response = {"decision": "block", "reason": worktree_result}
+        _emit_validator_catch(
+            session_id=session_id,
+            validator_type="pre_commit",
+            validator_name="bash-guard-worktree-path",
+            catch_description=worktree_result[:500],
+            severity="error",
+        )
         print(json.dumps(block_response))
         return 2
 
