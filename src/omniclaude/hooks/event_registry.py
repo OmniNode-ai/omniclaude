@@ -1071,7 +1071,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "task_id"],
+        required_fields=["session_id"],
     ),
     "team.task.progress": EventRegistration(
         event_type="team.task.progress",

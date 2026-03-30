@@ -813,6 +813,11 @@ class TestEventRegistryIntegration:
             "agent.chat.broadcast",
             # Cross-session coordination signal (OMN-6857)
             "coordination.signal",
+            # Team lifecycle events (OMN-7022)
+            "team.task.assigned",
+            "team.task.progress",
+            "team.task.completed",
+            "team.evidence.written",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
