@@ -77,9 +77,33 @@ claude -p --allowedTools "${ALLOWED_TOOLS}" \
 
 On re-run, phases with existing `status: completed` result files are skipped (idempotent).
 
-## Dispatch Surface
+## Dispatch Surface: Agent Teams (1 worker)
 
-**Target**: Agent Teams (1 worker)
+pr-polish uses a single Agent Teams background worker with Edit/Write/Bash tools. The team
+lead (this session) creates a single-worker team, dispatches the polish task, and monitors
+for completion.
+
+### Lifecycle
+
+```
+1. TeamCreate(team_name="pr-polish-{pr_number}")
+2. Agent(name="polisher-{pr_number}", team_name="pr-polish-{pr_number}",
+         prompt="Execute pr-polish for PR #{pr_number}. <full context and args>")
+3. Worker executes all three phases (conflicts, review, local-review) in background
+4. Worker reports completion via SendMessage(to="team-lead") with phase results
+5. TeamDelete(team_name="pr-polish-{pr_number}") after worker completes or times out
+```
+
+### Worker Tools
+
+The dispatched worker requires: `Bash, Read, Write, Edit, Glob, Grep, Skill`
+
+### Failure on Dispatch
+
+If Agent Teams dispatch fails (TeamCreate error, Agent tool unavailable, auth error):
+**STOP immediately.** Report the exact error to the user and wait for direction. Do NOT fall
+back to direct Bash, Read, Edit, Write, or Glob calls -- falling back bypasses observability,
+context management, and the orchestration layer.
 
 ## Overview
 
@@ -147,19 +171,14 @@ Parse arguments from `$ARGUMENTS`:
 
 **Rule: The coordinator must NEVER call Edit(), Write(), or analyze code directly.**
 
-> **CRITICAL — subagent_type must be `"onex:polymorphic-agent"`** (with the `onex:` prefix).
+### Phase 0: Conflict Resolution — dispatch to team worker
 
-### Phase 0: Conflict Resolution — dispatch to polymorphic agent
-
-Only runs if `git status` shows unmerged paths. Dispatch once per conflict batch:
+Only runs if `git status` shows unmerged paths. The worker handles this as part of its
+three-phase execution:
 
 ```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="Resolve merge conflicts on {branch}",
-  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
-
-    Resolve all merge conflicts on this branch. Base branch: {base_branch}.
+SendMessage(to="polisher-{pr_number}",
+  body="Resolve all merge conflicts on this branch. Base branch: {base_branch}.
 
     Steps:
     1. Run: git status (identify conflicted files)
@@ -167,13 +186,6 @@ Task(
     3. git add <resolved files>
     4. git commit -m 'fix(merge): resolve conflicts against {base_branch}'
     5. If --no-push is NOT set: git push
-
-    Conflict markers look like:
-    <<<<<<< HEAD
-    (current branch changes)
-    =======
-    (incoming changes)
-    >>>>>>> {base_branch}
 
     Resolution rules:
     - Prefer the more recent/complete implementation

@@ -129,18 +129,41 @@ TaskGet, TaskList, SendMessage, mcp__linear-server__save_comment
 `$ONEX_STATE_DIR/pr-queue/<date>/run_<run_id>.json` ensure safe re-runs. Re-running
 merge-sweep with the same `--run-id` skips PRs already processed in the current run.
 
+## Dispatch Surface: Agent Teams
+
+merge-sweep uses Claude Code Agent Teams with two parallel worker tracks. The team lead (this
+session) creates the team, runs Track A (merge) inline, and dispatches Track B (polish) workers
+as background agents.
+
+### Lifecycle
+
+```
+1. TeamCreate(team_name="merge-sweep-{run_id}")
+2. Track A (inline): team lead scans repos, classifies PRs, enables auto-merge directly
+3. Track B (parallel workers): for each PR in polish_queue:
+   a. Agent(name="polish-{repo}-pr-{N}", team_name="merge-sweep-{run_id}",
+            prompt="Execute pr-polish for PR #{N} in {repo}. --required-clean-runs {polish_clean_runs}")
+4. Track B workers report completion via SendMessage(to="team-lead") with polish results
+5. Team lead collects results from both tracks, builds ModelSkillResult
+6. TeamDelete(team_name="merge-sweep-{run_id}") after all workers complete or time out
+```
+
+Track A runs inline because it is lightweight (API calls only — `gh pr merge --auto`).
+Track B workers run in parallel up to `--max-parallel-polish` concurrent agents.
+
+### Failure on Dispatch
+
+If Agent Teams dispatch fails (TeamCreate error, Agent tool unavailable, auth error):
+**STOP immediately.** Report the exact error to the user and wait for direction. Do NOT fall
+back to direct Bash, Read, Edit, Write, or Glob calls — falling back bypasses observability,
+context management, and the orchestration layer.
+
 ## Execution Rules
 
 Execute end-to-end without stopping between tasks. If blocked on one task, record a skip note
 and continue to the next. Only pause for: (a) credentials not available in the session,
 (b) a destructive action not explicitly covered by the plan, or (c) an explicit user gate in
 the plan. Do not exit plan mode or stop to "await direction" in any other circumstance.
-
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
 
 ---
 
@@ -440,18 +463,21 @@ fi
       IF mergeable_state == "behind" AND rebaseable:
         update_pr_branch(repo, N)
 
-7. PHASE B — pr-polish queue (parallel, up to --max-parallel-polish):
+7. PHASE B — pr-polish queue (parallel Agent Teams workers, up to --max-parallel-polish):
    Skip if --skip-polish or polish_queue is empty.
    For each PR in polish_queue[]:
      acquire claim
      fetch headRefName from gh pr view (OMN-6253 defense — never trust scan-time branch name)
-     dispatch polymorphic-agent:
-       - create worktree at ${OMNI_WORKTREES}/merge-sweep-<run_id>/<repo>-pr-<N>/
-       - Skill(skill="onex:pr_polish", args="<N> --required-clean-runs <polish_clean_runs>")
-       - re-check mergeable state after polish
-       - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
-         (if "Pull request is in clean status" error: retry without --auto as direct merge)
-       - remove worktree
+     dispatch Agent Teams worker:
+       Agent(name="polish-{repo}-pr-{N}", team_name="merge-sweep-{run_id}",
+             prompt="Execute pr-polish for PR #{N}:
+               - create worktree at ${OMNI_WORKTREES}/merge-sweep-<run_id>/<repo>-pr-<N>/
+               - Run pr-polish: Skill(skill='onex:pr_polish', args='<N> --required-clean-runs <polish_clean_runs>')
+               - re-check mergeable state after polish
+               - if now merge-ready: gh pr merge <N> --repo <repo> --<merge_method> --auto
+                 (if 'Pull request is in clean status' error: retry without --auto as direct merge)
+               - remove worktree
+               - SendMessage(to='team-lead') with polish result")
      release claim
 
 8. COLLECT results
