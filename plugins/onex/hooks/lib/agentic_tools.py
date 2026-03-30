@@ -478,7 +478,7 @@ def _dispatch_list_dir(args: dict[str, Any]) -> str:
         return f"Error: not a directory: {path_str}"
 
     try:
-        entries = sorted(e.name for e in path.iterdir())
+        entries = sorted(p.name for p in path.iterdir())
     except OSError as exc:
         return f"Error listing directory: {exc}"
 

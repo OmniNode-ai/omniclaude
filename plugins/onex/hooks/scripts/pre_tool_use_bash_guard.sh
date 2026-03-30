@@ -69,6 +69,44 @@ fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command safety" >> "$LOG_FILE"
 
+# ---------------------------------------------------------------------------
+# Worktree path enforcement (OMN-7018)
+# Phase 1: supports only common `git worktree add <path> [-b <branch>]` form.
+# Unsupported flag/order variants (--lock, --detach, flags before path) trigger
+# conservative block until argument parsing is hardened.
+# ---------------------------------------------------------------------------
+CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
+if echo "$CMD" | grep -qE 'git\s+worktree\s+add'; then
+    # Extract the first non-flag argument after "add" as the path
+    WORKTREE_PATH=""
+    _in_add=false
+    for _token in $CMD; do
+        if [[ "$_in_add" == "true" && "$_token" != -* ]]; then
+            WORKTREE_PATH="$_token"
+            break
+        fi
+        [[ "$_token" == "add" ]] && _in_add=true
+    done
+
+    CANONICAL_ROOT="/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+    if [[ -z "$WORKTREE_PATH" ]]; then
+        # Could not parse path — fail closed
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Could not parse worktree path from command" >> "$LOG_FILE"
+        _hook_status "BLOCKED" "worktree path unparseable" "0"
+        jq -n --arg reason "BLOCKED: Could not parse worktree path from command. Use: git worktree add <path> [-b <branch>]" \
+            '{"decision": "block", "reason": $reason}'
+        trap - EXIT
+        exit 2
+    elif [[ "$WORKTREE_PATH" != "$CANONICAL_ROOT"/* ]]; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $WORKTREE_PATH" >> "$LOG_FILE"
+        _hook_status "BLOCKED" "worktree path outside canonical root" "0"
+        jq -n --arg reason "BLOCKED: Worktrees must be created under $CANONICAL_ROOT. Got: $WORKTREE_PATH" \
+            '{"decision": "block", "reason": $reason}'
+        trap - EXIT
+        exit 2
+    fi
+fi
+
 # Run Python bash guard
 set +e
 RESULT=$(echo "$TOOL_INFO" | \

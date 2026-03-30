@@ -963,19 +963,25 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
         return captured.getvalue().strip(), code
 
     def test_worktree_add_returns_advisory(self) -> None:
-        out, code = self._run("git worktree add /path/to/wt feat/my-branch")
+        out, code = self._run(
+            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+        )
         self.assertEqual(code, 0)
         data = json.loads(out)
         self.assertIn("advisory", data)
 
     def test_advisory_mentions_precommit_install(self) -> None:
-        out, _ = self._run("git worktree add /path/to/wt feat/my-branch")
+        out, _ = self._run(
+            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+        )
         data = json.loads(out)
         self.assertIn("pre-commit install", data["advisory"])
 
     def test_advisory_mentions_bypass_path(self) -> None:
         """Advisory should distinguish raw git worktree add from the managed path."""
-        out, _ = self._run("git worktree add /path/to/wt feat/my-branch")
+        out, _ = self._run(
+            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+        )
         msg = json.loads(out)["advisory"].lower()
         self.assertTrue(
             "worktreemanager" in msg
@@ -998,7 +1004,9 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
         self.assertNotIn("advisory", data)
 
     def test_advisory_exit_code_is_0(self) -> None:
-        _, code = self._run("git -C /some/repo worktree add /wt branch")
+        _, code = self._run(
+            "git -C /some/repo worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo branch"  # local-path-ok
+        )
         self.assertEqual(code, 0)
 
 
