@@ -68,7 +68,7 @@ mcp__linear-server__get_issue, mcp__linear-server__list_issues,
 mcp__linear-server__save_issue, mcp__linear-server__save_comment,
 mcp__linear-server__list_projects, mcp__linear-server__get_project,
 mcp__linear-server__list_teams, Bash, Read, Write, Edit, Glob, Grep,
-Task, TaskCreate, TaskUpdate, TaskGet, TaskList, SendMessage
+TeamCreate, TeamDelete, Agent, TaskCreate, TaskUpdate, TaskGet, TaskList, SendMessage
 ```
 
 **Failure doctrine in headless mode:**
@@ -175,7 +175,7 @@ the plan. Do not exit plan mode or stop to "await direction" in any other circum
 ## Wave Cap
 
 Dispatch tickets in waves of **5 tickets maximum** to prevent usage-limit interruptions.
-Start the next wave only after all Task() calls in the current wave have returned.
+Start the next wave only after all Agent() workers in the current wave have reported back.
 Never dispatch more than 5 tickets in a single wave, even if more are independent.
 
 ---
@@ -270,11 +270,11 @@ epic-team OMN-XXXX
   → Build dependency waves:
       Wave 0: independent tickets + cross-repo Part 1 splits (run in parallel)
       Wave 1: cross-repo Part 2 splits (run after Wave 0 completes)
-  → For each wave: dispatch ticket-pipeline per ticket as Task() from team-lead session
+  → For each wave: dispatch ticket-pipeline per ticket as Agent() workers in parallel
   → Start stall-detection watchdog for the wave [OMN-6987]
-  → Await all Task() calls in wave before starting next wave
-  → If watchdog detects stall: cancel stalled task, log to state, retry in next wave
-  → Collect results (status, pr_url, branch) from each Task()
+  → Await all Agent() workers in wave to report via SendMessage before starting next wave
+  → If watchdog detects stall: cancel stalled worker, log to state, retry in next wave
+  → Collect results (status, pr_url, branch) from SendMessage reports
   → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
@@ -308,7 +308,7 @@ Agent(
 **Before dispatching any ticket in a wave**, the team lead performs a lightweight verification
 pass to catch misaligned tickets early -- before they consume a full pipeline run.
 
-### Verification Steps (per ticket, before Task() dispatch)
+### Verification Steps (per ticket, before Agent() dispatch)
 
 1. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
    - Description is non-empty and contains actionable content
@@ -328,7 +328,7 @@ pass to catch misaligned tickets early -- before they consume a full pipeline ru
 
 ### Verification in the Dispatch Prompt
 
-The verification context is injected directly into each Task() dispatch prompt so the
+The verification context is injected directly into each Agent() dispatch prompt so the
 ticket-pipeline agent starts with pre-validated understanding rather than re-deriving it.
 
 ## Dispatch: Ticket-Pipeline per Ticket (Agent Teams Pattern)
@@ -380,15 +380,16 @@ Agent(
 )
 ```
 
-**Wave parallelism**: All Agent() calls within a wave MUST be dispatched in the same response
-(same message) for true parallelism. Do NOT dispatch tickets sequentially within a wave.
+**Wave parallelism**: Agent Teams workers run as independent concurrent Claude sessions.
+Dispatch all Agent() calls for a wave before monitoring. Do NOT dispatch tickets sequentially
+within a wave.
 
 **Wave serialization**: Wave N+1 starts only after all workers from Wave N have reported back
 via SendMessage or been timed out by stall detection.
 
 ## Stall Detection in Wave Dispatch [OMN-6987]
 
-After dispatching all Task() calls in a wave, the team lead monitors for stalled agents
+After dispatching all Agent() calls in a wave, the team lead monitors for stalled agents
 using the `dispatch_watchdog` skill. This prevents a single stalled agent from blocking
 the entire wave indefinitely.
 
@@ -629,27 +630,23 @@ It does NOT own:
 
 ### Execution Model
 
-**Direct dispatch from team-lead session** is the authoritative execution pattern:
+**Agent Teams dispatch from team-lead session** is the authoritative execution pattern:
 
-1. Team-lead constructs waves of tickets grouped by dependency
-2. For each wave, team-lead dispatches one `Task()` per ticket in parallel
-3. Team-lead awaits all Task() completions in a wave before starting the next wave
-4. Results (status, pr_url, branch) are collected directly from Task() return values
-5. No background workers, no TaskList polling loop, no SendMessage coordination
-
-**Why not per-repo workers?** Workers spawned as team members via `TeamCreate` + `Task(team_name=...)`
-go idle immediately (`idleReason: available`) and never process tasks from the task queue.
-This is a confirmed behavior across multiple epic runs. The direct dispatch pattern is the
-only execution model that reliably completes tickets.
+1. Team-lead creates the team via `TeamCreate(team_name="epic-{epic_id}")`
+2. Team-lead constructs waves of tickets grouped by dependency
+3. For each wave, team-lead dispatches `Agent()` workers in parallel with `team_name` parameter
+4. Workers execute in background and report completion via `SendMessage(to="team-lead")`
+5. Team-lead monitors SendMessage reports and stall detection before starting the next wave
+6. After all waves complete, team-lead cleans up via `TeamDelete()`
 
 ### Circuit Breaker / Heartbeat Timeout
 
-Every Task() dispatch has a configurable timeout to prevent stalled agents from blocking the
+Every Agent() dispatch has a configurable timeout to prevent stalled agents from blocking the
 entire wave indefinitely. If an agent produces no output for `DISPATCH_TIMEOUT_MINUTES`
 (default: 30, configurable via `EPIC_TEAM_DISPATCH_TIMEOUT_MINUTES` env var), the circuit
 breaker trips:
 
-1. The Task() dispatch returns a timeout error
+1. The Agent() dispatch returns a timeout error
 2. The ticket is marked `AGENT_TIMEOUT` in state.yaml
 3. A Kafka event `onex.evt.omniclaude.agent-circuit-breaker.v1` is emitted for observability
 4. The wave continues with remaining tickets (timeout is non-blocking)

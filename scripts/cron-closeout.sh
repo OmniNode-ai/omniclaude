@@ -58,6 +58,10 @@ fi
 export ONEX_RUN_ID="${RUN_ID}"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 
+# Source headless emit wrapper for unified event emission [OMN-7034]
+# shellcheck disable=SC1091
+source "$(dirname "$0")/headless-emit-wrapper.sh"
+
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
@@ -279,6 +283,8 @@ log "=== Close-out run ${RUN_ID} starting ==="
 log "State dir: ${RUN_DIR}"
 log "Cycle state: ${CYCLE_STATE}"
 
+emit_task_event "task-assigned" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"pipeline-start\""
+
 # A1: Merge sweep
 if ! run_phase "A1_merge_sweep" \
   "Run merge-sweep: scan all OmniNode-ai repos for open PRs with passing CI. Enable auto-merge on eligible ones (passing CI, no conflicts). If no eligible PRs, report 'nothing_to_merge'. Report results as a markdown summary." \
@@ -400,6 +406,8 @@ fi
 
 reset_strikes
 log "All infrastructure sweep gates PASSED"
+
+emit_task_event "task-progress" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"infra-gates-passed\""
 
 # ===========================================================================
 # Phase C: Release and redeploy (conditional)
@@ -531,6 +539,8 @@ fi
 # ===========================================================================
 
 log "=== Finalizing close-out run ==="
+
+emit_task_event "task-completed" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"pipeline-complete\", \"consecutive_failures\": ${CONSECUTIVE_FAILURES}"
 
 update_cycle_state "complete"
 

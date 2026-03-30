@@ -119,7 +119,7 @@ What happens when infrastructure is unavailable:
 | **Emit daemon down** | Events dropped, hook continues | 0 | Yes (events) |
 | **Kafka unavailable** | Daemon buffers briefly, then drops | 0 | Yes (events) |
 | **PostgreSQL down** | Logging skipped if `ENABLE_POSTGRES=true` | 0 | Yes (logs) |
-| **Routing timeout (5s)** | Fallback to `polymorphic-agent` | 0 | No |
+| **Routing timeout (5s)** | Fallback to default agent | 0 | No |
 | **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
 | **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
 | **Context injection fails** | Proceeds without patterns | 0 | No |
@@ -244,20 +244,13 @@ Hook changes deploy via the plugin cache (`~/.claude/plugins/cache/`). Test loca
 3. Deploy plugin to cache
 4. Verify hooks work in a live Claude Code session
 
-### Automated Workflows (`/parallel-solve`)
+### Automated Workflows
 
-Always dispatch to `polymorphic-agent` for skill-driven work. The ONLY exception is pure
-conversational responses (zero tool calls — e.g., answering a question).
+For parallel background work, use Agent Teams (TeamCreate + Agent with team_name).
+For overnight/cron work, use headless `claude -p` with checkpoint-resume.
+For verification and simple tasks, delegate to local LLMs.
 
-```python
-Task(
-    subagent_type="onex:polymorphic-agent",
-    description="Review PR #30",
-    prompt="..."
-)
-```
-
-This ensures ONEX capabilities, intelligence integration, and observability.
+See `docs/plans/2026-03-30-agent-team-architecture.md` for the full routing matrix.
 
 ```bash
 # Human developers running CLI tools directly (not agent workflows):
@@ -438,7 +431,7 @@ ls -la plugins/onex/hooks/scripts/*.sh                              # Check scri
 |---------|-------------|-----|
 | Events not emitting | Daemon not started | SessionStart hook must run first to start the daemon |
 | Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
-| Routing returns `polymorphic-agent` for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
+| Routing returns default agent for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
 | Context injection empty | Database unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env`; injection has 1s timeout |
 
 ---

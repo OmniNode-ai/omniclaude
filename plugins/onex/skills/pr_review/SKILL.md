@@ -5,34 +5,9 @@ level: basic
 debug: false
 ---
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
-files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run pr-review for PR #<pr_number>",
-  prompt="Run the pr-review skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
-
-<!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
-<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
-Apply the persona profile above when generating outputs.
-
-# Comprehensive PR Review
-
-Production-ready PR review system that fetches all feedback from GitHub, organizes by priority, and enforces strict merge requirements.
+**Target**: Agent Teams
 
 ## Seam Contract Check (Pre-Review Gate)
 

@@ -36,13 +36,9 @@ args:
 
 # Env Parity Checker
 
-## Dispatch Requirement
+## Dispatch Surface
 
-This skill MUST be dispatched through `onex:polymorphic-agent`. Never execute env-parity directly.
-
-```python
-Skill(skill="onex:env_parity", args="check --checks credential,ecr,infisical")
-```
+**Target**: Agent Teams
 
 ## Overview
 

@@ -42,25 +42,9 @@ ticket: OMN-3503
 
 # Feature Dashboard
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Feature dashboard audit",
-  prompt="Run the feature-dashboard skill. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**Announce at start (audit mode):** "Running feature-dashboard audit."
-**Announce at start (ticketize mode):** "Running feature-dashboard ticketize."
-
-Provides an automated audit of every skill's connectivity across 8 layers and surfaces gaps as
-actionable, machine-readable output. Audit and mutation are strictly separated.
+**Target**: Agent Teams
 
 ## Overview
 
