@@ -334,6 +334,13 @@ class TopicBase(StrEnum):
     """Emitted after a batch DoD compliance sweep completes."""
 
     # ==========================================================================
+    # Evidence dual-write topics (OMN-7030)
+    # Emitted by EvidenceWriter on every disk evidence write (fail-open).
+    # ==========================================================================
+    EVIDENCE_WRITTEN = "onex.evt.omniclaude.evidence-written.v1"
+    """Emitted after evidence is written to disk (self-check or verifier)."""
+
+    # ==========================================================================
     # Context integrity audit topics (OMN-5230)
     # Emitted by audit hooks for dispatch validation, scope enforcement,
     # budget tracking, return path control, and compression lifecycle.

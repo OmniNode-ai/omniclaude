@@ -75,16 +75,16 @@ class ModelEvidenceWrittenEvent(BaseModel):
 def emit_event(event: ModelEvidenceWrittenEvent) -> None:
     """Emit an EvidenceWritten event to Kafka. Fail-open: logs on error."""
     try:
-        from omniclaude.hooks.handler_event_emitter import HookEventEmitter
         from omniclaude.hooks.topics import TopicBase, build_topic
+        from omniclaude.publisher.emit_client import EmitClient
 
-        topic = build_topic(TopicBase.AUDIT_DISPATCH_VALIDATED)
-        emitter = HookEventEmitter()
-        emitter.emit_sync(
-            topic=topic,
+        topic = build_topic(TopicBase.EVIDENCE_WRITTEN)
+        client = EmitClient()
+        client.emit_sync(
+            event_type=topic,
             payload=event.model_dump(mode="json"),
         )
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, ImportError, AttributeError, TypeError):
         logger.warning(
             "Failed to emit EvidenceWritten event for task %s (fail-open)",
             event.task_id,
@@ -115,15 +115,23 @@ class EvidenceWriter:
         *,
         session_id: str = "",
         correlation_id: str = "",
+        recorded_at: datetime | None = None,
     ) -> Path:
         """Write self-check evidence to disk and emit Kafka event.
+
+        Args:
+            result: The self-check verification result.
+            session_id: Session identifier for tracing.
+            correlation_id: Correlation identifier for tracing.
+            recorded_at: Explicit timestamp for deterministic testing.
+                Defaults to now(UTC) if not provided.
 
         Returns the path to the written evidence file.
         """
         evidence_dir = self._evidence_dir(result.task_id)
         evidence_dir.mkdir(parents=True, exist_ok=True)
 
-        now = datetime.now(UTC)
+        now = recorded_at or datetime.now(UTC)
         payload = {
             "task_id": result.task_id,
             "evidence_type": "self_check",
@@ -164,15 +172,23 @@ class EvidenceWriter:
         *,
         session_id: str = "",
         correlation_id: str = "",
+        recorded_at: datetime | None = None,
     ) -> Path:
         """Write verifier evidence to disk and emit Kafka event.
+
+        Args:
+            result: The verifier verification result.
+            session_id: Session identifier for tracing.
+            correlation_id: Correlation identifier for tracing.
+            recorded_at: Explicit timestamp for deterministic testing.
+                Defaults to now(UTC) if not provided.
 
         Returns the path to the written evidence file.
         """
         evidence_dir = self._evidence_dir(result.task_id)
         evidence_dir.mkdir(parents=True, exist_ok=True)
 
-        now = datetime.now(UTC)
+        now = recorded_at or datetime.now(UTC)
         payload = {
             "task_id": result.task_id,
             "evidence_type": "verifier",
