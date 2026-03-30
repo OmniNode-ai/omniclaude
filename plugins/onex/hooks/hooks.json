@@ -185,6 +185,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_scope_gate.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_sweep_preflight.sh"
+          }
+        ]
       }
     ],
     "SubagentStart": [
