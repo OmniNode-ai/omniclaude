@@ -30,24 +30,9 @@ args:
 
 # Worktree Lifecycle Manager
 
-## Dispatch Requirement <!-- ai-slop-ok: skill-step-heading -->
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run worktree-lifecycle GC",
-  prompt="Run the worktree-lifecycle skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**Skill ID**: `onex:worktree_lifecycle`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6741
+**Target**: Agent Teams
 
 ---
 

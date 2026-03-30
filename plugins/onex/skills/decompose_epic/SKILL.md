@@ -36,19 +36,9 @@ args:
 
 # Decompose Epic
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Decompose epic <epic_id>",
-  prompt="Run the decompose-epic skill for <epic_id>. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+**Target**: Agent Teams
 
 ## Overview
 

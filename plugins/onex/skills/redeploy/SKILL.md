@@ -79,19 +79,9 @@ args:
 
 # Redeploy
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Runtime redeploy",
-  prompt="Run the redeploy skill. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+**Target**: Headless claude -p
 
 ## Overview
 
