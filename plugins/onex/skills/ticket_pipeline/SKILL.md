@@ -52,29 +52,9 @@ args:
 
 # Ticket Pipeline
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, your FIRST and ONLY action is to dispatch to a polymorphic-agent. Do NOT read
-files, run bash, or take any other action before dispatching.
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run ticket-pipeline for <ticket_id>",
-  prompt="Run the ticket-pipeline skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**If subagent dispatch fails** (auth error, "Not logged in", tool unavailable, Agent tool blocked,
-or any subagent execution error): **STOP immediately. Do NOT fall back to direct Bash, Read, Edit,
-Write, or Glob calls.** Report the exact error to the user and wait for direction. Falling back to
-direct tools bypasses ONEX observability, context management, and the orchestration layer. There
-is no acceptable workaround — surface the failure.
-
-> **Authoritative behavior is defined in `prompt.md`; `SKILL.md` is descriptive. When docs
-> conflict, `prompt.md` wins.**
+**Target**: Agent Teams or Headless
 
 ## Overview
 

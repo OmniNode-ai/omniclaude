@@ -30,24 +30,9 @@ args:
 
 # Dep Cascade Dedup
 
-## Dispatch Requirement <!-- ai-slop-ok: skill-step-heading -->
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run dep-cascade-dedup post-release cleanup",
-  prompt="Run the dep-cascade-dedup skill. <full context and args>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**Skill ID**: `onex:dep_cascade_dedup`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6740
+**Target**: Agent Teams
 
 ---
 
