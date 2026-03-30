@@ -205,6 +205,7 @@ Architecture follows the headless decomposition pattern from
 
 | Phase | Name | Gate? | Description |
 |-------|------|-------|-------------|
+| A0 | worktree-health | No | `prune-worktrees.sh --execute` — clean merged worktrees, skip unpushed/dirty [OMN-7021] |
 | A1 | merge-sweep | No | Drain open PRs with passing CI |
 | A2 | deploy-plugin | No | Copy plugin to cache |
 | A3 | infra-health | No | Verify postgres, redpanda, valkey |
@@ -329,7 +330,7 @@ When dispatching subagents for release or other high-risk operations:
 ## Integration Points
 
 **Phase A — Prepare:**
-- **worktree-health**: A0 — sweep worktrees for lost work, auto-clean merged, create recovery tickets [OMN-6867]
+- **worktree-health**: A0 — `scripts/prune-worktrees.sh --execute`: auto-clean merged worktrees, skip worktrees with unpushed commits or dirty state, skip detached HEAD and missing upstream [OMN-6867, OMN-7021]
 - **merge-sweep**: A1 — drains open PRs before release (full skill: Track A/B/A-update/A-resolve)
 - **dirty-pr-triage**: A1b — DIRTY/CONFLICTING PR detection, auto-close stale >24h, queue stall detection, missing auto-merge [OMN-6872]
 - **deploy-local-plugin**: A2 — activates newly merged skills/hooks
