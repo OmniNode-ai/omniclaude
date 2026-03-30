@@ -48,6 +48,39 @@ outputs:
 > **OMN-5349** — Automated morning investigation pipeline that pairs with `/close-day`
 > to form a daily OODA cycle.
 
+## Dispatch Surface: Agent Teams
+
+begin-day uses Claude Code Agent Teams with 7 parallel probe workers. The team lead (this
+session) handles Phases 0, 1, 3, and 4 inline. Phase 2 dispatches all probes as parallel
+Agent Teams workers, then aggregates their results.
+
+### Lifecycle
+
+```
+1. TeamCreate(team_name="begin-day-{run_id}")
+2. Phase 0 + Phase 1: team lead runs context load + sync inline
+3. Phase 2: for each probe in probe_catalog:
+   Agent(name="probe-{probe_name}", team_name="begin-day-{run_id}",
+         prompt="Run investigation probe: {skill_invocation}. Write results to
+                 $ONEX_STATE_DIR/begin-day/{run_id}/{probe_name}.json.
+                 Report findings via SendMessage(to='team-lead').")
+4. Team lead collects all 7 probe results via SendMessage
+5. Phase 3: team lead aggregates findings into ModelDayOpen YAML
+6. Phase 4: team lead feeds findings into design-to-plan (optional)
+7. TeamDelete(team_name="begin-day-{run_id}") after aggregation complete
+```
+
+All 7 probes are dispatched simultaneously for maximum parallelism (~8min wall-clock).
+Each probe writes its JSON artifact independently; the team lead aggregates after all
+workers report back or time out.
+
+### Failure on Dispatch
+
+If Agent Teams dispatch fails (TeamCreate error, Agent tool unavailable, auth error):
+**STOP immediately.** Report the exact error to the user and wait for direction. Do NOT fall
+back to direct Bash, Read, Edit, Write, or Glob calls — falling back bypasses observability,
+context management, and the orchestration layer.
+
 ## Overview
 
 `/begin-day` automates the entire morning investigation loop:
@@ -88,7 +121,7 @@ Phase 1: Sync & Preconditions (sequential, ~2min)
   └── Check infra health (Docker + port probes)
 
 Phase 2: Parallel Investigation (~8min wall-clock)
-  └── 7 probes dispatched as parallel polymorphic agents:
+  └── 7 probes dispatched as parallel Agent Teams workers:
       ├── list_prs         → /list-prs
       ├── dashboard_sweep  → /dashboard-sweep --triage-only
       ├── aislop_sweep     → /aislop-sweep --dry-run
