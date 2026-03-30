@@ -12,12 +12,10 @@ OMN-7035
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -95,20 +93,20 @@ class RoutingRecorder:
 
         return decision
 
-    def read_all(self) -> list[dict[str, Any]]:
+    def read_all(self) -> list[ModelRoutingDecision]:
         """Read all recorded routing decisions from the NDJSON file.
 
         Returns:
-            List of decision dicts in chronological order.
+            List of decision models in chronological order.
         """
         if not self._decisions_path.exists():
             return []
 
-        decisions: list[dict[str, Any]] = []
+        decisions: list[ModelRoutingDecision] = []
         for line in self._decisions_path.read_text().splitlines():
             stripped = line.strip()
             if stripped:
-                decisions.append(json.loads(stripped))
+                decisions.append(ModelRoutingDecision.model_validate_json(stripped))
         return decisions
 
     def _append_to_disk(self, decision: ModelRoutingDecision) -> None:

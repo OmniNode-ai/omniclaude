@@ -33,15 +33,15 @@ class TestRoutingRecorder:
         assert len(decisions) == 1
 
         d = decisions[0]
-        assert d["task_id"] == "task-1"
-        assert d["intended_surface"] == "local_llm"
-        assert d["executed_surface"] == "local_llm"
-        assert d["agent_model"] == "qwen3-14b"
-        assert d["rationale"] == "Mechanical verification, read-only, bounded context"
-        assert d["fallback"] == "claude-opus-4-6"
-        assert d["reroute_reason"] is None
-        assert d["schema_version"] == "1.0.0"
-        assert "created_at" in d
+        assert d.task_id == "task-1"
+        assert d.intended_surface == "local_llm"
+        assert d.executed_surface == "local_llm"
+        assert d.agent_model == "qwen3-14b"
+        assert d.rationale == "Mechanical verification, read-only, bounded context"
+        assert d.fallback == "claude-opus-4-6"
+        assert d.reroute_reason is None
+        assert d.schema_version == "1.0.0"
+        assert d.created_at
 
     def test_fallback_records_different_executed_surface(
         self, tmp_path: object
@@ -59,9 +59,9 @@ class TestRoutingRecorder:
         )
         decisions = recorder.read_all()
         assert len(decisions) == 1
-        assert decisions[0]["intended_surface"] == "local_llm"
-        assert decisions[0]["executed_surface"] == "team_worker"
-        assert decisions[0]["reroute_reason"] == "Connection timeout to local LLM"
+        assert decisions[0].intended_surface == "local_llm"
+        assert decisions[0].executed_surface == "team_worker"
+        assert decisions[0].reroute_reason == "Connection timeout to local LLM"
 
     def test_append_only_multiple_records(self, tmp_path: object) -> None:
         """Multiple records append to the same file without overwriting."""
@@ -75,7 +75,7 @@ class TestRoutingRecorder:
             )
         decisions = recorder.read_all()
         assert len(decisions) == 3
-        assert [d["task_id"] for d in decisions] == [
+        assert [d.task_id for d in decisions] == [
             "task-0",
             "task-1",
             "task-2",
@@ -99,7 +99,7 @@ class TestRoutingRecorder:
         lines = ndjson_path.read_text().splitlines()
         assert len(lines) == 1
         parsed = json.loads(lines[0])
-        assert parsed["task_id"] == "task-fmt"
+        assert parsed["task_id"] == "task-fmt"  # raw JSON dict access intentional
 
     def test_model_routing_decision_frozen(self) -> None:
         """ModelRoutingDecision is immutable."""
