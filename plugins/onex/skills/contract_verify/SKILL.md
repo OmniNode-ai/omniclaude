@@ -143,6 +143,22 @@ operational issue, not a contract compliance failure.
 When the CLI exits with code 1 (FAIL), invoke `auto_ticket_from_findings` with
 structured findings extracted from the JSON report.
 
+### Dispatch
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Create tickets from contract-verify failures",
+  prompt="Run auto_ticket_from_findings with the following findings: <findings_json>.
+    Source: contract-verify. Dedup on contract_name:check_type.
+    Do NOT create tickets for QUARANTINE results."
+)
+```
+
+The polymorphic-agent reads the report JSON from
+`$ONEX_STATE_DIR/contract-verify/<run_id>/report.json`, extracts all checks with
+`status: "FAIL"`, and maps each to a finding for `auto_ticket_from_findings`.
+
 ### Finding Structure
 
 Each failing check produces a finding:
