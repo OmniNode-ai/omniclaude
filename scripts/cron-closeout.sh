@@ -405,6 +405,32 @@ if phase_failed "B5_integration"; then
 fi
 
 reset_strikes
+log "Integration gate PASSED"
+
+# B6: Contract verification — runtime contract compliance check
+log "=== Phase B6: Contract verification ==="
+
+if ! run_phase "B6_contract_verify" \
+  "Run contract verification for the registration subsystem. Execute: uv run python -m omnibase_infra.verification.cli --registration-only --json. If the exit code is 0, print CONTRACT_VERIFY: PASS. If exit code is 1, print CONTRACT_VERIFY: FAIL followed by the failing checks. If exit code is 2, print CONTRACT_VERIFY: QUARANTINE." \
+  "Bash,Read"; then
+  record_strike "B6_contract_verify"
+fi
+
+# B6 is a soft gate by default — FAIL warns but does not halt
+# Set CONTRACT_VERIFY_HARD_GATE=1 to make it a hard gate
+if phase_failed "B6_contract_verify"; then
+  if [[ "${CONTRACT_VERIFY_HARD_GATE:-0}" == "1" ]]; then
+    log "HALT: Contract verification failed (hard gate enabled)."
+    log "Review output: ${RUN_DIR}/B6_contract_verify.txt"
+    update_cycle_state "halted_contract_verify"
+    exit 1
+  else
+    log "WARN: Contract verification reported failures (soft gate — continuing)."
+    log "Review output: ${RUN_DIR}/B6_contract_verify.txt"
+  fi
+fi
+
+reset_strikes
 log "All infrastructure sweep gates PASSED"
 
 emit_task_event "task-progress" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"infra-gates-passed\""
@@ -560,6 +586,7 @@ Phase Results:
   B2 data-flow-sweep:  $(test -f "${RUN_DIR}/B2_data_flow_sweep.txt" && echo "executed" || echo "missing")
   B3 database-sweep:   $(test -f "${RUN_DIR}/B3_database_sweep.txt" && echo "executed" || echo "missing")
   B5 integration-gate: $(test -f "${RUN_DIR}/B5_integration.txt" && echo "executed" || echo "missing")
+  B6 contract-verify: $(test -f "${RUN_DIR}/B6_contract_verify.txt" && echo "executed" || echo "missing")
   C1 release-check:    $(test -f "${RUN_DIR}/C1_release_check.txt" && echo "executed" || echo "missing")
   C2 redeploy-check:   $(test -f "${RUN_DIR}/C2_redeploy_check.txt" && echo "executed" || echo "missing")
   D3 dashboard-sweep:  $(test -f "${RUN_DIR}/D3_dashboard_sweep.txt" && echo "executed" || echo "missing")
