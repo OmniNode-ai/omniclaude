@@ -673,7 +673,7 @@ class TestStallSimulationEndToEnd:
                 checkpoint_dir=checkpoint_dir,
                 ticket_id="OMN-6889",
                 completed_work=[
-                    "Created worktree at /Volumes/PRO-G40/Code/omni_worktrees/OMN-6889/omniclaude",
+                    "Created worktree at /Volumes/PRO-G40/Code/omni_worktrees/OMN-6889/omniclaude",  # local-path-ok: test fixture
                     "Implemented SKILL.md for agent_healthcheck",
                     "Updated epic-team SKILL.md with health-check reference",
                 ],
