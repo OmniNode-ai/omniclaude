@@ -54,7 +54,8 @@ fi
 # If cache exists and is fresh, use cached result
 mkdir -p "$CACHE_DIR"
 if [[ -f "$CACHE_FILE" ]]; then
-    CACHE_AGE=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0) ))
+    FILE_MTIME=$(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
+    CACHE_AGE=$(( $(date +%s) - FILE_MTIME ))
     if [[ $CACHE_AGE -lt $CACHE_TTL_SECONDS ]]; then
         CACHED_STATUS=$(jq -er '.status // empty' "$CACHE_FILE" 2>/dev/null) || true
         if [[ "$CACHED_STATUS" == "pass" ]]; then
