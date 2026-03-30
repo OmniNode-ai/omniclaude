@@ -423,6 +423,7 @@ class TestModelSessionOutcome:
         emitted_at = make_timestamp()
         event = ModelSessionOutcome(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=emitted_at,
         )
@@ -434,6 +435,7 @@ class TestModelSessionOutcome:
         """event_name has default value of 'session.outcome'."""
         event = ModelSessionOutcome(
             session_id="test-session",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.UNKNOWN,
             emitted_at=make_timestamp(),
         )
@@ -445,6 +447,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError):
             ModelSessionOutcome(
                 session_id="test-session",
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 emitted_at=make_timestamp(),
                 event_name="wrong.event.name",  # type: ignore[arg-type]
@@ -454,6 +457,7 @@ class TestModelSessionOutcome:
         """Events are immutable (frozen=True)."""
         event = ModelSessionOutcome(
             session_id="test-session",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=make_timestamp(),
         )
@@ -464,6 +468,7 @@ class TestModelSessionOutcome:
         """Outcome field is immutable (frozen=True)."""
         event = ModelSessionOutcome(
             session_id="test-session",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=make_timestamp(),
         )
@@ -475,6 +480,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError) as exc_info:
             ModelSessionOutcome(
                 session_id="test-session",
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 emitted_at=make_timestamp(),
                 extra_field="should_fail",  # type: ignore[call-arg]
@@ -492,6 +498,7 @@ class TestModelSessionOutcome:
         for outcome in valid_outcomes:
             event = ModelSessionOutcome(
                 session_id="test-session",
+                correlation_id=uuid4(),
                 outcome=outcome,
                 emitted_at=make_timestamp(),
             )
@@ -503,6 +510,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError) as exc_info:
             ModelSessionOutcome(
                 session_id="",  # Empty string - should fail
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 emitted_at=make_timestamp(),
             )
@@ -512,6 +520,7 @@ class TestModelSessionOutcome:
         """session_id with exactly 1 character is valid."""
         event = ModelSessionOutcome(
             session_id="x",  # Single character - should pass
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=make_timestamp(),
         )
@@ -522,6 +531,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError) as exc_info:
             ModelSessionOutcome(
                 # Missing session_id
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 emitted_at=make_timestamp(),
             )
@@ -532,6 +542,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError) as exc_info:
             ModelSessionOutcome(
                 session_id="test-session",
+                correlation_id=uuid4(),
                 # Missing outcome
                 emitted_at=make_timestamp(),
             )
@@ -542,6 +553,7 @@ class TestModelSessionOutcome:
         with pytest.raises(ValidationError) as exc_info:
             ModelSessionOutcome(
                 session_id="test-session",
+                correlation_id=uuid4(),
                 outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
                 # Missing emitted_at
             )
@@ -552,6 +564,7 @@ class TestModelSessionOutcome:
         naive_dt = datetime(2025, 1, 19, 12, 0, 0)  # No tzinfo
         event = ModelSessionOutcome(
             session_id="test-session",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=naive_dt,
         )
@@ -563,6 +576,7 @@ class TestModelSessionOutcome:
         utc_dt = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
         event = ModelSessionOutcome(
             session_id="test-session",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
             emitted_at=utc_dt,
         )
@@ -574,6 +588,7 @@ class TestModelSessionOutcome:
         emitted_at = make_timestamp()
         original = ModelSessionOutcome(
             session_id="test-session-123",
+            correlation_id=uuid4(),
             outcome=EnumClaudeCodeSessionOutcome.FAILED,
             emitted_at=emitted_at,
         )

@@ -85,6 +85,31 @@ These rules are non-negotiable. Violations will cause production issues.
 
 ---
 
+## Agent Behavioral Rules (OMN-6888)
+
+Rules extracted from 186 wrong-approach friction events. Applicable to all agents
+operating in this repo.
+
+### Autonomous mode safety rails
+
+When operating autonomously (autopilot, epic-team, ticket-pipeline):
+- Never disable safety guardrails (pre-commit hooks, CI checks, type checkers)
+  to make code pass. Fix the code instead.
+- Never write state, logs, or output to `~/.claude/` -- use `omni_home/.onex_state/`
+  or the project-local equivalent.
+- Write friction logs and diagnostic output to `omni_home/.onex_state/friction/`
+  so they are externally observable by monitoring tools.
+
+### Contract-first topic definitions
+
+Kafka topics, event schemas, and subscription declarations belong in contract YAML
+files, not hardcoded in application code. When adding a new topic:
+1. Declare it in the node's contract YAML (`event_bus.publish_topics` / `subscribe_topics`)
+2. Reference the contract-declared topic name in application code via the contract loader
+3. Never hardcode topic strings like `"onex.evt.foo.bar.v1"` directly in Python
+
+---
+
 ## Failure Modes
 
 What happens when infrastructure is unavailable:

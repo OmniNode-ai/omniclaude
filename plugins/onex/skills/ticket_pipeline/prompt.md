@@ -29,12 +29,19 @@ auto_merge = "--auto-merge" in args
 require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
 require_tests = "--require-tests" in args  # Hard-gate test coverage: block pipeline if changed files lack tests
 docs_only = "--docs-only" in args  # Only generate/update documentation, skip implementation
+skip_test_iterate = "--skip-test-iterate" in args  # Skip the test-iterate phase (OMN-6891)
+
+max_test_iterations = 5  # Default max iterations for test-iterate loop
+if "--max-test-iterations" in args:
+    idx = args.index("--max-test-iterations")
+    if idx + 1 < len(args):
+        max_test_iterations = int(args[idx + 1])
 
 skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (pre_flight|implement|local_review|dod_verify|test_coverage_gate|create_pr|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
+        print("Error: --skip-to requires a phase argument (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)")  # ci_watch is now fast/non-blocking
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -79,6 +86,8 @@ policy:
   auto_fix_nits: false
   pr_review_timeout_hours: 24
   max_pr_review_cycles: 3
+  max_test_iterations: 5      # Max iterations for test-iterate loop (OMN-6891)
+  skip_test_iterate: false    # Skip the test-iterate phase entirely
   auto_merge: true            # Default true; set false only via --require-gate
   policy_auto_merge: true     # Mirrors auto_merge at pipeline start; read at Phase 6
   slack_on_merge: true
@@ -142,6 +151,14 @@ phases:
     started_at: null
     completed_at: null
     artifacts: {}
+    blocked_reason: null
+    block_kind: null
+    last_error: null
+    last_error_at: null
+  test_iterate:             # OMN-6891
+    started_at: null
+    completed_at: null
+    artifacts: {}           # framework, iterations, tests_run, tests_passed, tests_failed, diagnosis_path
     blocked_reason: null
     block_kind: null
     last_error: null
@@ -214,7 +231,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["pre_flight", "implement", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
+PHASE_ORDER = ["pre_flight", "generate_contract", "implement", "enrich_contract", "local_review", "dod_verify", "test_coverage_gate", "create_pr", "test_iterate", "ci_watch", "pr_review_loop", "review_gate", "integration_verification_gate", "auto_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -351,6 +368,8 @@ else:
             "auto_fix_nits": False,
             "pr_review_timeout_hours": 24,
             "max_pr_review_cycles": 3,
+            "max_test_iterations": max_test_iterations,
+            "skip_test_iterate": skip_test_iterate or docs_only,
             # auto_merge defaults to True (auto-merge is the normal path).
             # Set to False only when --require-gate is explicitly passed.
             "auto_merge": False if require_gate else True,
@@ -1105,6 +1124,16 @@ def build_phase_payload(phase_name, state, result):
             "head_sha": head_sha,
         }
 
+    elif phase_name == "test_iterate":
+        return {
+            "framework": artifacts.get("framework", "unknown"),
+            "iterations": artifacts.get("iterations", 0),
+            "tests_run": artifacts.get("tests_run", 0),
+            "tests_passed": artifacts.get("tests_passed", 0),
+            "tests_failed": artifacts.get("tests_failed", 0),
+            "diagnosis_path": artifacts.get("diagnosis_path", ""),
+        }
+
     elif phase_name == "ci_watch":
         return {
             "ci_fix_cycles_used": artifacts.get("ci_fix_cycles_used", 0),
@@ -1208,6 +1237,13 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "create_pr":
         artifacts["pr_url"] = payload.get("pr_url", "")
         artifacts["pr_number"] = payload.get("pr_number", 0)
+    elif phase == "test_iterate":
+        artifacts["framework"] = payload.get("framework", "unknown")
+        artifacts["iterations"] = payload.get("iterations", 0)
+        artifacts["tests_run"] = payload.get("tests_run", 0)
+        artifacts["tests_passed"] = payload.get("tests_passed", 0)
+        artifacts["tests_failed"] = payload.get("tests_failed", 0)
+        artifacts["diagnosis_path"] = payload.get("diagnosis_path", "")
     elif phase == "ci_watch":
         artifacts["ci_fix_cycles_used"] = payload.get("ci_fix_cycles_used", 0)
         artifacts["watch_duration_minutes"] = payload.get("watch_duration_minutes", 0)
@@ -1607,12 +1643,14 @@ def execute_phase(phase_name, state):
     """
     handlers = {
         "pre_flight": execute_pre_flight,
+        "generate_contract": execute_generate_contract,
         "implement": execute_implement,
         "enrich_contract": execute_enrich_contract,
         "local_review": execute_local_review,
         "dod_verify": execute_dod_verify,
         "test_coverage_gate": execute_test_coverage_gate,
         "create_pr": execute_create_pr,
+        "test_iterate": execute_test_iterate,
         "ci_watch": execute_ci_watch,
         "pr_review_loop": execute_pr_review_loop,
         "review_gate": execute_review_gate,
@@ -1861,6 +1899,77 @@ def execute_phase(phase_name, state):
 **Exit conditions:**
 - **Completed:** pre-commit and mypy issues resolved or deferred (AUTO-ADVANCE)
 - **Failed:** pre-flight tooling errors out unexpectedly
+
+---
+
+### Phase: GENERATE_CONTRACT
+
+**Contract generation for integration-sweep verification.**
+
+This phase creates a skeleton onex_change_control governance contract for the ticket.
+It runs after pre_flight and before implement. Failure is non-fatal -- the pipeline
+continues without a contract.
+
+1. Auto-detect onex_change_control repo path:
+   ```bash
+   if [ -z "$ONEX_CC_REPO_PATH" ]; then
+     TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
+     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+     for candidate in \
+       "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
+       "$REGISTRY_BASE/onex_change_control"; do
+       if [ -d "$candidate/contracts" ]; then
+         ONEX_CC_REPO_PATH="$candidate"
+         break
+       fi
+     done
+   fi
+   ```
+
+2. Check if contract exists: `ls $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml 2>/dev/null`
+   - If exists: skip this phase (contract already generated, possibly by plan-to-tickets)
+   - If not: continue
+
+3. Fetch ticket metadata:
+   - Use Linear MCP `get_issue` to get ticket title and description
+   - Parse description for seam indicators: look for keywords "cross-repo", "kafka", "topic",
+     "event", "api", "interface" in title or description
+   - If any seam keywords found: `is_seam_ticket=True`, scan description for interface types
+
+4. Generate contract:
+   ```python
+   import sys
+   sys.path.insert(0, f"{os.environ.get('CLAUDE_PLUGIN_ROOT', os.environ.get('OMNICLAUDE_PROJECT_ROOT', ''))}/skills/_lib/contract_generator")
+   from generate_contract import generate_skeleton_contract
+
+   yaml_str = generate_skeleton_contract(
+       ticket_id="{ticket_id}",
+       summary="{ticket_title}",
+       is_seam_ticket={is_seam_ticket},
+       interfaces_touched={interfaces_list},
+   )
+   ```
+
+5. Write contract to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
+
+6. Commit:
+   ```bash
+   cd $ONEX_CC_REPO_PATH && git add contracts/{ticket_id}.yaml && git commit -m "contract: add {ticket_id} skeleton [auto-generated]"
+   ```
+
+**On failure:** Log warning "Contract generation failed: {error}". Continue pipeline -- this
+phase is non-fatal.
+
+**State artifacts:**
+- `phases.generate_contract.started_at`
+- `phases.generate_contract.completed_at`
+- `phases.generate_contract.artifacts` (contract_path, skipped)
+
+**Exit conditions:**
+- **Completed:** Contract written and committed (AUTO-ADVANCE)
+- **Skipped:** Contract already exists (AUTO-ADVANCE)
+- **Failed:** Non-fatal warning, pipeline continues (AUTO-ADVANCE)
 
 ---
 
@@ -2928,6 +3037,159 @@ implementation including NEEDS_GATE predicate, one-shot merge check, and excepti
 **Exit conditions:**
 - **Completed:** pre-flight checks run, AUTO-FIX committed, DEFER recorded
 - **Failed:** pre-flight tool invocation errors
+
+---
+
+### Phase 3.5: TEST_ITERATE (OMN-6891) <!-- ai-slop-ok: skill-step-heading -->
+
+**Invariants:**
+- Phase 3 (create_pr) is completed
+- Branch is pushed to remote
+- Working directory has committed code
+
+**Purpose:** Run the repo's test suite locally, parse failures, diagnose and fix, re-run
+failed tests, and repeat up to 5 iterations. This catches bugs before CI runs (faster
+feedback loop). After 5 failed attempts, invoke the two-strike diagnosis protocol.
+
+**Framework auto-detection:**
+
+```python
+def detect_test_framework(repo_path: str) -> str:
+    """Auto-detect the test framework for this repo.
+
+    Returns: 'pytest' | 'vitest' | 'playwright' | 'unknown'
+    """
+    from pathlib import Path
+    repo = Path(repo_path)
+
+    # Python: pytest
+    if (repo / "pyproject.toml").exists():
+        content = (repo / "pyproject.toml").read_text()
+        if "pytest" in content or (repo / "tests").is_dir():
+            return "pytest"
+
+    # TypeScript: vitest
+    if (repo / "vitest.config.ts").exists() or (repo / "vitest.config.js").exists():
+        return "vitest"
+    if (repo / "package.json").exists():
+        content = (repo / "package.json").read_text()
+        if '"vitest"' in content:
+            return "vitest"
+
+    # E2E: playwright
+    if (repo / "playwright.config.ts").exists() or (repo / "playwright.config.js").exists():
+        return "playwright"
+
+    return "unknown"
+```
+
+**Test runner commands by framework:**
+
+| Framework | Run All | Run Failed Only | Parse Output |
+|-----------|---------|-----------------|--------------|
+| pytest | `uv run pytest tests/ -m unit -x --tb=short -q` | `uv run pytest tests/ -m unit --lf --tb=short -q` | Exit code + stdout |
+| vitest | `npx vitest run --reporter=verbose` | `npx vitest run --reporter=verbose --changed` | Exit code + stdout |
+| playwright | `npx playwright test --reporter=line` | `npx playwright test --reporter=line --last-failed` | Exit code + stdout |
+
+**Actions:**
+
+1. **Detect framework:**
+   ```python
+   framework = detect_test_framework(repo_path)
+   if framework == "unknown":
+       log("No test framework detected, skipping test-iterate phase")
+       return {"status": "completed", "artifacts": {"framework": "unknown", "iterations": 0}}
+   ```
+
+2. **Run test loop (max 5 iterations):**
+   ```python
+   MAX_TEST_ITERATE = 5
+
+   for iteration in range(1, MAX_TEST_ITERATE + 1):
+       log(f"Test-iterate: iteration {iteration}/{MAX_TEST_ITERATE}")
+
+       # Run tests
+       if iteration == 1:
+           test_result = run_all_tests(framework, repo_path)
+       else:
+           test_result = run_failed_tests(framework, repo_path)
+
+       if test_result.exit_code == 0:
+           log(f"All tests pass on iteration {iteration}")
+           return {
+               "status": "completed",
+               "artifacts": {
+                   "framework": framework,
+                   "iterations": iteration,
+                   "tests_run": test_result.tests_run,
+                   "tests_passed": test_result.tests_passed,
+                   "tests_failed": 0,
+               }
+           }
+
+       # Parse failures
+       failures = parse_test_failures(test_result.stdout, framework)
+       log(f"  {len(failures)} test failure(s) detected")
+
+       # Diagnose and fix each failure
+       for failure in failures:
+           diagnosis = diagnose_failure(failure, framework, repo_path)
+           if diagnosis.fixable:
+               apply_fix(diagnosis, repo_path)
+
+       # Commit fixes if any were applied
+       if has_staged_changes(repo_path):
+           git_commit(
+               repo_path,
+               f"fix: address test failures (iteration {iteration}/{MAX_TEST_ITERATE}) [{ticket_id}]"
+           )
+           git_push(repo_path)
+   ```
+
+3. **Two-strike diagnosis on exhaustion:**
+   If all 5 iterations fail, write a diagnosis document per the Two-Strike Protocol:
+   ```python
+   diagnosis_path = f"docs/diagnosis-{ticket_id.lower()}-test-failures.md"
+   write_diagnosis_document(
+       path=diagnosis_path,
+       known="Test suite has {n} persistent failures after {MAX_TEST_ITERATE} fix iterations",
+       tried=[f"Iteration {i}: {summary}" for i, summary in enumerate(iteration_summaries, 1)],
+       hypothesis="Root cause analysis of remaining failures",
+       proposed_fix="Recommended next steps for manual investigation",
+   )
+   ```
+
+4. **Store artifacts:**
+   ```python
+   artifacts = {
+       "framework": framework,
+       "iterations": iteration,
+       "tests_run": test_result.tests_run,
+       "tests_passed": test_result.tests_passed,
+       "tests_failed": test_result.tests_failed,
+       "diagnosis_path": diagnosis_path if exhausted else "",
+   }
+   ```
+
+**Failure diagnosis heuristics:**
+
+| Failure Type | Detection Pattern | Auto-Fix Strategy |
+|-------------|-------------------|-------------------|
+| Import error | `ModuleNotFoundError`, `ImportError` | Check for typos, missing `__init__.py`, wrong package path |
+| Type mismatch | `TypeError`, `ValidationError` | Compare expected vs actual types from traceback |
+| Missing env var | `KeyError` on `os.environ`, `EnvVarNotSet` | Add to test fixtures or mock the env var |
+| Assertion error | `AssertionError`, `assert` | Compare expected vs actual values, check test logic |
+| Fixture error | `fixture .* not found` | Check fixture scope and imports |
+
+**Mutations:**
+- `phases.test_iterate.started_at`
+- `phases.test_iterate.completed_at`
+- `phases.test_iterate.artifacts` (framework, iterations, tests_run, tests_passed, tests_failed, diagnosis_path)
+
+**Exit conditions:**
+- **Completed:** All tests pass (within 5 iterations), or no test framework detected (skip)
+- **Completed with warning:** Tests still failing after 5 iterations, diagnosis doc written. Pipeline continues to ci_watch (CI is the authoritative gate, not local tests).
+- **Never blocks:** This phase is always advisory. Even persistent test failures do not halt the pipeline -- CI is the hard gate.
 
 ---
 

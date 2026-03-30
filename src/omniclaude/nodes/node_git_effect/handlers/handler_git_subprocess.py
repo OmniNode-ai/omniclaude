@@ -380,6 +380,14 @@ class HandlerGitSubprocess:
 
     async def pr_create(self, request: ModelGitRequest) -> ModelGitResult:
         """Create a pull request with mandatory ticket stamp block."""
+        # Ticket linkage guard (OMN-6919) — warn if title has no OMN-XXXX
+        if request.pr_title and not ModelGitRequest.validate_pr_title_ticket_ref(
+            request.pr_title
+        ):
+            logger.warning(
+                "PR title has no OMN-XXXX ticket reference and is not exempt: %s",
+                request.pr_title,
+            )
         # Inject ticket stamp (OMN-2817 1g)
         body = _inject_ticket_stamp(
             request.pr_body,

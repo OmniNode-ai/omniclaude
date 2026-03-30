@@ -551,6 +551,52 @@ class TestPRTrackClassifier:
         result = classify_pr_track(pr)
         assert result.track == EnumMergeSweepTrack.TRACK_C
 
+    def test_is_in_merge_queue_true(self) -> None:
+        """OMN-6468: is_in_merge_queue returns True for queued PRs."""
+        from merge_planner.track_classifier import (
+            ModelPRClassificationInput,
+            is_in_merge_queue,
+        )
+
+        pr = ModelPRClassificationInput(
+            number=50,
+            repo="OmniNode-ai/omniclaude",
+            ci_status="success",
+            in_merge_queue=True,
+        )
+        assert is_in_merge_queue(pr) is True
+
+    def test_is_in_merge_queue_false(self) -> None:
+        """OMN-6468: is_in_merge_queue returns False for normal PRs."""
+        from merge_planner.track_classifier import (
+            ModelPRClassificationInput,
+            is_in_merge_queue,
+        )
+
+        pr = ModelPRClassificationInput(
+            number=51,
+            repo="OmniNode-ai/omniclaude",
+            ci_status="success",
+            in_merge_queue=False,
+        )
+        assert is_in_merge_queue(pr) is False
+
+    def test_merge_queue_pr_skipped_in_classification(self) -> None:
+        """OMN-6468: Merge queue PRs get reason 'In merge queue — skip'."""
+        from merge_planner.track_classifier import (
+            ModelPRClassificationInput,
+            classify_pr_track,
+        )
+
+        pr = ModelPRClassificationInput(
+            number=52,
+            repo="OmniNode-ai/omniclaude",
+            ci_status="success",
+            in_merge_queue=True,
+        )
+        result = classify_pr_track(pr)
+        assert "merge queue" in result.reason.lower()
+
     def test_classify_batch(self) -> None:
         from merge_planner.track_classifier import (
             EnumMergeSweepTrack,

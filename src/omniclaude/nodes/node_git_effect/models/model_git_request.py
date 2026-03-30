@@ -7,10 +7,24 @@ Model ownership: PRIVATE to omniclaude.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+_TICKET_RE = re.compile(r"OMN-\d+")
+# SYNC: exempt prefixes must match the lists in:
+#   - onex_change_control/.github/workflows/pr-title-check-reusable.yml
+#   - omnibase_infra/scripts/generate_deep_dive.py (is_exempt_pr)
+_EXEMPT_TITLE_PREFIXES = (
+    "chore(deps",
+    "chore: release",
+    "chore(release)",
+    "release:",
+    "build(deps",
+    "bump ",
+)
 
 
 class GitOperation(StrEnum):
@@ -180,6 +194,14 @@ class ModelGitRequest(BaseModel):
         default=None,
         description="Correlation ID for tracing",
     )
+
+    @staticmethod
+    def validate_pr_title_ticket_ref(title: str) -> bool:
+        """Return True if the PR title contains a ticket reference or is exempt."""
+        lower = title.lower()
+        if lower.startswith(_EXEMPT_TITLE_PREFIXES):
+            return True
+        return bool(_TICKET_RE.search(title))
 
 
 __all__ = ["GitOperation", "ModelGitRequest", "ModelPRListFilters"]

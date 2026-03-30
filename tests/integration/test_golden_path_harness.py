@@ -466,6 +466,7 @@ def _build_golden_path_events(
             "session.outcome",
             {
                 "session_id": sid,
+                "correlation_id": cid,
                 "outcome": "success",
                 "emitted_at": (T0 + timedelta(minutes=30, seconds=1)).isoformat(),
             },
@@ -541,6 +542,7 @@ def _build_golden_path_events(
             "routing.feedback",
             {
                 "session_id": sid,
+                "correlation_id": cid,
                 "outcome": "success",
                 "feedback_status": "produced",
                 "emitted_at": (T0 + timedelta(minutes=30, seconds=5)).isoformat(),
@@ -758,6 +760,7 @@ class TestGoldenPathStandalone:
             ModelSessionOutcome.model_validate(
                 {
                     "session_id": gp_ids.session_id,
+                    "correlation_id": str(gp_ids.correlation_id),
                     "outcome": "success",
                     "emitted_at": T0.isoformat(),
                     "unexpected_field": "should_fail",

@@ -248,8 +248,61 @@ The `ticket-pipeline` skill writes checkpoints after each phase completes and va
 
 All checkpoint operations in the pipeline context are non-blocking -- write failures log a warning but do not stop the pipeline.
 
+## Cron-Closeout Checkpoint Protocol (OMN-6887)
+
+The headless cron-closeout pattern (`scripts/cron-closeout.sh`) uses a separate, simpler
+checkpoint file for cross-invocation state persistence. This is distinct from the per-ticket
+pipeline checkpoints above.
+
+### Storage
+
+```
+$OMNI_HOME/.onex_state/pipeline_checkpoints/cron-closeout-state.yaml
+$OMNI_HOME/.onex_state/pipeline_checkpoints/cron-closeout.lock
+```
+
+### Checkpoint Schema
+
+```yaml
+schema_version: "1.0.0"
+pass_count: 5                          # Total completed passes
+last_status: success                   # success | noop | failure | halt | unknown
+last_run_at: 2026-03-28T22:00:00Z     # UTC timestamp of last completion
+consecutive_failures: 0                # Reset to 0 on success/noop; +1 on failure/halt
+dry_run: false                         # Whether last pass used --dry-run
+```
+
+### Lock File
+
+The lock file prevents concurrent cron invocations from overlapping. It contains:
+
+```yaml
+pid: 12345
+started_at: 2026-03-28T22:00:00Z
+```
+
+Lock timeout is 45 minutes (matching the autopilot cycle mutex). A new invocation
+finding a lock older than 45 minutes treats it as stale and removes it.
+
+### Circuit Breaker
+
+3 consecutive failures (status `failure` or `halt`) prevent further invocations.
+To reset: edit `consecutive_failures` in the checkpoint file to 0, or delete the
+checkpoint file entirely.
+
+### Relationship to Pipeline Checkpoints
+
+| Aspect | Pipeline Checkpoints | Cron-Closeout Checkpoint |
+|--------|---------------------|--------------------------|
+| Scope | Per-ticket, per-phase | Per-cron-loop, aggregate |
+| Storage | `$ONEX_STATE_DIR/checkpoints/{ticket_id}/` | `$OMNI_HOME/.onex_state/pipeline_checkpoints/` |
+| Schema | Full phase payloads | Simple pass/fail counter |
+| Writer | `checkpoint_manager.py` | `cron-closeout.sh` |
+| Purpose | Resume mid-pipeline | Track cron loop health |
+
 ## See Also
 
 - `ticket-pipeline` skill (writes checkpoints after each phase)
 - `local-review` skill (writes checkpoints after each iteration when `--checkpoint` is provided)
 - `omnibase_infra` checkpoint nodes (OMN-2143: infrastructure implementation)
+- `scripts/cron-closeout.sh` (headless cron pattern, OMN-6887)

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  com.omninode.cron-closeout.plist — launchd agent for headless close-out loop
+
+  Install:
+    cp scripts/com.omninode.cron-closeout.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.omninode.cron-closeout.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.omninode.cron-closeout.plist
+    rm ~/Library/LaunchAgents/com.omninode.cron-closeout.plist
+
+  [OMN-6887]
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.omninode.cron-closeout</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Volumes/PRO-G40/Code/omni_home/omniclaude/scripts/cron-closeout.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>1800</integer><!-- 30 minutes -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-closeout-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-closeout-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>/Users/jonah</string>
+    <key>OMNI_HOME</key>
+    <string>/Volumes/PRO-G40/Code/omni_home</string>
+  </dict>
+
+  <!-- Do not restart on failure — circuit breaker in script handles this -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

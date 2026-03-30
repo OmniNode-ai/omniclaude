@@ -584,3 +584,25 @@ allowed_extras:
       Emitted by refill-sprint skill when no eligible tech debt tickets remain
       in Future project. Used for alerting and pipeline idle detection.
     ticket: OMN-6870
+
+  # ---------------------------------------------------------------------------
+  # Multi-session coordination topics (OMN-6857)
+  # Cross-session coordination signals and session status changes for the
+  # session registry projector. No dedicated node contract yet.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.session-coordination-signal.v1"
+    lifecycle: integration
+    reason: >
+      Coordination signal emitted between sessions (PR merged, conflict detected,
+      ticket claimed/completed). Consumed by session registry projector in
+      omnibase_infra. No dedicated node contract; contract governance to follow.
+    ticket: OMN-6857
+
+  - topic: "onex.evt.omniclaude.session-status-changed.v1"
+    lifecycle: integration
+    reason: >
+      Session status change event for coordination projectors. Emitted when a
+      session binds/unbinds a task_id. Consumed by session registry projector.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-6857

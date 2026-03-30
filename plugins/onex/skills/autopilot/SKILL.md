@@ -1,6 +1,6 @@
 ---
-description: Autonomous close-out orchestrator — 4-phase pipeline with infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
-version: 2.0.0
+description: Autonomous close-out orchestrator — 4-phase pipeline with worktree health sweep, full merge-sweep with DIRTY PR triage and queue stall detection, infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
+version: 3.0.0
 mode: full
 level: advanced
 debug: false
@@ -38,9 +38,9 @@ outputs:
 # autopilot
 
 **Skill ID**: `onex:autopilot`
-**Version**: 2.0.0
+**Version**: 3.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-5438
+**Ticket**: OMN-6872
 **Epic**: OMN-5431
 
 ---
@@ -75,7 +75,9 @@ Top-level autonomous close-out orchestrator.
 In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 
 **Phase A — Prepare (sequential):**
-- A1: merge-sweep — drain open PRs
+- A0: worktree-health — sweep worktrees for lost uncommitted work, auto-clean merged worktrees, create recovery tickets for dirty worktrees [OMN-6867]
+- A1: merge-sweep — drain open PRs (full merge-sweep skill: Track A auto-merge, Track A-update branch refresh, Track A-resolve thread resolution, Track B pr-polish for fixable blockers)
+- A1b: dirty-pr-triage — explicit DIRTY/CONFLICTING PR detection, auto-close stale PRs (>24h), queue stall detection, missing auto-merge detection [OMN-6872]
 - A2: deploy-local-plugin — activate newly merged skills/hooks for this session
 - A3: start-environment — audit-first infra startup: verify core infra (postgres, redpanda, valkey) running, migration-gate healthy (proves DB migrations current), all runtime containers healthy. Auto-fixes by running infra-up + infra-up-runtime if containers missing.
 
@@ -108,7 +110,7 @@ the circuit breaker but do NOT halt the pipeline. B5 and B6 have halt authority.
 D1-D3 are read-only verification. Failures are logged with warnings but do NOT halt —
 the release and redeploy already completed successfully.
 
-**Note:** This is an 18-step pipeline (A1-A3, B1-B8, C1-C2, D1-D5). Internal step IDs use the
+**Note:** This is a 20-step pipeline (A0-A3 including A1b, B1-B8, C1-C2, D1-D5). Internal step IDs use the
 `{phase}{ordinal}` scheme for stable naming in cycle records, circuit breaker logs, and
 downstream debugging.
 
@@ -132,6 +134,108 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ---
 
+## Invocation Patterns: CronCreate vs Headless Cron
+
+There are two supported patterns for recurring autopilot execution. The headless cron
+pattern is **preferred** for production use because it avoids context accumulation.
+
+### Pattern 1: CronCreate (in-session, context-accumulating)
+
+Uses Claude Code's built-in `CronCreate` to fire autopilot on a schedule within an
+active interactive session. Each firing shares the session's context window.
+
+```
+/loop 30m /autopilot --mode close-out
+```
+
+**Pros**: Simple setup, immediate, no external dependencies.
+**Cons**: Context accumulates across invocations. After 2-3 passes the session hits
+`context_window_exceeded` errors (9 recorded friction events). Only viable for short
+sessions with 1-2 passes.
+
+**When to use**: Quick interactive close-out sessions where you will monitor and
+`/clear` between passes.
+
+### Pattern 2: Headless Cron (recommended for production)
+
+Uses `claude -p` (print mode) via `scripts/cron-closeout.sh`. Each phase gets a
+**fresh context window** via a separate `claude -p` invocation. State persists via
+`.onex_state/autopilot/cycle-state.yaml` and per-run output files.
+
+Architecture follows the headless decomposition pattern from
+`omnibase_infra/docs/patterns/headless_decomposition.md`:
+- **One task per invocation** (bounded context, <15 min timeout)
+- **State handoff via files** (no shared session state)
+- **Idempotent** (safe to re-run at any point)
+- **Lock-file concurrency guard** (prevents overlapping runs)
+
+```bash
+# Direct invocation (one full close-out cycle)
+./scripts/cron-closeout.sh
+
+# Dry run — prints phases without executing claude -p
+./scripts/cron-closeout.sh --dry-run
+
+# Via crontab (every 30 minutes)
+*/30 * * * * $OMNI_HOME/omniclaude/scripts/cron-closeout.sh >> /tmp/cron-closeout.log 2>&1  # local-path-ok: crontab example
+
+# Via launchd (macOS)
+# Create ~/Library/LaunchAgents/com.omninode.cron-closeout.plist
+```
+
+**State layout**:
+```
+.onex_state/autopilot/
+  cycle-state.yaml                     # Cross-run state (deployed versions, strikes)
+  cron-closeout.lock                   # Concurrency guard (auto-removed on exit)
+  runs/
+    closeout-2026-03-28T22-00-00Z/     # Per-run directory
+      A1_merge_sweep.txt               # Phase output
+      A2_deploy_plugin.txt
+      A3_start_env.txt
+      B5_integration.txt               # Hard gate output
+      C1_release_check.txt
+      C2_redeploy_check.txt
+      D3_dashboard_sweep.txt
+      pending_redeploys.txt            # F30 detection result
+      summary.txt                      # Run summary
+```
+
+**Phases executed** (each a separate `claude -p` invocation):
+
+| Phase | Name | Gate? | Description |
+|-------|------|-------|-------------|
+| A0 | worktree-health | No | `prune-worktrees.sh --execute` — clean merged worktrees, skip unpushed/dirty [OMN-7021] |
+| A1 | merge-sweep | No | Drain open PRs with passing CI |
+| A2 | deploy-plugin | No | Copy plugin to cache |
+| A3 | infra-health | No | Verify postgres, redpanda, valkey |
+| B1 | runtime-sweep | **Hard** | Containers healthy, node dispatch alive [OMN-7002] |
+| B2 | data-flow-sweep | **Hard** | Kafka consumers active, projections populated [OMN-7002] |
+| B3 | database-sweep | **Hard** | Projection tables have data [OMN-7002] |
+| B5 | integration-gate | **Hard** | Postgres + Redpanda must be healthy |
+| C1 | release-check | No | Report unreleased commits per repo |
+| C2 | redeploy-check | Conditional | Only if F30 detects version drift |
+| D3 | dashboard-sweep | No | Non-blocking health check |
+
+**F30 pending redeploy detection**: Before Phase C, the script compares git tags
+in each repo against `last_deploy_version` in `cycle-state.yaml`. If any tag has
+advanced beyond the recorded version, the repo is flagged for redeploy.
+
+**Circuit breaker**: 3 consecutive phase failures → pipeline halts with exit code 2.
+Resets on any successful integration gate pass.
+
+**Lock timeout**: 45 minutes. If a previous run's lock is older than this, it is
+treated as stale and removed.
+
+**Pros**: No context accumulation, survives session crashes, externally observable
+state, can run unattended for days.
+**Cons**: Requires `claude` CLI and environment variables configured externally.
+
+**When to use**: Overnight close-out, unattended pipeline operation, any run
+expected to exceed 2-3 passes.
+
+---
+
 ## Integration-Sweep Halt Policy
 
 | `overall_status` | `reason` | Action |
@@ -151,7 +255,7 @@ dispatches `onex:ticket-pipeline` for each. Full build-mode spec is in OMN-5120.
 
 ## Circuit Breaker
 
-3 consecutive step failures (across Steps 1–17) → stop immediately + Slack notify.
+3 consecutive step failures (across Steps A0–D5) → stop immediately + Slack notify.
 
 **Halt authority vs circuit breaker:**
 - **B5 (integration-sweep)** halts on FAIL or contract UNKNOWN — integration surfaces broken.
@@ -226,7 +330,9 @@ When dispatching subagents for release or other high-risk operations:
 ## Integration Points
 
 **Phase A — Prepare:**
-- **merge-sweep**: A1 — drains open PRs before release
+- **worktree-health**: A0 — `scripts/prune-worktrees.sh --execute`: auto-clean merged worktrees, skip worktrees with unpushed commits or dirty state, skip detached HEAD and missing upstream [OMN-6867, OMN-7021]
+- **merge-sweep**: A1 — drains open PRs before release (full skill: Track A/B/A-update/A-resolve)
+- **dirty-pr-triage**: A1b — DIRTY/CONFLICTING PR detection, auto-close stale >24h, queue stall detection, missing auto-merge [OMN-6872]
 - **deploy-local-plugin**: A2 — activates newly merged skills/hooks
 - **start-environment**: A3 — audit-first infra startup with auto-fix
 

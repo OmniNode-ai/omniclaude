@@ -234,7 +234,9 @@ epic-team OMN-XXXX
       Wave 0: independent tickets + cross-repo Part 1 splits (run in parallel)
       Wave 1: cross-repo Part 2 splits (run after Wave 0 completes)
   → For each wave: dispatch ticket-pipeline per ticket as Task() from team-lead session
+  → Start stall-detection watchdog for the wave [OMN-6987]
   → Await all Task() calls in wave before starting next wave
+  → If watchdog detects stall: cancel stalled task, log to state, retry in next wave
   → Collect results (status, pr_url, branch) from each Task()
   → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
@@ -264,6 +266,34 @@ Task(
 )
 ```
 
+## Pre-Dispatch Verification Preamble [OMN-6990]
+
+**Before dispatching any ticket in a wave**, the team lead performs a lightweight verification
+pass to catch misaligned tickets early -- before they consume a full pipeline run.
+
+### Verification Steps (per ticket, before Task() dispatch)
+
+1. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
+   - Description is non-empty and contains actionable content
+   - Repo target is identifiable (from title, description, or labels)
+   - No blocking dependencies are in non-Done state
+
+2. **Approach sanity check**: For each ticket, state in the dispatch prompt:
+   - What the ticket requires (1-sentence summary)
+   - Which repo and approximate files will be modified
+   - Any known constraints or patterns to follow
+
+3. **Skip unready tickets**: If a ticket fails verification:
+   - Mark as `skipped` in `state.yaml` with reason: `"verification_failed: {detail}"`
+   - Add a Linear comment: "Skipped by epic-team: {reason}"
+   - Do NOT dispatch -- move to next ticket in wave
+   - Unready tickets are re-evaluated in the next wave (dependency may have resolved)
+
+### Verification in the Dispatch Prompt
+
+The verification context is injected directly into each Task() dispatch prompt so the
+ticket-pipeline agent starts with pre-validated understanding rather than re-deriving it.
+
 ## Dispatch: Ticket-Pipeline per Ticket (Direct Dispatch Pattern)
 
 For each ticket in a wave, dispatch ticket-pipeline as a Task() from the team-lead session:
@@ -278,6 +308,12 @@ Task(
     URL: {url}
     Repo: {repo} at {repo_path}
     Epic: {epic_id}  Run: {run_id}
+
+    VERIFIED CONTEXT (from epic-team pre-dispatch check):
+    - Summary: {verified_summary}
+    - Target files: {verified_file_targets}
+    - Pattern to follow: {verified_pattern_reference}
+    - Dependencies met: {dependency_status}
 
     Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"{ticket_id}\")
 
@@ -297,6 +333,81 @@ Task(
 **DEPRECATED**: Spawning per-repo workers via `TeamCreate` + `Task(team_name=...)` + a
 `WORKER_TEMPLATE` is no longer used. See `prompt.md` for the deprecated WORKER_TEMPLATE
 preserved for historical reference.
+
+## Stall Detection in Wave Dispatch [OMN-6987]
+
+After dispatching all Task() calls in a wave, the team lead monitors for stalled agents
+using the `dispatch_watchdog` skill. This prevents a single stalled agent from blocking
+the entire wave indefinitely.
+
+### Monitoring Loop
+
+```
+# After dispatching wave N tasks:
+wave_start_time = now()
+stall_timeout = 300  # 5 minutes with no tool calls
+
+while any_task_still_running(wave_tasks):
+    # Check each running task
+    for task in wave_tasks:
+        if task.status == "in_progress":
+            elapsed_since_last_activity = now() - task.last_tool_call_time
+
+            if elapsed_since_last_activity > stall_timeout:
+                # Stall detected
+                log("[epic-team] STALL: {task.ticket_id} idle for {elapsed}s")
+                write_stall_event(epic_id, task.ticket_id, elapsed)
+
+                # Recovery: mark as failed, retry in next wave
+                task.status = "stalled"
+                task.retry_in_next_wave = true
+
+    # Check wave-level timeout (30 minutes total)
+    if now() - wave_start_time > 1800:
+        log("[epic-team] WAVE TIMEOUT: cancelling remaining tasks")
+        for task in wave_tasks:
+            if task.status == "in_progress":
+                task.status = "timeout"
+                task.retry_in_next_wave = true
+        break
+
+    sleep(60)  # Check every minute
+```
+
+### Stall State in state.yaml
+
+```yaml
+waves:
+  - wave_id: 0
+    dispatched_at: "2026-03-29T10:00:00Z"
+    completed_at: "2026-03-29T10:15:00Z"
+    tasks:
+      - ticket_id: OMN-2001
+        status: merged
+        pr_url: "https://github.com/..."
+      - ticket_id: OMN-2002
+        status: stalled
+        stall_detected_at: "2026-03-29T10:08:00Z"
+        idle_seconds: 480
+        retry_wave: 1
+```
+
+### Retry Policy
+
+- Stalled tasks are retried **once** in the next wave
+- If a task stalls twice: mark as `blocked`, add Linear comment, skip
+- Timeout tasks (wave-level) are always retried once
+- Maximum retry count per ticket: 1 (prevents infinite retry loops)
+
+### Integration with dispatch_watchdog Skill
+
+The monitoring logic above is the inline version for the team-lead session.
+For more sophisticated monitoring (e.g., headless overnight runs), invoke
+the `dispatch_watchdog` skill as a composable sub-skill:
+
+```
+Skill(skill="onex:dispatch_watchdog", args="--epic-id {epic_id} --timeout 300 --action report")
+```
 
 ## Skill Result Communication
 
@@ -493,6 +604,23 @@ breaker trips:
 
 This prevents the first autopilot close-out failure mode where a release dispatch stalled
 for 1+ hour with zero output.
+
+### Agent Health-Check Integration (OMN-6889)
+
+The `agent_healthcheck` skill provides more sophisticated stall detection beyond the simple
+timeout circuit breaker. During wave monitoring, epic-team checks agent health using three
+heuristics:
+
+1. **Inactivity**: No tool calls for 10 minutes (configurable)
+2. **Context overflow**: Context window usage > 80% (preemptive recovery before hard limit)
+3. **Rate limits**: Agent encounters rate-limit errors
+
+On stall detection, the health-check module:
+- Snapshots progress to a checkpoint file (using the checkpoint protocol from OMN-6887)
+- Summarizes completed vs remaining work
+- Relaunches a fresh agent with the summary and remaining tasks only
+
+See `@skills/agent_healthcheck/SKILL.md` for the full detection and recovery protocol.
 
 ## Failure Taxonomy and Recovery Strategies
 

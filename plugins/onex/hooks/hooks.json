@@ -304,6 +304,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_output_suppressor.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_commit_verify.sh"
+          }
+        ]
       }
     ]
   }

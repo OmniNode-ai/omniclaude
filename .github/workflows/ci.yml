@@ -1406,12 +1406,12 @@ jobs:
           echo "Database schema validation passed"
 
   # ============================================================================
-  # DOD EVIDENCE VALIDATION (OMN-6747) — advisory, non-required
+  # DOD EVIDENCE VALIDATION (OMN-6747) — hard mode (OMN-6117)
   # ============================================================================
 
   dod-evidence-check:
-    name: DoD Evidence Check (Advisory)
-    # Self-hosted runner only — advisory check, not a required gate
+    name: DoD Evidence Check
+    # Self-hosted runner only — hard gate: missing DoD evidence blocks merge
     runs-on: >-
       ${{
         (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
@@ -1427,8 +1427,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run DoD evidence check
+        # Advisory until CI can generate DoD evidence (evidence files are local
+        # artifacts not committed to the repo). Hard mode blocks every PR that
+        # has a ticket ID in the branch name. Tracked: OMN-6117.
         run: bash scripts/dod-pre-push-check.sh
-        continue-on-error: true
         env:
           DOD_ENFORCEMENT: advisory
 

@@ -565,6 +565,10 @@ for repo, prs in repo_scan_results.items():
             continue
         if pr.get("autoMergeRequest") is not None:
             continue  # already enrolled
+        # OMN-6468: Never touch PRs already in the merge queue.
+        # Dequeue/re-enqueue doubles CI time (~10 min waste per event).
+        if pr.get("mergeQueueEntry") is not None or pr.get("mergeStateStatus", "").upper() == "QUEUED":
+            continue
         pr_number = pr["number"]
         # Skip PRs already handled by other tracks
         if pr in candidates_pre_claim or pr in branch_update_queue_pre_claim or pr in polish_queue_pre_claim:
@@ -973,6 +977,16 @@ for pr in candidates:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
     repo_full = f"{base_owner}/{base_repo_name}"
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
+
+    # OMN-6468: Skip PRs already in the merge queue. Dequeue/re-enqueue
+    # doubles CI time because both runs execute sequentially.
+    if pr.get("mergeQueueEntry") is not None or pr.get("mergeStateStatus", "").upper() == "QUEUED":
+        auto_merge_results.append({
+            "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+            "result": "skipped", "reason": "already in merge queue (OMN-6468)"
+        })
+        print(f"  ⊘ skipped (in merge queue): {repo_full}#{pr['number']} — {pr.get('title', '')[:60]}")
+        continue
 
     acquired = registry.acquire(pr_key, run_id=run_id, action="auto_merge_enable", dry_run=dry_run)
     if not acquired:
