@@ -389,6 +389,82 @@ Report which endpoints are responding. This is informational — failures here d
 fi
 
 # ===========================================================================
+# Phase E: Verification suite [OMN-7006]
+# ===========================================================================
+
+log "=== Phase E: Verification suite ==="
+
+# Check if verification was already run this cycle (idempotent)
+VERIFICATION_MARKER="${STATE_DIR}/last_verification_run_id"
+SKIP_VERIFICATION=false
+if [[ -f "${VERIFICATION_MARKER}" ]]; then
+  LAST_VERIFICATION_RUN=$(cat "${VERIFICATION_MARKER}")
+  if [[ "${LAST_VERIFICATION_RUN}" == "${RUN_ID}" ]]; then
+    log "Verification suite already passed in this cycle — skipping"
+    SKIP_VERIFICATION=true
+  fi
+fi
+
+if [[ "${SKIP_VERIFICATION}" == "false" ]]; then
+  # E1: Phase 1 integration tests (handler init, runtime health, node registration, dispatch)
+  # Critical — blocks close-out on failure
+  if ! run_phase "E1_foundation_tests" \
+    "Run Phase 1 foundation integration tests in omnibase_infra. Execute:
+cd ${OMNI_HOME}/omnibase_infra
+uv run pytest tests/integration/test_runtime_health.py tests/integration/test_node_registration.py tests/integration/test_dispatch_roundtrip.py -v --timeout=120
+
+Report PASS count and FAIL count.
+If ANY test fails, print: INTEGRATION: FAIL
+If ALL tests pass, print: INTEGRATION: PASS" \
+    "Bash,Read"; then
+    record_strike "E1_foundation_tests"
+  fi
+
+  if phase_failed "E1_foundation_tests"; then
+    log "CRITICAL: Foundation verification tests failed. Node layer may be dead."
+    update_cycle_state "halted_verification_foundation"
+    exit 1
+  fi
+
+  # E2: Phase 2 pipeline integration tests (pattern, injection, intent)
+  # Critical — blocks close-out on failure
+  if ! run_phase "E2_pipeline_tests" \
+    "Run Phase 2 pipeline integration tests in omnidash. Execute:
+cd ${OMNI_HOME}/omnidash
+npx vitest run tests/integration/pattern-pipeline.test.ts tests/integration/injection-pipeline.test.ts tests/integration/intent-pipeline.test.ts
+
+Report PASS count and FAIL count.
+If ANY test fails, print: INTEGRATION: FAIL
+If ALL tests pass, print: INTEGRATION: PASS" \
+    "Bash,Read"; then
+    record_strike "E2_pipeline_tests"
+  fi
+
+  if phase_failed "E2_pipeline_tests"; then
+    log "CRITICAL: Pipeline verification tests failed. Data flow may be broken."
+    update_cycle_state "halted_verification_pipeline"
+    exit 1
+  fi
+
+  # E3: Phase 3 Playwright P0 data tests (dashboard rendering)
+  # Non-blocking — produces WARN, does not halt close-out
+  if ! run_phase "E3_dashboard_tests" \
+    "Run Playwright P0 data verification against running omnidash (if available). Execute:
+cd ${OMNI_HOME}/omnidash
+npx playwright test --config playwright.dataflow.config.ts p0-data-verification.spec.ts 2>&1 || true
+
+Report test results. This is non-blocking — dashboard rendering failures do not affect runtime correctness.
+Print INTEGRATION: PASS if tests pass, or describe failures as warnings." \
+    "Bash,Read"; then
+    log "WARNING: Dashboard verification tests failed (non-blocking)"
+  fi
+
+  # Mark verification as complete for this cycle
+  echo "${RUN_ID}" > "${VERIFICATION_MARKER}"
+  log "Verification suite complete"
+fi
+
+# ===========================================================================
 # Finalize
 # ===========================================================================
 
@@ -412,6 +488,9 @@ Phase Results:
   C1 release-check:    $(test -f "${RUN_DIR}/C1_release_check.txt" && echo "executed" || echo "missing")
   C2 redeploy-check:   $(test -f "${RUN_DIR}/C2_redeploy_check.txt" && echo "executed" || echo "missing")
   D3 dashboard-sweep:  $(test -f "${RUN_DIR}/D3_dashboard_sweep.txt" && echo "executed" || echo "missing")
+  E1 foundation-tests: $(test -f "${RUN_DIR}/E1_foundation_tests.txt" && echo "executed" || echo "missing")
+  E2 pipeline-tests:   $(test -f "${RUN_DIR}/E2_pipeline_tests.txt" && echo "executed" || echo "missing")
+  E3 dashboard-tests:  $(test -f "${RUN_DIR}/E3_dashboard_tests.txt" && echo "executed" || echo "missing")
 
 Pending Redeploy: ${HAS_PENDING_REDEPLOY}
 Consecutive Failures: ${CONSECUTIVE_FAILURES}
