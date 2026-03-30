@@ -158,6 +158,10 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "hostile.reviewer.failed",  # OMN-6188 - Multi-model hostile review failure
         "agent.chat.broadcast",  # OMN-3972 - Agent chat broadcast for multi-terminal coordination
         "coordination.signal",  # OMN-6857 - Cross-session coordination signal (PR merged, conflict, etc.)
+        "team.task.assigned",  # OMN-7022 - Team lifecycle: task assigned (TeamCreate/Agent dispatch)
+        "team.task.progress",  # OMN-7022 - Team lifecycle: task in progress (TaskUpdate)
+        "team.task.completed",  # OMN-7022 - Team lifecycle: task completed (TaskUpdate)
+        "team.evidence.written",  # OMN-7022 - Team lifecycle: evidence artifact written
     ]
 )
 

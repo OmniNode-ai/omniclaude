@@ -323,6 +323,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_commit_verify.sh"
           }
         ]
+      },
+      {
+        "matcher": "^(TeamCreate|Agent|SendMessage|TaskCreate|TaskUpdate)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_team_observability.sh"
+          }
+        ]
       }
     ]
   }
