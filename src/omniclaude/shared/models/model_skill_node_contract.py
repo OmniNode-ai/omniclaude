@@ -12,7 +12,7 @@ Model ownership: PRIVATE to omniclaude.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal  # any-ok: external API boundary
 
 from pydantic import BaseModel, ConfigDict, model_validator
 

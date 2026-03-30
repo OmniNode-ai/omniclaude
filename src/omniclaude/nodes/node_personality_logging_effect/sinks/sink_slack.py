@@ -20,7 +20,7 @@ import logging
 import time
 import urllib.request
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 
 from omniclaude.nodes.node_personality_logging_effect.models.model_logging_config import (
     ModelLoggingConfig,

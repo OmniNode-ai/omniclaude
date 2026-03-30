@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 
 from omniclaude.services.ci_relay.models import PRStatusEvent
 

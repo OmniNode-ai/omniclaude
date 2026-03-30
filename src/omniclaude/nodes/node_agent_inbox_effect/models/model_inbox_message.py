@@ -8,7 +8,7 @@ Model ownership: PRIVATE to omniclaude.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal  # any-ok: external API boundary
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator

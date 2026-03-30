@@ -17,6 +17,7 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -110,7 +111,7 @@ class ModelCheckResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     criterion: str
-    status: str = Field(description="PASS or FAIL")
+    status: Literal["PASS", "FAIL"] = Field(description="PASS or FAIL")
     exit_code: int | None = Field(
         default=None, description="Process exit code, None on exception"
     )

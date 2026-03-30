@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # any-ok: contract-driven node shell
 
 from omnibase_core.nodes.node_compute import NodeCompute
 

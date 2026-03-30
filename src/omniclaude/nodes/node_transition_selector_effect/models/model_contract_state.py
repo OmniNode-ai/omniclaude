@@ -9,7 +9,7 @@ Once omnibase_core publishes ContractState, replace this with:
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, TypedDict  # any-ok: external API boundary
 
 from pydantic import BaseModel, ConfigDict, Field
 

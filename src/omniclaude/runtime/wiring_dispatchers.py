@@ -29,7 +29,7 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict  # any-ok: external API boundary
 
 import yaml
 from omnibase_core.enums import EnumMessageCategory
