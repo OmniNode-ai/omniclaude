@@ -1335,6 +1335,23 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${GREEN}  Removed stale cache${NC}"
     fi
 
+    # Remove OMNICLAUDE_PROJECT_ROOT from settings.json if present [OMN-7019]
+    # This env var caused hooks to resolve through the bare clone instead of the
+    # plugin cache. CLAUDE_PLUGIN_ROOT (set by Claude Code natively) is the only
+    # supported resolution path. No-op when settings.json is absent or key missing;
+    # fail loudly on write errors to avoid partial rewrites.
+    SETTINGS="$HOME/.claude/settings.json"
+    if [[ -f "$SETTINGS" ]] && jq -e '.env.OMNICLAUDE_PROJECT_ROOT' "$SETTINGS" >/dev/null 2>&1; then
+        if jq 'del(.env.OMNICLAUDE_PROJECT_ROOT)' "$SETTINGS" > "${SETTINGS}.tmp" 2>/dev/null; then
+            mv "${SETTINGS}.tmp" "$SETTINGS"
+            echo -e "${GREEN}  Removed OMNICLAUDE_PROJECT_ROOT from settings.json${NC}"
+        else
+            echo -e "${RED}  FATAL: Failed to rewrite settings.json — aborting cleanup (original preserved)${NC}"
+            rm -f "${SETTINGS}.tmp"
+            exit 1
+        fi
+    fi
+
     # Post-deploy runtime authority assertion [OMN-7017]
     # Verify all hook scripts resolve through the canonical cache path, not through
     # a bare clone or stale cache. Fail loudly if any hook resolves outside.
