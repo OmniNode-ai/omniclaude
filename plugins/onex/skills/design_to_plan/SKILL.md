@@ -182,6 +182,68 @@ find src/ -name "contract.yaml" -o -name "*.contract.yaml"
 
 ---
 
+### Runtime State Inventory (Pre-Plan)
+
+**When required:** Any plan that touches DB schemas, Kafka topics, or consumer groups MUST include
+a Runtime State Inventory section. This is the R8 counterpart to the Known Types Inventory -- it
+grounds runtime assumptions in source artifacts before any task references them.
+
+**What to query:**
+
+- **Table schemas**: Read the actual migration DDL files under `docker/migrations/forward/` (or
+  equivalent migration directory). List every column referenced by the plan with its type and
+  source migration file + line number.
+- **Consumer group patterns**: Trace the config chain from `runtime_config.yaml` through
+  `compute_consumer_group_id()` to produce the actual group ID pattern. Do NOT fabricate
+  identity parameters -- read them from the runtime config.
+- **Topic resolution behavior**: Check `TopicResolver`, `TopicBase` enum, and contract YAMLs
+  to confirm topic names resolve correctly. Document the resolution path.
+
+**Output**: A **Runtime State Inventory** section included after the Known Types Inventory,
+before Task 1. Format:
+
+```markdown
+## Runtime State Inventory
+
+> Actual runtime state queried from source artifacts. Plans MUST use these as source of truth.
+> Any DB column, consumer group, or topic referenced in a task below MUST appear here with its
+> source citation.
+
+### [Table Name] Table Schema
+
+**Source:** `docker/migrations/forward/NNN_description.sql`
+
+| Column | Type | Source Migration |
+|--------|------|-----------------|
+| `column_name` | TYPE | NNN |
+
+### Consumer Group ID Pattern
+
+**Source:** `src/.../util_consumer_group.py:NNN` and `src/.../runtime_config.yaml`
+
+Canonical format: `{env}.{service}.{node_name}.{purpose}.{version}`
+Actual values: `local.runtime_config.runtime_config.consume.1.0.0`
+
+### Topic Resolution
+
+**Source:** `src/.../topic_resolver.py` or contract YAML
+
+- `onex.evt.producer.event-name.v1` — resolved via [mechanism]
+```
+
+**Rules:**
+- Only include state relevant to the plan (not the entire database schema)
+- Every entry must cite the exact source file and line number
+- If a plan task references a DB column, consumer group, or topic NOT in this inventory, the
+  adversarial review (R8) will reject it as CRITICAL
+- If the runtime state inventory reveals that an assumption is wrong (e.g., a column does not
+  exist), the plan MUST be rewritten before proceeding
+
+**Enforcement:** Plans that touch DB/Kafka/runtime state without a grounded Runtime State
+Inventory are rejected as CRITICAL during R8 review. This is a hard gate -- no exceptions.
+
+---
+
 ### Plan Size Constraints
 
 **Hard cap: 15 tasks / ~30KB.** Before writing the plan to disk, count `## Task N:` headings and
