@@ -1056,6 +1056,59 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "signal_type", "task_id"],
     ),
+    # =========================================================================
+    # Team Lifecycle Events (OMN-7022)
+    # Agent team dispatch monitoring. Fan-out to team-specific topics for
+    # omnidash team dashboard projections.
+    # =========================================================================
+    "team.task.assigned": EventRegistration(
+        event_type="team.task.assigned",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TEAM_TASK_ASSIGNED,
+                transform=None,
+                description="Team task assignment for dashboard projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "task_id"],
+    ),
+    "team.task.progress": EventRegistration(
+        event_type="team.task.progress",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TEAM_TASK_PROGRESS,
+                transform=None,
+                description="Team task progress update for dashboard projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "task_id"],
+    ),
+    "team.task.completed": EventRegistration(
+        event_type="team.task.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TEAM_TASK_COMPLETED,
+                transform=None,
+                description="Team task completion for dashboard projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "task_id"],
+    ),
+    "team.evidence.written": EventRegistration(
+        event_type="team.evidence.written",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.TEAM_EVIDENCE_WRITTEN,
+                transform=None,
+                description="Team evidence artifact written for dashboard projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "task_id"],
+    ),
 }
 
 
