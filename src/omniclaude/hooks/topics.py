@@ -414,6 +414,23 @@ class TopicBase(StrEnum):
     SESSION_STATUS_CHANGED = "onex.evt.omniclaude.session-status-changed.v1"
     """Session status change event for coordination projectors."""
 
+    # ==========================================================================
+    # Team lifecycle topics (OMN-7026)
+    # Unified event schema for all dispatch surfaces (team_worker,
+    # headless_claude, local_llm). Consumed by omnidash team timeline.
+    # ==========================================================================
+    TEAM_TASK_ASSIGNED = "onex.evt.omniclaude.team-task-assigned.v1"
+    """Emitted when a task is assigned to an agent on any dispatch surface."""
+
+    TEAM_TASK_PROGRESS = "onex.evt.omniclaude.team-task-progress.v1"
+    """Emitted at phase transitions during task execution."""
+
+    TEAM_EVIDENCE_WRITTEN = "onex.evt.omniclaude.team-evidence-written.v1"
+    """Emitted when an evidence artifact is persisted to disk."""
+
+    TEAM_TASK_COMPLETED = "onex.evt.omniclaude.team-task-completed.v1"
+    """Emitted when a task reaches a terminal state with a verification verdict."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
