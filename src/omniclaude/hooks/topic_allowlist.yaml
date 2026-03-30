@@ -571,6 +571,20 @@ allowed_extras:
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6180
 
+  - topic: "onex.evt.omniclaude.sprint-auto-pull-completed.v1"
+    lifecycle: observability
+    reason: >
+      Emitted by refill-sprint skill after pulling tech debt tickets from Future
+      into Active Sprint. Skill-level emission with no dedicated node contract.
+    ticket: OMN-6870
+
+  - topic: "onex.evt.omniclaude.tech-debt-queue-empty.v1"
+    lifecycle: observability
+    reason: >
+      Emitted by refill-sprint skill when no eligible tech debt tickets remain
+      in Future project. Used for alerting and pipeline idle detection.
+    ticket: OMN-6870
+
   # ---------------------------------------------------------------------------
   # Multi-session coordination topics (OMN-6857)
   # Cross-session coordination signals and session status changes for the
@@ -592,3 +606,40 @@ allowed_extras:
       session binds/unbinds a task_id. Consumed by session registry projector.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-6857
+
+  # ---------------------------------------------------------------------------
+  # Team lifecycle topics (OMN-7026)
+  # Unified event schema for all dispatch surfaces. Consumed by omnidash
+  # team timeline projections.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.team-task-assigned.v1"
+    lifecycle: observability
+    reason: >
+      Team task assignment event emitted when a task is assigned to an agent
+      on any dispatch surface (team_worker, headless_claude, local_llm).
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-task-progress.v1"
+    lifecycle: observability
+    reason: >
+      Team task progress event emitted at phase transitions during execution.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-evidence-written.v1"
+    lifecycle: observability
+    reason: >
+      Team evidence artifact written event emitted when evidence files are
+      persisted to disk during task execution.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026
+
+  - topic: "onex.evt.omniclaude.team-task-completed.v1"
+    lifecycle: observability
+    reason: >
+      Team task completion event emitted when a task reaches a terminal state
+      with a verification verdict.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7026

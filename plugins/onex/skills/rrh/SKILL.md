@@ -16,19 +16,9 @@ author: OmniClaude Team
 
 # Release Readiness Handshake (RRH) Skill
 
-## Dispatch Requirement
+## Dispatch Surface
 
-When invoked, dispatch to a polymorphic-agent:
-
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="RRH preflight validation",
-  prompt="Run the rrh skill. <full context>"
-)
-```
-
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
+**Target**: Agent Teams
 
 ## Overview
 

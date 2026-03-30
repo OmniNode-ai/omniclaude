@@ -252,6 +252,32 @@ REMOVED=0
 FAILED_REMOVE=()
 
 for wt in "${STALE[@]}"; do
+  # ---------------------------------------------------------------------------
+  # Safety check: unpushed commits (OMN-7021)
+  # Before removing, verify no unique local commits exist that would be lost.
+  # Missing upstream defaults to SKIP (not DELETE). Detached HEAD already
+  # skipped earlier in the discovery loop.
+  # ---------------------------------------------------------------------------
+  UNPUSHED=$(git -C "$wt" log @{u}..HEAD --oneline 2>/dev/null || echo "NO_UPSTREAM")
+  if [[ "$UNPUSHED" == "NO_UPSTREAM" ]]; then
+    log "  SKIP: $wt has no upstream configured — cannot verify push state"
+    SKIPPED+=("$wt (no upstream)")
+    continue
+  elif [[ -n "$UNPUSHED" ]]; then
+    log "  SKIP: $wt has unpushed commits:"
+    echo "$UNPUSHED" | while IFS= read -r line; do log "    $line"; done
+    SKIPPED+=("$wt (unpushed commits)")
+    continue
+  fi
+
+  # Also check for uncommitted changes (dirty working tree)
+  DIRTY=$(git -C "$wt" status --porcelain 2>/dev/null || true)
+  if [[ -n "$DIRTY" ]]; then
+    log "  SKIP: $wt has uncommitted changes"
+    SKIPPED+=("$wt (dirty working tree)")
+    continue
+  fi
+
   # Find the canonical clone to run git worktree remove from
   canonical_gitdir="$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null || true)"
   # git-common-dir for a worktree is e.g.:

@@ -404,6 +404,17 @@ class TopicBase(StrEnum):
     """Broadcast chat message for multi-terminal agent coordination."""
 
     # ==========================================================================
+    # Sprint auto-pull topics (OMN-6870)
+    # Emitted by refill-sprint skill when tech debt tickets are pulled
+    # from Future into Active Sprint.
+    # ==========================================================================
+    SPRINT_AUTO_PULL_COMPLETED = "onex.evt.omniclaude.sprint-auto-pull-completed.v1"
+    """Emitted after refill-sprint completes a pull cycle."""
+
+    TECH_DEBT_QUEUE_EMPTY = "onex.evt.omniclaude.tech-debt-queue-empty.v1"
+    """Emitted when no eligible tech debt tickets remain in Future."""
+
+    # ==========================================================================
     # Session coordination topics (OMN-6857)
     # Multi-session awareness signals for concurrent session coordination.
     # Consumed by session registry projector and graph projector.
@@ -413,6 +424,23 @@ class TopicBase(StrEnum):
 
     SESSION_STATUS_CHANGED = "onex.evt.omniclaude.session-status-changed.v1"
     """Session status change event for coordination projectors."""
+
+    # ==========================================================================
+    # Team lifecycle topics (OMN-7026)
+    # Unified event schema for all dispatch surfaces (team_worker,
+    # headless_claude, local_llm). Consumed by omnidash team timeline.
+    # ==========================================================================
+    TEAM_TASK_ASSIGNED = "onex.evt.omniclaude.team-task-assigned.v1"
+    """Emitted when a task is assigned to an agent on any dispatch surface."""
+
+    TEAM_TASK_PROGRESS = "onex.evt.omniclaude.team-task-progress.v1"
+    """Emitted at phase transitions during task execution."""
+
+    TEAM_EVIDENCE_WRITTEN = "onex.evt.omniclaude.team-evidence-written.v1"
+    """Emitted when an evidence artifact is persisted to disk."""
+
+    TEAM_TASK_COMPLETED = "onex.evt.omniclaude.team-task-completed.v1"
+    """Emitted when a task reaches a terminal state with a verification verdict."""
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:
