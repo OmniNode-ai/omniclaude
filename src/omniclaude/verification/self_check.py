@@ -165,9 +165,9 @@ def run_self_check(
     for check in contract.definition_of_done:
         start = time.monotonic()
         try:
-            proc = subprocess.run(
+            proc = subprocess.run(  # nosec B602 — shell=True is intentional (contract-driven check execution)
                 check.check,
-                shell=True,  # noqa: S602 — intentional, see shell execution doctrine
+                shell=True,  # noqa: S602
                 capture_output=True,
                 text=True,
                 timeout=timeout,
