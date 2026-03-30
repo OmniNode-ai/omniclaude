@@ -581,8 +581,17 @@ def _emit_shadow_comparison_event(
         if divergence_reason and len(divergence_reason) > 500:
             divergence_reason = divergence_reason[:497] + "..."
 
+        # OMN-6907: Warn when session_id falls back to sentinel default
+        resolved_session_id = session_id or "unknown"
+        if resolved_session_id == "unknown":
+            logger.warning(
+                "shadow_validation session_id resolved to 'unknown' for "
+                "correlation=%s — caller did not propagate session_id",
+                correlation_id,
+            )
+
         payload = ModelDelegationShadowComparisonPayload(
-            session_id=session_id or "unknown",
+            session_id=resolved_session_id,
             correlation_id=corr_uuid,
             emitted_at=emitted_at,
             task_type=task_type,

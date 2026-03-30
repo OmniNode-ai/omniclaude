@@ -94,6 +94,39 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# OMN-6907: Sentinel / empty-string validation helpers
+# ---------------------------------------------------------------------------
+
+_SENTINEL_VALUES: frozenset[str] = frozenset({"", "unknown", "none", "null"})
+
+
+def _validate_required_field(field_name: str, value: str, event_type: str) -> bool:
+    """Return True if value is non-empty and not a sentinel.
+
+    Logs a warning and returns False when the value is empty or a known
+    sentinel, indicating the caller failed to propagate real data.
+    """
+    if not value or value.strip().lower() in _SENTINEL_VALUES:
+        logger.warning(
+            "%s is empty or sentinel (%r) for event %s — skipping emit "
+            "(OMN-6907: fix caller to propagate real value)",
+            field_name,
+            value,
+            event_type,
+        )
+        return False
+    return True
+
+
+def _warn_empty_correlation_id(event_type: str) -> None:
+    """Log a warning when correlation_id is empty (non-fatal, event still emits)."""
+    logger.warning(
+        "correlation_id is empty for event %s — downstream tracing will be "
+        "degraded (OMN-6907: fix caller to propagate correlation_id)",
+        event_type,
+    )
+
 
 def _get_emit_fn() -> object:
     """Lazily resolve emit_event from emit_client_wrapper.
@@ -139,6 +172,11 @@ def emit_epic_run_updated(
     emit_fn = _get_emit_fn()
     if emit_fn is None:
         return
+    # OMN-6907: Reject empty run_id — downstream upserts key on it
+    if not _validate_required_field("run_id", run_id, "epic.run.updated"):
+        return
+    if not correlation_id:
+        _warn_empty_correlation_id("epic.run.updated")
     try:
         payload: dict[str, object] = {
             "event_id": str(uuid.uuid4()),
@@ -191,6 +229,11 @@ def emit_pr_watch_updated(
     emit_fn = _get_emit_fn()
     if emit_fn is None:
         return
+    # OMN-6907: Reject empty run_id — downstream upserts key on it
+    if not _validate_required_field("run_id", run_id, "pr.watch.updated"):
+        return
+    if not correlation_id:
+        _warn_empty_correlation_id("pr.watch.updated")
     try:
         payload: dict[str, object] = {
             "event_id": str(uuid.uuid4()),
@@ -285,6 +328,11 @@ def emit_budget_cap_hit(
     emit_fn = _get_emit_fn()
     if emit_fn is None:
         return
+    # OMN-6907: Reject empty run_id — downstream upserts key on it
+    if not _validate_required_field("run_id", run_id, "budget.cap.hit"):
+        return
+    if not correlation_id:
+        _warn_empty_correlation_id("budget.cap.hit")
     try:
         payload: dict[str, object] = {
             "event_id": str(uuid.uuid4()),
@@ -459,6 +507,9 @@ def emit_dod_sweep_completed(
     """Emit dod.sweep.completed event. Fire-and-forget; never blocks."""
     emit_fn = _get_emit_fn()
     if emit_fn is None:
+        return
+    # OMN-6907: Reject empty run_id — downstream upserts key on it
+    if not _validate_required_field("run_id", run_id, "dod.sweep.completed"):
         return
     try:
         payload: dict[str, object] = {

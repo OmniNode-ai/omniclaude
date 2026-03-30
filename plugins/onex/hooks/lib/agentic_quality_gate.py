@@ -11,13 +11,19 @@ Checks:
 2. Minimum output length (>=100 chars) — non-trivial output
 3. No refusal indicators — the model didn't refuse the task
 4. Minimum iterations (>=2) — the model did multi-step work
+5. Evidence of grounding — the output references files, code, or search hits
 
-Ticket: OMN-5729
+Evidence-of-grounding doctrine: The quality gate requires evidence of grounding
+in repository-derived artifacts. A 500-word response that names zero files from
+the codebase fails the gate regardless of length or iteration count.
+
+Ticket: OMN-5729, OMN-6961
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -45,6 +51,17 @@ _REFUSAL_INDICATORS: tuple[str, ...] = (
     "sorry, i",
     "unfortunately, i",
 )
+
+# Evidence-of-grounding patterns
+_GROUNDING_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"(?:[a-zA-Z0-9_./\\-]+\.(?:py|ts|js|yaml|yml|md|json|sh|toml|cfg|txt))\b"
+    ),
+    re.compile(r"\b(?:class|def|import|from)\s+[A-Za-z_]\w+"),
+    re.compile(r"`[A-Za-z_]\w+(?:\.\w+)*`"),
+    re.compile(r"(?:line\s+\d+|L\d+|:\d+:)"),
+)
+_MIN_GROUNDING_HITS = 1
 
 
 @dataclass
@@ -108,11 +125,24 @@ def check_agentic_quality(
         logger.debug("Agentic quality gate failed: %s", reason)
         return AgenticQualityResult(passed=False, reason=reason)
 
+    # Check 5: Evidence of grounding
+    grounding_hits = sum(
+        1 for pattern in _GROUNDING_PATTERNS if pattern.search(content)
+    )
+    if grounding_hits < _MIN_GROUNDING_HITS:
+        reason = (
+            f"no evidence of grounding: output references {grounding_hits} "
+            f"file paths or code identifiers (minimum: {_MIN_GROUNDING_HITS})"
+        )
+        logger.debug("Agentic quality gate failed: %s", reason)
+        return AgenticQualityResult(passed=False, reason=reason)
+
     logger.debug(
-        "Agentic quality gate passed: %d tool calls, %d iterations, %d chars",
+        "Agentic quality gate passed: %d tool calls, %d iterations, %d chars, %d grounding",
         tool_calls_count,
         iterations,
         len(content),
+        grounding_hits,
     )
     return AgenticQualityResult(passed=True)
 

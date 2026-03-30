@@ -112,14 +112,18 @@ def emit_agent_status(
             else os.environ.get("SESSION_ID", "unknown")
         )
 
+        # Track data quality degradation from sentinel defaults (OMN-6907)
+        _degraded_fields: list[str] = []
         if resolved_agent_name == "unknown":
             logger.warning(
                 "agent_name resolved to 'unknown' — AGENT_NAME env var not set and no --agent-name provided"
             )
+            _degraded_fields.append("agent_name")
         if resolved_session_id == "unknown":
             logger.warning(
                 "session_id resolved to 'unknown' — SESSION_ID env var not set and no --session-id provided"
             )
+            _degraded_fields.append("session_id")
 
         # Build validated payload — Pydantic enforces all constraints
         # correlation_id is always required (no default on the model);
@@ -128,6 +132,13 @@ def emit_agent_status(
         resolved_correlation_id = (
             correlation_id if correlation_id is not None else uuid4()
         )
+
+        # Merge caller metadata with data quality tags so downstream
+        # consumers can filter/flag events with sentinel defaults.
+        resolved_metadata = dict(metadata) if metadata else {}
+        if _degraded_fields:
+            resolved_metadata["data_quality"] = "degraded"
+            resolved_metadata["degraded_fields"] = ",".join(_degraded_fields)
 
         payload_model = ModelAgentStatusPayload(
             correlation_id=resolved_correlation_id,
@@ -141,7 +152,8 @@ def emit_agent_status(
             current_task=current_task,
             blocking_reason=blocking_reason,
             emitted_at=datetime.now(UTC),
-            metadata=metadata or {},
+            metadata=resolved_metadata,
+            task_id=os.getenv("ONEX_TASK_ID"),
         )
 
         # Serialize to flat dict for daemon transport

@@ -98,6 +98,43 @@ class ModelEventTracingConfig:
     environment: str | None = None
 
 
+def resolve_correlation_id(
+    tracing: ModelEventTracingConfig,
+    fallback: UUID | str | None = None,
+) -> UUID:
+    """Resolve a correlation_id from tracing config, falling back to a session or new UUID.
+
+    Central resolver per OMN-6884 to ensure correlation_id is never silently None.
+    Logs a warning when falling back to a generated UUID so gaps are detectable.
+
+    Args:
+        tracing: The tracing config that may carry an explicit correlation_id.
+        fallback: A fallback value (typically session_id). If a string, it is
+            attempted as a UUID parse; on failure a new UUID is generated.
+
+    Returns:
+        A non-None UUID suitable for event emission.
+    """
+    if tracing.correlation_id is not None:
+        return tracing.correlation_id
+    if fallback is not None:
+        if isinstance(fallback, UUID):
+            return fallback
+        try:
+            return UUID(str(fallback))
+        except (ValueError, AttributeError):
+            pass
+    generated = uuid4()
+    logger.warning(
+        "correlation_id_generated_fallback",
+        extra={
+            "generated_id": str(generated),
+            "hint": "Caller should propagate correlation_id from session context.",
+        },
+    )
+    return generated
+
+
 @dataclass(frozen=True)
 class ModelToolExecutedConfig:
     """Configuration for tool executed events.
@@ -218,7 +255,8 @@ class ModelClaudeHookEventConfig:
         event_type: The Claude Code hook event type (e.g., UserPromptSubmit).
         session_id: Claude Code session identifier (string per upstream API).
         prompt: The full prompt text (for UserPromptSubmit events).
-        correlation_id: Optional correlation ID for distributed tracing.
+        correlation_id: Correlation ID for distributed tracing (OMN-6884: now required,
+            defaults to a fresh UUID if not provided by the caller).
         timestamp_utc: Event timestamp (defaults to now UTC if not provided).
         environment: Environment label for config metadata (not used for topic prefixing).
     """
@@ -226,7 +264,7 @@ class ModelClaudeHookEventConfig:
     event_type: EnumClaudeCodeHookEventType
     session_id: str
     prompt: str | None = None
-    correlation_id: UUID | None = None
+    correlation_id: UUID = field(default_factory=uuid4)
     timestamp_utc: datetime | None = None
     environment: str | None = None
 
@@ -666,8 +704,9 @@ async def emit_session_started_from_config(
     payload = ModelHookSessionStartedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
-        correlation_id=tracing.correlation_id or config.session_id,
+        correlation_id=resolve_correlation_id(tracing, fallback=config.session_id),
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -759,8 +798,9 @@ async def emit_session_ended_from_config(
     payload = ModelHookSessionEndedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
-        correlation_id=tracing.correlation_id or config.session_id,
+        correlation_id=resolve_correlation_id(tracing, fallback=config.session_id),
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -852,8 +892,9 @@ async def emit_prompt_submitted_from_config(
     payload = ModelHookPromptSubmittedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
-        correlation_id=tracing.correlation_id or config.session_id,
+        correlation_id=resolve_correlation_id(tracing, fallback=config.session_id),
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -949,8 +990,9 @@ async def emit_tool_executed_from_config(
     payload = ModelHookToolExecutedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
-        correlation_id=tracing.correlation_id or config.session_id,
+        correlation_id=resolve_correlation_id(tracing, fallback=config.session_id),
         causation_id=tracing.causation_id or uuid4(),
+        task_id=os.getenv("ONEX_TASK_ID"),
         # Graceful degradation: warn (above) for testing visibility, but
         # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
@@ -1252,8 +1294,13 @@ async def emit_session_outcome_from_config(
         # fall back to now() so production never drops an event.
         emitted_at = tracing.emitted_at or datetime.now(UTC)
 
+        # OMN-6884: resolve correlation_id from tracing config, falling back
+        # to session_id parsed as UUID or a fresh UUID.
+        correlation_id = resolve_correlation_id(tracing, fallback=config.session_id)
+
         payload = ModelSessionOutcome(
             session_id=config.session_id,
+            correlation_id=correlation_id,
             outcome=outcome_enum,
             emitted_at=emitted_at,
             success=config.success,

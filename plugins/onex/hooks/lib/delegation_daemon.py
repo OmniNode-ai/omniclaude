@@ -477,6 +477,23 @@ def _handle_request(data: bytes) -> bytes:
         # If the orchestrator signals agentic eligibility, start a background
         # agentic loop and return immediately with a job_id.
         if result.get("agentic") and run_agentic_task is not None:
+            # Reject if session already has an active job (OMN-6957)
+            with _agentic_jobs_lock:
+                for existing_job in _agentic_jobs.values():
+                    if (
+                        existing_job.session_id == session_id
+                        and existing_job.status == AgenticJobStatus.RUNNING
+                    ):
+                        return json.dumps(
+                            {
+                                "delegated": False,
+                                "agentic_dispatched": False,
+                                "error": "active_job_exists",
+                                "job_id": existing_job.job_id,
+                                "reason": "session has an active agentic job",
+                            }
+                        ).encode()
+
             agentic_prompt = result.get("agentic_prompt", prompt)
             system_prompt = result.get("agentic_system_prompt", "")
             endpoint_url = result.get("agentic_endpoint_url", "")

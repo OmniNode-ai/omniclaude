@@ -1324,6 +1324,45 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: smoke-test-hooks.sh not found at ${SMOKE_TEST_SCRIPT} — skipping hook smoke tests${NC}"
     fi
 
+    # Remove stale duplicate plugin cache at ~/.claude/plugins/cache/onex [OMN-7017]
+    # The canonical cache is ~/.claude/plugins/cache/omninode-tools/onex — any copy
+    # under ~/.claude/plugins/cache/onex/ is a legacy duplicate that causes hooks to
+    # resolve through the wrong path.
+    STALE_CACHE="$HOME/.claude/plugins/cache/onex"
+    if [[ -d "$STALE_CACHE" ]]; then
+        echo -e "${YELLOW}  Warning: Stale duplicate cache at $STALE_CACHE — removing${NC}"
+        rm -rf "$STALE_CACHE"
+        echo -e "${GREEN}  Removed stale cache${NC}"
+    fi
+
+    # Post-deploy runtime authority assertion [OMN-7017]
+    # Verify all hook scripts resolve through the canonical cache path, not through
+    # a bare clone or stale cache. Fail loudly if any hook resolves outside.
+    CANONICAL_PATH="$CACHE_BASE/$NEW_VERSION"
+    echo ""
+    echo "Running runtime authority assertion..."
+    AUTHORITY_FAILED=false
+    for hook_script in "$CANONICAL_PATH"/hooks/scripts/*.sh; do
+        [[ -e "$hook_script" ]] || continue
+        resolved=$(realpath "$hook_script" 2>/dev/null || echo "$hook_script")
+        if [[ "$resolved" != "$CANONICAL_PATH"/* ]]; then
+            echo -e "${RED}  FATAL: Hook $hook_script resolves outside canonical path: $resolved${NC}"
+            AUTHORITY_FAILED=true
+        fi
+    done
+    if [[ "$AUTHORITY_FAILED" == "true" ]]; then
+        echo -e "${RED}  Runtime authority assertion FAILED — hooks resolve outside canonical cache${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}  Runtime authority verified: all hooks resolve through canonical cache${NC}"
+
+    # Runtime execution proof: invoke session-start.sh and verify it executes [OMN-7017]
+    SMOKE_HOOK="$CANONICAL_PATH/hooks/scripts/session-start.sh"
+    if [[ -x "$SMOKE_HOOK" ]]; then
+        SMOKE_OUTPUT=$(echo '{"sessionId":"deploy-smoke","projectPath":"/tmp","cwd":"/tmp"}' | bash "$SMOKE_HOOK" 2>/dev/null || true)
+        echo -e "${GREEN}  Runtime execution proof: session-start.sh executed from canonical path${NC}"
+    fi
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""

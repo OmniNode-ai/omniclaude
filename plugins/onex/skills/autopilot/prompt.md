@@ -51,9 +51,9 @@ Check for consecutive no-op cycles:
   Print: "WARNING: {count + 1} consecutive autopilot cycles found zero tickets.
   Unconditional surface probes still running but ticket-gated verification has not occurred."
 
-Initialize step tracking: all 18 steps start as `not_run`, using canonical IDs:
+Initialize step tracking: all 20 steps start as `not_run`, using canonical IDs:
 ```
-A1_merge_sweep, A2_deploy_local_plugin, A3_start_environment,
+A0_worktree_health, A1_merge_sweep, A1b_dirty_pr_triage, A2_deploy_local_plugin, A3_start_environment,
 B1_dod_sweep, B2_aislop_sweep, B3_bus_audit, B4_gap_detect, B5_integration_sweep,
 B6_playwright_gate, B7_friction_triage, B8_duplication_sweep,
 C1_release, C2_redeploy,
@@ -115,6 +115,104 @@ This ensures missed redeploys are caught on the next cycle, not lost.
 
 ---
 
+### A0: Worktree Health Sweep [OMN-6867] <!-- ai-slop-ok: skill-step-heading -->
+
+Run worktree health sweep before merge-sweep to detect lost work and clean stale worktrees.
+This step runs FIRST because agents frequently stall at the commit step, leaving complete
+implementations uncommitted in worktrees that silently accumulate.
+
+```bash
+WORKTREE_ROOT="${OMNI_WORKTREES}"  # Must be set in env; typically /path/to/omni_worktrees
+```
+
+**Step A0a: Auto-clean merged worktrees (zero risk)**
+
+Run the prune script in dry-run first, then execute:
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/prune-worktrees.sh --worktrees-root "$WORKTREE_ROOT" --execute
+```
+
+Record: number of worktrees pruned.
+
+**Step A0b: Detect worktrees with uncommitted work**
+
+For each remaining worktree directory:
+```python
+import subprocess
+from pathlib import Path
+
+worktree_root = Path(os.environ.get("OMNI_WORKTREES", "/Volumes/PRO-G40/Code/omni_worktrees"))  # local-path-ok
+dirty_worktrees = []
+stale_worktrees = []
+
+for ticket_dir in worktree_root.iterdir():
+    if not ticket_dir.is_dir():
+        continue
+    for repo_dir in ticket_dir.iterdir():
+        if not (repo_dir / ".git").exists():
+            continue
+
+        # Check for uncommitted changes
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "status", "--porcelain"],
+            capture_output=True, text=True
+        )
+        if result.stdout.strip():
+            dirty_worktrees.append({
+                "path": str(repo_dir),
+                "ticket": ticket_dir.name,
+                "changes": len(result.stdout.strip().splitlines()),
+            })
+
+        # Check for stale worktrees (>3 days, no associated PR)
+        branch_result = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True
+        )
+        branch = branch_result.stdout.strip()
+        pr_result = subprocess.run(
+            ["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number"],
+            capture_output=True, text=True
+        )
+        # If no open PR and worktree is >3 days old
+        import json, time
+        prs = json.loads(pr_result.stdout) if pr_result.returncode == 0 else []
+        mtime = repo_dir.stat().st_mtime
+        age_days = (time.time() - mtime) / 86400
+        if not prs and age_days > 3:
+            stale_worktrees.append({
+                "path": str(repo_dir),
+                "ticket": ticket_dir.name,
+                "branch": branch,
+                "age_days": round(age_days, 1),
+            })
+```
+
+**Step A0c: Report and create recovery tickets**
+
+For each dirty worktree with uncommitted work:
+- Print: `WARNING: Dirty worktree {path} ({changes} uncommitted files) — ticket {ticket}`
+- Create a Linear ticket:
+  ```
+  Title: fix(worktree): recover uncommitted work in {ticket}/{repo}
+  Description: Agent stalled before commit. {changes} uncommitted files in {path}.
+  Priority: High
+  Project: Active Sprint
+  ```
+
+For each stale worktree (>3 days, no PR):
+- Print: `WARNING: Stale worktree {path} — branch {branch}, {age_days} days old, no open PR`
+
+**Halt policy:** NEVER halt. Worktree health is hygiene, not release-blocking.
+
+- On success (all clean): record `pass`, continue.
+- On dirty worktrees found: record `warn` with count and recovery ticket IDs, continue.
+- On error (script failure): record `fail`. Log error, increment failure counter. Do NOT halt.
+
+Check circuit breaker.
+
+---
+
 ### A1: merge-sweep <!-- ai-slop-ok: skill-step-heading -->
 
 Run merge-sweep to drain open PRs before release:
@@ -171,6 +269,160 @@ else:
 - On drain complete: record `pass`, continue.
 - On timeout: record `warn` with message listing pending PRs. Do NOT halt. Continue to A2.
 - On skip: record `pass` with note "No merge-sweep PRs to drain."
+
+---
+
+### A1b: DIRTY PR Triage and Queue Health [OMN-6872] <!-- ai-slop-ok: skill-step-heading -->
+
+After merge-sweep and queue drain, perform explicit DIRTY/CONFLICTING PR detection and
+queue health monitoring. This catches the failure mode where 21 PRs piled up with 2
+conflicting PRs blocking the entire queue undetected.
+
+**Step A1b-1: DIRTY/CONFLICTING PR detection**
+
+Scan all repos for open PRs with `mergeStateStatus` of DIRTY or CONFLICTING that
+were NOT already handled by merge-sweep's Track B:
+
+```python
+from datetime import datetime, timezone, timedelta
+
+STALE_PR_THRESHOLD_HOURS = 24
+dirty_prs = []
+stale_dirty_prs = []
+
+for repo in repo_list:
+    prs = gh_pr_list(repo, state="open", json_fields=[
+        "number", "title", "mergeable", "mergeStateStatus",
+        "headRefName", "updatedAt", "author", "url"
+    ])
+    for pr in prs:
+        merge_state = pr.get("mergeStateStatus", "").upper()
+        if merge_state in ("DIRTY", "CONFLICTING") or pr.get("mergeable") == "CONFLICTING":
+            updated_at = datetime.fromisoformat(
+                pr["updatedAt"].rstrip("Z")
+            ).replace(tzinfo=timezone.utc)
+            age_hours = (datetime.now(timezone.utc) - updated_at).total_seconds() / 3600
+
+            entry = {
+                "repo": repo,
+                "number": pr["number"],
+                "title": pr["title"],
+                "merge_state": merge_state,
+                "age_hours": round(age_hours, 1),
+                "author": pr.get("author", {}).get("login", "unknown"),
+                "url": pr.get("url", ""),
+            }
+
+            if age_hours > STALE_PR_THRESHOLD_HOURS:
+                stale_dirty_prs.append(entry)
+            else:
+                dirty_prs.append(entry)
+```
+
+**Step A1b-2: Auto-close stale CONFLICTING PRs (>24h)**
+
+For each PR that has been DIRTY/CONFLICTING for more than 24 hours:
+```bash
+gh pr close <number> --repo <repo> --comment \
+  "[autopilot] Auto-closing: PR has been CONFLICTING for {age_hours}h (>{STALE_PR_THRESHOLD_HOURS}h threshold). \
+  Rebase and reopen when ready. See OMN-6872."
+```
+
+Record each closure in the step result.
+
+**Step A1b-3: Flag recent DIRTY PRs**
+
+For each PR that is DIRTY/CONFLICTING but less than 24h old:
+```
+WARNING: DIRTY PR {repo}#{number} — {title} (CONFLICTING for {age_hours}h, author: {author})
+  Action needed: rebase or resolve conflicts before next cycle
+```
+
+**Step A1b-4: Queue health check**
+
+Detect stalled merge queues — non-empty queue with no merges in the last hour:
+
+```python
+QUEUE_STALL_THRESHOLD_MINUTES = 60
+
+for repo in repo_list:
+    # Check for PRs with active autoMergeRequest
+    queued_prs = gh_pr_list(repo, state="open", json_fields=[
+        "number", "autoMergeRequest", "mergeStateStatus"
+    ])
+    active_queue = [pr for pr in queued_prs if pr.get("autoMergeRequest") is not None]
+
+    if not active_queue:
+        continue
+
+    # Check recent merge activity
+    recent_merges = run(
+        f"gh pr list --repo {repo} --state merged "
+        f"--json number,mergedAt --limit 5"
+    )
+    recent_merges = json.loads(recent_merges)
+
+    last_merge_time = None
+    for m in recent_merges:
+        merged_at = datetime.fromisoformat(m["mergedAt"].rstrip("Z")).replace(tzinfo=timezone.utc)
+        if last_merge_time is None or merged_at > last_merge_time:
+            last_merge_time = merged_at
+
+    if last_merge_time:
+        minutes_since_merge = (datetime.now(timezone.utc) - last_merge_time).total_seconds() / 60
+        if minutes_since_merge > QUEUE_STALL_THRESHOLD_MINUTES:
+            print(
+                f"WARNING: STALLED QUEUE in {repo} — "
+                f"{len(active_queue)} PR(s) queued but no merges in {minutes_since_merge:.0f} min "
+                f"(threshold: {QUEUE_STALL_THRESHOLD_MINUTES} min). "
+                f"Queued: {[f'#{pr[\"number\"]}' for pr in active_queue]}"
+            )
+    elif active_queue:
+        print(
+            f"WARNING: STALLED QUEUE in {repo} — "
+            f"{len(active_queue)} PR(s) queued but no recent merges found at all."
+        )
+```
+
+**Step A1b-5: Missing auto-merge detection**
+
+Detect CLEAN PRs that should be in the merge queue but are not:
+```python
+for repo in repo_list:
+    prs = gh_pr_list(repo, state="open", json_fields=[
+        "number", "title", "mergeable", "mergeStateStatus",
+        "autoMergeRequest", "statusCheckRollup", "reviewDecision", "isDraft"
+    ])
+    for pr in prs:
+        if pr["isDraft"]:
+            continue
+        if pr.get("mergeable") != "MERGEABLE":
+            continue
+        if pr.get("mergeStateStatus", "").upper() not in ("CLEAN", "HAS_HOOKS"):
+            continue
+        if pr.get("autoMergeRequest") is not None:
+            continue  # already in queue
+        # Check if all required checks pass
+        required = [c for c in pr.get("statusCheckRollup", []) if c.get("isRequired")]
+        all_green = all(c.get("conclusion") == "SUCCESS" for c in required) if required else True
+        review_ok = pr.get("reviewDecision") in ("APPROVED", None)
+        if all_green and review_ok:
+            print(
+                f"WARNING: CLEAN PR missing auto-merge: {repo}#{pr['number']} — {pr['title']} "
+                f"(MERGEABLE + CLEAN + GREEN + APPROVED but not in merge queue)"
+            )
+            # Arm auto-merge
+            run(f"gh pr merge {pr['number']} --repo {repo} --squash --auto")
+```
+
+**Halt policy:** NEVER halt. DIRTY PR triage is operational hygiene.
+
+- On no issues found: record `pass`, continue.
+- On stale PRs closed: record `warn` with count of closures and warnings, continue.
+- On stalled queue detected: record `warn`, continue.
+- On error: record `fail`. Log error, increment failure counter. Do NOT halt.
+
+Check circuit breaker.
 
 ---
 
@@ -754,7 +1006,9 @@ Print:
 AUTOPILOT CLOSE-OUT COMPLETE
 
 Steps:
+  A0: worktree-health      — {status}  {pruned_count pruned, dirty_count dirty, stale_count stale}
   A1: merge-sweep          — {status}
+  A1b: dirty-pr-triage     — {status}  {dirty_count dirty, closed_count closed, stalled_count stalled queues}
   A2: deploy-local-plugin  — {status}
   A3: start-environment    — {status}
   B1: dod-sweep            — {status}
@@ -794,7 +1048,7 @@ AUTOPILOT_RESULT: {status} mode=close-out
 ### Write Cycle Record <!-- ai-slop-ok: skill-step-heading -->
 
 Populate `ModelAutopilotCycleRecord`:
-- Set each step's status from execution results using canonical IDs (A1-D4, including B6)
+- Set each step's status from execution results using canonical IDs (A0-D5, including A1b, B6)
 - Set `overall_status` (using `EnumAutopilotCycleStatus`):
   - `COMPLETE` if all steps are `pass`, `pass_repaired`, `warn`, or `skipped` (and every skipped step has a non-empty `reason` — the model validator enforces this)
   - `INCOMPLETE` if any step has status `not_run`, or if any step is `skipped` without a valid reason (should not happen if model validation is correct, but defense-in-depth)

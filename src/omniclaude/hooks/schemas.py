@@ -474,6 +474,18 @@ class ModelHookSessionStartedPayload(BaseModel):
         description="ID of the event or trigger that caused this event",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command. Used to "
+            "correlate all work on a logical task regardless of how many CLI sessions "
+            "it spans."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -574,6 +586,16 @@ class ModelHookSessionEndedPayload(BaseModel):
         description="ID of the previous event in the session chain",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -618,13 +640,16 @@ class ModelSessionOutcome(BaseModel):
     Attributes:
         event_name: Literal discriminator for polymorphic deserialization.
         session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing (OMN-6884).
         outcome: Classification of how the session ended.
         emitted_at: Timestamp when the event was emitted (UTC).
 
     Example:
         >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
         >>> event = ModelSessionOutcome(
         ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
         ...     outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
         ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
         ... )
@@ -643,6 +668,15 @@ class ModelSessionOutcome(BaseModel):
         ...,
         min_length=1,
         description="Session identifier",
+    )
+    # OMN-6884: correlation_id was missing entirely. Session outcomes are always
+    # emitted within a session context, so correlation_id is required.
+    correlation_id: UUID = Field(
+        ...,
+        description=(
+            "Correlation ID for distributed tracing. Required per OMN-6884: "
+            "session outcomes are always emitted within a session context."
+        ),
     )
     outcome: EnumClaudeCodeSessionOutcome = Field(
         ...,
@@ -787,15 +821,16 @@ class ModelRoutingFeedbackPayload(BaseModel):
         skip_reason: Why reinforcement was skipped (e.g., NO_INJECTION,
             UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD). None when
             ``feedback_status`` is ``"produced"``.
-        correlation_id: Optional correlation ID for distributed tracing. Propagated
-            to the omniintelligence consumer to satisfy its required field. None
-            when the producer does not have a correlation context available.
+        correlation_id: Correlation ID for distributed tracing (OMN-6884: now required).
+            Routing feedback is always emitted within a session context.
         emitted_at: Timestamp when the event was emitted (UTC).
 
     Example:
         >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
         >>> event = ModelRoutingFeedbackPayload(
         ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
         ...     outcome="success",
         ...     feedback_status="produced",
         ...     skip_reason=None,
@@ -803,6 +838,7 @@ class ModelRoutingFeedbackPayload(BaseModel):
         ... )
         >>> skipped = ModelRoutingFeedbackPayload(
         ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
         ...     outcome="unknown",
         ...     feedback_status="skipped",
         ...     skip_reason="NO_INJECTION",
@@ -842,10 +878,13 @@ class ModelRoutingFeedbackPayload(BaseModel):
             "BELOW_SCORE_THRESHOLD). None when feedback_status is 'produced'. [OMN-2622]"
         ),
     )
-    correlation_id: UUID | None = Field(
-        default=None,
-        description="Correlation ID propagated to the consumer for tracing. Optional to maintain "
-        "backwards compatibility with existing producers that do not emit this field.",
+    correlation_id: UUID = Field(
+        ...,
+        description=(
+            "Correlation ID propagated to the consumer for tracing. "
+            "Required per OMN-6884: routing feedback is always emitted within "
+            "a session context that has a correlation_id."
+        ),
     )
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
@@ -952,6 +991,16 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     causation_id: UUID = Field(
         ...,
         description="ID of the previous event in the session chain",
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
@@ -1083,6 +1132,16 @@ class ModelHookToolExecutedPayload(BaseModel):
         description="ID of the prompt event that triggered this tool use",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -1205,6 +1264,16 @@ class ModelHookContextInjectedPayload(BaseModel):
         description="ID of the prompt event that triggered context injection",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
     emitted_at: TimezoneAwareDatetime = Field(
@@ -1300,6 +1369,15 @@ class ModelValidatorCatchPayload(BaseModel):
         ...,
         min_length=1,
         description="Session identifier string",
+    )
+    # OMN-6884: correlation_id was missing. Validator catches always occur
+    # within a session context, so correlation_id is required for tracing.
+    correlation_id: str = Field(
+        ...,
+        description=(
+            "Correlation ID for distributed tracing. Required per OMN-6884: "
+            "validator catches always occur within a session context."
+        ),
     )
     validator_type: str = Field(
         ...,
@@ -1743,6 +1821,16 @@ class ModelHookManifestInjectedPayload(BaseModel):
         description="ID of the prompt event that triggered manifest injection",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # Timestamps
     emitted_at: TimezoneAwareDatetime = Field(
         ...,
@@ -2134,6 +2222,16 @@ class ModelAgentStatusPayload(BaseModel):
         description="Durable instance ID to disambiguate parallel agents with same name",
     )
 
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
+    )
+
     # State
     state: EnumAgentState = Field(
         ...,
@@ -2434,6 +2532,16 @@ class ModelTaskDelegatedPayload(BaseModel):
     correlation_id: UUID = Field(
         ...,
         description="Correlation ID for distributed tracing",
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
     # Timestamps — MUST be explicitly injected (no default_factory for testability)
@@ -2817,6 +2925,16 @@ class ModelHookDecisionRecordedPayload(BaseModel):
             "Optional session identifier for correlation with Claude Code hook events. "
             "None when the decision originated outside a hook session."
         ),
+    )
+
+    # Task binding for cross-session correlation (OMN-6851)
+    task_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable task identifier (e.g., 'OMN-1234') that persists across session "
+            "restarts. Set via ONEX_TASK_ID env var or 'set-session' command."
+        ),
+        max_length=64,
     )
 
 

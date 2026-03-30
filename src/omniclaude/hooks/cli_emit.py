@@ -590,12 +590,16 @@ def cmd_claude_hook_event(
             )
             return
 
-        config = ModelClaudeHookEventConfig(
-            event_type=hook_event_type,
-            session_id=session_id,
-            prompt=prompt,
-            correlation_id=corr_id,
-        )
+        # OMN-6884: correlation_id defaults to uuid4() in the config dataclass,
+        # so only pass it explicitly when the caller provided one.
+        config_kwargs: dict[str, object] = {
+            "event_type": hook_event_type,
+            "session_id": session_id,
+            "prompt": prompt,
+        }
+        if corr_id is not None:
+            config_kwargs["correlation_id"] = corr_id
+        config = ModelClaudeHookEventConfig(**config_kwargs)  # type: ignore[arg-type]
 
         result = run_with_timeout(emit_claude_hook_event(config))
 

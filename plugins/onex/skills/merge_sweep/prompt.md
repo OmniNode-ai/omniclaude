@@ -153,6 +153,29 @@ hardcoded list above.
 
 ---
 
+## 2b. Fetch Bare Clones (OMN-6869)
+
+Before scanning or checking merge status, fetch latest `main` in each bare clone to
+prevent stale-ref false positives (e.g., branch-contains checks against an outdated main).
+
+```bash
+OMNI_HOME="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+
+for repo in "${repo_list[@]}"; do
+  repo_name="${repo#*/}"  # strip org prefix
+  bare_clone="$OMNI_HOME/$repo_name"
+  if [ -f "$bare_clone/HEAD" ]; then
+    git -C "$bare_clone" fetch origin main:main --quiet 2>/dev/null &
+  fi
+done
+wait
+```
+
+This runs in parallel and completes in seconds. If a fetch fails (network issue), the
+scan proceeds with whatever refs are already cached — no hard failure.
+
+---
+
 ## 3. Scan Phase (Parallel, Tier-Aware)
 
 Scan up to `--max-parallel-repos` repos concurrently. The scan method depends on the
@@ -542,6 +565,10 @@ for repo, prs in repo_scan_results.items():
             continue
         if pr.get("autoMergeRequest") is not None:
             continue  # already enrolled
+        # OMN-6468: Never touch PRs already in the merge queue.
+        # Dequeue/re-enqueue doubles CI time (~10 min waste per event).
+        if pr.get("mergeQueueEntry") is not None or pr.get("mergeStateStatus", "").upper() == "QUEUED":
+            continue
         pr_number = pr["number"]
         # Skip PRs already handled by other tracks
         if pr in candidates_pre_claim or pr in branch_update_queue_pre_claim or pr in polish_queue_pre_claim:
@@ -950,6 +977,16 @@ for pr in candidates:
     base_owner, base_repo_name = pr["baseRepository"]["nameWithOwner"].split("/")
     repo_full = f"{base_owner}/{base_repo_name}"
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr["number"])
+
+    # OMN-6468: Skip PRs already in the merge queue. Dequeue/re-enqueue
+    # doubles CI time because both runs execute sequentially.
+    if pr.get("mergeQueueEntry") is not None or pr.get("mergeStateStatus", "").upper() == "QUEUED":
+        auto_merge_results.append({
+            "pr_key": pr_key, "repo": repo_full, "pr": pr["number"],
+            "result": "skipped", "reason": "already in merge queue (OMN-6468)"
+        })
+        print(f"  ⊘ skipped (in merge queue): {repo_full}#{pr['number']} — {pr.get('title', '')[:60]}")
+        continue
 
     acquired = registry.acquire(pr_key, run_id=run_id, action="auto_merge_enable", dry_run=dry_run)
     if not acquired:

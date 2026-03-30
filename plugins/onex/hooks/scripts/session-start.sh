@@ -1491,6 +1491,39 @@ else
     printf '%s' "$INPUT"
 fi
 
+# === Plugin freshness check (non-blocking) ===
+# Checks if deployed plugin is behind origin/main and auto-refreshes.
+# Runs in background to stay within 50ms budget.
+_omniclaude_bare="${OMNI_HOME}/omniclaude"  # OMNI_HOME set by environment
+_plugin_cache="${CLAUDE_PLUGIN_ROOT:-}"
+if [[ -n "${_plugin_cache}" && -d "${_omniclaude_bare}" ]]; then
+  (
+    # Compare deployed commit (stamped during deploy) vs current bare clone HEAD
+    _deployed_commit_file="${_plugin_cache}/.deployed-commit"
+    _current_commit=$(git -C "${_omniclaude_bare}" rev-parse HEAD 2>/dev/null || echo "unknown")
+    _deployed_commit=""
+    [[ -f "${_deployed_commit_file}" ]] && _deployed_commit=$(cat "${_deployed_commit_file}" 2>/dev/null)
+
+    if [[ "${_current_commit}" != "${_deployed_commit}" && "${_current_commit}" != "unknown" ]]; then
+      log "Plugin stale: deployed=${_deployed_commit:-none} current=${_current_commit:0:8}. Refreshing..."
+      # Extract updated skills from bare clone to plugin cache
+      _skills_dir="${_plugin_cache}/skills"
+      if [[ -d "${_skills_dir}" ]]; then
+        _tmpdir=$(mktemp -d)
+        git -C "${_omniclaude_bare}" archive HEAD plugins/onex/skills/ 2>/dev/null | tar -x -C "${_tmpdir}" 2>/dev/null
+        if [[ -d "${_tmpdir}/plugins/onex/skills" ]]; then
+          cp -r "${_tmpdir}/plugins/onex/skills/"* "${_skills_dir}/" 2>/dev/null
+          echo "${_current_commit}" > "${_deployed_commit_file}"
+          log "Plugin refreshed to ${_current_commit:0:8}"
+        fi
+        rm -rf "${_tmpdir}"
+      fi
+    fi
+  ) &
+  disown || true
+fi
+# === End plugin freshness check ===
+
 # === Opportunistic env sync (non-blocking) ===
 # Runs sync-omnibase-env.py in background when Infisical is configured.
 # Throttle and flock guards in the script prevent duplicate syncs.

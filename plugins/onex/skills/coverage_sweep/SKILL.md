@@ -1,177 +1,165 @@
 ---
 description: Measure test coverage across all Python repos under omni_home, flag modules below threshold, and auto-create Linear tickets for coverage gaps
-mode: full
 version: 1.0.0
+mode: full
 level: intermediate
 debug: false
 category: quality
 tags:
   - coverage
   - testing
-  - quality
   - automation
-  - sweep
+  - linear
+  - org-wide
 author: OmniClaude Team
 composable: true
 args:
-  - name: --threshold
-    description: "Minimum coverage percentage to pass (default: 60)"
-    required: false
   - name: --repos
-    description: "Comma-separated list of repos to scan (default: all Python repos under omni_home)"
+    description: "Comma-separated repo names to scan (default: all Python repos)"
     required: false
-  - name: --auto-ticket
-    description: "Auto-create Linear tickets for modules below threshold (default: true)"
+  - name: --target
+    description: "Coverage target percentage (default: 50)"
     required: false
   - name: --dry-run
-    description: "Report coverage gaps without creating tickets"
+    description: Scan and report only -- no ticket creation
     required: false
-  - name: --skip-install
-    description: "Skip uv sync step (use when deps are already installed)"
+  - name: --max-tickets
+    description: "Maximum tickets to create per run (default: 20)"
     required: false
+  - name: --team
+    description: "Linear team name (default: Omninode)"
+    required: false
+  - name: --project
+    description: "Linear project name (default: Active Sprint)"
+    required: false
+  - name: --force-rescan
+    description: Ignore cache and re-run coverage scans
+    required: false
+inputs:
+  - name: repos
+    description: "list[str] -- repos to scan; empty = default list"
+outputs:
+  - name: skill_result
+    description: "ModelCoverageSweepReport with scan results and ticket summary"
 ---
 
 # Coverage Sweep
 
-## Dispatch Requirement
+## Overview
 
-When invoked, dispatch to a polymorphic-agent:
+Scans all OmniNode Python repos for test coverage gaps, identifies modules with
+zero or below-target coverage, checks for existing tickets, and auto-creates
+Linear tickets for uncovered modules.
 
-```
-Agent(
-  subagent_type="onex:polymorphic-agent",
-  description="Run coverage-sweep across repos",
-  prompt="Run the coverage-sweep skill. <full context and args>"
-)
-```
+**Announce at start:** "I'm using the coverage-sweep skill."
 
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` (with the `onex:` prefix).
-
-**Skill ID**: `onex:coverage_sweep`
-**Version**: 1.0.0
-**Owner**: omniclaude
-**Ticket**: OMN-6736
-
----
-
-## Purpose
-
-Measure test coverage across all Python repos in the omni_home registry, identify modules
-that fall below a configurable threshold, and optionally auto-create Linear tickets for
-coverage gaps. Designed to run as a recurring quality gate or on-demand audit.
-
----
-
-## Usage
+## Supported Repos (default scan target)
 
 ```
-/coverage-sweep
-/coverage-sweep --threshold 80
-/coverage-sweep --repos omnibase_core,omniclaude --dry-run
-/coverage-sweep --threshold 70 --auto-ticket
+DEFAULT_REPOS = [
+  "omniclaude", "omnibase_core", "omnibase_infra",
+  "omnibase_spi", "omniintelligence", "omnimemory",
+  "onex_change_control", "omnibase_compat"
+]
 ```
 
----
-
-## Behavior
-
-### Step 1: Discover repos <!-- ai-slop-ok: skill-step-heading -->
-
-Scan `$OMNI_HOME/` for directories containing `pyproject.toml`. <!-- local-path-ok -->
-If `--repos` is provided, filter to only those repos.
-
-Skip repos that do not have a `tests/` directory.
-
-### Step 2: Run coverage per repo <!-- ai-slop-ok: skill-step-heading -->
-
-For each repo, run:
-
-```bash
-cd $OMNI_HOME/{repo} # local-path-ok
-uv run pytest tests/ -m unit --cov=src/ --cov-report=json:coverage.json --cov-report=term -q || true
-```
-
-If `--skip-install` is not set, run `uv sync --group dev` first.
-
-Parse the generated `coverage.json` (written to the repo root by `--cov-report=json:coverage.json`) to extract per-module coverage percentages.
-
-### Step 3: Evaluate against threshold <!-- ai-slop-ok: skill-step-heading -->
-
-Default threshold: 60%. Override with `--threshold`.
-
-For each module, classify:
-- **PASS**: coverage >= threshold
-- **GAP**: coverage < threshold
-- **MISSING**: no tests found at all (0% coverage)
-
-### Step 4: Generate report <!-- ai-slop-ok: skill-step-heading -->
-
-Output a summary table:
+## CLI
 
 ```
-Coverage Sweep Report
-=====================
-
-Threshold: 60%
-
-| Repo | Module | Coverage | Status |
-|------|--------|----------|--------|
-| omnibase_core | src/omnibase_core/models/ | 85% | PASS |
-| omnibase_core | src/omnibase_core/validators/ | 42% | GAP |
-| omniclaude | src/omniclaude/hooks/ | 71% | PASS |
-| omniclaude | src/omniclaude/cli/ | 0% | MISSING |
-
-Summary: 2 PASS, 1 GAP, 1 MISSING across 2 repos
+/coverage-sweep                                  # Full scan + ticket creation
+/coverage-sweep --dry-run                        # Report only
+/coverage-sweep --repos omniclaude,omnibase_core # Scan specific repos
+/coverage-sweep --target 80                      # Override target percentage
+/coverage-sweep --max-tickets 10                 # Limit tickets created
+/coverage-sweep --force-rescan                   # Ignore 1-hour cache
 ```
 
-Ensure `$ONEX_STATE_DIR/coverage-sweep/` exists (create if needed), then write the full report to `$ONEX_STATE_DIR/coverage-sweep/latest-report.json`.
+## How It Works
 
-### Step 5: Auto-ticket gaps (unless --dry-run) <!-- ai-slop-ok: skill-step-heading -->
+### Phase 1: Scan
 
-For each GAP or MISSING module (if `--auto-ticket` is true, which is the default):
+For each repo:
+1. Check cache (1-hour TTL). If fresh, use cached result.
+2. Otherwise run: `uv run pytest --cov=src/ --cov-report=json -q`
+3. Parse the JSON coverage report
+4. Identify modules below target (default 50%)
+5. Cross-reference with `git log --since=14d` for recently-changed modules
 
-1. Check if an open Linear ticket already exists for this coverage gap
-   (search for `coverage-gap:{repo}:{module_path}` in ticket descriptions)
-2. If no existing ticket, create one:
-   - Title: `chore: add test coverage for {repo}/{module_path}`
-   - Description includes: current coverage %, threshold, which files lack tests
-   - Labels: `tech-debt`, `testing`
-   - Project: Active Sprint
-3. Report created/skipped tickets in the output
+### Phase 2: Prioritize
 
-### Step 6: Emit summary <!-- ai-slop-ok: skill-step-heading -->
+Gaps are prioritized:
+1. **Zero coverage** -- complete blind spots (Linear priority: High)
+2. **Recently changed, below target** -- changed without tests (priority: Medium)
+3. **Below target** -- below repo target (priority: Low)
 
-Write skill result to `$ONEX_STATE_DIR/skill-results/{context_id}/coverage_sweep.json`:
+### Phase 3: Dedup
 
-```json
-{
-  "status": "success",
-  "extra_status": "gaps_found",
-  "extra": {
-    "repos_scanned": 5,
-    "modules_total": 42,
-    "modules_passing": 35,
-    "modules_gap": 5,
-    "modules_missing": 2,
-    "threshold": 60,
-    "tickets_created": 3,
-    "tickets_skipped": 4
-  }
-}
+Before creating tickets:
+1. Fetch existing Linear tickets with `test-coverage` or `coverage` labels
+2. Search by title pattern: `test(coverage): add tests for <module> (<repo>)`
+3. Skip any gaps that already have matching tickets
+
+### Phase 4: Create Tickets
+
+For each non-duplicate gap (up to `--max-tickets`):
+1. Create Linear ticket with structured description
+2. Include: module path, current coverage %, statement counts
+3. Add `test-coverage` and `auto-generated` labels
+4. Assign to specified team and project
+
+## Cache
+
+Scan results are cached at `~/.onex_state/coverage_cache/<repo>.json` with 1-hour TTL.
+Use `--force-rescan` to bypass.
+
+## Integration with Refill Sprint
+
+This skill is designed to be called as a tier in the refill-sprint workflow:
+```
+Ready queue -> Future tech debt -> Coverage gaps (this skill)
 ```
 
----
+When sprint is idle and Ready/Future are empty, coverage-sweep generates fresh
+work items from actual test coverage data.
+
+## Output
+
+Reports include per-repo breakdown:
+- Total modules, modules below target, zero-coverage modules
+- Repo average coverage percentage
+- List of gaps with priority classification
+- Tickets created vs skipped (dedup)
+
+## Execution Steps
+
+1. Parse arguments (repos, target, dry-run, max-tickets)
+2. Initialize `CoverageScanner` with omni_home path and target
+3. Run `scanner.scan_repos(repos)` to get coverage data
+4. If `--dry-run`: report gaps and exit
+5. Fetch existing Linear tickets for dedup:
+   ```
+   mcp__linear-server__list_issues(
+     team=team_id,
+     labels=["test-coverage"]
+   )
+   ```
+6. Initialize `CoverageTicketCreator` with existing titles
+7. Build ticket requests: `creator.build_ticket_requests(scan_results, max_tickets=N)`
+8. For each ticket request, create via:
+   ```
+   mcp__linear-server__create_issue(
+     title=req.title,
+     description=req.description,
+     team=team_id,
+     project=project_id,
+     priority=req.priority,
+     labels=req.labels
+   )
+   ```
+9. Report summary: gaps found, tickets created, tickets skipped
 
 ## Error Handling
 
-- If a repo has no `src/` directory: skip it with a warning before running pytest
-- If `uv run pytest` fails for a repo: log the error, mark all modules as UNKNOWN (coverage undetermined), continue
-- If Linear API is unavailable: report gaps but skip ticket creation, exit cleanly
-
----
-
-## Integration Points
-
-- **autopilot**: Can be added as a step in close-out mode for periodic coverage audits
-- **ticket-pipeline**: OMN-6730 uses coverage data from this skill as a hard gate
-- **insights-to-plan**: Coverage trends feed into sprint planning insights
+- If a repo scan fails (no pytest, no src/, timeout), log and continue
+- If Linear API fails, report the error but don't block remaining tickets
+- Cache errors are non-fatal (scan proceeds without cache)
