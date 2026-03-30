@@ -643,3 +643,17 @@ allowed_extras:
       with a verification verdict.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-7026
+
+  # ---------------------------------------------------------------------------
+  # Evidence dual-write topics (OMN-7030)
+  # Emitted by the evidence writer when verification evidence is persisted.
+  # No dedicated node contract -- emitted by evidence_writer effect.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.evidence-written.v1"
+    lifecycle: telemetry
+    reason: >
+      Evidence written event emitted when verification evidence is dual-written
+      to disk and Kafka. Consumed by downstream verification dashboards.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7030
