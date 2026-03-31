@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 from enum import StrEnum
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +111,8 @@ def run_quality_gate(
 
 
 def handle_delegation_result(
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, str | int | float | bool | None],
+) -> dict[str, str | int | float | bool | None]:
     """Process LLM response, run quality gate, build terminal event.
 
     Args:

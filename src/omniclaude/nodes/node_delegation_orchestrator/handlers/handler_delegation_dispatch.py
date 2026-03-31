@@ -24,7 +24,6 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import Any
 
 from omniclaude.lib.task_classifier import TaskClassifier
 
@@ -103,8 +102,8 @@ def select_backend() -> DelegationRoute | None:
 
 
 def handle_delegation_dispatch(
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: dict[str, str | int | float | bool | None],
+) -> dict[str, str | int | float | bool | None]:
     """Classify prompt, select backend, return routing decision.
 
     Args:
