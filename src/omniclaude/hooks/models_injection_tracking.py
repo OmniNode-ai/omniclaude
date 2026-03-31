@@ -10,7 +10,7 @@ Part of OMN-1673: INJECT-004 injection tracking.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +22,7 @@ from omniclaude.hooks.cohort_assignment import (
 )
 
 
-class EnumInjectionContext(str, Enum):
+class EnumInjectionContext(StrEnum):
     """Valid injection contexts (match DB CHECK constraint)."""
 
     SESSION_START = "SessionStart"
@@ -31,7 +31,7 @@ class EnumInjectionContext(str, Enum):
     SUBAGENT_START = "SubagentStart"
 
 
-class EnumInjectionSource(str, Enum):
+class EnumInjectionSource(StrEnum):
     """Distinguishes injection outcomes for complete telemetry.
 
     This enum tracks WHY an injection record was created, enabling

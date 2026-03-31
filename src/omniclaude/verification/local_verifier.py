@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -33,7 +33,7 @@ _DEFAULT_TIMEOUT_SECONDS = 30.0
 # ---------------------------------------------------------------------------
 
 
-class EnumVerdict(str, Enum):
+class EnumVerdict(StrEnum):
     """Tri-state verification outcome."""
 
     PASS = "PASS"  # noqa: S105
@@ -41,7 +41,7 @@ class EnumVerdict(str, Enum):
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
 
 
-class EnumDispatchSurface(str, Enum):
+class EnumDispatchSurface(StrEnum):
     """Where the verification was executed."""
 
     LOCAL_LLM = "local_llm"

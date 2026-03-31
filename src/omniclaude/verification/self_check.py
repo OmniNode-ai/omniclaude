@@ -16,7 +16,7 @@ import hashlib
 import subprocess
 import time
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,7 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # ---------------------------------------------------------------------------
 
 
-class EnumCheckType(str, Enum):
+class EnumCheckType(StrEnum):
     """Allowed mechanical check types."""
 
     COMMAND_EXIT_0 = "command_exit_0"
@@ -104,7 +104,7 @@ class ModelTaskContract(BaseModel):
 _CHECK_TIMEOUT_SECONDS = 120
 
 
-class EnumCheckStatus(str, Enum):
+class EnumCheckStatus(StrEnum):
     """Allowed statuses for a mechanical check result."""
 
     PASS = "PASS"  # noqa: S105

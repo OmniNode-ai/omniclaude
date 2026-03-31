@@ -24,7 +24,7 @@ import json
 import subprocess
 import tempfile
 import time
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
@@ -43,7 +43,7 @@ from omniclaude.trace.frame_assembler import CheckSpec, run_checks, sha256_of
 # ---------------------------------------------------------------------------
 
 
-class ReplayMode(str, Enum):
+class ReplayMode(StrEnum):
     """Replay execution mode controlling which steps are live vs stubbed."""
 
     FULL = "full"

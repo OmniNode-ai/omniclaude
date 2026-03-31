@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 from typing import NamedTuple
 
 from pydantic import Field
@@ -239,14 +239,14 @@ class CohortAssignmentConfig(BaseSettings):
         return cls.from_contract()
 
 
-class EnumCohort(str, Enum):
+class EnumCohort(StrEnum):
     """A/B experiment cohort."""
 
     CONTROL = "control"
     TREATMENT = "treatment"
 
 
-class IdentityType(str, Enum):
+class IdentityType(StrEnum):
     """Type of identity used for cohort assignment.
 
     Priority order: USER_ID > REPO_PATH > SESSION_ID
