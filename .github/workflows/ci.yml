@@ -1491,7 +1491,7 @@ jobs:
           coverage report
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage.xml
           flags: unittests
@@ -1788,7 +1788,7 @@ jobs:
 
       - name: Upload compliance report
         if: always() && steps.check-command.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compliance-report
           path: .onex_state/compliance/report.yaml
