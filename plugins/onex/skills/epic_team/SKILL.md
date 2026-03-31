@@ -601,6 +601,33 @@ repos:
 Keyword matching is case-insensitive. Tickets with no keyword match are UNMATCHED.
 Use `--force-unmatched` to route them to omniplan as TRIAGE tasks.
 
+## Stacked Branch Execution (OMN-6270)
+
+When Wave N+1 tickets depend on Wave N (via cross-repo Part 2 splits or file-overlap
+chains), the downstream ticket branches from the Wave N branch tip instead of `main`.
+This avoids merge conflicts and ensures later tickets see earlier changes without
+waiting for merge.
+
+**How it works:**
+
+1. After Wave N completes, collect `{ticket_id: branch_name}` from worker results
+2. When dispatching Wave N+1, check if any ticket has a dependency on a Wave N ticket
+   (via `chain_targets` from `detect_file_overlap_chains` or cross-repo Part 2 mapping)
+3. If a dependency exists and the upstream ticket succeeded, pass `--base-branch <branch>`
+   to the downstream ticket's `ticket-pipeline` invocation
+4. `ticket-pipeline` creates its worktree from the specified base branch and opens its
+   PR targeting that base branch
+
+**Fallback:** If the upstream ticket failed or returned no branch, fall back to `main`.
+
+**Chain depth limit:** Maximum 3 levels of stacking. Beyond that, tickets target `main`
+independently to avoid deep rebase chains.
+
+**State tracking:** The `ticket_results` dict in state.yaml records `branch` per ticket,
+making stacked branch resolution available across waves and on `--resume`.
+
+---
+
 ## Worktree Policy
 
 Workers create isolated git worktrees at:

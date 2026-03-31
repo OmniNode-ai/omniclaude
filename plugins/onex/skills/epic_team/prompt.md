@@ -139,11 +139,10 @@ def detect_file_overlap_chains(waves, ticket_metadata):
 
     return chain_targets
 
-# NOTE: ticket-pipeline does not currently support --base-branch.
-# This chaining logic is recorded here for documentation and future use.
-# A follow-up task is needed to add --base-branch support to ticket-pipeline's
-# `gh pr create` call. Until then, the chain_targets dict is logged but
-# not enforced during dispatch.
+# Stacked branch execution (OMN-6270): chain_targets maps downstream
+# ticket_id -> upstream ticket_id. When dispatching, resolve the upstream
+# ticket's branch name from ticket_results and pass --base-branch to
+# ticket-pipeline. Falls back to main if upstream failed or has no branch.
 ```
 
 ### Circuit Breaker / Heartbeat Timeout
@@ -169,13 +168,27 @@ DISPATCH_TIMEOUT_MINUTES = int(os.environ.get("EPIC_TEAM_DISPATCH_TIMEOUT_MINUTE
 For each ticket in a wave, dispatch a Task() from the team-lead session:
 
 ```python
-def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_id, run_id):
+def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_id, run_id, base_branch=None):
     """Dispatch ticket-pipeline for a single ticket as a Task() subagent.
 
     Includes circuit breaker timeout (DISPATCH_TIMEOUT_MINUTES). If the agent
     stalls beyond the timeout, the dispatch returns a timeout error rather than
     blocking the wave indefinitely.
+
+    Args:
+        base_branch: If set, ticket-pipeline branches from this branch instead
+                     of main (stacked branch execution, OMN-6270).
     """
+    base_branch_instruction = ""
+    if base_branch:
+        base_branch_instruction = f"""
+STACKED BRANCH: This ticket depends on a prior ticket's branch.
+- Create your worktree from branch '{base_branch}' instead of main:
+    git worktree add <path> -b <new-branch> origin/{base_branch}
+- Open your PR targeting '{base_branch}' instead of main:
+    gh pr create --base {base_branch}
+- If '{base_branch}' does not exist on the remote, fall back to main.
+"""
     try:
         result = Task(
             subagent_type="onex:polymorphic-agent",
@@ -187,7 +200,7 @@ Ticket: {ticket_id} - {ticket_title}
 URL: {ticket_url}
 Repo: {repo} at {repo_path}
 Epic: {epic_id}  Run: {run_id}
-
+{base_branch_instruction}
 Invoke: Skill(skill="onex:ticket_pipeline", args="{ticket_id}")
 
 After ticket-pipeline completes, report back:
@@ -242,15 +255,36 @@ This keeps sub-agent context minimal, preventing context window exhaustion on la
 
 ```python
 waves = build_waves(state["assignments"], state["cross_repo_splits"])
+chain_targets = detect_file_overlap_chains(waves, ticket_metadata)
 ticket_results = {}  # ticket_id -> {status, pr_url, branch}
+
+def resolve_base_branch(ticket_id):
+    """Resolve the base branch for a ticket using stacked branch execution (OMN-6270).
+
+    If the ticket has a chain dependency on an upstream ticket that completed
+    successfully with a branch, return that branch name. Otherwise return None
+    (ticket-pipeline will use main).
+    """
+    upstream_tid = chain_targets.get(ticket_id)
+    if not upstream_tid:
+        return None
+    upstream_result = ticket_results.get(upstream_tid, {})
+    upstream_branch = upstream_result.get("branch")
+    upstream_status = upstream_result.get("status")
+    if upstream_branch and upstream_status in ("merged", "pr_created", "in_review"):
+        print(f"  [stacked] {ticket_id} will branch from {upstream_branch} (via {upstream_tid})")
+        return upstream_branch
+    print(f"  [stacked] {ticket_id} upstream {upstream_tid} has no usable branch, using main")
+    return None
 
 for wave_idx, wave in enumerate(waves):
     print(f"\n=== Wave {wave_idx}: dispatching {len(wave)} ticket(s) ===")
 
     # Dispatch all tickets in this wave in parallel (single message = simultaneous Task calls)
     # The team-lead awaits all results before proceeding to the next wave.
+    # Stacked branch execution (OMN-6270): resolve base_branch from prior wave results.
     wave_results = [
-        dispatch_ticket(repo, ticket_id, ...)
+        dispatch_ticket(repo, ticket_id, ..., base_branch=resolve_base_branch(ticket_id))
         for repo, ticket_id in wave
     ]
 
