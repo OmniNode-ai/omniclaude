@@ -19,7 +19,8 @@
         ".venv/**",
         "venv/**",
         "node_modules/**",
-        "archived/**"
+        "archived/**",
+        ".claude/worktrees/**"
     ],
     "checkExternal": false,
     "externalTimeout": 5000

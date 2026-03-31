@@ -1,3 +1,26 @@
+## v0.20.0 (2026-03-31)
+
+### Added
+- feat: delegation orchestrator node + classifier compound keywords [OMN-7103] (#1034)
+- feat: wire intent drift emitter into PostToolUse hook [OMN-7141] (#1035)
+- feat(hooks): add sweep pre-flight validation hook [OMN-7057] (#1020)
+- feat(merge-sweep): add state recovery with per-repo checkpoint and exponential backoff [OMN-7083] (#1029)
+- feat: add stacked branch execution to epic-team [OMN-6270] (#1027)
+- feat: add R8 runtime state grounding to design-to-plan [OMN-7040] (#1022)
+- feat: add compliance_migration skill for handler migration [OMN-6846] (#1026)
+
+### Fixed
+- fix: wire execute_dod_verify in ticket-pipeline Phase 2.5 [OMN-7085] (#1030)
+- fix: graduate DoD enforcement to hard mode [OMN-7086] (#1031)
+- fix(hooks): remove poly enforcer from hooks.json [OMN-7023] (#1028)
+
+### Changed
+- refactor(plugin): remove deploy_local_plugin, plugin runs from source [OMN-7101] (#1032)
+- test(integration): add DoD enforcement chain end-to-end test [OMN-7092] (#1033)
+- docs: update plugin install docs to marketplace system [OMN-7101]
+- chore: add marketplace.json for Claude Code plugin discovery [OMN-7101]
+- chore(deps): bump the actions group with 4 updates (#1024)
+
 ## v0.19.1 (2026-03-31)
 
 ### Changed
