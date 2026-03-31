@@ -183,8 +183,7 @@ def dispatch_ticket(repo, ticket_id, ticket_title, ticket_url, repo_path, epic_i
     if base_branch:
         base_branch_instruction = f"""
 STACKED BRANCH: This ticket depends on a prior ticket's branch.
-- Create your worktree from branch '{base_branch}' instead of main:
-    git worktree add <path> -b <new-branch> origin/{base_branch}
+- Use get_worktree() from _lib/pr-safety/helpers.md with base_ref='{base_branch}' instead of main.
 - Open your PR targeting '{base_branch}' instead of main:
     gh pr create --base {base_branch}
 - If '{base_branch}' does not exist on the remote, fall back to main.
