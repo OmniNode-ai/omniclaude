@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -84,7 +84,7 @@ _ACK_REPLY = (
 # =============================================================================
 
 
-class EnumTriageSeverity(str, Enum):
+class EnumTriageSeverity(StrEnum):
     """Severity classification for CodeRabbit review threads."""
 
     CRITICAL = "critical"
@@ -94,7 +94,7 @@ class EnumTriageSeverity(str, Enum):
     UNKNOWN = "unknown"
 
 
-class EnumTriageAction(str, Enum):
+class EnumTriageAction(StrEnum):
     """Action taken on a CodeRabbit review thread."""
 
     AUTO_REPLIED = "auto_replied"

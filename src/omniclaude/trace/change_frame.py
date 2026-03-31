@@ -11,7 +11,7 @@ Stage 1 of DESIGN_AGENT_TRACE_PR_DEBUGGING_SYSTEM.md
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 
-class FailureType(str, Enum):
+class FailureType(StrEnum):
     """Classification of the type of failure that occurred in a ChangeFrame."""
 
     TEST_FAIL = "test_fail"
@@ -32,7 +32,7 @@ class FailureType(str, Enum):
     RUNTIME_FAIL = "runtime_fail"
 
 
-class OutcomeStatus(str, Enum):
+class OutcomeStatus(StrEnum):
     """High-level classification of a ChangeFrame's outcome."""
 
     PASS = "pass"  # noqa: S105
@@ -40,7 +40,7 @@ class OutcomeStatus(str, Enum):
     PARTIAL = "partial"
 
 
-class AssociationMethod(str, Enum):
+class AssociationMethod(StrEnum):
     """Method used to associate a ChangeFrame with a PREnvelope."""
 
     COMMIT_ANCESTRY = "commit_ancestry"

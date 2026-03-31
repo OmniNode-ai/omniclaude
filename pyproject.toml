@@ -3,17 +3,17 @@
 
 [project]
 name = "omninode-claude"
-version = "0.19.0"
+version = "0.19.1"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
 license = { text = "MIT" }
 authors = [{ name = "OmniNode.ai", email = "contact@omninode.ai" }]
 keywords = ["omninode", "claude", "plugin", "hooks", "skills", "onex", "agents"]
 dependencies = [
-    "omnibase-core==0.35.0",
+    "omnibase-core==0.36.0",
     "omnibase-spi==0.20.3",
-    "omnibase-infra==0.30.0",
-    "omninode-intelligence==0.21.0",
+    "omnibase-infra==0.30.1",
+    "omninode-intelligence==0.21.1",
     "pydantic>=2.12.5,<3.0.0",
     "pydantic-settings>=2.6.0,<3.0.0",
     "cachetools>=5.0.0",
@@ -96,14 +96,14 @@ build-backend = "hatchling.build"
 # Override omninode-intelligence's transitive pin on omnibase-infra so our direct pin wins.
 # Required until omniintelligence publishes a release with >=0.24.1.
 override-dependencies = [
-    "omnibase-core==0.35.0",
+    "omnibase-core==0.36.0",
     "omnibase-spi==0.20.3",
-    "omnibase-infra==0.30.0",
+    "omnibase-infra==0.30.1",
 ]
 
 [tool.uv.sources]
 onex-change-control = { git = "https://github.com/OmniNode-ai/onex_change_control.git", branch = "main" }
-omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.21.0" }
+omninode-intelligence = { git = "https://github.com/OmniNode-ai/omniintelligence.git", tag = "v0.21.1" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/omniclaude"]

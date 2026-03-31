@@ -9,10 +9,10 @@ other channels scope messages to specific contexts.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumChatChannel(str, Enum):
+class EnumChatChannel(StrEnum):
     """Logical channels for agent chat message routing.
 
     Attributes:
