@@ -24,7 +24,7 @@
 # hard               — Block on failures. Pipeline dod_verify phase blocks before
 #                       PR creation. Completion guard blocks Done status. Epic audit
 #                       blocks epic completion and creates follow-up tickets.
-mode: soft
+mode: hard
 
 # Per-layer overrides (optional)
 # If set, these override the global mode for specific enforcement layers.
@@ -49,12 +49,12 @@ mode: soft
 #                     actionable, no false positives, UNKNOWN rates acceptable,
 #                     exemption volume stable or shrinking.
 layers:
-  pipeline_gate: soft              # PreToolUse hook blocking Edit/Write without active pipeline
-  pipeline_gate_contract: soft     # Pre_flight contract check — graduates with pipeline_gate
+  pipeline_gate: hard              # PreToolUse hook blocking Edit/Write without active pipeline
+  pipeline_gate_contract: hard     # Pre_flight contract check — graduates with pipeline_gate
   pipeline_dod_verify: null        # ticket-pipeline dod_verify phase
   epic_audit: null                 # epic-team DoD audit wave
   completion_guard: null           # PreToolUse hook blocking Done without DoD receipt
-  dod_sweep: soft                  # dod_sweep skill follow-up ticket creation
+  dod_sweep: hard                  # dod_sweep skill follow-up ticket creation
   # The /dod-verify skill always runs checks regardless of policy.
   # Policy only affects whether the hook blocks completion.
 

@@ -51,9 +51,9 @@ Check for consecutive no-op cycles:
   Print: "WARNING: {count + 1} consecutive autopilot cycles found zero tickets.
   Unconditional surface probes still running but ticket-gated verification has not occurred."
 
-Initialize step tracking: all 20 steps start as `not_run`, using canonical IDs:
+Initialize step tracking: all 19 steps start as `not_run`, using canonical IDs:
 ```
-A0_worktree_health, A1_merge_sweep, A1b_dirty_pr_triage, A2_deploy_local_plugin, A3_start_environment,
+A0_worktree_health, A1_merge_sweep, A1b_dirty_pr_triage, A3_start_environment,
 B1_dod_sweep, B2_aislop_sweep, B3_bus_audit, B4_gap_detect, B5_integration_sweep,
 B6_playwright_gate, B7_friction_triage, B8_duplication_sweep,
 C1_release, C2_redeploy,
@@ -423,20 +423,6 @@ for repo in repo_list:
 - On error: record `fail`. Log error, increment failure counter. Do NOT halt.
 
 Check circuit breaker.
-
----
-
-### A2: deploy-local-plugin <!-- ai-slop-ok: skill-step-heading -->
-
-Activate newly merged omniclaude skills and hooks:
-
-```
-/deploy-local-plugin
-```
-
-- On success: record `pass`, continue. New skills/hooks are now available for Phase B quality sweeps.
-- On error: record `warn`, continue. Plugin deploy failure is non-blocking — Phase B
-  can still run with the previous plugin version.
 
 ---
 
@@ -1009,7 +995,6 @@ Steps:
   A0: worktree-health      — {status}  {pruned_count pruned, dirty_count dirty, stale_count stale}
   A1: merge-sweep          — {status}
   A1b: dirty-pr-triage     — {status}  {dirty_count dirty, closed_count closed, stalled_count stalled queues}
-  A2: deploy-local-plugin  — {status}
   A3: start-environment    — {status}
   B1: dod-sweep            — {status}
   B2: aislop-sweep         — {status}

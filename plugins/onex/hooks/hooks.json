@@ -116,15 +116,6 @@
         ]
       },
       {
-        "matcher": "^(Task|Agent)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_poly_enforcer.sh"
-          }
-        ]
-      },
-      {
         "hooks": [
           {
             "type": "command",
@@ -183,6 +174,15 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_scope_gate.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_sweep_preflight.sh"
           }
         ]
       }
@@ -249,15 +249,6 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_auto_hostile_review.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-skill-delegation-enforcer.sh"
           }
         ]
       },

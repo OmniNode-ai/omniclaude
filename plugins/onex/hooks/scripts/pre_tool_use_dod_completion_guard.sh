@@ -9,9 +9,9 @@
 # checks if it's a Linear save_issue call setting status to Done/Complete.
 #
 # Policy modes (from DOD_ENFORCEMENT_MODE env var):
-#   advisory (default) — log warning, allow
+#   advisory           — log warning, allow
 #   soft               — log warning, allow, add system message
-#   hard               — block the tool call
+#   hard (default)     — block the tool call
 #
 # Exit codes:
 #   0 — allow the tool call
@@ -91,7 +91,7 @@ fi
 EVIDENCE_DIR=".evidence/$TICKET_ID"
 RECEIPT_PATH="$EVIDENCE_DIR/dod_report.json"
 
-POLICY_MODE="${DOD_ENFORCEMENT_MODE:-advisory}"
+POLICY_MODE="${DOD_ENFORCEMENT_MODE:-hard}"
 
 # Check if receipt exists and is fresh (< 30 minutes old)
 RECEIPT_CHECK=$(python3 -c "

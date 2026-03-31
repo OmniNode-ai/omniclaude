@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""NodeSkillDeployLocalPluginOrchestrator — thin orchestrator shell for the deploy-local-plugin skill.
+"""NodeSkillDelegateOrchestrator — thin orchestrator shell for the delegate skill.
 
-Capability: skill.deploy_local_plugin
+Capability: skill.delegate
 All dispatch logic lives in the shared handle_skill_requested handler.
 """
 
@@ -16,17 +16,17 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeSkillDeployLocalPluginOrchestrator(NodeOrchestrator):
-    """Orchestrator node for the deploy-local-plugin skill.
+class NodeSkillDelegateOrchestrator(NodeOrchestrator):
+    """Orchestrator node for the delegate skill.
 
-    Capability: skill.deploy_local_plugin
+    Capability: skill.delegate
 
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:
-        """Initialize the NodeSkillDeployLocalPluginOrchestrator.
+        """Initialize the NodeSkillDelegateOrchestrator.
 
         Args:
             container: ONEX container for dependency injection.
@@ -34,4 +34,4 @@ class NodeSkillDeployLocalPluginOrchestrator(NodeOrchestrator):
         super().__init__(container)
 
 
-__all__ = ["NodeSkillDeployLocalPluginOrchestrator"]
+__all__ = ["NodeSkillDelegateOrchestrator"]

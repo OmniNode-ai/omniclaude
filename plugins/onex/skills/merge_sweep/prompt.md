@@ -28,9 +28,15 @@ When `/merge-sweep [args]` is invoked:
    - `--since <date>` — default: none (ISO 8601: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ)
    - `--label <labels>` — default: all (comma-separated for any-match)
    - `--run-id <id>` — default: generate new; provided by parent pipeline for claim ownership
+   - `--resume` — default: false; resume from last checkpoint state file, skipping repos already processed
+   - `--reset-state` — default: false; delete existing state file and start a clean run
 
 3. **Generate or restore run_id**:
-   - If `--run-id` provided: use it (resume mode — no ledger for merge-sweep, but claim registry uses it)
+   - If `--resume` AND state file exists at `$ONEX_STATE_DIR/merge-sweep/sweep-state.json`:
+     - If state file `started_at` is >24h old: log WARNING, delete state file, proceed as clean start
+     - Otherwise: inherit `run_id` from state file; log resume summary (repos done/pending/failed)
+   - If `--reset-state`: delete state file at `$ONEX_STATE_DIR/merge-sweep/sweep-state.json`, proceed as clean start
+   - If `--run-id` provided: use it (claim registry uses it for ownership)
    - Otherwise: generate `<YYYYMMDD-HHMMSS>-<random6>` (e.g., `20260223-143012-a3f`)
 
 3a. **Startup resume — clean stale own claims**:
@@ -183,6 +189,19 @@ current ONEX tier (see `@_lib/tier-routing/helpers.md`):
 
 ```python
 tier = detect_onex_tier()
+```
+
+**State recovery (--resume):**
+
+If `--resume` is set and a valid (non-stale) state file was loaded in Step 3, filter out
+repos that are already marked `"done"` in the checkpoint:
+
+```python
+resume_state = loaded_state  # from Step 3; None if no valid state file
+if resume_state:
+    done_repos = [r for r, s in resume_state["repos"].items() if s["status"] == "done"]
+    repo_list = [r for r in repo_list if r not in done_repos]
+    print(f"[merge-sweep] RESUMING: skipping {len(done_repos)} done repos: {done_repos}")
 ```
 
 **Initialize per-repo result tracking before scanning:**
@@ -1446,6 +1465,23 @@ except Exception as e:
 
 Write result to: `$ONEX_STATE_DIR/skill-results/<run_id>/merge-sweep.json`
 
+### Checkpoint Finalization (OMN-7083)
+
+After writing ModelSkillResult, finalize the state file:
+
+```python
+# Update state file to mark run as completed
+state["status"] = "completed"
+state["updated_at"] = now_iso()
+# Per-repo statuses were already updated during execution (after each repo completes)
+write_state_file_atomic(state)  # write to .tmp, rename to final path
+```
+
+If `--resume` was used, include resume stats in the summary:
+```
+Resumed from checkpoint: <N> repos skipped (already done from prior run)
+```
+
 Print summary:
 
 ```
@@ -1473,7 +1509,8 @@ Merge Sweep Complete — run <run_id>
 | PR is BEHIND/UNKNOWN at scan time | Step 5b: update branch proactively, skip auto-merge (CI needs to re-run) |
 | PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge in Step 6 |
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
-| `update-branch` API fails (403/429) | Log warning, record `result: failed`, continue others |
+| `update-branch` API fails (403) | Log warning, record `result: failed`, continue others |
+| Any GitHub API call returns 429 (rate limit) | Write checkpoint before sleeping; exponential backoff (60s → 120s → 240s → 480s → 900s cap); retry once after wait; if still 429, mark repo as `"failed"` in state, write checkpoint, skip to next repo |
 | GraphQL `enqueuePullRequest` fails with unresolved conversations | Record `result: failed` with note to resolve CodeRabbit threads (OMN-5634), continue others |
 | GraphQL `enqueuePullRequest` fails for other reasons | Record `result: failed` in details, continue others |
 | `gh pr merge --auto` fails with "clean status" (non-queue repos) | Fall back to direct `gh pr merge` (no `--auto`); record `result: merged_directly` |

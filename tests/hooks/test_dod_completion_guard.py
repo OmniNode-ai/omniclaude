@@ -24,6 +24,15 @@ HOOK_SCRIPT = str(
     / "pre_tool_use_dod_completion_guard.sh"
 )
 
+DOD_ENFORCEMENT_YAML = str(
+    Path(__file__).resolve().parents[2]
+    / "plugins"
+    / "onex"
+    / "hooks"
+    / "config"
+    / "dod_enforcement.yaml"
+)
+
 
 def _run_hook(
     tool_input: dict[str, object],
@@ -199,3 +208,22 @@ class TestAllowsDoneWhenNoContractExists:
             cwd=str(tmp_path),
         )
         assert result.returncode == 0
+
+
+class TestHardModeInvariant:
+    """Lock the hard-mode default so drift requires intentional test update."""
+
+    def test_dod_enforcement_yaml_mode_is_hard(self) -> None:
+        import yaml
+
+        with open(DOD_ENFORCEMENT_YAML) as f:
+            config = yaml.safe_load(f)
+        assert config["mode"] == "hard", (
+            f"dod_enforcement.yaml global mode must be 'hard', got '{config['mode']}'"
+        )
+
+    def test_shell_script_default_is_hard(self) -> None:
+        script = Path(HOOK_SCRIPT).read_text()
+        assert 'POLICY_MODE="${DOD_ENFORCEMENT_MODE:-hard}"' in script, (
+            "pre_tool_use_dod_completion_guard.sh must default to hard mode"
+        )
