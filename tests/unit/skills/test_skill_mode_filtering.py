@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 SKILLS_DIR = Path(__file__).parents[3] / "plugins" / "onex" / "skills"
-FILTER_HELPERS = SKILLS_DIR / "deploy_local_plugin" / "_filter_helpers.sh"
+FILTER_HELPERS = SKILLS_DIR / "_lib" / "_filter_helpers.sh"
 
 
 @pytest.mark.unit
