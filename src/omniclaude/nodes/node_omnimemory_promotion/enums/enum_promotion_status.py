@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumPromotionStatus(str, Enum):
+class EnumPromotionStatus(StrEnum):
     """Outcome of an OmniMemory pattern promotion attempt.
 
     PROMOTED        — pattern was newly promoted and written to OmniMemory.

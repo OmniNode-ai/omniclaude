@@ -8,10 +8,10 @@ and controls filtering thresholds for noisy channels.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumChatSeverity(str, Enum):
+class EnumChatSeverity(StrEnum):
     """Severity levels for agent chat messages.
 
     Attributes:

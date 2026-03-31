@@ -12,7 +12,7 @@ pure delegation shell.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # any-ok: contract-driven node shell
 
 from omnibase_core.nodes.node_compute import NodeCompute
 

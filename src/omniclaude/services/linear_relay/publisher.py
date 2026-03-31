@@ -21,7 +21,7 @@ import hashlib
 import json
 import logging
 import os
-from typing import Any, Protocol
+from typing import Any, Protocol  # any-ok: external API boundary
 
 from omniclaude.services.linear_relay.models import LinearEpicClosedCommand
 

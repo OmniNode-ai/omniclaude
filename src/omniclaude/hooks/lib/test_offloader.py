@@ -25,18 +25,18 @@ import os
 import shutil
 import subprocess
 import sys
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
 
-class EnumOffloadTarget(str, Enum):
+class EnumOffloadTarget(StrEnum):
     gemini = "gemini"
     codex = "codex"
     direct = "direct"
 
 
-class EnumOffloadResult(str, Enum):
+class EnumOffloadResult(StrEnum):
     offloaded = "offloaded"
     fallback_direct = "fallback_direct"
     direct = "direct"

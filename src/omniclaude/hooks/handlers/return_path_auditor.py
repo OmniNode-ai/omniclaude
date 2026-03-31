@@ -40,7 +40,7 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any  # any-ok: external hook API boundary
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field

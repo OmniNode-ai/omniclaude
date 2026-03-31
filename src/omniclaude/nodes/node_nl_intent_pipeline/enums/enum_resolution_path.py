@@ -9,10 +9,10 @@ by OMN-2504 (Ambiguity Gate) for auditable resolution traceability.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumResolutionPath(str, Enum):
+class EnumResolutionPath(StrEnum):
     """How an ambiguity was resolved on the way to a structured Intent object.
 
     Variants:

@@ -555,7 +555,7 @@ class TestLoggerCallback:
             "agent-1": {"a": 1},
             "agent-2": {"a": 1},
         }
-        reconcile_outputs(base, outputs, logger=lambda e: log_entries.append(e))
+        reconcile_outputs(base, outputs, logger=log_entries.append)
 
         events = {e["event"] for e in log_entries}
         assert "field_classified" in events

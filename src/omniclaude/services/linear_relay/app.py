@@ -15,7 +15,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 
 from fastapi import FastAPI, HTTPException, Request
 

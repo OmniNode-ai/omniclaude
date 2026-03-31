@@ -22,14 +22,14 @@ from __future__ import annotations
 
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
 
-class EnumConstraintDomain(str, Enum):
+class EnumConstraintDomain(StrEnum):
     """Domains that constraints can apply to."""
 
     NAMING = "naming"

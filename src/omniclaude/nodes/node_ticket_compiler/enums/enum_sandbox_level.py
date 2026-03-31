@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumSandboxLevel(str, Enum):
+class EnumSandboxLevel(StrEnum):
     """Sandbox constraint levels for ticket execution.
 
     Controls what resources and permissions are available when executing

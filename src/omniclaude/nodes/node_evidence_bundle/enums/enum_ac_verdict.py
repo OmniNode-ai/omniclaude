@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumAcVerdict(str, Enum):
+class EnumAcVerdict(StrEnum):
     """Result of evaluating a single acceptance criterion.
 
     PASS    — criterion was verified and met.

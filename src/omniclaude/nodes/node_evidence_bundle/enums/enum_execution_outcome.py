@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumExecutionOutcome(str, Enum):
+class EnumExecutionOutcome(StrEnum):
     """Overall outcome of a ticket execution.
 
     SUCCESS — all acceptance criteria passed.

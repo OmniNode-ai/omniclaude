@@ -11,12 +11,12 @@ Part of OMN-6867: worktree health sweep for close-out pipeline.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class EnumWorktreeStatus(str, Enum):
+class EnumWorktreeStatus(StrEnum):
     """Classification of a worktree's health state."""
 
     SAFE_TO_DELETE = "safe_to_delete"

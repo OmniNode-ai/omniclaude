@@ -10,12 +10,12 @@ Part of OMN-6868: Agent idle shipper skill.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class EnumShipperAction(str, Enum):
+class EnumShipperAction(StrEnum):
     """Action taken by the shipper for a stalled worktree."""
 
     NO_OP = "no_op"

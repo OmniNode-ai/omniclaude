@@ -1,3 +1,16 @@
+## v0.19.1 (2026-03-31)
+
+### Changed
+- chore(deps): bump omnibase_core to 0.36.0, omnibase_infra to 0.30.1, omninode-intelligence to 0.21.1
+- ci: add onex compliance check to CI [OMN-7080] (#1023)
+- chore(validation): fix low-risk ONEX validation warnings [OMN-7082] (#1016)
+
+## v0.19.0 (2026-03-30)
+
+### Changed
+- chore(deps): bump omnibase_core to 0.35.0 (#1019)
+- chore(deps): bump all ONEX deps to release-20260330 versions (#1021)
+
 ## v0.18.0 (2026-03-28)
 
 ### Added

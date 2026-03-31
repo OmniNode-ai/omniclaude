@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-class EnumCheckType(str, Enum):
+class EnumCheckType(StrEnum):
     """Allowed mechanical check types."""
 
     COMMAND_EXIT_0 = "command_exit_0"

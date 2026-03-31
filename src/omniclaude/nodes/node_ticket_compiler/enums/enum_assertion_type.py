@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumAssertionType(str, Enum):
+class EnumAssertionType(StrEnum):
     """Types of verifiable assertions in a ticket's test contract.
 
     Each assertion type maps to a specific verification mechanism that can

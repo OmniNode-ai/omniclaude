@@ -496,7 +496,7 @@ These modules are intended for external use:
 
 All ONEX runtime state (pipelines, epics, skill results, logs, artifacts) lives under `ONEX_STATE_DIR`. This env var MUST be set — there is no default.
 
-- Configured automatically by `deploy_local_plugin` on first deploy
+- Configured automatically on first plugin install
 - Persisted in `~/.omnibase/.env`
 - Python resolver: `from plugins.onex.hooks.lib.onex_state import state_path, ensure_state_dir`
 - Shell resolver: `source onex-paths.sh` (provides `$ONEX_LOG_DIR`, `$ONEX_PIPELINES_DIR`, etc.)
@@ -705,6 +705,21 @@ Reusable methodologies and executable scripts. Referenced by agents and commands
 uv sync              # Install dependencies
 uv sync --group dev  # Include dev tools
 ```
+
+### Plugin Installation
+
+The onex plugin is installed via Claude Code's marketplace system:
+
+```bash
+# Install (or reinstall after cache wipe)
+claude plugin install onex@omninode-tools
+
+# Uninstall
+claude plugin uninstall onex@omninode-tools
+```
+
+The marketplace config lives at `plugins/.claude-plugin/marketplace.json`.
+`deploy_local_plugin` is retired — use the marketplace install command.
 
 ---
 

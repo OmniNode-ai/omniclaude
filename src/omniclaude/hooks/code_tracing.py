@@ -20,14 +20,14 @@ from __future__ import annotations
 
 import logging
 import os
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
 
-class EnumTraceStatus(str, Enum):
+class EnumTraceStatus(StrEnum):
     """Status of a code trace requirement."""
 
     PENDING = "pending"

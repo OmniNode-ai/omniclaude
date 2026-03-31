@@ -11,7 +11,7 @@ may render this into human-readable text but MUST NOT mutate any field.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
