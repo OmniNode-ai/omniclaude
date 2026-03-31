@@ -374,6 +374,25 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         fi
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
+
+    # -----------------------------------------------------------------------
+    # Intent Drift Detection (OMN-7141)
+    # -----------------------------------------------------------------------
+    # Reads stored session intent, calls detect_drift(), and emits to
+    # onex.evt.omniintelligence.intent-drift-detected.v1 via emit daemon.
+    # Non-blocking: runs in background subshell. All failures are silent.
+    # -----------------------------------------------------------------------
+    DRIFT_EMITTER="${HOOKS_LIB}/intent_drift_emitter.py"
+    if [[ -f "$DRIFT_EMITTER" ]]; then
+        (
+            "$PYTHON_CMD" "$DRIFT_EMITTER" \
+                --session-id "$SESSION_ID" \
+                --tool-name "$TOOL_NAME" \
+                ${FILE_PATH:+--file-path "$FILE_PATH"} \
+                >> "$LOG_FILE" 2>&1 || true
+        ) &
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Intent drift check started (async)" >> "$LOG_FILE"
+    fi
 fi
 
 # -----------------------------------------------------------------------
