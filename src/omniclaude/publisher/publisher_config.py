@@ -51,7 +51,7 @@ class PublisherConfig(BaseSettings):
         description="PID file path",
     )
     spool_dir: Path = Field(
-        default_factory=lambda: _lazy_spool_dir(),
+        default_factory=_lazy_spool_dir,
         description="Disk spool directory",
     )
 

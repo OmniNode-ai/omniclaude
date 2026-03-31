@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omninode-tools",
+  "version": "1.0.0",
+  "description": "OmniNode platform tools — ONEX skills, hooks, agents",
+  "owner": {
+    "name": "OmniNode",
+    "email": "dev@omninode.ai"
+  },
+  "plugins": [
+    {
+      "name": "onex",
+      "description": "ONEX architecture plugin with skills, hooks, and agents",
+      "source": "./onex",
+      "category": "development"
+    }
+  ]
+}

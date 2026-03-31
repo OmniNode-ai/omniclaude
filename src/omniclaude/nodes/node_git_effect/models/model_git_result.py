@@ -8,7 +8,7 @@ Model ownership: PRIVATE to omniclaude.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field

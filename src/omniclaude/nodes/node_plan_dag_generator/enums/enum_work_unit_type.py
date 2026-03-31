@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumWorkUnitType(str, Enum):
+class EnumWorkUnitType(StrEnum):
     """Types of work units that can appear as nodes in a Plan DAG.
 
     Each work unit type corresponds to a category of executable work

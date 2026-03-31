@@ -13,7 +13,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 
 import yaml
 

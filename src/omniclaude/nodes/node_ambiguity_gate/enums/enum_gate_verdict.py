@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumGateVerdict(str, Enum):
+class EnumGateVerdict(StrEnum):
     """Outcome of the ambiguity gate check for a single work unit.
 
     PASS  — the work unit is unambiguous; ticket compilation may proceed.

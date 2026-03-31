@@ -8,10 +8,10 @@ at the plan DAG generator, ambiguity gate, and ticket compiler boundaries.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumIntentType(str, Enum):
+class EnumIntentType(StrEnum):
     """Typed intent classifications for the NL Intent-Plan-Ticket Compiler.
 
     Variants align with the intent classes produced by the OMN-2348 Intent

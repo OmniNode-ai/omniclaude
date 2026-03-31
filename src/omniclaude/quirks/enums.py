@@ -14,10 +14,10 @@ Related:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class QuirkType(str, Enum):
+class QuirkType(StrEnum):
     """Behavioural anti-patterns detected by the Quirks Detector.
 
     Each value maps to a distinct detection heuristic or model check.
@@ -45,7 +45,7 @@ class QuirkType(str, Enum):
     """Agent references a function, class, or module that does not exist."""
 
 
-class QuirkStage(str, Enum):
+class QuirkStage(StrEnum):
     """Policy enforcement tier for a detected quirk.
 
     Stages escalate from passive observation through warning to hard blocking.

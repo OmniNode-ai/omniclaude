@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumAmbiguityType(str, Enum):
+class EnumAmbiguityType(StrEnum):
     """Typed ambiguity categories for Plan DAG nodes.
 
     Ambiguity is expected and permitted at the NL→Intent stage.  Past

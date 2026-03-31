@@ -34,7 +34,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 from uuid import UUID
 
 from omniclaude.nodes.node_agent_inbox_effect.models import (

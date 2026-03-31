@@ -8,10 +8,10 @@ consumers to filter, route, or render messages differently.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumChatMessageType(str, Enum):
+class EnumChatMessageType(StrEnum):
     """Semantic classification of agent chat messages.
 
     Attributes:

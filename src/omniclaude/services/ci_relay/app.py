@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
-from typing import Any
+from typing import Any  # any-ok: external API boundary
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

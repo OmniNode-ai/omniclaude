@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 import yaml
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_STATE_DIR = ".onex_state"
 
 
-class EnumCheckpointPhaseStatus(str, Enum):
+class EnumCheckpointPhaseStatus(StrEnum):
     """Status of a checkpoint phase."""
 
     PENDING = "pending"

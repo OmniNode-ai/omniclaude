@@ -61,7 +61,7 @@ import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast  # any-ok: external hook API boundary
 
 from omniclaude.hooks.schemas_audit import (
     AuditContextBudgetEvent,
