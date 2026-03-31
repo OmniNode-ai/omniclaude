@@ -50,6 +50,12 @@ if ! echo "$COMMAND" | grep -qEi "$SWEEP_PATTERN"; then
     exit 0
 fi
 
+# Allow gh auth repair commands through without preflight
+if echo "$COMMAND" | grep -qEi '^gh auth (login|refresh|status|setup-git)'; then
+    echo "$TOOL_INFO"
+    exit 0
+fi
+
 # --- Cache check ---
 # If cache exists and is fresh, use cached result
 mkdir -p "$CACHE_DIR"
@@ -68,9 +74,9 @@ if [[ -f "$CACHE_FILE" ]]; then
             echo "$TOOL_INFO"
             exit 0
         elif [[ "$CACHED_STATUS" == "block" ]]; then
-            CACHED_REASON=$(jq -er '.reason // "Cached pre-flight failure"' "$CACHE_FILE" 2>/dev/null)
-            echo "{\"decision\":\"block\",\"reason\":\"$CACHED_REASON\"}" >&2
-            exit 2
+            # Don't honor cached blocks — always re-check so transient
+            # failures (auth expired, rate limit) recover immediately.
+            rm -f "$CACHE_FILE"
         fi
     fi
 fi
@@ -94,6 +100,7 @@ if [[ "$GH_AUTH_OK" == "false" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Sweep preflight BLOCKED: $GH_AUTH_MSG" >> "$LOG_FILE"
     printf '{"status":"block","reason":"%s","checked_at":"%s"}\n' "$GH_AUTH_MSG" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$CACHE_FILE"
     echo "{\"decision\":\"block\",\"reason\":\"Pre-flight check failed: $GH_AUTH_MSG\"}" >&2
+    trap - EXIT  # Clear error-guard trap before intentional block
     exit 2
 fi
 
@@ -109,7 +116,10 @@ if RATE_JSON=$(gh api /rate_limit 2>/dev/null); then
     if [[ $RATE_REMAINING -ge $RATE_LIMIT_THRESHOLD ]]; then
         RATE_OK=true
     else
-        RESET_TIME=$(date -r "$RATE_RESET" +"%H:%M:%S" 2>/dev/null || echo "unknown")
+        # Cross-platform epoch-to-time: macOS uses date -r, GNU uses date -d @
+        RESET_TIME=$(date -r "$RATE_RESET" +"%H:%M:%S" 2>/dev/null \
+            || date -d "@$RATE_RESET" +"%H:%M:%S" 2>/dev/null \
+            || echo "unknown")
         RATE_MSG="GitHub API rate limit low: ${RATE_REMAINING}/${RATE_LIMIT} remaining (resets at ${RESET_TIME}). Threshold: ${RATE_LIMIT_THRESHOLD}"
     fi
 else
@@ -124,6 +134,7 @@ if [[ "$RATE_OK" == "false" ]]; then
     printf '{"status":"block","reason":"%s","rate_remaining":%d,"checked_at":"%s"}\n' \
         "$RATE_MSG" "$RATE_REMAINING" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$CACHE_FILE"
     echo "{\"decision\":\"block\",\"reason\":\"Pre-flight check failed: $RATE_MSG\"}" >&2
+    trap - EXIT  # Clear error-guard trap before intentional block
     exit 2
 fi
 
