@@ -299,6 +299,7 @@ repos:
           bash -c 'grep -rInE
           --include="*.py" --include="*.sh" --include="*.yml"
           --include="*.yaml" --include="*.toml" --include="*.md"
+          --exclude-dir=.venv --exclude-dir=node_modules
           "(192\.168\.|10\.(0|1|2)\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)"
           src/ tests/ docs/ .github/ plugins/ 2>/dev/null
           | grep -v "onex-allow-internal-ip"
