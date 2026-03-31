@@ -2435,6 +2435,195 @@ local_review. Failure is non-fatal -- the pipeline continues with an unenriched 
 - **Blocked:** Hard mode and any checks failed
 - **Failed:** Evidence runner errors out
 
+**Stable result codes:**
+- `VERIFIED_PASS` — all checks verified
+- `VERIFIED_FAIL` — one or more checks failed
+- `SKIPPED_NO_CONTRACT` — no contract file found for ticket
+- `SKIPPED_NO_DOD_EVIDENCE` — contract exists but has no dod_evidence items
+- `ERROR_RUNNER_FAILURE` — evidence runner threw an exception
+
+#### execute_dod_verify
+
+```python
+def execute_dod_verify(state):
+    """Phase 2.5: Run DoD evidence checks and enforce policy.
+
+    Returns a standard phase result dict with status, artifacts, and reason.
+    """
+    import json
+    import os
+    import sys
+    from pathlib import Path
+
+    import yaml
+
+    ticket_id = state["ticket_id"]
+    repo_path = state.get("repo_path", os.getcwd())
+
+    # --- 1. Locate ticket contract ---
+    contract_path = None
+    onex_cc_path = os.environ.get("ONEX_CC_REPO_PATH", "")
+    if onex_cc_path:
+        candidate = Path(onex_cc_path) / "contracts" / f"{ticket_id}.yaml"
+        if candidate.exists():
+            contract_path = str(candidate)
+
+    if contract_path is None:
+        candidate = Path(repo_path) / ".contracts" / f"{ticket_id}.yaml"
+        if candidate.exists():
+            contract_path = str(candidate)
+
+    if contract_path is None:
+        print(f"DoD verify: no contract found for {ticket_id} — SKIPPED_NO_CONTRACT")
+        return {
+            "status": "completed",
+            "blocking_issues": 0,
+            "nit_count": 0,
+            "artifacts": {
+                "dod_total": 0,
+                "dod_verified": 0,
+                "dod_failed": 0,
+                "dod_skipped": 0,
+                "receipt_path": "",
+                "contract_path": "",
+                "policy_mode": "advisory",
+                "result_code": "SKIPPED_NO_CONTRACT",
+            },
+            "reason": "No contract found — skipping DoD verification",
+            "block_kind": None,
+        }
+
+    # --- 2. Load contract and check for dod_evidence ---
+    with open(contract_path) as f:
+        contract = yaml.safe_load(f)
+
+    evidence_items = contract.get("dod_evidence", [])
+    if not evidence_items:
+        print(f"DoD verify: contract exists but no dod_evidence items — SKIPPED_NO_DOD_EVIDENCE")
+        return {
+            "status": "completed",
+            "blocking_issues": 0,
+            "nit_count": 0,
+            "artifacts": {
+                "dod_total": 0,
+                "dod_verified": 0,
+                "dod_failed": 0,
+                "dod_skipped": 0,
+                "receipt_path": "",
+                "contract_path": contract_path,
+                "policy_mode": "advisory",
+                "result_code": "SKIPPED_NO_DOD_EVIDENCE",
+            },
+            "reason": "Contract has no dod_evidence items — skipping",
+            "block_kind": None,
+        }
+
+    # --- 3. Run evidence checks via dod_evidence_runner.py ---
+    # Add the evidence runner to sys.path
+    runner_dir = str(
+        Path(os.environ.get("CLAUDE_PLUGIN_ROOT", "."))
+        / "plugins" / "onex" / "skills" / "_lib" / "dod-evidence-runner"
+    )
+    if runner_dir not in sys.path:
+        sys.path.insert(0, runner_dir)
+
+    try:
+        from dod_evidence_runner import run_dod_evidence, write_evidence_receipt
+
+        run_result = run_dod_evidence(evidence_items)
+        receipt_path = write_evidence_receipt(
+            ticket_id=ticket_id,
+            contract_path=contract_path,
+            run_result=run_result,
+            working_dir=repo_path,
+            emit=True,
+        )
+    except Exception as e:
+        print(f"DoD verify: evidence runner failed — ERROR_RUNNER_FAILURE: {e}")
+        return {
+            "status": "failed",
+            "blocking_issues": 0,
+            "nit_count": 0,
+            "artifacts": {
+                "dod_total": 0,
+                "dod_verified": 0,
+                "dod_failed": 0,
+                "dod_skipped": 0,
+                "receipt_path": "",
+                "contract_path": contract_path,
+                "policy_mode": "advisory",
+                "result_code": "ERROR_RUNNER_FAILURE",
+            },
+            "reason": f"Evidence runner failed: {e}",
+            "block_kind": "failed_exception",
+        }
+
+    # --- 4. Read enforcement policy from dod_enforcement.yaml ---
+    enforcement_yaml = (
+        Path(os.environ.get("CLAUDE_PLUGIN_ROOT", "."))
+        / "plugins" / "onex" / "hooks" / "config" / "dod_enforcement.yaml"
+    )
+    policy_mode = "advisory"  # default fallback
+    if enforcement_yaml.exists():
+        with open(enforcement_yaml) as f:
+            enforcement_config = yaml.safe_load(f) or {}
+        # Check layer-specific override first, then global mode
+        layers = enforcement_config.get("layers", {})
+        layer_mode = layers.get("pipeline_dod_verify")
+        if layer_mode is not None:
+            policy_mode = layer_mode
+        else:
+            policy_mode = enforcement_config.get("mode", "advisory")
+
+    # --- 5. Determine result code and status ---
+    has_failures = run_result.failed > 0
+    if not has_failures:
+        result_code = "VERIFIED_PASS"
+    else:
+        result_code = "VERIFIED_FAIL"
+
+    artifacts = {
+        "dod_total": run_result.total,
+        "dod_verified": run_result.verified,
+        "dod_failed": run_result.failed,
+        "dod_skipped": run_result.skipped,
+        "receipt_path": str(receipt_path),
+        "contract_path": contract_path,
+        "policy_mode": policy_mode,
+        "result_code": result_code,
+    }
+
+    # --- 6. Enforce policy ---
+    if policy_mode == "hard" and has_failures:
+        print(f"DoD verify: HARD mode — {run_result.failed} checks failed, blocking pipeline")
+        return {
+            "status": "blocked",
+            "blocking_issues": run_result.failed,
+            "nit_count": 0,
+            "artifacts": artifacts,
+            "reason": f"DoD verification failed: {run_result.failed}/{run_result.total} checks failed (hard mode)",
+            "block_kind": "blocked_dod_hard",
+        }
+
+    if policy_mode == "soft" and has_failures:
+        print(f"DoD verify: SOFT mode — {run_result.failed} checks failed, proceeding with warning")
+
+    if policy_mode == "advisory":
+        print(f"DoD verify: ADVISORY mode — logging results only")
+
+    print(f"DoD verify: {result_code} — {run_result.verified}/{run_result.total} verified, "
+          f"{run_result.failed} failed, {run_result.skipped} skipped (policy={policy_mode})")
+
+    return {
+        "status": "completed",
+        "blocking_issues": 0,
+        "nit_count": run_result.failed if policy_mode == "soft" else 0,
+        "artifacts": artifacts,
+        "reason": None,
+        "block_kind": None,
+    }
+```
+
 ---
 
 ### Phase 2.75: TEST COVERAGE GATE (OMN-6730) <!-- ai-slop-ok: skill-step-heading -->
