@@ -1,0 +1,132 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX Node Contract
+# Node: NodeDelegationOrchestrator
+#
+# Delegation orchestrator — classifies incoming prompts, routes to the
+# appropriate LLM backend (local vLLM, GLM, Gemini CLI, Codex CLI),
+# runs quality gate, emits delegation result. Fully async via Kafka.
+#
+# Terminal event semantics: exactly one terminal event (completed OR failed)
+# per correlation_id. Retries fork a new correlation_id.
+
+name: node_delegation_orchestrator
+contract_name: node_delegation_orchestrator
+node_name: node_delegation_orchestrator
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: ORCHESTRATOR_GENERIC
+
+description: >
+  Delegation orchestrator. Classifies incoming prompts, routes to the
+  appropriate LLM backend (local vLLM, GLM/Z.AI, Gemini CLI, Codex CLI),
+  runs quality gate with failure class preservation, emits delegation
+  result events. Fully async via Kafka. correlation_id-keyed, replay-safe.
+
+# Event bus topics
+event_bus:
+  event_bus_enabled: true
+  subscribe_topics:
+    - "onex.cmd.omniclaude.delegate-task.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.delegation-completed.v1"
+    - "onex.evt.omniclaude.delegation-failed.v1"
+    - "onex.evt.omniclaude.task-delegated.v1"
+
+consumed_events:
+  - topic: "onex.cmd.omniclaude.delegate-task.v1"
+    event_type: "DelegateTaskCommand"
+    message_category: "COMMAND"
+    description: "Inbound delegation request from user-prompt-submit hook"
+
+published_events:
+  - topic: "onex.evt.omniclaude.delegation-completed.v1"
+    event_type: "DelegationCompletedEvent"
+    description: "Delegation succeeded — includes response, model, metrics, quality gate result"
+  - topic: "onex.evt.omniclaude.delegation-failed.v1"
+    event_type: "DelegationFailedEvent"
+    description: "Delegation failed — includes failure class, model attempted, reason"
+  - topic: "onex.evt.omniclaude.task-delegated.v1"
+    event_type: "TaskDelegatedEvent"
+    description: "Backward-compatible delegation event for omnidash delegation dashboard"
+
+# Handler routing
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "delegation.dispatch"
+      handler:
+        name: "HandlerDelegationDispatch"
+        module: "omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_dispatch"
+      description: "Classify prompt, select backend, route to LLM effect node"
+    - operation: "delegation.result"
+      handler:
+        name: "HandlerDelegationResult"
+        module: "omniclaude.nodes.node_delegation_orchestrator.handlers.handler_delegation_result"
+      description: "Receive LLM response, run quality gate, emit terminal event"
+  execution_mode: "single"
+  max_timeout_seconds: 120
+
+# Orchestrator lifecycle states (correlation_id-keyed, replay-safe)
+lifecycle:
+  states:
+    - received
+    - classified
+    - routed
+    - inference_requested
+    - inference_returned
+    - quality_evaluated
+    - completed
+    - failed
+  terminal_states:
+    - completed
+    - failed
+  semantics: >
+    Exactly one terminal event (completed OR failed) per correlation_id.
+    Retries fork a new correlation_id. Terminal transitions are idempotent.
+
+# Downstream effect nodes this orchestrator coordinates
+downstream_effects:
+  - node: NodeLlmInferenceEffect
+    capability: inference.openai_compatible
+    description: "Local vLLM (Qwen3-Coder, Qwen3-14B) and cloud OpenAI-compatible (GLM/Z.AI)"
+  - node: NodeLlmInferenceEffect
+    capability: inference.gemini_cli
+    description: "Gemini CLI subprocess dispatch"
+  - node: NodeLlmInferenceEffect
+    capability: inference.codex_cli
+    description: "Codex CLI subprocess dispatch"
+
+# Dependencies
+dependencies:
+  - name: task_classifier
+    type: "module"
+    class_name: "TaskClassifier"
+    module: "omniclaude.lib.task_classifier"
+    description: "Keyword-based intent classifier for delegation eligibility"
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-7108
+  epic: OMN-7103
+  maturity: alpha
+  tags:
+    - orchestrator
+    - delegation
+    - multi-model
+    - llm
+    - gemini
+    - codex
+    - glm

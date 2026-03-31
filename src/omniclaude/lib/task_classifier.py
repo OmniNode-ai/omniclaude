@@ -459,6 +459,39 @@ class TaskClassifier:
         """
         prompt_lower = user_prompt.lower()
 
+        # Compound keyword overrides — checked BEFORE single-keyword matching.
+        # Resolves ambiguity where "write tests" matches both IMPLEMENT ("write")
+        # and TEST ("test"). Compound patterns have priority.
+        _COMPOUND_OVERRIDES: list[tuple[str, TaskIntent]] = [
+            ("write test", TaskIntent.TEST),
+            ("write tests", TaskIntent.TEST),
+            ("write unit test", TaskIntent.TEST),
+            ("create test", TaskIntent.TEST),
+            ("create tests", TaskIntent.TEST),
+            ("generate test", TaskIntent.TEST),
+            ("add test", TaskIntent.TEST),
+            ("write doc", TaskIntent.DOCUMENT),
+            ("write documentation", TaskIntent.DOCUMENT),
+            ("generate doc", TaskIntent.DOCUMENT),
+            ("create doc", TaskIntent.DOCUMENT),
+        ]
+        for compound, override_intent in _COMPOUND_OVERRIDES:
+            if compound in prompt_lower:
+                # Compound match = high confidence, skip single-keyword scoring
+                keywords = [
+                    kw
+                    for kw in self.INTENT_KEYWORDS.get(override_intent, [])
+                    if self._keyword_in_text(kw, prompt_lower)
+                ]
+                return TaskContext(
+                    primary_intent=override_intent,
+                    confidence=0.7,
+                    keywords=keywords,
+                    entities=[],
+                    mentioned_services=[],
+                    mentioned_node_types=[],
+                )
+
         # Score each intent based on keyword matches
         intent_scores: dict[TaskIntent, int] = {}
         for intent, intent_keywords in self.INTENT_KEYWORDS.items():
