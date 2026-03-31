@@ -437,7 +437,7 @@ class TopicBase(StrEnum):
     # Thin /delegate skill publishes to this topic; consumed by
     # node_delegation_orchestrator on the omnibase_infra runtime.
     # ==========================================================================
-    DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
+    DELEGATION_REQUEST = "onex.cmd.omniclaude.delegation-request.v1"
     """Command to request task delegation through the node-based pipeline."""
 
     # ==========================================================================

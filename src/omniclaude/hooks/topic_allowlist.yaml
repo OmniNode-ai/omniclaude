@@ -608,6 +608,21 @@ allowed_extras:
     ticket: OMN-6857
 
   # ---------------------------------------------------------------------------
+  # Delegation pipeline topics (OMN-7040)
+  # Thin /delegate skill publishes delegation requests to be consumed by
+  # node_delegation_orchestrator on the omnibase_infra runtime.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.cmd.omniclaude.delegation-request.v1"
+    lifecycle: internal_control
+    reason: >
+      Delegation request command published by the /delegate skill to trigger
+      task delegation through the node-based pipeline. Consumed by
+      node_delegation_orchestrator in omnibase_infra.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7040
+
+  # ---------------------------------------------------------------------------
   # Team lifecycle topics (OMN-7026)
   # Unified event schema for all dispatch surfaces. Consumed by omnidash
   # team timeline projections.
