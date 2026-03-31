@@ -17,7 +17,6 @@ import subprocess
 import time
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -105,13 +104,20 @@ class ModelTaskContract(BaseModel):
 _CHECK_TIMEOUT_SECONDS = 120
 
 
+class EnumCheckStatus(str, Enum):
+    """Allowed statuses for a mechanical check result."""
+
+    PASS = "PASS"  # noqa: S105
+    FAIL = "FAIL"
+
+
 class ModelCheckResult(BaseModel):
     """Result of a single mechanical check execution."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     criterion: str
-    status: Literal["PASS", "FAIL"] = Field(description="PASS or FAIL")
+    status: EnumCheckStatus = Field(description="PASS or FAIL")
     exit_code: int | None = Field(
         default=None, description="Process exit code, None on exception"
     )
@@ -176,7 +182,9 @@ def run_self_check(
                 check=False,
             )
             elapsed = time.monotonic() - start
-            status = "PASS" if proc.returncode == 0 else "FAIL"
+            status = (
+                EnumCheckStatus.PASS if proc.returncode == 0 else EnumCheckStatus.FAIL
+            )
             results.append(
                 ModelCheckResult(
                     criterion=check.criterion,
@@ -189,7 +197,7 @@ def run_self_check(
             )
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - start
-            status = "FAIL"
+            status = EnumCheckStatus.FAIL
             results.append(
                 ModelCheckResult(
                     criterion=check.criterion,
@@ -202,7 +210,7 @@ def run_self_check(
             )
         except OSError as e:
             elapsed = time.monotonic() - start
-            status = "FAIL"
+            status = EnumCheckStatus.FAIL
             results.append(
                 ModelCheckResult(
                     criterion=check.criterion,
@@ -214,7 +222,7 @@ def run_self_check(
                 )
             )
 
-        if status == "FAIL":
+        if status == EnumCheckStatus.FAIL:
             all_passed = False
 
     total_duration = time.monotonic() - start_total
