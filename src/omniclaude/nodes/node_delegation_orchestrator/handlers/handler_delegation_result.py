@@ -24,6 +24,12 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 
+from pydantic import BaseModel, ConfigDict, Field
+
+from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_result import (
+    ModelDelegationOutcome,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,79 +116,85 @@ def run_quality_gate(
     return EnumQualityGateResult.PASSED, ""
 
 
+class ModelLlmResponsePayload(BaseModel):
+    """Inbound LLM response from an effect node — input to the result handler."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+
+    generated_text: str = Field(default="", description="LLM-generated text")
+    model_used: str = Field(
+        default="unknown", description="Model that produced the response"
+    )
+    intent: str = Field(default="", description="Classified task intent")
+    correlation_id: str = Field(default="", description="Correlation ID")
+    latency_ms: float = Field(default=0.0, ge=0.0, description="E2E latency in ms")
+    confidence: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Classification confidence"
+    )
+    estimated_savings_usd: float = Field(
+        default=0.0, ge=0.0, description="Cost savings estimate"
+    )
+
+
 def handle_delegation_result(
-    payload: dict[str, str | int | float | bool | None],
-) -> dict[str, str | int | float | bool | None]:
+    payload: ModelLlmResponsePayload,
+) -> ModelDelegationOutcome:
     """Process LLM response, run quality gate, build terminal event.
 
     Args:
-        payload: LLM response payload with 'generated_text', 'model_used',
-            'intent', 'correlation_id', 'latency_ms', 'confidence',
-            'estimated_savings_usd'.
+        payload: Typed LLM response payload from the effect node.
 
     Returns:
-        Dict with terminal event data: delegation_success, quality_gate_result,
-        quality_gate_reason, model, intent, latency, savings, response.
+        Typed delegation outcome with quality gate result and metrics.
     """
-    generated_text = payload.get("generated_text") or ""
-    intent = payload.get("intent", "")
-    correlation_id = payload.get("correlation_id", "")
-    model_used = payload.get("model_used", "unknown")
-    latency_ms = payload.get("latency_ms", 0)
-    confidence = payload.get("confidence", 0.0)
-    savings = payload.get("estimated_savings_usd", 0.0)
-
     # Strip reasoning model prefixes (Qwen3 <think>, GLM reasoning_content)
-    clean_text = generated_text
+    clean_text = payload.generated_text
     if "<think>" in clean_text:
-        # Strip Qwen3 chain-of-thought
         think_end = clean_text.rfind("</think>")
         if think_end != -1:
             clean_text = clean_text[think_end + 8 :].strip()
 
     # Run quality gate
-    gate_result, gate_reason = run_quality_gate(clean_text, intent)
+    gate_result, gate_reason = run_quality_gate(clean_text, payload.intent)
+    success = gate_result == EnumQualityGateResult.PASSED
 
-    result = {
-        "correlation_id": correlation_id,
-        "delegation_success": gate_result == EnumQualityGateResult.PASSED,
-        "quality_gate_result": gate_result.value,
-        "quality_gate_reason": gate_reason,
-        "model_used": model_used,
-        "intent": intent,
-        "confidence": confidence,
-        "latency_ms": latency_ms,
-        "estimated_savings_usd": savings
-        if gate_result == EnumQualityGateResult.PASSED
-        else 0.0,
-        "response_length": len(clean_text),
-    }
-
-    if gate_result == EnumQualityGateResult.PASSED:
-        result["response"] = clean_text
+    if success:
         logger.info(
             "Delegation completed: model=%s intent=%s latency=%dms savings=$%.4f (correlation_id=%s)",
-            model_used,
-            intent,
-            latency_ms,
-            savings,
-            correlation_id,
+            payload.model_used,
+            payload.intent,
+            payload.latency_ms,
+            payload.estimated_savings_usd,
+            payload.correlation_id,
         )
     else:
         logger.warning(
             "Delegation failed quality gate: model=%s intent=%s result=%s reason=%s (correlation_id=%s)",
-            model_used,
-            intent,
+            payload.model_used,
+            payload.intent,
             gate_result.value,
             gate_reason,
-            correlation_id,
+            payload.correlation_id,
         )
 
-    return result
+    return ModelDelegationOutcome(
+        correlation_id=payload.correlation_id,
+        delegation_success=success,
+        quality_gate_result=gate_result.value,
+        quality_gate_reason=gate_reason,
+        model_used=payload.model_used,
+        intent=payload.intent,
+        confidence=payload.confidence,
+        latency_ms=payload.latency_ms,
+        estimated_savings_usd=payload.estimated_savings_usd if success else 0.0,
+        response_length=len(clean_text),
+        response=clean_text if success else None,
+    )
 
 
 __all__ = [
     "EnumQualityGateResult",
+    "ModelLlmResponsePayload",
     "handle_delegation_result",
     "run_quality_gate",
 ]

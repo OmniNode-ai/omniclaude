@@ -26,6 +26,12 @@ import shutil
 from dataclasses import dataclass
 
 from omniclaude.lib.task_classifier import TaskClassifier
+from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+    ModelDelegationCommand,
+)
+from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_result import (
+    ModelDelegationDispatchResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,52 +108,47 @@ def select_backend() -> DelegationRoute | None:
 
 
 def handle_delegation_dispatch(
-    payload: dict[str, str | int | float | bool | None],
-) -> dict[str, str | int | float | bool | None]:
+    command: ModelDelegationCommand,
+) -> ModelDelegationDispatchResult:
     """Classify prompt, select backend, return routing decision.
 
     Args:
-        payload: Command event payload with 'prompt', 'correlation_id', 'session_id'.
+        command: Typed delegation command from the hook or Kafka consumer.
 
     Returns:
-        Dict with routing decision: backend, model, intent, confidence,
-        or failure reason.
+        Typed dispatch result with routing decision or failure reason.
     """
-    prompt = payload.get("prompt", "")
-    correlation_id = payload.get("correlation_id", "")
-
-    if not prompt:
-        return {
-            "routed": False,
-            "reason": "empty_prompt",
-            "correlation_id": correlation_id,
-        }
+    if not command.prompt:
+        return ModelDelegationDispatchResult(
+            routed=False,
+            reason="empty_prompt",
+            correlation_id=command.correlation_id,
+        )
 
     # Classify
     classifier = TaskClassifier()
-    score = classifier.is_delegatable(prompt)
+    score = classifier.is_delegatable(command.prompt)
 
     if not score.delegatable:
-        return {
-            "routed": False,
-            "reason": f"not_delegatable: {score.reasons[0] if score.reasons else 'unknown'}",
-            "intent": score.primary_intent.value
-            if hasattr(score, "primary_intent")
-            else "unknown",
-            "confidence": score.confidence,
-            "correlation_id": correlation_id,
-        }
+        reason = score.reasons[0] if score.reasons else "unknown"
+        return ModelDelegationDispatchResult(
+            routed=False,
+            reason=f"not_delegatable: {reason}",
+            intent=score.delegate_to_model,
+            confidence=score.confidence,
+            correlation_id=command.correlation_id,
+        )
 
     # Select backend
     route = select_backend()
     if route is None:
-        return {
-            "routed": False,
-            "reason": "no_backend_available",
-            "intent": score.delegate_to_model,
-            "confidence": score.confidence,
-            "correlation_id": correlation_id,
-        }
+        return ModelDelegationDispatchResult(
+            routed=False,
+            reason="no_backend_available",
+            intent=score.delegate_to_model,
+            confidence=score.confidence,
+            correlation_id=command.correlation_id,
+        )
 
     logger.info(
         "Delegation dispatch: intent=%s confidence=%.2f backend=%s model=%s (correlation_id=%s)",
@@ -155,23 +156,23 @@ def handle_delegation_dispatch(
         score.confidence,
         route.backend,
         route.model,
-        correlation_id,
+        command.correlation_id,
     )
 
-    return {
-        "routed": True,
-        "backend": route.backend,
-        "base_url": route.base_url,
-        "model": route.model,
-        "api_key": route.api_key,
-        "timeout": route.timeout,
-        "intent": score.delegate_to_model,
-        "confidence": score.confidence,
-        "estimated_savings_usd": score.estimated_savings_usd,
-        "prompt": prompt,
-        "correlation_id": correlation_id,
-        "session_id": payload.get("session_id", ""),
-    }
+    return ModelDelegationDispatchResult(
+        routed=True,
+        backend=route.backend,
+        base_url=route.base_url,
+        model=route.model,
+        api_key=route.api_key,
+        timeout=route.timeout,
+        intent=score.delegate_to_model,
+        confidence=score.confidence,
+        estimated_savings_usd=score.estimated_savings_usd,
+        prompt=command.prompt,
+        correlation_id=command.correlation_id,
+        session_id=command.session_id,
+    )
 
 
 __all__ = [
