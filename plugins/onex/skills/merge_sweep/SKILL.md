@@ -1,7 +1,7 @@
 ---
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
 mode: full
-version: 3.4.0
+version: 3.5.0
 level: advanced
 debug: false
 category: workflow
@@ -57,6 +57,12 @@ args:
   - name: --label
     description: "Filter PRs that have this GitHub label. Use comma-separated for multiple (any match). Default: all labels"
     required: false
+  - name: --resume
+    description: "Resume from last checkpoint state file. Skips repos/PRs already processed in the prior run."
+    required: false
+  - name: --reset-state
+    description: "Delete existing state file and start a clean run (useful after manual intervention)"
+    required: false
   - name: --run-id
     description: "Pipeline run ID for claim registry ownership. Generated if not provided."
     required: false
@@ -108,6 +114,20 @@ plugins/onex/skills/merge_sweep/run.sh --repos omniclaude,omnibase_core
 
 # Skip polish (fast, merge-only sweep)
 plugins/onex/skills/merge_sweep/run.sh --skip-polish
+
+# Resume interrupted sweep (picks up from last checkpoint)
+plugins/onex/skills/merge_sweep/run.sh --resume
+```
+
+**Headless resume pattern**: When a headless sweep is interrupted (usage limit, rate limit,
+process kill), the next cron invocation should use `--resume` to continue from the checkpoint.
+Example cron-closeout.sh integration:
+
+```bash
+# First attempt: clean sweep
+claude -p "/merge-sweep" --allowedTools "$TOOLS" || \
+# On failure: resume from checkpoint
+claude -p "/merge-sweep --resume" --allowedTools "$TOOLS"
 ```
 
 **Minimum tool allowlist for headless merge-sweep:**
@@ -212,6 +232,8 @@ Designed as the daily close-out command — one sweep drains both the merge queu
 /merge-sweep --label ready-for-merge,approved      # PRs with either label
 /merge-sweep --since 2026-02-20 --label ready-for-merge  # Combine filters
 /merge-sweep --max-parallel-polish 1               # Throttle pr-polish (lower resource use)
+/merge-sweep --resume                              # Resume interrupted sweep from checkpoint
+/merge-sweep --reset-state                         # Clear stale state and start fresh
 ```
 
 ## PR Classification Predicates
@@ -368,18 +390,169 @@ fi
 | `--max-parallel-prs` | 5 | Concurrent auto-merge enable operations |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel |
 | `--max-parallel-polish` | 2 | Concurrent pr-polish agents (resource-intensive) |
+| `--resume` | false | Resume from last checkpoint; skip already-processed repos/PRs |
+| `--reset-state` | false | Delete existing state file and start clean |
 | `--skip-polish` | false | Skip Track B entirely |
 | `--polish-clean-runs` | 2 | Clean local-review passes required during pr-polish |
 | `--authors` | all | Limit to PRs by these GitHub usernames (comma-separated) |
 | `--since` | — | Filter PRs updated after this date (ISO 8601). Skips ancient PRs. |
 | `--label` | all | Filter PRs with this label. Comma-separated = any match. |
 
+## State Recovery & Checkpoint Protocol (OMN-7083)
+
+merge-sweep writes per-repo progress to a state file after each repo completes. On re-invocation
+with `--resume`, it reads the state file and skips already-processed repos/PRs. This prevents
+lost progress when sweeps are interrupted by usage limits, rate limits, or context exhaustion.
+
+### State File
+
+Path: `$ONEX_STATE_DIR/merge-sweep/sweep-state.json`
+
+```json
+{
+  "run_id": "20260331-084500-a3f",
+  "started_at": "2026-03-31T08:45:00Z",
+  "updated_at": "2026-03-31T09:12:33Z",
+  "status": "in_progress",
+  "repos": {
+    "OmniNode-ai/omniclaude": {
+      "status": "done",
+      "prs_auto_merged": 3,
+      "prs_polished": 1,
+      "prs_branch_updated": 1,
+      "prs_blocked": 0,
+      "prs_failed": 0,
+      "completed_at": "2026-03-31T08:52:11Z"
+    },
+    "OmniNode-ai/omnibase_core": {
+      "status": "in_progress",
+      "prs_auto_merged": 1,
+      "prs_polished": 0,
+      "prs_branch_updated": 0,
+      "prs_blocked": 0,
+      "prs_failed": 0,
+      "completed_at": null
+    },
+    "OmniNode-ai/omnibase_infra": {
+      "status": "pending",
+      "prs_auto_merged": 0,
+      "prs_polished": 0,
+      "prs_branch_updated": 0,
+      "prs_blocked": 0,
+      "prs_failed": 0,
+      "completed_at": null
+    }
+  },
+  "backoff": {
+    "consecutive_rate_limits": 0,
+    "current_wait_seconds": 0,
+    "last_rate_limit_at": null
+  },
+  "filters_snapshot": {
+    "since": "2026-03-20",
+    "labels": [],
+    "authors": [],
+    "repos_filter": []
+  }
+}
+```
+
+### Checkpoint Write Protocol
+
+After completing ALL tracks (A-update, A, A-resolve, B) for a single repo:
+
+1. Update `repos[repo].status` to `"done"` and set `completed_at`
+2. Increment per-repo counters from the ModelSkillResult details for that repo
+3. Update `updated_at` to current timestamp
+4. Write the full state file atomically (write to `.tmp`, rename to final path)
+
+If a repo fails mid-processing (rate limit, API error, etc.):
+
+1. Set `repos[repo].status` to `"failed"` with partial counters
+2. Write state file
+3. Continue to next repo (existing partial-failure behavior)
+
+### Resume Protocol (`--resume`)
+
+On invocation with `--resume`:
+
+1. Read `$ONEX_STATE_DIR/merge-sweep/sweep-state.json`
+2. If file does not exist: proceed as normal (clean start), log info
+3. If file exists:
+   a. Validate `filters_snapshot` matches current invocation filters. If mismatch:
+      log WARNING with the diff and proceed with current filters (the user may have
+      intentionally changed filters). Do NOT abort.
+   b. Skip repos where `repos[repo].status == "done"`
+   c. Re-scan repos where status is `"in_progress"`, `"failed"`, or `"pending"`
+   d. Inherit `run_id` from state file (ensures claim registry continuity)
+   e. Inherit `backoff` state (resumes exponential backoff position)
+4. Log resume summary:
+   ```
+   [merge-sweep] RESUMING run <run_id> from checkpoint
+     Repos done (skipping):    5
+     Repos pending/failed:     6 (will process)
+     Backoff position:         0 consecutive rate limits
+   ```
+
+### Reset (`--reset-state`)
+
+Delete the state file and start a clean run:
+```bash
+rm -f "$ONEX_STATE_DIR/merge-sweep/sweep-state.json"
+```
+Log: `[merge-sweep] State file cleared. Starting clean run.`
+
+### Staleness Guard
+
+If the state file's `started_at` is older than 24 hours, treat it as stale:
+- Log WARNING: `State file is >24h old (started: <timestamp>). Starting fresh run.`
+- Delete the state file and proceed as clean start
+- Rationale: PR state changes rapidly; a day-old checkpoint is unreliable
+
+### Exponential Backoff on Rate Limits
+
+When a GitHub API call returns HTTP 429 or the `gh` CLI reports "rate limit exceeded":
+
+```python
+def handle_rate_limit(backoff_state: dict) -> int:
+    """Returns seconds to wait before retry."""
+    BASE_WAIT = 60
+    MAX_WAIT = 900  # 15 minutes
+    backoff_state["consecutive_rate_limits"] += 1
+    backoff_state["last_rate_limit_at"] = now_iso()
+    wait = min(BASE_WAIT * (2 ** (backoff_state["consecutive_rate_limits"] - 1)), MAX_WAIT)
+    backoff_state["current_wait_seconds"] = wait
+    return wait
+
+def reset_backoff(backoff_state: dict):
+    """Call after any successful API call."""
+    backoff_state["consecutive_rate_limits"] = 0
+    backoff_state["current_wait_seconds"] = 0
+```
+
+Backoff progression: 60s → 120s → 240s → 480s → 900s (cap).
+
+After waiting, retry the failed operation once. If it fails again, write checkpoint and
+skip to next repo. The next `--resume` invocation picks up where this one stopped.
+
+**Integration with checkpoint**: Before sleeping for backoff, write the current state file.
+This ensures that if the process is killed during the wait, progress is preserved.
+
 ## Execution Algorithm
 
 ```
+0. STATE RECOVERY:
+   IF --reset-state: delete state file, proceed to step 1
+   IF --resume AND state file exists AND state file < 24h old:
+     Load state file → resume_state
+     Skip repos where resume_state.repos[repo].status == "done"
+     Inherit run_id and backoff from resume_state
+     Log resume summary (repos done / pending / failed)
+   ELSE: initialize empty state with new run_id, write initial state file
+
 1. VALIDATE: parse and validate --since date if provided
 
-2. SCAN (parallel, up to --max-parallel-repos):
+2. SCAN (parallel, up to --max-parallel-repos; SKIP repos marked "done" in resume_state):
    Initialize: repo_scan_results = {repo: None for repo in repo_list}
    For each repo:
      gh pr list --repo <repo> --state open --json \
@@ -480,11 +653,32 @@ fi
                - SendMessage(to='team-lead') with polish result")
      release claim
 
-8. COLLECT results
+8. CHECKPOINT per repo: After all tracks complete for a repo, write checkpoint:
+   state.repos[repo].status = "done"
+   state.repos[repo].completed_at = now_iso()
+   Increment per-repo counters from track results
+   Write state file atomically (tmp + rename)
 
-9. SUMMARY: Post LOW_RISK informational notification to Slack (best-effort, no polling)
+   ON RATE LIMIT at any API call (Steps 5b, 5c, 6, 7):
+     wait_seconds = handle_rate_limit(state.backoff)
+     Write checkpoint BEFORE sleeping (preserve progress if killed)
+     Sleep wait_seconds
+     Retry once; if still rate-limited: mark repo as "failed", write checkpoint, skip to next repo
+     On success: reset_backoff(state.backoff)
 
-10. EMIT ModelSkillResult
+9. COLLECT results (merge checkpoint data with in-memory results for ModelSkillResult)
+
+10. SUMMARY: Post LOW_RISK informational notification to Slack (best-effort, no polling)
+    Include resume stats if this was a --resume run:
+    ```
+    Resumed from checkpoint: <N> repos skipped (already done)
+    ```
+
+11. EMIT ModelSkillResult
+
+12. FINALIZE STATE: Set state.status = "completed", write final state file.
+    State file persists after completion for auditability. Cleared by --reset-state
+    or automatically by the staleness guard on the next run (>24h).
 ```
 
 ## --since Date Filter
@@ -646,7 +840,9 @@ Track B `result` values: `polished_and_queued` | `polished_partial` | `blocked` 
 | PR `mergeStateStatus` BEHIND/UNKNOWN (scan) | Step 5b: update branch proactively; record `branch_updated`; CI re-runs; next sweep merges |
 | PR becomes CLEAN between scan and Step 5b | Promote to `candidates[]` for normal auto-merge |
 | PR is BEHIND but not rebaseable | Skip with warning; may need Track B or manual resolution |
-| `update-branch` API fails (403/429/422) | Log warning, record `result: failed`, continue others |
+| `update-branch` API fails (403/422) | Log warning, record `result: failed`, continue others |
+| `update-branch` API returns 429 (rate limit) | Trigger exponential backoff; write checkpoint before sleeping; retry once after wait; if still 429, mark repo failed and skip |
+| Any `gh` API call returns rate limit error | Same backoff protocol: checkpoint → sleep → retry once → skip on second failure |
 | `gh pr list` fails for a repo | Log warning, skip that repo, continue others |
 | Thread resolution GraphQL query fails | Log warning, record `result: failed` for that PR, continue others |
 | Thread reply mutation fails | Log warning, still attempt to resolve the thread (resolution is priority) |
@@ -688,6 +884,13 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.5.0** (OMN-7083): State recovery with per-repo checkpointing. Add `--resume` flag to
+  continue interrupted sweeps from last checkpoint. Add `--reset-state` to clear stale state.
+  State file at `$ONEX_STATE_DIR/merge-sweep/sweep-state.json` tracks per-repo completion
+  status, counters, and backoff position. Exponential backoff on rate limits (60s base, 900s
+  cap) with checkpoint-before-sleep to preserve progress if killed during wait. 24-hour
+  staleness guard auto-clears old state files. Headless resume pattern documented for
+  cron-closeout.sh integration. Fixes interrupted 11-repo sweeps losing all progress.
 - **v3.4.0** (OMN-6253): Two-layer PR branch name defense. Dispatcher now fetches `headRefName`
   from `gh pr view` at dispatch time instead of trusting scan-time data. pr-polish agent
   independently verifies it is on the correct branch as Step 0 before any work begins. Post-push
