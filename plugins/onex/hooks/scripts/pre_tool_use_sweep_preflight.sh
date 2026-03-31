@@ -54,7 +54,13 @@ fi
 # If cache exists and is fresh, use cached result
 mkdir -p "$CACHE_DIR"
 if [[ -f "$CACHE_FILE" ]]; then
-    FILE_MTIME=$(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
+    # Cross-platform mtime: Linux uses stat -c %Y, macOS uses stat -f %m
+    FILE_MTIME=0
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        FILE_MTIME=$(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+    else
+        FILE_MTIME=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
+    fi
     CACHE_AGE=$(( $(date +%s) - FILE_MTIME ))
     if [[ $CACHE_AGE -lt $CACHE_TTL_SECONDS ]]; then
         CACHED_STATUS=$(jq -er '.status // empty' "$CACHE_FILE" 2>/dev/null) || true
