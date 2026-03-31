@@ -457,6 +457,19 @@ class TopicBase(StrEnum):
     TEAM_TASK_COMPLETED = "onex.evt.omniclaude.team-task-completed.v1"
     """Emitted when a task reaches a terminal state with a verification verdict."""
 
+    # ==========================================================================
+    # Delegation pipeline topics (OMN-7103)
+    # Node-based delegation orchestrator command/event bus topics.
+    # ==========================================================================
+    DELEGATE_TASK = "onex.cmd.omniclaude.delegate-task.v1"
+    """Command to request delegation of a task to a local LLM endpoint."""
+
+    DELEGATION_COMPLETED = "onex.evt.omniclaude.delegation-completed.v1"
+    """Emitted when a delegation pipeline run completes successfully."""
+
+    DELEGATION_FAILED = "onex.evt.omniclaude.delegation-failed.v1"
+    """Emitted when a delegation pipeline run fails at any stage."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
