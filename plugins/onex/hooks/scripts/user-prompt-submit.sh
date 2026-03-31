@@ -555,36 +555,29 @@ if [[ -n "$AGENTIC_WORK_PRODUCT" ]]; then
 fi
 
 # -----------------------------
-# Local Model Delegation Dispatch (OMN-2271)
+# Local Model Delegation Dispatch (OMN-2271, OMN-7103)
 # -----------------------------
-# Delegation runs AFTER routing + injection + advisory because:
-# 1. Routing provides agent context that shapes the delegation decision
-# 2. If delegation succeeds, we short-circuit all final assembly
-# 3. Reordering would bypass agent context that local models need
+# Two dispatch paths:
+# 1. SYNC (fast local LLMs <3s): daemon socket → immediate response → inject
+# 2. ASYNC (node-based via Kafka): classify → emit command → node handles → collect next prompt
 #
-# When ENABLE_LOCAL_INFERENCE_PIPELINE=true AND ENABLE_LOCAL_DELEGATION=true,
-# attempt to delegate to a local model via TaskClassifier.is_delegatable().
-# Conservative: any error or failed gate falls through to the normal Claude path.
-# Runs in the sync path (before final context assembly) — local_delegation_handler.py
-# exits 0 on all failures so this block never blocks the hook.
+# The sync path is kept for backward compat and fast local models.
+# The Kafka command is ALWAYS emitted when delegatable (for dashboard/metrics),
+# but the sync path provides the immediate response when available.
 DELEGATION_RESULT=""
 DELEGATION_ACTIVE="false"
-# Delegation activates when at least one local LLM endpoint is configured.
-# This follows the connection-config-inference pattern (OMN-5510): no separate
-# boolean flags — if LLM_CODER_URL or LLM_DEEPSEEK_R1_URL is set, delegation
-# can work.  ENABLE_LOCAL_DELEGATION=false still acts as an explicit kill switch.
 _DELEGATION_KILL_SWITCH=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-true}")
 _HAS_LLM_ENDPOINTS="false"
-[[ -n "${LLM_CODER_URL:-}" || -n "${LLM_DEEPSEEK_R1_URL:-}" ]] && _HAS_LLM_ENDPOINTS="true"
+[[ -n "${LLM_CODER_URL:-}" || -n "${LLM_DEEPSEEK_R1_URL:-}" || -n "${LLM_GLM_URL:-}" ]] && _HAS_LLM_ENDPOINTS="true"
 
 if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "false" ]] \
         && [[ "$WORKFLOW_DETECTED" != "true" ]] \
-        && [[ ! "$PROMPT" =~ ^/ ]]; then  # Slash commands invoke structured skills/commands — never delegate to local models
+        && [[ ! "$PROMPT" =~ ^/ ]]; then
     DELEGATION_HANDLER="${HOOKS_LIB}/delegation_orchestrator.py"
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
 
-        # Fast path: daemon (< 50ms)
+        # Fast path: daemon socket (< 50ms classification + LLM call)
         _DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
         if [[ -S "$_DELEGATION_SOCK" ]]; then
             _DAEMON_REQ=$(jq -cn --arg prompt "$PROMPT" --arg corr "$CORRELATION_ID" --arg sess "$SESSION_ID" \
@@ -595,10 +588,7 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
             fi
         fi
 
-        # Fallback: direct Python invocation (~ 3s cold start)
-        # OMN-6486: Bumped from 8s to 12s — LLM delegation check takes 5-9s
-        # depending on model latency; 8s caused flaky smoke test failures.
-        # Configurable via OMNICLAUDE_DELEGATION_TIMEOUT_SEC.
+        # Fallback: direct Python invocation
         _DELEGATION_TIMEOUT_SEC="${OMNICLAUDE_DELEGATION_TIMEOUT_SEC:-12}"
         if [[ -z "$DELEGATION_RESULT" ]] || ! jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
             set +e
@@ -612,13 +602,25 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
             disown
         fi
 
-        # Validate output is a parseable JSON object (not just any valid JSON value)
+        # Validate output
         if [[ -n "$DELEGATION_RESULT" ]] && jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
             DELEGATION_ACTIVE="$(jq -r '.delegated // false' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'false')"
         else
-            log "WARNING: local_delegation_handler.py produced non-JSON output, skipping"
+            log "WARNING: delegation produced non-JSON output, skipping"
             DELEGATION_RESULT=""
             DELEGATION_ACTIVE="false"
+        fi
+
+        # --- Node-based Kafka command emission (OMN-7103) ---
+        # Always emit the delegation command to Kafka for dashboard metrics,
+        # regardless of whether the sync path succeeded. The node-based
+        # orchestrator consumes this for async delegation and observability.
+        _DEL_CONFIDENCE="$(jq -r '.confidence // 0' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '0')"
+        _DEL_INTENT="$(jq -r '.intent // "unknown"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'unknown')"
+        if [[ "$_DEL_CONFIDENCE" != "0" ]] && [[ "$_DEL_INTENT" != "unknown" ]]; then
+            # Fire-and-forget Kafka emit for delegation orchestrator node
+            _emit_event "delegate.task" "{\"prompt_length\": ${#PROMPT}, \"intent\": \"$_DEL_INTENT\", \"confidence\": $_DEL_CONFIDENCE, \"correlation_id\": \"$CORRELATION_ID\", \"session_id\": \"$SESSION_ID\", \"delegated_sync\": $DELEGATION_ACTIVE}" 2>/dev/null &
+            log "Delegation Kafka command emitted: intent=$_DEL_INTENT confidence=$_DEL_CONFIDENCE"
         fi
 
         # --- Agentic dispatch handling (OMN-5728 — Phase 2: Dispatch) ---
