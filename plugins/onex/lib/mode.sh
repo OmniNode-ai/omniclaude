@@ -37,19 +37,22 @@ omniclaude_mode() {
 
     # 3. Auto-detect: cwd is under omni_home or omni_worktrees → full
     local cwd="${PWD}"
-    if [[ "$cwd" == */omni_home/* ]] || [[ "$cwd" == */omni_worktrees/* ]]; then
+    if [[ "$cwd" == */omni_home ]] || [[ "$cwd" == */omni_home/* ]] || [[ "$cwd" == */omni_worktrees ]] || [[ "$cwd" == */omni_worktrees/* ]]; then
         echo "full"
         return 0
     fi
 
     # 4. Auto-detect: omnibase_core importable as local dev install → full
-    if command -v python3 &>/dev/null; then
-        local loc
+    local loc=""
+    local plugin_python="${CLAUDE_PLUGIN_ROOT:-}/lib/.venv/bin/python3"
+    if [[ -x "$plugin_python" ]]; then
+        loc=$("$plugin_python" -c "import omnibase_core; print(omnibase_core.__file__)" 2>/dev/null || true)
+    elif command -v python3 &>/dev/null; then
         loc=$(python3 -c "import omnibase_core; print(omnibase_core.__file__)" 2>/dev/null || true)
-        if [[ -n "$loc" ]] && { [[ "$loc" == */omni_home/* ]] || [[ "$loc" == */omni_worktrees/* ]]; }; then
-            echo "full"
-            return 0
-        fi
+    fi
+    if [[ -n "$loc" ]] && { [[ "$loc" == */omni_home/* ]] || [[ "$loc" == */omni_worktrees/* ]]; }; then
+        echo "full"
+        return 0
     fi
 
     # 5. Default: lite (graceful degradation for external repos)
