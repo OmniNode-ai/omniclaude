@@ -31,7 +31,6 @@ import argparse
 import json
 import os
 import sys
-import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,14 +90,13 @@ def _import_emit_client() -> object | None:
 def _find_daemon_socket() -> str:
     """Resolve the emit daemon socket path.
 
-    Matches session-start.sh logic: ${OMNICLAUDE_EMIT_SOCKET:-${TMPDIR:-/tmp}/omniclaude-emit.sock}
-    Uses tempfile.gettempdir() which checks TMPDIR first (critical on macOS where
-    TMPDIR is /var/folders/... not /tmp/).
+    Matches session-start.sh logic: ${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}
+    Uses ~/.claude/emit.sock as a deterministic path independent of $TMPDIR.
     """
     explicit = os.environ.get("OMNICLAUDE_EMIT_SOCKET")
     if explicit:
         return explicit
-    return os.path.join(tempfile.gettempdir(), "omniclaude-emit.sock")
+    return str(Path.home() / ".claude" / "emit.sock")
 
 
 def _check_daemon_socket() -> tuple[bool, str]:

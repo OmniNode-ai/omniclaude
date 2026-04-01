@@ -10,7 +10,6 @@ No CLI support — publisher is started/stopped programmatically.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -18,11 +17,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _default_socket_path() -> Path:
-    return Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+    return Path.home() / ".claude" / "emit.sock"
 
 
 def _default_pid_path() -> Path:
-    return Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+    return Path.home() / ".claude" / "emit.pid"
 
 
 def _lazy_spool_dir() -> Path:

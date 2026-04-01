@@ -31,7 +31,7 @@ class TestPublisherConfig:
 
         config = PublisherConfig(kafka_bootstrap_servers="localhost:9092")
         assert (
-            config.socket_path == Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+            config.socket_path == Path.home() / ".claude" / "emit.sock"
         )
 
     def test_custom_values(self, tmp_path: Path) -> None:

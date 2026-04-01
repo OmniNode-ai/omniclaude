@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,7 +30,7 @@ class TestParseArgs:
 
     def test_start_default_socket_path(self) -> None:
         args = _parse_args(["start", "--kafka-servers", "localhost:9092"])
-        expected = str(Path(tempfile.gettempdir()) / "omniclaude-emit.sock")
+        expected = str(Path.home() / ".claude" / "emit.sock")
         assert args.socket_path == expected
 
     def test_start_custom_socket_path(self) -> None:
@@ -72,9 +71,9 @@ class TestDoStop:
     def test_stop_no_pid_file(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        (tmp_path / ".claude").mkdir()
         with patch(_CONFIG_TARGET, side_effect=Exception("no kafka")):
-            with patch("omniclaude.publisher.__main__.tempfile") as mock_tempfile:
-                mock_tempfile.gettempdir.return_value = str(tmp_path)
+            with patch("pathlib.Path.home", return_value=tmp_path):
                 args = _parse_args(["stop"])
                 result = _do_stop(args)
         assert result == 0
@@ -83,11 +82,12 @@ class TestDoStop:
     def test_stop_stale_pid(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        pid_path = tmp_path / "omniclaude-emit.pid"
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        pid_path = claude_dir / "emit.pid"
         pid_path.write_text("999999999")
         with patch(_CONFIG_TARGET, side_effect=Exception("no kafka")):
-            with patch("omniclaude.publisher.__main__.tempfile") as mock_tempfile:
-                mock_tempfile.gettempdir.return_value = str(tmp_path)
+            with patch("pathlib.Path.home", return_value=tmp_path):
                 args = _parse_args(["stop"])
                 result = _do_stop(args)
         assert result == 0
@@ -141,8 +141,8 @@ class TestMain:
     """Tests for main() dispatch."""
 
     def test_main_stop(self, tmp_path: Path) -> None:
+        (tmp_path / ".claude").mkdir()
         with patch(_CONFIG_TARGET, side_effect=Exception("no kafka")):
-            with patch("omniclaude.publisher.__main__.tempfile") as mock_tempfile:
-                mock_tempfile.gettempdir.return_value = str(tmp_path)
+            with patch("pathlib.Path.home", return_value=tmp_path):
                 result = main(["stop"])
         assert result == 0
