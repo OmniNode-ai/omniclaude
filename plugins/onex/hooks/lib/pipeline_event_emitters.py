@@ -284,6 +284,7 @@ def emit_gate_decision(
     if emit_fn is None:
         return
     try:
+        now_iso = datetime.now(UTC).isoformat()
         payload: dict[str, object] = {
             "event_id": str(uuid.uuid4()),
             "gate_id": gate_id,
@@ -292,7 +293,15 @@ def emit_gate_decision(
             "gate_type": gate_type,
             "wait_seconds": wait_seconds,
             "correlation_id": correlation_id,
-            "emitted_at": datetime.now(UTC).isoformat(),
+            "emitted_at": now_iso,
+            # OMN-6902: projector-compatible field aliases — omnidash read-model
+            # consumer reads data.outcome, data.gate_name, data.blocking, data.details
+            "outcome": decision,
+            "gate_name": gate_type,
+            "blocking": decision == "REJECTED",
+            "details": f"{gate_type} gate {decision.lower()} after {wait_seconds:.0f}s",
+            "timestamp": now_iso,
+            "created_at": now_iso,
         }
         if responder is not None:
             payload["responder"] = responder
