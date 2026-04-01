@@ -678,15 +678,15 @@ def _emit_delegation_event(
             correlation_id=corr_uuid,
             emitted_at=emitted_at,
             task_type=task_type,
-            handler_used=handler_name,
-            model_used=model_name,
+            delegated_to=model_name,
+            delegated_by=handler_name,
             quality_gate_passed=quality_gate_passed,
             quality_gate_reason=quality_gate_reason[:200]
             if quality_gate_reason
             else None,
             delegation_success=delegation_success,
-            estimated_savings_usd=max(0.0, savings_usd),
-            latency_ms=max(0, latency_ms),
+            cost_savings_usd=max(0.0, savings_usd),
+            delegation_latency_ms=max(0, latency_ms),
             task_id=os.getenv("ONEX_TASK_ID"),
         )
 
