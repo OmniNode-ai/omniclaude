@@ -378,13 +378,24 @@ bus_status() {
 LINE3=""
 
 if [ "$HAS_JQ" -eq 1 ]; then
+  # Resolve service hosts from env (supports remote infra)
+  _PG_HOST="${POSTGRES_HOST:-localhost}"
+  _PG_PORT="${POSTGRES_PORT:-5436}"
+  _VK_HOST="${VALKEY_HOST:-localhost}"
+  _VK_PORT="${VALKEY_PORT:-16379}"
+  # Extract host from KAFKA_BOOTSTRAP_SERVERS (format: host:port)
+  _RP_HOST="${KAFKA_BOOTSTRAP_SERVERS%%:*}"
+  _RP_HOST="${_RP_HOST:-localhost}"
+  _RP_PORT="${KAFKA_BOOTSTRAP_SERVERS##*:}"
+  _RP_PORT="${_RP_PORT:-19092}"
+
   # Run all probes in parallel — capture output via temp files
   _TMP_PG=$(mktemp) _TMP_RP=$(mktemp) _TMP_VK=$(mktemp)
   _TMP_RT=$(mktemp) _TMP_IN=$(mktemp) _TMP_PH=$(mktemp) _TMP_BUS=$(mktemp)
 
-  ( tcp_up  localhost 5436  > "$_TMP_PG"  ) &
-  ( tcp_up  localhost 19092 > "$_TMP_RP"  ) &
-  ( tcp_up  localhost 16379 > "$_TMP_VK"  ) &
+  ( tcp_up  "$_PG_HOST" "$_PG_PORT"  > "$_TMP_PG"  ) &
+  ( tcp_up  "$_RP_HOST" "$_RP_PORT"  > "$_TMP_RP"  ) &
+  ( tcp_up  "$_VK_HOST" "$_VK_PORT"  > "$_TMP_VK"  ) &
   ( http_up http://localhost:8085/health > "$_TMP_RT"  ) &
   ( http_up http://localhost:8053/health > "$_TMP_IN"  ) &
   ( tcp_up  localhost 6006  > "$_TMP_PH"  ) &
