@@ -111,6 +111,13 @@ At the START of every cycle (before merge-sweep), check:
 3. If tag > deployed version, add to `pending_redeploy[]`
 4. If `pending_redeploy` is non-empty, run redeploy BEFORE merge-sweep
 
+**IMPORTANT (OMN-7214)**: When F30 triggers a redeploy, Docker images MUST be
+rebuilt. A bare `docker compose up -d` without `--build` restarts containers
+with stale images. The `/redeploy` skill handles this via `deploy-runtime.sh`,
+but if invoking docker compose directly, always include `--build` or run
+`docker compose build` first. After restart, verify health endpoints report
+the new version.
+
 This ensures missed redeploys are caught on the next cycle, not lost.
 
 ---
@@ -813,12 +820,31 @@ Check circuit breaker.
 
 ### C2: redeploy <!-- ai-slop-ok: skill-step-heading -->
 
+When F30 detects version drift (pending_redeploy is non-empty), images MUST be
+rebuilt before restarting containers. A bare `docker compose up -d` restarts
+with stale images and silently runs old code (OMN-7214).
+
 Run:
 ```
 /redeploy
 ```
 
-- On success: record `pass`. Record redeployed target confirmation.
+The `/redeploy` skill calls `deploy-runtime.sh --execute --restart` which rebuilds
+images before restarting. If redeploy is triggered outside the skill (e.g., manual
+recovery), always use `--build`:
+
+```bash
+docker compose build --profile runtime
+docker compose up -d --force-recreate --profile runtime
+```
+
+After containers start, verify the deployed version matches the expected tag:
+```bash
+# Check that runtime containers report the new version
+docker ps --format '{{.Names}}\t{{.Image}}' | grep omninode
+```
+
+- On success: record `pass`. Record redeployed target confirmation including image tag/digest.
 - On error: record `halt`. **HALT**. Report the redeploy failure.
 
 Increment failure counter if redeploy fails.
