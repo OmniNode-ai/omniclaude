@@ -407,6 +407,42 @@ Append all six probe results (CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUND
 
 ---
 
+## Step 5c: Response Content Assertions <!-- ai-slop-ok: skill-step-heading -->
+
+For each unconditional probe that returns JSON, extend with content assertions:
+
+### RUNTIME_HEALTH probe — content extension
+After confirming HTTP 200, parse the JSON response and assert:
+- `status` field equals "healthy" (not just "HTTP 200 returned")
+- `version` field is non-null and matches semver pattern
+- If `subscribers` field present: value > 0
+
+### SCHEMA_PARITY probe — content extension
+After confirming schema_ok, parse the JSON response and assert:
+- `tables` array is non-empty
+- Each table entry has `name`, `columns` fields
+- No table has 0 columns
+
+### Assertion execution doctrine
+All new content assertions must use the shared assertion operator vocabulary from golden_path_validate (eq, neq, gte, lte, in, contains, not_matches). Skill-specific wrappers may adapt inputs, but operator semantics must not fork across database_sweep, integration_sweep, dashboard_sweep, golden_path_validate, and DoD verification.
+
+### Endpoint probes (generic) — content extension
+For any `endpoint` evidence type, add optional `response_assertions`:
+```yaml
+dod_evidence:
+  - type: endpoint
+    url: http://localhost:3000/api/registry/nodes
+    response_assertions:
+      - field: "[0].service_name"
+        op: not_matches
+        expected: "^[0-9a-f]{8}-"
+      - field: "length"
+        op: gte
+        expected: 1
+```
+
+---
+
 ## Step 6: Artifact Assembly <!-- ai-slop-ok: skill-step-heading -->
 
 Assemble a `ModelIntegrationRecord`:

@@ -479,6 +479,75 @@ consumer group, and topic referenced in the plan must have an explicit source-of
 
 ---
 
+#### R9 -- Data Flow Proof
+
+Any plan that touches an event pipeline (Kafka topic, projection handler, DB table,
+or API endpoint) MUST include a task that verifies the full data flow with content assertions.
+
+**Required for plans touching:**
+- Kafka producers or consumers
+- Projection handlers (event → DB)
+- API routes that read from projection tables
+- Dashboard pages that display projected data
+
+**What the task must do:**
+- Publish a test event with known field values
+- Assert the projected output matches field-by-field (not just `count > 0`)
+- Assert the API response contains the expected field values
+- If touching UI: assert the rendered page shows the correct data
+
+**Severity:**
+- Plan touches event pipeline but has no data flow proof task = CRITICAL
+- Plan has a proof task but it only checks `count > 0` = MAJOR
+- Plan has a proof task that checks specific field values = clean
+
+#### R10 -- Rendered Output Proof
+
+Any plan that fixes data display, dashboard rendering, or UI output MUST include
+a task that verifies the fix is visibly correct. This encodes OMN-7093 into the
+review process.
+
+**Required for plans touching:**
+- Dashboard pages or components
+- API routes consumed by the UI
+- Projection handlers that feed dashboard data
+
+**Acceptable verification (at least one):**
+- Playwright test asserting rendered content contains expected data
+- curl + jq assertion that API response has correct field values and types
+- Screenshot comparison before/after
+
+**Not acceptable as sole verification:**
+- "Integration test passes" (may test wrong layer)
+- "PR merged" (code on main ≠ working feature)
+- "Unit test passes" (tests function, not rendered output)
+
+**Severity:**
+- Plan touches display but has no rendered output proof = CRITICAL
+- Plan has proof but it only checks HTTP 200 = MAJOR
+- Plan has proof but it does not reach the relevant persistence or rendered-output layer for the change = MAJOR
+
+Plans fail R9 or R10 not only when proof tasks are absent, but when proof tasks
+do not reach the relevant persistence or rendered-output layer for the change.
+An event pipeline plan must reach DB or API or UI appropriately. A UI plan must
+reach rendered output. An infra plan must reach downstream consumer truth.
+
+### Mandatory Proof of Life Task
+
+Every plan MUST include a final task titled "## Task N: Proof of Life — End-to-End Verification"
+that exercises the full path with real data and asserts user-visible output is correct.
+
+For plans that touch data pipelines:
+- Publish a known event → verify it appears in the DB with correct fields → verify API returns it → verify dashboard shows it
+
+For plans that touch UI only:
+- curl the API → verify response content → verify Playwright renders it correctly
+
+For plans that touch infrastructure only:
+- Verify the service is running → verify it responds with correct content → verify downstream consumers are healthy
+
+This task is non-optional. Plans without it fail R9/R10 review.
+
 #### Review Output Format
 
 Each category must be explicitly acknowledged with a minimal evidence pointer, even when clean:

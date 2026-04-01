@@ -92,6 +92,30 @@ a ticket as Done.
 
 ---
 
+## New evidence type: rendered_output
+
+For tickets tagged with data pipeline, dashboard, or display labels:
+
+```yaml
+dod_evidence:
+  - type: rendered_output
+    method: api_content  # or playwright_screenshot
+    url: http://localhost:3000/api/registry/nodes
+    assertions:
+      - field: "[0].service_name"
+        op: not_matches
+        expected: "^[0-9a-f]{8}-"
+      - field: "length"
+        op: gte
+        expected: 1
+```
+
+**Verification logic:**
+- `api_content`: curl the URL, parse JSON, run assertions using the shared golden_path_validate operator vocabulary. This is evidence verification.
+- `playwright_screenshot`: navigate to URL, take screenshot. **Important**: `playwright_screenshot` is evidence collection, not evidence verification, unless paired with rendered-state assertions or a structured classifier result (e.g., dashboard_sweep DATA_MISMATCH detection). Image capture alone is not sufficient as standalone proof.
+
+---
+
 ## Integration Points
 
 - **ticket-pipeline**: The `dod_verify` phase calls this same runner

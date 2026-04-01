@@ -1109,6 +1109,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id", "task_id"],
     ),
+    # =========================================================================
+    # Hook Health Observability (OMN-7158)
+    # =========================================================================
+    "hook.health.error": EventRegistration(
+        event_type="hook.health.error",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.HOOK_HEALTH_ERROR,
+                transform=None,
+                description="Structured hook error event for health observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["hook_name", "error_tier", "error_category", "session_id"],
+    ),
 }
 
 

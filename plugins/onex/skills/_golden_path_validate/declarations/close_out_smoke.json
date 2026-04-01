@@ -1,0 +1,23 @@
+[
+  {
+    "node_id": "node_claude_hook_event_effect",
+    "ticket_id": "close-out-smoke",
+    "input": {
+      "topic": "onex.cmd.omniintelligence.claude-hook-event.v1",
+      "fixture": {
+        "event_type": "UserPromptSubmit",
+        "correlation_id": "closeout-smoke-{timestamp}",
+        "prompt": "close-out smoke test",
+        "session_id": "closeout-smoke"
+      }
+    },
+    "output": {
+      "topic": "onex.evt.omniintelligence.intent-classified.v1"
+    },
+    "timeout_ms": 30000,
+    "assertions": [
+      {"field": "correlation_id", "op": "contains", "expected": "closeout-smoke"},
+      {"field": "event_type", "op": "eq", "expected": "intent-classified"}
+    ]
+  }
+]

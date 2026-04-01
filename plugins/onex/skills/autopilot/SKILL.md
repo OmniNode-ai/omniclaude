@@ -102,6 +102,31 @@ In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
   - `/data-flow-sweep --dry-run --skip-playwright` — end-to-end pipeline check
   - `/runtime-sweep --dry-run` — node registration and wiring integrity
   Findings appended to close-day report. Non-blocking — does NOT halt pipeline.
+- B4b: data-content-verification — **HARD GATE** (promoted from advisory):
+
+### B4b: Data Content Verification — HARD GATE (promoted from advisory)
+
+Runs three checks with content assertions:
+
+1. **Registry content**: Query `node_service_registry` — assert no UUID-only names, no test-* entries
+2. **Projection freshness**: For top 5 tables by row count — assert max(created_at) within 24h
+3. **Sentinel scan**: Scan all text columns in top 10 tables for known sentinels (abcd-1234, test-*, placeholder)
+
+**Halt policy:**
+- Registry has UUID-only names → HALT (garbage data reaching users)
+- Sentinel values found in production tables → HALT
+- Projection staleness → WARN (not halt — may be legitimate low-traffic period)
+
+This gate runs AFTER B1-B4 (infrastructure gates) and BEFORE B5 (integration sweep).
+It catches the class of bug where infrastructure is healthy but data is garbage.
+
+### Severity doctrine
+Phase 1 data-content gating uses coarse severity classes for operational simplicity.
+Future refinement should distinguish dominant user-facing corruption (hard fail) from
+isolated or lower-confidence content anomalies (warn or quarantine). For example:
+one or two garbage rows in a large table may warrant quarantine rather than halt,
+while dominant UUID-only names across the registry is a clear halt.
+
 - B5: integration-sweep — **HARD GATE** (unchanged halt policy)
 - B6: playwright-gate — **HARD GATE** for smoke failures; consumes B5 Playwright result (reruns only if stale >10 min or missing)
 
@@ -239,6 +264,26 @@ treated as stale and removed.
 
 ---
 
+## E1 extension: Golden Path Smoke (real Kafka)
+
+After infrastructure foundation tests, run golden path declarations from
+`plugins/onex/skills/_golden_path_validate/declarations/close_out_smoke.json`
+against real Kafka (KAFKA_BOOTSTRAP_SERVERS=localhost:19092).
+
+This proves: event published → handler processes → output event appears.
+Infrastructure tests alone cannot prove this.
+
+The close-out Kafka golden path is a transport-and-handler proof, not a complete
+downstream content proof by itself. It complements, not replaces, database/API/rendered-output
+verification. The declarations should cover at least three distinct pipeline paths:
+one classification path, one projection path, and one display-facing path.
+
+Failure policy: WARN (not halt) for Phase 1 rollout. Promote to hard gate
+after 5 consecutive passing cycles. Owner: close-out skill maintainer.
+Review date: 2 weeks after first deployment.
+
+---
+
 ## Circuit Breaker
 
 3 consecutive step failures (across Steps A0–D5) → stop immediately + Slack notify.
@@ -322,6 +367,7 @@ Each headless `claude -p` phase inherits authorization from `cron-closeout.sh`:
 - **data-flow-sweep**: B4b — end-to-end Kafka->DB->UI pipeline verification (parallel, advisory)
 - **database-sweep**: B4b — projection table health check (parallel, advisory)
 - **runtime-sweep**: B4b — node registration and wiring verification (parallel, advisory)
+- **data-content-verification**: B4b — **HARD GATE** (promoted from advisory); registry content, projection freshness, sentinel scan
 - **integration-sweep**: B5 — hard gate; halt on FAIL or contract UNKNOWN
 - **playwright-gate**: B6 — Playwright regression gate; consumes B5 PLAYWRIGHT_BEHAVIORAL result (reruns if stale >10 min or missing); smoke FAIL halts, data-flow FAIL warns
 - **friction-triage**: B7 — recurring friction pattern remediation (non-halting)
