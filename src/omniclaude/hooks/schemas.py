@@ -60,12 +60,13 @@ See Also:
 
 from __future__ import annotations
 
+import hashlib
 import re
 import warnings
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_infra.utils import ensure_timezone_aware
@@ -2049,6 +2050,59 @@ class ModelStaticContextEditDetectedPayload(BaseModel):
 
 
 # =============================================================================
+# Hook Error Event (OMN-7157)
+# =============================================================================
+
+
+class EnumHookErrorTier(StrEnum):
+    """Severity tier for hook errors."""
+
+    INTERPRETER = "interpreter"  # Tier 1: wrong Python, import failures
+    DEGRADED = "degraded"  # Tier 2: subsystem failed-open
+    INTENTIONAL_BLOCK = "intentional_block"  # Tier 3: guard working as designed
+
+
+class EnumHookErrorCategory(StrEnum):
+    """Specific error category within a tier."""
+
+    # Tier 1 - Interpreter
+    IMPORT_ERROR = "import_error"
+    TYPE_ERROR = "type_error"
+    SYNTAX_ERROR = "syntax_error"
+    # Tier 2 - Degraded
+    TIMEOUT = "timeout"
+    FUNCTIONAL_DEGRADATION = "functional_degradation"
+    AUTH_DENIED = "auth_denied"
+    # Tier 3 - Intentional blocks
+    DOD_BLOCK = "dod_block"
+    BASH_BLOCK = "bash_block"
+    SCOPE_BLOCK = "scope_block"
+
+
+class ModelHookErrorEvent(BaseModel):
+    """Structured hook error event for Kafka emission."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
+
+    event_id: str = Field(default_factory=lambda: str(uuid4()))
+    hook_name: str
+    error_tier: EnumHookErrorTier
+    error_category: EnumHookErrorCategory
+    error_message: str = Field(max_length=1000)
+    session_id: str
+    python_version: str = ""
+    hook_script_path: str = ""
+    execution_time_ms: int = 0
+    emitted_at: datetime
+
+    @property
+    def fingerprint(self) -> str:
+        """Deterministic fingerprint for deduplication: SHA256[:16] of hook_name + category + message."""
+        raw = f"{self.hook_name}:{self.error_category.value}:{self.error_message}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -3161,6 +3215,10 @@ __all__ = [
     "EnumTraceSpanKind",
     "EnumTraceSpanStatus",
     "ModelCorrelationTraceSpanPayload",
+    # Hook error event (OMN-7157)
+    "EnumHookErrorTier",
+    "EnumHookErrorCategory",
+    "ModelHookErrorEvent",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

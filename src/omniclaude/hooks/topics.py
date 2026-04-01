@@ -470,6 +470,12 @@ class TopicBase(StrEnum):
     DELEGATION_FAILED = "onex.evt.omniclaude.delegation-failed.v1"
     """Emitted when a delegation pipeline run fails at any stage."""
 
+    # ==========================================================================
+    # Hook health observability topics (OMN-7157)
+    # ==========================================================================
+    HOOK_HEALTH_ERROR = "onex.evt.omniclaude.hook-health-error.v1"
+    """Structured hook error event for health observability dashboard."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
