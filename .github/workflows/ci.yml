@@ -1140,6 +1140,9 @@ jobs:
           uv sync --frozen --group dev
           uv pip install pytest-split pytest-cov
 
+      - name: Auto-generate skill nodes
+        run: uv run python scripts/generate_skill_node.py --all
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
