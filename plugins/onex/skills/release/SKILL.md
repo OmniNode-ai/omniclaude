@@ -1,7 +1,7 @@
 ---
 description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 mode: full
-version: 1.2.0
+version: 1.3.0
 level: advanced
 debug: false
 category: workflow
@@ -233,7 +233,7 @@ Example: If `omnibase_core` was bumped to `1.5.0` in this run, then `omnibase_in
 
 ### Per-Repo Notes: omnibase_infra BUMP Actions
 
-The `omnibase_infra` repo requires two additional automated actions during Sub-Step 2 (BUMP),
+The `omnibase_infra` repo requires three additional automated actions during Sub-Step 2 (BUMP),
 after the `pyproject.toml` version is updated. These run inline as part of the BUMP sub-step
 (not as a separate phase). See `prompt.md` Sub-Step 2b for the authoritative implementation.
 
@@ -284,6 +284,15 @@ are released on a separate cadence and may intentionally lag behind. The skill l
 **When a `--no-deps` warning appears**: A separate ticket should track updating that plugin
 pin to a version with compatible transitive dependencies, at which point the `--no-deps`
 flag can be removed.
+
+#### 3. `_FALLBACK_MATRIX` sync via `update_version_matrix.py`
+
+**Script**: `scripts/update_version_matrix.py`
+
+After bumping versions or pinning dependencies, runs `update_version_matrix.py` to
+regenerate the `_FALLBACK_MATRIX` in `version_compatibility.py` from `pyproject.toml`.
+The fallback is used by installed packages without a source tree. Without this step,
+the CI job `test_fallback_matrix_sync` fails on the release PR.
 
 ### Smoke Test: Dry-Run Verification
 
@@ -542,6 +551,7 @@ This naming:
 | No unreleased commits for a repo | `NOTHING_TO_RELEASE` | Skip repo (not an error); reduce from plan | None needed |
 | Worktree already exists (wrong branch) | `WORKTREE_CONFLICT` | Fail repo; do not clobber existing worktree | Manually remove conflicting worktree |
 | Worktree dirty (uncommitted changes) | `WORKTREE_DIRTY` | Fail repo; do not proceed with dirty state | Clean or remove worktree, then `--resume` |
+| Fallback matrix sync failure | `FALLBACK_MATRIX_SYNC_FAILED` | Fail repo; `update_version_matrix.py` could not sync `_FALLBACK_MATRIX` | Fix script or pyproject.toml, then `--resume` |
 | Pre-commit hook failure | `LINT_FAILED` | Fail repo; remaining repos in same tier + later tiers blocked | Fix lint issues, then `--resume` |
 | `uv lock` failure | `LOCK_FAILED` | Fail repo; dependency resolution error | Fix dependency conflicts, then `--resume` |
 | PR creation failure | `PR_FAILED` | Fail repo; GitHub API error or branch protection issue | Check GitHub permissions, then `--resume` |
@@ -615,6 +625,9 @@ This is HIGH_RISK — silence will NOT auto-advance.
 
 ## Changelog
 
+- **v1.3.0**: Add `_FALLBACK_MATRIX` sync step — run `update_version_matrix.py` after
+  version bump to keep `_FALLBACK_MATRIX` in sync with `pyproject.toml`, preventing
+  `test_fallback_matrix_sync` CI failure on release PRs.
 - **v1.2.0**: Fix version base computation — use `max(tag_version, pyproject_version)` to
   prevent downgrades when `pyproject.toml` was bumped without cutting a release tag.
   Also fix omniweb tech stack reference (Node.js/pnpm, not PHP).

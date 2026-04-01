@@ -557,7 +557,7 @@ def bump_version(worktree_path: str, new_version: str) -> None:
 #### Sub-Step 2b: BUMP — omnibase_infra-specific post-bump actions
 
 After bumping the version in `pyproject.toml`, if the repo being released is `omnibase_infra`,
-run two additional automated updates before advancing to Sub-Step 3 (PIN).
+run three additional automated actions before advancing to Sub-Step 3 (PIN).
 
 **Action 1: Update version_compatibility.py bounds**
 
@@ -730,7 +730,49 @@ after the `bump_version()` call, when `repo == "omnibase_infra"`:
 # In execute_repo_release(), after bump_version():
 if repo == "omnibase_infra":
     update_version_compatibility(worktree_path, state)
+    sync_fallback_matrix(worktree_path)
     validate_dockerfile_pins(worktree_path, state)
+```
+
+**Action 3: Sync `_FALLBACK_MATRIX` via `update_version_matrix.py`**
+
+The `_FALLBACK_MATRIX` in `version_compatibility.py` is a hardcoded copy of the version
+bounds used when `pyproject.toml` is not available (installed packages without source tree).
+After bumping versions or pinning dependencies, this fallback must be regenerated from
+`pyproject.toml` to prevent drift.
+
+The CI job `test_fallback_matrix_sync` runs the script in `--check` mode and will fail
+the build if the fallback is stale.
+
+```python
+import subprocess
+
+def sync_fallback_matrix(worktree_path: str) -> None:
+    """Run update_version_matrix.py to sync _FALLBACK_MATRIX with pyproject.toml.
+
+    This MUST run after any change to version bounds in pyproject.toml (bump or pin).
+    The script reads pyproject.toml and rewrites the _FALLBACK_MATRIX block in
+    version_compatibility.py in-place.
+
+    Idempotency: if the fallback already matches, the script reports no changes.
+    """
+    script_path = os.path.join(worktree_path, "scripts", "update_version_matrix.py")
+    if not os.path.exists(script_path):
+        print("  update_version_matrix.py not found — skipping fallback sync")
+        return
+
+    result = subprocess.run(
+        ["uv", "run", "python", script_path],
+        cwd=worktree_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ReleaseError(
+            code="FALLBACK_MATRIX_SYNC_FAILED",
+            message=f"update_version_matrix.py failed: {result.stderr.strip()}",
+        )
+    print(f"  {result.stdout.strip()}")
 ```
 
 #### Sub-Step 3: PIN
