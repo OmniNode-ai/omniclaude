@@ -152,6 +152,24 @@ Follow-up ticket format:
 - Description includes: which checks failed, passed, and UNKNOWN, with confidence
   tier of each failed check
 
+## Rendered Output Evidence Enforcement
+
+Tickets with any of the following labels MUST have at least one `rendered_output`
+evidence item in their `dod_evidence[]` array:
+- `data_pipeline`
+- `dashboard`
+- `display`
+- `projection`
+
+**Check logic:**
+1. For each ticket in the sweep, check if any of the above labels are present
+2. If label match: verify `dod_evidence[]` contains at least one item with `type: rendered_output`
+3. If missing: flag the ticket as `RENDERED_OUTPUT_MISSING` in the sweep report
+4. Create a follow-up ticket with title `fix: DoD gap -- {ticket_id} -- missing rendered_output evidence`
+
+This enforcement encodes OMN-7093 (Visual Output Verification) into the automated
+DoD compliance pipeline.
+
 ## Report Output
 
 1. Write `ModelDodSweepResult` YAML to
