@@ -40,6 +40,7 @@ runtime node system is operational.
 ## Execution
 
 1. Query `GET /api/hook-health/summary?window={window}m` from omnidash
+   (pending: omnidash endpoint not yet implemented; uses local `hook_health_probe` until then)
 2. Evaluate:
    - Tier 1 (interpreter) errors > 0: CRITICAL alert (always)
    - Tier 2 (degraded) errors > threshold: WARNING alert

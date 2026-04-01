@@ -818,6 +818,8 @@ class TestEventRegistryIntegration:
             "team.task.progress",
             "team.task.completed",
             "team.evidence.written",
+            # Hook health observability (OMN-7158)
+            "hook.health.error",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

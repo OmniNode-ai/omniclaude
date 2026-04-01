@@ -103,7 +103,8 @@ def emit_hook_error(
         safe_message = sanitize_text(error_message[:1000])
 
         event_id = str(uuid4())
-        raw = f"{hook_name}:{category.value}:{error_message}"
+        # Compute fingerprint from sanitized message to match schema's .fingerprint property
+        raw = f"{hook_name}:{category.value}:{safe_message}"
         fingerprint = hashlib.sha256(raw.encode()).hexdigest()[:16]
 
         payload = {

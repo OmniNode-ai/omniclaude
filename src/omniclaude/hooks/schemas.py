@@ -2093,11 +2093,19 @@ class ModelHookErrorEvent(BaseModel):
     python_version: str = ""
     hook_script_path: str = ""
     execution_time_ms: int = 0
-    emitted_at: datetime
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
 
     @property
     def fingerprint(self) -> str:
-        """Deterministic fingerprint for deduplication: SHA256[:16] of hook_name + category + message."""
+        """Deterministic fingerprint for deduplication: SHA256[:16] of hook_name + category + message.
+
+        Note: Computed from the sanitized error_message stored in this model.
+        The emitter must use the same sanitized value when pre-computing fingerprints
+        for the payload to ensure consistency.
+        """
         raw = f"{self.hook_name}:{self.error_category.value}:{self.error_message}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
