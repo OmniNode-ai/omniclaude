@@ -224,6 +224,30 @@ Apply in order — first match wins:
 - Shows empty state component: `No data`, `No results`, `Nothing here`, `0 items`
 - Or renders a skeleton/loading state that never resolves
 
+### 1.3b Content Validation (Phase 1 extension)
+
+For each page classified as HEALTHY, perform data content assertions:
+
+1. **API-to-UI parity**: Fetch the page's backing API endpoint, compare key fields
+   against what Playwright sees rendered on the page. If API returns `node_name: "node_intelligence_orchestrator"`
+   but the page shows a UUID, classify as MOCK (data mismatch).
+
+2. **Schema conformance**: For pages backed by known models, validate the API response
+   matches expected field names and types. Use the assertion pattern from golden_path_validate.
+
+3. **Cross-layer consistency**: For pages showing counts (e.g., "217 nodes registered"),
+   verify the count matches `SELECT count(*) FROM {backing_table}`.
+
+4. **Identity-based trace**: For at least one key field per page, trace the value from
+   projection table → API response → rendered UI. This catches cases where the API is
+   already wrong and the UI faithfully renders the wrong API — parity alone would pass.
+
+### New classification: DATA_MISMATCH
+- Page loads without errors (not BROKEN)
+- Data is present (not EMPTY)
+- But data content is incorrect (UUIDs instead of names, stale timestamps, wrong counts)
+- This is distinct from MOCK (hardcoded test data) — DATA_MISMATCH is real data that's wrong
+
 ### 1.4 Mock Detection Patterns
 
 Strings that indicate hardcoded mock data:
