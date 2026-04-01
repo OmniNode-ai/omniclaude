@@ -28,7 +28,13 @@ def run_hook(
             "tool_input": {"command": cmd},
         }
     )
-    env = {**os.environ, "OMNICLAUDE_MODE": "full"}
+    env = {
+        **os.environ,
+        "OMNICLAUDE_MODE": "full",
+        # Bypass the hook runtime daemon so the shell-based counter logic
+        # (counter files in /tmp) is exercised instead of the daemon path.
+        "HOOK_RUNTIME_SOCKET": "/tmp/nonexistent-test-socket",
+    }
     proc = subprocess.run(
         ["bash", "plugins/onex/hooks/scripts/post-tool-delegation-counter.sh"],
         input=payload,
