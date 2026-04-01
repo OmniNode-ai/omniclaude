@@ -162,6 +162,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "team.task.progress",  # OMN-7022 - Team lifecycle: task in progress (TaskUpdate)
         "team.task.completed",  # OMN-7022 - Team lifecycle: task completed (TaskUpdate)
         "team.evidence.written",  # OMN-7022 - Team lifecycle: evidence artifact written
+        "hook.health.error",  # OMN-7158 - Structured hook error event for health observability
     ]
 )
 

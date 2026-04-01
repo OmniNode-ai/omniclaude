@@ -672,3 +672,17 @@ allowed_extras:
       to disk and Kafka. Consumed by downstream verification dashboards.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-7030
+
+  # ---------------------------------------------------------------------------
+  # Hook health observability topics (OMN-7156)
+  # Structured hook error events emitted by hook_error_emitter for health
+  # monitoring and alerting. No dedicated node contract yet.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.hook-health-error.v1"
+    lifecycle: observability
+    reason: >
+      Hook health error event emitted by hook_error_emitter when hooks fail.
+      Consumed by hook-health-alert skill and omnidash hook health dashboard.
+      No dedicated node contract; contract governance to follow.
+    ticket: OMN-7156
