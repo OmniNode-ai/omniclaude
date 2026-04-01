@@ -553,8 +553,8 @@ class TestAPIUnavailability:
 class TestContextInjectionConfigAPIUrl:
     """Test ContextInjectionConfig resolves api_url from INTELLIGENCE_SERVICE_URL."""
 
-    def test_api_url_defaults_to_localhost_8053(self) -> None:
-        """Default api_url is http://localhost:8053."""
+    def test_api_url_empty_when_no_env_set(self) -> None:
+        """api_url is empty when no INTELLIGENCE_SERVICE_URL is set [OMN-7227]."""
         import os
 
         # Inject a sentinel value so patch.dict always has the key to restore,
@@ -563,7 +563,7 @@ class TestContextInjectionConfigAPIUrl:
         with patch.dict(os.environ, {"INTELLIGENCE_SERVICE_URL": ""}, clear=False):
             del os.environ["INTELLIGENCE_SERVICE_URL"]
             cfg = ContextInjectionConfig()
-            assert "8053" in cfg.api_url or "localhost" in cfg.api_url
+            assert cfg.api_url == ""
 
     def test_api_url_reads_intelligence_service_url(self) -> None:
         """api_url falls back to INTELLIGENCE_SERVICE_URL env var."""

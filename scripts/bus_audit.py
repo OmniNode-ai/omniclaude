@@ -1235,8 +1235,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--broker",
-        default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:19092"),
-        help="Kafka bootstrap servers (default: $KAFKA_BOOTSTRAP_SERVERS or localhost:19092)",
+        default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", ""),
+        help="Kafka bootstrap servers (default: $KAFKA_BOOTSTRAP_SERVERS, required)",
     )
     parser.add_argument(
         "--sample-count",
@@ -1268,6 +1268,12 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if not args.broker:
+        parser.error(
+            "KAFKA_BOOTSTRAP_SERVERS is not set and --broker was not provided. "
+            "No localhost default. [OMN-7227]"
+        )
 
     # Exit codes:
     #   0 = success (PASS or WARN verdict)

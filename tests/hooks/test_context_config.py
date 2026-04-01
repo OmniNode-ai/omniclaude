@@ -245,13 +245,8 @@ class TestContextInjectionConfigDatabaseDsn:
         dsn = config.get_db_dsn()
         assert dsn == "postgresql://testuser:testpass@localhost:5432/testdb"
 
-    def test_get_db_dsn_with_defaults(self) -> None:
-        """Test DSN uses default values."""
+    def test_get_db_dsn_raises_when_host_not_set(self) -> None:
+        """Test DSN raises RuntimeError when db_host is not configured [OMN-7227]."""
         config = ContextInjectionConfig(db_password=SecretStr("mypassword"))
-        dsn = config.get_db_dsn()
-
-        assert "localhost" in dsn  # Default host
-        assert "5436" in dsn  # Default port
-        assert "omniclaude" in dsn  # Default db name
-        assert "postgres" in dsn  # Default user
-        assert "mypassword" in dsn  # Password we set
+        with pytest.raises(RuntimeError, match="OMNICLAUDE_CONTEXT_DB_HOST is not set"):
+            config.get_db_dsn()

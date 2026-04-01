@@ -40,16 +40,13 @@ import requests
 # at module level, but that triggers a circular import: config.__init__ → aggregators →
 # hooks → lib.utils → debug_utils → config.settings (still loading). Using os.environ
 # directly breaks the cycle.  Defaults match the Settings field defaults.
-INTELLIGENCE_SERVICE_URL = os.environ.get(
-    "INTELLIGENCE_SERVICE_URL", "http://localhost:8053"
-)
-MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8000")
-# Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL for backward compatibility
-# Note: MCP server URL is not yet in settings; uses environment variable with localhost fallback
+INTELLIGENCE_SERVICE_URL = os.environ.get("INTELLIGENCE_SERVICE_URL", "")
+MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "")
+# Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL — no localhost default [OMN-7227]
 MCP_SERVER_URL = (
     os.environ.get("MCP_SERVER_URL")
     or os.environ.get("ONEX_MCP_URL")
-    or os.environ.get("ARCHON_MCP_URL", "http://localhost:8051")
+    or os.environ.get("ARCHON_MCP_URL", "")
 )
 
 # Docker container name patterns for health checks

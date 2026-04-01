@@ -14,6 +14,7 @@ Usage:
 
 import asyncio
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from enum import Enum
@@ -263,7 +264,7 @@ async def main():
 
     # Initialize client
     client = IntelligenceEventClient(
-        bootstrap_servers="localhost:9092",  # Redpanda external port
+        bootstrap_servers=os.environ["KAFKA_BOOTSTRAP_SERVERS"],
         enable_intelligence=True,
         request_timeout_ms=10000,
     )

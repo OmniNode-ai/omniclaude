@@ -85,16 +85,11 @@ def get_kafka_bootstrap_servers() -> str:
     if servers:
         return servers
 
-    # Use configurable fallback - no hardcoded IPs
-    fallback_host = os.environ.get("KAFKA_FALLBACK_HOST", "localhost")
-    fallback_port = os.environ.get("KAFKA_FALLBACK_PORT", "9092")
-    default_servers = f"{fallback_host}:{fallback_port}"
-    logger.warning(
-        "KAFKA_BOOTSTRAP_SERVERS not set, using fallback: %s. "
-        "Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use.",
-        default_servers,
+    # No localhost default — fail explicitly [OMN-7227]
+    raise RuntimeError(
+        "KAFKA_BOOTSTRAP_SERVERS is not set. "
+        "No localhost default to prevent silent local connections. [OMN-7227]"
     )
-    return default_servers
 
 
 def create_event_envelope(

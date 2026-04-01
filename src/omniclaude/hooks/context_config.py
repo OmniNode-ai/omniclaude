@@ -16,7 +16,7 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
 
     Database configuration (primary source):
     OMNICLAUDE_CONTEXT_DB_ENABLED: Enable database as pattern source (default: true)
-    OMNICLAUDE_CONTEXT_DB_HOST: PostgreSQL host (default: localhost)
+    OMNICLAUDE_CONTEXT_DB_HOST: PostgreSQL host (required, no default)
     OMNICLAUDE_CONTEXT_DB_PORT: PostgreSQL port (default: 5436)
     OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omniclaude)
     OMNICLAUDE_CONTEXT_DB_USER: Database user (default: postgres)
@@ -57,7 +57,7 @@ from omniclaude.hooks.injection_limits import InjectionLimitsConfig
 # same value as the built-in default". Must not be a valid URL.
 _API_URL_UNSET = "__unset__"
 # Built-in fallback when neither OMNICLAUDE_CONTEXT_API_URL nor INTELLIGENCE_SERVICE_URL is set.
-_API_URL_DEFAULT = "http://localhost:8053"
+_API_URL_DEFAULT = None  # No localhost default [OMN-7227]
 
 
 class SessionStartInjectionConfig(BaseModel):
@@ -292,8 +292,8 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     db_host: str = Field(
-        default="localhost",
-        description="PostgreSQL host for pattern storage",
+        default="",
+        description="PostgreSQL host for pattern storage. Set via OMNICLAUDE_CONTEXT_DB_HOST. No localhost default. [OMN-7227]",
     )
 
     db_port: int = Field(
@@ -358,7 +358,7 @@ class ContextInjectionConfig(BaseSettings):
         default=_API_URL_UNSET,
         description=(
             "Base URL for omniintelligence HTTP API. "
-            "Default: INTELLIGENCE_SERVICE_URL env var or http://localhost:8053. "
+            "Default: INTELLIGENCE_SERVICE_URL env var (no localhost fallback). "
             "Override via OMNICLAUDE_CONTEXT_API_URL."
         ),
     )
@@ -437,14 +437,16 @@ class ContextInjectionConfig(BaseSettings):
         Priority:
             1. OMNICLAUDE_CONTEXT_API_URL (handled by pydantic-settings above)
             2. INTELLIGENCE_SERVICE_URL
-            3. Built-in default: http://localhost:8053
+            3. No default — API auto-disabled if neither is set [OMN-7227]
         """
         if self.api_url == _API_URL_UNSET:
             intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
             if intelligence_url:
                 object.__setattr__(self, "api_url", intelligence_url)
             else:
-                object.__setattr__(self, "api_url", _API_URL_DEFAULT)
+                # No localhost default — leave unset so infer_api_enabled_from_url
+                # auto-disables the API when no URL is configured. [OMN-7227]
+                object.__setattr__(self, "api_url", "")
         return self
 
     @model_validator(mode="after")
@@ -479,12 +481,14 @@ class ContextInjectionConfig(BaseSettings):
             PostgreSQL connection string in the format:
             postgresql://user:<password>@host:port/dbname
 
-        Example:
-            >>> config = ContextInjectionConfig(db_password=SecretStr("secret"))
-            >>> dsn = config.get_db_dsn()
-            >>> dsn.startswith("postgresql://")
-            True
+        Raises:
+            RuntimeError: If db_host is not configured.
         """
+        if not self.db_host:
+            raise RuntimeError(
+                "OMNICLAUDE_CONTEXT_DB_HOST is not set. "
+                "No localhost default. [OMN-7227]"
+            )
         db_pass = self.db_password.get_secret_value()
         return f"postgresql://{self.db_user}:{db_pass}@{self.db_host}:{self.db_port}/{self.db_name}"
 

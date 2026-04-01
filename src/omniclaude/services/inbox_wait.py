@@ -66,7 +66,12 @@ async def register_watch(
 
             # In production, the Valkey client would be injected via ServiceRegistry.
             # For now, fall back to in-memory for development.
-            valkey_host = os.environ.get("VALKEY_HOST", "localhost")
+            valkey_host = os.environ.get("VALKEY_HOST", "").strip()
+            if not valkey_host:
+                raise RuntimeError(
+                    "VALKEY_HOST is not set. "
+                    "No localhost default to prevent silent local connections. [OMN-7227]"
+                )
             valkey_port = int(os.environ.get("VALKEY_PORT", "16379"))
 
             try:
@@ -114,7 +119,12 @@ async def unregister_watch(
                 ValkeyClientProtocol,
             )
 
-            valkey_host = os.environ.get("VALKEY_HOST", "localhost")
+            valkey_host = os.environ.get("VALKEY_HOST", "").strip()
+            if not valkey_host:
+                raise RuntimeError(
+                    "VALKEY_HOST is not set. "
+                    "No localhost default to prevent silent local connections. [OMN-7227]"
+                )
             valkey_port = int(os.environ.get("VALKEY_PORT", "16379"))
 
             try:

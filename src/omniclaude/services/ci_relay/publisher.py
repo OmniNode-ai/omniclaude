@@ -28,10 +28,18 @@ def _get_bootstrap_servers() -> str:
     """Get Kafka bootstrap servers from environment.
 
     Returns:
-        Bootstrap server string. Defaults to localhost:19092 for local development.
+        Bootstrap server string from KAFKA_BOOTSTRAP_SERVERS env var.
+
+    Raises:
+        RuntimeError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
-    default = "localhost:19092"  # bus_local default (OMN-3431)
-    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", default)
+    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
+    if not servers:
+        raise RuntimeError(
+            "KAFKA_BOOTSTRAP_SERVERS is not set. "
+            "No localhost default to prevent silent local connections. [OMN-7227]"
+        )
+    return servers
 
 
 async def _get_producer() -> (

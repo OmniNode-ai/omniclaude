@@ -296,7 +296,17 @@ def get_connection_string() -> str:
         )
         sys.exit(1)
 
-    return f"postgresql://postgres:{password}@localhost:5436/omnibase_infra"
+    host = os.environ.get("POSTGRES_HOST", "").strip()
+    port = os.environ.get("POSTGRES_PORT", "").strip()
+    db = os.environ.get("POSTGRES_DATABASE", "").strip() or "omnibase_infra"
+    if not host or not port:
+        print(
+            "ERROR: POSTGRES_HOST and POSTGRES_PORT must be set. "
+            "No localhost default. [OMN-7227]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return f"postgresql://postgres:{password}@{host}:{port}/{db}"
 
 
 def seed_decisions(*, dry_run: bool = False) -> int:
