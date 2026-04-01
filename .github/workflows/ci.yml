@@ -1245,6 +1245,7 @@ jobs:
 
       - name: Initialize hooks database
         env:
+          POSTGRES_HOST: localhost
           POSTGRES_USER: hooks_test
           POSTGRES_PASSWORD: hooks_test
           POSTGRES_DB: hooks_test_db
@@ -1381,6 +1382,7 @@ jobs:
 
       - name: Validate database schema
         env:
+          POSTGRES_HOST: localhost
           PGPASSWORD: schema_test
           POSTGRES_USER: schema_test
           POSTGRES_DB: schema_test_db
