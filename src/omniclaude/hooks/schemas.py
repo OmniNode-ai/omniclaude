@@ -2553,13 +2553,13 @@ class ModelTaskDelegatedPayload(BaseModel):
         correlation_id: Correlation ID for distributed tracing.
         emitted_at: Timestamp when the event was emitted (UTC). Must be injected explicitly.
         task_type: TaskIntent value (document, test, research).
-        handler_used: Endpoint purpose used (doc_gen, test_boilerplate, code_review).
-        model_used: Model identifier returned by the endpoint.
+        delegated_to: Model identifier that received the delegated task.
+        delegated_by: Handler/endpoint that initiated the delegation.
         quality_gate_passed: True when the heuristic quality check succeeded.
         quality_gate_reason: Human-readable reason for quality gate failure (max 200 chars).
         delegation_success: True when delegation produced a usable response.
-        estimated_savings_usd: Estimated cost savings compared to primary model (>= 0.0).
-        latency_ms: Total delegation wall-clock time in milliseconds (>= 0).
+        cost_savings_usd: Estimated cost savings compared to primary model (>= 0.0).
+        delegation_latency_ms: Total delegation wall-clock time in milliseconds (>= 0).
 
     Note:
         ``extra="ignore"`` is intentional — the delegation result dict may carry
@@ -2573,13 +2573,13 @@ class ModelTaskDelegatedPayload(BaseModel):
         ...     correlation_id=uuid4(),
         ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
         ...     task_type="document",
-        ...     handler_used="doc_gen",
-        ...     model_used="Qwen2.5-72B",
+        ...     delegated_to="Qwen2.5-72B",
+        ...     delegated_by="doc_gen",
         ...     quality_gate_passed=True,
         ...     quality_gate_reason=None,
         ...     delegation_success=True,
-        ...     estimated_savings_usd=0.0112,
-        ...     latency_ms=320,
+        ...     cost_savings_usd=0.0112,
+        ...     delegation_latency_ms=320,
         ... )
     """
 
@@ -2618,15 +2618,15 @@ class ModelTaskDelegatedPayload(BaseModel):
         min_length=1,
         description="TaskIntent value: document, test, research",
     )
-    handler_used: str = Field(
+    delegated_to: str = Field(
         ...,
         min_length=1,
-        description="Endpoint purpose used: doc_gen, test_boilerplate, code_review",
+        description="Model identifier that received the delegated task",
     )
-    model_used: str = Field(
+    delegated_by: str = Field(
         ...,
         min_length=1,
-        description="Model identifier returned by the endpoint",
+        description="Handler/endpoint that initiated the delegation",
     )
 
     # Quality gate outcome
@@ -2645,12 +2645,12 @@ class ModelTaskDelegatedPayload(BaseModel):
         ...,
         description="True when delegation produced a usable response for the user",
     )
-    estimated_savings_usd: float = Field(
+    cost_savings_usd: float = Field(
         ...,
         ge=0.0,
         description="Estimated cost savings compared to primary model in USD",
     )
-    latency_ms: int = Field(
+    delegation_latency_ms: int = Field(
         ...,
         ge=0,
         description="Total delegation wall-clock time in milliseconds",

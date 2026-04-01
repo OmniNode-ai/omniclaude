@@ -51,13 +51,13 @@ def _valid_payload_kwargs() -> dict[str, Any]:
         "correlation_id": uuid4(),
         "emitted_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC),
         "task_type": "document",
-        "handler_used": "doc_gen",
-        "model_used": "Qwen2.5-72B",
+        "delegated_to": "Qwen2.5-72B",
+        "delegated_by": "doc_gen",
         "quality_gate_passed": True,
         "quality_gate_reason": None,
         "delegation_success": True,
-        "estimated_savings_usd": 0.0112,
-        "latency_ms": 320,
+        "cost_savings_usd": 0.0112,
+        "delegation_latency_ms": 320,
     }
 
 
@@ -72,11 +72,11 @@ class TestModelTaskDelegatedPayloadSchema:
         kwargs = _valid_payload_kwargs()
         payload = ModelTaskDelegatedPayload(**kwargs)
         assert payload.task_type == "document"
-        assert payload.handler_used == "doc_gen"
-        assert payload.model_used == "Qwen2.5-72B"
+        assert payload.delegated_by == "doc_gen"
+        assert payload.delegated_to == "Qwen2.5-72B"
         assert payload.delegation_success is True
-        assert payload.estimated_savings_usd == pytest.approx(0.0112)
-        assert payload.latency_ms == 320
+        assert payload.cost_savings_usd == pytest.approx(0.0112)
+        assert payload.delegation_latency_ms == 320
 
     def test_frozen_model_raises_on_mutation(self) -> None:
         """Attempting to set an attribute on a frozen payload raises TypeError or ValidationError."""
@@ -86,12 +86,12 @@ class TestModelTaskDelegatedPayloadSchema:
         with pytest.raises((TypeError, ValidationError)):
             payload.task_type = "test"  # type: ignore[misc]
 
-    def test_handler_used_min_length_enforced(self) -> None:
-        """handler_used='' (empty string) must raise ValidationError (min_length=1)."""
+    def test_delegated_by_min_length_enforced(self) -> None:
+        """delegated_by='' (empty string) must raise ValidationError (min_length=1)."""
         from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
 
         kwargs = _valid_payload_kwargs()
-        kwargs["handler_used"] = ""
+        kwargs["delegated_by"] = ""
         with pytest.raises(ValidationError):
             ModelTaskDelegatedPayload(**kwargs)
 

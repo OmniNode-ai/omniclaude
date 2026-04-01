@@ -184,12 +184,12 @@ class TestTaskIdFieldPresent:
             correlation_id=_SESSION_ID,
             emitted_at=_NOW,
             task_type="document",
-            handler_used="doc_gen",
-            model_used="Qwen2.5-72B",
+            delegated_to="Qwen2.5-72B",
+            delegated_by="doc_gen",
             quality_gate_passed=True,
             delegation_success=True,
-            estimated_savings_usd=0.01,
-            latency_ms=100,
+            cost_savings_usd=0.01,
+            delegation_latency_ms=100,
         )
         assert payload.task_id is None
 
