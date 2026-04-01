@@ -239,6 +239,26 @@ treated as stale and removed.
 
 ---
 
+## E1 extension: Golden Path Smoke (real Kafka)
+
+After infrastructure foundation tests, run golden path declarations from
+`plugins/onex/skills/_golden_path_validate/declarations/close_out_smoke.json`
+against real Kafka (KAFKA_BOOTSTRAP_SERVERS=localhost:19092).
+
+This proves: event published → handler processes → output event appears.
+Infrastructure tests alone cannot prove this.
+
+The close-out Kafka golden path is a transport-and-handler proof, not a complete
+downstream content proof by itself. It complements, not replaces, database/API/rendered-output
+verification. The declarations should cover at least three distinct pipeline paths:
+one classification path, one projection path, and one display-facing path.
+
+Failure policy: WARN (not halt) for Phase 1 rollout. Promote to hard gate
+after 5 consecutive passing cycles. Owner: close-out skill maintainer.
+Review date: 2 weeks after first deployment.
+
+---
+
 ## Circuit Breaker
 
 3 consecutive step failures (across Steps A0–D5) → stop immediately + Slack notify.
