@@ -612,6 +612,27 @@ notify_hook_degraded() {
 }
 
 # =============================================================================
+# Structured Hook Error Emission (OMN-7158)
+# =============================================================================
+# Emit structured hook error event to Kafka via temp-file handoff.
+# SECURITY: Never interpolates raw stderr into python -c. Writes to temp file.
+# Always call from a backgrounded subshell: ( emit_hook_error_event "$_stderr_tmp" ) &
+#
+# Usage: ( emit_hook_error_event "$_stderr_tmp" ) &
+
+emit_hook_error_event() {
+    local stderr_file="$1"
+    [[ -z "$stderr_file" || ! -f "$stderr_file" || ! -s "$stderr_file" ]] && return 0
+    "$PYTHON_CMD" -m plugins.onex.hooks.lib.hook_error_emitter \
+        --hook-name "${_OMNICLAUDE_HOOK_NAME:-unknown}" \
+        --error-file "$stderr_file" \
+        --session-id "${SESSION_ID:-unknown}" \
+        --python-version "$("$PYTHON_CMD" --version 2>&1)" \
+        --hook-script-path "${BASH_SOURCE[1]:-unknown}" \
+        2>/dev/null || true  # fire-and-forget
+}
+
+# =============================================================================
 # Emit Daemon Helper (OMN-1631, OMN-1632)
 # =============================================================================
 # Emit event via emit daemon for fast, non-blocking Kafka emission.
