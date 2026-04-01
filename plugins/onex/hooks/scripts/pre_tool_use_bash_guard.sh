@@ -76,7 +76,10 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command safety" >> "$LOG_
 # conservative block until argument parsing is hardened.
 # ---------------------------------------------------------------------------
 CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
-if echo "$CMD" | grep -qE 'git\s+worktree\s+add'; then
+# Strip single- and double-quoted strings before checking for git worktree add
+# to avoid false positives on commit messages, grep patterns, etc.
+CMD_UNQUOTED=$(echo "$CMD" | sed -E "s/\"([^\"\\\\]|\\\\.)*\"//g; s/'[^']*'//g")
+if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
     # Extract the first non-flag argument after "add" as the path
     WORKTREE_PATH=""
     _in_add=false

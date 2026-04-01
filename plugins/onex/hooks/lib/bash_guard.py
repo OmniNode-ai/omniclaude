@@ -320,6 +320,25 @@ _WORKTREE_ADD_RE: re.Pattern[str] = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# Pattern to strip single- and double-quoted strings from a command.
+# Used to avoid false positives on "worktree" appearing inside commit messages,
+# grep patterns, or echo arguments.
+_QUOTED_STRING_RE: re.Pattern[str] = re.compile(
+    r"""(?:"(?:[^"\\]|\\.)*"|'[^']*')""",
+)
+
+
+def _is_real_worktree_add(command: str) -> bool:
+    """Return True only if *command* contains ``git worktree add`` as an actual command.
+
+    Strips quoted strings first so that occurrences inside commit messages
+    (``git commit -m "fix worktree add"``) or grep patterns
+    (``grep "git worktree add" file``) do not trigger false positives.
+    """
+    stripped = _QUOTED_STRING_RE.sub("", command)
+    return bool(_WORKTREE_ADD_RE.search(stripped))
+
+
 CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (
         re.compile(r"^\s*uv\s+lock\b", re.IGNORECASE),
@@ -357,7 +376,7 @@ def _check_worktree_path(command: str) -> str | None:
     Flags before the path (``--lock``, ``--detach``) cause the path to be
     unparseable, which triggers a conservative block (fail closed).
     """
-    if not _WORKTREE_ADD_RE.search(command):
+    if not _is_real_worktree_add(command):
         return None
 
     # Tokenize and extract the first non-flag argument after "add"
@@ -674,8 +693,11 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Tier 3 — CONTEXT_ADVISORY
     # ------------------------------------------------------------------
+    # Strip quoted strings so patterns don't false-positive on worktree
+    # mentions inside commit messages, grep patterns, or echo arguments.
+    command_unquoted = _QUOTED_STRING_RE.sub("", command)
     for pattern, advisory_message in CONTEXT_ADVISORY_PATTERNS:
-        if pattern.search(command):
+        if pattern.search(command_unquoted):
             print(json.dumps({"advisory": advisory_message}))
             return 0
 

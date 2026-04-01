@@ -115,3 +115,58 @@ class TestWorktreePathEnforcement:
         result = bash_guard._check_worktree_path("git worktree add /tmp/bad -b feat")
         assert result is not None
         assert "BLOCKED" in result
+
+
+@pytest.mark.unit
+class TestWorktreeFalsePositives:
+    """Worktree detection must not false-positive on quoted strings."""
+
+    def test_commit_message_with_worktree_allowed(self) -> None:
+        """git commit -m containing 'worktree' must not trigger worktree guard."""
+        stdout, code = _run_main(_bash_input('git commit -m "fix worktree pruning"'))
+        assert code == 0
+
+    def test_commit_message_with_worktree_add_allowed(self) -> None:
+        """git commit -m containing 'worktree add' must not trigger worktree guard."""
+        stdout, code = _run_main(
+            _bash_input('git commit -m "fix git worktree add path resolution"')
+        )
+        assert code == 0
+
+    def test_grep_for_worktree_allowed(self) -> None:
+        """grep searching for 'worktree' in files must be allowed."""
+        stdout, code = _run_main(_bash_input('grep "git worktree add" somefile.sh'))
+        assert code == 0
+
+    def test_echo_worktree_allowed(self) -> None:
+        """echo containing 'worktree add' must be allowed."""
+        stdout, code = _run_main(_bash_input("echo 'git worktree add /some/path'"))
+        assert code == 0
+
+    def test_real_worktree_add_still_enforced(self) -> None:
+        """Actual git worktree add to non-canonical path is still blocked."""
+        stdout, code = _run_main(_bash_input("git worktree add /tmp/bad-tree -b feat"))
+        assert code == 2
+        output = json.loads(stdout)
+        assert output["decision"] == "block"
+
+    def test_real_worktree_add_canonical_still_allowed(self) -> None:
+        """Actual git worktree add to canonical path is still allowed."""
+        stdout, code = _run_main(
+            _bash_input(
+                "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-1234/repo -b feat"  # local-path-ok
+            )
+        )
+        assert code == 0
+
+    def test_is_real_worktree_add_ignores_quoted(self) -> None:
+        """_is_real_worktree_add returns False for quoted occurrences."""
+        assert not bash_guard._is_real_worktree_add('git commit -m "fix worktree add"')
+        assert not bash_guard._is_real_worktree_add("grep 'git worktree add' file.sh")
+
+    def test_is_real_worktree_add_detects_real(self) -> None:
+        """_is_real_worktree_add returns True for actual commands."""
+        assert bash_guard._is_real_worktree_add("git worktree add /tmp/foo -b bar")
+        assert bash_guard._is_real_worktree_add(
+            "git -C /some/repo worktree add /tmp/foo"
+        )
