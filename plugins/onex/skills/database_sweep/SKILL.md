@@ -84,6 +84,56 @@ Classify each table:
 - `ORPHAN`: exists in DB but not in Drizzle schema
 - `NO_TIMESTAMP`: has rows but no timestamp column (report row count only)
 
+## Phase 2b: Content Sampling (per table with rows > 0)
+
+For each table, sample 5 rows and run content assertions:
+
+### Registration tables (node_service_registry)
+> Note: `registration_projections` exists in `omnibase_infra` but NOT in `omnidash_analytics`. Only `node_service_registry` is the projection target here.
+- `service_name` / `node_name` must NOT match UUID pattern `^[0-9a-f]{8}-`
+- `service_name` / `node_name` must NOT start with `test-`
+- `service_type` / `node_type` must be a known enum value (COMPUTE, EFFECT, ORCHESTRATOR, REDUCER)
+
+### Event tables (event_bus_events, hook_events, etc.)
+- `emitted_at` / `created_at` must be within last 7 days (not stale)
+- `correlation_id` must NOT be null or empty
+- `event_type` must NOT be null
+
+### Pipeline tables (epic_run_events, gate_decisions, pr_watch_state)
+- `ticket_id` must match `OMN-\d+` pattern (not placeholder like `OMN-2400`)
+- `epic_run_id` must NOT be `abcd-1234` or other known test sentinels
+
+### Sentinel detection (all tables)
+Known test sentinels to flag: `abcd-1234`, `test-node-*`, `OMN-2400`, `placeholder`, `example.com`
+
+### Doctrine
+Sentinel detection is a guardrail, not the primary content model. Table-specific assertions should prefer semantic validity rules over enumerating known bad values. For example, registration names should be checked for human-meaningful or contract-derived identity, not only "not UUID." Ticket IDs should be checked against real allowed format plus known-non-placeholder patterns.
+
+Phase 1 staleness thresholds are coarse and table-class-based at best. Future refinement should move toward expected-cadence-aware freshness checks for critical projections. Tables should be grouped by cadence class (every-close-out, every-user-activity, low-traffic) rather than one blanket threshold.
+
+### SQL Queries
+
+```sql
+-- Registration content check
+SELECT service_name, service_type FROM node_service_registry
+WHERE service_name ~ '^[0-9a-f]{8}-' OR service_name LIKE 'test-%'
+LIMIT 5;
+-- If rows returned: FAIL (garbage data in registry)
+
+-- Staleness check
+SELECT tablename, max_ts FROM (
+  SELECT '{table}' as tablename, max(created_at) as max_ts FROM {table}
+) sub WHERE max_ts < now() - interval '7 days';
+-- If rows returned: WARN (stale data)
+
+-- Sentinel check
+SELECT * FROM {table} WHERE
+  {text_column}::text IN ('abcd-1234', 'placeholder', 'example.com')
+  OR {text_column}::text LIKE 'test-%'
+LIMIT 5;
+-- If rows returned: FAIL (test data in production)
+```
+
 ## Phase 3 — Migration Tracking
 
 For each ONEX database, verify migration state is clean.
