@@ -121,9 +121,7 @@ def _do_stop(args: argparse.Namespace) -> int:
             # (prefix OMNICLAUDE_PUBLISHER_ + field PID_PATH).
             env_pid = os.environ.get("OMNICLAUDE_PUBLISHER_PID_PATH")
             pid_path = (
-                Path(env_pid)
-                if env_pid
-                else Path.home() / ".claude" / "emit.pid"
+                Path(env_pid) if env_pid else Path.home() / ".claude" / "emit.pid"
             )
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")
