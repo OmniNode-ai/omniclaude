@@ -100,6 +100,27 @@ Classify each flow:
 - `EMPTY_TABLE`: messages in topic but 0 rows in DB
 - `MISSING_TABLE`: table does not exist
 
+## Phase 3b: Field Mapping Verification
+
+For each topic → projection → DB table chain, verify that the Kafka message fields
+match the projection handler's expected fields and the DB column names.
+
+### Method
+1. Consume 1 message from the topic: `rpk topic consume {topic} --num 1 --offset end`
+2. Parse the JSON payload — extract top-level field names
+3. Read the projection handler source — extract the field names it reads from `data.*`
+4. Read the DB table schema — extract column names
+5. Assert: every field the projection reads from the message exists in the message
+6. Assert: every column the projection writes to exists in the DB table
+
+### Critical chains to verify (minimum)
+1. `onex.evt.platform.node-introspection.v1` → `platform-projections.ts:projectNodeIntrospection` → `node_service_registry`
+2. `onex.evt.omniintelligence.pattern-learned.v1` → `omniintelligence-projections.ts:projectPatternLearned` → `pattern_learning_artifacts`
+3. `onex.evt.omniclaude.routing-decision.v1` → `omniclaude-projections.ts:projectRoutingDecision` → `agent_routing_decisions`
+
+### Doctrine
+Phase 1 field-mapping verification is a structural anti-drift check, not a full semantic projection proof. It verifies obvious field-presence mismatches across message, handler, and DB schema, not every transformation rule in projection logic. Future refinement should converge on typed handler interfaces or contract-declared payload schemas rather than raw source scraping.
+
 ## Phase 4 — Dashboard Page Verification (optional)
 
 Skip if `--skip-playwright` is set.
