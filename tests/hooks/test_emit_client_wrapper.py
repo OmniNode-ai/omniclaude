@@ -168,14 +168,13 @@ class TestModuleImport:
 
     def test_get_default_socket_path_returns_fresh_value(self) -> None:
         """Verify get_default_socket_path() computes path per-call via tempfile.gettempdir()."""
-        import tempfile
 
         from plugins.onex.hooks.lib.emit_client_wrapper import get_default_socket_path
 
         result = get_default_socket_path()
         assert result is not None
         assert isinstance(result, Path)
-        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+        expected = Path.home() / ".claude" / "emit.sock"
         assert expected == result
 
     def test_default_socket_path_backwards_compat(self) -> None:

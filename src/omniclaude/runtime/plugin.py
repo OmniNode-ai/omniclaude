@@ -13,7 +13,7 @@ and dispatcher wiring from contracts.
 Required environment surface
 ----------------------------
 - ``KAFKA_BOOTSTRAP_SERVERS``          — required (gate: should_activate)
-- ``OMNICLAUDE_PUBLISHER_SOCKET_PATH`` — optional (default: /tmp/omniclaude-emit.sock)
+- ``OMNICLAUDE_PUBLISHER_SOCKET_PATH`` — optional (default: ~/.claude/emit.sock)
 - ``OMNICLAUDE_PUBLISHER_ENVIRONMENT`` — optional (default: dev)
 - ``OMNICLAUDE_CONTRACTS_ROOT``        — optional (gate: wire_handlers)
 """

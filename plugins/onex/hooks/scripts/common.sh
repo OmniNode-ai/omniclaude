@@ -721,7 +721,7 @@ emit_via_daemon() {
 # Returns: 0 on restart attempt (whether successful or not), 1 if skipped
 
 _try_restart_emit_daemon() {
-    local socket_path="${OMNICLAUDE_EMIT_SOCKET:-${TMPDIR:-/tmp}/omniclaude-emit.sock}"
+    local socket_path="${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}"
     local lock_dir="/tmp/omniclaude-emit-restart.lock"
     local fail_count_file="/tmp/omniclaude-emit-fail-count"
     local restart_ts_file="/tmp/omniclaude-emit-restart-last-at"

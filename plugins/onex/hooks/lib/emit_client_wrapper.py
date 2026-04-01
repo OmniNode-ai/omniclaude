@@ -66,7 +66,6 @@ import logging
 import os
 import socket
 import sys
-import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -82,16 +81,10 @@ logger = logging.getLogger(__name__)
 def get_default_socket_path() -> Path:
     """Compute the default socket path on each call.
 
-    Uses tempfile.gettempdir() to match the daemon (publisher_config.py) and
-    session-start.sh which both resolve via $TMPDIR. On macOS, $TMPDIR is
-    /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ would cause the client
-    to miss the daemon socket entirely.
-
-    Computed per-call (not cached at import time) so that tests which set
-    TMPDIR after import get the correct path, and reset_client() actually
-    picks up environment changes.
+    Uses ~/.claude/emit.sock as a deterministic path that doesn't depend on
+    $TMPDIR (which differs between macOS /var/folders/... and Linux /tmp/).
     """
-    return Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+    return Path.home() / ".claude" / "emit.sock"
 
 
 # Backwards-compatible alias -- existing callers that read the module-level

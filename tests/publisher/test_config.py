@@ -27,12 +27,9 @@ class TestPublisherConfig:
         assert config.spool_dir.is_absolute()
 
     def test_socket_path_default(self) -> None:
-        import tempfile
 
         config = PublisherConfig(kafka_bootstrap_servers="localhost:9092")
-        assert (
-            config.socket_path == Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
-        )
+        assert config.socket_path == Path.home() / ".claude" / "emit.sock"
 
     def test_custom_values(self, tmp_path: Path) -> None:
         spool = tmp_path / "spool"

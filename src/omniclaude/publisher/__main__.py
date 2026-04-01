@@ -17,7 +17,6 @@ import asyncio
 import logging
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Kafka bootstrap servers (host:port, comma-separated)",
     )
-    _default_sock = str(Path(tempfile.gettempdir()) / "omniclaude-emit.sock")
+    _default_sock = str(Path.home() / ".claude" / "emit.sock")
     start_parser.add_argument(
         "--socket-path",
         default=_default_sock,
@@ -98,7 +97,7 @@ def _do_stop(args: argparse.Namespace) -> int:
       1. --pid-path CLI argument (explicit override)
       2. PublisherConfig (pydantic-settings, reads OMNICLAUDE_PUBLISHER_PID_PATH)
       3. OMNICLAUDE_PUBLISHER_PID_PATH env var (fallback when config fails)
-      4. Default: $TMPDIR/omniclaude-emit.pid
+      4. Default: ~/.claude/emit.pid
     """
     import signal
 
@@ -122,9 +121,7 @@ def _do_stop(args: argparse.Namespace) -> int:
             # (prefix OMNICLAUDE_PUBLISHER_ + field PID_PATH).
             env_pid = os.environ.get("OMNICLAUDE_PUBLISHER_PID_PATH")
             pid_path = (
-                Path(env_pid)
-                if env_pid
-                else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+                Path(env_pid) if env_pid else Path.home() / ".claude" / "emit.pid"
             )
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")

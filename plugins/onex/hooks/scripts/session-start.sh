@@ -221,11 +221,9 @@ fi
 # Socket path can be overridden via OMNICLAUDE_EMIT_SOCKET environment variable
 # This enables testing with alternative socket paths and matches emit_client_wrapper.py
 # Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
-# Use $TMPDIR for consistency with Python's tempfile.gettempdir() (both check TMPDIR first)
-_TMPDIR="${TMPDIR:-/tmp}"
-_TMPDIR="${_TMPDIR%/}"  # Remove trailing slash (macOS TMPDIR often ends with /)
-EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${_TMPDIR}/omniclaude-emit.sock}"
-EMIT_DAEMON_PID_FILE="${_TMPDIR}/omniclaude-emit.pid"
+# Deterministic path under ~/.claude/ — avoids TMPDIR divergence between macOS and Linux
+EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}"
+EMIT_DAEMON_PID_FILE="${HOME}/.claude/emit.pid"
 
 # Check if daemon is responsive via real protocol ping.
 #
@@ -245,6 +243,25 @@ check_socket_responsive() {
 }
 
 start_emit_daemon_if_needed() {
+    # Pre-check: kill stale daemon whose socket is at a different path (OMN-7229)
+    # This handles the case where a daemon was started with --socket-path /tmp/...
+    # but the expected socket is now at ~/.claude/emit.sock.
+    if [[ -f "$EMIT_DAEMON_PID_FILE" ]]; then
+        local _stale_pid
+        _stale_pid=$(cat "$EMIT_DAEMON_PID_FILE" 2>/dev/null)
+        if [[ -n "$_stale_pid" ]] && kill -0 "$_stale_pid" 2>/dev/null; then
+            if [[ ! -S "$EMIT_DAEMON_SOCKET" ]]; then
+                log "Publisher PID $_stale_pid alive but socket missing at $EMIT_DAEMON_SOCKET — replacing"
+                kill "$_stale_pid" 2>/dev/null || true
+                sleep 1
+                rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
+            fi
+        else
+            # PID file exists but process is dead — clean up
+            rm -f "$EMIT_DAEMON_PID_FILE" 2>/dev/null || true
+        fi
+    fi
+
     # Check if publisher already running via socket
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         # Fast path: PID file check via kill -0 (<1ms, no Python spawn).

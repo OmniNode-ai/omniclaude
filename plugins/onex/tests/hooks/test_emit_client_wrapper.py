@@ -79,7 +79,7 @@ class TestModuleImport:
         result = get_default_socket_path()
         assert result is not None
         assert isinstance(result, Path)
-        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+        expected = Path.home() / ".claude" / "emit.sock"
         assert expected == result
 
     def test_default_socket_path_backwards_compat(self) -> None:
