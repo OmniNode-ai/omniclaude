@@ -280,7 +280,12 @@ check_router() {
     echo "Router Service:"
 
     # Check HTTP health endpoint
-    local router_host="${ROUTER_HOST:-localhost}"
+    if [ -z "${ROUTER_HOST:-}" ]; then
+        echo "  ❌ ROUTER_HOST is not set. No localhost default. [OMN-7227]"
+        add_issue "ROUTER_HOST not set"
+        return
+    fi
+    local router_host="${ROUTER_HOST}"
     local router_port="${ROUTER_PORT:-8070}"
     local health_response=$(curl -s "http://${router_host}:${router_port}/health" 2>/dev/null || echo "")
 

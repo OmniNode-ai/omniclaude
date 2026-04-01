@@ -19,8 +19,11 @@ set -e
 
 echo "Initializing OmniClaude database..."
 
-# Use POSTGRES_HOST environment variable if set, otherwise default to localhost
-POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
+# POSTGRES_HOST must be set — no localhost default [OMN-7227]
+if [ -z "${POSTGRES_HOST:-}" ]; then
+    echo "ERROR: POSTGRES_HOST is not set. No localhost default. [OMN-7227]" >&2
+    exit 1
+fi
 
 # Support both POSTGRES_DB and POSTGRES_DATABASE environment variable names
 # Default changed from 'postgres' to 'omniclaude' as part of DB-SPLIT-07 (OMN-2058)

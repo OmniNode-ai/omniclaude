@@ -59,12 +59,11 @@ except ImportError:
     # Fallback to environment variables
     import os
 
-    # Safe fallback to localhost - avoids connecting to remote server if .env is misconfigured
-    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5436"))
-    POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+    POSTGRES_HOST = os.environ["POSTGRES_HOST"]
+    POSTGRES_PORT = int(os.environ["POSTGRES_PORT"])
+    POSTGRES_USER = os.environ["POSTGRES_USER"]
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-    POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE", "omniclaude")
+    POSTGRES_DATABASE = os.environ["POSTGRES_DATABASE"]
 
 console = Console()
 

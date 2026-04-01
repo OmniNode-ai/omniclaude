@@ -2538,8 +2538,13 @@ class ManifestInjector:
                 }
 
             driver = None
-            # Get Memgraph URL from environment (default to localhost for development)
-            memgraph_url = os.environ.get("MEMGRAPH_URL", "bolt://localhost:7687")
+            # Get Memgraph URL from environment — no localhost default [OMN-7227]
+            memgraph_url = os.environ.get("MEMGRAPH_URL", "").strip()
+            if not memgraph_url:
+                return {
+                    "status": "error",
+                    "error": "MEMGRAPH_URL is not set. No localhost default. [OMN-7227]",
+                }
             try:
                 # Connect to Memgraph
                 driver = GraphDatabase.driver(memgraph_url)
@@ -4489,7 +4494,7 @@ class ManifestInjector:
                 },
                 "local_services": {
                     "qdrant": {
-                        "endpoint": os.environ.get("QDRANT_HOST", "localhost")
+                        "endpoint": (os.environ.get("QDRANT_HOST") or "NOT_SET")
                         + ":"
                         + os.environ.get("QDRANT_PORT", "6333"),
                         "note": "Connection details only - collections unavailable",
