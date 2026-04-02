@@ -22,7 +22,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|integration_verification_gate|auto_merge). Overrides auto-detection when provided.
+    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|create_pr|test_iterate|ci_watch|pr_review_loop|integration_verification_gate|auto_merge|verification_sweep). Overrides auto-detection when provided.
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -58,7 +58,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> generate_contract -> decision_context_load -> conflict_gate -> implement -> enrich_contract -> local_review -> create_pr -> test_iterate -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: pre_flight -> generate_contract -> decision_context_load -> conflict_gate -> implement -> enrich_contract -> local_review -> create_pr -> test_iterate -> ci_watch -> pr_review_loop -> review_gate -> integration_verification_gate -> auto_merge -> verification_sweep. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Cross-repo detection**: When implementation touches files in multiple repos, the pipeline no longer hard-stops. Instead it invokes `decompose-epic` to create per-repo sub-tickets, posts a Slack MEDIUM_RISK gate (10-min timeout), then hands off to `epic-team` for parallel execution.
 
@@ -1264,6 +1264,29 @@ Task(
 )
 ```
 
+### Phase 7: verification_sweep (OMN-7254)
+
+Post-merge verification. After auto_merge succeeds (PR merged, Linear updated to Done),
+dispatch verification-sweep to confirm the work produced visible, correct results.
+
+- Invokes `verification-sweep --ticket {ticket_id}`
+- Checks dashboard endpoints, database tables, and dod_evidence rendered_output items
+- **Non-blocking**: writes receipt to `.onex_state/verification-receipts/{ticket_id}.yaml`
+- If verification fails: posts Linear comment with failure details, writes to
+  `.onex_state/verification-failures/{ticket_id}.yaml`
+- Pipeline status is NOT affected by verification failures (non-blocking)
+- Skipped entirely when `--docs-only` is set (no runtime surfaces to verify)
+
+```python
+# Dispatched after auto_merge success:
+Skill(skill="onex:verification_sweep", args="--ticket {ticket_id}")
+```
+
+**State artifacts** (written to `phases.verification_sweep.artifacts`):
+- `receipt_path`: path to verification receipt YAML
+- `overall_status`: pass | fail | partial | skip
+- `failure_summary`: human-readable summary (only on fail)
+
 ---
 
 ## Detailed Orchestration
@@ -1285,6 +1308,7 @@ is documented in `prompt.md`. The dispatch contracts above are sufficient to exe
 - `contract-compliance-check` skill (Phase 5.5 Gate 1, OMN-2978)
 - `_lib/cdqa-gate/helpers.md` (Phase 5.5 gate protocol, OMN-3189)
 - `auto-merge` skill (Phase 6, OMN-2525)
+- `verification-sweep` skill (Phase 7, OMN-7254) — post-merge endpoint/DB/DoD verification
 - `pr-review-dev` skill (PR review and fix loop, used by pr-watch in Phase 5)
 - `ci-fix-pipeline` skill (CI diagnosis and fix, used by ci-watch in Phase 4)
 - `decompose-epic` skill (cross-repo split, OMN-2522)

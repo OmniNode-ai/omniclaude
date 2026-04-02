@@ -214,6 +214,7 @@ epic-team orchestrates these independently-invocable primitives:
 | `decompose-epic` | Analyze epic → create Linear child tickets | OMN-2522 |
 | `slack-gate` | LOW_RISK / MEDIUM_RISK / HIGH_RISK human gates | OMN-2521 |
 | `ticket-pipeline` | Per-ticket pipeline (implement → review → PR → CI → merge) | — |
+| `verification-sweep` | Post-orchestration endpoint/DB/DoD verification | OMN-7254 |
 
 `ticket-pipeline` in turn composes:
 
@@ -278,6 +279,11 @@ epic-team OMN-XXXX
   → Post-wave integration check (OMN-3345): run gap cycle --no-fix per repo touched
       → GREEN/YELLOW/RED per repo → post to Slack epic thread
       → Write integration_check section to state.yaml (non-blocking — always advances)
+  → Post-orchestration verification sweep (OMN-7254): invoke /verification-sweep --epic {epic_id}
+      → Verify dashboard endpoints return HTTP 200 with real data
+      → Verify database tables contain expected rows
+      → Verify dod_evidence rendered_output items have passing receipts
+      → Write receipts to .onex_state/verification-receipts/ (non-blocking — always advances)
   → DoD compliance gate (OMN-5833): invoke /dod-sweep {epic_id} (targeted mode)
       → If FAIL: do NOT mark epic Done; follow-ups auto-created; post Slack block
       → If PASS: proceed to mark epic Done; post Slack clean notification
@@ -758,6 +764,7 @@ never imply all tickets passed when exemptions are present.
 - `auto-merge` skill (OMN-2525) — merge gate
 - `decompose-epic` skill (OMN-2522) — empty epic auto-decompose
 - `slack-gate` skill (OMN-2521) — LOW/MEDIUM/HIGH_RISK gates
+- `verification-sweep` skill (OMN-7254) — post-orchestration endpoint/DB/DoD verification
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
 
