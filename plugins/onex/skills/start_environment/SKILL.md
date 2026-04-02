@@ -24,22 +24,46 @@ args:
 
 ## CRITICAL RULE — AUDIT FIRST, ALWAYS
 
-**Before taking any action, run `docker ps` and read the output.**
+**Before taking any action, check actual service health.**
 
-Never assume any container is running. Never assume any container is stopped. The state of
-the environment is unknown at skill invocation time. Read it. Then act.
+Never assume any service is running or stopped. The state of the environment is unknown at
+skill invocation time. Check it. Then act.
 
-This skill exists because repeated incidents were caused by agents assuming postgres or
-redpanda were running when they were not. The fix is mandatory state inspection before every
-startup sequence.
+### Health Check Strategy [OMN-7238]
+
+Infrastructure may run **locally in Docker** or on a **remote host** (per `POSTGRES_HOST` in env).
+Always source `~/.omnibase/.env` first and use `POSTGRES_HOST` to determine where infra lives.
+
+**Primary checks (always work, local or remote):**
+```bash
+source ~/.omnibase/.env
+INFRA_HOST="${POSTGRES_HOST:-localhost}"
+curl -sf "http://${INFRA_HOST}:8085/health"        # runtime API
+curl -sf "http://${INFRA_HOST}:8053/health"        # intelligence API
+psql -h "${INFRA_HOST}" -p "${POSTGRES_PORT:-5436}" -U postgres -d omnibase_infra -c 'SELECT 1'
+kcat -L -b "${KAFKA_BOOTSTRAP_SERVERS}" 2>&1 | head -3
+```
+
+**Supplementary checks (only when infra is local Docker):**
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+```
+
+If `POSTGRES_HOST` points to a remote host, `docker ps` reflects LOCAL Docker only and
+will show zero containers — this is expected and NOT a failure signal.
 
 ---
 
 ## Overview
 
-Brings up the local ONEX Docker environment in the correct bundle order, starting only what
+Brings up the ONEX Docker environment in the correct bundle order, starting only what
 is missing or unhealthy. Uses the canonical `infra-*` shell functions — never raw
 `docker compose -f <path>` (per CLAUDE.md, direct path usage caused the 2026-03-08 incident).
+
+**NOTE**: The `infra-*` shell functions and `docker compose` commands only work when
+infrastructure runs in local Docker. When infra is on a remote host, this skill
+operates in **audit-only mode** — it checks health endpoints and reports status but
+cannot start/stop remote containers.
 
 ## Bundle Hierarchy
 
@@ -67,26 +91,48 @@ before starting memory. Never skip levels.
 ### Phase 0 — State Audit (MANDATORY, NO EXCEPTIONS)
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+source ~/.omnibase/.env
+INFRA_HOST="${POSTGRES_HOST:-localhost}"
+IS_LOCAL=$([[ "${INFRA_HOST}" == "localhost" || "${INFRA_HOST}" == "127.0.0.1" ]] && echo true || echo false)
+
+# Always check health endpoints (works local or remote)
+echo "=== Health Endpoint Checks (host: ${INFRA_HOST}) ==="
+curl -sf "http://${INFRA_HOST}:8085/health" && echo "runtime: HEALTHY" || echo "runtime: UNHEALTHY"
+curl -sf "http://${INFRA_HOST}:8053/health" && echo "intelligence-api: HEALTHY" || echo "intelligence-api: UNHEALTHY"
+psql -h "${INFRA_HOST}" -p "${POSTGRES_PORT:-5436}" -U postgres -d omnibase_infra -c 'SELECT 1' >/dev/null 2>&1 && echo "postgres: HEALTHY" || echo "postgres: UNHEALTHY"
+kcat -L -b "${KAFKA_BOOTSTRAP_SERVERS}" 2>/dev/null | head -1 | grep -q "broker" && echo "kafka: HEALTHY" || echo "kafka: UNHEALTHY"
+
+# Supplementary: local Docker state (only meaningful when infra is local)
+if [[ "${IS_LOCAL}" == "true" ]]; then
+  echo "=== Local Docker State ==="
+  docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+fi
 ```
 
-Read and categorize every running container. Build two lists:
-- **Running and healthy**: containers with `(healthy)` status
-- **Missing or unhealthy**: containers expected but absent, or showing `(unhealthy)` / `(health: starting)`
+Build two lists from health endpoint results:
+- **Healthy**: services returning 200 / responding to queries
+- **Unhealthy**: services unreachable or returning errors
 
-Expected containers by bundle:
+If infra is on a remote host (`POSTGRES_HOST` != localhost), skip Docker container enumeration
+and rely entirely on health endpoints.
 
-| Bundle | Container names (substring match) |
-|--------|----------------------------------|
-| core | `omnibase-infra-postgres`, `omnibase-infra-redpanda`, `omnibase-infra-valkey` |
-| runtime | `omninode-runtime`, `omninode-runtime-effects`, `omnibase-intelligence-api`, `omninode-agent-actions-consumer`, `omninode-skill-lifecycle-consumer`, `omninode-contract-resolver`, `runtime-worker` |
-| memory | `omnibase-infra-memgraph` |
+Expected services:
+
+| Bundle | Health checks |
+|--------|--------------|
+| core | postgres (`SELECT 1`), kafka (kcat broker metadata) |
+| runtime | `http://$INFRA_HOST:8085/health`, `http://$INFRA_HOST:8053/health` |
 
 If `--status` flag: print categorized state table and stop. Do not start anything.
 
 ### Phase 1 — Determine What to Start
 
-Based on the audit and the requested mode:
+**Remote host mode**: If `POSTGRES_HOST` points to a non-localhost address, this skill
+operates in **audit-only mode**. It reports health status but cannot start/stop containers
+on the remote host. If any service is unhealthy, report the failure and stop — do not
+attempt `infra-up` against a remote host.
+
+**Local Docker mode**: Based on the audit and the requested mode:
 
 | Mode | What gets started |
 |------|------------------|

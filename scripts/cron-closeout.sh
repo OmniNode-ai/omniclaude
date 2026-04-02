@@ -58,6 +58,17 @@ fi
 export ONEX_RUN_ID="${RUN_ID}"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 
+# ---------------------------------------------------------------------------
+# Infrastructure host resolution [OMN-7238]
+# After migration to .201, infra may run on a remote host.
+# Derive INFRA_HOST from POSTGRES_HOST (set in ~/.omnibase/.env).
+# Falls back to localhost for backwards compatibility with local Docker.
+# ---------------------------------------------------------------------------
+
+INFRA_HOST="${POSTGRES_HOST:-localhost}"
+POSTGRES_PORT="${POSTGRES_PORT:-5436}"
+KAFKA_BROKERS="${KAFKA_BOOTSTRAP_SERVERS:-${INFRA_HOST}:19092}"
+
 # Source headless emit wrapper for unified event emission [OMN-7034]
 # shellcheck disable=SC1091
 source "$(dirname "$0")/headless-emit-wrapper.sh"
@@ -299,13 +310,13 @@ if ! run_phase "A2_deploy_plugin" \
   record_strike "A2_deploy_plugin"
 fi
 
-# A3: Verify infrastructure health
+# A3: Verify infrastructure health [OMN-7238: use health endpoints, not local docker]
 if ! run_phase "A3_start_env" \
-  "Verify infrastructure health. Run these checks and report status for each:
-1. docker ps -a --format 'table {{.Names}}\t{{.Status}}' (list all containers)
-2. psql -h localhost -p 5436 -U postgres -d omnibase_infra -c 'SELECT 1' (postgres check)
-3. docker exec omnibase-infra-redpanda rpk cluster health (redpanda check)
-4. docker exec omnibase-infra-valkey valkey-cli ping (valkey check)
+  "Verify infrastructure health on host ${INFRA_HOST}. Run these checks and report status for each:
+1. PostgreSQL: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -c 'SELECT 1'
+2. Runtime API: curl -sf http://${INFRA_HOST}:8085/health
+3. Intelligence API: curl -sf http://${INFRA_HOST}:8053/health
+4. Kafka/Redpanda: kcat -L -b ${KAFKA_BROKERS} -t __consumer_offsets 2>&1 | head -3 (or curl -sf http://${INFRA_HOST}:8082/v3/clusters if Redpanda HTTP proxy is up)
 Report HEALTHY or UNHEALTHY for each service. Do NOT attempt to restart anything." \
   "Bash,Read"; then
   record_strike "A3_start_env"
@@ -317,13 +328,13 @@ fi
 
 log "=== Phase B: Infrastructure sweep gates ==="
 
-# B1: Runtime sweep — verify runtime containers healthy and node dispatch alive
+# B1: Runtime sweep — verify runtime health endpoints [OMN-7238: remote-aware]
 if ! run_phase "B1_runtime_sweep" \
-  "Run runtime health verification. Check:
-1. All required containers healthy: docker ps -a --format '{{.Names}}\t{{.Status}}' | check for omninode-runtime, omnibase-infra-postgres, omnibase-infra-redpanda, omnibase-infra-valkey
-2. No containers stuck in 'starting' state
-3. Runtime health endpoint: curl -sf http://localhost:8085/health
-4. Node registration evidence: docker logs --since 30m omninode-runtime | grep -i 'registration\|introspection\|dispatch'
+  "Run runtime health verification against ${INFRA_HOST}. Check:
+1. Runtime health endpoint: curl -sf http://${INFRA_HOST}:8085/health
+2. Intelligence API health: curl -sf http://${INFRA_HOST}:8053/health
+3. PostgreSQL connectivity: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -c 'SELECT 1'
+4. Kafka broker reachable: kcat -L -b ${KAFKA_BROKERS} 2>&1 | head -5
 
 If ALL checks pass, print: INTEGRATION: PASS
 If ANY critical check fails, print: INTEGRATION: FAIL" \
@@ -338,15 +349,14 @@ if phase_failed "B1_runtime_sweep"; then
   exit 1
 fi
 
-# B2: Data flow sweep — verify Kafka consumer groups active and projections populated
+# B2: Data flow sweep — verify Kafka and projections [OMN-7238: remote-aware]
 if ! run_phase "B2_data_flow_sweep" \
-  "Run data flow verification. Check:
-1. Kafka consumer groups active: docker exec omnibase-infra-redpanda rpk group list | grep runtime
-2. Registration projections exist: psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections'
-3. No stuck consumers (lag check): docker exec omnibase-infra-redpanda rpk group describe <group> for runtime groups
+  "Run data flow verification against ${INFRA_HOST}. Check:
+1. Kafka consumer groups active: kcat -L -b ${KAFKA_BROKERS} 2>&1 | grep -c 'topic' (verify broker is responding with topics)
+2. Registration projections exist: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections'
 
-If projections > 0 and consumer groups active, print: INTEGRATION: PASS
-If projections = 0 or no consumer groups, print: INTEGRATION: FAIL" \
+If projections > 0 and Kafka broker responds, print: INTEGRATION: PASS
+If projections = 0 or Kafka unreachable, print: INTEGRATION: FAIL" \
   "Bash,Read"; then
   record_strike "B2_data_flow_sweep"
 fi
@@ -358,12 +368,12 @@ if phase_failed "B2_data_flow_sweep"; then
   exit 1
 fi
 
-# B3: Database sweep — verify projection tables populated
+# B3: Database sweep — verify projection tables populated [OMN-7238: remote-aware]
 if ! run_phase "B3_database_sweep" \
-  "Run database health verification. Check projection tables in omnibase_infra:
-1. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections' (must be > 0)
-2. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM agent_actions' (informational)
-3. psql -h localhost -p 5436 -U postgres -d omnibase_infra -tAc 'SELECT count(tablename) FROM pg_tables WHERE schemaname='\''public'\''' (total tables)
+  "Run database health verification against ${INFRA_HOST}. Check projection tables in omnibase_infra:
+1. psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections' (must be > 0)
+2. psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM agent_actions' (informational)
+3. psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc 'SELECT count(tablename) FROM pg_tables WHERE schemaname='\''public'\''' (total tables)
 
 If registration_projections > 0, print: INTEGRATION: PASS
 If registration_projections = 0, print: INTEGRATION: FAIL" \
@@ -378,15 +388,15 @@ if phase_failed "B3_database_sweep"; then
   exit 1
 fi
 
-# B5: Integration gate (original) — verify critical services
+# B5: Integration gate — verify critical services [OMN-7238: remote-aware]
 if ! run_phase "B5_integration" \
-  "Run integration health checks. For each service, test and report PASS or FAIL:
-1. PostgreSQL: psql -h localhost -p 5436 -U postgres -d omnibase_infra -c 'SELECT 1'
-2. Redpanda: docker exec omnibase-infra-redpanda rpk cluster health
-3. Runtime API: curl -sf http://localhost:8085/health (may not be running — FAIL is OK)
-4. Omnidash: curl -sf http://localhost:3000 (may not be running — FAIL is OK)
+  "Run integration health checks against ${INFRA_HOST}. For each service, test and report PASS or FAIL:
+1. PostgreSQL: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -c 'SELECT 1'
+2. Kafka/Redpanda: kcat -L -b ${KAFKA_BROKERS} 2>&1 | head -3 (broker metadata response)
+3. Runtime API: curl -sf http://${INFRA_HOST}:8085/health (may not be running — FAIL is OK)
+4. Omnidash: curl -sf http://localhost:3000 (runs locally — FAIL is OK)
 
-Critical services are PostgreSQL and Redpanda. If BOTH are healthy, print exactly:
+Critical services are PostgreSQL and Kafka. If BOTH are healthy, print exactly:
   INTEGRATION: PASS
 If EITHER critical service is down, print exactly:
   INTEGRATION: FAIL

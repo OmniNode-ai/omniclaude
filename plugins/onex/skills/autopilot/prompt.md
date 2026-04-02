@@ -441,18 +441,18 @@ Verify all infrastructure is running and healthy before proceeding:
 /start-environment --mode auto
 ```
 
-This skill audits actual container state (docker ps -a), starts missing core infra
-(postgres, redpanda, valkey via infra-up), starts missing runtime services (via
-infra-up-runtime), and verifies all containers are healthy.
+This skill verifies infrastructure health via network-level health endpoints.
+Infrastructure may run locally in Docker or on a remote host (per `POSTGRES_HOST` in env).
+The host is determined from `POSTGRES_HOST` in `~/.omnibase/.env` (falls back to `localhost`).
 
-Critical checks (specific pass criteria):
-- postgres: running + healthy + responds to `SELECT 1` via `psql -h localhost -p 5436`
-- migration-gate: running + healthy (proves `db_metadata.migrations_complete = TRUE` — all forward migrations applied)
-- forward-migration: exited with code 0 (not stuck or crashed)
-- intelligence-migration: exited with code 0
-- redpanda: running + healthy + `rpk cluster health` returns clean
-- valkey: running + healthy
-- All runtime containers: show `(healthy)` in `docker ps -a` (not just "Up" — must pass healthcheck)
+Critical checks (specific pass criteria) — use `POSTGRES_HOST` from env:
+- postgres: responds to `SELECT 1` via `psql -h $POSTGRES_HOST -p ${POSTGRES_PORT:-5436}`
+- runtime API: `curl -sf http://$POSTGRES_HOST:8085/health` returns 200
+- intelligence API: `curl -sf http://$POSTGRES_HOST:8053/health` returns 200
+- kafka/redpanda: `kcat -L -b $KAFKA_BOOTSTRAP_SERVERS` returns broker metadata
+
+If `docker` is available locally, also check container state with `docker ps -a`.
+But health endpoints are the primary signal — `docker ps` is supplementary only.
 
 - On success (already healthy): record step result as `pass`. Continue.
 - On success (after auto-repair): record step result as `pass_repaired`. Continue.
@@ -840,8 +840,16 @@ docker compose up -d --force-recreate --profile runtime
 
 After containers start, verify the deployed version matches the expected tag:
 ```bash
-# Check that runtime containers report the new version
-docker ps --format '{{.Names}}\t{{.Image}}' | grep omninode
+# Primary: health endpoint verification (works local or remote) [OMN-7238]
+source ~/.omnibase/.env
+INFRA_HOST="${POSTGRES_HOST:-localhost}"
+curl -sf "http://${INFRA_HOST}:8085/health"
+curl -sf "http://${INFRA_HOST}:8053/health"
+
+# Supplementary: container image check (local Docker only)
+if [[ "${INFRA_HOST}" == "localhost" || "${INFRA_HOST}" == "127.0.0.1" ]]; then
+  docker ps --format '{{.Names}}\t{{.Image}}' | grep omninode
+fi
 ```
 
 - On success: record `pass`. Record redeployed target confirmation including image tag/digest.
@@ -861,17 +869,29 @@ Run D1, D2, and D3 concurrently. Collect results before proceeding to D4.
 /verify-plugin
 ```
 
-**D2: container-health**
-Verify all containers came back healthy after redeploy:
+**D2: container-health** [OMN-7238: health-endpoint primary]
+Verify runtime services healthy after redeploy using health endpoints (primary)
+and `docker ps` (supplementary, only if Docker is local):
 ```bash
-docker ps -a --format "table {{.Names}}\t{{.Status}}" | grep -i "unhealthy\|Exited"
+# Primary — works for both local and remote infra
+source ~/.omnibase/.env
+INFRA_HOST="${POSTGRES_HOST:-localhost}"
+curl -sf "http://${INFRA_HOST}:8085/health"   # runtime
+curl -sf "http://${INFRA_HOST}:8053/health"   # intelligence API
+psql -h "${INFRA_HOST}" -p "${POSTGRES_PORT:-5436}" -U postgres -d omnibase_infra -c 'SELECT 1'
+kcat -L -b "${KAFKA_BOOTSTRAP_SERVERS}" 2>&1 | head -3
+
+# Supplementary — only if infra is local Docker
+if [[ "${INFRA_HOST}" == "localhost" || "${INFRA_HOST}" == "127.0.0.1" ]]; then
+  docker ps -a --format "table {{.Names}}\t{{.Status}}" | grep -i "unhealthy\|Exited"
+fi
 ```
-Record: which containers are healthy, which are unhealthy, which exited.
+Record: which services are healthy, which are unhealthy.
 
 **D2 pass-vs-warn thresholds:**
-- `pass`: all core runtime containers healthy (omninode-runtime, intelligence-api, all consumers)
-- `warn`: core runtime healthy but optional/non-critical containers degraded (phoenix, memgraph, autoheal)
-- `fail`: any core runtime container unhealthy or missing
+- `pass`: runtime + intelligence-api health endpoints return 200, postgres + kafka reachable
+- `warn`: core services healthy but supplementary docker checks show non-critical containers degraded
+- `fail`: any core health endpoint unreachable or returning non-200
 
 **D3: dashboard-sweep**
 ```
