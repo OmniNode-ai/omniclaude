@@ -32,9 +32,9 @@ _DEFAULT_STATE_DIR = Path.home() / ".onex_state"
 def _get_shell_key() -> str:
     """Get a stable key for the current shell process.
 
-    Uses PPID (parent process ID) on Unix, or a combination of
-    session leader PID on Windows. Falls back to PID if PPID
-    is not available.
+    Uses PPID (parent process ID), which is available cross-platform.
+    On Windows, PPID behavior varies by terminal emulator.
+    Falls back to PID if PPID is not available.
     """
     ppid = os.getppid()
     return str(ppid)
