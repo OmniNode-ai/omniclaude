@@ -44,6 +44,7 @@ class TestSendTelegramReply:
         bot.send_message.assert_called_once_with(
             chat_id=-100123,
             text="Hello from OmniClaw",
+            reply_to_message_id=None,
         )
 
     @pytest.mark.asyncio
@@ -60,11 +61,11 @@ class TestSendTelegramReply:
         )
 
     @pytest.mark.asyncio
-    async def test_no_reply_to_omits_reply_to_message_id(self) -> None:
+    async def test_no_reply_to_passes_none(self) -> None:
         bot = AsyncMock()
         reply = _make_reply(reply_to=None)
 
         await send_telegram_reply(reply, bot=bot)
 
         call_kwargs = bot.send_message.call_args[1]
-        assert "reply_to_message_id" not in call_kwargs
+        assert call_kwargs["reply_to_message_id"] is None

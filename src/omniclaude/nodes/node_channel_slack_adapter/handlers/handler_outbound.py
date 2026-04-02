@@ -12,7 +12,7 @@ Related:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
@@ -24,7 +24,13 @@ logger = logging.getLogger(__name__)
 class SlackWebClient(Protocol):
     """Protocol for Slack Web API client (slack_sdk.WebClient)."""
 
-    def chat_postMessage(self, **kwargs: Any) -> Any: ...  # noqa: N802
+    def chat_postMessage(  # noqa: N802
+        self,
+        *,
+        channel: str,
+        text: str,
+        thread_ts: str | None = None,
+    ) -> object: ...
 
 
 async def send_slack_reply(
@@ -41,17 +47,14 @@ async def send_slack_reply(
         reply: The channel reply to send.
         client: A Slack WebClient instance.
     """
-    kwargs: dict[str, Any] = {
-        "channel": reply.channel_id,
-        "text": reply.reply_text,
-    }
-    if reply.reply_to:
-        kwargs["thread_ts"] = reply.reply_to
-
     logger.info(
         "Sending Slack reply: channel=%s correlation_id=%s",
         reply.channel_id,
         reply.correlation_id,
     )
 
-    client.chat_postMessage(**kwargs)
+    client.chat_postMessage(
+        channel=reply.channel_id,
+        text=reply.reply_text,
+        thread_ts=reply.reply_to,
+    )

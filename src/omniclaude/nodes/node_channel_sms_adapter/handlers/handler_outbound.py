@@ -12,7 +12,7 @@ Related:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
@@ -24,7 +24,13 @@ logger = logging.getLogger(__name__)
 class TwilioMessagesApi(Protocol):
     """Protocol for Twilio Messages API (twilio.rest.Client.messages)."""
 
-    def create(self, **kwargs: Any) -> Any: ...
+    def create(
+        self,
+        *,
+        body: str,
+        from_: str,
+        to: str,
+    ) -> object: ...
 
 
 async def send_sms_reply(

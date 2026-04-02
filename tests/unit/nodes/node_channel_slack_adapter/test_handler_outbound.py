@@ -44,6 +44,7 @@ class TestSendSlackReply:
         client.chat_postMessage.assert_called_once_with(
             channel="C456",
             text="Hello from OmniClaw",
+            thread_ts=None,
         )
 
     @pytest.mark.asyncio
@@ -60,11 +61,11 @@ class TestSendSlackReply:
         )
 
     @pytest.mark.asyncio
-    async def test_no_reply_to_omits_thread_ts(self) -> None:
+    async def test_no_reply_to_passes_none_thread_ts(self) -> None:
         client = MagicMock()
         reply = _make_reply(reply_to=None)
 
         await send_slack_reply(reply, client=client)
 
         call_kwargs = client.chat_postMessage.call_args[1]
-        assert "thread_ts" not in call_kwargs
+        assert call_kwargs["thread_ts"] is None

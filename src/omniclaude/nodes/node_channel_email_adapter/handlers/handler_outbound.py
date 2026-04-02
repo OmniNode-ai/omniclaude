@@ -13,19 +13,12 @@ from __future__ import annotations
 
 import logging
 from email.message import EmailMessage
-from typing import Any, Protocol
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
 )
 
 logger = logging.getLogger(__name__)
-
-
-class SmtpSender(Protocol):
-    """Protocol for SMTP send operations."""
-
-    def send_message(self, msg: EmailMessage, **kwargs: Any) -> Any: ...
 
 
 def build_reply_message(

@@ -12,7 +12,7 @@ Related:
 from __future__ import annotations
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
@@ -24,7 +24,13 @@ logger = logging.getLogger(__name__)
 class TelegramBot(Protocol):
     """Protocol for Telegram Bot API client (aiogram.Bot)."""
 
-    async def send_message(self, **kwargs: Any) -> Any: ...
+    async def send_message(
+        self,
+        *,
+        chat_id: int,
+        text: str,
+        reply_to_message_id: int | None = None,
+    ) -> object: ...
 
 
 async def send_telegram_reply(
@@ -41,17 +47,16 @@ async def send_telegram_reply(
         reply: The channel reply to send.
         bot: A Telegram Bot instance.
     """
-    kwargs: dict[str, Any] = {
-        "chat_id": int(reply.channel_id),
-        "text": reply.reply_text,
-    }
-    if reply.reply_to:
-        kwargs["reply_to_message_id"] = int(reply.reply_to)
-
     logger.info(
         "Sending Telegram reply: chat_id=%s correlation_id=%s",
         reply.channel_id,
         reply.correlation_id,
     )
 
-    await bot.send_message(**kwargs)
+    reply_to_id = int(reply.reply_to) if reply.reply_to else None
+
+    await bot.send_message(
+        chat_id=int(reply.channel_id),
+        text=reply.reply_text,
+        reply_to_message_id=reply_to_id,
+    )
