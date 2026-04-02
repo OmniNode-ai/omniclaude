@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class ModelSlackMessageEvent(BaseModel):
     """Typed representation of a Slack Events API message payload."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     channel: str = Field(..., description="Slack channel ID")
     ts: str = Field(..., description="Message timestamp (Slack message ID)")

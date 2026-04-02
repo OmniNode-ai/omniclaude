@@ -70,6 +70,10 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
         # ONEX convention: each node has a node.py entry point.
         # These are expected duplicates across node directories.
         "node.py",
+        # OmniClaw channel adapter convention: each adapter has handler_inbound.py
+        # and handler_outbound.py for inbound/outbound message normalization.
+        "handler_inbound.py",
+        "handler_outbound.py",
         # Pre-existing duplicates (OMN-5618): common module names across
         # independent subsystems. Renaming would break public API surface.
         "enums.py",

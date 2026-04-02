@@ -19,8 +19,10 @@ class ModelSlackConfig(BaseModel):
     bot_token: str = Field(  # secret-ok: config model, resolved from env at runtime
         ..., min_length=1, description="Slack bot OAuth token"
     )
-    signing_secret: str = (
-        Field(  # secret-ok: config model, resolved from env at runtime
-            ..., min_length=1, description="Slack app signing secret"
+    slack_signing_key: str = (
+        Field(  # secret-ok: config model, resolved from env at runtime  # noqa: secrets
+            ...,
+            min_length=1,
+            description="Slack app signing key for webhook verification",
         )
     )

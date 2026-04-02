@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ModelTelegramUser(BaseModel):
     """Typed representation of a Telegram user object."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     id: int = Field(..., description="Telegram user ID")
     is_bot: bool = Field(default=False, description="Whether the user is a bot")
@@ -38,7 +38,7 @@ class ModelTelegramUser(BaseModel):
 class ModelTelegramChat(BaseModel):
     """Typed representation of a Telegram chat object."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     id: int = Field(..., description="Telegram chat ID")
     type: str = Field(default="private", description="Chat type")
@@ -47,7 +47,7 @@ class ModelTelegramChat(BaseModel):
 class ModelTelegramMessage(BaseModel):
     """Typed representation of a Telegram message object."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     message_id: int = Field(..., description="Telegram message ID")
     chat: ModelTelegramChat = Field(..., description="Chat the message belongs to")
