@@ -211,7 +211,7 @@ def extract_tone_signal(
 
     # Check formal (structured, numbered lists, polite language)
     formal_hits = sum(1 for phrase in _FORMAL_INDICATORS if phrase in prompt_lower)
-    has_numbered_list = bool(re.search(r"\n\s*\d+[.)]\s", prompt_preview))
+    has_numbered_list = bool(re.search(r"(^|\n)\s*\d+[.)]\s", prompt_preview))
     if formal_hits >= 2 or (formal_hits >= 1 and has_numbered_list):
         return ("formal", min(0.55 + formal_hits * 0.1, 0.85))
 
