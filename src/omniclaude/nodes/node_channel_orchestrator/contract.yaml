@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX Node Contract
+# Node: NodeChannelOrchestrator
+#
+# Channel orchestrator — receives normalized messages from any channel
+# adapter, routes through the assistant pipeline (delegation, context
+# injection, response generation), and emits reply-requested events.
+
+name: node_channel_orchestrator
+contract_name: node_channel_orchestrator
+node_name: node_channel_orchestrator
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: ORCHESTRATOR_GENERIC
+
+description: >
+  Channel orchestrator — receives normalized messages from any channel adapter,
+  routes through the assistant pipeline (delegation, context injection, response
+  generation), and emits reply-requested events. Channel-agnostic; adapters are
+  thin bridges.
+
+event_bus:
+  event_bus_enabled: true
+  subscribe_topics:
+    - "onex.cmd.omniclaw.channel-message-received.v1"
+  publish_topics:
+    - "onex.evt.omniclaw.channel-reply-requested.v1"
+    - "onex.evt.omniclaw.channel-message-processed.v1"
+
+consumed_events:
+  - topic: "onex.cmd.omniclaw.channel-message-received.v1"
+    event_type: "ChannelMessageReceived"
+    message_category: "COMMAND"
+    description: "Inbound normalized message from any channel adapter"
+
+published_events:
+  - topic: "onex.evt.omniclaw.channel-reply-requested.v1"
+    event_type: "ChannelReplyRequested"
+    description: "Outbound response to be dispatched to originating channel adapter"
+  - topic: "onex.evt.omniclaw.channel-message-processed.v1"
+    event_type: "ChannelMessageProcessed"
+    description: "Observability event after orchestrator processes a channel message"
+
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "channel.orchestrate"
+      handler:
+        name: "HandlerChannelOrchestrate"
+        module: "omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate"
+      description: "Process channel message through assistant pipeline and emit reply"
+  execution_mode: "single"
+  max_timeout_seconds: 60
+
+input_model:
+  name: "ModelChannelOrchestratorInput"
+  module: "omniclaude.nodes.node_channel_orchestrator.models"
+
+capabilities:
+  - name: channel.orchestration
+    description: Route channel messages through assistant pipeline
+    version: 1.0.0
+
+downstream_effects:
+  - node: NodeLocalLlmInferenceEffect
+    capability: local_llm.inference
+    description: LLM inference for response generation
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  tags:
+    - omniclaw
+    - channel
+    - orchestrator
