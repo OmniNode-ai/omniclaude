@@ -593,7 +593,7 @@ class HandlerContextInjection:
             try:
                 resume_context = await asyncio.wait_for(
                     self._load_resume_context(agent_id=agent_id),
-                    timeout=3.0,
+                    timeout=0.9,  # Stay within 1s context-injection budget
                 )
                 if resume_context:
                     if context_markdown:
@@ -1106,7 +1106,7 @@ class HandlerContextInjection:
 
         cfg = self._config
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=0.9) as client:  # Stay within 1s context-injection budget
                 resp = await client.get(
                     cfg.session_projector_url,
                     params={"agent_id": agent_id, "limit": "1"},
