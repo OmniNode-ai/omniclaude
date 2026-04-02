@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 # Default path where the statusline script caches OAuth usage API responses
-DEFAULT_USAGE_CACHE_PATH = Path("/tmp/omniclaude-usage-cache.json")  # noqa: S108
+DEFAULT_USAGE_CACHE_PATH = Path("/tmp/omniclaude-usage-cache.json")  # noqa: S108  # nosec B108
 
 
 class ModelLimitStatus(BaseModel):
