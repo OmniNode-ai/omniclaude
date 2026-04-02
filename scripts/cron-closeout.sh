@@ -388,6 +388,29 @@ if phase_failed "B3_database_sweep"; then
   exit 1
 fi
 
+# B4b: Data verification — advisory, non-blocking [OMN-6764]
+# Runs three data sweeps in dry-run mode. Findings appended to close-day report.
+# Does NOT halt pipeline on failure.
+log "=== Phase B4b: Data verification (advisory) ==="
+
+if ! run_phase "B4b_data_verification" \
+  "Run all three data verification sweeps in dry-run mode. This is advisory only — report findings but do NOT halt.
+
+1. Database sweep (dry-run): Run /database-sweep --dry-run — check projection table health (row counts, staleness, schema drift). Report any tables with zero rows or stale data.
+
+2. Data flow sweep (dry-run): Run /data-flow-sweep --dry-run --skip-playwright — check end-to-end pipeline health (Kafka consumer lag, projection freshness, event flow continuity). Skip Playwright checks. Report any broken data flow paths.
+
+3. Runtime sweep (dry-run): Run /runtime-sweep --dry-run — check node registration and wiring integrity (registered nodes match contracts, dispatch routes are valid). Report any unregistered nodes or broken wiring.
+
+For each sweep, report:
+- Status: CLEAN or FINDINGS
+- Finding count and summary if any issues found
+
+End with a consolidated summary listing all findings across the three sweeps. These findings will be appended to the close-day report." \
+  "Bash,Read,Glob,Grep"; then
+  log "WARNING: Data verification phase failed (advisory — not halting)"
+fi
+
 # B5: Integration gate — verify critical services [OMN-7238: remote-aware]
 if ! run_phase "B5_integration" \
   "Run integration health checks against ${INFRA_HOST}. For each service, test and report PASS or FAIL:
@@ -595,6 +618,7 @@ Phase Results:
   B1 runtime-sweep:    $(test -f "${RUN_DIR}/B1_runtime_sweep.txt" && echo "executed" || echo "missing")
   B2 data-flow-sweep:  $(test -f "${RUN_DIR}/B2_data_flow_sweep.txt" && echo "executed" || echo "missing")
   B3 database-sweep:   $(test -f "${RUN_DIR}/B3_database_sweep.txt" && echo "executed" || echo "missing")
+  B4b data-verify:    $(test -f "${RUN_DIR}/B4b_data_verification.txt" && echo "executed" || echo "missing")
   B5 integration-gate: $(test -f "${RUN_DIR}/B5_integration.txt" && echo "executed" || echo "missing")
   B6 contract-verify: $(test -f "${RUN_DIR}/B6_contract_verify.txt" && echo "executed" || echo "missing")
   C1 release-check:    $(test -f "${RUN_DIR}/C1_release_check.txt" && echo "executed" || echo "missing")
