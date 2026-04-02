@@ -43,16 +43,18 @@ fi
 echo -e "\n${bold}Plugin Verification Suite${reset}"
 echo -e "Root: $PLUGIN_ROOT\n"
 
+# OMN-7310: Resolve repo root (plugin is at plugins/onex/, repo root is ../..)
+REPO_ROOT="$(cd "$PLUGIN_ROOT/../.." 2>/dev/null && pwd)"
+
 # CHECK: file_exists — required directories
-for dir in skills agents hooks ".claude-plugin" "lib/.venv"; do
+for dir in skills agents hooks ".claude-plugin"; do
   check "file_exists: $dir" test -d "$PLUGIN_ROOT/$dir"
 done
+check "file_exists: repo .venv" test -d "$REPO_ROOT/.venv"
 
 # CHECK: file_exists — registry and sentinel files
 check "file_exists: installed_plugins.json" test -f "$HOME/.claude/plugins/installed_plugins.json"
 check "file_exists: known_marketplaces.json" test -f "$HOME/.claude/plugins/known_marketplaces.json"
-check "file_exists: lib/venv_manifest.txt"   test -f "$PLUGIN_ROOT/lib/venv_manifest.txt"
-check "file_exists: .omniclaude-sentinel"    test -f "$PLUGIN_ROOT/lib/.venv/.omniclaude-sentinel"
 
 # CHECK: version consistency across 3 surfaces
 PLUGIN_VER=""
@@ -89,17 +91,11 @@ kebab_count="$(find "$PLUGIN_ROOT/skills" -maxdepth 1 -mindepth 1 -type d \
   -name '*-*' ! -name '_*' 2>/dev/null | wc -l | tr -d ' ')"
 check "skill_naming: zero kebab-case dirs (found: $kebab_count)" test "$kebab_count" -eq 0
 
-# CHECK: python_import — venv health
-PYTHON="$PLUGIN_ROOT/lib/.venv/bin/python3"
+# CHECK: python_import — venv health (OMN-7310: use repo main venv)
+PYTHON="$REPO_ROOT/.venv/bin/python3"
 check "python_import: omnibase_spi"       "$PYTHON" -c "import omnibase_spi"
 check "python_import: omniclaude"         "$PYTHON" -c "import omniclaude"
 check "python_import: TopicBase"          "$PYTHON" -c "from omniclaude.hooks.topics import TopicBase"
-
-# CHECK: no editable installs in venv (catches development-mode contamination)
-editable_count=0
-editable_count="$(find "$PLUGIN_ROOT/lib/.venv" -name "*.pth" \
-  -exec grep -l "editable" {} \; 2>/dev/null | wc -l | tr -d ' ')"
-check "venv_clean: no editable .pth files (found: $editable_count)" test "$editable_count" -eq 0
 
 # CHECK: settings.json statusLine points to current or known version
 # Note: this is compatibility sanity, not exact correctness.

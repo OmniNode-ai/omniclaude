@@ -103,9 +103,9 @@ class TestContextSource:
         assert ContextSource.RAG_QUERY == "rag_query"
         assert ContextSource.NONE == "none"
 
-    def test_has_six_values(self) -> None:
-        """ContextSource has exactly 6 defined values (includes MEMORY_FABRIC)."""
-        assert len(ContextSource) == 6
+    def test_has_seven_values(self) -> None:
+        """ContextSource has exactly 7 defined values (includes SESSION_RESUME)."""
+        assert len(ContextSource) == 7
 
 
 # =============================================================================

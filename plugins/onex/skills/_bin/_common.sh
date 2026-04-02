@@ -29,7 +29,7 @@ LIB_DIR="${BIN_DIR}/_lib"
 # ---------------------------------------------------------------------------
 # Priority chain (same as hooks/scripts/common.sh):
 #   1. PLUGIN_PYTHON_BIN env var (explicit override)
-#   2. Plugin-bundled venv at PLUGIN_ROOT/lib/.venv
+#   2. Repo main venv at PLUGIN_ROOT/../../.venv (OMN-7310)
 #   3. OMNICLAUDE_PROJECT_ROOT/.venv (dev mode)
 #   4. System python3
 #   5. Hard failure
@@ -42,8 +42,11 @@ _find_python() {
 
     # Derive PLUGIN_ROOT: _bin is at plugins/onex/skills/_bin
     local plugin_root="${CLAUDE_PLUGIN_ROOT:-${BIN_DIR}/../..}"
-    if [[ -f "${plugin_root}/lib/.venv/bin/python3" && -x "${plugin_root}/lib/.venv/bin/python3" ]]; then
-        echo "${plugin_root}/lib/.venv/bin/python3"
+    # OMN-7310: use repo main venv (plugin_root is plugins/onex/, repo root is ../..)
+    local repo_root
+    repo_root="$(cd "${plugin_root}/../.." 2>/dev/null && pwd)"
+    if [[ -n "$repo_root" && -f "${repo_root}/.venv/bin/python3" && -x "${repo_root}/.venv/bin/python3" ]]; then
+        echo "${repo_root}/.venv/bin/python3"
         return
     fi
 

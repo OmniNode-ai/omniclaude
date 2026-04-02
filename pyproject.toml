@@ -45,6 +45,11 @@ hooks = [
     "valkey>=6.0",
 ]
 
+# discord is optional: Discord channel adapter for OmniClaw (OMN-7189).
+discord = [
+    "discord.py>=2.3.0,<3.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",

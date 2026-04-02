@@ -585,6 +585,31 @@ class HandlerContextInjection:
             except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade
                 logger.warning("Memory fabric integration failed: %s", exc)
 
+        # Step 6c: Session resume context (additive source, OMN-7298)
+        # Injects last session snapshot when agent is logged in (ONEX_AGENT_ID set).
+        # Follows same pattern as memory fabric: additive, timeout-guarded, never blocks.
+        agent_id = os.environ.get("ONEX_AGENT_ID")
+        if cfg.session_resume_enabled and agent_id:
+            try:
+                resume_context = await asyncio.wait_for(
+                    self._load_resume_context(agent_id=agent_id),
+                    timeout=3.0,
+                )
+                if resume_context:
+                    if context_markdown:
+                        context_markdown = context_markdown + "\n\n" + resume_context
+                    else:
+                        context_markdown = resume_context
+                    context_source = ContextSource.SESSION_RESUME
+                    logger.info(
+                        "session_resume: injected context for agent=%s",
+                        agent_id,
+                    )
+            except TimeoutError:
+                logger.warning("Session resume retrieval timed out (3s budget)")
+            except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade
+                logger.warning("Session resume integration failed: %s", exc)
+
         context_size_bytes = len(context_markdown.encode("utf-8"))
 
         # Compute token count for both injection record and event (OMN-5548)
@@ -1058,6 +1083,51 @@ class HandlerContextInjection:
         except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade not crash
             logger.warning(
                 "Memory fabric retrieval failed (graceful degradation): %s", exc
+            )
+            return ""
+
+    async def _load_resume_context(self, agent_id: str) -> str:
+        """Load last session snapshot for an agent from the session projector.
+
+        Calls the session projector endpoint and formats the snapshot
+        as injectable markdown context. Fails gracefully — returns
+        empty string on any error to avoid blocking session startup.
+
+        Args:
+            agent_id: The agent identity to load resume context for.
+
+        Returns:
+            Formatted markdown string with resume context, or empty string.
+        """
+        import httpx
+        from session_resume_client import format_resume_context
+
+        cfg = self._config
+        try:
+            payload: dict[str, object] = {
+                "agent_id": agent_id,
+                "limit": 1,
+            }
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(cfg.session_projector_url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+            snapshots = data.get("snapshots", [])
+            if not snapshots or not isinstance(snapshots, list):
+                return ""
+
+            latest = snapshots[0]
+            if not isinstance(latest, dict):
+                return ""
+
+            result: str = format_resume_context(latest, agent_id=agent_id)
+            return result
+
+        except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade not crash
+            logger.warning(
+                "Session resume retrieval failed (graceful degradation): %s", exc
             )
             return ""
 
