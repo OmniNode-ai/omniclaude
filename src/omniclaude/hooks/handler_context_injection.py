@@ -1122,7 +1122,8 @@ class HandlerContextInjection:
             if not isinstance(latest, dict):
                 return ""
 
-            return format_resume_context(latest, agent_id=agent_id)
+            result: str = format_resume_context(latest, agent_id=agent_id)
+            return result
 
         except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade not crash
             logger.warning(
