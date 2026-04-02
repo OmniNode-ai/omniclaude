@@ -32,6 +32,7 @@ from pathlib import Path
 # Add new producers here when a new service is onboarded.
 _KNOWN_PRODUCERS = (
     "omniclaude",
+    "omniclaw",
     "omninode",
     "omniintelligence",
     "omnimemory",
