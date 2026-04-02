@@ -79,14 +79,54 @@ TOOLS_EXECUTED=$(echo "$STOP_INFO" | jq -r '.tools_executed // empty' 2>/dev/nul
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Session ID: $SESSION_ID" >> "$LOG_FILE"
 
+# --- ChangeFrame data collection for objective evaluation (OMN-7379) ---
+# Compute session latency from the epoch file written by session-start.sh.
+# Falls back to null if the file is missing (session-start didn't run or
+# SESSION_ID was empty).
+LATENCY_SECONDS="null"
+_SESSION_EPOCH_FILE="${TMPDIR:-/tmp}/omniclaude-session-epoch-${SESSION_ID}.txt"
+if [[ -f "$_SESSION_EPOCH_FILE" ]]; then
+    _START_EPOCH=$(cat "$_SESSION_EPOCH_FILE" 2>/dev/null) || true
+    if [[ "$_START_EPOCH" =~ ^[0-9]+$ ]]; then
+        _STOP_EPOCH=$(date +%s)
+        LATENCY_SECONDS=$((_STOP_EPOCH - _START_EPOCH))
+    fi
+    # Clean up the epoch file
+    rm -f "$_SESSION_EPOCH_FILE" 2>/dev/null || true
+fi
+
+# Count tools executed for a rough gate signal
+TOOLS_COUNT=0
+if [[ -n "$TOOLS_EXECUTED" ]] && [[ "$TOOLS_EXECUTED" != "null" ]] && [[ "$TOOLS_EXECUTED" != "[]" ]]; then
+    TOOLS_COUNT=$(echo "$TOOLS_EXECUTED" | jq 'length' 2>/dev/null || echo "0")
+fi
+
 # Emit Stop event to Kafka for pattern learning trigger (non-blocking)
+# Enriched with ChangeFrame data (OMN-7379): latency_seconds, gate_results
 if [[ "$KAFKA_ENABLED" == "true" ]] && command -v jq >/dev/null 2>&1; then
     (
+        # Synthesize a session_completion gate result from completion_status.
+        # Also include a tools_executed gate if tools were used.
+        GATE_PASSED="false"
+        GATE_PASS_RATE="0.0"
+        if [[ "$COMPLETION_STATUS" == "success" || "$COMPLETION_STATUS" == "completed" || "$COMPLETION_STATUS" == "complete" ]]; then
+            GATE_PASSED="true"
+            GATE_PASS_RATE="1.0"
+        fi
+
+        GATE_RESULTS=$(jq -n \
+            --arg passed "$GATE_PASSED" \
+            --arg pass_rate "$GATE_PASS_RATE" \
+            '[{gate_id: "session_completion", passed: ($passed == "true"), pass_rate: ($pass_rate | tonumber), check_count: 1, pass_count: (if $passed == "true" then 1 else 0 end)}]' 2>/dev/null || echo "[]")
+
         STOP_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg completion_status "$COMPLETION_STATUS" \
             --arg event_type "Stop" \
-            '{session_id: $session_id, completion_status: $completion_status, event_type: $event_type}' 2>/dev/null)
+            --argjson latency_seconds "$LATENCY_SECONDS" \
+            --argjson gate_results "$GATE_RESULTS" \
+            --argjson tools_count "$TOOLS_COUNT" \
+            '{session_id: $session_id, completion_status: $completion_status, event_type: $event_type, latency_seconds: $latency_seconds, gate_results: $gate_results, tools_count: $tools_count}' 2>/dev/null)
         if [[ -n "$STOP_PAYLOAD" ]] && [[ "$STOP_PAYLOAD" != "null" ]]; then
             emit_via_daemon "response.stopped" "$STOP_PAYLOAD" 100
         else
