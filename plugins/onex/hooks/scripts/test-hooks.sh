@@ -21,19 +21,14 @@ VERBOSE=0
 
 # ─── Python discovery ────────────────────────────────────────────────────────
 # Some hooks (user-prompt-submit.sh, post-tool-use-quality.sh) require Python.
-# When running from the source tree, the .venv lives only in the deployed cache.
-# Auto-discover it so tests pass without manual env setup.
+# OMN-7310: use repo main venv instead of plugin lib venv.
 if [[ -z "${PLUGIN_PYTHON_BIN:-}" ]]; then
-    # 1. .venv co-located with this script's plugin root (deployed cache)
-    _VENV_PYTHON="${HOOKS_DIR}/../lib/.venv/bin/python3"
-    # 2. Deployed cache fallback (when running from source worktree)
-    _CACHE_PYTHON="$HOME/.claude/plugins/cache/omninode-tools/onex/2.2.5/lib/.venv/bin/python3"
-    if [[ -x "$_VENV_PYTHON" ]]; then
-        export PLUGIN_PYTHON_BIN="$_VENV_PYTHON"
-    elif [[ -x "$_CACHE_PYTHON" ]]; then
-        export PLUGIN_PYTHON_BIN="$_CACHE_PYTHON"
+    # 1. Repo main venv (HOOKS_DIR is plugins/onex/hooks, repo root is ../../..)
+    _REPO_PYTHON="$(cd "${HOOKS_DIR}/../../.." 2>/dev/null && pwd)/.venv/bin/python3"
+    if [[ -x "$_REPO_PYTHON" ]]; then
+        export PLUGIN_PYTHON_BIN="$_REPO_PYTHON"
     fi
-    unset _VENV_PYTHON _CACHE_PYTHON
+    unset _REPO_PYTHON
 fi
 
 PASS=0
