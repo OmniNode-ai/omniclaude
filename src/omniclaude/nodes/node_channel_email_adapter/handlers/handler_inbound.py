@@ -51,13 +51,17 @@ def email_to_envelope(
     # Thread ID from In-Reply-To or last entry in References
     thread_id = _extract_thread_id(msg)
 
-    # Parse date
+    # Parse date — always produce a UTC-aware datetime
+    from datetime import UTC, datetime
+
     date_header = msg.get("Date")
     timestamp = email.utils.parsedate_to_datetime(date_header) if date_header else None
     if timestamp is None:
-        from datetime import UTC, datetime
-
         timestamp = datetime.now(tz=UTC)
+    elif timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    else:
+        timestamp = timestamp.astimezone(UTC)
 
     return ModelChannelEnvelope(
         channel_id=mailbox,

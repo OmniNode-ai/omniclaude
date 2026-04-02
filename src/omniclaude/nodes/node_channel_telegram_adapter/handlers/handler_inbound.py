@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,10 +25,19 @@ from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 logger = logging.getLogger(__name__)
 
 
+class EnumTelegramChatType(str, Enum):
+    """Telegram chat type enum."""
+
+    PRIVATE = "private"
+    GROUP = "group"
+    SUPERGROUP = "supergroup"
+    CHANNEL = "channel"
+
+
 class ModelTelegramUser(BaseModel):
     """Typed representation of a Telegram user object."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: int = Field(..., description="Telegram user ID")
     is_bot: bool = Field(default=False, description="Whether the user is a bot")
@@ -38,16 +48,19 @@ class ModelTelegramUser(BaseModel):
 class ModelTelegramChat(BaseModel):
     """Typed representation of a Telegram chat object."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: int = Field(..., description="Telegram chat ID")
-    type: str = Field(default="private", description="Chat type")
+    type: EnumTelegramChatType = Field(
+        default=EnumTelegramChatType.PRIVATE,
+        description="Chat type",
+    )
 
 
 class ModelTelegramMessage(BaseModel):
     """Typed representation of a Telegram message object."""
 
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     message_id: int = Field(..., description="Telegram message ID")
     chat: ModelTelegramChat = Field(..., description="Chat the message belongs to")

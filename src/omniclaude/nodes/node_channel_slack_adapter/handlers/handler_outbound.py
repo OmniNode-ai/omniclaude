@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 
 class SlackWebClient(Protocol):
-    """Protocol for Slack Web API client (slack_sdk.WebClient)."""
+    """Protocol for Slack Web API client (slack_sdk.AsyncWebClient)."""
 
-    def chat_postMessage(  # noqa: N802
+    async def chat_postMessage(  # noqa: N802
         self,
         *,
         channel: str,
@@ -53,7 +53,7 @@ async def send_slack_reply(
         reply.correlation_id,
     )
 
-    client.chat_postMessage(
+    await client.chat_postMessage(
         channel=reply.channel_id,
         text=reply.reply_text,
         thread_ts=reply.reply_to,

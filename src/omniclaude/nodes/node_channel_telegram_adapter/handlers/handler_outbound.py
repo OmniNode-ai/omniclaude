@@ -53,10 +53,26 @@ async def send_telegram_reply(
         reply.correlation_id,
     )
 
-    reply_to_id = int(reply.reply_to) if reply.reply_to else None
+    try:
+        reply_to_id = int(reply.reply_to) if reply.reply_to else None
+    except ValueError:
+        logger.warning(
+            "Non-numeric reply_to for correlation_id=%s; sending without reply thread",
+            reply.correlation_id,
+        )
+        reply_to_id = None
+
+    try:
+        chat_id = int(reply.channel_id)
+    except ValueError:
+        logger.error(
+            "Non-numeric channel_id for correlation_id=%s; cannot send Telegram reply",
+            reply.correlation_id,
+        )
+        return
 
     await bot.send_message(
-        chat_id=int(reply.channel_id),
+        chat_id=chat_id,
         text=reply.reply_text,
         reply_to_message_id=reply_to_id,
     )

@@ -11,6 +11,7 @@ Related:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Protocol
 
@@ -47,12 +48,12 @@ async def send_sms_reply(
         from_number: The Twilio phone number to send from.
     """
     logger.info(
-        "Sending SMS reply: to=%s correlation_id=%s",
-        reply.channel_id,
+        "Sending SMS reply: correlation_id=%s",
         reply.correlation_id,
     )
 
-    messages_api.create(
+    await asyncio.to_thread(
+        messages_api.create,
         body=reply.reply_text,
         from_=from_number,
         to=reply.channel_id,

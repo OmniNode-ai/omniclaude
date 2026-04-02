@@ -54,8 +54,7 @@ def build_reply_message(
     msg.set_content(reply.reply_text)
 
     logger.info(
-        "Built email reply: to=%s correlation_id=%s",
-        to_addr,
+        "Built email reply: correlation_id=%s",
         reply.correlation_id,
     )
 
