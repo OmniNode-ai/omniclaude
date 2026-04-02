@@ -148,6 +148,7 @@ class ContextSource(StrEnum):
         SESSION_AGGREGATOR: Context aggregated from session history.
         RAG_QUERY: Context retrieved via RAG query from vector database.
         FALLBACK_STATIC: Static fallback context when other sources unavailable.
+        MEMORY_FABRIC: Context from cross-agent memory fabric (agent learnings).
         NONE: No context injection performed.
     """
 
@@ -155,6 +156,7 @@ class ContextSource(StrEnum):
     SESSION_AGGREGATOR = "session_aggregator"
     RAG_QUERY = "rag_query"
     FALLBACK_STATIC = "fallback_static"
+    MEMORY_FABRIC = "memory_fabric"
     NONE = "none"
 
 
