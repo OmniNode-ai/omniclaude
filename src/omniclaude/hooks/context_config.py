@@ -373,6 +373,33 @@ class ContextInjectionConfig(BaseSettings):
         ),
     )
 
+    # Cross-agent memory fabric configuration (OMN-7249)
+    memory_fabric_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable cross-agent memory fabric as an additional context source. "
+            "Override via OMNICLAUDE_CONTEXT_MEMORY_FABRIC_ENABLED."
+        ),
+    )
+
+    memory_fabric_url: str = Field(
+        default="http://localhost:8085/v1/nodes/node_agent_learning_retrieval_effect/execute",
+        description=(
+            "URL for the memory fabric retrieval endpoint. "
+            "Override via OMNICLAUDE_CONTEXT_MEMORY_FABRIC_URL."
+        ),
+    )
+
+    memory_fabric_max_learnings: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description=(
+            "Maximum learnings to inject from memory fabric. "
+            "Override via OMNICLAUDE_CONTEXT_MEMORY_FABRIC_MAX_LEARNINGS."
+        ),
+    )
+
     # Injection limits configuration (OMN-1671)
     limits: InjectionLimitsConfig = Field(
         default_factory=InjectionLimitsConfig,

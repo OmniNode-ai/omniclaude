@@ -554,10 +554,43 @@ class HandlerContextInjection:
         context_markdown = self._format_patterns_markdown(
             patterns, cfg.limits.max_patterns_per_injection
         )
+
+        # Step 6b: Cross-agent memory fabric (additive source, OMN-7249)
+        # Appended after database patterns — both sources provide different signals
+        # (learned patterns vs. agent learnings). Wrapped in try/except with timeout
+        # to ensure session startup is never blocked.
+        if cfg.memory_fabric_enabled:
+            try:
+                repo_name = Path(project_root or "").name
+                memory_fabric_context = await asyncio.wait_for(
+                    self._load_learnings_from_memory_fabric(
+                        repo=repo_name,
+                    ),
+                    timeout=3.0,
+                )
+                if memory_fabric_context:
+                    if context_markdown:
+                        context_markdown = (
+                            context_markdown + "\n\n" + memory_fabric_context
+                        )
+                    else:
+                        context_markdown = memory_fabric_context
+                    context_source = ContextSource.MEMORY_FABRIC
+                    logger.info(
+                        "memory_fabric: injected learnings for repo=%s",
+                        repo_name,
+                    )
+            except TimeoutError:
+                logger.warning("Memory fabric retrieval timed out (3s budget)")
+            except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade
+                logger.warning("Memory fabric integration failed: %s", exc)
+
         context_size_bytes = len(context_markdown.encode("utf-8"))
 
         # Compute token count for both injection record and event (OMN-5548)
-        tokens_injected = count_tokens(context_markdown) if patterns else 0
+        tokens_injected = (
+            count_tokens(context_markdown) if (patterns or context_markdown) else 0
+        )
 
         # Record injection to database via emit daemon
         if cohort_assignment:
@@ -947,6 +980,86 @@ class HandlerContextInjection:
             source_files=[],
             warnings=["patterns_read_disabled (api_enabled=False, OMN-2059)"],
         )
+
+    async def _load_learnings_from_memory_fabric(
+        self,
+        repo: str,
+        task_type: str | None = None,
+    ) -> str:
+        """Load recent agent learnings from the cross-agent memory fabric.
+
+        Calls the memory fabric retrieval endpoint and formats matching
+        learnings as markdown for injection. Fails gracefully — returns
+        empty string on any error to avoid blocking session startup.
+
+        Args:
+            repo: Repository name (basename of project_root).
+            task_type: Optional task type filter.
+
+        Returns:
+            Formatted markdown string with learnings, or empty string on failure.
+        """
+        import httpx
+
+        cfg = self._config
+        try:
+            payload: dict[str, object] = {
+                "match_type": "task_context",
+                "repo": repo,
+                "max_results": cfg.memory_fabric_max_learnings,
+            }
+            if task_type:
+                payload["task_type"] = task_type
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(cfg.memory_fabric_url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+            matches = data.get("matches", [])
+            if not matches or not isinstance(matches, list):
+                return ""
+
+            lines: list[str] = [
+                "## Agent Learnings (Cross-Session)",
+                "",
+                "Relevant solutions from previous agent sessions:",
+                "",
+            ]
+            for match in matches[: cfg.memory_fabric_max_learnings]:
+                if not isinstance(match, dict):
+                    continue
+                summary = match.get("resolution_summary", "")
+                match_repo = match.get("repo", "")
+                score = match.get("score", 0.0)
+                if not summary:
+                    continue
+                lines.append(
+                    f"### Learning (repo: {match_repo}, relevance: {score:.0%})"
+                )
+                lines.append("")
+                lines.append(str(summary))
+                lines.append("")
+                lines.append("---")
+                lines.append("")
+
+            # Remove trailing separator
+            if lines[-2:] == ["---", ""]:
+                lines = lines[:-2]
+
+            formatted = "\n".join(lines)
+            if (
+                formatted.strip()
+                == "## Agent Learnings (Cross-Session)\n\nRelevant solutions from previous agent sessions:"
+            ):
+                return ""
+            return formatted
+
+        except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade not crash
+            logger.warning(
+                "Memory fabric retrieval failed (graceful degradation): %s", exc
+            )
+            return ""
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.
