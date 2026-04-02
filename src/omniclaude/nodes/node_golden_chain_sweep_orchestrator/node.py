@@ -113,6 +113,11 @@ async def _persist_results(
     """Insert per-chain results into golden_chain_sweep_results table."""
     import psycopg2  # noqa: PLC0415
 
+    from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (  # noqa: PLC0415
+        GOLDEN_CHAIN_DEFINITIONS,
+    )
+
+    conn = None
     try:
         conn = psycopg2.connect(db_dsn)
         conn.autocommit = True
@@ -123,16 +128,6 @@ async def _persist_results(
             status = result.projection_status
             if result.publish_status == "error":
                 status = "error"
-
-            # Find the matching chain to get head_topic/tail_table
-            chain_summary = next(
-                (c for c in summary.chains if c.name == result.chain_name), None
-            )
-
-            # Get head_topic/tail_table from payloads (they're in the result context)
-            from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (
-                GOLDEN_CHAIN_DEFINITIONS,
-            )
 
             chain_def = next(
                 (c for c in GOLDEN_CHAIN_DEFINITIONS if c.name == result.chain_name),
@@ -164,11 +159,16 @@ async def _persist_results(
             )
 
         cur.close()
-        conn.close()
         logger.info("Persisted %d chain results to golden_chain_sweep_results", len(chain_results))
 
     except Exception as exc:
         logger.error("Failed to persist sweep results: %s", exc)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001, S110
+                pass
 
 
 def _write_evidence(

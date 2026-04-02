@@ -92,6 +92,21 @@ async def run_chain(
     poll_start = time.monotonic()
     projected_row: dict[str, Any] | None = None
 
+    # Validate tail_table against allowed identifier pattern
+    import re  # noqa: PLC0415
+
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_.]*$", payload.tail_table):
+        return ModelChainResult(
+            chain_name=payload.chain_name,
+            correlation_id=payload.correlation_id,
+            publish_status=publish_status,
+            publish_latency_ms=publish_latency_ms,
+            projection_status="error",
+            projection_latency_ms=-1,
+            error_reason=f"Invalid tail_table identifier: {payload.tail_table}",
+        )
+
+    conn = None
     try:
         conn = psycopg2.connect(db_dsn)
         conn.autocommit = True
@@ -115,8 +130,6 @@ async def run_chain(
         projection_latency_ms = (time.monotonic() - poll_start) * 1000.0
 
         if projected_row is None:
-            cur.close()
-            conn.close()
             return ModelChainResult(
                 chain_name=payload.chain_name,
                 correlation_id=payload.correlation_id,
@@ -161,7 +174,6 @@ async def run_chain(
             )
 
         cur.close()
-        conn.close()
 
         return ModelChainResult(
             chain_name=payload.chain_name,
@@ -185,6 +197,12 @@ async def run_chain(
             projection_latency_ms=(time.monotonic() - poll_start) * 1000.0,
             error_reason=f"DB poll failed: {exc}",
         )
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001, S110
+                pass
 
 
 __all__ = ["run_chain"]

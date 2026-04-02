@@ -27,12 +27,12 @@ description: >
   side effects -- produces deterministic output from chain definitions.
 
 input_model:
-  name: "ModelGoldenChainPayloadComputeInput"
-  module: "omniclaude.nodes.node_golden_chain_payload_compute.models"
+  name: "ModelChainDefinition"
+  module: "omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_definition"
   description: "Chain definitions — list of chain specs with topic, table, fixture template, assertions."
 output_model:
-  name: "ModelGoldenChainPayloadComputeOutput"
-  module: "omniclaude.nodes.node_golden_chain_payload_compute.models"
+  name: "ModelEnrichedPayload"
+  module: "omniclaude.nodes.node_golden_chain_payload_compute.models.model_enriched_payload"
   description: "List of enriched payloads with correlation_id, emitted_at, fixture, and assertions."
 
 runtime:

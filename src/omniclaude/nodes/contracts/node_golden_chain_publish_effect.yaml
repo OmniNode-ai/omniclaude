@@ -27,12 +27,12 @@ description: >
   from golden_path_validate. Cleans up synthetic rows after validation.
 
 input_model:
-  name: "ModelGoldenChainPublishInput"
-  module: "omniclaude.nodes.node_golden_chain_publish_effect.models"
+  name: "ModelEnrichedPayload"
+  module: "omniclaude.nodes.node_golden_chain_payload_compute.models.model_enriched_payload"
   description: "Single enriched payload from the payload compute node."
 output_model:
-  name: "ModelGoldenChainPublishResult"
-  module: "omniclaude.nodes.node_golden_chain_publish_effect.models"
+  name: "ModelChainResult"
+  module: "omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result"
   description: "Chain result with publish/projection status, latency, assertion results."
 
 event_bus:

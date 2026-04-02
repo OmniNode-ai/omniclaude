@@ -26,12 +26,12 @@ description: >
   summaries. Pure aggregation with no side effects.
 
 input_model:
-  name: "ModelGoldenChainReducerInput"
-  module: "omniclaude.nodes.node_golden_chain_status_reducer.models"
+  name: "ModelChainResult"
+  module: "omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result"
   description: "List of chain results from the publish effect node."
 output_model:
-  name: "ModelGoldenChainSweepSummary"
-  module: "omniclaude.nodes.node_golden_chain_status_reducer.models"
+  name: "ModelSweepSummary"
+  module: "omniclaude.nodes.node_golden_chain_status_reducer.models.model_sweep_summary"
   description: "Sweep summary with overall status, per-chain summaries, and counts."
 
 runtime:

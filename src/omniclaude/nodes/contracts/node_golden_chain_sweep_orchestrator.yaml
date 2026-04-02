@@ -27,13 +27,13 @@ description: >
   to omnidash_analytics, and writes evidence artifacts.
 
 input_model:
-  name: "ModelGoldenChainSweepRequest"
-  module: "omniclaude.nodes.node_golden_chain_sweep_orchestrator.models"
+  name: "ModelSweepRequest"
+  module: "omniclaude.nodes.node_golden_chain_sweep_orchestrator.models.model_sweep_request"
   description: "Sweep trigger request with optional chain filter."
 output_model:
-  name: "ModelGoldenChainSweepResult"
-  module: "omniclaude.nodes.node_golden_chain_sweep_orchestrator.models"
-  description: "Persisted sweep result with summary and evidence artifact path."
+  name: "ModelSweepSummary"
+  module: "omniclaude.nodes.node_golden_chain_status_reducer.models.model_sweep_summary"
+  description: "Sweep summary with overall status, per-chain summaries, and counts."
 
 event_bus:
   subscribe_topics:
