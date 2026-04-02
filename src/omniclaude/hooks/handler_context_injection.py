@@ -585,9 +585,9 @@ class HandlerContextInjection:
             except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade
                 logger.warning("Memory fabric integration failed: %s", exc)
 
-        # Step 6c: Session resume context (additive source, OMN-7298)
-        # Injects last session snapshot when agent is logged in (ONEX_AGENT_ID set).
-        # Follows same pattern as memory fabric: additive, timeout-guarded, never blocks.
+        # Step 6c: Session resume context (additive source, OMN-7300)
+        # Injects the agent's last session snapshot for continuity across /clear
+        # and session restarts. Requires ONEX_AGENT_ID env var (set by /login).
         agent_id = os.environ.get("ONEX_AGENT_ID")
         if cfg.session_resume_enabled and agent_id:
             try:
@@ -607,7 +607,7 @@ class HandlerContextInjection:
                     )
             except TimeoutError:
                 logger.warning("Session resume retrieval timed out (3s budget)")
-            except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade
+            except Exception as exc:  # noqa: BLE001 — boundary: session resume must degrade
                 logger.warning("Session resume integration failed: %s", exc)
 
         context_size_bytes = len(context_markdown.encode("utf-8"))
@@ -1086,46 +1086,49 @@ class HandlerContextInjection:
             )
             return ""
 
-    async def _load_resume_context(self, agent_id: str) -> str:
-        """Load last session snapshot for an agent from the session projector.
+    async def _load_resume_context(
+        self,
+        agent_id: str,
+    ) -> str:
+        """Load session resume context for a logged-in agent.
 
-        Calls the session projector endpoint and formats the snapshot
-        as injectable markdown context. Fails gracefully — returns
-        empty string on any error to avoid blocking session startup.
+        Calls the session projector endpoint and formats the latest snapshot
+        as markdown for injection. Fails gracefully — returns empty string
+        on any error to avoid blocking session startup.
 
         Args:
-            agent_id: The agent identity to load resume context for.
+            agent_id: The agent identity (e.g., CAIA, SENTINEL).
 
         Returns:
-            Formatted markdown string with resume context, or empty string.
+            Formatted markdown string with session context, or empty string.
         """
+        import sys
+
         import httpx
+
+        # Import from plugin lib — add to path if needed
+        hooks_lib = str(
+            Path(__file__).resolve().parents[3] / "plugins" / "onex" / "hooks" / "lib"
+        )
+        if hooks_lib not in sys.path:
+            sys.path.insert(0, hooks_lib)
+
         from session_resume_client import format_resume_context
 
         cfg = self._config
         try:
-            payload: dict[str, object] = {
-                "agent_id": agent_id,
-                "limit": 1,
-            }
-
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(cfg.session_projector_url, json=payload)
+                resp = await client.get(
+                    cfg.session_projector_url,
+                    params={"agent_id": agent_id, "limit": "1"},
+                )
                 resp.raise_for_status()
                 data = resp.json()
 
-            snapshots = data.get("snapshots", [])
-            if not snapshots or not isinstance(snapshots, list):
-                return ""
+            snapshot = data.get("snapshot") or data.get("snapshots", [None])[0]
+            return format_resume_context(snapshot, agent_id=agent_id)
 
-            latest = snapshots[0]
-            if not isinstance(latest, dict):
-                return ""
-
-            result: str = format_resume_context(latest, agent_id=agent_id)
-            return result
-
-        except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade not crash
+        except Exception as exc:  # noqa: BLE001 — boundary: session resume must degrade not crash
             logger.warning(
                 "Session resume retrieval failed (graceful degradation): %s", exc
             )
