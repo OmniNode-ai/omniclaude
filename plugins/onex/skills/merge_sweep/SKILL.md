@@ -103,37 +103,58 @@ Then proceed without waiting for input (this is a headless-compatible warning, n
 
 ## Headless Mode (Overnight Pipelines)
 
-Use `plugins/onex/skills/merge_sweep/run.sh` for overnight/unattended runs:
+Use `scripts/cron-merge-sweep.sh` for overnight/unattended runs. This wrapper handles
+`claude -p` invocation with scoped `--allowedTools`, auth recovery, and structured result YAML.
 
 ```bash
 # Full headless sweep
-plugins/onex/skills/merge_sweep/run.sh
+./scripts/cron-merge-sweep.sh
 
 # Limit repos
-plugins/onex/skills/merge_sweep/run.sh --repos omniclaude,omnibase_core
+./scripts/cron-merge-sweep.sh --repos omniclaude,omnibase_core
 
 # Skip polish (fast, merge-only sweep)
-plugins/onex/skills/merge_sweep/run.sh --skip-polish
+./scripts/cron-merge-sweep.sh --skip-polish
 
 # Resume interrupted sweep (picks up from last checkpoint)
-plugins/onex/skills/merge_sweep/run.sh --resume
+./scripts/cron-merge-sweep.sh --resume
+
+# Dry run (print without executing)
+./scripts/cron-merge-sweep.sh --dry-run
+```
+
+### Auth Recovery [OMN-7256]
+
+The headless wrapper detects GitHub auth failures (`HTTP 401`, `token expired`, etc.) in
+`claude -p` output and automatically runs `gh auth refresh` before retrying. Circuit breaker:
+max 2 auth refreshes per cycle — if both fail, the run aborts with exit code 2.
+
+Auth recovery flow:
+1. Pre-check: `gh auth status` before invoking claude. If it fails, refresh immediately.
+2. During sweep: if merge-sweep output contains auth failure indicators, refresh and retry.
+3. Circuit breaker: after 2 failed refreshes, abort and write `auth_failed` to result YAML.
+
+### Result YAML
+
+Each run produces a structured result at `.onex_state/merge-sweep-results/{run_id}.yaml`:
+
+```yaml
+run_id: "merge-sweep-2026-04-02T03-00-00Z"
+completed_at: "2026-04-02T03:12:00Z"
+status: "complete"        # complete | failed | auth_failed
+attempts: 1
+auth_refreshes: 0
+sweep_args: "--skip-polish"
+output_files:
+  - "merge-sweep-2026-04-02T03-00-00Z-attempt-1.txt"
 ```
 
 **Headless resume pattern**: When a headless sweep is interrupted (usage limit, rate limit,
 process kill), the next cron invocation should use `--resume` to continue from the checkpoint.
-Example cron-closeout.sh integration:
-
-```bash
-# First attempt: clean sweep
-claude -p "/merge-sweep" --allowedTools "$TOOLS" || \
-# On failure: resume from checkpoint
-claude -p "/merge-sweep --resume" --allowedTools "$TOOLS"
-```
 
 **Minimum tool allowlist for headless merge-sweep:**
 ```
-Bash, Read, Write, Edit, Glob, Grep, Task, TaskCreate, TaskUpdate,
-TaskGet, TaskList, SendMessage, mcp__linear-server__save_comment
+Bash, Read, Write, Edit, Glob, Grep
 ```
 
 **Failure doctrine in headless mode:**
