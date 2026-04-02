@@ -120,7 +120,10 @@ Remove tickets that should not be dispatched:
    non-completed tickets
 3. **Missing repo**: Tickets without a clear target repo (no `repo:` label or description match)
 4. **No push access**: Exclude repos where the current agent identity cannot push — verify
-   via `gh api repos/{owner}/{repo} --jq '.permissions.push'` before scheduling any workers
+   via `gh api repos/{owner}/{repo} --jq '.permissions.push'` before scheduling any workers.
+   If the permission check errors, times out, returns null/undefined, or yields any non-true
+   value, treat the repo as non-pushable, log the error and repo identifier, and skip dispatch
+   for that repo (fail-closed).
 5. **Wave cap**: If current in-flight count >= wave cap, skip this cycle entirely
 
 **Dispatched state file** (`.onex_state/pipeline-fill/dispatched.yaml`):
@@ -143,7 +146,17 @@ completed:
     completed_at: "2026-04-02T09:45:00Z"
     worker_type: ticket_pipeline
     status: done
+failed:
+  - ticket_id: OMN-7298
+    repo: OmniNode-ai/omniclaude
+    dispatched_at: "2026-04-02T08:00:00Z"
+    failed_at: "2026-04-02T08:01:00Z"
+    worker_type: ticket_pipeline
+    error: "Agent dispatch timed out"
 ```
+
+On dispatch failure, the ticket must be moved out of `in_flight` immediately and into `failed`
+(not left as `in_flight`). Failed entries do not count toward wave-cap enforcement.
 
 ---
 
@@ -297,7 +310,7 @@ All state is written to `.onex_state/pipeline-fill/`:
 
 | File | Purpose |
 |------|---------|
-| `dispatched.yaml` | In-flight and completed ticket tracking |
+| `dispatched.yaml` | In-flight, completed, and failed ticket tracking |
 | `last-run.yaml` | Timestamp and result of last cycle |
 | `scores.yaml` | Last scoring run (for debugging/auditing) |
 
@@ -349,7 +362,7 @@ Also write this report to `.onex_state/pipeline-fill/scores.yaml` for external t
 | No candidates found | Log "No unstarted tickets in Active Sprint", skip cycle |
 | All candidates filtered | Log reason breakdown, skip cycle |
 | All candidates below --min-score | Log "No tickets above minimum score threshold", skip cycle |
-| Dispatch failure | Log friction event, mark ticket as `failed` in dispatched.yaml, continue to next ticket |
+| Dispatch failure | Log friction event, move ticket out of `in_flight` into `failed` in dispatched.yaml (decrement wave-cap count), continue to next ticket |
 | Wave cap reached | Log "Wave cap reached", skip cycle |
 | GitHub API error (repo readiness check) | Use default repo_readiness_score of 0.5, continue scoring |
 
