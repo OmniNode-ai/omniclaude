@@ -91,6 +91,14 @@ class ModelLoggingConfig(BaseModel):
         default="default",
         description="Active personality profile name",
     )
+    persona_driven: bool = Field(
+        default=False,
+        description=(
+            "When True, dynamically select phrase pack based on inferred user "
+            "persona (technical_level + preferred_tone). Falls back to static "
+            "personality_profile when persona is unavailable."
+        ),
+    )
     routing_rules: list[ModelRoutingRule] = Field(
         default_factory=list,
         description="Ordered glob-pattern → sinks routing rules",

@@ -30,6 +30,7 @@ from omniclaude.nodes.node_personality_logging_effect.models.model_personality_p
 from omniclaude.nodes.node_personality_logging_effect.personality_adapter import (
     PersonalityAdapter,
     apply_redaction,
+    build_persona_profile,
     get_builtin_profiles,
 )
 
@@ -296,3 +297,78 @@ def test_render_does_not_mutate_event_attrs() -> None:
     adapter.render(event, "panic_comic")
     # Pydantic frozen model — attrs cannot be mutated, but verify API contract
     assert event.attrs == original_attrs
+
+
+# ---------------------------------------------------------------------------
+# Persona-driven profile tests (Task 8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_build_persona_profile_beginner_explanatory() -> None:
+    """Beginner+explanatory persona produces detailed phrase pack."""
+    profile = build_persona_profile("beginner", "explanatory")
+    assert profile.name == "persona_beginner_explanatory"
+    # info severity should have helpful context
+    info_phrases = [p for p in profile.phrases if p.severity == "info"]
+    assert len(info_phrases) == 1
+    assert info_phrases[0].prefix == "Note: "
+
+
+@pytest.mark.unit
+def test_build_persona_profile_expert_concise() -> None:
+    """Expert+concise persona produces minimal phrase pack."""
+    profile = build_persona_profile("expert", "concise")
+    assert profile.name == "persona_expert_concise"
+    # info severity should have no prefix
+    info_phrases = [p for p in profile.phrases if p.severity == "info"]
+    assert len(info_phrases) == 1
+    assert info_phrases[0].prefix == ""
+    assert info_phrases[0].suffix == ""
+
+
+@pytest.mark.unit
+def test_build_persona_profile_intermediate_formal() -> None:
+    """Intermediate+formal produces structured professional phrasing."""
+    profile = build_persona_profile("intermediate", "formal")
+    assert profile.name == "persona_intermediate_formal"
+    warn_phrases = [p for p in profile.phrases if p.severity == "warn"]
+    assert len(warn_phrases) == 1
+    assert "review recommended" in warn_phrases[0].suffix
+
+
+@pytest.mark.unit
+def test_build_persona_profile_unknown_falls_back_to_default() -> None:
+    """Unknown persona combination falls back to default built-in."""
+    profile = build_persona_profile("unknown_level", "unknown_tone")
+    assert profile.name == "default"
+
+
+@pytest.mark.unit
+def test_persona_profile_renders_correctly() -> None:
+    """A persona-driven profile renders events correctly through the adapter."""
+    profile = build_persona_profile("beginner", "explanatory")
+    adapter = PersonalityAdapter(extra_profiles=[profile])
+    event = _make_event(
+        severity=EnumLogSeverity.ERROR,
+        event_name="deploy.fail",
+        message="rollback triggered",
+    )
+    result = adapter.render(event, profile.name)
+    assert "Problem found:" in result.rendered_message
+    assert "action needed" in result.rendered_message
+    assert "deploy.fail" in result.rendered_message
+
+
+@pytest.mark.unit
+def test_persona_profile_deterministic() -> None:
+    """Persona-driven rendering is deterministic."""
+    profile = build_persona_profile("expert", "concise")
+    adapter = PersonalityAdapter(extra_profiles=[profile])
+    event = _make_event(severity=EnumLogSeverity.WARN, message="slow query")
+    first = adapter.render(event, profile.name)
+    for _ in range(10):
+        assert (
+            adapter.render(event, profile.name).rendered_message
+            == first.rendered_message
+        )
