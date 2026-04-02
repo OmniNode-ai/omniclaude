@@ -27,7 +27,7 @@ comparison — this skill only classifies and publishes.
 1. Parse the user's prompt
 2. Classify the task type using the existing `TaskClassifier` (heuristic keyword matching)
 3. Construct a delegation request envelope (plain dict, no infrastructure model imports)
-4. Publish to `onex.cmd.omniclaude.delegation-request.v1` via the emit daemon
+4. Publish to `onex.cmd.omnibase-infra.delegation-request.v1` via the emit daemon
 5. Return immediately with the correlation ID
 
 ## Task Types
@@ -62,7 +62,7 @@ Runtime-side validation occurs on the consuming `node_delegation_orchestrator`.
 
 ## Kafka Topic
 
-- **Command topic**: `onex.cmd.omniclaude.delegation-request.v1`
+- **Command topic**: `onex.cmd.omnibase-infra.delegation-request.v1`
 - **Producer**: this skill (via omniclaude emit daemon)
 - **Consumer**: `node_delegation_orchestrator` (omnibase_infra runtime)
 
@@ -165,7 +165,7 @@ TaskClassifier.classify() --> task_type = "test"
 Construct plain dict envelope
   |
   v
-Publish to onex.cmd.omniclaude.delegation-request.v1
+Publish to onex.cmd.omnibase-infra.delegation-request.v1
   |
   v
 [RUNTIME SIDE - not in this skill]

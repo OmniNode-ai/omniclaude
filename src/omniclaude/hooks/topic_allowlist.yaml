@@ -613,7 +613,7 @@ allowed_extras:
   # node_delegation_orchestrator on the omnibase_infra runtime.
   # ---------------------------------------------------------------------------
 
-  - topic: "onex.cmd.omniclaude.delegation-request.v1"
+  - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
     lifecycle: internal_control
     reason: >
       Delegation request command published by the /delegate skill to trigger
