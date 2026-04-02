@@ -36,7 +36,7 @@ class TestComplianceSweepSkillMd:
         assert len(parts) >= 3, "Frontmatter not properly delimited"
         fm = yaml.safe_load(parts[1])
         assert fm["description"], "description required"
-        assert fm["version"] == "1.0.0"
+        assert fm["version"] == "1.1.0"
         assert fm["mode"] == "full"
         assert fm["category"] == "verification"
         assert "compliance" in fm["tags"]
