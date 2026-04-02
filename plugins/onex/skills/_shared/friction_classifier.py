@@ -123,7 +123,7 @@ def match_signal(
 _REQUIRED_RULE_FIELDS = frozenset(
     {"rule_id", "event_pattern", "surface", "severity", "description_template"}
 )
-_VALID_SEVERITIES = frozenset({"low", "medium", "high"})
+_VALID_SEVERITIES = frozenset({"low", "medium", "high", "critical"})
 _VALID_PATTERN = re.compile(
     r"^(\*|[a-z][a-z0-9_.]*(?::[a-z_]+=\S+)?)$"
 )  # "*" or "event.type" or "event.type:field=value"
