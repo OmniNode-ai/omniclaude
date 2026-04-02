@@ -16,13 +16,9 @@ class ModelSlackConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    bot_token: str = Field(  # secret-ok: config model, resolved from env at runtime
+    bot_token: str = Field(  # secret-ok: resolved from env
         ..., min_length=1, description="Slack bot OAuth token"
     )
-    slack_signing_key: str = (
-        Field(  # secret-ok: config model, resolved from env at runtime  # noqa: secrets
-            ...,
-            min_length=1,
-            description="Slack app signing key for webhook verification",
-        )
+    app_verification: str = Field(  # secret-ok: resolved from env
+        ..., min_length=1, description="Slack signing verification value"
     )
