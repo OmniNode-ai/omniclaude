@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-7360
+#
+# Wire schema contract for prompt submitted event
+topic: "onex.evt.omniclaude.prompt-submitted.v1"
+schema_version: "1.0.0"
+ticket: "OMN-7360"
+description: >
+  User prompt submission event (preview-safe). Contains sanitized 100-char preview
+  only — full prompts go to the intelligence topic.
+
+producer:
+  repo: "omniclaude"
+  file: "src/omniclaude/hooks/handler_event_emitter.py"
+  function: "emit_prompt_submitted"
+
+consumer:
+  repo: "omnibase_infra"
+  file: "src/omnibase_infra/services/session/consumer.py"
+  model: "ModelHookPromptSubmittedPayload"
+
+required_fields:
+  - name: "entity_id"
+    type: "uuid"
+    description: "Session identifier as UUID (partition key for ordering)."
+  - name: "session_id"
+    type: "string"
+    description: "Session identifier string."
+  - name: "correlation_id"
+    type: "uuid"
+    description: "Correlation ID for distributed tracing."
+  - name: "causation_id"
+    type: "uuid"
+    description: "ID of the previous event in the session chain."
+  - name: "emitted_at"
+    type: "datetime"
+    description: "Timestamp when the hook emitted this event (UTC)."
+  - name: "prompt_id"
+    type: "uuid"
+    description: "Unique identifier for this specific prompt."
+  - name: "prompt_preview"
+    type: "string"
+    description: "Sanitized and truncated preview of the prompt (max 100 chars)."
+    constraints:
+      max_length: 100
+  - name: "prompt_length"
+    type: "integer"
+    description: "Total character count of the original prompt."
+    constraints:
+      ge: 0
+
+optional_fields:
+  - name: "task_id"
+    type: "string"
+    nullable: true
+    description: "Stable task identifier for cross-session correlation."
+  - name: "detected_intent"
+    type: "string"
+    nullable: true
+    description: "Classified intent if available."
+  - name: "action_description"
+    type: "string"
+    nullable: false
+    description: "Human-readable description for consumer display."

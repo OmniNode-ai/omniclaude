@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-7360
+#
+# Wire schema contract for tool executed event
+topic: "onex.evt.omniclaude.tool-executed.v1"
+schema_version: "1.0.0"
+ticket: "OMN-7360"
+description: >
+  Tool execution event emitted after each tool completes in Claude Code.
+  Captures tool execution metadata for observability.
+
+producer:
+  repo: "omniclaude"
+  file: "src/omniclaude/hooks/handler_event_emitter.py"
+  function: "emit_tool_executed"
+
+consumer:
+  repo: "omnibase_infra"
+  file: "src/omnibase_infra/services/session/consumer.py"
+  model: "ModelHookToolExecutedPayload"
+
+required_fields:
+  - name: "entity_id"
+    type: "uuid"
+    description: "Session identifier as UUID (partition key for ordering)."
+  - name: "session_id"
+    type: "string"
+    description: "Session identifier string."
+  - name: "correlation_id"
+    type: "uuid"
+    description: "Correlation ID for distributed tracing."
+  - name: "causation_id"
+    type: "uuid"
+    description: "ID of the prompt event that triggered this tool use."
+  - name: "emitted_at"
+    type: "datetime"
+    description: "Timestamp when the hook emitted this event (UTC)."
+  - name: "tool_execution_id"
+    type: "uuid"
+    description: "Unique identifier for this tool execution."
+  - name: "tool_name"
+    type: "string"
+    description: "Name of the tool (Read, Write, Edit, Bash, etc.)."
+
+optional_fields:
+  - name: "task_id"
+    type: "string"
+    nullable: true
+    description: "Stable task identifier for cross-session correlation."
+  - name: "success"
+    type: "boolean"
+    nullable: false
+    description: "Whether the tool execution succeeded."
+  - name: "duration_ms"
+    type: "integer"
+    nullable: true
+    description: "Tool execution duration in milliseconds."
+  - name: "summary"
+    type: "string"
+    nullable: true
+    description: "Brief summary of the tool execution result (max 500 chars)."
+  - name: "action_description"
+    type: "string"
+    nullable: false
+    description: "Human-readable description for consumer display."

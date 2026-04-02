@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-7360
+#
+# Wire schema contract for session ended event
+topic: "onex.evt.omniclaude.session-ended.v1"
+schema_version: "1.0.0"
+ticket: "OMN-7360"
+description: >
+  Session end event emitted by Claude Code hooks. Final event in a session lifecycle.
+
+producer:
+  repo: "omniclaude"
+  file: "src/omniclaude/hooks/handler_event_emitter.py"
+  function: "emit_session_ended"
+
+consumer:
+  repo: "omnibase_infra"
+  file: "src/omnibase_infra/services/session/consumer.py"
+  model: "ModelHookSessionEndedPayload"
+
+required_fields:
+  - name: "entity_id"
+    type: "uuid"
+    description: "Session identifier as UUID (partition key for ordering)."
+  - name: "session_id"
+    type: "string"
+    description: "Session identifier string."
+  - name: "correlation_id"
+    type: "uuid"
+    description: "Correlation ID for distributed tracing."
+  - name: "causation_id"
+    type: "uuid"
+    description: "ID of the previous event in the session chain."
+  - name: "emitted_at"
+    type: "datetime"
+    description: "Timestamp when the hook emitted this event (UTC)."
+  - name: "reason"
+    type: "string"
+    description: "What caused the session to end (clear, logout, exit, other)."
+
+optional_fields:
+  - name: "task_id"
+    type: "string"
+    nullable: true
+    description: "Stable task identifier for cross-session correlation."
+  - name: "duration_seconds"
+    type: "float"
+    nullable: true
+    description: "Total session duration in seconds."
+  - name: "tools_used_count"
+    type: "integer"
+    nullable: false
+    description: "Number of tool invocations during the session."
+  - name: "action_description"
+    type: "string"
+    nullable: false
+    description: "Human-readable description for consumer display."
