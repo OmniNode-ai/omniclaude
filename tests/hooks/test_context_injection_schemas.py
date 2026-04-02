@@ -84,6 +84,7 @@ class TestContextSource:
         assert ContextSource.DATABASE == "database"
         assert ContextSource.SESSION_AGGREGATOR == "session_aggregator"
         assert ContextSource.RAG_QUERY == "rag_query"
+        assert ContextSource.MEMORY_FABRIC == "memory_fabric"
         assert ContextSource.FALLBACK_STATIC == "fallback_static"
         assert ContextSource.NONE == "none"
 
@@ -92,6 +93,7 @@ class TestContextSource:
         assert isinstance(ContextSource.DATABASE, str)
         assert isinstance(ContextSource.SESSION_AGGREGATOR, str)
         assert isinstance(ContextSource.RAG_QUERY, str)
+        assert isinstance(ContextSource.MEMORY_FABRIC, str)
         assert isinstance(ContextSource.FALLBACK_STATIC, str)
         assert isinstance(ContextSource.NONE, str)
 
