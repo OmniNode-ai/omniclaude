@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Validate that no localhost/default fallbacks exist in src/ and scripts/.
 
@@ -139,7 +140,7 @@ def main() -> int:
             print(f"  {filepath}:{line_num}")
             print(f"    {line_text}\n")
         print(
-            "Fix: Replace with os.environ[\"VAR\"] (no fallback) or raise an error "
+            'Fix: Replace with os.environ["VAR"] (no fallback) or raise an error '
             "when the env var is missing. [OMN-7227]"
         )
         return 1

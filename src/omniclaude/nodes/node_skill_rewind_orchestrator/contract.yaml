@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the rewind skill.
-  Query what a named agent was doing at a specific time. Conversational rewind -- search the event stream by agent identity and timestamp.
+  Query what a named agent was doing at a specific time. Conversational rewind — search the event stream by agent identity and timestamp.
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.

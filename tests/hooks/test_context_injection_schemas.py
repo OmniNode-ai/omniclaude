@@ -85,6 +85,8 @@ class TestContextSource:
         assert ContextSource.SESSION_AGGREGATOR == "session_aggregator"
         assert ContextSource.RAG_QUERY == "rag_query"
         assert ContextSource.MEMORY_FABRIC == "memory_fabric"
+        assert ContextSource.SESSION_RESUME == "session_resume"
+        assert ContextSource.PERSONA == "persona"
         assert ContextSource.FALLBACK_STATIC == "fallback_static"
         assert ContextSource.NONE == "none"
 
@@ -94,6 +96,8 @@ class TestContextSource:
         assert isinstance(ContextSource.SESSION_AGGREGATOR, str)
         assert isinstance(ContextSource.RAG_QUERY, str)
         assert isinstance(ContextSource.MEMORY_FABRIC, str)
+        assert isinstance(ContextSource.SESSION_RESUME, str)
+        assert isinstance(ContextSource.PERSONA, str)
         assert isinstance(ContextSource.FALLBACK_STATIC, str)
         assert isinstance(ContextSource.NONE, str)
 
@@ -101,11 +105,12 @@ class TestContextSource:
         """ContextSource can be compared to strings."""
         assert ContextSource.DATABASE == "database"
         assert ContextSource.RAG_QUERY == "rag_query"
+        assert ContextSource.PERSONA == "persona"
         assert ContextSource.NONE == "none"
 
-    def test_has_seven_values(self) -> None:
-        """ContextSource has exactly 7 defined values (includes SESSION_RESUME)."""
-        assert len(ContextSource) == 7
+    def test_has_eight_values(self) -> None:
+        """ContextSource has exactly 8 defined values (includes SESSION_RESUME, PERSONA)."""
+        assert len(ContextSource) == 8
 
 
 # =============================================================================

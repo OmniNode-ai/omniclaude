@@ -1,12 +1,12 @@
 ---
-description: Query what a named agent was doing at a specific time. Conversational rewind -- search the event stream by agent identity and timestamp.
+description: Query what a named agent was doing at a specific time. Conversational rewind — search the event stream by agent identity and timestamp.
 mode: full
 level: basic
 debug: false
 index: true
 ---
 
-# Rewind -- Conversational Rewind
+# Rewind — Conversational Rewind
 
 ## Overview
 
@@ -33,7 +33,7 @@ Enables temporal queries like "What was CAIA doing yesterday at 3pm?"
 ## Display Format
 
 ```
-### CAIA -- April 1, 2026 3:00pm - 4:30pm
+### CAIA — April 1, 2026 3:00pm - 4:30pm
 
 **Ticket:** OMN-7241 | **Branch:** jonah/omn-7241-learning-models
 **Outcome:** success (1.5 hours)

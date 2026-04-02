@@ -149,6 +149,7 @@ class ContextSource(StrEnum):
         RAG_QUERY: Context retrieved via RAG query from vector database.
         MEMORY_FABRIC: Context from cross-agent memory fabric (agent learnings).
         SESSION_RESUME: Context from agent session projector (last session snapshot).
+        PERSONA: Inferred user persona for output adaptation (technical level, tone).
         FALLBACK_STATIC: Static fallback context when other sources unavailable.
         NONE: No context injection performed.
     """
@@ -158,6 +159,7 @@ class ContextSource(StrEnum):
     RAG_QUERY = "rag_query"
     MEMORY_FABRIC = "memory_fabric"
     SESSION_RESUME = "session_resume"
+    PERSONA = "persona"
     FALLBACK_STATIC = "fallback_static"
     NONE = "none"
 
