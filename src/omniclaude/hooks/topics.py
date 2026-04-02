@@ -494,6 +494,25 @@ class TopicBase(StrEnum):
     CHANNEL_MESSAGE_PROCESSED = "onex.evt.omniclaw.channel-message-processed.v1"
     """Observability event emitted after orchestrator processes a channel message."""
 
+    # ==========================================================================
+    # OmniClaw channel-specific outbound topics (OMN-7187)
+    # Fan-out targets for the reply dispatcher. One per supported channel.
+    # ==========================================================================
+    CHANNEL_DISCORD_OUTBOUND = "onex.cmd.omniclaw.discord-outbound.v1"
+    """Reply routed to Discord adapter."""
+
+    CHANNEL_SLACK_OUTBOUND = "onex.cmd.omniclaw.slack-outbound.v1"
+    """Reply routed to Slack adapter."""
+
+    CHANNEL_TELEGRAM_OUTBOUND = "onex.cmd.omniclaw.telegram-outbound.v1"
+    """Reply routed to Telegram adapter."""
+
+    CHANNEL_EMAIL_OUTBOUND = "onex.cmd.omniclaw.email-outbound.v1"
+    """Reply routed to Email adapter."""
+
+    CHANNEL_SMS_OUTBOUND = "onex.cmd.omniclaw.sms-outbound.v1"
+    """Reply routed to SMS adapter."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

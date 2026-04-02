@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX Node Contract
+# Node: NodeChannelReplyDispatcher
+
+name: node_channel_reply_dispatcher
+contract_name: node_channel_reply_dispatcher
+node_name: node_channel_reply_dispatcher
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: EFFECT_GENERIC
+
+description: >
+  Dispatches reply-requested events to channel-specific outbound topics
+  based on channel_type. Fan-out from generic reply to N adapters.
+
+event_bus:
+  event_bus_enabled: true
+  subscribe_topics:
+    - "onex.evt.omniclaw.channel-reply-requested.v1"
+  publish_topics:
+    - "onex.cmd.omniclaw.discord-outbound.v1"
+    - "onex.cmd.omniclaw.slack-outbound.v1"
+    - "onex.cmd.omniclaw.telegram-outbound.v1"
+    - "onex.cmd.omniclaw.email-outbound.v1"
+    - "onex.cmd.omniclaw.sms-outbound.v1"
+
+consumed_events:
+  - topic: "onex.evt.omniclaw.channel-reply-requested.v1"
+    event_type: "ChannelReplyRequested"
+    message_category: "EVENT"
+    description: "Outbound response to be dispatched to originating channel adapter"
+
+published_events:
+  - topic: "onex.cmd.omniclaw.discord-outbound.v1"
+    event_type: "ChannelOutbound"
+    description: "Reply routed to Discord adapter"
+  - topic: "onex.cmd.omniclaw.slack-outbound.v1"
+    event_type: "ChannelOutbound"
+    description: "Reply routed to Slack adapter"
+  - topic: "onex.cmd.omniclaw.telegram-outbound.v1"
+    event_type: "ChannelOutbound"
+    description: "Reply routed to Telegram adapter"
+  - topic: "onex.cmd.omniclaw.email-outbound.v1"
+    event_type: "ChannelOutbound"
+    description: "Reply routed to Email adapter"
+  - topic: "onex.cmd.omniclaw.sms-outbound.v1"
+    event_type: "ChannelOutbound"
+    description: "Reply routed to SMS adapter"
+
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "channel.dispatch_reply"
+      handler:
+        name: "HandlerDispatchReply"
+        module: "omniclaude.nodes.node_channel_reply_dispatcher.handlers.handler_dispatch_reply"
+      description: "Route reply to channel-specific outbound topic"
+  execution_mode: "single"
+  max_timeout_seconds: 10
+
+input_model:
+  name: "ModelChannelReply"
+  module: "omniclaude.nodes.node_channel_reply_dispatcher.models"
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  tags:
+    - omniclaw
+    - channel
+    - dispatcher
