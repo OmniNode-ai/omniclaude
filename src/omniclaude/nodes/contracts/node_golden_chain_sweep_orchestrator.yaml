@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: node_golden_chain_sweep_orchestrator
+# Epic: OMN-7356 Golden Event Chain Validator
+
+name: "golden_chain_sweep_orchestrator"
+contract_name: "golden_chain_sweep_orchestrator"
+node_name: "golden_chain_sweep_orchestrator"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: "ORCHESTRATOR"
+
+description: >
+  ORCHESTRATOR node that coordinates the full golden chain validation sweep.
+  Invokes payload_compute to build payloads, runs publish_effect in parallel
+  for all chains, reduces results via status_reducer, persists sweep results
+  to omnidash_analytics, and writes evidence artifacts.
+
+input_model:
+  name: "ModelGoldenChainSweepRequest"
+  module: "omniclaude.nodes.node_golden_chain_sweep_orchestrator.models"
+  description: "Sweep trigger request with optional chain filter."
+output_model:
+  name: "ModelGoldenChainSweepResult"
+  module: "omniclaude.nodes.node_golden_chain_sweep_orchestrator.models"
+  description: "Persisted sweep result with summary and evidence artifact path."
+
+event_bus:
+  subscribe_topics:
+    - "onex.cmd.omniclaude.golden-chain-sweep.v1"
+
+runtime:
+  supports_direct_call: true
+  supports_event_driven: true
+  side_effects: true
+  timeout_ms: 120000
+  deterministic: false
+
+dependencies:
+  - name: "payload_compute"
+    type: "node"
+    node_name: "golden_chain_payload_compute"
+    description: "Builds synthetic test payloads for all chains"
+  - name: "publish_effect"
+    type: "node"
+    node_name: "golden_chain_publish_effect"
+    description: "Publishes events and polls for projected rows"
+  - name: "status_reducer"
+    type: "node"
+    node_name: "golden_chain_status_reducer"
+    description: "Aggregates chain results into sweep summary"
+  - name: "omnidash_analytics_db"
+    type: "service"
+    description: "PostgreSQL connection for persisting sweep results"
+
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2026-04-02"
+  ticket: "OMN-7366"
+  tags:
+    - orchestrator
+    - golden-chain
+    - sweep
+    - validation
+    - kafka
+    - database
+    - onex

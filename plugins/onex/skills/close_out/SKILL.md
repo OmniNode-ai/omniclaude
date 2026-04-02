@@ -61,11 +61,20 @@ Invoke `/redeploy` to refresh the runtime with new versions.
 - Seed Infisical if contracts changed
 - Verify health endpoints respond
 
+### Evidence Collection (Phase E)
+
+Invoke `/golden_chain_sweep` to validate Kafka-to-DB-projection data flow.
+
+- **Advisory gate** (not blocking for initial rollout — OMN-7356)
+- Log sweep results (pass/partial/fail) in the close-out summary
+- After 2 weeks of green sweeps, promote to hard gate alongside integration-sweep
+
 ### Verification
 
 - Confirm all PRs from Step 1 are merged (not just attempted)
 - Confirm all releases from Step 3 have published tags
 - Confirm runtime health from Step 4
+- Include golden chain sweep results in close-out summary
 - Write close-out summary to `docs/tracking/close-out-<date>.md`
 
 ## Error Handling

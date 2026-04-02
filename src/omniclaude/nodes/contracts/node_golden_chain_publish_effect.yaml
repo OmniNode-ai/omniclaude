@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: node_golden_chain_publish_effect
+# Epic: OMN-7356 Golden Event Chain Validator
+
+name: "golden_chain_publish_effect"
+contract_name: "golden_chain_publish_effect"
+node_name: "golden_chain_publish_effect"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: "EFFECT_GENERIC"
+
+description: >
+  EFFECT node that publishes a single synthetic event to Kafka, then polls
+  omnidash_analytics for the projected row matching the correlation_id. Runs
+  field-level assertions against the projected row using the AssertionEngine
+  from golden_path_validate. Cleans up synthetic rows after validation.
+
+input_model:
+  name: "ModelGoldenChainPublishInput"
+  module: "omniclaude.nodes.node_golden_chain_publish_effect.models"
+  description: "Single enriched payload from the payload compute node."
+output_model:
+  name: "ModelGoldenChainPublishResult"
+  module: "omniclaude.nodes.node_golden_chain_publish_effect.models"
+  description: "Chain result with publish/projection status, latency, assertion results."
+
+event_bus:
+  publish_topics:
+    - "onex.evt.omniclaude.routing-decision.v1"
+    - "onex.evt.omniintelligence.pattern-stored.v1"
+    - "onex.evt.omniclaude.task-delegated.v1"
+    - "onex.evt.omniclaude.llm-routing-decision.v1"
+    - "onex.evt.omniintelligence.run-evaluated.v1"
+
+runtime:
+  supports_direct_call: true
+  supports_event_driven: false
+  side_effects: true
+  timeout_ms: 20000
+  deterministic: false
+
+dependencies:
+  - name: "kafka_producer"
+    type: "service"
+    description: "Kafka producer for publishing synthetic events"
+  - name: "omnidash_analytics_db"
+    type: "service"
+    description: "PostgreSQL connection to omnidash_analytics for polling projected rows"
+  - name: "assertion_engine"
+    type: "utility"
+    module: "plugins.onex.skills._golden_path_validate.golden_path_runner"
+    class_name: "AssertionEngine"
+    description: "Reused assertion evaluation engine from golden path validate"
+
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2026-04-02"
+  ticket: "OMN-7363"
+  tags:
+    - effect
+    - golden-chain
+    - kafka
+    - database
+    - validation
+    - onex
