@@ -56,11 +56,11 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.pipeline_fill.v1"
-    consumer_group: "omniclaude.skill.pipeline_fill"
+    topic: "onex.cmd.omniclaude.pipeline-fill.v1"
+    consumer_group: "omniclaude.skill.pipeline-fill"
   publish:
-    success_topic: "onex.evt.omniclaude.pipeline_fill-completed.v1"
-    failure_topic: "onex.evt.omniclaude.pipeline_fill-failed.v1"
+    success_topic: "onex.evt.omniclaude.pipeline-fill-completed.v1"
+    failure_topic: "onex.evt.omniclaude.pipeline-fill-failed.v1"
 
 # Capabilities
 capabilities:

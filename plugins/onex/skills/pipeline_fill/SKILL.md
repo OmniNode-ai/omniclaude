@@ -125,15 +125,18 @@ Remove tickets that should not be dispatched:
 ```yaml
 in_flight:
   - ticket_id: OMN-7300
+    repo: OmniNode-ai/omniclaude
     dispatched_at: "2026-04-02T10:00:00Z"
     worker_type: ticket_pipeline
     status: running
   - ticket_id: OMN-7301
+    repo: OmniNode-ai/omnibase_infra
     dispatched_at: "2026-04-02T10:05:00Z"
     worker_type: local_llm
     status: running
 completed:
   - ticket_id: OMN-7299
+    repo: OmniNode-ai/omniclaude
     dispatched_at: "2026-04-02T09:00:00Z"
     completed_at: "2026-04-02T09:45:00Z"
     worker_type: ticket_pipeline
@@ -257,7 +260,7 @@ to the delegation orchestrator:
 
 After every dispatch, update `.onex_state/pipeline-fill/dispatched.yaml`:
 - Add ticket to `in_flight` list
-- Include `dispatched_at`, `worker_type`, and initial `status: running`
+- Include `dispatched_at`, `worker_type`, `repo` (target GitHub repo), and initial `status: running`
 
 ---
 
@@ -265,8 +268,8 @@ After every dispatch, update `.onex_state/pipeline-fill/dispatched.yaml`:
 
 Before starting a new cycle, check for completed dispatches:
 
-1. For ticket-pipeline dispatches: check if the ticket's PR has been merged
-   (`gh pr list --state merged --search "OMN-XXXX"`)
+1. For ticket-pipeline dispatches: check if the ticket's PR has been merged in the recorded repo
+   (`gh pr list --repo "{repo}" --state merged --search "{ticket_id}"`)
 2. For local LLM dispatches: check if the delegation orchestrator reported completion
 3. Move completed tickets from `in_flight` to `completed` in dispatched.yaml
 4. Update the in-flight count for wave cap enforcement
