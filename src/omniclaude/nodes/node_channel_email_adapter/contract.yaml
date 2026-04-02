@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX Node Contract
+# Node: NodeChannelEmailAdapter
+
+name: node_channel_email_adapter
+contract_name: node_channel_email_adapter
+node_name: node_channel_email_adapter
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: EFFECT_GENERIC
+
+description: >
+  Email channel adapter. Polls IMAP for inbound messages and sends
+  replies via SMTP. Constrained MVP scope: plain-text preferred,
+  minimal threading heuristics via In-Reply-To/References headers,
+  attachment metadata only (no content download).
+
+event_bus:
+  event_bus_enabled: true
+  subscribe_topics:
+    - "onex.cmd.omniclaw.email-outbound.v1"
+  publish_topics:
+    - "onex.cmd.omniclaw.channel-message-received.v1"
+
+consumed_events:
+  - topic: "onex.cmd.omniclaw.email-outbound.v1"
+    event_type: "ChannelOutbound"
+    message_category: "COMMAND"
+    description: "Reply to be sent via SMTP"
+
+published_events:
+  - topic: "onex.cmd.omniclaw.channel-message-received.v1"
+    event_type: "ChannelMessageReceived"
+    description: "Normalized inbound message from email"
+
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "channel.email.inbound"
+      handler:
+        name: "HandlerEmailInbound"
+        module: "omniclaude.nodes.node_channel_email_adapter.handlers.handler_inbound"
+      description: "Parse email message into ModelChannelEnvelope"
+    - operation: "channel.email.outbound"
+      handler:
+        name: "HandlerEmailOutbound"
+        module: "omniclaude.nodes.node_channel_email_adapter.handlers.handler_outbound"
+      description: "Send reply via SMTP with threading headers"
+  execution_mode: "single"
+  max_timeout_seconds: 60
+
+dependencies:
+  - name: imap_host
+    type: environment
+    key: EMAIL_IMAP_HOST
+    required: true
+    description: "IMAP server hostname"
+  - name: imap_user
+    type: environment
+    key: EMAIL_IMAP_USER
+    required: true
+    description: "IMAP login username"
+  - name: imap_password
+    type: environment
+    key: EMAIL_IMAP_PASSWORD
+    required: true
+    description: "IMAP login password"
+  - name: smtp_host
+    type: environment
+    key: EMAIL_SMTP_HOST
+    required: true
+    description: "SMTP server hostname"
+  - name: smtp_from
+    type: environment
+    key: EMAIL_SMTP_FROM
+    required: true
+    description: "From address for outbound emails"
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  tags:
+    - omniclaw
+    - channel
+    - email
+    - adapter

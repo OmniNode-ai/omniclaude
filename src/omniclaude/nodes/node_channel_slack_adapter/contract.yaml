@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# ONEX Node Contract
+# Node: NodeChannelSlackAdapter
+
+name: node_channel_slack_adapter
+contract_name: node_channel_slack_adapter
+node_name: node_channel_slack_adapter
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: EFFECT_GENERIC
+
+description: >
+  Slack channel adapter. Bridges Slack Events API messages to/from
+  ModelChannelEnvelope on the OmniClaw event bus. Inbound handler
+  converts Slack event payloads to normalized envelopes; outbound
+  handler sends replies via Slack Web API.
+
+event_bus:
+  event_bus_enabled: true
+  subscribe_topics:
+    - "onex.cmd.omniclaw.slack-outbound.v1"
+  publish_topics:
+    - "onex.cmd.omniclaw.channel-message-received.v1"
+
+consumed_events:
+  - topic: "onex.cmd.omniclaw.slack-outbound.v1"
+    event_type: "ChannelOutbound"
+    message_category: "COMMAND"
+    description: "Reply to be sent to a Slack channel"
+
+published_events:
+  - topic: "onex.cmd.omniclaw.channel-message-received.v1"
+    event_type: "ChannelMessageReceived"
+    description: "Normalized inbound message from Slack"
+
+handler_routing:
+  routing_strategy: "operation_match"
+  handlers:
+    - operation: "channel.slack.inbound"
+      handler:
+        name: "HandlerSlackInbound"
+        module: "omniclaude.nodes.node_channel_slack_adapter.handlers.handler_inbound"
+      description: "Convert Slack event to ModelChannelEnvelope and publish"
+    - operation: "channel.slack.outbound"
+      handler:
+        name: "HandlerSlackOutbound"
+        module: "omniclaude.nodes.node_channel_slack_adapter.handlers.handler_outbound"
+      description: "Send reply to Slack channel via Web API"
+  execution_mode: "single"
+  max_timeout_seconds: 30
+
+dependencies:
+  - name: slack_bot_token
+    type: environment
+    key: SLACK_BOT_TOKEN
+    required: true
+    description: "Slack bot OAuth token"
+  - name: slack_signing_secret
+    type: environment
+    key: SLACK_SIGNING_SECRET
+    required: true
+    description: "Slack app signing secret for webhook verification"
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  tags:
+    - omniclaw
+    - channel
+    - slack
+    - adapter

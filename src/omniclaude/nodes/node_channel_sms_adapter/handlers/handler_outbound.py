@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+"""SMS/Twilio outbound handler.
+
+Sends reply messages via the Twilio Messages API.
+
+Related:
+    - OMN-7193: SMS/Twilio channel adapter contract package
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Protocol
+
+from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
+    ModelChannelReply,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class TwilioMessagesApi(Protocol):
+    """Protocol for Twilio Messages API (twilio.rest.Client.messages)."""
+
+    def create(self, **kwargs: Any) -> Any: ...
+
+
+async def send_sms_reply(
+    reply: ModelChannelReply,
+    *,
+    messages_api: TwilioMessagesApi,
+    from_number: str,
+) -> None:
+    """Send a reply via Twilio SMS.
+
+    Args:
+        reply: The channel reply to send.
+        messages_api: Twilio client.messages interface.
+        from_number: The Twilio phone number to send from.
+    """
+    logger.info(
+        "Sending SMS reply: to=%s correlation_id=%s",
+        reply.channel_id,
+        reply.correlation_id,
+    )
+
+    messages_api.create(
+        body=reply.reply_text,
+        from_=from_number,
+        to=reply.channel_id,
+    )
