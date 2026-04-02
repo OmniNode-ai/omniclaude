@@ -501,6 +501,13 @@ log "Session ID: $SESSION_ID"
 log "Project Path: $PROJECT_PATH"
 log "CWD: $CWD"
 
+# Write session-start epoch for latency calculation at stop time (OMN-7379).
+# The stop hook reads this file to compute session latency_seconds.
+if [[ -n "$SESSION_ID" ]]; then
+    _SESSION_EPOCH_FILE="${TMPDIR:-/tmp}/omniclaude-session-epoch-${SESSION_ID}.txt"
+    date +%s > "$_SESSION_EPOCH_FILE" 2>/dev/null || true
+fi
+
 # Start emit daemon early (before any Kafka emissions)
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
 start_emit_daemon_if_needed
