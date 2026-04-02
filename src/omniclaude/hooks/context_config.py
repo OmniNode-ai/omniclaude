@@ -400,6 +400,23 @@ class ContextInjectionConfig(BaseSettings):
         ),
     )
 
+    # Session resume configuration (OMN-7298)
+    session_resume_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable session resume context injection when agent is logged in. "
+            "Override via OMNICLAUDE_CONTEXT_SESSION_RESUME_ENABLED."
+        ),
+    )
+
+    session_projector_url: str = Field(
+        default="http://localhost:8085/v1/nodes/node_session_projector_effect/execute",
+        description=(
+            "URL for the session projector retrieval endpoint. "
+            "Override via OMNICLAUDE_CONTEXT_SESSION_PROJECTOR_URL."
+        ),
+    )
+
     # Injection limits configuration (OMN-1671)
     limits: InjectionLimitsConfig = Field(
         default_factory=InjectionLimitsConfig,
