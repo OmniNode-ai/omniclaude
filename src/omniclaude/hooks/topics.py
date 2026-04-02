@@ -480,6 +480,20 @@ class TopicBase(StrEnum):
     HOOK_HEALTH_ERROR = "onex.evt.omniclaude.hook-health-error.v1"
     """Structured hook error event for health observability dashboard."""
 
+    # ==========================================================================
+    # OmniClaw channel messaging topics (OMN-7185)
+    # Inbound normalized messages from any channel adapter, outbound replies,
+    # and processing observability.
+    # ==========================================================================
+    CHANNEL_MESSAGE_RECEIVED = "onex.cmd.omniclaw.channel-message-received.v1"
+    """Inbound normalized message from any channel adapter. Payload: ModelChannelEnvelope."""
+
+    CHANNEL_REPLY_REQUESTED = "onex.evt.omniclaw.channel-reply-requested.v1"
+    """Outbound response to be dispatched to the originating channel adapter."""
+
+    CHANNEL_MESSAGE_PROCESSED = "onex.evt.omniclaw.channel-message-processed.v1"
+    """Observability event emitted after orchestrator processes a channel message."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
