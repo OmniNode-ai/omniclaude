@@ -353,9 +353,86 @@ def get_builtin_profiles() -> dict[str, ModelPersonalityProfile]:
     return dict(_BUILTIN_PROFILES)
 
 
+# ---------------------------------------------------------------------------
+# Persona-driven profile construction
+# ---------------------------------------------------------------------------
+
+# Persona phrase packs keyed by (technical_level, preferred_tone) combinations.
+# Beginner+explanatory: detailed prefixes with inline context.
+# Expert+concise: minimal prefixes, no embellishment.
+# Intermediate+formal: structured, professional phrasing.
+# Unrecognised combinations fall back to the default profile.
+
+_BEGINNER_EXPLANATORY_PHRASES: list[dict[str, str]] = [
+    {"severity": "trace", "prefix": "Detail: ", "suffix": " (background activity)"},
+    {"severity": "debug", "prefix": "Debug info: ", "suffix": " (for troubleshooting)"},
+    {"severity": "info", "prefix": "Note: ", "suffix": ""},
+    {"severity": "warn", "prefix": "Heads up: ", "suffix": " (may need attention)"},
+    {"severity": "error", "prefix": "Problem found: ", "suffix": " (action needed)"},
+    {
+        "severity": "fatal",
+        "prefix": "Critical issue: ",
+        "suffix": " (requires immediate attention)",
+    },
+]
+
+_EXPERT_CONCISE_PHRASES: list[dict[str, str]] = [
+    {"severity": "trace", "prefix": "", "suffix": ""},
+    {"severity": "debug", "prefix": "dbg: ", "suffix": ""},
+    {"severity": "info", "prefix": "", "suffix": ""},
+    {"severity": "warn", "prefix": "WARN ", "suffix": ""},
+    {"severity": "error", "prefix": "ERR ", "suffix": ""},
+    {"severity": "fatal", "prefix": "FATAL ", "suffix": ""},
+]
+
+_INTERMEDIATE_FORMAL_PHRASES: list[dict[str, str]] = [
+    {"severity": "trace", "prefix": "[Trace] ", "suffix": ""},
+    {"severity": "debug", "prefix": "[Debug] ", "suffix": ""},
+    {"severity": "info", "prefix": "[Info] ", "suffix": ""},
+    {"severity": "warn", "prefix": "[Warning] ", "suffix": " — review recommended."},
+    {"severity": "error", "prefix": "[Error] ", "suffix": " — action required."},
+    {
+        "severity": "fatal",
+        "prefix": "[Fatal] ",
+        "suffix": " — immediate intervention required.",
+    },
+]
+
+_PERSONA_PHRASE_MAP: dict[tuple[str, str], list[dict[str, str]]] = {
+    ("beginner", "explanatory"): _BEGINNER_EXPLANATORY_PHRASES,
+    ("beginner", "casual"): _BEGINNER_EXPLANATORY_PHRASES,
+    ("expert", "concise"): _EXPERT_CONCISE_PHRASES,
+    ("expert", "formal"): _INTERMEDIATE_FORMAL_PHRASES,
+    ("advanced", "concise"): _EXPERT_CONCISE_PHRASES,
+    ("advanced", "formal"): _INTERMEDIATE_FORMAL_PHRASES,
+    ("intermediate", "formal"): _INTERMEDIATE_FORMAL_PHRASES,
+    ("intermediate", "explanatory"): _BEGINNER_EXPLANATORY_PHRASES,
+}
+
+
+def build_persona_profile(
+    technical_level: str,
+    preferred_tone: str,
+) -> ModelPersonalityProfile:
+    """Build a personality profile dynamically from persona attributes.
+
+    Returns a profile matching the (technical_level, preferred_tone) pair.
+    Falls back to the default built-in profile for unrecognised combinations.
+    """
+    key = (technical_level, preferred_tone)
+    phrases = _PERSONA_PHRASE_MAP.get(key)
+    if phrases is None:
+        return _BUILTIN_PROFILES["default"]
+    return _build_builtin_profile(
+        name=f"persona_{technical_level}_{preferred_tone}",
+        phrases=phrases,
+    )
+
+
 __all__ = [
     "PersonalityAdapter",
     "apply_redaction",
+    "build_persona_profile",
     "get_builtin_profiles",
     "load_phrase_pack",
 ]
