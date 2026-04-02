@@ -16,7 +16,9 @@ class ModelDiscordConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    bot_token: str = Field(..., min_length=1, description="Discord bot token")
+    bot_token: str = Field(  # secret-ok: config model, resolved from env at runtime
+        ..., min_length=1, description="Discord bot token"
+    )
     intents_message_content: bool = Field(
         default=True,
         description="Whether to enable the message_content intent",
