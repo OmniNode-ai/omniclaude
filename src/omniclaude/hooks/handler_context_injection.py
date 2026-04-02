@@ -1102,18 +1102,7 @@ class HandlerContextInjection:
         Returns:
             Formatted markdown string with session context, or empty string.
         """
-        import sys
-
         import httpx
-
-        # Import from plugin lib — add to path if needed
-        hooks_lib = str(
-            Path(__file__).resolve().parents[3] / "plugins" / "onex" / "hooks" / "lib"
-        )
-        if hooks_lib not in sys.path:
-            sys.path.insert(0, hooks_lib)
-
-        from session_resume_client import format_resume_context
 
         cfg = self._config
         try:
@@ -1126,13 +1115,70 @@ class HandlerContextInjection:
                 data = resp.json()
 
             snapshot = data.get("snapshot") or data.get("snapshots", [None])[0]
-            return format_resume_context(snapshot, agent_id=agent_id)
+            return self._format_resume_snapshot(snapshot, agent_id=agent_id)
 
         except Exception as exc:  # noqa: BLE001 — boundary: session resume must degrade not crash
             logger.warning(
                 "Session resume retrieval failed (graceful degradation): %s", exc
             )
             return ""
+
+    @staticmethod
+    def _format_resume_snapshot(
+        snapshot: dict[str, object] | None,
+        agent_id: str,
+    ) -> str:
+        """Format a session projector snapshot as injectable markdown."""
+        if not snapshot:
+            return ""
+
+        lines: list[str] = [f"## Resumed Session Context ({agent_id})", ""]
+
+        ticket = snapshot.get("current_ticket")
+        branch = snapshot.get("git_branch")
+        workdir = snapshot.get("working_directory", "")
+        outcome = snapshot.get("session_outcome")
+
+        if ticket:
+            lines.append(f"- **Ticket:** {ticket}")
+        if branch:
+            lines.append(f"- **Branch:** {branch}")
+        if workdir:
+            repo = str(workdir).rstrip("/").split("/")[-1] if workdir else "unknown"
+            lines.append(f"- **Repo:** {repo}")
+
+        files = snapshot.get("files_touched", [])
+        if files and isinstance(files, list):
+            lines.append(
+                f"- **Files touched:** {', '.join(str(f) for f in files[:10])}"
+            )
+
+        errors = snapshot.get("errors_hit", [])
+        if errors and isinstance(errors, list):
+            lines.append(f"- **Errors hit:** {len(errors)}")
+            for err in errors[-3:]:
+                lines.append(f"  - `{str(err)[:100]}`")
+
+        last_tool = snapshot.get("last_tool_name")
+        last_success = snapshot.get("last_tool_success")
+        last_summary = snapshot.get("last_tool_summary")
+        if last_tool:
+            status = "succeeded" if last_success else "failed"
+            lines.append(f"- **Last action:** {last_tool} ({status})")
+            if last_summary:
+                lines.append(f"  - {str(last_summary)[:200]}")
+
+        if outcome:
+            lines.append(f"- **Session outcome:** {outcome}")
+
+        started = snapshot.get("session_started_at")
+        ended = snapshot.get("session_ended_at")
+        if ended:
+            lines.append(f"- **Session ended at:** {ended}")
+        elif started:
+            lines.append(f"- **Session started at:** {started}")
+
+        return "\n".join(lines)
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.
