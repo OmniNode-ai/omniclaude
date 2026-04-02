@@ -585,15 +585,15 @@ class HandlerContextInjection:
             except Exception as exc:  # noqa: BLE001 — boundary: memory fabric must degrade
                 logger.warning("Memory fabric integration failed: %s", exc)
 
-        # Step 6c: Session resume context (additive source, OMN-7298)
-        # Injects last session snapshot when agent is logged in (ONEX_AGENT_ID set).
-        # Follows same pattern as memory fabric: additive, timeout-guarded, never blocks.
+        # Step 6c: Session resume context (additive source, OMN-7300)
+        # Injects the agent's last session snapshot for continuity across /clear
+        # and session restarts. Requires ONEX_AGENT_ID env var (set by /login).
         agent_id = os.environ.get("ONEX_AGENT_ID")
         if cfg.session_resume_enabled and agent_id:
             try:
                 resume_context = await asyncio.wait_for(
                     self._load_resume_context(agent_id=agent_id),
-                    timeout=3.0,
+                    timeout=0.9,  # Stay within 1s context-injection budget
                 )
                 if resume_context:
                     if context_markdown:
@@ -607,7 +607,7 @@ class HandlerContextInjection:
                     )
             except TimeoutError:
                 logger.warning("Session resume retrieval timed out (3s budget)")
-            except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade
+            except Exception as exc:  # noqa: BLE001 — boundary: session resume must degrade
                 logger.warning("Session resume integration failed: %s", exc)
 
         context_size_bytes = len(context_markdown.encode("utf-8"))
@@ -1086,50 +1086,101 @@ class HandlerContextInjection:
             )
             return ""
 
-    async def _load_resume_context(self, agent_id: str) -> str:
-        """Load last session snapshot for an agent from the session projector.
+    async def _load_resume_context(
+        self,
+        agent_id: str,
+    ) -> str:
+        """Load session resume context for a logged-in agent.
 
-        Calls the session projector endpoint and formats the snapshot
-        as injectable markdown context. Fails gracefully — returns
-        empty string on any error to avoid blocking session startup.
+        Calls the session projector endpoint and formats the latest snapshot
+        as markdown for injection. Fails gracefully — returns empty string
+        on any error to avoid blocking session startup.
 
         Args:
-            agent_id: The agent identity to load resume context for.
+            agent_id: The agent identity (e.g., CAIA, SENTINEL).
 
         Returns:
-            Formatted markdown string with resume context, or empty string.
+            Formatted markdown string with session context, or empty string.
         """
         import httpx
-        from session_resume_client import format_resume_context
 
         cfg = self._config
         try:
-            payload: dict[str, object] = {
-                "agent_id": agent_id,
-                "limit": 1,
-            }
-
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(cfg.session_projector_url, json=payload)
+            async with httpx.AsyncClient(
+                timeout=0.9
+            ) as client:  # Stay within 1s context-injection budget
+                resp = await client.get(
+                    cfg.session_projector_url,
+                    params={"agent_id": agent_id, "limit": "1"},
+                )
                 resp.raise_for_status()
                 data = resp.json()
 
-            snapshots = data.get("snapshots", [])
-            if not snapshots or not isinstance(snapshots, list):
-                return ""
+            snapshot = data.get("snapshot") or data.get("snapshots", [None])[0]
+            return self._format_resume_snapshot(snapshot, agent_id=agent_id)
 
-            latest = snapshots[0]
-            if not isinstance(latest, dict):
-                return ""
-
-            result: str = format_resume_context(latest, agent_id=agent_id)
-            return result
-
-        except Exception as exc:  # noqa: BLE001 — boundary: resume must degrade not crash
+        except Exception as exc:  # noqa: BLE001 — boundary: session resume must degrade not crash
             logger.warning(
                 "Session resume retrieval failed (graceful degradation): %s", exc
             )
             return ""
+
+    @staticmethod
+    def _format_resume_snapshot(
+        snapshot: dict[str, object] | None,
+        agent_id: str,
+    ) -> str:
+        """Format a session projector snapshot as injectable markdown."""
+        if not snapshot:
+            return ""
+
+        lines: list[str] = [f"## Resumed Session Context ({agent_id})", ""]
+
+        ticket = snapshot.get("current_ticket")
+        branch = snapshot.get("git_branch")
+        workdir = snapshot.get("working_directory", "")
+        outcome = snapshot.get("session_outcome")
+
+        if ticket:
+            lines.append(f"- **Ticket:** {ticket}")
+        if branch:
+            lines.append(f"- **Branch:** {branch}")
+        if workdir:
+            repo = str(workdir).rstrip("/").split("/")[-1] if workdir else "unknown"
+            lines.append(f"- **Repo:** {repo}")
+
+        files = snapshot.get("files_touched", [])
+        if files and isinstance(files, list):
+            lines.append(
+                f"- **Files touched:** {', '.join(str(f) for f in files[:10])}"
+            )
+
+        errors = snapshot.get("errors_hit", [])
+        if errors and isinstance(errors, list):
+            lines.append(f"- **Errors hit:** {len(errors)}")
+            for err in errors[-3:]:
+                lines.append(f"  - `{str(err)[:100]}`")
+
+        last_tool = snapshot.get("last_tool_name")
+        last_success = snapshot.get("last_tool_success")
+        last_summary = snapshot.get("last_tool_summary")
+        if last_tool:
+            status = "succeeded" if last_success else "failed"
+            lines.append(f"- **Last action:** {last_tool} ({status})")
+            if last_summary:
+                lines.append(f"  - {str(last_summary)[:200]}")
+
+        if outcome:
+            lines.append(f"- **Session outcome:** {outcome}")
+
+        started = snapshot.get("session_started_at")
+        ended = snapshot.get("session_ended_at")
+        if ended:
+            lines.append(f"- **Session ended at:** {ended}")
+        elif started:
+            lines.append(f"- **Session started at:** {started}")
+
+        return "\n".join(lines)
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.

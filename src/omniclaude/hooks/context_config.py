@@ -400,11 +400,12 @@ class ContextInjectionConfig(BaseSettings):
         ),
     )
 
-    # Session resume configuration (OMN-7298)
+    # Session resume configuration (OMN-7300)
     session_resume_enabled: bool = Field(
         default=False,
         description=(
-            "Enable session resume context injection when agent is logged in. "
+            "Enable session resume context injection for agent continuity. "
+            "Requires ONEX_AGENT_ID env var. "
             "Override via OMNICLAUDE_CONTEXT_SESSION_RESUME_ENABLED."
         ),
     )
