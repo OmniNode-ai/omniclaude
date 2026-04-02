@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,7 +25,7 @@ from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 logger = logging.getLogger(__name__)
 
 
-class EnumTelegramChatType(str, Enum):
+class EnumTelegramChatType(StrEnum):
     """Telegram chat type enum."""
 
     PRIVATE = "private"

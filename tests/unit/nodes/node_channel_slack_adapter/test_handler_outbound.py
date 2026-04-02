@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -36,7 +36,7 @@ class TestSendSlackReply:
 
     @pytest.mark.asyncio
     async def test_sends_message_to_channel(self) -> None:
-        client = MagicMock()
+        client = AsyncMock()
         reply = _make_reply()
 
         await send_slack_reply(reply, client=client)
@@ -49,7 +49,7 @@ class TestSendSlackReply:
 
     @pytest.mark.asyncio
     async def test_threaded_reply_passes_thread_ts(self) -> None:
-        client = MagicMock()
+        client = AsyncMock()
         reply = _make_reply(reply_to="1711929500.000000")
 
         await send_slack_reply(reply, client=client)
@@ -62,7 +62,7 @@ class TestSendSlackReply:
 
     @pytest.mark.asyncio
     async def test_no_reply_to_passes_none_thread_ts(self) -> None:
-        client = MagicMock()
+        client = AsyncMock()
         reply = _make_reply(reply_to=None)
 
         await send_slack_reply(reply, client=client)
