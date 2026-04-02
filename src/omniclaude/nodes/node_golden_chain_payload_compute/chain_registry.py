@@ -8,6 +8,7 @@ Never hardcode topic strings outside this registry.
 
 from __future__ import annotations
 
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_definition import (
     ModelChainAssertion,
     ModelChainDefinition,
@@ -17,7 +18,7 @@ from omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_defin
 GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
     ModelChainDefinition(
         name="registration",
-        head_topic="onex.evt.omniclaude.routing-decision.v1",
+        head_topic=TopicBase.ROUTING_DECISION,
         tail_table="agent_routing_decisions",
         fixture_template={
             "selected_agent": "golden-chain-test-agent",
@@ -34,7 +35,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
     ),
     ModelChainDefinition(
         name="pattern_learning",
-        head_topic="onex.evt.omniintelligence.pattern-stored.v1",
+        head_topic=TopicBase.PATTERN_STORED,
         tail_table="pattern_learning_artifacts",
         fixture_template={
             "pattern_name": "golden-chain-test-pattern",
@@ -49,7 +50,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
     ),
     ModelChainDefinition(
         name="delegation",
-        head_topic="onex.evt.omniclaude.task-delegated.v1",
+        head_topic=TopicBase.TASK_DELEGATED,
         tail_table="delegation_events",
         fixture_template={
             "delegate_model": "golden-chain-test-model",
@@ -64,7 +65,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
     ),
     ModelChainDefinition(
         name="routing",
-        head_topic="onex.evt.omniclaude.llm-routing-decision.v1",
+        head_topic=TopicBase.LLM_ROUTING_DECISION,
         tail_table="llm_routing_decisions",
         fixture_template={
             "selected_model": "golden-chain-test-model",
@@ -79,7 +80,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
     ),
     ModelChainDefinition(
         name="evaluation",
-        head_topic="onex.evt.omniintelligence.run-evaluated.v1",
+        head_topic=TopicBase.RUN_EVALUATED,
         tail_table="session_outcomes",
         fixture_template={
             "outcome": "success",

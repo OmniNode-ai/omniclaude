@@ -196,6 +196,15 @@ class TopicBase(StrEnum):
     CONTEXT_ENRICHMENT = "onex.evt.omniclaude.context-enrichment.v1"  # OMN-2274
 
     # ==========================================================================
+    # Intelligence output topics (omniintelligence producers)
+    # ==========================================================================
+    PATTERN_STORED = "onex.evt.omniintelligence.pattern-stored.v1"
+    """Emitted by omniintelligence when a pattern is persisted to the store."""
+
+    RUN_EVALUATED = "onex.evt.omniintelligence.run-evaluated.v1"
+    """Emitted by omniintelligence after a session run evaluation completes."""
+
+    # ==========================================================================
     # Delegation observability topics (OMN-2281)
     # ==========================================================================
     TASK_DELEGATED = "onex.evt.omniclaude.task-delegated.v1"

@@ -17,18 +17,19 @@ import logging
 import time
 from typing import Any
 
-from aiokafka import AIOKafkaProducer
-
-from plugins.onex.skills._golden_path_validate.golden_path_runner import (
-    AssertionEngine,
-    _get_nested,
+from omniclaude.lib.kafka_publisher_base import (
+    create_event_envelope,
+    publish_to_kafka,
 )
-
 from omniclaude.nodes.node_golden_chain_payload_compute.models.model_enriched_payload import (
     ModelEnrichedPayload,
 )
 from omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result import (
     ModelChainResult,
+)
+from plugins.onex.skills._golden_path_validate.golden_path_runner import (
+    AssertionEngine,
+    _get_nested,
 )
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ async def run_chain(
 
     Args:
         payload: Enriched payload from the compute node.
-        bootstrap_servers: Kafka bootstrap servers string.
+        bootstrap_servers: Kafka bootstrap servers string (passed for compat; resolved
+            from KAFKA_BOOTSTRAP_SERVERS env var by the shared publisher).
         db_dsn: PostgreSQL DSN for omnidash_analytics.
 
     Returns:
@@ -54,16 +56,25 @@ async def run_chain(
 
     assertion_engine = AssertionEngine()
 
-    # Step 1: Publish to Kafka
-    producer = AIOKafkaProducer(bootstrap_servers=bootstrap_servers)
+    # Step 1: Publish to Kafka via shared publisher abstraction
     try:
-        await producer.start()
-        fixture_bytes = json.dumps(payload.fixture).encode()
+        envelope = create_event_envelope(
+            event_type_value=payload.head_topic,
+            payload=payload.fixture,
+            correlation_id=payload.correlation_id,
+            schema_ref=f"golden-chain/{payload.chain_name}",
+        )
         publish_start = time.monotonic()
-        await producer.send_and_wait(payload.head_topic, value=fixture_bytes)
+        published = await publish_to_kafka(
+            topic=payload.head_topic,
+            envelope=envelope,
+            partition_key=payload.correlation_id,
+        )
         publish_latency_ms = (time.monotonic() - publish_start) * 1000.0
+        if not published:
+            raise RuntimeError("Shared publisher returned False (producer unavailable)")
         publish_status = "ok"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: publish errors must degrade gracefully
         logger.error("Kafka publish failed for chain %s: %s", payload.chain_name, exc)
         return ModelChainResult(
             chain_name=payload.chain_name,
@@ -74,11 +85,6 @@ async def run_chain(
             projection_latency_ms=-1,
             error_reason=f"Kafka publish failed: {exc}",
         )
-    finally:
-        try:
-            await producer.stop()
-        except Exception:
-            pass
 
     # Step 2: Poll omnidash_analytics for projected row
     timeout_s = payload.timeout_ms / 1000.0
@@ -100,7 +106,8 @@ async def run_chain(
             )
             row = cur.fetchone()
             if row is not None:
-                col_names = [desc[0] for desc in cur.description]
+                description = cur.description or []
+                col_names = [desc[0] for desc in description]
                 projected_row = dict(zip(col_names, row))
                 break
             await asyncio.sleep(poll_interval_s)
@@ -148,7 +155,7 @@ async def run_chain(
                 payload.tail_table,
                 payload.correlation_id,
             )
-        except Exception as cleanup_exc:
+        except Exception as cleanup_exc:  # noqa: BLE001 — cleanup failure is non-fatal
             logger.warning(
                 "Cleanup failed for %s: %s", payload.tail_table, cleanup_exc
             )
@@ -167,7 +174,7 @@ async def run_chain(
             raw_row_preview=raw_preview,
         )
 
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — boundary: DB poll errors must degrade gracefully
         logger.error("DB poll failed for chain %s: %s", payload.chain_name, exc)
         return ModelChainResult(
             chain_name=payload.chain_name,
