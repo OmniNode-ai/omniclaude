@@ -85,11 +85,11 @@ IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLE
 
 ## Execution Steps
 
-### Step 1: Parse Arguments
+### Parse Arguments
 
 Parse `--max-cycles` (default 1), `--skip-closeout` (default false), `--dry-run` (default false).
 
-### Step 2: Publish Start Command
+### Publish Start Command
 
 Publish `cmd.build-loop.start.v1` to Kafka with:
 - `correlation_id`: New UUID
@@ -98,7 +98,7 @@ Publish `cmd.build-loop.start.v1` to Kafka with:
 - `dry_run`: From args
 - `requested_at`: Current timestamp
 
-### Step 3: Monitor Loop Progress
+### Monitor Loop Progress
 
 The orchestrator node handles the actual execution. This skill monitors progress
 by subscribing to build loop events:
@@ -106,7 +106,7 @@ by subscribing to build loop events:
 - `evt.build-loop-cycle-completed.v1` — cycle finished
 - `evt.build-loop-failed.v1` — loop failed
 
-### Step 4: Write Skill Result
+### Write Skill Result
 
 Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/build_loop.json`.
 
