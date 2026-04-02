@@ -180,3 +180,44 @@ class TestBuildTopicMalformedTopics:
 
         with pytest.raises(ModelOnexError, match="invalid characters"):
             build_topic("omniclaude.test@v1")
+
+
+# =============================================================================
+# OmniClaw Channel Topic Tests (OMN-7185)
+# =============================================================================
+
+
+class TestChannelTopics:
+    """Tests for OmniClaw channel messaging topics."""
+
+    def test_channel_message_received(self) -> None:
+        assert (
+            TopicBase.CHANNEL_MESSAGE_RECEIVED
+            == "onex.cmd.omniclaw.channel-message-received.v1"
+        )
+
+    def test_channel_reply_requested(self) -> None:
+        assert (
+            TopicBase.CHANNEL_REPLY_REQUESTED
+            == "onex.evt.omniclaw.channel-reply-requested.v1"
+        )
+
+    def test_channel_message_processed(self) -> None:
+        assert (
+            TopicBase.CHANNEL_MESSAGE_PROCESSED
+            == "onex.evt.omniclaw.channel-message-processed.v1"
+        )
+
+    def test_build_topic_validates_channel_topics(self) -> None:
+        assert (
+            build_topic(TopicBase.CHANNEL_MESSAGE_RECEIVED)
+            == "onex.cmd.omniclaw.channel-message-received.v1"
+        )
+        assert (
+            build_topic(TopicBase.CHANNEL_REPLY_REQUESTED)
+            == "onex.evt.omniclaw.channel-reply-requested.v1"
+        )
+        assert (
+            build_topic(TopicBase.CHANNEL_MESSAGE_PROCESSED)
+            == "onex.evt.omniclaw.channel-message-processed.v1"
+        )

@@ -686,3 +686,33 @@ allowed_extras:
       Consumed by hook-health-alert skill and omnidash hook health dashboard.
       No dedicated node contract; contract governance to follow.
     ticket: OMN-7156
+
+  # ---------------------------------------------------------------------------
+  # OmniClaw channel messaging topics (OMN-7185)
+  # Inbound normalized messages from channel adapters, outbound replies,
+  # and processing observability.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.cmd.omniclaw.channel-message-received.v1"
+    lifecycle: integration
+    reason: >
+      Inbound normalized message from any channel adapter. Consumed by the
+      channel orchestrator node. Contract governance to follow with
+      node_channel_orchestrator contract.
+    ticket: OMN-7185
+
+  - topic: "onex.evt.omniclaw.channel-reply-requested.v1"
+    lifecycle: integration
+    reason: >
+      Outbound reply event emitted by channel orchestrator. Consumed by
+      channel reply dispatcher for fan-out to channel-specific outbound topics.
+      Contract governance to follow.
+    ticket: OMN-7185
+
+  - topic: "onex.evt.omniclaw.channel-message-processed.v1"
+    lifecycle: observability
+    reason: >
+      Observability event emitted after orchestrator processes a channel message.
+      Used for monitoring and dashboards.
+      Contract governance to follow.
+    ticket: OMN-7185
