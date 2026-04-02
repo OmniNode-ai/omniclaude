@@ -1,6 +1,6 @@
 ---
-description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system, reports violations, and optionally creates Linear tickets for remediation
-version: 1.0.0
+description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system and wire schema mismatches, reports violations, and optionally creates Linear tickets for remediation
+version: 1.1.0
 mode: full
 level: advanced
 debug: false
@@ -50,17 +50,38 @@ imperative patterns that bypass the ONEX contract system.
 
 ## What This Detects
 
-The scanner performs 4 checks per handler:
+The scanner performs 6 checks:
+
+### Checks 1-4: Per-handler contract compliance
 
 | Check | Violation Type | What It Finds |
 |-------|---------------|---------------|
-| Topic compliance | `HARDCODED_TOPIC`, `UNDECLARED_PUBLISH`, `UNDECLARED_SUBSCRIBE` | Topic string literals in handler code not declared in contract.yaml |
-| Transport compliance | `UNDECLARED_TRANSPORT`, `DIRECT_DB_ACCESS` | Handler imports transport libraries (psycopg, httpx, etc.) not declared in contract |
-| Handler routing | `MISSING_HANDLER_ROUTING`, `UNREGISTERED_HANDLER` | Handler files not registered in contract.yaml `handler_routing` |
-| Logic-in-node | `LOGIC_IN_NODE` | Business logic in node.py instead of handlers |
+| 1. Topic compliance | `HARDCODED_TOPIC`, `UNDECLARED_PUBLISH`, `UNDECLARED_SUBSCRIBE` | Topic string literals in handler code not declared in contract.yaml |
+| 2. Transport compliance | `UNDECLARED_TRANSPORT`, `DIRECT_DB_ACCESS` | Handler imports transport libraries (psycopg, httpx, etc.) not declared in contract |
+| 3. Handler routing | `MISSING_HANDLER_ROUTING`, `UNREGISTERED_HANDLER` | Handler files not registered in contract.yaml `handler_routing` |
+| 4. Logic-in-node | `LOGIC_IN_NODE` | Business logic in node.py instead of handlers |
 
 Detection uses AST-based analysis (not regex) to avoid false positives from comments
 and docstrings.
+
+### Checks 5-6: Wire schema validation (OMN-7362, OMN-7365)
+
+Runs as a separate pass after Checks 1-4. Operates on wire schema contract YAMLs
+(files matching `*_v*.yaml` with `topic`, `producer`, `consumer`, `required_fields`).
+
+| Check | Violation Type | What It Finds |
+|-------|---------------|---------------|
+| 5. Wire schema mismatch | `WIRE_SCHEMA_MISMATCH` | Producer/consumer field names don't match the wire schema contract |
+| 6. Model dump drift | `MODEL_DUMP_DRIFT` | Pydantic model's `model_json_schema()` has drifted from contract declarations |
+
+Check 5 compares contract `required_fields`/`optional_fields` against actual model field
+names. Check 6 detects type mismatches and undeclared/stale fields between the contract
+and the model's JSON schema output.
+
+**Infrastructure**:
+- Scanner: `onex_change_control.scanners.wire_schema_compliance`
+- Scanner: `onex_change_control.scanners.model_dump_drift`
+- Model: `onex_change_control.models.model_wire_schema_contract.ModelWireSchemaContract`
 
 ## Verdicts
 
@@ -98,13 +119,18 @@ Use `--repos` to override.
 
 This skill wraps infrastructure from `onex_change_control`:
 
-- **Scanner**: `onex_change_control.scanners.handler_contract_compliance` -- AST-based
+- **Scanner (Checks 1-4)**: `onex_change_control.scanners.handler_contract_compliance` -- AST-based
   cross-reference analysis per handler
+- **Scanner (Check 5)**: `onex_change_control.scanners.wire_schema_compliance` -- cross-repo
+  publisher/consumer field matching against wire schema contracts
+- **Scanner (Check 6)**: `onex_change_control.scanners.model_dump_drift` -- Pydantic
+  model_json_schema() drift detection against contract declarations
 - **Validator**: `onex_change_control.validators.arch_handler_contract_compliance` -- CLI
   entry point with `--repo-root`, `--allowlist-path`, `--generate-allowlist`, `--json`
-- **Models**: `ModelHandlerComplianceResult`, `ModelComplianceSweepReport` -- structured
-  output compatible with omnidash consumption
+- **Models**: `ModelHandlerComplianceResult`, `ModelComplianceSweepReport`,
+  `ModelWireSchemaContract` -- structured output compatible with omnidash consumption
 - **Enums**: `EnumComplianceVerdict`, `EnumComplianceViolation` -- classification types
+  (including `WIRE_SCHEMA_MISMATCH`, `MODEL_DUMP_DRIFT`)
 
 ## Ticket Creation (--create-tickets)
 

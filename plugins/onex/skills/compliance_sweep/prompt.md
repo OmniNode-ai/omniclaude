@@ -101,6 +101,43 @@ fall back to manual scanning:
 
 Parse the JSON output from the validator into `ModelHandlerComplianceResult` objects.
 
+## Phase 2b: Run wire schema checks (Check 5 + Check 6)
+
+After the handler compliance scan, run wire schema validation as a separate pass.
+This operates on wire schema contract YAMLs, not handler files.
+
+**Discovery**: Find all `*_v*.yaml` files in each repo that have `topic`, `producer`,
+`consumer`, and `required_fields` keys (wire schema contract structure).
+
+**Scan directories** (search in each repo's src tree):
+```bash
+# Find wire schema contracts
+find /Volumes/PRO-G40/Code/omni_home/<repo>/src/ -name '*_v*.yaml' -type f  # local-path-ok
+```
+
+**For each wire schema contract found**:
+1. Parse with `ModelWireSchemaContract` from `onex_change_control.models`
+2. Run Check 5 (WIRE_SCHEMA_MISMATCH): if consumer model is importable, compare
+   contract `required_fields`/`optional_fields` against model field names
+3. Run Check 6 (MODEL_DUMP_DRIFT): if model is importable, compare contract field
+   types against `model_json_schema()` output
+
+**Infrastructure** (from `onex_change_control`):
+```python
+from onex_change_control.scanners.wire_schema_compliance import (
+    discover_wire_schema_contracts,
+    check_wire_schema_mismatch,
+)
+from onex_change_control.scanners.model_dump_drift import check_model_dump_drift
+```
+
+Append any violations to the compliance report. Wire schema violations use
+`WIRE_SCHEMA_MISMATCH` and `MODEL_DUMP_DRIFT` from `EnumComplianceViolation`.
+
+If models are not importable in the scan environment (cross-repo models), log
+"Skipped: model not importable" and continue. This is expected for cross-repo
+contracts where the consumer is in a different repo.
+
 ## Phase 3: Aggregate results
 
 Build a `ModelComplianceSweepReport` from the per-handler results:
