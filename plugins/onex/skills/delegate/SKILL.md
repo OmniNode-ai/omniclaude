@@ -92,27 +92,34 @@ To publish from a skill script:
 
 ```python
 #!/usr/bin/env python3
-import json
 import os
 import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Add plugin hooks/lib to path for emit_client_wrapper (no omnibase_infra dep)
+_HOOKS_LIB = Path(__file__).parent.parent.parent / "hooks" / "lib"
+if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_LIB))
+
 # Add src/ to path for omniclaude imports
 _SRC_PATH = Path(__file__).parent.parent.parent.parent.parent / "src"
 if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
 
-from omniclaude.hooks.topics import TopicBase, build_topic
 from omniclaude.lib.task_classifier import TaskClassifier, TaskIntent
 
-TOPIC = build_topic(TopicBase.DELEGATION_REQUEST)
 DELEGATABLE = frozenset({TaskIntent.TEST, TaskIntent.DOCUMENT, TaskIntent.RESEARCH})
 
 
 def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens: int = 2048) -> dict:
-    """Classify prompt and return the delegation request envelope."""
+    """Classify prompt and publish a delegation request via the emit daemon.
+
+    The payload is wrapped in a ModelEventEnvelope-compatible dict so the
+    runtime Kafka consumer (event_bus_subcontract_wiring) can deserialize it
+    with ModelEventEnvelope[object].model_validate(data).
+    """
     classifier = TaskClassifier()
     result = classifier.classify(prompt)
 
@@ -123,7 +130,9 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
         }
 
     correlation_id = str(uuid.uuid4())
-    envelope = {
+
+    # Inner payload: the delegation request fields
+    delegation_payload = {
         "prompt": prompt,
         "task_type": result.intent.value,
         "source_session_id": os.environ.get("CLAUDE_SESSION_ID"),
@@ -133,14 +142,23 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
         "emitted_at": datetime.now(UTC).isoformat(),
     }
 
+    # Outer envelope: ModelEventEnvelope-compatible structure.
+    # The daemon publishes this dict as the raw Kafka message value.
+    # The runtime consumer calls ModelEventEnvelope[object].model_validate()
+    # on it, so 'payload' is the only required key (all others have defaults).
+    envelope = {
+        "payload": delegation_payload,
+        "correlation_id": correlation_id,
+        "event_type": "omnibase-infra.delegation-request",
+        "source_tool": "omniclaude.delegate-skill",
+    }
+
     # Publish via emit daemon (fire-and-forget)
     # The emit daemon is started by the hook system; if unavailable,
     # the skill reports the envelope for manual submission.
     try:
-        from omniclaude.hooks._helpers import get_emit_client
-        client = get_emit_client()
-        if client is not None:
-            client.emit(TOPIC, envelope)
+        from emit_client_wrapper import emit_event
+        emit_event("delegation.request", envelope)
     except ImportError:
         pass  # Emit client unavailable — envelope returned for manual submission
 
@@ -148,7 +166,7 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
         "success": True,
         "correlation_id": correlation_id,
         "task_type": result.intent.value,
-        "topic": TOPIC,
+        "topic": "onex.cmd.omnibase-infra.delegation-request.v1",
         "envelope": envelope,
     }
 ```

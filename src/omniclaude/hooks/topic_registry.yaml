@@ -300,6 +300,11 @@ topics:
     topic_base_constant: "TASK_DELEGATED"
     description: "Task delegated to sub-agent"
 
+  - event_type: "delegation.request"
+    topic: "onex.cmd.omnibase-infra.delegation-request.v1"
+    topic_base_constant: "DELEGATION_REQUEST"
+    description: "Delegation request command for node_delegation_orchestrator (OMN-7040)"
+
   # ---------------------------------------------------------------------------
   # Shadow validation topics
   # ---------------------------------------------------------------------------
