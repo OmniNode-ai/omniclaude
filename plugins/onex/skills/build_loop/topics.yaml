@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Topic manifest for omniclaude skill: build-loop
+# Source of truth for this skill's Kafka topics.
+
+topics:
+  - onex.cmd.omnibase-infra.build-loop-start.v1
+  - onex.evt.omnibase-infra.build-loop-started.v1
+  - onex.evt.omnibase-infra.build-loop-cycle-completed.v1
+  - onex.evt.omnibase-infra.build-loop-failed.v1
