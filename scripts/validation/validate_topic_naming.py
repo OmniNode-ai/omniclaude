@@ -36,6 +36,7 @@ _KNOWN_PRODUCERS = (
     "omniintelligence",
     "omnimemory",
     "omnibase",
+    "omnibase-infra",
 )
 _PRODUCER_SEGMENT = "|".join(_KNOWN_PRODUCERS)
 

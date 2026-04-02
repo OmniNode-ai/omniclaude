@@ -83,11 +83,11 @@ class TestTopicBase:
         # ONEX canonical format (OMN-1537): onex.{kind}.{producer}.{event-name}.v{n}
         # - Exactly 5 dot-separated segments
         # - kind: cmd, evt, dlq, intent, snapshot
-        # - producer: lowercase service name
+        # - producer: lowercase service name (may contain hyphens for infra services)
         # - event-name: kebab-case
         # - version: v + integer
         onex_pattern = re.compile(
-            r"^onex\.(cmd|evt|dlq|intent|snapshot)\.[a-z]+\.[a-z-]+\.v\d+$"
+            r"^onex\.(cmd|evt|dlq|intent|snapshot)\.[a-z][a-z0-9-]*\.[a-z-]+\.v\d+$"
         )
 
         # All topics now follow ONEX canonical format (OMN-1552 migrated legacy topics)
