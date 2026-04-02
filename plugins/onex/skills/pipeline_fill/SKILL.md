@@ -119,7 +119,9 @@ Remove tickets that should not be dispatched:
 2. **Blocked**: Tickets with `blocked` label or where `blockedBy` relations exist with
    non-completed tickets
 3. **Missing repo**: Tickets without a clear target repo (no `repo:` label or description match)
-4. **Wave cap**: If current in-flight count >= wave cap, skip this cycle entirely
+4. **No push access**: Exclude repos where the current agent identity cannot push — verify
+   via `gh api repos/{owner}/{repo} --jq '.permissions.push'` before scheduling any workers
+5. **Wave cap**: If current in-flight count >= wave cap, skip this cycle entirely
 
 **Dispatched state file** (`.onex_state/pipeline-fill/dispatched.yaml`):
 ```yaml
