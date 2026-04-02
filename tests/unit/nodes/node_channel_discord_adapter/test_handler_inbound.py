@@ -14,6 +14,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+discord = pytest.importorskip("discord", reason="discord.py not installed")
+
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_discord_adapter.handlers.handler_inbound import (
     message_to_envelope,

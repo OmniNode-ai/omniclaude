@@ -12,8 +12,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-import discord
 import pytest
+
+discord = pytest.importorskip("discord", reason="discord.py not installed")
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_discord_adapter.handlers.handler_outbound import (
