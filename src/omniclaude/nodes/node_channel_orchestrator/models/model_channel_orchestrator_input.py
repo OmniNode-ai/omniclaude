@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from omnibase_core.models.channel.model_channel_envelope import ModelChannelEnvelope
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
 
 class ModelChannelOrchestratorInput(ModelChannelEnvelope):

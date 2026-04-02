@@ -8,7 +8,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from omnibase_core.enums.enum_channel_type import EnumChannelType
+from omniclaude.enums.enum_channel_type import EnumChannelType
 
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_channel_reply_dispatcher.handlers.handler_dispatch_reply import (

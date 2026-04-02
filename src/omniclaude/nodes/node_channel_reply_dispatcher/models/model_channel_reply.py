@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from omnibase_core.enums.enum_channel_type import EnumChannelType  # noqa: TC002
+from omniclaude.enums.enum_channel_type import EnumChannelType  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 
 
