@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+# Ticket: OMN-7360
+#
+# Wire schema contract for onex.evt.omniclaude.session-started.v1
+topic: "onex.evt.omniclaude.session-started.v1"
+schema_version: "1.0.0"
+ticket: "OMN-7360"
+description: >
+  Session start event emitted by Claude Code hooks. Establishes the correlation_id
+  for all subsequent events in the session lifecycle.
+
+producer:
+  repo: "omniclaude"
+  file: "src/omniclaude/hooks/handler_event_emitter.py"
+  function: "emit_session_started"
+
+consumer:
+  repo: "omnibase_infra"
+  file: "src/omnibase_infra/services/session/consumer.py"
+  model: "ModelHookSessionStartedPayload"
+
+required_fields:
+  - name: "entity_id"
+    type: "uuid"
+    description: "Session identifier as UUID (partition key for ordering)."
+  - name: "session_id"
+    type: "string"
+    description: "Session identifier string."
+  - name: "correlation_id"
+    type: "uuid"
+    description: "Correlation ID for distributed tracing."
+  - name: "causation_id"
+    type: "uuid"
+    description: "ID of the event or trigger that caused this event."
+  - name: "emitted_at"
+    type: "datetime"
+    description: "Timestamp when the hook emitted this event (UTC)."
+  - name: "working_directory"
+    type: "string"
+    description: "Current working directory of the session."
+  - name: "hook_source"
+    type: "string"
+    description: "What triggered the session start (startup, resume, clear, compact)."
+
+optional_fields:
+  - name: "task_id"
+    type: "string"
+    nullable: true
+    description: "Stable task identifier for cross-session correlation."
+  - name: "git_branch"
+    type: "string"
+    nullable: true
+    description: "Current git branch if in a git repository."
+  - name: "action_description"
+    type: "string"
+    nullable: false
+    description: "Human-readable description for consumer display."
