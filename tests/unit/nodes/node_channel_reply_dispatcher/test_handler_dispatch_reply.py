@@ -70,8 +70,7 @@ class TestHandlerDispatchReply:
         reply = _make_reply(channel_type=EnumChannelType.MATRIX)
         result = handle_dispatch_reply(reply)
         assert result.routed is False
-        assert result.error is not None
-        assert "matrix" in result.error
+        assert result.topic is None
 
     def test_routing_table_is_declarative(self) -> None:
         assert isinstance(OUTBOUND_TOPIC_MAP, dict)

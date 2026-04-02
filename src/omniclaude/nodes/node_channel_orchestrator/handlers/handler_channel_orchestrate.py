@@ -45,9 +45,8 @@ def handle_channel_orchestrate(
         Orchestrator output with reply text and routing metadata.
     """
     logger.info(
-        "Channel orchestrate: channel_type=%s sender=%s correlation_id=%s",
+        "Channel orchestrate: channel_type=%s correlation_id=%s",
         envelope.channel_type,
-        envelope.sender_id,
         envelope.correlation_id,
     )
 
