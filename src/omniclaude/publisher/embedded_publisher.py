@@ -455,7 +455,12 @@ class EmbeddedEventPublisher:
         payload: dict[str, object],
         correlation_id: str | None,
     ) -> dict[str, object]:
-        """Add standard metadata fields to payload."""
+        """Add standard metadata fields to payload.
+
+        Injects ``entity_id`` (derived from ``session_id``) and ``emitted_at``
+        so that consumers expecting these fields (e.g. omnidash session
+        projection) can validate and partition events correctly.  (OMN-7239)
+        """
         result = dict(payload)
         if "correlation_id" not in result or result["correlation_id"] is None:
             result["correlation_id"] = correlation_id or str(uuid4())
@@ -463,6 +468,20 @@ class EmbeddedEventPublisher:
             result["causation_id"] = None
         if "emitted_at" not in result:
             result["emitted_at"] = datetime.now(UTC).isoformat()
+        # Derive entity_id from session_id when absent so consumers that
+        # validate on entity_id (ModelHookSessionStartedPayload et al.) accept
+        # events emitted by shell hooks that only provide session_id.
+        if "entity_id" not in result:
+            session_id = result.get("session_id")
+            if isinstance(session_id, str) and session_id:
+                try:
+                    UUID(session_id)
+                    result["entity_id"] = session_id
+                except ValueError:
+                    import hashlib
+
+                    h = hashlib.sha256(session_id.encode()).hexdigest()[:32]
+                    result["entity_id"] = str(UUID(h))
         result["schema_version"] = "1.0.0"
         return result
 
