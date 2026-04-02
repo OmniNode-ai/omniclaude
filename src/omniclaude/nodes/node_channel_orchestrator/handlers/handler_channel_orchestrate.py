@@ -18,12 +18,11 @@ from __future__ import annotations
 
 import logging
 
-from omniclaude.shared.models.model_channel_envelope import (
-    ModelChannelEnvelope,  # noqa: TC002
-)
-
 from omniclaude.nodes.node_channel_orchestrator.models.model_channel_orchestrator_output import (
     ModelChannelOrchestratorOutput,
+)
+from omniclaude.shared.models.model_channel_envelope import (
+    ModelChannelEnvelope,  # noqa: TC002
 )
 
 logger = logging.getLogger(__name__)

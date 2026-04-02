@@ -9,15 +9,15 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from omniclaude.enums.enum_channel_type import EnumChannelType
-from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
+from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate import (
     handle_channel_orchestrate,
 )
 from omniclaude.nodes.node_channel_orchestrator.models.model_channel_orchestrator_output import (
     ModelChannelOrchestratorOutput,
 )
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
 
 def _make_envelope(**overrides: object) -> ModelChannelEnvelope:

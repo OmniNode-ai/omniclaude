@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from omniclaude.enums.enum_channel_type import EnumChannelType  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
+
+from omniclaude.enums.enum_channel_type import EnumChannelType  # noqa: TC002
 
 
 class ModelChannelReply(BaseModel):

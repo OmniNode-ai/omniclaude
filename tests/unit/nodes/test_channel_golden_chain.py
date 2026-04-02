@@ -16,9 +16,8 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from omniclaude.enums.enum_channel_type import EnumChannelType
-from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
+from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_channel_orchestrator.handlers.handler_channel_orchestrate import (
     handle_channel_orchestrate,
@@ -29,6 +28,7 @@ from omniclaude.nodes.node_channel_reply_dispatcher.handlers.handler_dispatch_re
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
 )
+from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope
 
 
 @pytest.mark.unit

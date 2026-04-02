@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class EnumChannelType(str, Enum):
+class EnumChannelType(StrEnum):
     """Supported messaging platform channel types."""
 
     DISCORD = "discord"

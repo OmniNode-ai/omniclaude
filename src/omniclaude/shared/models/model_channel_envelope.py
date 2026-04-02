@@ -23,23 +23,31 @@ class ModelChannelEnvelope(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     # Channel routing
-    channel_id: str = Field(..., min_length=1, description="Platform-specific channel/room ID")
+    channel_id: str = Field(
+        ..., min_length=1, description="Platform-specific channel/room ID"
+    )
     channel_type: EnumChannelType = Field(..., description="Messaging platform type")
 
     # Sender (kept for business logic; must not be logged per PII rules)
     # string-id-ok: sender_id is a platform-specific user identifier
     sender_id: str = Field(..., description="Platform-specific sender identifier")
     # string-id-ok: sender_display_name is a platform-provided display name
-    sender_display_name: str | None = Field(default=None, description="Human-readable sender name")
+    sender_display_name: str | None = Field(
+        default=None, description="Human-readable sender name"
+    )
 
     # Message content
     message_text: str = Field(..., description="Raw message text from the sender")
     # string-id-ok: message_id is a platform-specific message identifier
-    message_id: str | None = Field(default=None, description="Platform-specific message ID")
+    message_id: str | None = Field(
+        default=None, description="Platform-specific message ID"
+    )
 
     # Thread context
     # string-id-ok: thread_id is a platform-specific thread identifier
-    thread_id: str | None = Field(default=None, description="Thread/conversation ID if applicable")
+    thread_id: str | None = Field(
+        default=None, description="Thread/conversation ID if applicable"
+    )
 
     # Timing
     timestamp: datetime = Field(..., description="When the message was received")

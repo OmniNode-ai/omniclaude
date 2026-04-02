@@ -17,7 +17,6 @@ import logging
 from dataclasses import dataclass
 
 from omniclaude.enums.enum_channel_type import EnumChannelType  # noqa: TC002
-
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,
