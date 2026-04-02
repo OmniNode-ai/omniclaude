@@ -29,7 +29,7 @@
 #
 # Priority:
 #   1. PLUGIN_PYTHON_BIN env var (explicit override / escape hatch)
-#   2. Plugin-bundled venv at PLUGIN_ROOT/lib/.venv (marketplace runtime)
+#   2. Repo main venv at PLUGIN_ROOT/../../.venv (OMN-7310: use repo venv, not plugin lib venv)
 #   3. OMNICLAUDE_PROJECT_ROOT/.venv (explicit dev mode, no heuristics)
 #   4. Hard failure with actionable error message
 
@@ -40,9 +40,11 @@ find_python() {
         return
     fi
 
-    # 2. Plugin-bundled venv (marketplace runtime — created by deploy.sh)
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" && -x "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
-        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
+    # 2. Repo main venv (OMN-7310: plugin lives at plugins/onex/, repo root is ../..)
+    local repo_root
+    repo_root="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
+    if [[ -n "$repo_root" && -f "${repo_root}/.venv/bin/python3" && -x "${repo_root}/.venv/bin/python3" ]]; then
+        echo "${repo_root}/.venv/bin/python3"
         return
     fi
 
@@ -98,25 +100,19 @@ verify_venv_or_warn() {
 }
 
 # =============================================================================
-# Inline Venv Auto-Repair (OMN-3726)
+# Inline Venv Auto-Repair (OMN-3726, updated OMN-7310)
 # =============================================================================
-# If find_python() returns empty, attempt to create a minimal venv at
-# PLUGIN_ROOT/lib/.venv using system python3. This recovers from the common
-# failure mode where deploy.sh ran but the venv was deleted or corrupted.
+# If find_python() returns empty, attempt to run `uv sync` in the repo root
+# to create/repair the repo's main .venv. Rate-limited via marker file.
 #
-# Design:
-#   - python3 -m venv is synchronous (~200ms) — creates a usable interpreter
-#   - pip install of omniclaude is fully backgrounded (logs to /tmp)
-#   - Rate-limited via /tmp/omniclaude-venv-repair-failed marker (5 min cooldown)
-#   - Writes .omniclaude-sentinel timestamp on successful venv creation
-#
-# Returns: path to the newly created python3 interpreter, or empty string
+# Returns: path to the repo venv python3 interpreter, or empty string
 
 _try_inline_venv_repair() {
-    local venv_dir="${PLUGIN_ROOT}/lib/.venv"
+    local repo_root
+    repo_root="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
+    local venv_dir="${repo_root}/.venv"
     local repair_failed_marker="/tmp/omniclaude-venv-repair-failed"
     local repair_log="/tmp/omniclaude-venv-repair.log"
-    local sentinel="${venv_dir}/.omniclaude-sentinel"
 
     # Rate-limit: skip if a previous repair failed less than 5 minutes ago
     if [[ -f "$repair_failed_marker" ]]; then
@@ -130,126 +126,37 @@ _try_inline_venv_repair() {
             echo ""
             return 1
         fi
-        # Cooldown expired, remove stale marker
         rm -f "$repair_failed_marker" 2>/dev/null || true
     fi
 
-    # Find system python3 (must not be inside our own broken venv)
-    local sys_python=""
-    local candidate
-    # Fast-path candidates: common locations on macOS + Linux containers.
-    # The PATH fallback search below handles all other locations.
-    for candidate in /usr/bin/python3 /usr/local/bin/python3 /opt/homebrew/bin/python3 /usr/bin/python3.11 /usr/bin/python3.12 /usr/bin/python3.13; do
-        if [[ -x "$candidate" ]]; then
-            sys_python="$candidate"
-            break
+    # Require uv for repo venv repair
+    if ! command -v uv &>/dev/null; then
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    # Require pyproject.toml at repo root
+    if [[ ! -f "${repo_root}/pyproject.toml" ]]; then
+        touch "$repair_failed_marker" 2>/dev/null || true
+        echo ""
+        return 1
+    fi
+
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: running uv sync in ${repo_root}" >> "$repair_log" 2>/dev/null || true
+    if (cd "$repo_root" && uv sync >> "$repair_log" 2>&1); then
+        local repaired_python="${venv_dir}/bin/python3"
+        if [[ -x "$repaired_python" ]]; then
+            rm -f "$repair_failed_marker" 2>/dev/null || true
+            echo "$repaired_python"
+            return 0
         fi
-    done
-
-    # Fallback: search PATH but exclude PLUGIN_ROOT to avoid circular reference
-    if [[ -z "$sys_python" ]]; then
-        local IFS=':'
-        local p
-        for p in $PATH; do
-            # Skip paths inside our own plugin tree
-            [[ "$p" == "${PLUGIN_ROOT}"* ]] && continue
-            if [[ -x "${p}/python3" ]]; then
-                sys_python="${p}/python3"
-                break
-            fi
-        done
-        unset IFS
     fi
 
-    if [[ -z "$sys_python" ]]; then
-        # No system python3 available — mark failure and bail
-        touch "$repair_failed_marker" 2>/dev/null || true
-        echo ""
-        return 1
-    fi
-
-    # Determine venv creation strategy: prefer python3 -m venv, fallback to uv
-    local venv_strategy=""
-    if "$sys_python" -m venv --help >/dev/null 2>&1; then
-        venv_strategy="python-venv"
-    elif command -v uv &>/dev/null; then
-        venv_strategy="uv"
-    else
-        # Neither python3 -m venv nor uv available
-        touch "$repair_failed_marker" 2>/dev/null || true
-        echo ""
-        return 1
-    fi
-
-    # Create the venv directory tree if needed
-    mkdir -p "${PLUGIN_ROOT}/lib" 2>/dev/null || {
-        touch "$repair_failed_marker" 2>/dev/null || true
-        echo ""
-        return 1
-    }
-
-    # Create minimal venv (~200ms synchronous)
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: creating venv at ${venv_dir} (strategy: ${venv_strategy})" >> "$repair_log" 2>/dev/null || true
-    local venv_ok=false
-    if [[ "$venv_strategy" == "python-venv" ]]; then
-        "$sys_python" -m venv "$venv_dir" >> "$repair_log" 2>&1 && venv_ok=true
-    elif [[ "$venv_strategy" == "uv" ]]; then
-        uv venv "$venv_dir" >> "$repair_log" 2>&1 && venv_ok=true
-    fi
-    if [[ "$venv_ok" != "true" ]]; then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: venv creation failed (strategy: ${venv_strategy})" >> "$repair_log" 2>/dev/null || true
-        touch "$repair_failed_marker" 2>/dev/null || true
-        echo ""
-        return 1
-    fi
-
-    local repaired_python="${venv_dir}/bin/python3"
-    if [[ ! -x "$repaired_python" ]]; then
-        touch "$repair_failed_marker" 2>/dev/null || true
-        echo ""
-        return 1
-    fi
-
-    # Write sentinel with creation timestamp
-    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$sentinel" 2>/dev/null || true
-
-    # Remove any stale failure marker (repair succeeded)
-    rm -f "$repair_failed_marker" 2>/dev/null || true
-
-    # Background: install omniclaude into the repaired venv
-    # This is non-blocking — the venv python3 is already usable for hooks.
-    # Uses venv_strategy (not re-probing PATH) to select the correct install tool.
-    # uv-created venvs have no pip, so pip install would fail without this guard.
-    (
-        _bg_strategy="$venv_strategy"  # capture before any PATH changes
-        _bg_python="$repaired_python"
-        _bg_root="$PLUGIN_ROOT"
-        _bg_log="$repair_log"
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background install starting (strategy: ${_bg_strategy})" >> "$_bg_log" 2>/dev/null || true
-
-        # _bg_strategy is captured from the enclosing subshell scope — do not
-        # extract this function into a separate script without passing it explicitly.
-        _install_pkg() {
-            local flag="$1" target="$2"
-            if [[ "$_bg_strategy" == "uv" ]]; then
-                uv pip install --quiet "$flag" "$target" >> "$_bg_log" 2>&1 || true
-            elif "$_bg_python" -m pip --version &>/dev/null 2>&1; then
-                "$_bg_python" -m pip install --quiet --disable-pip-version-check "$flag" "$target" >> "$_bg_log" 2>&1 || true
-            else
-                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: no install tool available" >> "$_bg_log" 2>/dev/null || true
-            fi
-        }
-
-        if [[ -f "${_bg_root}/pyproject.toml" ]]; then
-            _install_pkg "-e" "${_bg_root}"
-        elif [[ -f "${_bg_root}/requirements.txt" ]]; then
-            _install_pkg "-r" "${_bg_root}/requirements.txt"
-        fi
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: background install finished" >> "$_bg_log" 2>/dev/null || true
-    ) &
-
-    echo "$repaired_python"
-    return 0
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-repair: uv sync failed" >> "$repair_log" 2>/dev/null || true
+    touch "$repair_failed_marker" 2>/dev/null || true
+    echo ""
+    return 1
 }
 
 # Resolve Python — hard fail if not found (unless advisory hook)
@@ -283,14 +190,12 @@ if [[ -z "${PYTHON_CMD}" ]]; then
     echo "ERROR: No valid Python found for ONEX hooks." 1>&2
     echo "  Expected one of:" 1>&2
     echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2
-    echo "    - ${PLUGIN_ROOT}/lib/.venv/bin/python3 (deploy the plugin)" 1>&2
+    echo "    - Repo .venv at \$(cd PLUGIN_ROOT/../.. && pwd)/.venv (run: uv sync)" 1>&2
     echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
     echo "" 1>&2
     echo "  Auto-repair was attempted but failed. Check /tmp/omniclaude-venv-repair.log" 1>&2
     echo "" 1>&2
-    echo "  Quick fix: run the deploy skill with --repair-venv to build lib/.venv" 1>&2
-    echo "  in the active cache version without a full redeploy:" 1>&2
-    echo "    \${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv" 1>&2
+    echo "  Quick fix: cd to the omniclaude repo root and run 'uv sync'" 1>&2
     exit 1
 fi
 export PYTHON_CMD

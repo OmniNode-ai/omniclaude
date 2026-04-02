@@ -44,7 +44,10 @@ omniclaude_mode() {
 
     # 4. Auto-detect: omnibase_core importable as local dev install → full
     local loc=""
-    local plugin_python="${CLAUDE_PLUGIN_ROOT:-}/lib/.venv/bin/python3"
+    # OMN-7310: use repo main venv instead of plugin lib venv
+    local repo_root
+    repo_root="$(cd "${CLAUDE_PLUGIN_ROOT:-}/../.." 2>/dev/null && pwd)"
+    local plugin_python="${repo_root}/.venv/bin/python3"
     if [[ -x "$plugin_python" ]]; then
         loc=$("$plugin_python" -c "import omnibase_core; print(omnibase_core.__file__)" 2>/dev/null || true)
     elif command -v python3 &>/dev/null; then
