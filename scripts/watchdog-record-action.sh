@@ -38,6 +38,11 @@ DETAIL="${DETAIL:0:200}"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 MAX_ACTIONS=20
 
+if [[ "${LOOP_NAME}" != "closeout" && "${LOOP_NAME}" != "buildloop" ]]; then
+  echo "ERROR: loop_name must be 'closeout' or 'buildloop', got '${LOOP_NAME}'" >&2
+  exit 1
+fi
+
 if [[ ! -f "${STATE_FILE}" ]]; then
   echo "WARN: No state file found. Run watchdog-state-write.sh first." >&2
   exit 0

@@ -138,7 +138,7 @@ case "${OUTPUT_MODE}" in
     echo ""
 
     # Show recent actions taken
-    ACTIONS=$(jq -r ".loops.${LOOP_NAME}.actions_taken[-3:][]? | \"  [\(.timestamp)] \(.action) — \(.detail)\"" "${STATE_FILE}" 2>/dev/null)
+    ACTIONS=$(jq -r ".loops.${LOOP_NAME}.actions_taken[:3][]? | \"  [\(.timestamp)] \(.action) — \(.detail)\"" "${STATE_FILE}" 2>/dev/null)
     if [[ -n "${ACTIONS}" ]]; then
       echo "Recent actions:"
       echo "${ACTIONS}"

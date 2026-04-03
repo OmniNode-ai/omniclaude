@@ -565,7 +565,7 @@ def check_escalation(
     if policy is None:
         policy = load_policy()
 
-    loop = _ensure_loop(state, loop_name)
+    loop = state.loops.get(loop_name, ModelWatchdogLoopState())
     top_phase, top_count = _top_streak(loop)
     level_def = _action_for_streak(policy, top_count)
 

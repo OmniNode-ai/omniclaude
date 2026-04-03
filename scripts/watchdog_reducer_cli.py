@@ -57,17 +57,25 @@ STATE_DIR = OMNI_HOME / ".onex_state" / "watchdog"
 def cmd_run(args: list[str]) -> int:
     """Record a run result via the reducer."""
     if len(args) < 3:
-        print("Usage: watchdog_reducer_cli.py run <loop> <result> <phase> [error_message]", file=sys.stderr)
+        print(
+            "Usage: watchdog_reducer_cli.py run <loop> <result> <phase> [error_message]",
+            file=sys.stderr,
+        )
         return 1
 
     loop_name, result, phase = args[0], args[1], args[2]
     error_msg = args[3] if len(args) > 3 else None
 
     if loop_name not in ("closeout", "buildloop"):
-        print(f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'", file=sys.stderr)
+        print(
+            f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'",
+            file=sys.stderr,
+        )
         return 1
     if result not in ("pass", "fail"):
-        print(f"ERROR: result must be 'pass' or 'fail', got '{result}'", file=sys.stderr)
+        print(
+            f"ERROR: result must be 'pass' or 'fail', got '{result}'", file=sys.stderr
+        )
         return 1
 
     policy = load_policy()
@@ -87,7 +95,9 @@ def cmd_run(args: list[str]) -> int:
     save_state(new_state, STATE_DIR)
 
     level = new_state.loops[loop_name].escalation_level
-    print(f"Watchdog state updated: loop={loop_name} result={result} phase={phase} escalation={level}")
+    print(
+        f"Watchdog state updated: loop={loop_name} result={result} phase={phase} escalation={level}"
+    )
 
     if intents:
         intent = intents[0]
@@ -104,7 +114,10 @@ def cmd_check(args: list[str]) -> int:
 
     loop_name = args[0]
     if loop_name not in ("closeout", "buildloop"):
-        print(f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'", file=sys.stderr)
+        print(
+            f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'",
+            file=sys.stderr,
+        )
         return 1
 
     policy = load_policy()
@@ -118,10 +131,20 @@ def cmd_check(args: list[str]) -> int:
 def cmd_action(args: list[str]) -> int:
     """Record an action taken."""
     if len(args) < 3:
-        print("Usage: watchdog_reducer_cli.py action <loop> <action> <detail>", file=sys.stderr)
+        print(
+            "Usage: watchdog_reducer_cli.py action <loop> <action> <detail>",
+            file=sys.stderr,
+        )
         return 1
 
     loop_name, action, detail = args[0], args[1], args[2]
+
+    if loop_name not in ("closeout", "buildloop"):
+        print(
+            f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'",
+            file=sys.stderr,
+        )
+        return 1
 
     policy = load_policy()
     state = load_state(STATE_DIR)
@@ -154,13 +177,26 @@ def cmd_read(args: list[str]) -> int:
     if loop_name in state.loops:
         print(json.dumps(state.loops[loop_name].model_dump(mode="json"), indent=2))
     else:
-        print(json.dumps({"runs": [], "failure_streaks": {}, "escalation_level": 0, "actions_taken": [], "fsm_state": "healthy"}))
+        print(
+            json.dumps(
+                {
+                    "runs": [],
+                    "failure_streaks": {},
+                    "escalation_level": 0,
+                    "actions_taken": [],
+                    "fsm_state": "healthy",
+                }
+            )
+        )
     return 0
 
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Usage: watchdog_reducer_cli.py <run|check|action|read> ...", file=sys.stderr)
+        print(
+            "Usage: watchdog_reducer_cli.py <run|check|action|read> ...",
+            file=sys.stderr,
+        )
         return 1
 
     cmd = sys.argv[1]
