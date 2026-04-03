@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"
+OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
 export OMNI_HOME
 
 # ---------------------------------------------------------------------------

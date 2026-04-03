@@ -28,7 +28,7 @@ import sys
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -80,13 +80,13 @@ def _content_words(text: str) -> frozenset[str]:
     )
 
 
-class EnumReviewConfidence(str, Enum):
+class EnumReviewConfidence(StrEnum):
     high = "high"
     medium = "medium"
     low = "low"
 
 
-class EnumReviewVerdict(str, Enum):
+class EnumReviewVerdict(StrEnum):
     clean = "clean"
     risks_noted = "risks_noted"
     blocking_issue = "blocking_issue"

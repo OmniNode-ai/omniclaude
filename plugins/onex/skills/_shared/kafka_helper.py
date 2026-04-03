@@ -63,6 +63,8 @@ try:
 except ImportError:
     from common_utils import get_timeout_seconds
 
+import enum
+
 from omniclaude.config import settings
 
 # ONEX-compliant error handling
@@ -74,9 +76,8 @@ except ImportError:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
     except ImportError:
         # Fallback: Define locally if import fails (for standalone usage)
-        from enum import Enum as FallbackEnum
 
-        class EnumCoreErrorCode(str, FallbackEnum):  # type: ignore[no-redef]
+        class EnumCoreErrorCode(enum.StrEnum):  # type: ignore[no-redef]
             """Core error codes for ONEX operations."""
 
             CONFIGURATION_ERROR = "CONFIGURATION_ERROR"

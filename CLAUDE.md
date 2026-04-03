@@ -39,7 +39,7 @@
 ## Naming Conventions (Enforcement)
 
 - All models: `Model` prefix, Pydantic `BaseModel`, `ConfigDict(frozen=True, extra="forbid")`
-- All enums: `Enum` prefix, `str, Enum` base
+- All enums: `Enum` prefix, `StrEnum` base (Python 3.11+)
 - No `@dataclass`. No `str` literal fields for finite sets — use enums.
 - Check existing code for conventions before creating new files or classes.
 
