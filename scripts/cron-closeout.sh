@@ -148,7 +148,28 @@ if [[ -f "${LOCK_FILE}" ]]; then
 fi
 
 echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_FILE}"
-trap 'rm -f "${LOCK_FILE}"' EXIT
+
+# ---------------------------------------------------------------------------
+# Watchdog state integration
+# ---------------------------------------------------------------------------
+
+WATCHDOG_PHASE="starting"
+WATCHDOG_EXIT_CODE=0
+WATCHDOG_SCRIPT="$(dirname "$0")/watchdog-state-write.sh"
+
+cleanup_and_record() {
+  local exit_code="${WATCHDOG_EXIT_CODE:-$?}"
+  rm -f "${LOCK_FILE}"
+  if [[ -x "${WATCHDOG_SCRIPT}" ]]; then
+    if [[ ${exit_code} -eq 0 ]]; then
+      "${WATCHDOG_SCRIPT}" closeout pass complete "" 2>/dev/null || true
+    else
+      "${WATCHDOG_SCRIPT}" closeout fail "${WATCHDOG_PHASE}" "exit_code=${exit_code}" 2>/dev/null || true
+    fi
+  fi
+}
+
+trap 'cleanup_and_record' EXIT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -285,7 +306,7 @@ record_strike() {
   if [[ ${CONSECUTIVE_FAILURES} -ge ${MAX_FAILURES} ]]; then
     log "CIRCUIT BREAKER: ${MAX_FAILURES} consecutive failures. Halting pipeline."
     update_cycle_state "circuit_breaker"
-    exit 2
+    WATCHDOG_PHASE="${phase}"; WATCHDOG_EXIT_CODE=2; exit 2
   fi
 }
 
@@ -296,6 +317,32 @@ reset_strikes() {
 # ===========================================================================
 # Phase A: Prepare
 # ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Watchdog pre-check — enforce escalation policy before starting
+# ---------------------------------------------------------------------------
+
+WATCHDOG_CHECK="$(dirname "$0")/watchdog-check.sh"
+if [[ -x "${WATCHDOG_CHECK}" ]]; then
+  WATCHDOG_RESULT=$("${WATCHDOG_CHECK}" closeout 2>/dev/null) || true
+  WATCHDOG_ACTION=$(echo "${WATCHDOG_RESULT}" | jq -r '.action // "restart"' 2>/dev/null || echo "restart")
+  WATCHDOG_LEVEL=$(echo "${WATCHDOG_RESULT}" | jq -r '.level // 0' 2>/dev/null || echo "0")
+
+  if [[ "${WATCHDOG_ACTION}" == "alert_user" ]]; then
+    echo "WATCHDOG BLOCK: Escalation level ${WATCHDOG_LEVEL}. Not restarting."
+    echo "Run: $(dirname "$0")/watchdog-state-read.sh closeout"
+    echo "To reset after fixing: rm ${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+    WATCHDOG_PHASE="watchdog_block"; WATCHDOG_EXIT_CODE=5; exit 5
+  fi
+
+  if [[ "${WATCHDOG_ACTION}" != "restart" ]]; then
+    log "WATCHDOG: Escalation level ${WATCHDOG_LEVEL}, action=${WATCHDOG_ACTION}"
+    log "WATCHDOG: ${WATCHDOG_RESULT}"
+    # Continue running — the cron script itself is the mechanism.
+    # The watchdog state is informational for CronCreate watchdog prompts
+    # which read the state and decide what to do.
+  fi
+fi
 
 log "=== Close-out run ${RUN_ID} starting ==="
 log "State dir: ${RUN_DIR}"
@@ -353,7 +400,7 @@ if phase_failed "B1_runtime_sweep"; then
   log "HALT: Runtime sweep reported failures."
   log "Review output: ${RUN_DIR}/B1_runtime_sweep.txt"
   update_cycle_state "halted_runtime_sweep"
-  exit 1
+  WATCHDOG_PHASE="B1_runtime_sweep"; WATCHDOG_EXIT_CODE=1; exit 1
 fi
 
 # B2: Data flow sweep — verify Kafka and projections [OMN-7238: remote-aware]
@@ -372,7 +419,7 @@ if phase_failed "B2_data_flow_sweep"; then
   log "HALT: Data flow sweep reported failures."
   log "Review output: ${RUN_DIR}/B2_data_flow_sweep.txt"
   update_cycle_state "halted_data_flow_sweep"
-  exit 1
+  WATCHDOG_PHASE="B2_data_flow_sweep"; WATCHDOG_EXIT_CODE=1; exit 1
 fi
 
 # B3: Database sweep — verify projection tables populated [OMN-7238: remote-aware]
@@ -392,7 +439,7 @@ if phase_failed "B3_database_sweep"; then
   log "HALT: Database sweep reported failures."
   log "Review output: ${RUN_DIR}/B3_database_sweep.txt"
   update_cycle_state "halted_database_sweep"
-  exit 1
+  WATCHDOG_PHASE="B3_database_sweep"; WATCHDOG_EXIT_CODE=1; exit 1
 fi
 
 # B4b: Data verification — advisory, non-blocking [OMN-6764]
@@ -441,7 +488,7 @@ if phase_failed "B5_integration"; then
   log "HALT: Integration gate reported failures. Cannot proceed to release."
   log "Review output: ${RUN_DIR}/B5_integration.txt"
   update_cycle_state "halted_integration"
-  exit 1
+  WATCHDOG_PHASE="B5_integration"; WATCHDOG_EXIT_CODE=1; exit 1
 fi
 
 reset_strikes
@@ -463,7 +510,7 @@ if phase_failed "B6_contract_verify"; then
     log "HALT: Contract verification failed (hard gate enabled)."
     log "Review output: ${RUN_DIR}/B6_contract_verify.txt"
     update_cycle_state "halted_contract_verify"
-    exit 1
+    WATCHDOG_PHASE="B6_contract_verify"; WATCHDOG_EXIT_CODE=1; exit 1
   else
     log "WARN: Contract verification reported failures (soft gate — continuing)."
     log "Review output: ${RUN_DIR}/B6_contract_verify.txt"
@@ -578,7 +625,7 @@ If ALL hard gates pass, print: INTEGRATION: PASS" \
   if phase_failed "E1_foundation_tests"; then
     log "CRITICAL: Foundation verification tests failed. Node layer may be dead."
     update_cycle_state "halted_verification_foundation"
-    exit 1
+    WATCHDOG_PHASE="E1_foundation_tests"; WATCHDOG_EXIT_CODE=1; exit 1
   fi
 
   # E2: Phase 2 pipeline integration tests (pattern, injection, intent)
@@ -598,7 +645,7 @@ If ALL tests pass, print: INTEGRATION: PASS" \
   if phase_failed "E2_pipeline_tests"; then
     log "CRITICAL: Pipeline verification tests failed. Data flow may be broken."
     update_cycle_state "halted_verification_pipeline"
-    exit 1
+    WATCHDOG_PHASE="E2_pipeline_tests"; WATCHDOG_EXIT_CODE=1; exit 1
   fi
 
   # E4: Golden chain sweep — end-to-end Kafka-to-DB-projection validation [OMN-7388]

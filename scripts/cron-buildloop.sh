@@ -30,7 +30,8 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-OMNI_HOME="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok: script runs on local machine only
+OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 STATE_DIR="${OMNI_HOME}/.onex_state/autopilot"
 LOG_DIR="/tmp/buildloop-logs"
 MAX_CYCLES=3
@@ -88,9 +89,7 @@ preflight() {
     missing+=("claude CLI")
   fi
 
-  if [[ "${DRY_RUN}" != "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    missing+=("ANTHROPIC_API_KEY")
-  fi
+  # Note: claude -p uses its own auth (Claude Code login), not ANTHROPIC_API_KEY
 
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "ERROR: Missing requirements: ${missing[*]}" >&2
@@ -211,7 +210,28 @@ if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
 fi
 
 echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_DIR}/pid"
-trap 'rm -rf "${LOCK_DIR}"' EXIT
+
+# ---------------------------------------------------------------------------
+# Watchdog state integration
+# ---------------------------------------------------------------------------
+
+WATCHDOG_PHASE="starting"
+WATCHDOG_EXIT_CODE=0
+WATCHDOG_SCRIPT="$(dirname "$0")/watchdog-state-write.sh"
+
+cleanup_and_record() {
+  local exit_code="${WATCHDOG_EXIT_CODE:-$?}"
+  rm -rf "${LOCK_DIR}"
+  if [[ -x "${WATCHDOG_SCRIPT}" ]]; then
+    if [[ ${exit_code} -eq 0 ]]; then
+      "${WATCHDOG_SCRIPT}" buildloop pass complete "" 2>/dev/null || true
+    else
+      "${WATCHDOG_SCRIPT}" buildloop fail "${WATCHDOG_PHASE}" "exit_code=${exit_code}" 2>/dev/null || true
+    fi
+  fi
+}
+
+trap 'cleanup_and_record' EXIT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -242,6 +262,28 @@ EOJSON
 # Main execution
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Watchdog pre-check — enforce escalation policy before starting
+# ---------------------------------------------------------------------------
+
+WATCHDOG_CHECK="$(dirname "$0")/watchdog-check.sh"
+if [[ -x "${WATCHDOG_CHECK}" ]]; then
+  WATCHDOG_RESULT=$("${WATCHDOG_CHECK}" buildloop 2>/dev/null) || true
+  WATCHDOG_ACTION=$(echo "${WATCHDOG_RESULT}" | jq -r '.action // "restart"' 2>/dev/null || echo "restart")
+  WATCHDOG_LEVEL=$(echo "${WATCHDOG_RESULT}" | jq -r '.level // 0' 2>/dev/null || echo "0")
+
+  if [[ "${WATCHDOG_ACTION}" == "alert_user" ]]; then
+    echo "WATCHDOG BLOCK: Escalation level ${WATCHDOG_LEVEL}. Not restarting."
+    echo "Run: $(dirname "$0")/watchdog-state-read.sh buildloop"
+    echo "To reset after fixing: rm ${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+    WATCHDOG_PHASE="watchdog_block"; WATCHDOG_EXIT_CODE=5; exit 5
+  fi
+
+  if [[ "${WATCHDOG_ACTION}" != "restart" ]]; then
+    log "WATCHDOG: Escalation level ${WATCHDOG_LEVEL}, action=${WATCHDOG_ACTION}"
+  fi
+fi
+
 log "=== Build loop run ${RUN_ID} starting ==="
 log "Max cycles: ${MAX_CYCLES}"
 log "Delegation: ${ENABLE_DELEGATION}"
@@ -260,7 +302,11 @@ OUTPUT_FILE="${RUN_DIR}/build-loop-output.txt"
 log "Starting claude -p invocation with ${PHASE_TIMEOUT}s timeout"
 
 exit_code=0
-timeout "${PHASE_TIMEOUT}" claude -p "/build-loop --max-cycles ${MAX_CYCLES}" \
+# Use gtimeout (GNU) if available, fall back to no timeout on macOS
+timeout_cmd=""
+if command -v timeout &>/dev/null; then timeout_cmd="timeout ${PHASE_TIMEOUT}";
+elif command -v gtimeout &>/dev/null; then timeout_cmd="gtimeout ${PHASE_TIMEOUT}"; fi
+${timeout_cmd} claude -p "/build-loop --max-cycles ${MAX_CYCLES}" \
   --print \
   --allowedTools "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*" \
   > "${OUTPUT_FILE}" 2>&1 || exit_code=$?
@@ -269,9 +315,11 @@ if [[ ${exit_code} -eq 124 ]]; then
   log "TIMEOUT: Build loop exceeded ${PHASE_TIMEOUT}s"
   echo "TIMEOUT" >> "${OUTPUT_FILE}"
   emit_friction "critical" "Build loop timed out after ${PHASE_TIMEOUT}s" "exit_code=124"
+  WATCHDOG_PHASE="build_loop_timeout"; WATCHDOG_EXIT_CODE=124
 elif [[ ${exit_code} -ne 0 ]]; then
   log "FAILED: Build loop exited with code ${exit_code}"
   emit_friction "high" "Build loop failed with exit code ${exit_code}" "exit_code=${exit_code}"
+  WATCHDOG_PHASE="build_loop_execution"; WATCHDOG_EXIT_CODE=${exit_code}
 else
   log "Build loop completed successfully"
 fi
