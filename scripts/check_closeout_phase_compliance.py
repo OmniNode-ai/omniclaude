@@ -38,7 +38,7 @@ except ImportError:
 def _load_yaml_minimal(path: Path) -> dict:
     """Load YAML with PyYAML or fall back to regex extraction."""
     if yaml is not None:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f)
     raise ImportError("PyYAML required: pip install pyyaml")
 
@@ -168,17 +168,17 @@ def check_compliance(
                     f"forbidden text '{forbidden}'"
                 )
 
-        # Check infra_consistency
+        # Check infra_consistency (case-insensitive, consistent with must_not_contain)
         infra = phase.get("infra_consistency", {})
         must_ref = infra.get("must_reference")
-        if must_ref and must_ref not in prompt:
+        if must_ref and must_ref.lower() not in prompt.lower():
             violations.append(
                 f"INFRA_MISSING: Phase {phase_id} must reference "
                 f"'{must_ref}' but doesn't"
             )
 
         for banned in infra.get("must_not_reference", []):
-            if banned in prompt:
+            if banned.lower() in prompt.lower():
                 violations.append(
                     f"INFRA_STALE: Phase {phase_id} references "
                     f"'{banned}' which should have been migrated"

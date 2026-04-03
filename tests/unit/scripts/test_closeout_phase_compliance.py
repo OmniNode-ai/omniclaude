@@ -13,6 +13,7 @@ Verifies that:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -323,7 +324,9 @@ class TestCurrentScriptCompliance:
             "E3",
         }
         for v in violations:
-            phase_prefix = v.split(":")[1].strip().split(" ")[1][:2]
+            match = re.search(r"Phase\s+(\w+)", v)
+            assert match, f"Could not parse phase ID from violation: {v}"
+            phase_prefix = match.group(1)[:2]
             assert phase_prefix not in non_violating, (
                 f"Unexpected violation in passing phase: {v}"
             )
