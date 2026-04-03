@@ -342,10 +342,19 @@ _ERROR_INDICATORS: tuple[str, ...] = (
 )
 
 # Required markers per task type — at least one must be present.
+# Intent-specific policy (OMN-7410):
+#   test     → require code markers (def test_, @pytest, assert, class Test)
+#   document → prose indicator only (paragraph length > 50 chars, no code markers)
+#   research → skip markers (length + refusal detection is sufficient)
+#   subprocess intents (lint, format_check, test_run, type_check) → bypass gate
 _TASK_MARKERS: dict[str, tuple[str, ...]] = {
     "test": ("def test_", "class test", "@pytest", "assert"),
-    "document": ('"""', "args:", "returns:", "parameters:"),
 }
+
+# Intents that bypass the quality gate entirely (subprocess results).
+_GATE_BYPASS_INTENTS: frozenset[str] = frozenset(
+    {"lint", "format_check", "test_run", "type_check"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -557,10 +566,12 @@ def _call_llm_with_system_prompt(
 def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
     """Run a fast heuristic quality check on the handler response.
 
-    Checks (in order):
-    1. Minimum length per task type (DOCUMENT: 100, TEST: 80, RESEARCH: 60 chars).
-    2. No error indicators in the first 200 characters (case-insensitive).
-    3. Task-type-specific content markers (for TEST and DOCUMENT only).
+    Intent-specific policy (OMN-7410):
+    - Subprocess intents (lint, format_check, test_run, type_check): bypass gate.
+    - All LLM intents: minimum length check + refusal detection.
+    - ``test``: require code markers (def test_, @pytest, assert, class Test).
+    - ``document``: prose indicator only (paragraph length > 50 chars).
+    - ``research``: length + refusal detection only (no marker check).
 
     This gate is intentionally heuristic and executes in < 5 ms.  No LLM call
     is made.  The async compliance emit (``_emit_compliance_advisory``) is the
@@ -568,12 +579,18 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
 
     Args:
         response: Raw text returned by the handler LLM.
-        task_type: TaskIntent value string ("document", "test", "research").
+        task_type: TaskIntent value string ("document", "test", "research",
+            or a subprocess intent).
 
     Returns:
         Tuple of ``(passed, reason)`` where reason is an empty string when
         the gate passes, or a human-readable failure description.
     """
+    # Subprocess intents bypass the gate entirely — their pass/fail comes from
+    # the process exit code, not heuristic text analysis.
+    if task_type in _GATE_BYPASS_INTENTS:
+        return True, ""
+
     routing = _HANDLER_ROUTING.get(task_type)
     min_length = routing[3] if routing else 60
 
@@ -585,23 +602,31 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
         )
 
     # Check 2: error indicators in the first 200 chars
-    # Fast heuristic: check first 200 chars only. Models typically front-load
-    # refusals; longer preambles may bypass this check (acceptable tradeoff for
-    # a <5ms gate).
     preview = response[:200].lower()
     for indicator in _ERROR_INDICATORS:
         if indicator in preview:
             return False, f"response contains refusal indicator: {indicator!r}"
 
-    # Check 3: task-type markers (TEST and DOCUMENT only)
+    # Check 3: intent-specific content validation
     markers = _TASK_MARKERS.get(task_type)
     if markers:
+        # Code-marker check (test intent)
         response_lower = response.lower()
         if not any(marker in response_lower for marker in markers):
             return (
                 False,
                 f"response missing expected markers for {task_type!r}: "
                 f"none of {markers} found",
+            )
+    elif task_type == "document":
+        # Prose indicator: longest paragraph must be > 50 chars
+        paragraphs = response.split("\n\n")
+        max_para_len = max((len(p.strip()) for p in paragraphs), default=0)
+        if max_para_len < 50:
+            return (
+                False,
+                f"document response lacks prose paragraphs "
+                f"(longest: {max_para_len} < 50 chars)",
             )
 
     return True, ""
