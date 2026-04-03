@@ -1958,18 +1958,39 @@ continues without a contract.
    cd $ONEX_CC_REPO_PATH && git add contracts/{ticket_id}.yaml && git commit -m "contract: add {ticket_id} skeleton [auto-generated]"
    ```
 
-**On failure:** Log warning "Contract generation failed: {error}". Continue pipeline -- this
-phase is non-fatal.
+7. Contract completeness check (post-generation):
+   - If `is_seam_ticket=True` and `interfaces_touched` includes topics/events: verify `golden_path`
+     is not None in the generated YAML
+   - Verify `dod_evidence` has at least 1 item (if dod_items were extracted)
+   - If either check fails and `emergency_bypass.enabled` is not true in the contract: HALT with
+     error "Contract incomplete — add golden_path/dod_evidence before proceeding"
+   - If `emergency_bypass.enabled` is true: log the bypass, emit a friction event via
+     `/record_friction` with category "contract-bypass", and continue with the skeletal contract
+
+**Emergency bypass governance:**
+- The `emergency_bypass` field in the contract YAML controls this escape hatch
+- `justification` must be a specific sentence referencing a real incident or deadline
+- `follow_up_ticket_id` must be a valid Linear ticket ID (not empty string)
+- A skeletal contract artifact is still required — bypass skips completeness checks, not contract
+  creation entirely
+- Every bypass emits a friction event so it surfaces in friction triage
+- Follow-up tickets staying in backlog >7 days should trigger escalation via friction triage
+
+**On failure:** HALT pipeline. Contract generation failure is fatal. The pipeline cannot proceed
+without a contract. If generation fails due to infrastructure issues (Linear MCP unavailable,
+onex_change_control repo not found), emit a friction event with the error details and halt.
 
 **State artifacts:**
 - `phases.generate_contract.started_at`
 - `phases.generate_contract.completed_at`
-- `phases.generate_contract.artifacts` (contract_path, skipped)
+- `phases.generate_contract.artifacts` (contract_path, skipped, bypass_used)
 
 **Exit conditions:**
-- **Completed:** Contract written and committed (AUTO-ADVANCE)
+- **Completed:** Contract written, committed, and completeness-checked (AUTO-ADVANCE)
 - **Skipped:** Contract already exists (AUTO-ADVANCE)
-- **Failed:** Non-fatal warning, pipeline continues (AUTO-ADVANCE)
+- **Failed:** Pipeline HALTS — contract generation is fatal. No further phases execute.
+- **Bypassed:** Emergency bypass used — contract exists but incomplete. Pipeline continues
+  with friction event logged.
 
 ---
 
