@@ -2,27 +2,20 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# cron-buildloop.sh — Headless build loop scheduler using claude -p
+# DEPRECATED: cron-buildloop.sh — Build loop is now integrated into cron-closeout.sh
+# as phases F1-F3. Use cron-closeout.sh instead:
 #
-# Runs /build-loop --max-cycles 3 on a schedule via launchd.
-# Modeled on cron-closeout.sh with atomic lock, log rotation, and
-# token budget awareness.
+#   ./scripts/cron-closeout.sh              # Full pipeline (close-out + build)
+#   ./scripts/cron-closeout.sh --build-only # Build loop only (phases F1-F3)
+#   ./scripts/cron-closeout.sh --skip-build # Close-out only (no build)
 #
-# Delegation: Enables local model delegation by default so that
-# testing, review, and lightweight tasks route to local LLMs
-# (DeepSeek-R1, Qwen3-Coder) instead of frontier Claude.
-# Override with --no-delegation to disable.
+# This script is kept for backwards compatibility but will be removed in a future release.
+# The launchd plist ai.omninode.buildloop.plist should be unloaded:
+#   launchctl unload ~/Library/LaunchAgents/ai.omninode.buildloop.plist
+#   rm ~/Library/LaunchAgents/ai.omninode.buildloop.plist
 #
-# Usage:
-#   ./scripts/cron-buildloop.sh              # Run build loop (max 3 cycles)
-#   ./scripts/cron-buildloop.sh --dry-run    # Print what would execute
-#   ./scripts/cron-buildloop.sh --no-delegation  # Disable local model delegation
-#
+# Original: Headless build loop scheduler using claude -p
 # Requires: claude CLI, ANTHROPIC_API_KEY
-#
-# Install launchd plist:
-#   cp ~/Library/LaunchAgents/ai.omninode.buildloop.plist ~/Library/LaunchAgents/
-#   launchctl load ~/Library/LaunchAgents/ai.omninode.buildloop.plist
 
 set -euo pipefail
 

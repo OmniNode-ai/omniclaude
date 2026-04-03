@@ -2,14 +2,20 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# cron-closeout.sh — Headless close-out orchestrator using scoped claude -p invocations
+# cron-closeout.sh — Headless close-out + build loop orchestrator using scoped claude -p invocations
 #
 # Each phase runs in a fresh context window. State persists via cycle-state.yaml
 # and per-run output files in the state directory.
 #
+# Phases A-E: Close-out (merge-sweep, quality gates, release, verification)
+# Phases F1-F3: Build loop (fill tickets, classify, dispatch builds)
+#
 # Usage:
-#   ./scripts/cron-closeout.sh              # Full close-out pipeline
+#   ./scripts/cron-closeout.sh              # Full pipeline (close-out + build)
 #   ./scripts/cron-closeout.sh --dry-run    # Print phases without executing
+#   ./scripts/cron-closeout.sh --skip-build # Close-out only (phases A-E)
+#   ./scripts/cron-closeout.sh --build-only # Build loop only (phases F1-F3)
+#   ./scripts/cron-closeout.sh --no-delegation  # Disable local model delegation
 #
 # Requires: claude CLI, gh CLI (authenticated), ANTHROPIC_API_KEY
 #
@@ -37,11 +43,19 @@ PHASE_TIMEOUT=600  # 10 minutes per phase
 RUN_ID="closeout-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 RUN_DIR="${STATE_DIR}/runs/${RUN_ID}"
 DRY_RUN=false
+SKIP_BUILD=false
+BUILD_ONLY=false
+ENABLE_DELEGATION=true
+MAX_BUILD_TICKETS=3
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
+    --skip-build) SKIP_BUILD=true; shift ;;
+    --build-only) BUILD_ONLY=true; shift ;;
+    --no-delegation) ENABLE_DELEGATION=false; shift ;;
+    --max-build-tickets) MAX_BUILD_TICKETS="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -60,6 +74,18 @@ fi
 
 export ONEX_RUN_ID="${RUN_ID}"
 export ONEX_UNSAFE_ALLOW_EDITS=1
+
+# ---------------------------------------------------------------------------
+# Delegation configuration (for build loop phases F1-F3)
+# ---------------------------------------------------------------------------
+# When delegation is enabled, ticket-pipeline invocations route delegatable
+# tasks (testing, documentation, research) to local LLMs instead of frontier
+# Claude. Ported from cron-buildloop.sh.
+
+if [[ "${ENABLE_DELEGATION}" == "true" ]]; then
+  export ENABLE_LOCAL_INFERENCE_PIPELINE=true
+  export ENABLE_LOCAL_DELEGATION=true
+fi
 
 # ---------------------------------------------------------------------------
 # Infrastructure host resolution [OMN-7238]
@@ -102,6 +128,57 @@ preflight() {
 preflight
 
 # ---------------------------------------------------------------------------
+# Delegation health pre-check [OMN-7391]
+# ---------------------------------------------------------------------------
+# Before enabling delegation, verify local LLMs respond on their
+# OpenAI-compatible /v1/models endpoints. If either is unreachable,
+# disable delegation gracefully (build continues with frontier only).
+
+check_delegation_health() {
+  if [[ "${ENABLE_DELEGATION}" != "true" ]]; then
+    return 0
+  fi
+
+  local coder_url="${LLM_CODER_URL:-}"
+  local fast_url="${LLM_CODER_FAST_URL:-}"
+  local failures=()
+
+  if [[ -z "${coder_url}" && -z "${fast_url}" ]]; then
+    echo "WARN: Delegation enabled but LLM_CODER_URL and LLM_CODER_FAST_URL not set. Disabling delegation."
+    ENABLE_DELEGATION=false
+    export ENABLE_LOCAL_INFERENCE_PIPELINE=false
+    export ENABLE_LOCAL_DELEGATION=false
+    return 0
+  fi
+
+  if [[ -n "${coder_url}" ]]; then
+    if curl -sf --max-time 5 "${coder_url}/v1/models" >/dev/null 2>&1; then
+      echo "Delegation health: ${coder_url} OK"
+    else
+      failures+=("LLM_CODER_URL (${coder_url})")
+    fi
+  fi
+
+  if [[ -n "${fast_url}" ]]; then
+    if curl -sf --max-time 5 "${fast_url}/v1/models" >/dev/null 2>&1; then
+      echo "Delegation health: ${fast_url} OK"
+    else
+      failures+=("LLM_CODER_FAST_URL (${fast_url})")
+    fi
+  fi
+
+  if [[ ${#failures[@]} -gt 0 ]]; then
+    echo "WARN: Delegation endpoints unreachable: ${failures[*]}"
+    echo "WARN: Disabling delegation for this run. Build loop will use frontier Claude only."
+    ENABLE_DELEGATION=false
+    export ENABLE_LOCAL_INFERENCE_PIPELINE=false
+    export ENABLE_LOCAL_DELEGATION=false
+  fi
+}
+
+check_delegation_health
+
+# ---------------------------------------------------------------------------
 # Directory setup
 # ---------------------------------------------------------------------------
 
@@ -131,7 +208,7 @@ fi
 # ---------------------------------------------------------------------------
 
 LOCK_FILE="${STATE_DIR}/cron-closeout.lock"
-LOCK_TIMEOUT=2700  # 45 minutes
+LOCK_TIMEOUT=5400  # 90 minutes (increased for build loop phases)
 
 if [[ -f "${LOCK_FILE}" ]]; then
   lock_time=$(stat -f %m "${LOCK_FILE}" 2>/dev/null || stat -c %Y "${LOCK_FILE}" 2>/dev/null || echo 0)
@@ -179,6 +256,23 @@ log() {
   local msg="[cron-closeout $(date -u +"%H:%M:%S")] $1"
   echo "${msg}"
   echo "${msg}" >> "${LOG_DIR}/${RUN_ID}.log"
+}
+
+# Emit a friction event to the NDJSON registry (best-effort)
+emit_friction() {
+  local severity="$1"
+  local description="$2"
+  local error_msg="${3:-}"
+  local ts
+  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local friction_dir="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}/friction"
+  mkdir -p "${friction_dir}"
+  local record
+  record=$(cat <<EOJSON
+{"skill":"cron_closeout","surface":"cron_closeout/build_loop","severity":"${severity}","description":"${description}","error_message":"${error_msg}","correlation_id":"${RUN_ID}","phase":"cron","timestamp":"${ts}"}
+EOJSON
+)
+  echo "${record}" >> "${friction_dir}/build-loop.ndjson" 2>/dev/null || true
 }
 
 # Run a single headless phase with timeout.
@@ -313,6 +407,14 @@ record_strike() {
 reset_strikes() {
   CONSECUTIVE_FAILURES=0
 }
+
+# ===========================================================================
+# Phases A-E: Close-out (skipped when --build-only is set)
+# ===========================================================================
+
+if [[ "${BUILD_ONLY}" == "true" ]]; then
+  log "=== --build-only: Skipping phases A-E ==="
+else
 
 # ===========================================================================
 # Phase A: Prepare
@@ -708,6 +810,115 @@ Print INTEGRATION: PASS if tests pass, or describe failures as warnings." \
   log "Verification suite complete"
 fi
 
+fi  # end of BUILD_ONLY skip (phases A-E)
+
+# ===========================================================================
+# Phases F1-F3: Build loop (ticket fill, classify, dispatch)
+# ===========================================================================
+# Only run if:
+# - --skip-build was NOT set
+# - If close-out phases ran (not --build-only), E phases must have passed
+# Ported from cron-buildloop.sh — that script is now deprecated.
+
+if [[ "${SKIP_BUILD}" == "true" ]]; then
+  log "=== --skip-build: Skipping phases F1-F3 ==="
+else
+
+  # If we ran close-out phases, verify E phases passed before building
+  if [[ "${BUILD_ONLY}" != "true" ]]; then
+    if phase_failed "E1_foundation_tests" || phase_failed "E2_pipeline_tests" || phase_failed "E4_golden_chain"; then
+      log "SKIP: Build loop phases skipped — verification suite (Phase E) did not pass"
+      emit_friction "high" "Build loop skipped: verification suite failed" "E_phases_failed"
+      # Jump to finalize
+      SKIP_BUILD=true
+    fi
+  fi
+
+  if [[ "${SKIP_BUILD}" != "true" ]]; then
+    log "=== Phase F: Build loop (max ${MAX_BUILD_TICKETS} tickets) ==="
+    log "Delegation: ${ENABLE_DELEGATION}"
+
+    reset_strikes
+
+    # F1: Fill — query Linear for top-N unstarted tickets by priority
+    F1_OUTPUT="${RUN_DIR}/F1_fill.txt"
+    if ! run_phase "F1_fill" \
+      "Query Linear for unstarted tickets in project Ready, team Omninode. Score by priority (Urgent=4, High=3, Medium=2, Low=1). Select the top ${MAX_BUILD_TICKETS} tickets that are not blocked. Output ONLY a JSON array of objects with keys: ticket_id, title, priority, score. Example: [{\"ticket_id\": \"OMN-1234\", \"title\": \"Add foo\", \"priority\": \"High\", \"score\": 3}]. Use the Linear MCP tools." \
+      "Bash,Read,Glob,Grep,mcp__linear-server__*"; then
+      record_strike "F1_fill"
+      emit_friction "high" "F1 fill phase failed" "run_phase_error"
+    fi
+
+    # F2: Classify — determine which tickets are auto-buildable
+    F2_OUTPUT="${RUN_DIR}/F2_classify.txt"
+    if [[ -f "${F1_OUTPUT}" ]] && ! phase_failed "F1_fill"; then
+      if ! run_phase "F2_classify" \
+        "Read the file ${F1_OUTPUT} which contains a JSON array of tickets from Linear. For each ticket, classify it:
+
+If the ticket has labels containing 'arch', 'design', or 'RFC', OR the title contains 'redesign', 'migrate', or 'rearchitect', classify as NEEDS_ARCH_DECISION.
+Otherwise classify as AUTO_BUILDABLE.
+
+Output ONLY a JSON array of objects with keys: ticket_id, title, classification. Example: [{\"ticket_id\": \"OMN-1234\", \"title\": \"Add foo\", \"classification\": \"AUTO_BUILDABLE\"}]" \
+        "Bash,Read,Glob,Grep"; then
+        record_strike "F2_classify"
+        emit_friction "high" "F2 classify phase failed" "run_phase_error"
+      fi
+    else
+      log "SKIP: F2 classify — F1 fill did not produce output"
+    fi
+
+    # F3: Build — dispatch ticket-pipeline for each AUTO_BUILDABLE ticket
+    if [[ -f "${F2_OUTPUT}" ]] && ! phase_failed "F2_classify"; then
+      log "=== Phase F3: Build dispatch ==="
+
+      # Parse AUTO_BUILDABLE tickets from F2 output
+      BUILDABLE_TICKETS=$(grep -o '"ticket_id"[[:space:]]*:[[:space:]]*"[^"]*"' "${F2_OUTPUT}" 2>/dev/null | head -n "${MAX_BUILD_TICKETS}" || true)
+
+      # Also need to check classification — extract full JSON objects
+      DISPATCH_COUNT=0
+      while IFS= read -r ticket_id; do
+        # Clean the ticket ID
+        ticket_id=$(echo "${ticket_id}" | sed 's/.*"ticket_id"[[:space:]]*:[[:space:]]*"//;s/".*//')
+        if [[ -z "${ticket_id}" ]]; then
+          continue
+        fi
+
+        # Verify this ticket is AUTO_BUILDABLE (not NEEDS_ARCH_DECISION)
+        if grep -q "\"${ticket_id}\"" "${F2_OUTPUT}" && grep -A2 "\"${ticket_id}\"" "${F2_OUTPUT}" | grep -q "NEEDS_ARCH_DECISION"; then
+          log "SKIP: ${ticket_id} classified as NEEDS_ARCH_DECISION"
+          continue
+        fi
+
+        DISPATCH_COUNT=$((DISPATCH_COUNT + 1))
+        if [[ ${DISPATCH_COUNT} -gt ${MAX_BUILD_TICKETS} ]]; then
+          log "Reached max build tickets (${MAX_BUILD_TICKETS}), stopping dispatch"
+          break
+        fi
+
+        log "F3: Dispatching ticket-pipeline for ${ticket_id} (${DISPATCH_COUNT}/${MAX_BUILD_TICKETS})"
+
+        if ! run_phase "F3_build_${ticket_id}" \
+          "Run /ticket_pipeline for ${ticket_id}" \
+          "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"; then
+          log "WARN: ticket-pipeline for ${ticket_id} failed"
+          emit_friction "high" "F3 build dispatch failed for ${ticket_id}" "ticket_pipeline_error"
+          # Don't record strike for individual ticket failures — continue to next
+        fi
+      done <<< "${BUILDABLE_TICKETS}"
+
+      if [[ ${DISPATCH_COUNT} -eq 0 ]]; then
+        log "No AUTO_BUILDABLE tickets to dispatch"
+      else
+        log "F3: Dispatched ${DISPATCH_COUNT} ticket(s)"
+      fi
+    else
+      log "SKIP: F3 build — F2 classify did not produce output"
+    fi
+
+    log "Build loop phases complete"
+  fi
+fi
+
 # ===========================================================================
 # Finalize
 # ===========================================================================
@@ -743,8 +954,15 @@ Phase Results:
   E2 pipeline-tests:   $(test -f "${RUN_DIR}/E2_pipeline_tests.txt" && echo "executed" || echo "missing")
   E4 golden-chain:     $(test -f "${RUN_DIR}/E4_golden_chain.txt" && echo "executed" || echo "missing")
   E3 dashboard-tests:  $(test -f "${RUN_DIR}/E3_dashboard_tests.txt" && echo "executed" || echo "missing")
+  F1 fill:             $(test -f "${RUN_DIR}/F1_fill.txt" && echo "executed" || echo "missing")
+  F2 classify:         $(test -f "${RUN_DIR}/F2_classify.txt" && echo "executed" || echo "missing")
+  F3 build:            $(ls "${RUN_DIR}"/F3_build_*.txt 2>/dev/null | wc -l | xargs) dispatch(es)
 
-Pending Redeploy: ${HAS_PENDING_REDEPLOY}
+Pending Redeploy: ${HAS_PENDING_REDEPLOY:-false}
+Skip Build: ${SKIP_BUILD}
+Build Only: ${BUILD_ONLY}
+Delegation: ${ENABLE_DELEGATION}
+Max Build Tickets: ${MAX_BUILD_TICKETS}
 Consecutive Failures: ${CONSECUTIVE_FAILURES}
 EOF
 
