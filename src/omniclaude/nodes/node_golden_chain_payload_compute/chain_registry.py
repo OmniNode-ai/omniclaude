@@ -66,6 +66,9 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             "delegate_model": "golden-chain-test-model",
             "task_type": "golden-chain-test",
             "session_id": "golden-chain-test-session",
+            "cost_savings_usd": 0.0112,
+            "cost_usd": 0.001,
+            "delegation_latency_ms": 150,
         },
         assertions=(
             ModelChainAssertion(
