@@ -486,22 +486,32 @@ if check_pending_redeploy; then
   HAS_PENDING_REDEPLOY=true
 fi
 
-# C1: Check for unreleased commits
-if ! run_phase "C1_release_check" \
+# C1: Release repos with unreleased commits [OMN-7401: execute, not report]
+if ! run_phase "C1_release" \
   "Check OmniNode-ai Python repos for unreleased commits on main since the last git tag. For each repo in ${OMNI_HOME}/ (omnibase_core, omnibase_infra, omnibase_spi, omniclaude, omniintelligence, omnimemory), run:
   LAST_TAG=\$(git -C ${OMNI_HOME}/<repo> describe --tags --abbrev=0 2>/dev/null)
   git -C ${OMNI_HOME}/<repo> log \${LAST_TAG}..HEAD --oneline
-Report which repos have unreleased commits and how many commits each." \
-  "Bash,Read,Glob,Grep"; then
-  record_strike "C1_release_check"
+
+If ANY repo has unreleased commits, execute the release skill:
+  /release --autonomous
+
+This will bump versions, create release PRs, merge, tag, and publish to PyPI.
+If no repos have unreleased commits, report 'No unreleased commits — skipping release.' and exit successfully." \
+  "Bash,Read,Write,Edit,Glob,Grep"; then
+  record_strike "C1_release"
 fi
 
-# C2: Report pending redeploy status
+# C2: Execute pending redeploy [OMN-7401: execute, not report]
 if [[ "${HAS_PENDING_REDEPLOY}" == "true" ]]; then
-  if ! run_phase "C2_redeploy_check" \
-    "Repos with versions newer than deployed: $(cat "${RUN_DIR}/pending_redeploys.txt" 2>/dev/null || echo 'unknown'). Report which repos need redeployment. Compare git tags in ${OMNI_HOME}/<repo> against the cycle-state deployed versions. Do NOT execute the actual redeploy — just report what would need to happen." \
-    "Bash,Read,Glob,Grep"; then
-    record_strike "C2_redeploy_check"
+  if ! run_phase "C2_redeploy" \
+    "Repos with versions newer than deployed: $(cat "${RUN_DIR}/pending_redeploys.txt" 2>/dev/null || echo 'unknown'). Execute a full runtime redeploy by running:
+  /redeploy
+
+This will sync bare clones to latest tags, update Dockerfile plugin pins, rebuild Docker runtime images on ${INFRA_HOST}, seed Infisical, and verify health.
+
+After redeploy completes, update ${CYCLE_STATE} with the new deployed versions by reading the latest git tags for each repo." \
+    "Bash,Read,Write,Edit,Glob,Grep"; then
+    record_strike "C2_redeploy"
   fi
 else
   log "No pending redeploys — skipping C2"
@@ -542,16 +552,25 @@ if [[ -f "${VERIFICATION_MARKER}" ]]; then
 fi
 
 if [[ "${SKIP_VERIFICATION}" == "false" ]]; then
-  # E1: Phase 1 integration tests (handler init, runtime health, node registration, dispatch)
+  # E1: Foundation verification via remote health endpoints [OMN-7401: remote-aware]
   # Critical — blocks close-out on failure
+  # NOTE: Previously ran local pytest integration tests, but those tests use
+  # `docker ps` and `docker logs` which only work when containers are local.
+  # Infrastructure migrated to ${INFRA_HOST} in OMN-7238 — use health endpoints.
   if ! run_phase "E1_foundation_tests" \
-    "Run Phase 1 foundation integration tests in omnibase_infra. Execute:
-cd ${OMNI_HOME}/omnibase_infra
-uv run pytest tests/integration/test_runtime_health.py tests/integration/test_node_registration.py tests/integration/test_dispatch_roundtrip.py -v --timeout=120
+    "Run foundation verification against ${INFRA_HOST}. Check all critical subsystems:
 
-Report PASS count and FAIL count.
-If ANY test fails, print: INTEGRATION: FAIL
-If ALL tests pass, print: INTEGRATION: PASS" \
+1. Runtime container health: curl -sf http://${INFRA_HOST}:8085/health (must return 200)
+2. Node registration evidence: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc 'SELECT count(*) FROM registration_projections' (must be > 0)
+3. No handler init errors: ssh ${INFRA_HOST} 'docker logs --since 10m omninode-runtime 2>&1 | grep -ci \"NoneType\\|config is None\\|initialize() got an unexpected\"' (must be 0)
+4. Runtime health endpoint reachable: curl -sf http://${INFRA_HOST}:8085/health | jq .status (must be healthy or ok)
+5. Event dispatch evidence: psql -h ${INFRA_HOST} -p ${POSTGRES_PORT} -U postgres -d omnibase_infra -tAc \"SELECT count(*) FROM registration_projections WHERE created_at > now() - interval '1 hour'\" (recent activity > 0 preferred, 0 is WARN not FAIL)
+6. Kafka broker reachable: kcat -L -b ${KAFKA_BROKERS} 2>&1 | head -5 (must show broker metadata)
+
+Tests 1-4 and 6 are HARD GATES. Test 5 is informational.
+Report PASS/FAIL for each test.
+If ANY hard gate fails, print: INTEGRATION: FAIL
+If ALL hard gates pass, print: INTEGRATION: PASS" \
     "Bash,Read"; then
     record_strike "E1_foundation_tests"
   fi
