@@ -23,7 +23,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from enum import Enum, StrEnum
+from enum import StrEnum
 from typing import Any
 
 # Add project root for config module (type-safe Pydantic Settings) and ONEX errors

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from functools import cached_property
 from typing import Any, Literal
 

@@ -43,9 +43,8 @@ No custom YAML parser — fail closed cleanly rather than silently misparse.
 
 from __future__ import annotations
 
-import enum
-from enum import StrEnum
 import pathlib
+from enum import StrEnum
 from typing import Any
 
 # Patchable in tests
