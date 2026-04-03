@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: node_golden_chain_payload_compute
+# Epic: OMN-7356 Golden Event Chain Validator
+
+name: "golden_chain_payload_compute"
+contract_name: "golden_chain_payload_compute"
+node_name: "golden_chain_payload_compute"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: "COMPUTE"
+
+description: >
+  Pure COMPUTE node that builds synthetic test payloads for all 5 golden chain
+  definitions. Each payload includes a correlation_id with the golden-chain-
+  prefix, an emitted_at timestamp, and per-chain assertion declarations. No
+  side effects -- produces deterministic output from chain definitions.
+
+input_model:
+  name: "ModelChainDefinition"
+  module: "omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_definition"
+  description: "Chain definitions — list of chain specs with topic, table, fixture template, assertions."
+output_model:
+  name: "ModelEnrichedPayload"
+  module: "omniclaude.nodes.node_golden_chain_payload_compute.models.model_enriched_payload"
+  description: "List of enriched payloads with correlation_id, emitted_at, fixture, and assertions."
+
+runtime:
+  supports_direct_call: true
+  supports_event_driven: false
+  side_effects: false
+  timeout_ms: 5000
+  deterministic: true
+
+timestamp_policy:
+  explicit_injection: true
+  timezone_required: true
+  rationale: >
+    Timestamps are injected by the caller so that test fixtures have
+    deterministic emitted_at values.
+
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2026-04-02"
+  ticket: "OMN-7361"
+  tags:
+    - compute
+    - golden-chain
+    - test
+    - validation
+    - onex

@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# ONEX Node Contract
+# Node: node_golden_chain_status_reducer
+# Epic: OMN-7356 Golden Event Chain Validator
+
+name: "golden_chain_status_reducer"
+contract_name: "golden_chain_status_reducer"
+node_name: "golden_chain_status_reducer"
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+node_type: "REDUCER"
+
+description: >
+  REDUCER node that aggregates per-chain results into a sweep summary.
+  Computes overall_status (pass/partial/fail), counts, and per-chain
+  summaries. Pure aggregation with no side effects.
+
+input_model:
+  name: "ModelChainResult"
+  module: "omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result"
+  description: "List of chain results from the publish effect node."
+output_model:
+  name: "ModelSweepSummary"
+  module: "omniclaude.nodes.node_golden_chain_status_reducer.models.model_sweep_summary"
+  description: "Sweep summary with overall status, per-chain summaries, and counts."
+
+runtime:
+  supports_direct_call: true
+  supports_event_driven: false
+  side_effects: false
+  timeout_ms: 5000
+  deterministic: true
+
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2026-04-02"
+  ticket: "OMN-7364"
+  tags:
+    - reducer
+    - golden-chain
+    - aggregation
+    - validation
+    - onex
