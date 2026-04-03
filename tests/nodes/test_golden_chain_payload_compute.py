@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (
     GOLDEN_CHAIN_DEFINITIONS,
     get_chain_definitions,

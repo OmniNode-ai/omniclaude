@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result import (
     ModelChainResult,
 )
