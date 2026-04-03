@@ -201,6 +201,20 @@ phases:
     required_tools: "Bash,Read"
     verification: "All integration tests pass"
 
+  - id: E4_golden_chain
+    name: "Golden Chain Sweep"
+    category: gate
+    blocking: true
+    expected_action: "Run golden chain sweep to verify end-to-end Kafka-to-DB data flow"
+    required_keywords:
+      - "/golden_chain_sweep"
+      - "INTEGRATION: PASS"
+      - "INTEGRATION: FAIL"
+    infra_consistency:
+      must_reference: "INFRA_HOST"
+    required_tools: "Bash,Read"
+    verification: "All 5 chains pass end-to-end"
+
   - id: E3_dashboard_tests
     name: "Dashboard Verification"
     category: advisory
