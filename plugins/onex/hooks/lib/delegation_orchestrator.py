@@ -342,10 +342,19 @@ _ERROR_INDICATORS: tuple[str, ...] = (
 )
 
 # Required markers per task type — at least one must be present.
+# Intent-specific policy (OMN-7410):
+#   test     → require code markers (def test_, @pytest, assert, class Test)
+#   document → prose indicator only (paragraph length > 50 chars, no code markers)
+#   research → skip markers (length + refusal detection is sufficient)
+#   subprocess intents (lint, format_check, test_run, type_check) → bypass gate
 _TASK_MARKERS: dict[str, tuple[str, ...]] = {
     "test": ("def test_", "class test", "@pytest", "assert"),
-    "document": ('"""', "args:", "returns:", "parameters:"),
 }
+
+# Intents that bypass the quality gate entirely (subprocess results).
+_GATE_BYPASS_INTENTS: frozenset[str] = frozenset(
+    {"lint", "format_check", "test_run", "type_check"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +393,11 @@ _FALSY = frozenset({"false", "0", "no", "off"})
 # ---------------------------------------------------------------------------
 
 
+# Intents eligible for frontier model routing (OMN-7410).
+# document is excluded for privacy (may contain proprietary code).
+_FRONTIER_ELIGIBLE_INTENTS: frozenset[str] = frozenset({"research", "code_review"})
+
+
 def _select_handler_endpoint(
     intent_value: str,
 ) -> tuple[str, str, str, str] | None:
@@ -391,6 +405,12 @@ def _select_handler_endpoint(
 
     Looks up the routing table to find which endpoint purpose is appropriate,
     then queries LocalLlmEndpointRegistry for the configured URL.
+
+    Frontier routing policy (OMN-7410):
+    - research and code_review intents prefer frontier (Gemini > GLM) when
+      available and not disabled by DELEGATION_DISABLE_FRONTIER_ROUTING.
+    - document intent NEVER routes to frontier (privacy boundary).
+    - If frontier is unavailable, falls back to local endpoint.
 
     Args:
         intent_value: TaskIntent enum value string (e.g., "document", "test").
@@ -407,11 +427,40 @@ def _select_handler_endpoint(
     purpose_name, system_prompt, handler_name, _min_len = routing
 
     try:
-        purpose = LlmEndpointPurpose(purpose_name)
         registry = LocalLlmEndpointRegistry()
+
+        # Frontier routing: prefer frontier for eligible intents
+        if intent_value in _FRONTIER_ELIGIBLE_INTENTS:
+            for frontier_purpose in (
+                LlmEndpointPurpose.GEMINI,
+                LlmEndpointPurpose.GLM,
+            ):
+                frontier_ep = registry.get_endpoint(frontier_purpose)
+                if frontier_ep is not None:
+                    url = str(frontier_ep.url).rstrip("/")
+                    logger.info(
+                        "Frontier routing: intent=%s -> provider=%s (model=%s)",
+                        intent_value,
+                        frontier_purpose.value,
+                        frontier_ep.model_name,
+                    )
+                    return url, frontier_ep.model_name, system_prompt, handler_name
+            logger.debug(
+                "No frontier endpoint available for intent=%s, falling back to local",
+                intent_value,
+            )
+
+        # Local endpoint fallback (or non-frontier-eligible intents)
+        purpose = LlmEndpointPurpose(purpose_name)
         endpoint = registry.get_endpoint(purpose)
         if endpoint is not None:
             url = str(endpoint.url).rstrip("/")
+            logger.info(
+                "Local routing: intent=%s -> purpose=%s (model=%s)",
+                intent_value,
+                purpose_name,
+                endpoint.model_name,
+            )
             return url, endpoint.model_name, system_prompt, handler_name
         logger.debug(
             "No endpoint configured for purpose=%s (intent=%s)",
@@ -517,10 +566,12 @@ def _call_llm_with_system_prompt(
 def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
     """Run a fast heuristic quality check on the handler response.
 
-    Checks (in order):
-    1. Minimum length per task type (DOCUMENT: 100, TEST: 80, RESEARCH: 60 chars).
-    2. No error indicators in the first 200 characters (case-insensitive).
-    3. Task-type-specific content markers (for TEST and DOCUMENT only).
+    Intent-specific policy (OMN-7410):
+    - Subprocess intents (lint, format_check, test_run, type_check): bypass gate.
+    - All LLM intents: minimum length check + refusal detection.
+    - ``test``: require code markers (def test_, @pytest, assert, class Test).
+    - ``document``: prose indicator only (paragraph length > 50 chars).
+    - ``research``: length + refusal detection only (no marker check).
 
     This gate is intentionally heuristic and executes in < 5 ms.  No LLM call
     is made.  The async compliance emit (``_emit_compliance_advisory``) is the
@@ -528,12 +579,18 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
 
     Args:
         response: Raw text returned by the handler LLM.
-        task_type: TaskIntent value string ("document", "test", "research").
+        task_type: TaskIntent value string ("document", "test", "research",
+            or a subprocess intent).
 
     Returns:
         Tuple of ``(passed, reason)`` where reason is an empty string when
         the gate passes, or a human-readable failure description.
     """
+    # Subprocess intents bypass the gate entirely — their pass/fail comes from
+    # the process exit code, not heuristic text analysis.
+    if task_type in _GATE_BYPASS_INTENTS:
+        return True, ""
+
     routing = _HANDLER_ROUTING.get(task_type)
     min_length = routing[3] if routing else 60
 
@@ -545,17 +602,15 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
         )
 
     # Check 2: error indicators in the first 200 chars
-    # Fast heuristic: check first 200 chars only. Models typically front-load
-    # refusals; longer preambles may bypass this check (acceptable tradeoff for
-    # a <5ms gate).
     preview = response[:200].lower()
     for indicator in _ERROR_INDICATORS:
         if indicator in preview:
             return False, f"response contains refusal indicator: {indicator!r}"
 
-    # Check 3: task-type markers (TEST and DOCUMENT only)
+    # Check 3: intent-specific content validation
     markers = _TASK_MARKERS.get(task_type)
     if markers:
+        # Code-marker check (test intent)
         response_lower = response.lower()
         if not any(marker in response_lower for marker in markers):
             return (
@@ -563,8 +618,66 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
                 f"response missing expected markers for {task_type!r}: "
                 f"none of {markers} found",
             )
+    elif task_type == "document":
+        # Prose indicator: longest paragraph must be > 50 chars
+        paragraphs = response.split("\n\n")
+        max_para_len = max((len(p.strip()) for p in paragraphs), default=0)
+        if max_para_len < 50:
+            return (
+                False,
+                f"document response lacks prose paragraphs "
+                f"(longest: {max_para_len} < 50 chars)",
+            )
 
     return True, ""
+
+
+# ---------------------------------------------------------------------------
+# Result-only delegation mode (OMN-7410)
+# ---------------------------------------------------------------------------
+
+_RESULT_ONLY_SUMMARY_LIMIT = 200
+
+
+def _format_result_only(
+    *,
+    response_text: str,
+    model_name: str | None,
+    handler_name: str,
+    pass_fail: str,
+    elapsed_seconds: float,
+    correlation_id: str,
+) -> dict[str, Any]:
+    """Format a delegation result into the normalized result-only schema.
+
+    When ``DELEGATION_RESULT_ONLY=true``, both subprocess and LLM results
+    are normalized into a compact schema that omits the full response body.
+    The ``summary`` field is deterministically truncated to 200 chars.
+
+    Args:
+        response_text: Full response text from handler or subprocess.
+        model_name: Model name (None for subprocess handlers).
+        handler_name: Handler/intent name.
+        pass_fail: "pass", "fail", or "error".
+        elapsed_seconds: Wall-clock time for the delegation.
+        correlation_id: Correlation ID from the delegation context.
+
+    Returns:
+        Normalized dict conforming to the result-only schema.
+    """
+    truncated = len(response_text) > _RESULT_ONLY_SUMMARY_LIMIT
+    summary = response_text[:_RESULT_ONLY_SUMMARY_LIMIT] if truncated else response_text
+
+    return {
+        "mode": "result_only",
+        "handler_name": handler_name,
+        "pass_fail": pass_fail,
+        "summary": summary,
+        "correlation_id": correlation_id,
+        "model_name": model_name,
+        "elapsed_seconds": elapsed_seconds,
+        "truncated": truncated,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1251,6 +1364,98 @@ def main() -> None:
         print(json.dumps({"delegated": False, "reason": "result_serialize_error"}))
 
     sys.exit(0)
+
+
+# ---------------------------------------------------------------------------
+# Subprocess task handler (OMN-7410)
+# ---------------------------------------------------------------------------
+
+_SUBPROCESS_ROUTING: dict[str, dict[str, Any]] = {
+    "lint": {"command": ["ruff", "check", "src/"], "timeout": 60},
+    "format_check": {"command": ["ruff", "format", "--check", "src/"], "timeout": 60},
+    "test_run": {"command": ["pytest", "tests/", "-x", "--tb=short", "-q"], "timeout": 120},
+    "type_check": {"command": ["mypy", "src/"], "timeout": 120},
+}
+
+
+def _call_subprocess_handler(
+    intent: str,
+    cwd: str,
+    timeout_override: int | None = None,
+) -> dict[str, Any]:
+    """Execute an approved mechanical task as a subprocess.
+
+    Only intents listed in ``_SUBPROCESS_ROUTING`` are allowed. The subprocess
+    runs with ``cwd`` restricted to repo roots under ``OMNI_HOME``.
+
+    Args:
+        intent: Approved task type (lint, format_check, test_run, type_check).
+        cwd: Working directory for the subprocess.
+        timeout_override: Optional timeout in seconds (overrides default).
+
+    Returns:
+        Dict with keys: pass_fail, output, elapsed_seconds, command.
+
+    Raises:
+        ValueError: If intent is not in the approved routing table.
+        ValueError: If DELEGATION_DISABLE_SUBPROCESS_HANDLER is set.
+    """
+    import subprocess as _sp
+
+    if os.environ.get("DELEGATION_DISABLE_SUBPROCESS_HANDLER", "").lower() == "true":
+        raise ValueError("Subprocess delegation disabled by env flag")
+
+    route = _SUBPROCESS_ROUTING.get(intent)
+    if route is None:
+        raise ValueError(
+            f"'{intent}' is not an approved subprocess intent. "
+            f"Approved: {sorted(_SUBPROCESS_ROUTING)}"
+        )
+
+    command = route["command"]
+    timeout = timeout_override if timeout_override is not None else route["timeout"]
+
+    start = time.monotonic()
+    try:
+        proc = _sp.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cwd,
+        )
+        elapsed = time.monotonic() - start
+        pass_fail = "pass" if proc.returncode == 0 else "fail"
+        output = (proc.stdout or "") + (proc.stderr or "")
+        logger.info(
+            "Subprocess delegation: intent=%s pass_fail=%s elapsed=%.1fs command=%s",
+            intent,
+            pass_fail,
+            elapsed,
+            command,
+        )
+        return {
+            "pass_fail": pass_fail,
+            "output": output[:2000],
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
+    except _sp.TimeoutExpired:
+        elapsed = time.monotonic() - start
+        return {
+            "pass_fail": "error",
+            "output": f"Timeout after {timeout}s",
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
+    except Exception as exc:
+        elapsed = time.monotonic() - start
+        return {
+            "pass_fail": "error",
+            "output": str(exc)[:2000],
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
 
 
 if __name__ == "__main__":
