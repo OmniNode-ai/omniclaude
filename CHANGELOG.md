@@ -1,3 +1,26 @@
+## v0.21.0 (2026-04-03)
+
+### Features (74 commits)
+- feat(ci): add golden chain integrity gate to CI pipeline [OMN-7389] (#1096)
+- feat(autopilot): wire golden chain sweep as E4 hard gate in closeout [OMN-7388] (#1095)
+- feat(autopilot): add delegation health pre-check to build loop [OMN-7391] (#1097)
+- feat(nodes): golden event chain validator [OMN-7356] (#1084)
+- feat: add cron-buildloop.sh with delegation and friction [OMN-7400] (#1088)
+- feat: wire Check 5+6 into compliance_sweep skill [OMN-7367] (#1086)
+- feat: enrich STOP hook payload with ChangeFrame data [OMN-7379] (#1087)
+- feat: add wire schema contracts for session, prompt, tool events [OMN-7360] (#1085)
+- feat: add session-start pre-flight staleness warning [OMN-7376] (#1083)
+- feat: add /build-loop skill [OMN-7322] (#1081)
+- feat(injection): wire session resume into context injection [OMN-7300] (#1078)
+- feat(nodes): add Slack, Telegram, Email, SMS channel adapters [OMN-7190, OMN-7191, OMN-7192, OMN-7193] (#1080)
+- feat(persona): PERSONA context source + persona-driven personality wiring [OMN-3974] (#1079)
+- feat(skill): add /rewind skill for conversational rewind [OMN-7299] (#1077)
+- feat(hooks): add persona signal extraction from session behavior [OMN-7306] (#1076)
+...and more
+
+### Release metadata
+- Coordinated release: release-20260403-ce7121
+
 ## v0.20.0 (2026-03-31)
 
 ### Added

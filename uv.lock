@@ -12,9 +12,9 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = "==0.36.0" },
-    { name = "omnibase-infra", specifier = "==0.30.1" },
-    { name = "omnibase-spi", specifier = "==0.20.3" },
+    { name = "omnibase-core", specifier = "==0.38.0" },
+    { name = "omnibase-infra", specifier = "==0.32.0" },
+    { name = "omnibase-spi", specifier = "==0.20.4" },
 ]
 
 [[package]]
@@ -1972,7 +1972,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.36.0"
+version = "0.38.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1986,14 +1986,14 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/10/db/ac7e38dc36f6e814e117c21b6c587b4ba8b824c3eed46b0ba533c1b189f5/omnibase_core-0.36.0.tar.gz", hash = "sha256:0a329b3c2c9d46fb4bea1eafd7b268672bf0baa27ec99b99c3aac32ee0c38c85", size = 8098009, upload-time = "2026-03-31T06:56:48.255Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/f0/9c2971cc3328ca592f19da9afe3b95317de52d476f8b80f6ca03a273254f/omnibase_core-0.38.0.tar.gz", hash = "sha256:1667dd1047f937e5239a10a9443f754c0079b1fd8d58a061b73b0b900bdc6204", size = 8140989, upload-time = "2026-04-03T08:29:15.675Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/43/5477707e360eb5469fa683c40f95eddf570c8aa91ef2e27de9f0ddece4c5/omnibase_core-0.36.0-py3-none-any.whl", hash = "sha256:559408bdf961ea16454c310279dfc0e4c28addd7dbe8c0579343519d67adb1d5", size = 5300159, upload-time = "2026-03-31T06:56:46.079Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/dd/3061cb53bdd9725c216788652860d94bde720ae8883090ac4f18237faec4/omnibase_core-0.38.0-py3-none-any.whl", hash = "sha256:3ce216b042440e62db1959dd930f6807424de8511b0b03cf89a9868ead0c491a", size = 5365077, upload-time = "2026-04-03T08:29:18.665Z" },
 ]
 
 [[package]]
 name = "omnibase-infra"
-version = "0.30.1"
+version = "0.32.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -2041,28 +2041,28 @@ dependencies = [
     { name = "uvicorn" },
     { name = "watchdog" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/31/2b/ee1563fb12ecda7b53944d98847625331bdb85cac77b352f72396bb35479/omnibase_infra-0.30.1.tar.gz", hash = "sha256:6ef3b9cfa94d17d48ef688330ec3f3436a74994041e4cea379dfe8c148799510", size = 6919675, upload-time = "2026-03-31T07:38:55.157Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/a6/f54a764f9af7f45c72cdb09099d6e47d3aadbab72363d5291537bd9d33c6/omnibase_infra-0.32.0.tar.gz", hash = "sha256:7cc8e857b1f8434534b2eb38f7a8c1b9f16ec4f9cef8c17a94adf48446483009", size = 7199277, upload-time = "2026-04-03T08:55:58.274Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/e7/38b2c69a39d6c83a6dd2d56b2b9f6f0527f337278a1707727b0064052ea3/omnibase_infra-0.30.1-py3-none-any.whl", hash = "sha256:6484aa60e615ea5ec477fcaaa655acb85e1e2d84038dedfb317cbf23448d0fb1", size = 4109430, upload-time = "2026-03-31T07:38:57.407Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/5a/569b0e975d3ca6c5bd137fa8a2cb809962c9bb59d5315957a1d8f66d27b4/omnibase_infra-0.32.0-py3-none-any.whl", hash = "sha256:b31c343d6163a9ad3ebfaafc4646578b8335d7c55a6914b8884341ce821d2e6e", size = 4489037, upload-time = "2026-04-03T08:55:55.783Z" },
 ]
 
 [[package]]
 name = "omnibase-spi"
-version = "0.20.3"
+version = "0.20.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/92/0c3c1569b94fbfee7cdcbe47da4046a9ff6f8a8577666f0996fa744b7066/omnibase_spi-0.20.3.tar.gz", hash = "sha256:773386dc34657cde92ba4a6283ff246a196e992e504d2c9d04e2fc84573f5db2", size = 1119797, upload-time = "2026-03-30T20:53:51.717Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/ed/23668a820fea9b87a88f619f8df1944e8522d7f2ff8d2e34993709be69f7/omnibase_spi-0.20.4.tar.gz", hash = "sha256:79a81568150d89c97f97661cd7ad1443258cc5fdb46c380c9306b02c65001073", size = 1119882, upload-time = "2026-04-03T08:29:09.403Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/e3/53c296e31b1ef988e074e518800c7788c4c52c638617ca9bbbc17d4aa630/omnibase_spi-0.20.3-py3-none-any.whl", hash = "sha256:b970cc4f148ceba5f172c44412e1b5386a9148e61ccb171b7d401a56505c9269", size = 758281, upload-time = "2026-03-30T20:53:52.952Z" },
+    { url = "https://files.pythonhosted.org/packages/66/1f/e41b898a9f023795376e2a254e64c27889427155c42555a872cdcc0ee67e/omnibase_spi-0.20.4-py3-none-any.whl", hash = "sha256:dc263d4e0474a9031f5159e90ba05c3cb318703740e236b717d61072962921b7", size = 758280, upload-time = "2026-04-03T08:29:07.755Z" },
 ]
 
 [[package]]
 name = "omninode-claude"
-version = "0.20.0"
+version = "0.21.0"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
@@ -2127,10 +2127,10 @@ requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = "==0.36.0" },
-    { name = "omnibase-infra", specifier = "==0.30.1" },
-    { name = "omnibase-spi", specifier = "==0.20.3" },
-    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.21.1" },
+    { name = "omnibase-core", specifier = "==0.38.0" },
+    { name = "omnibase-infra", specifier = "==0.32.0" },
+    { name = "omnibase-spi", specifier = "==0.20.4" },
+    { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.23.0,<2.0.0" },
@@ -2168,8 +2168,8 @@ dev = [
 
 [[package]]
 name = "omninode-intelligence"
-version = "0.21.1"
-source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.21.1#2e452f3e80a5f792ff85c53ac5e31a1fa9c4b9d7" }
+version = "0.23.0"
+source = { git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0#bd2702fd69f77e9f71ec04dbe250819590e998af" }
 dependencies = [
     { name = "adaptive-classifier" },
     { name = "confluent-kafka" },
