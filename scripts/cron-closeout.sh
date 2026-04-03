@@ -609,6 +609,7 @@ If ALL tests pass, print: INTEGRATION: PASS" \
   #   - Schema mismatches (event fails validation at consumer)
   #   - Projection bugs (event consumed but not written to DB)
   #   - Infrastructure breaks (Kafka or DB connectivity)
+  e4_exec_failed=0
   if ! run_phase "E4_golden_chain" \
     "Run the golden chain sweep to verify end-to-end Kafka-to-DB-projection data flow.
 
@@ -632,10 +633,11 @@ Environment:
   INFRA_HOST=${INFRA_HOST}
   POSTGRES_PORT=${POSTGRES_PORT}" \
     "Bash,Read,Write,Glob,Grep"; then
+    e4_exec_failed=1
     record_strike "E4_golden_chain"
   fi
 
-  if phase_failed "E4_golden_chain"; then
+  if [[ ${e4_exec_failed} -eq 1 ]] || phase_failed "E4_golden_chain"; then
     log "CRITICAL: Golden chain sweep failed. Event pipeline broken — data not flowing from Kafka to DB."
     update_cycle_state "halted_verification_golden_chain"
     exit 1
