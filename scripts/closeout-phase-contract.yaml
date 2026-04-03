@@ -99,15 +99,71 @@ phases:
     required_tools: "Bash,Read"
     verification: "registration_projections > 0"
 
-  - id: B4b_data_verification
-    name: "Data Verification (Advisory)"
+  - id: B4b_database_sweep
+    name: "Data Verification — Database Sweep (Advisory)"
     category: advisory
     blocking: false
-    expected_action: "Run dry-run sweeps and report findings"
+    expected_action: "Run /database_sweep --dry-run to check projection table health"
     required_keywords:
-      - "dry-run"
+      - "/database_sweep"
+      - "--dry-run"
     required_tools: "Bash,Read,Glob,Grep"
-    verification: "Reports findings without halting"
+    verification: "Reports CLEAN or FINDINGS without halting"
+
+  - id: B4b_database_sweep_retry
+    name: "Data Verification — Database Sweep Retry (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Retry /database_sweep --dry-run on first-attempt failure"
+    required_keywords:
+      - "/database_sweep"
+      - "--dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports CLEAN or FINDINGS without halting"
+
+  - id: B4b_data_flow_sweep
+    name: "Data Verification — Data Flow Sweep (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Run /data_flow_sweep --dry-run to verify end-to-end pipeline health"
+    required_keywords:
+      - "/data_flow_sweep"
+      - "--dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports CLEAN or FINDINGS with per-topic status"
+
+  - id: B4b_data_flow_sweep_retry
+    name: "Data Verification — Data Flow Sweep Retry (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Retry /data_flow_sweep --dry-run on first-attempt failure"
+    required_keywords:
+      - "/data_flow_sweep"
+      - "--dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports CLEAN or FINDINGS without halting"
+
+  - id: B4b_runtime_sweep
+    name: "Data Verification — Runtime Sweep (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Run /runtime_sweep --dry-run to check node registration and wiring"
+    required_keywords:
+      - "/runtime_sweep"
+      - "--dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports CLEAN or FINDINGS with per-check status"
+
+  - id: B4b_runtime_sweep_retry
+    name: "Data Verification — Runtime Sweep Retry (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Retry /runtime_sweep --dry-run on first-attempt failure"
+    required_keywords:
+      - "/runtime_sweep"
+      - "--dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports CLEAN or FINDINGS without halting"
 
   - id: B5_integration
     name: "Integration Gate"
@@ -214,6 +270,18 @@ phases:
       must_reference: "INFRA_HOST"
     required_tools: "Bash,Read"
     verification: "All 5 chains pass end-to-end"
+
+  - id: E4_golden_chain_retry
+    name: "Golden Chain Sweep Retry"
+    category: gate
+    blocking: true
+    expected_action: "Retry golden chain sweep on first-attempt failure"
+    required_keywords:
+      - "/golden_chain_sweep"
+    infra_consistency:
+      must_reference: "INFRA_HOST"
+    required_tools: "Bash,Read,Write,Glob,Grep"
+    verification: "All 5 chains pass end-to-end on retry"
 
   - id: E3_dashboard_tests
     name: "Dashboard Verification"
