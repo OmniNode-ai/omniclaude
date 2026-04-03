@@ -545,27 +545,55 @@ if phase_failed "B3_database_sweep"; then
   WATCHDOG_PHASE="B3_database_sweep"; WATCHDOG_EXIT_CODE=1; exit 1
 fi
 
-# B4b: Data verification — advisory, non-blocking [OMN-6764]
-# Runs three data sweeps in dry-run mode. Findings appended to close-day report.
-# Does NOT halt pipeline on failure.
+# B4b: Data verification — advisory, non-blocking [OMN-6764] [OMN-7435]
+# Runs three verification skills in dry-run mode. Findings appended to close-day report.
+# Does NOT halt pipeline on failure. Each skill has a 5-minute timeout (bootstrap estimate).
 log "=== Phase B4b: Data verification (advisory) ==="
 
-if ! run_phase "B4b_data_verification" \
-  "Run all three data verification sweeps in dry-run mode. This is advisory only — report findings but do NOT halt.
+# B4b-1: Database sweep (dry-run)
+if ! run_phase "B4b_database_sweep" \
+  "Run /database_sweep --dry-run to check projection table health. Report CLEAN or FINDINGS." \
+  "Bash,Read,Glob,Grep" \
+  300; then
+  log "WARNING: B4b database sweep failed (advisory — not halting)"
+  # Retry once on total failure
+  if ! run_phase "B4b_database_sweep_retry" \
+    "Run /database_sweep --dry-run to check projection table health. Report CLEAN or FINDINGS." \
+    "Bash,Read,Glob,Grep" \
+    300; then
+    log "WARNING: B4b database sweep retry also failed"
+    emit_friction "low" "B4b database sweep failed after retry" "both attempts failed"
+  fi
+fi
 
-1. Database sweep (dry-run): Run /database-sweep --dry-run — check projection table health (row counts, staleness, schema drift). Report any tables with zero rows or stale data.
+# B4b-2: Data flow sweep (dry-run, skip playwright)
+if ! run_phase "B4b_data_flow_sweep" \
+  "Run /data_flow_sweep --dry-run --skip-playwright to verify end-to-end pipeline health. Report CLEAN or FINDINGS with per-topic status." \
+  "Bash,Read,Glob,Grep" \
+  300; then
+  log "WARNING: B4b data flow sweep failed (advisory — not halting)"
+  if ! run_phase "B4b_data_flow_sweep_retry" \
+    "Run /data_flow_sweep --dry-run --skip-playwright to verify end-to-end pipeline health. Report CLEAN or FINDINGS." \
+    "Bash,Read,Glob,Grep" \
+    300; then
+    log "WARNING: B4b data flow sweep retry also failed"
+    emit_friction "low" "B4b data flow sweep failed after retry" "both attempts failed"
+  fi
+fi
 
-2. Data flow sweep (dry-run): Run /data-flow-sweep --dry-run --skip-playwright — check end-to-end pipeline health (Kafka consumer lag, projection freshness, event flow continuity). Skip Playwright checks. Report any broken data flow paths.
-
-3. Runtime sweep (dry-run): Run /runtime-sweep --dry-run — check node registration and wiring integrity (registered nodes match contracts, dispatch routes are valid). Report any unregistered nodes or broken wiring.
-
-For each sweep, report:
-- Status: CLEAN or FINDINGS
-- Finding count and summary if any issues found
-
-End with a consolidated summary listing all findings across the three sweeps. These findings will be appended to the close-day report." \
-  "Bash,Read,Glob,Grep"; then
-  log "WARNING: Data verification phase failed (advisory — not halting)"
+# B4b-3: Runtime sweep (dry-run)
+if ! run_phase "B4b_runtime_sweep" \
+  "Run /runtime_sweep --dry-run to check node registration and wiring integrity. Report CLEAN or FINDINGS with per-check status." \
+  "Bash,Read,Glob,Grep" \
+  300; then
+  log "WARNING: B4b runtime sweep failed (advisory — not halting)"
+  if ! run_phase "B4b_runtime_sweep_retry" \
+    "Run /runtime_sweep --dry-run to check node registration and wiring integrity. Report CLEAN or FINDINGS." \
+    "Bash,Read,Glob,Grep" \
+    300; then
+    log "WARNING: B4b runtime sweep retry also failed"
+    emit_friction "low" "B4b runtime sweep failed after retry" "both attempts failed"
+  fi
 fi
 
 # B5: Integration gate — verify critical services [OMN-7238: remote-aware]
@@ -751,41 +779,27 @@ If ALL tests pass, print: INTEGRATION: PASS" \
     WATCHDOG_PHASE="E2_pipeline_tests"; WATCHDOG_EXIT_CODE=1; exit 1
   fi
 
-  # E4: Golden chain sweep — end-to-end Kafka-to-DB-projection validation [OMN-7388]
-  # Hard gate — verifies all 5 golden chains (registration, pattern_learning,
-  # delegation, routing, evaluation) flow from Kafka topic through omnidash
-  # ReadModelConsumer to the analytics database. This catches:
-  #   - Dead-letter subscriptions (consumer not wired)
-  #   - Schema mismatches (event fails validation at consumer)
-  #   - Projection bugs (event consumed but not written to DB)
-  #   - Infrastructure breaks (Kafka or DB connectivity)
+  # E4: Golden chain sweep — end-to-end Kafka-to-DB-projection validation [OMN-7388] [OMN-7435]
+  # Hard gate — invokes /golden_chain_sweep skill to verify all 5 chains flow from
+  # Kafka topic through omnidash ReadModelConsumer to the analytics database.
+  # Timeout: 5 minutes (bootstrap estimate — tune after first 3 runs).
   e4_exec_failed=0
   if ! run_phase "E4_golden_chain" \
-    "Run the golden chain sweep to verify end-to-end Kafka-to-DB-projection data flow.
-
-Execute /golden_chain_sweep to validate all 5 chains:
-  1. registration: routing-decision.v1 -> agent_routing_decisions
-  2. pattern_learning: pattern-stored.v1 -> pattern_learning_artifacts
-  3. delegation: task-delegated.v1 -> delegation_events
-  4. routing: llm-routing-decision.v1 -> llm_routing_decisions
-  5. evaluation: run-evaluated.v1 -> session_outcomes
-
-For each chain: publish a synthetic event with a unique correlation_id to the
-head Kafka topic, then poll the tail database table for a row matching that
-correlation_id (timeout: 30s per chain).
-
-Report per-chain PASS/FAIL.
-If ANY chain fails, print: INTEGRATION: FAIL
-If ALL chains pass, print: INTEGRATION: PASS
-
-Environment:
-  KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKERS}
-  INFRA_HOST=${INFRA_HOST}
-  POSTGRES_PORT=${POSTGRES_PORT}" \
+    "Run /golden_chain_sweep to validate all 5 Kafka-to-DB-projection chains. Environment: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKERS}, INFRA_HOST=${INFRA_HOST}, POSTGRES_PORT=${POSTGRES_PORT}. Report per-chain PASS/FAIL. If ANY chain fails, print: INTEGRATION: FAIL. If ALL pass, print: INTEGRATION: PASS." \
     "Bash,Read,Write,Glob,Grep" \
-    1200; then
+    300; then
     e4_exec_failed=1
-    record_strike "E4_golden_chain"
+    # Retry once on total failure (skill didn't start or timed out)
+    log "E4 golden chain first attempt failed — retrying once"
+    if ! run_phase "E4_golden_chain_retry" \
+      "Run /golden_chain_sweep to validate all 5 Kafka-to-DB-projection chains. Environment: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKERS}, INFRA_HOST=${INFRA_HOST}, POSTGRES_PORT=${POSTGRES_PORT}. Report per-chain PASS/FAIL." \
+      "Bash,Read,Write,Glob,Grep" \
+      300; then
+      record_strike "E4_golden_chain"
+      emit_friction "high" "E4 golden chain sweep failed after retry" "both attempts failed"
+    else
+      e4_exec_failed=0
+    fi
   fi
 
   if [[ ${e4_exec_failed} -eq 1 ]] || phase_failed "E4_golden_chain"; then
