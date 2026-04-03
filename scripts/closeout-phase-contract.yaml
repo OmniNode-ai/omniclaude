@@ -1,0 +1,213 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Closeout Phase Contract — Machine-Verifiable Behavioral Spec
+#
+# Each phase in cron-closeout.sh declares:
+#   - expected_action: what the phase MUST do (not just report)
+#   - required_keywords: strings that MUST appear in the phase prompt
+#   - must_not_contain: strings that MUST NOT appear (catches read-only bugs)
+#   - required_tools: tools the phase needs to function
+#   - blocking: whether failure halts the pipeline
+#   - infra_consistency: infrastructure reference rules
+#
+# The compliance test (scripts/check_closeout_phase_compliance.py) reads this
+# contract and verifies cron-closeout.sh prompt text matches.
+#
+# [OMN-7383]
+
+contract_version: "1.0.0"
+pipeline: "cron-closeout"
+script_path: "scripts/cron-closeout.sh"
+
+phases:
+  - id: A1_merge_sweep
+    name: "Merge Sweep"
+    category: prepare
+    blocking: false
+    expected_action: "Scan repos for open PRs with passing CI, enable auto-merge"
+    required_keywords:
+      - "merge"
+      - "PR"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Output lists merged or eligible PRs"
+
+  - id: A2_deploy_plugin
+    name: "Deploy Plugin"
+    category: prepare
+    blocking: false
+    expected_action: "rsync plugin files to cache directory"
+    required_keywords:
+      - "rsync"
+      - "CACHE_DIR"
+      - "DEPLOY_COMPLETE"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Output contains DEPLOY_COMPLETE"
+
+  - id: A3_start_env
+    name: "Infrastructure Health"
+    category: prepare
+    blocking: false
+    expected_action: "Verify infrastructure health on INFRA_HOST"
+    required_keywords:
+      - "INFRA_HOST"
+      - "health"
+    infra_consistency:
+      must_reference: "INFRA_HOST"
+      must_not_reference:
+        - "docker ps"
+        - "docker exec"
+    required_tools: "Bash,Read"
+    verification: "Reports HEALTHY/UNHEALTHY per service"
+
+  - id: B1_runtime_sweep
+    name: "Runtime Sweep"
+    category: gate
+    blocking: true
+    expected_action: "Verify runtime health endpoints against INFRA_HOST"
+    required_keywords:
+      - "INFRA_HOST"
+      - "INTEGRATION: PASS"
+      - "INTEGRATION: FAIL"
+    infra_consistency:
+      must_reference: "INFRA_HOST"
+      must_not_reference:
+        - "docker ps"
+        - "docker exec"
+    required_tools: "Bash,Read"
+    verification: "Prints INTEGRATION: PASS or INTEGRATION: FAIL"
+
+  - id: B2_data_flow_sweep
+    name: "Data Flow Sweep"
+    category: gate
+    blocking: true
+    expected_action: "Verify Kafka and projections against INFRA_HOST"
+    required_keywords:
+      - "INFRA_HOST"
+      - "INTEGRATION: PASS"
+    required_tools: "Bash,Read"
+    verification: "Projections > 0 and Kafka responds"
+
+  - id: B3_database_sweep
+    name: "Database Sweep"
+    category: gate
+    blocking: true
+    expected_action: "Verify projection tables populated on INFRA_HOST"
+    required_keywords:
+      - "INFRA_HOST"
+      - "registration_projections"
+    required_tools: "Bash,Read"
+    verification: "registration_projections > 0"
+
+  - id: B4b_data_verification
+    name: "Data Verification (Advisory)"
+    category: advisory
+    blocking: false
+    expected_action: "Run dry-run sweeps and report findings"
+    required_keywords:
+      - "dry-run"
+    required_tools: "Bash,Read,Glob,Grep"
+    verification: "Reports findings without halting"
+
+  - id: B5_integration
+    name: "Integration Gate"
+    category: gate
+    blocking: true
+    expected_action: "Verify critical services (PostgreSQL, Kafka)"
+    required_keywords:
+      - "INFRA_HOST"
+      - "INTEGRATION: PASS"
+      - "INTEGRATION: FAIL"
+    required_tools: "Bash,Read"
+    verification: "Both PostgreSQL and Kafka healthy"
+
+  - id: B6_contract_verify
+    name: "Contract Verification"
+    category: gate
+    blocking: soft
+    expected_action: "Run registration contract compliance check"
+    required_keywords:
+      - "CONTRACT_VERIFY"
+    required_tools: "Bash,Read"
+    verification: "Exit code 0 = PASS"
+
+  - id: C1_release_check
+    name: "Release"
+    category: action
+    blocking: false
+    expected_action: "Execute /release --autonomous for repos with unreleased commits"
+    required_keywords:
+      - "/release"
+      - "--autonomous"
+    must_not_contain:
+      - "Do NOT execute"
+      - "report only"
+      - "Do not execute"
+      - "just check"
+      - "just report"
+    required_tools: "Bash,Read,Write,Edit,Glob,Grep"
+    verification: "Release PRs created and merged, or 'No unreleased commits'"
+
+  - id: C2_redeploy_check
+    name: "Redeploy"
+    category: action
+    blocking: false
+    expected_action: "Execute /redeploy to refresh runtime"
+    required_keywords:
+      - "/redeploy"
+    must_not_contain:
+      - "Do NOT execute"
+      - "report only"
+      - "Do not execute"
+      - "just check"
+      - "just report"
+    required_tools: "Bash,Read,Write,Edit,Glob,Grep"
+    verification: "Health endpoints respond after redeploy"
+
+  - id: D3_dashboard_sweep
+    name: "Dashboard Health"
+    category: advisory
+    blocking: false
+    expected_action: "Check omnidash health endpoints"
+    required_keywords:
+      - "localhost:3000"
+    required_tools: "Bash,Read"
+    verification: "Reports endpoint status"
+
+  - id: E1_foundation_tests
+    name: "Foundation Verification"
+    category: gate
+    blocking: true
+    expected_action: "Verify all critical subsystems on INFRA_HOST"
+    required_keywords:
+      - "INFRA_HOST"
+      - "INTEGRATION: PASS"
+      - "INTEGRATION: FAIL"
+    infra_consistency:
+      must_reference: "INFRA_HOST"
+      must_not_reference:
+        - "docker ps"
+        - "docker logs"
+    required_tools: "Bash,Read"
+    verification: "All hard gate tests pass"
+
+  - id: E2_pipeline_tests
+    name: "Pipeline Integration Tests"
+    category: gate
+    blocking: true
+    expected_action: "Run vitest integration tests in omnidash"
+    required_keywords:
+      - "vitest"
+      - "INTEGRATION: PASS"
+    required_tools: "Bash,Read"
+    verification: "All integration tests pass"
+
+  - id: E3_dashboard_tests
+    name: "Dashboard Verification"
+    category: advisory
+    blocking: false
+    expected_action: "Run Playwright P0 data verification"
+    required_keywords:
+      - "playwright"
+    required_tools: "Bash,Read"
+    verification: "Results reported (non-blocking)"
