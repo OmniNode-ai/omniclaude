@@ -49,7 +49,7 @@ from omniclaude.shared.models.model_watchdog_state import (  # noqa: E402
 )
 
 OMNI_HOME = Path(
-    __import__("os").environ.get("OMNI_HOME", "/Users/jonah/Code/omni_home")
+    __import__("os").environ.get("OMNI_HOME", str(Path.home() / "omni_home"))
 )
 STATE_DIR = OMNI_HOME / ".onex_state" / "watchdog"
 
@@ -172,6 +172,14 @@ def cmd_read(args: list[str]) -> int:
         return 1
 
     loop_name = args[0]
+
+    if loop_name not in ("closeout", "buildloop"):
+        print(
+            f"ERROR: loop must be 'closeout' or 'buildloop', got '{loop_name}'",
+            file=sys.stderr,
+        )
+        return 1
+
     state = load_state(STATE_DIR)
 
     if loop_name in state.loops:
