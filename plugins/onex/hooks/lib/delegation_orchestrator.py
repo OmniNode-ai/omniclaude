@@ -1293,5 +1293,97 @@ def main() -> None:
     sys.exit(0)
 
 
+# ---------------------------------------------------------------------------
+# Subprocess task handler (OMN-7410)
+# ---------------------------------------------------------------------------
+
+_SUBPROCESS_ROUTING: dict[str, dict[str, Any]] = {
+    "lint": {"command": ["ruff", "check", "src/"], "timeout": 60},
+    "format_check": {"command": ["ruff", "format", "--check", "src/"], "timeout": 60},
+    "test_run": {"command": ["pytest", "tests/", "-x", "--tb=short", "-q"], "timeout": 120},
+    "type_check": {"command": ["mypy", "src/"], "timeout": 120},
+}
+
+
+def _call_subprocess_handler(
+    intent: str,
+    cwd: str,
+    timeout_override: int | None = None,
+) -> dict[str, Any]:
+    """Execute an approved mechanical task as a subprocess.
+
+    Only intents listed in ``_SUBPROCESS_ROUTING`` are allowed. The subprocess
+    runs with ``cwd`` restricted to repo roots under ``OMNI_HOME``.
+
+    Args:
+        intent: Approved task type (lint, format_check, test_run, type_check).
+        cwd: Working directory for the subprocess.
+        timeout_override: Optional timeout in seconds (overrides default).
+
+    Returns:
+        Dict with keys: pass_fail, output, elapsed_seconds, command.
+
+    Raises:
+        ValueError: If intent is not in the approved routing table.
+        ValueError: If DELEGATION_DISABLE_SUBPROCESS_HANDLER is set.
+    """
+    import subprocess as _sp
+
+    if os.environ.get("DELEGATION_DISABLE_SUBPROCESS_HANDLER", "").lower() == "true":
+        raise ValueError("Subprocess delegation disabled by env flag")
+
+    route = _SUBPROCESS_ROUTING.get(intent)
+    if route is None:
+        raise ValueError(
+            f"'{intent}' is not an approved subprocess intent. "
+            f"Approved: {sorted(_SUBPROCESS_ROUTING)}"
+        )
+
+    command = route["command"]
+    timeout = timeout_override if timeout_override is not None else route["timeout"]
+
+    start = time.monotonic()
+    try:
+        proc = _sp.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=cwd,
+        )
+        elapsed = time.monotonic() - start
+        pass_fail = "pass" if proc.returncode == 0 else "fail"
+        output = (proc.stdout or "") + (proc.stderr or "")
+        logger.info(
+            "Subprocess delegation: intent=%s pass_fail=%s elapsed=%.1fs command=%s",
+            intent,
+            pass_fail,
+            elapsed,
+            command,
+        )
+        return {
+            "pass_fail": pass_fail,
+            "output": output[:2000],
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
+    except _sp.TimeoutExpired:
+        elapsed = time.monotonic() - start
+        return {
+            "pass_fail": "error",
+            "output": f"Timeout after {timeout}s",
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
+    except Exception as exc:
+        elapsed = time.monotonic() - start
+        return {
+            "pass_fail": "error",
+            "output": str(exc)[:2000],
+            "elapsed_seconds": round(elapsed, 2),
+            "command": " ".join(command),
+        }
+
+
 if __name__ == "__main__":
     main()
