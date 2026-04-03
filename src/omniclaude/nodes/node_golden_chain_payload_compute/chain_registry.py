@@ -28,9 +28,13 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             "session_id": "golden-chain-test-session",
         },
         assertions=(
-            ModelChainAssertion(field="selected_agent", op="eq", expected="golden-chain-test-agent"),
+            ModelChainAssertion(
+                field="selected_agent", op="eq", expected="golden-chain-test-agent"
+            ),
             ModelChainAssertion(field="confidence_score", op="gte", expected="0.0000"),
-            ModelChainAssertion(field="correlation_id", op="eq", expected="__CORRELATION_ID__"),
+            ModelChainAssertion(
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+            ),
         ),
     ),
     ModelChainDefinition(
@@ -43,9 +47,15 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             "state": "stored",
         },
         assertions=(
-            ModelChainAssertion(field="pattern_name", op="eq", expected="golden-chain-test-pattern"),
-            ModelChainAssertion(field="pattern_type", op="eq", expected="golden-chain-test"),
-            ModelChainAssertion(field="correlation_id", op="eq", expected="__CORRELATION_ID__"),
+            ModelChainAssertion(
+                field="pattern_name", op="eq", expected="golden-chain-test-pattern"
+            ),
+            ModelChainAssertion(
+                field="pattern_type", op="eq", expected="golden-chain-test"
+            ),
+            ModelChainAssertion(
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+            ),
         ),
     ),
     ModelChainDefinition(
@@ -58,9 +68,15 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             "session_id": "golden-chain-test-session",
         },
         assertions=(
-            ModelChainAssertion(field="delegate_model", op="eq", expected="golden-chain-test-model"),
-            ModelChainAssertion(field="task_type", op="eq", expected="golden-chain-test"),
-            ModelChainAssertion(field="correlation_id", op="eq", expected="__CORRELATION_ID__"),
+            ModelChainAssertion(
+                field="delegate_model", op="eq", expected="golden-chain-test-model"
+            ),
+            ModelChainAssertion(
+                field="task_type", op="eq", expected="golden-chain-test"
+            ),
+            ModelChainAssertion(
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+            ),
         ),
     ),
     ModelChainDefinition(
@@ -73,9 +89,15 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             "session_id": "golden-chain-test-session",
         },
         assertions=(
-            ModelChainAssertion(field="selected_model", op="eq", expected="golden-chain-test-model"),
-            ModelChainAssertion(field="decision_method", op="in", expected=["llm", "fuzzy", "fallback"]),
-            ModelChainAssertion(field="correlation_id", op="eq", expected="__CORRELATION_ID__"),
+            ModelChainAssertion(
+                field="selected_model", op="eq", expected="golden-chain-test-model"
+            ),
+            ModelChainAssertion(
+                field="decision_method", op="in", expected=["llm", "fuzzy", "fallback"]
+            ),
+            ModelChainAssertion(
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+            ),
         ),
     ),
     ModelChainDefinition(
@@ -88,8 +110,12 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
         },
         assertions=(
             ModelChainAssertion(field="outcome", op="eq", expected="success"),
-            ModelChainAssertion(field="session_id", op="eq", expected="golden-chain-test-session"),
-            ModelChainAssertion(field="correlation_id", op="eq", expected="__CORRELATION_ID__"),
+            ModelChainAssertion(
+                field="session_id", op="eq", expected="golden-chain-test-session"
+            ),
+            ModelChainAssertion(
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+            ),
         ),
     ),
 )

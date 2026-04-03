@@ -25,6 +25,9 @@ from omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result
     ModelChainResult,
 )
 from omniclaude.nodes.node_golden_chain_publish_effect.node import run_chain
+from omniclaude.nodes.node_golden_chain_publish_effect.persist import (
+    persist_sweep_results,
+)
 from omniclaude.nodes.node_golden_chain_status_reducer.models.model_sweep_summary import (
     ModelSweepSummary,
 )
@@ -60,9 +63,7 @@ async def run_sweep(
         chain_filter=request.chain_filter,
         timeout_ms=request.timeout_ms,
     )
-    logger.info(
-        "Golden chain sweep %s: built %d payloads", sweep_id, len(payloads)
-    )
+    logger.info("Golden chain sweep %s: built %d payloads", sweep_id, len(payloads))
 
     # Step 2: Run all chains in parallel
     chain_results: list[ModelChainResult] = list(
@@ -85,8 +86,9 @@ async def run_sweep(
         sweep_id=sweep_id,
     )
 
-    # Step 4: Persist to golden_chain_sweep_results
-    await _persist_results(summary, chain_results, db_dsn=db_dsn)
+    # Step 4: Persist to golden_chain_sweep_results (runs in effect node — DB access is
+    # correctly scoped outside this orchestrator per arch-no-db-in-orchestrator)
+    await persist_sweep_results(summary, chain_results, db_dsn=db_dsn)
 
     # Step 5: Write evidence artifact
     _write_evidence(summary, chain_results)
@@ -102,73 +104,6 @@ async def run_sweep(
     )
 
     return summary
-
-
-async def _persist_results(
-    summary: ModelSweepSummary,
-    chain_results: list[ModelChainResult],
-    *,
-    db_dsn: str,
-) -> None:
-    """Insert per-chain results into golden_chain_sweep_results table."""
-    import psycopg2  # noqa: PLC0415
-
-    from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (  # noqa: PLC0415
-        GOLDEN_CHAIN_DEFINITIONS,
-    )
-
-    conn = None
-    try:
-        conn = psycopg2.connect(db_dsn)
-        conn.autocommit = True
-        cur = conn.cursor()
-
-        for result in chain_results:
-            # Determine the effective status
-            status = result.projection_status
-            if result.publish_status == "error":
-                status = "error"
-
-            chain_def = next(
-                (c for c in GOLDEN_CHAIN_DEFINITIONS if c.name == result.chain_name),
-                None,
-            )
-            if chain_def is None:
-                continue
-
-            cur.execute(
-                """
-                INSERT INTO golden_chain_sweep_results
-                    (sweep_id, chain_name, head_topic, tail_table, status,
-                     publish_latency_ms, projection_latency_ms, assertion_results,
-                     error_reason, correlation_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    summary.sweep_id,
-                    result.chain_name,
-                    chain_def.head_topic,
-                    chain_def.tail_table,
-                    status,
-                    result.publish_latency_ms,
-                    result.projection_latency_ms,
-                    json.dumps(result.assertion_results),
-                    result.error_reason,
-                    result.correlation_id,
-                ),
-            )
-
-        cur.close()
-        logger.info("Persisted %d chain results to golden_chain_sweep_results", len(chain_results))
-
-    except Exception as exc:
-        logger.error("Failed to persist sweep results: %s", exc)
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:  # noqa: BLE001, S110
-                pass
 
 
 def _write_evidence(

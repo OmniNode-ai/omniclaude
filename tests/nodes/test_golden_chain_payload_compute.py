@@ -48,9 +48,7 @@ class TestChainRegistry:
 
     def test_all_chains_have_assertions(self) -> None:
         for chain in GOLDEN_CHAIN_DEFINITIONS:
-            assert len(chain.assertions) > 0, (
-                f"Chain {chain.name} has no assertions"
-            )
+            assert len(chain.assertions) > 0, f"Chain {chain.name} has no assertions"
 
     def test_all_chains_have_correlation_id_assertion(self) -> None:
         for chain in GOLDEN_CHAIN_DEFINITIONS:

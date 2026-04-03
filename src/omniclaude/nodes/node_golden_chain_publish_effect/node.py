@@ -115,7 +115,7 @@ async def run_chain(
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             cur.execute(
-                f"SELECT * FROM {payload.tail_table} "  # noqa: S608
+                f"SELECT * FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table name validated above
                 "WHERE correlation_id = %s LIMIT 1",
                 (payload.correlation_id,),
             )
@@ -159,7 +159,7 @@ async def run_chain(
         # Step 4: Cleanup synthetic row
         try:
             cur.execute(
-                f"DELETE FROM {payload.tail_table} "  # noqa: S608
+                f"DELETE FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table name validated above
                 "WHERE correlation_id = %s",
                 (payload.correlation_id,),
             )
@@ -169,9 +169,7 @@ async def run_chain(
                 payload.correlation_id,
             )
         except Exception as cleanup_exc:  # noqa: BLE001 — cleanup failure is non-fatal
-            logger.warning(
-                "Cleanup failed for %s: %s", payload.tail_table, cleanup_exc
-            )
+            logger.warning("Cleanup failed for %s: %s", payload.tail_table, cleanup_exc)
 
         cur.close()
 

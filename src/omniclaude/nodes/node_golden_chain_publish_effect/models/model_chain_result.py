@@ -16,12 +16,8 @@ class ModelChainResult(BaseModel):
 
     chain_name: str = Field(..., description="Chain name")
     correlation_id: str = Field(..., description="Correlation ID used for this chain")
-    publish_status: str = Field(
-        ..., description="Kafka publish result: ok | error"
-    )
-    publish_latency_ms: float = Field(
-        default=-1, description="Time to Kafka ack in ms"
-    )
+    publish_status: str = Field(..., description="Kafka publish result: ok | error")
+    publish_latency_ms: float = Field(default=-1, description="Time to Kafka ack in ms")
     projection_status: str = Field(
         ..., description="DB projection result: pass | fail | timeout | error"
     )

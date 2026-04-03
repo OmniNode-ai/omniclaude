@@ -15,7 +15,9 @@ class ModelChainAssertion(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     field: str = Field(..., description="Dot-separated field path in the projected row")
-    op: str = Field(..., description="Assertion operator: eq, neq, gte, lte, in, contains")
+    op: str = Field(
+        ..., description="Assertion operator: eq, neq, gte, lte, in, contains"
+    )
     expected: Any = Field(..., description="Expected value")
 
 
@@ -25,7 +27,9 @@ class ModelChainDefinition(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str = Field(..., description="Chain name (e.g. 'registration')")
-    head_topic: str = Field(..., description="Kafka topic to publish synthetic event to")
+    head_topic: str = Field(
+        ..., description="Kafka topic to publish synthetic event to"
+    )
     tail_table: str = Field(..., description="DB table to poll for projected row")
     fixture_template: dict[str, Any] = Field(
         ..., description="Template payload for the synthetic event"

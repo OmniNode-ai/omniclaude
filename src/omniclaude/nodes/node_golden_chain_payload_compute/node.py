@@ -57,7 +57,9 @@ def build_payloads(
             ModelChainAssertion(
                 field=a.field,
                 op=a.op,
-                expected=correlation_id if a.expected == "__CORRELATION_ID__" else a.expected,
+                expected=correlation_id
+                if a.expected == "__CORRELATION_ID__"
+                else a.expected,
             )
             for a in chain.assertions
         )
