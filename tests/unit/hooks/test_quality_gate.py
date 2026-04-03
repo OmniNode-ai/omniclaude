@@ -54,9 +54,6 @@ class TestQualityGateMarkers:
     def test_test_gate_accepts_with_markers(self) -> None:
         from plugins.onex.hooks.lib.delegation_orchestrator import _run_quality_gate
 
-        response = (
-            "def test_example():\n"
-            "    assert True\n" * 5
-        )
+        response = "def test_example():\n    assert True\n" * 5
         passed, reason = _run_quality_gate(response, "test")
         assert passed, f"Test with markers should pass: {reason}"

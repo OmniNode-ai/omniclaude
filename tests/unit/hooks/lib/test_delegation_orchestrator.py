@@ -197,13 +197,16 @@ class TestQualityGate:
         assert passed is False
         assert "too short" in reason
 
-    def test_document_fails_missing_markers(self) -> None:
-        """Doc response of adequate length but no docstring markers fails."""
-        # 100+ chars but no Args:/Returns:/'""' markers
-        response = "x" * 120  # No markers at all
+    def test_document_passes_prose_only(self) -> None:
+        """Doc response of adequate length passes without docstring markers.
+
+        OMN-7410 changed the document gate to check only length + refusal
+        indicators (no marker requirement).
+        """
+        response = "x" * 120  # No markers, but long enough
         passed, reason = do._run_quality_gate(response, "document")
-        assert passed is False
-        assert "missing expected markers" in reason
+        assert passed is True
+        assert reason == ""
 
     def test_document_fails_error_indicator(self) -> None:
         """Doc response starting with refusal phrase fails."""
@@ -1042,8 +1045,8 @@ class TestQualityGateFailure:
     ) -> None:
         _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
 
-        # LLM returns a response that will fail the doc quality gate (no markers)
-        bad_response = "x" * 120  # Long enough but no docstring markers
+        # LLM returns a response that will fail the doc quality gate (too short)
+        bad_response = "Short."
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(
@@ -1067,7 +1070,7 @@ class TestQualityGateFailure:
     ) -> None:
         """Delegation event must be emitted when quality gate fails."""
         _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
-        bad_response = "x" * 120  # No docstring markers
+        bad_response = "Short."  # Too short to pass quality gate
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(
@@ -1099,7 +1102,7 @@ class TestQualityGateFailure:
         nothing to evaluate for compliance.
         """
         _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
-        bad_response = "x" * 120  # No docstring markers — fails doc quality gate
+        bad_response = "Short."  # Too short — fails doc quality gate
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(
