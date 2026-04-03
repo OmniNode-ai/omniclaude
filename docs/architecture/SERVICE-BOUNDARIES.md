@@ -160,7 +160,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 ### 1. Intelligence Service
 
 **Owner**: omniintelligence repository
-**Endpoint**: `${ARCHON_INTELLIGENCE_URL}` (see `.env.example`)
+**Endpoint**: `${INTELLIGENCE_SERVICE_URL}` (see `.env.example`)
 **Access Pattern**: HTTP REST API
 
 **Purpose**: Intelligence coordination and event processing
@@ -391,7 +391,7 @@ QDRANT_URL=http://localhost:6333
 # Note: Accessed primarily via Kafka events
 # Direct HTTP used only for health checks
 
-ARCHON_INTELLIGENCE_URL=<see .env.example>  # Archon server IP and port
+INTELLIGENCE_SERVICE_URL=<see .env.example>  # Intelligence service URL
 ARCHON_SEARCH_URL=<see .env.example>        # Archon server IP and port
 ARCHON_BRIDGE_URL=<see .env.example>        # Archon server IP and port
 
@@ -467,7 +467,7 @@ omniclaude uses three communication patterns with external services:
 ```bash
 # Health checks (load .env first to get service URLs)
 source .env
-curl ${ARCHON_INTELLIGENCE_URL}/health  # Archon Intelligence
+curl ${INTELLIGENCE_SERVICE_URL}/health  # Archon Intelligence
 curl ${QDRANT_URL}/collections          # Qdrant
 ```
 
@@ -620,7 +620,7 @@ conn = psycopg2.connect(
 # GOOD: Environment-based configuration
 import os
 
-response = requests.get(f"{os.getenv('ARCHON_INTELLIGENCE_URL')}/health")
+response = requests.get(f"{os.getenv('INTELLIGENCE_SERVICE_URL')}/health")
 
 producer = KafkaProducer(
     bootstrap_servers=os.getenv('KAFKA_BOOTSTRAP_SERVERS')
@@ -836,7 +836,7 @@ GEMINI_API_KEY=actual_key_here
 source .env
 
 # Check service health (using env vars)
-curl ${ARCHON_INTELLIGENCE_URL}/health  # Archon Intelligence
+curl ${INTELLIGENCE_SERVICE_URL}/health  # Archon Intelligence
 curl ${ARCHON_SEARCH_URL}/health        # Archon Search
 curl ${QDRANT_URL}/collections          # Qdrant
 

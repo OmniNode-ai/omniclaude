@@ -353,8 +353,8 @@ QDRANT_PORT=6333
 # Linear Insights (for /deep-dive command)
 LINEAR_INSIGHTS_OUTPUT_DIR="${HOME}/Code/omni_save"  # Deep dive output location
 
-# Archon Intelligence Service
-ARCHON_INTELLIGENCE_URL=http://localhost:8053  # Intelligence coordinator
+# Intelligence Service
+INTELLIGENCE_SERVICE_URL=http://localhost:8053  # Intelligence coordinator
 ```
 
 #### Example .env Files by Repository
