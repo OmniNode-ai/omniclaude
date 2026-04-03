@@ -73,12 +73,19 @@ class TestContractYaml:
         if not CLOSEOUT_PATH.exists():
             pytest.skip("cron-closeout.sh not found")
 
-        prompts = checker.extract_phase_prompts(CLOSEOUT_PATH)
+        # Use raw regex scan instead of checker.extract_phase_prompts() so the
+        # test is independent of the extractor under test.
+        script_ids = set(
+            re.findall(
+                r'run_phase\s+"([^"]+)"',
+                CLOSEOUT_PATH.read_text(),
+            )
+        )
         with open(CONTRACT_PATH) as f:
             contract = yaml.safe_load(f)
         contract_ids = {p["id"] for p in contract["phases"]}
 
-        missing = set(prompts.keys()) - contract_ids
+        missing = script_ids - contract_ids
         assert not missing, f"Phases in script but missing from contract: {missing}"
 
 
