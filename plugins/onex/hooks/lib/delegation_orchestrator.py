@@ -633,6 +633,54 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
+# Result-only delegation mode (OMN-7410)
+# ---------------------------------------------------------------------------
+
+_RESULT_ONLY_SUMMARY_LIMIT = 200
+
+
+def _format_result_only(
+    *,
+    response_text: str,
+    model_name: str | None,
+    handler_name: str,
+    pass_fail: str,
+    elapsed_seconds: float,
+    correlation_id: str,
+) -> dict[str, Any]:
+    """Format a delegation result into the normalized result-only schema.
+
+    When ``DELEGATION_RESULT_ONLY=true``, both subprocess and LLM results
+    are normalized into a compact schema that omits the full response body.
+    The ``summary`` field is deterministically truncated to 200 chars.
+
+    Args:
+        response_text: Full response text from handler or subprocess.
+        model_name: Model name (None for subprocess handlers).
+        handler_name: Handler/intent name.
+        pass_fail: "pass", "fail", or "error".
+        elapsed_seconds: Wall-clock time for the delegation.
+        correlation_id: Correlation ID from the delegation context.
+
+    Returns:
+        Normalized dict conforming to the result-only schema.
+    """
+    truncated = len(response_text) > _RESULT_ONLY_SUMMARY_LIMIT
+    summary = response_text[:_RESULT_ONLY_SUMMARY_LIMIT] if truncated else response_text
+
+    return {
+        "mode": "result_only",
+        "handler_name": handler_name,
+        "pass_fail": pass_fail,
+        "summary": summary,
+        "correlation_id": correlation_id,
+        "model_name": model_name,
+        "elapsed_seconds": elapsed_seconds,
+        "truncated": truncated,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Compliance advisory emit (async, non-blocking)
 # ---------------------------------------------------------------------------
 
