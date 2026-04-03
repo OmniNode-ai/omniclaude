@@ -1,0 +1,83 @@
+# Stopgap — designed for replacement by node_watchdog_reducer (OMN-TBD)
+#
+# Declarative escalation policy for the watchdog state system.
+# Consumed by:
+#   - watchdog-check.sh (bash, via yq/python)
+#   - omniclaude.shared.models.model_watchdog_state (Python)
+#   - Future: node_watchdog_reducer ONEX node
+#
+# The policy maps failure streak counts to actions and exit codes.
+# "phase_match" means consecutive failures of the SAME phase.
+
+schema_version: "1.0"
+
+escalation_levels:
+  - level: 0
+    min_streak: 0
+    max_streak: 0
+    action: "restart"
+    exit_code: 0
+    description: "No failures — normal operation"
+
+  - level: 1
+    min_streak: 1
+    max_streak: 1
+    action: "restart"
+    exit_code: 0
+    description: "Single failure — restart and hope it was transient"
+
+  - level: 2
+    min_streak: 2
+    max_streak: 2
+    action: "investigate"
+    exit_code: 2
+    description: "Two identical failures — read logs, check state, diagnose root cause"
+
+  - level: 3
+    min_streak: 3
+    max_streak: 3
+    action: "fix"
+    exit_code: 3
+    description: "Three identical failures — attempt to fix config, script, or state"
+
+  - level: 4
+    min_streak: 4
+    max_streak: 4
+    action: "ticket"
+    exit_code: 4
+    description: "Four identical failures — create Linear ticket for manual investigation"
+
+  - level: 5
+    min_streak: 5
+    max_streak: 999
+    action: "alert_user"
+    exit_code: 5
+    description: "Five+ identical failures — STOP restarting, alert the user"
+
+# FSM state transitions for future node_watchdog_reducer
+# Each (current_state, event) pair maps to a next_state.
+fsm_transitions:
+  healthy:
+    on_pass: "healthy"
+    on_fail: "degraded"
+  degraded:
+    on_pass: "healthy"
+    on_fail: "investigating"
+  investigating:
+    on_pass: "healthy"
+    on_fail: "fixing"
+  fixing:
+    on_pass: "healthy"
+    on_fail: "ticketed"
+  ticketed:
+    on_pass: "healthy"
+    on_fail: "blocked"
+  blocked:
+    on_pass: "healthy"
+    on_fail: "blocked"
+
+# Maximum run history to retain per loop
+max_history: 20
+
+# Maximum action audit trail entries per loop
+max_actions: 20
