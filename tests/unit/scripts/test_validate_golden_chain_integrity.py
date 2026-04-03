@@ -1,5 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 OmniNode Team
 """Tests for validate_golden_chain_integrity.py [OMN-7389]."""
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ class TestGoldenChainIntegrityScript:
             [sys.executable, "scripts/validation/validate_golden_chain_integrity.py"],
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, (
             f"Script failed:\n{result.stdout}\n{result.stderr}"
