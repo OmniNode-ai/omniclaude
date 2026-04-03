@@ -101,6 +101,58 @@ preflight() {
 preflight
 
 # ---------------------------------------------------------------------------
+# Delegation health pre-check [OMN-7391]
+# ---------------------------------------------------------------------------
+# Before enabling delegation, verify local LLMs respond on their
+# OpenAI-compatible /v1/models endpoints. If either is unreachable,
+# disable delegation gracefully (build loop continues with frontier only).
+
+check_delegation_health() {
+  if [[ "${ENABLE_DELEGATION}" != "true" ]]; then
+    return 0
+  fi
+
+  local coder_url="${LLM_CODER_URL:-}"
+  local fast_url="${LLM_CODER_FAST_URL:-}"
+  local failures=()
+
+  if [[ -z "${coder_url}" && -z "${fast_url}" ]]; then
+    echo "WARN: Delegation enabled but LLM_CODER_URL and LLM_CODER_FAST_URL not set. Disabling delegation."
+    ENABLE_DELEGATION=false
+    export ENABLE_LOCAL_INFERENCE_PIPELINE=false
+    export ENABLE_LOCAL_DELEGATION=false
+    return 0
+  fi
+
+  # Probe each endpoint with a 5s timeout
+  if [[ -n "${coder_url}" ]]; then
+    if curl -sf --max-time 5 "${coder_url}/v1/models" >/dev/null 2>&1; then
+      echo "Delegation health: ${coder_url} OK"
+    else
+      failures+=("LLM_CODER_URL (${coder_url})")
+    fi
+  fi
+
+  if [[ -n "${fast_url}" ]]; then
+    if curl -sf --max-time 5 "${fast_url}/v1/models" >/dev/null 2>&1; then
+      echo "Delegation health: ${fast_url} OK"
+    else
+      failures+=("LLM_CODER_FAST_URL (${fast_url})")
+    fi
+  fi
+
+  if [[ ${#failures[@]} -gt 0 ]]; then
+    echo "WARN: Delegation endpoints unreachable: ${failures[*]}"
+    echo "WARN: Disabling delegation for this run. Build loop will use frontier Claude only."
+    ENABLE_DELEGATION=false
+    export ENABLE_LOCAL_INFERENCE_PIPELINE=false
+    export ENABLE_LOCAL_DELEGATION=false
+  fi
+}
+
+check_delegation_health
+
+# ---------------------------------------------------------------------------
 # Directory setup
 # ---------------------------------------------------------------------------
 
