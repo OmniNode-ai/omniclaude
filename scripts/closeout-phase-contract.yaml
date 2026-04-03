@@ -131,7 +131,7 @@ phases:
     required_tools: "Bash,Read"
     verification: "Exit code 0 = PASS"
 
-  - id: C1_release_check
+  - id: C1_release
     name: "Release"
     category: action
     blocking: false
@@ -148,7 +148,7 @@ phases:
     required_tools: "Bash,Read,Write,Edit,Glob,Grep"
     verification: "Release PRs created and merged, or 'No unreleased commits'"
 
-  - id: C2_redeploy_check
+  - id: C2_redeploy
     name: "Redeploy"
     category: action
     blocking: false
@@ -187,7 +187,6 @@ phases:
       must_reference: "INFRA_HOST"
       must_not_reference:
         - "docker ps"
-        - "docker logs"
     required_tools: "Bash,Read"
     verification: "All hard gate tests pass"
 

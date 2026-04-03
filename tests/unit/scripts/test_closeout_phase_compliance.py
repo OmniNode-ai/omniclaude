@@ -13,9 +13,7 @@ Verifies that:
 
 from __future__ import annotations
 
-import textwrap
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import yaml
@@ -80,9 +78,7 @@ class TestContractYaml:
         contract_ids = {p["id"] for p in contract["phases"]}
 
         missing = set(prompts.keys()) - contract_ids
-        assert not missing, (
-            f"Phases in script but missing from contract: {missing}"
-        )
+        assert not missing, f"Phases in script but missing from contract: {missing}"
 
 
 class TestPromptExtraction:
@@ -109,9 +105,7 @@ class TestPromptExtraction:
         c1 = prompts.get(c1_id, "")
         # On main (pre-OMN-7401), C1 is report-only and won't contain /release.
         # After OMN-7401 merges, C1_release will contain /release.
-        assert len(c1) > 0, (
-            f"C1 phase ({c1_id}) prompt should not be empty"
-        )
+        assert len(c1) > 0, f"C1 phase ({c1_id}) prompt should not be empty"
 
 
 class TestComplianceChecker:
@@ -129,44 +123,54 @@ class TestComplianceChecker:
         lines = ["#!/usr/bin/env bash\n"]
         for phase_id, prompt in phases.items():
             lines.append(
-                f'run_phase "{phase_id}" \\\n'
-                f'  "{prompt}" \\\n'
-                f'  "Bash,Read"\n\n'
+                f'run_phase "{phase_id}" \\\n  "{prompt}" \\\n  "Bash,Read"\n\n'
             )
         script_path.write_text("".join(lines))
         return script_path
 
     def test_passes_when_compliant(self, tmp_path: Path) -> None:
-        contract = self._write_contract(tmp_path, [
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "C1_release",
+                    "name": "Release",
+                    "category": "action",
+                    "blocking": False,
+                    "expected_action": "Execute /release",
+                    "required_keywords": ["/release", "--autonomous"],
+                }
+            ],
+        )
+        script = self._write_script(
+            tmp_path,
             {
-                "id": "C1_release",
-                "name": "Release",
-                "category": "action",
-                "blocking": False,
-                "expected_action": "Execute /release",
-                "required_keywords": ["/release", "--autonomous"],
-            }
-        ])
-        script = self._write_script(tmp_path, {
-            "C1_release": "Execute /release --autonomous for all repos",
-        })
+                "C1_release": "Execute /release --autonomous for all repos",
+            },
+        )
         violations = checker.check_compliance(contract, script)
         assert violations == []
 
     def test_catches_missing_keyword(self, tmp_path: Path) -> None:
-        contract = self._write_contract(tmp_path, [
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "C1_release",
+                    "name": "Release",
+                    "category": "action",
+                    "blocking": False,
+                    "expected_action": "Execute /release",
+                    "required_keywords": ["/release"],
+                }
+            ],
+        )
+        script = self._write_script(
+            tmp_path,
             {
-                "id": "C1_release",
-                "name": "Release",
-                "category": "action",
-                "blocking": False,
-                "expected_action": "Execute /release",
-                "required_keywords": ["/release"],
-            }
-        ])
-        script = self._write_script(tmp_path, {
-            "C1_release": "Check for unreleased commits and report them",
-        })
+                "C1_release": "Check for unreleased commits and report them",
+            },
+        )
         violations = checker.check_compliance(contract, script)
         assert len(violations) == 1
         assert "KEYWORD_MISSING" in violations[0]
@@ -174,20 +178,26 @@ class TestComplianceChecker:
 
     def test_catches_forbidden_text(self, tmp_path: Path) -> None:
         """This is the exact bug that C1/C2 had — 'Do NOT execute'."""
-        contract = self._write_contract(tmp_path, [
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "C1_release",
+                    "name": "Release",
+                    "category": "action",
+                    "blocking": False,
+                    "expected_action": "Execute /release",
+                    "required_keywords": ["/release"],
+                    "must_not_contain": ["Do NOT execute", "report only"],
+                }
+            ],
+        )
+        script = self._write_script(
+            tmp_path,
             {
-                "id": "C1_release",
-                "name": "Release",
-                "category": "action",
-                "blocking": False,
-                "expected_action": "Execute /release",
-                "required_keywords": ["/release"],
-                "must_not_contain": ["Do NOT execute", "report only"],
-            }
-        ])
-        script = self._write_script(tmp_path, {
-            "C1_release": "Run /release but Do NOT execute the actual release. Report only.",
-        })
+                "C1_release": "Run /release but Do NOT execute the actual release. Report only.",
+            },
+        )
         violations = checker.check_compliance(contract, script)
         assert len(violations) == 2
         assert any("FORBIDDEN_TEXT" in v and "Do NOT execute" in v for v in violations)
@@ -195,61 +205,76 @@ class TestComplianceChecker:
 
     def test_catches_stale_infra_reference(self, tmp_path: Path) -> None:
         """This is the exact bug E1 had — referencing docker ps after migration."""
-        contract = self._write_contract(tmp_path, [
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "E1_foundation_tests",
+                    "name": "Foundation Verification",
+                    "category": "gate",
+                    "blocking": True,
+                    "expected_action": "Verify on INFRA_HOST",
+                    "required_keywords": ["INFRA_HOST"],
+                    "infra_consistency": {
+                        "must_reference": "INFRA_HOST",
+                        "must_not_reference": ["docker ps", "docker logs"],
+                    },
+                }
+            ],
+        )
+        script = self._write_script(
+            tmp_path,
             {
-                "id": "E1_foundation_tests",
-                "name": "Foundation Verification",
-                "category": "gate",
-                "blocking": True,
-                "expected_action": "Verify on INFRA_HOST",
-                "required_keywords": ["INFRA_HOST"],
-                "infra_consistency": {
-                    "must_reference": "INFRA_HOST",
-                    "must_not_reference": ["docker ps", "docker logs"],
-                },
-            }
-        ])
-        script = self._write_script(tmp_path, {
-            "E1_foundation_tests": "Run docker ps to check containers. "
-            "Also check INFRA_HOST health.",
-        })
+                "E1_foundation_tests": "Run docker ps to check containers. "
+                "Also check INFRA_HOST health.",
+            },
+        )
         violations = checker.check_compliance(contract, script)
         assert len(violations) == 1
         assert "INFRA_STALE" in violations[0]
         assert "docker ps" in violations[0]
 
     def test_catches_missing_infra_host(self, tmp_path: Path) -> None:
-        contract = self._write_contract(tmp_path, [
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "B1_runtime_sweep",
+                    "name": "Runtime Sweep",
+                    "category": "gate",
+                    "blocking": True,
+                    "expected_action": "Verify on INFRA_HOST",
+                    "required_keywords": ["INTEGRATION: PASS"],
+                    "infra_consistency": {
+                        "must_reference": "INFRA_HOST",
+                    },
+                }
+            ],
+        )
+        script = self._write_script(
+            tmp_path,
             {
-                "id": "B1_runtime_sweep",
-                "name": "Runtime Sweep",
-                "category": "gate",
-                "blocking": True,
-                "expected_action": "Verify on INFRA_HOST",
-                "required_keywords": ["INTEGRATION: PASS"],
-                "infra_consistency": {
-                    "must_reference": "INFRA_HOST",
-                },
-            }
-        ])
-        script = self._write_script(tmp_path, {
-            "B1_runtime_sweep": "Check localhost:8085/health. INTEGRATION: PASS",
-        })
+                "B1_runtime_sweep": "Check localhost:8085/health. INTEGRATION: PASS",
+            },
+        )
         violations = checker.check_compliance(contract, script)
         assert len(violations) == 1
         assert "INFRA_MISSING" in violations[0]
 
     def test_catches_missing_phase(self, tmp_path: Path) -> None:
-        contract = self._write_contract(tmp_path, [
-            {
-                "id": "E4_golden_chain",
-                "name": "Golden Chain Sweep",
-                "category": "gate",
-                "blocking": True,
-                "expected_action": "Run golden chain sweep",
-                "required_keywords": ["/golden_chain_sweep"],
-            }
-        ])
+        contract = self._write_contract(
+            tmp_path,
+            [
+                {
+                    "id": "E4_golden_chain",
+                    "name": "Golden Chain Sweep",
+                    "category": "gate",
+                    "blocking": True,
+                    "expected_action": "Run golden chain sweep",
+                    "required_keywords": ["/golden_chain_sweep"],
+                }
+            ],
+        )
         script = self._write_script(tmp_path, {})
         violations = checker.check_compliance(contract, script)
         assert len(violations) == 1
@@ -259,11 +284,11 @@ class TestComplianceChecker:
 class TestCurrentScriptCompliance:
     """Verify the CURRENT cron-closeout.sh against the contract."""
 
-    def test_current_script_detects_known_bugs(self) -> None:
-        """The compliance checker should detect known bugs on main.
+    def test_current_script_is_compliant(self) -> None:
+        """The current cron-closeout.sh should pass all contract checks.
 
-        These are tracked by OMN-7401 (E1/C1/C2 fix branch).
-        Once OMN-7401 merges, update this test to assert zero violations.
+        OMN-7401 fixed E1/C1/C2 to use remote INFRA_HOST and execute
+        /release and /redeploy autonomously. Zero violations expected.
         """
         if not CONTRACT_PATH.exists() or not CLOSEOUT_PATH.exists():
             pytest.skip("Contract or script not found")
@@ -271,17 +296,9 @@ class TestCurrentScriptCompliance:
         violations = checker.check_compliance(
             CONTRACT_PATH, CLOSEOUT_PATH, verbose=True
         )
-        # Known violations on main (pre-OMN-7401):
-        # - C1 missing /release and --autonomous
-        # - C2 missing /redeploy, contains "Do NOT execute"
-        # - E1 missing INFRA_HOST
-        # After OMN-7401 merges, change this to: assert violations == []
-        violation_text = "\n".join(violations)
-        assert any("C1_release_check" in v for v in violations), (
-            "Expected C1 violation (missing /release)"
-        )
-        assert any("E1_foundation_tests" in v for v in violations), (
-            "Expected E1 violation (missing INFRA_HOST)"
+        assert violations == [], (
+            "Unexpected violations after OMN-7401 fix:\n"
+            + "\n".join(f"  - {v}" for v in violations)
         )
 
     def test_passing_phases_are_compliant(self) -> None:
@@ -291,8 +308,20 @@ class TestCurrentScriptCompliance:
 
         violations = checker.check_compliance(CONTRACT_PATH, CLOSEOUT_PATH)
         # These phases should NOT have violations
-        non_violating = {"A1", "A2", "A3", "B1", "B2", "B3", "B4b", "B5",
-                         "B6", "D3", "E2", "E3"}
+        non_violating = {
+            "A1",
+            "A2",
+            "A3",
+            "B1",
+            "B2",
+            "B3",
+            "B4b",
+            "B5",
+            "B6",
+            "D3",
+            "E2",
+            "E3",
+        }
         for v in violations:
             phase_prefix = v.split(":")[1].strip().split(" ")[1][:2]
             assert phase_prefix not in non_violating, (

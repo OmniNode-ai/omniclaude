@@ -25,7 +25,6 @@ Exit codes:
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -90,18 +89,18 @@ def extract_phase_prompts(script_path: Path) -> dict[str, str]:
         paren_depth = 0
         while j < len(content):
             ch = content[j]
-            if ch == '\\' and j + 1 < len(content):
+            if ch == "\\" and j + 1 < len(content):
                 # Escaped character — include both
-                prompt_chars.append(content[j:j+2])
+                prompt_chars.append(content[j : j + 2])
                 j += 2
-            elif ch == '$' and j + 1 < len(content) and content[j+1] == '(':
+            elif ch == "$" and j + 1 < len(content) and content[j + 1] == "(":
                 # Start of $(...) subshell — quotes inside don't end the prompt
                 paren_depth += 1
-                prompt_chars.append('$(')
+                prompt_chars.append("$(")
                 j += 2
-            elif ch == ')' and paren_depth > 0:
+            elif ch == ")" and paren_depth > 0:
                 paren_depth -= 1
-                prompt_chars.append(')')
+                prompt_chars.append(")")
                 j += 1
             elif ch == '"' and paren_depth == 0:
                 # End of prompt string (only at top-level)
@@ -186,7 +185,7 @@ def check_compliance(
                 )
 
         if verbose and not any(phase_id in v for v in violations):
-            print(f"  PASS")
+            print("  PASS")
 
     return violations
 
@@ -210,16 +209,16 @@ def main() -> int:
     violations = check_compliance(contract_path, closeout_path, verbose=verbose)
 
     if violations:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"CLOSEOUT PHASE COMPLIANCE: FAIL ({len(violations)} violations)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for v in violations:
             print(f"  - {v}")
         print(f"\nFix the phase prompts in {closeout_path.name} to match")
         print(f"the contract in {contract_path.name}.")
         return 1
 
-    print(f"CLOSEOUT PHASE COMPLIANCE: PASS (all phases compliant)")
+    print("CLOSEOUT PHASE COMPLIANCE: PASS (all phases compliant)")
     return 0
 
 
