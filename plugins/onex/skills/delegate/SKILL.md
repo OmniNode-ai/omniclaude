@@ -145,7 +145,7 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
     # Outer envelope: ModelEventEnvelope-compatible structure.
     # The daemon publishes this dict as the raw Kafka message value.
     # The runtime consumer calls ModelEventEnvelope[object].model_validate()
-    # on it, so 'payload' is the only required key (all others have defaults).
+    # on it. Registry validation requires both 'payload' and 'correlation_id'.
     envelope = {
         "payload": delegation_payload,
         "correlation_id": correlation_id,
@@ -153,14 +153,24 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
         "source_tool": "omniclaude.delegate-skill",
     }
 
-    # Publish via emit daemon (fire-and-forget)
+    # Publish via emit daemon.
     # The emit daemon is started by the hook system; if unavailable,
     # the skill reports the envelope for manual submission.
+    emitted = False
     try:
         from emit_client_wrapper import emit_event
-        emit_event("delegation.request", envelope)
+        emitted = emit_event("delegation.request", envelope)
     except ImportError:
         pass  # Emit client unavailable — envelope returned for manual submission
+
+    if not emitted:
+        return {
+            "success": False,
+            "error": "emit_event returned falsy — delegation request not queued",
+            "correlation_id": correlation_id,
+            "topic": "onex.cmd.omnibase-infra.delegation-request.v1",
+            "envelope": envelope,
+        }
 
     return {
         "success": True,
