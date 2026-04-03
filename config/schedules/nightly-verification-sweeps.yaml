@@ -1,0 +1,32 @@
+# Nightly Verification Sweep Schedules
+# OMN-7446: Schedule verification sweeps on a cadence
+#
+# These schedules are operational bridges until a deterministic scheduler exists.
+# Apply via: /schedule create --from-config config/schedules/nightly-verification-sweeps.yaml
+# Or manually via Claude Code: CronCreate with durable: true
+#
+# Note: golden_chain_sweep and integration_sweep are already wired into
+# cron-closeout.sh (Part 1, OMN-7435) and do not need separate scheduling.
+
+schedules:
+  - name: nightly-data-flow-sweep
+    description: >
+      Run data_flow_sweep in dry-run mode nightly to catch regression
+      in Kafka topic -> projection -> dashboard data flow.
+    cron: "3 2 * * *"  # 2:03 AM local (offset from :00 to avoid fleet pile-up)
+    prompt: >
+      Run /data_flow_sweep --dry-run.
+      If any FAIL results, create a friction event and report findings.
+    recurring: true
+    durable: true
+
+  - name: nightly-runtime-sweep
+    description: >
+      Run runtime_sweep in dry-run mode nightly to catch handler wiring
+      regressions across all repos.
+    cron: "7 3 * * *"  # 3:07 AM local
+    prompt: >
+      Run /runtime_sweep --dry-run --scope all-repos.
+      If any FAIL results, create a friction event and report findings.
+    recurring: true
+    durable: true
