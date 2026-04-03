@@ -898,7 +898,7 @@ Output ONLY a JSON array of objects with keys: ticket_id, title, classification.
         log "F3: Dispatching ticket-pipeline for ${ticket_id} (${DISPATCH_COUNT}/${MAX_BUILD_TICKETS})"
 
         if ! run_phase "F3_build_${ticket_id}" \
-          "Run /ticket_pipeline for ${ticket_id}" \
+          "Dispatch ticket-pipeline for ${ticket_id}: Run /ticket_pipeline" \
           "Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*,mcp__slack__*"; then
           log "WARN: ticket-pipeline for ${ticket_id} failed"
           emit_friction "high" "F3 build dispatch failed for ${ticket_id}" "ticket_pipeline_error"
