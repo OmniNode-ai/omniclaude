@@ -90,9 +90,17 @@ class TestGenerateSkeletonContract:
         assert contract["golden_path"] is not None
         assert "input" in contract["golden_path"]
         assert "output" in contract["golden_path"]
-        assert contract["golden_path"]["input"]["topic"] == "onex.cmd.omn-9999.trigger.v1"
-        assert contract["golden_path"]["output"]["topic"] == "onex.evt.omn-9999.completed.v1"
-        assert contract["golden_path"]["input"]["fixture"] == "tests/fixtures/omn-9999_trigger.json"
+        assert (
+            contract["golden_path"]["input"]["topic"] == "onex.cmd.omn-9999.trigger.v1"
+        )
+        assert (
+            contract["golden_path"]["output"]["topic"]
+            == "onex.evt.omn-9999.completed.v1"
+        )
+        assert (
+            contract["golden_path"]["input"]["fixture"]
+            == "tests/fixtures/omn-9999_trigger.json"
+        )
         assert contract["golden_path"]["output"]["schema_name"] == "ModelOmn9999Result"
 
     def test_generate_contract_without_topics_has_no_golden_path(self) -> None:
