@@ -1937,7 +1937,22 @@ continues without a contract.
      "event", "api", "interface" in title or description
    - If any seam keywords found: `is_seam_ticket=True`, scan description for interface types
 
-4. Generate contract:
+4. Extract DoD items from ticket description:
+   - Parse for markdown checklist items (`- [ ]` or `- [x]`, including multiline continuations)
+   - Look for "Definition of Done", "DoD", or "Acceptance Criteria" section headers — extract
+     items under those sections
+   - Treat both completed (`[x]`) and incomplete (`[ ]`) checklist items as DoD inputs
+   - If no explicit DoD section found, treat all checklist items as DoD items
+   - Store extracted items as a list of strings
+
+5. Extract published_events from ticket description:
+   - Scan description for Kafka topic patterns matching `onex.evt.*` or `onex.cmd.*`
+   - Prefer canonical topic names (full `onex.{kind}.{producer}.{event-name}.v{n}` patterns)
+     over partial mentions or examples
+   - Treat extracted names as best-effort — they may be corrected during post-implementation
+     contract enrichment
+
+6. Generate contract:
    ```python
    import sys
    sys.path.insert(0, f"{os.environ.get('CLAUDE_PLUGIN_ROOT', os.environ.get('OMNICLAUDE_PROJECT_ROOT', ''))}/skills/_lib/contract_generator")
@@ -1948,6 +1963,8 @@ continues without a contract.
        summary="{ticket_title}",
        is_seam_ticket={is_seam_ticket},
        interfaces_touched={interfaces_list},
+       dod_items={dod_items_list},
+       published_events={published_events_list},
    )
    ```
 
