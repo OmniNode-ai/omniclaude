@@ -694,6 +694,7 @@ Phase Results:
   D3 dashboard-sweep:  $(test -f "${RUN_DIR}/D3_dashboard_sweep.txt" && echo "executed" || echo "missing")
   E1 foundation-tests: $(test -f "${RUN_DIR}/E1_foundation_tests.txt" && echo "executed" || echo "missing")
   E2 pipeline-tests:   $(test -f "${RUN_DIR}/E2_pipeline_tests.txt" && echo "executed" || echo "missing")
+  E4 golden-chain:     $(test -f "${RUN_DIR}/E4_golden_chain.txt" && echo "executed" || echo "missing")
   E3 dashboard-tests:  $(test -f "${RUN_DIR}/E3_dashboard_tests.txt" && echo "executed" || echo "missing")
 
 Pending Redeploy: ${HAS_PENDING_REDEPLOY}
