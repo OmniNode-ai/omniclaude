@@ -601,6 +601,48 @@ If ALL tests pass, print: INTEGRATION: PASS" \
     exit 1
   fi
 
+  # E4: Golden chain sweep — end-to-end Kafka-to-DB-projection validation [OMN-7388]
+  # Hard gate — verifies all 5 golden chains (registration, pattern_learning,
+  # delegation, routing, evaluation) flow from Kafka topic through omnidash
+  # ReadModelConsumer to the analytics database. This catches:
+  #   - Dead-letter subscriptions (consumer not wired)
+  #   - Schema mismatches (event fails validation at consumer)
+  #   - Projection bugs (event consumed but not written to DB)
+  #   - Infrastructure breaks (Kafka or DB connectivity)
+  e4_exec_failed=0
+  if ! run_phase "E4_golden_chain" \
+    "Run the golden chain sweep to verify end-to-end Kafka-to-DB-projection data flow.
+
+Execute /golden_chain_sweep to validate all 5 chains:
+  1. registration: routing-decision.v1 -> agent_routing_decisions
+  2. pattern_learning: pattern-stored.v1 -> pattern_learning_artifacts
+  3. delegation: task-delegated.v1 -> delegation_events
+  4. routing: llm-routing-decision.v1 -> llm_routing_decisions
+  5. evaluation: run-evaluated.v1 -> session_outcomes
+
+For each chain: publish a synthetic event with a unique correlation_id to the
+head Kafka topic, then poll the tail database table for a row matching that
+correlation_id (timeout: 30s per chain).
+
+Report per-chain PASS/FAIL.
+If ANY chain fails, print: INTEGRATION: FAIL
+If ALL chains pass, print: INTEGRATION: PASS
+
+Environment:
+  KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKERS}
+  INFRA_HOST=${INFRA_HOST}
+  POSTGRES_PORT=${POSTGRES_PORT}" \
+    "Bash,Read,Write,Glob,Grep"; then
+    e4_exec_failed=1
+    record_strike "E4_golden_chain"
+  fi
+
+  if [[ ${e4_exec_failed} -eq 1 ]] || phase_failed "E4_golden_chain"; then
+    log "CRITICAL: Golden chain sweep failed. Event pipeline broken — data not flowing from Kafka to DB."
+    update_cycle_state "halted_verification_golden_chain"
+    exit 1
+  fi
+
   # E3: Phase 3 Playwright P0 data tests (dashboard rendering)
   # Non-blocking — produces WARN, does not halt close-out
   if ! run_phase "E3_dashboard_tests" \
@@ -652,6 +694,7 @@ Phase Results:
   D3 dashboard-sweep:  $(test -f "${RUN_DIR}/D3_dashboard_sweep.txt" && echo "executed" || echo "missing")
   E1 foundation-tests: $(test -f "${RUN_DIR}/E1_foundation_tests.txt" && echo "executed" || echo "missing")
   E2 pipeline-tests:   $(test -f "${RUN_DIR}/E2_pipeline_tests.txt" && echo "executed" || echo "missing")
+  E4 golden-chain:     $(test -f "${RUN_DIR}/E4_golden_chain.txt" && echo "executed" || echo "missing")
   E3 dashboard-tests:  $(test -f "${RUN_DIR}/E3_dashboard_tests.txt" && echo "executed" || echo "missing")
 
 Pending Redeploy: ${HAS_PENDING_REDEPLOY}

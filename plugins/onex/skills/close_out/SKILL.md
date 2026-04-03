@@ -65,9 +65,9 @@ Invoke `/redeploy` to refresh the runtime with new versions.
 
 Invoke `/golden_chain_sweep` to validate Kafka-to-DB-projection data flow.
 
-- **Advisory gate** (not blocking for initial rollout — OMN-7356)
-- Log sweep results (pass/partial/fail) in the close-out summary
-- After 2 weeks of green sweeps, promote to hard gate alongside integration-sweep
+- **Hard gate** (promoted from advisory — OMN-7388)
+- Validates all 5 golden chains: registration, pattern_learning, delegation, routing, evaluation
+- Failure halts close-out — event pipeline integrity is non-negotiable
 
 ### Verification
 
