@@ -77,3 +77,118 @@ class TestGenerateSkeletonContract:
             ticket_id="OMN-1111", summary="Test", is_seam_ticket=False
         )
         assert a == b
+
+    def test_generate_contract_with_topics_populates_golden_path(self) -> None:
+        """When interfaces_touched includes 'topics', golden_path should be populated."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test feature with Kafka topics",
+            is_seam_ticket=True,
+            interfaces_touched=["topics", "events"],
+        )
+        contract = yaml.safe_load(result)
+        assert contract["golden_path"] is not None
+        assert "input" in contract["golden_path"]
+        assert "output" in contract["golden_path"]
+        assert (
+            contract["golden_path"]["input"]["topic"] == "onex.cmd.omn-9999.trigger.v1"
+        )
+        assert (
+            contract["golden_path"]["output"]["topic"]
+            == "onex.evt.omn-9999.completed.v1"
+        )
+        assert (
+            contract["golden_path"]["input"]["fixture"]
+            == "tests/fixtures/omn-9999_trigger.json"
+        )
+        assert contract["golden_path"]["output"]["schema_name"] == "ModelOmn9999Result"
+
+    def test_generate_contract_without_topics_has_no_golden_path(self) -> None:
+        """When interfaces_touched does not include topics/events, golden_path is absent."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Non-seam feature",
+            is_seam_ticket=False,
+        )
+        contract = yaml.safe_load(result)
+        assert "golden_path" not in contract
+
+    def test_generate_contract_with_dod_items(self) -> None:
+        """When dod_items are provided, dod_evidence should be populated."""
+        dod_items = [
+            "Unit tests pass for the new handler",
+            "Kafka topic registered in topics.yaml",
+            "Dashboard page renders real data",
+        ]
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test feature",
+            is_seam_ticket=True,
+            interfaces_touched=["topics"],
+            dod_items=dod_items,
+        )
+        contract = yaml.safe_load(result)
+        assert len(contract["dod_evidence"]) == 3
+        assert contract["dod_evidence"][0]["id"] == "dod-001"
+        assert contract["dod_evidence"][0]["linear_dod_text"] == dod_items[0]
+        assert len(contract["dod_evidence"][0]["checks"]) >= 1
+
+    def test_dod_evidence_infers_test_check(self) -> None:
+        """DoD item mentioning 'test' should infer test_passes check."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test",
+            is_seam_ticket=False,
+            dod_items=["Unit tests pass for handler"],
+        )
+        contract = yaml.safe_load(result)
+        check = contract["dod_evidence"][0]["checks"][0]
+        assert check["check_type"] == "test_passes"
+
+    def test_dod_evidence_infers_topic_check(self) -> None:
+        """DoD item mentioning 'topic' should infer grep check."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test",
+            is_seam_ticket=False,
+            dod_items=["Kafka topic registered"],
+        )
+        contract = yaml.safe_load(result)
+        check = contract["dod_evidence"][0]["checks"][0]
+        assert check["check_type"] == "grep"
+
+    def test_dod_evidence_infers_dashboard_check(self) -> None:
+        """DoD item mentioning 'dashboard' should infer endpoint check."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test",
+            is_seam_ticket=False,
+            dod_items=["Dashboard page renders data"],
+        )
+        contract = yaml.safe_load(result)
+        check = contract["dod_evidence"][0]["checks"][0]
+        assert check["check_type"] == "endpoint"
+
+    def test_dod_evidence_default_check(self) -> None:
+        """DoD item with no keywords should get a TODO command check."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test",
+            is_seam_ticket=False,
+            dod_items=["Something completely unrelated"],
+        )
+        contract = yaml.safe_load(result)
+        check = contract["dod_evidence"][0]["checks"][0]
+        assert check["check_type"] == "command"
+
+    def test_published_events_included(self) -> None:
+        """When published_events are provided, they appear in the contract."""
+        result = generate_skeleton_contract(
+            ticket_id="OMN-9999",
+            summary="Test",
+            is_seam_ticket=True,
+            interfaces_touched=["events"],
+            published_events=["onex.evt.test.completed.v1"],
+        )
+        contract = yaml.safe_load(result)
+        assert contract["published_events"] == ["onex.evt.test.completed.v1"]
