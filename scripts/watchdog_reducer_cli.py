@@ -27,6 +27,7 @@ Exit codes match the escalation policy (0=restart, 2=investigate, etc.)
 
 from __future__ import annotations
 
+import fcntl
 import json
 import sys
 import uuid
@@ -54,6 +55,20 @@ OMNI_HOME = Path(
 STATE_DIR = OMNI_HOME / ".onex_state" / "watchdog"
 
 
+def _apply_event_with_lock(
+    event: ModelWatchdogEvent, policy: object
+) -> tuple[object, list[object]]:
+    """Serialize reducer writes across processes via fcntl file lock."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    lock_file = STATE_DIR / ".watchdog.lock"
+    with lock_file.open("a+") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        state = load_state(STATE_DIR)
+        new_state, intents = reduce(state, event, policy)
+        save_state(new_state, STATE_DIR)
+    return new_state, intents
+
+
 def cmd_run(args: list[str]) -> int:
     """Record a run result via the reducer."""
     if len(args) < 3:
@@ -79,7 +94,6 @@ def cmd_run(args: list[str]) -> int:
         return 1
 
     policy = load_policy()
-    state = load_state(STATE_DIR)
 
     event = ModelWatchdogEvent(
         kind=EnumWatchdogEventKind.RUN_COMPLETED,
@@ -91,8 +105,7 @@ def cmd_run(args: list[str]) -> int:
         correlation_id=str(uuid.uuid4()),
     )
 
-    new_state, intents = reduce(state, event, policy)
-    save_state(new_state, STATE_DIR)
+    new_state, intents = _apply_event_with_lock(event, policy)
 
     level = new_state.loops[loop_name].escalation_level
     print(
@@ -147,7 +160,6 @@ def cmd_action(args: list[str]) -> int:
         return 1
 
     policy = load_policy()
-    state = load_state(STATE_DIR)
 
     event = ModelWatchdogEvent(
         kind=EnumWatchdogEventKind.ACTION_TAKEN,
@@ -158,8 +170,7 @@ def cmd_action(args: list[str]) -> int:
         correlation_id=str(uuid.uuid4()),
     )
 
-    new_state, _intents = reduce(state, event, policy)
-    save_state(new_state, STATE_DIR)
+    _new_state, _intents = _apply_event_with_lock(event, policy)
 
     print(f"Recorded action: {action} for {loop_name}")
     return 0
