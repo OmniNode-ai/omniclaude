@@ -115,42 +115,41 @@ def _write_evidence(
         from plugins.onex.hooks.lib.onex_state import ensure_state_dir
 
         base_dir = ensure_state_dir("golden-chain-sweep")
-    except Exception:
-        logger.warning("Cannot resolve ONEX_STATE_DIR; skipping evidence artifact")
-        return
 
-    date_str = summary.sweep_started_at[:10]
-    artifact_dir = base_dir / date_str / summary.sweep_id
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+        date_str = summary.sweep_started_at[:10]
+        artifact_dir = base_dir / date_str / summary.sweep_id
+        artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    artifact: dict[str, Any] = {
-        "sweep_id": summary.sweep_id,
-        "sweep_started_at": summary.sweep_started_at,
-        "sweep_completed_at": summary.sweep_completed_at,
-        "overall_status": summary.overall_status,
-        "pass_count": summary.pass_count,
-        "fail_count": summary.fail_count,
-        "timeout_count": summary.timeout_count,
-        "error_count": summary.error_count,
-        "chains": [
-            {
-                "name": r.chain_name,
-                "correlation_id": r.correlation_id,
-                "publish_status": r.publish_status,
-                "publish_latency_ms": r.publish_latency_ms,
-                "projection_status": r.projection_status,
-                "projection_latency_ms": r.projection_latency_ms,
-                "assertion_results": r.assertion_results,
-                "raw_row_preview": r.raw_row_preview,
-                "error_reason": r.error_reason,
-            }
-            for r in chain_results
-        ],
-    }
+        artifact: dict[str, Any] = {
+            "sweep_id": summary.sweep_id,
+            "sweep_started_at": summary.sweep_started_at,
+            "sweep_completed_at": summary.sweep_completed_at,
+            "overall_status": summary.overall_status,
+            "pass_count": summary.pass_count,
+            "fail_count": summary.fail_count,
+            "timeout_count": summary.timeout_count,
+            "error_count": summary.error_count,
+            "chains": [
+                {
+                    "name": r.chain_name,
+                    "correlation_id": r.correlation_id,
+                    "publish_status": r.publish_status,
+                    "publish_latency_ms": r.publish_latency_ms,
+                    "projection_status": r.projection_status,
+                    "projection_latency_ms": r.projection_latency_ms,
+                    "assertion_results": r.assertion_results,
+                    "raw_row_preview": r.raw_row_preview,
+                    "error_reason": r.error_reason,
+                }
+                for r in chain_results
+            ],
+        }
 
-    artifact_path = artifact_dir / "sweep_results.json"
-    artifact_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
-    logger.info("Evidence artifact written: %s", artifact_path)
+        artifact_path = artifact_dir / "sweep_results.json"
+        artifact_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+        logger.info("Evidence artifact written: %s", artifact_path)
+    except Exception:  # noqa: BLE001 — evidence writing is best-effort; never crash the sweep
+        logger.warning("Failed to write evidence artifact; skipping")
 
 
 __all__ = ["run_sweep"]
