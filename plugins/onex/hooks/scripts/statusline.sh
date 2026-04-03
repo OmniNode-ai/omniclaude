@@ -379,13 +379,13 @@ LINE3=""
 
 if [ "$HAS_JQ" -eq 1 ]; then
   # Resolve service hosts from env (supports remote infra)
-  _PG_HOST="${POSTGRES_HOST:-localhost}"
+  _PG_HOST="${POSTGRES_HOST:?POSTGRES_HOST required}"
   _PG_PORT="${POSTGRES_PORT:-5436}"
-  _VK_HOST="${VALKEY_HOST:-localhost}"
+  _VK_HOST="${VALKEY_HOST:?VALKEY_HOST required}"
   _VK_PORT="${VALKEY_PORT:-16379}"
   # Extract host from KAFKA_BOOTSTRAP_SERVERS (format: host:port)
   _RP_HOST="${KAFKA_BOOTSTRAP_SERVERS%%:*}"
-  _RP_HOST="${_RP_HOST:-localhost}"
+  _RP_HOST="${_RP_HOST:?KAFKA_BOOTSTRAP_SERVERS required}"
   _RP_PORT="${KAFKA_BOOTSTRAP_SERVERS##*:}"
   _RP_PORT="${_RP_PORT:-19092}"
 

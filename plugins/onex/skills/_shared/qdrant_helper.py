@@ -23,7 +23,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # Add project root for config module (type-safe Pydantic Settings) and ONEX errors
@@ -48,7 +48,7 @@ except ImportError:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
     except ImportError:
         # Fallback: Define locally if import fails (for standalone usage)
-        class EnumCoreErrorCode(str, Enum):
+        class EnumCoreErrorCode(StrEnum):
             """Core error codes for ONEX operations."""
 
             VALIDATION_ERROR = "VALIDATION_ERROR"

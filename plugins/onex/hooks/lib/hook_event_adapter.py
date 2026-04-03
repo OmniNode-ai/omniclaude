@@ -69,9 +69,9 @@ except ImportError:
         except ImportError:
             # Final stub fallback: define minimal stand-ins so the module loads
             # in any environment without crashing the hook.
-            from enum import Enum
+            from enum import StrEnum
 
-            class EnumCoreErrorCode(str, Enum):  # type: ignore[no-redef]
+            class EnumCoreErrorCode(StrEnum):  # type: ignore[no-redef]
                 IMPORT_ERROR = "IMPORT_ERROR"
 
             class OnexError(Exception):  # type: ignore[no-redef]

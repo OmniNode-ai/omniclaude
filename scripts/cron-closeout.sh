@@ -94,7 +94,7 @@ fi
 # Falls back to localhost for backwards compatibility with local Docker.
 # ---------------------------------------------------------------------------
 
-INFRA_HOST="${POSTGRES_HOST:-localhost}"
+INFRA_HOST="${POSTGRES_HOST:?POSTGRES_HOST required}"
 POSTGRES_PORT="${POSTGRES_PORT:-5436}"
 KAFKA_BROKERS="${KAFKA_BOOTSTRAP_SERVERS:-${INFRA_HOST}:19092}"
 

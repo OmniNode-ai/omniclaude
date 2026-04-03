@@ -50,7 +50,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID, uuid4
@@ -320,7 +320,7 @@ def _compute_routing_path(method: str, event_attempted: bool) -> str:
         return "local"
 
 
-class RoutingMethod(str, Enum):
+class RoutingMethod(StrEnum):
     """HOW the routing decision was made."""
 
     EVENT_BASED = "event_based"  # Via Kafka request-response
@@ -328,7 +328,7 @@ class RoutingMethod(str, Enum):
     FALLBACK = "fallback"  # Error recovery path
 
 
-class RoutingPolicy(str, Enum):
+class RoutingPolicy(StrEnum):
     """WHY this routing path was chosen."""
 
     TRIGGER_MATCH = "trigger_match"  # Matched based on activation triggers
@@ -338,7 +338,7 @@ class RoutingPolicy(str, Enum):
     COST_GATE = "cost_gate"  # Cost optimization routing
 
 
-class RoutingPath(str, Enum):
+class RoutingPath(StrEnum):
     """WHAT canonical routing outcome."""
 
     EVENT = "event"  # Event-based routing used
