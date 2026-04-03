@@ -384,6 +384,11 @@ _FALSY = frozenset({"false", "0", "no", "off"})
 # ---------------------------------------------------------------------------
 
 
+# Intents eligible for frontier model routing (OMN-7410).
+# document is excluded for privacy (may contain proprietary code).
+_FRONTIER_ELIGIBLE_INTENTS: frozenset[str] = frozenset({"research", "code_review"})
+
+
 def _select_handler_endpoint(
     intent_value: str,
 ) -> tuple[str, str, str, str] | None:
@@ -391,6 +396,12 @@ def _select_handler_endpoint(
 
     Looks up the routing table to find which endpoint purpose is appropriate,
     then queries LocalLlmEndpointRegistry for the configured URL.
+
+    Frontier routing policy (OMN-7410):
+    - research and code_review intents prefer frontier (Gemini > GLM) when
+      available and not disabled by DELEGATION_DISABLE_FRONTIER_ROUTING.
+    - document intent NEVER routes to frontier (privacy boundary).
+    - If frontier is unavailable, falls back to local endpoint.
 
     Args:
         intent_value: TaskIntent enum value string (e.g., "document", "test").
@@ -407,11 +418,40 @@ def _select_handler_endpoint(
     purpose_name, system_prompt, handler_name, _min_len = routing
 
     try:
-        purpose = LlmEndpointPurpose(purpose_name)
         registry = LocalLlmEndpointRegistry()
+
+        # Frontier routing: prefer frontier for eligible intents
+        if intent_value in _FRONTIER_ELIGIBLE_INTENTS:
+            for frontier_purpose in (
+                LlmEndpointPurpose.GEMINI,
+                LlmEndpointPurpose.GLM,
+            ):
+                frontier_ep = registry.get_endpoint(frontier_purpose)
+                if frontier_ep is not None:
+                    url = str(frontier_ep.url).rstrip("/")
+                    logger.info(
+                        "Frontier routing: intent=%s -> provider=%s (model=%s)",
+                        intent_value,
+                        frontier_purpose.value,
+                        frontier_ep.model_name,
+                    )
+                    return url, frontier_ep.model_name, system_prompt, handler_name
+            logger.debug(
+                "No frontier endpoint available for intent=%s, falling back to local",
+                intent_value,
+            )
+
+        # Local endpoint fallback (or non-frontier-eligible intents)
+        purpose = LlmEndpointPurpose(purpose_name)
         endpoint = registry.get_endpoint(purpose)
         if endpoint is not None:
             url = str(endpoint.url).rstrip("/")
+            logger.info(
+                "Local routing: intent=%s -> purpose=%s (model=%s)",
+                intent_value,
+                purpose_name,
+                endpoint.model_name,
+            )
             return url, endpoint.model_name, system_prompt, handler_name
         logger.debug(
             "No endpoint configured for purpose=%s (intent=%s)",
