@@ -62,7 +62,6 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -92,7 +91,7 @@ class EnumWatchdogFsmState(StrEnum):
 class EnumRunResult(StrEnum):
     """Result of a single loop run."""
 
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
 
 
@@ -115,12 +114,18 @@ class ModelWatchdogEvent(BaseModel):
 
     kind: EnumWatchdogEventKind
     loop: str = Field(..., description="Loop name: 'closeout' or 'buildloop'.")
-    timestamp: str = Field(..., description="ISO 8601 UTC timestamp, injected by caller.")
-    correlation_id: str = Field(..., description="Unique ID for this event, injected by caller.")
+    timestamp: str = Field(
+        ..., description="ISO 8601 UTC timestamp, injected by caller."
+    )
+    correlation_id: str = Field(
+        ..., description="Unique ID for this event, injected by caller."
+    )
 
     # Fields for run_completed events
     result: EnumRunResult | None = Field(default=None)
-    phase: str | None = Field(default=None, description="Phase that failed, or 'complete'.")
+    phase: str | None = Field(
+        default=None, description="Phase that failed, or 'complete'."
+    )
     error_message: str | None = Field(default=None)
 
     # Fields for action_taken events
@@ -296,15 +301,59 @@ class ModelWatchdogCheckResult(BaseModel):
 # Policy loading
 # ---------------------------------------------------------------------------
 
-_DEFAULT_POLICY_PATH = Path(__file__).resolve().parents[4] / "scripts" / "watchdog-escalation-policy.yaml"
+_DEFAULT_POLICY_PATH = (
+    Path(__file__).resolve().parents[4] / "scripts" / "watchdog-escalation-policy.yaml"
+)
 
 _FALLBACK_LEVELS = [
-    ModelEscalationLevel(level=0, min_streak=0, max_streak=0, action=EnumWatchdogAction.RESTART, exit_code=0, description="No failures"),
-    ModelEscalationLevel(level=1, min_streak=1, max_streak=1, action=EnumWatchdogAction.RESTART, exit_code=0, description="Single failure"),
-    ModelEscalationLevel(level=2, min_streak=2, max_streak=2, action=EnumWatchdogAction.INVESTIGATE, exit_code=2, description="Two identical failures"),
-    ModelEscalationLevel(level=3, min_streak=3, max_streak=3, action=EnumWatchdogAction.FIX, exit_code=3, description="Three identical failures"),
-    ModelEscalationLevel(level=4, min_streak=4, max_streak=4, action=EnumWatchdogAction.TICKET, exit_code=4, description="Four identical failures"),
-    ModelEscalationLevel(level=5, min_streak=5, max_streak=999, action=EnumWatchdogAction.ALERT_USER, exit_code=5, description="Five+ identical failures"),
+    ModelEscalationLevel(
+        level=0,
+        min_streak=0,
+        max_streak=0,
+        action=EnumWatchdogAction.RESTART,
+        exit_code=0,
+        description="No failures",
+    ),
+    ModelEscalationLevel(
+        level=1,
+        min_streak=1,
+        max_streak=1,
+        action=EnumWatchdogAction.RESTART,
+        exit_code=0,
+        description="Single failure",
+    ),
+    ModelEscalationLevel(
+        level=2,
+        min_streak=2,
+        max_streak=2,
+        action=EnumWatchdogAction.INVESTIGATE,
+        exit_code=2,
+        description="Two identical failures",
+    ),
+    ModelEscalationLevel(
+        level=3,
+        min_streak=3,
+        max_streak=3,
+        action=EnumWatchdogAction.FIX,
+        exit_code=3,
+        description="Three identical failures",
+    ),
+    ModelEscalationLevel(
+        level=4,
+        min_streak=4,
+        max_streak=4,
+        action=EnumWatchdogAction.TICKET,
+        exit_code=4,
+        description="Four identical failures",
+    ),
+    ModelEscalationLevel(
+        level=5,
+        min_streak=5,
+        max_streak=999,
+        action=EnumWatchdogAction.ALERT_USER,
+        exit_code=5,
+        description="Five+ identical failures",
+    ),
 ]
 
 _FALLBACK_FSM = {
@@ -355,7 +404,9 @@ def _advance_fsm(
         return current
 
 
-def _action_for_streak(policy: ModelEscalationPolicy, streak: int) -> ModelEscalationLevel:
+def _action_for_streak(
+    policy: ModelEscalationPolicy, streak: int
+) -> ModelEscalationLevel:
     """Find the escalation level for a given streak count. Pure."""
     for level_def in reversed(policy.escalation_levels):
         if level_def.min_streak <= streak <= level_def.max_streak:
@@ -454,7 +505,9 @@ def reduce(
 
         # Update streaks and FSM
         if event.result == EnumRunResult.FAIL:
-            loop.failure_streaks[event.phase] = loop.failure_streaks.get(event.phase, 0) + 1
+            loop.failure_streaks[event.phase] = (
+                loop.failure_streaks.get(event.phase, 0) + 1
+            )
             max_streak = max(loop.failure_streaks.values(), default=0)
             loop.escalation_level = min(max_streak, 5)
             loop.fsm_state = _advance_fsm(loop.fsm_state, "on_fail", policy)
@@ -462,10 +515,16 @@ def reduce(
             # Emit escalation intent
             top_phase, top_count = _top_streak(loop)
             level_def = _action_for_streak(policy, top_count)
-            intents.append(_build_intent(
-                level_def, event.loop, event.correlation_id,
-                top_phase, top_count, event.error_message,
-            ))
+            intents.append(
+                _build_intent(
+                    level_def,
+                    event.loop,
+                    event.correlation_id,
+                    top_phase,
+                    top_count,
+                    event.error_message,
+                )
+            )
         else:
             # Success resets everything
             loop.failure_streaks = {}
@@ -550,7 +609,7 @@ def load_state(state_dir: Path) -> ModelWatchdogState:
     try:
         raw = json.loads(state_file.read_text())
         return ModelWatchdogState.model_validate(raw)
-    except (json.JSONDecodeError, Exception):
+    except (json.JSONDecodeError, ValueError):
         corrupt_path = state_file.with_suffix(".corrupt.json")
         state_file.rename(corrupt_path)
         return ModelWatchdogState()
@@ -561,9 +620,7 @@ def save_state(state: ModelWatchdogState, state_dir: Path) -> Path:
     state_dir.mkdir(parents=True, exist_ok=True)
     state_file = state_dir / STATE_FILENAME
     temp_file = state_file.with_suffix(f".tmp.{uuid.uuid4().hex[:8]}")
-    temp_file.write_text(
-        json.dumps(state.model_dump(mode="json"), indent=2) + "\n"
-    )
+    temp_file.write_text(json.dumps(state.model_dump(mode="json"), indent=2) + "\n")
     temp_file.rename(state_file)
     return state_file
 
