@@ -17,7 +17,9 @@ class TestGoldenChainIntegrityScript:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"Script failed:\n{result.stdout}\n{result.stderr}"
+        assert result.returncode == 0, (
+            f"Script failed:\n{result.stdout}\n{result.stderr}"
+        )
         assert "PASS" in result.stdout
 
 
