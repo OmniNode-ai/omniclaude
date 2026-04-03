@@ -224,3 +224,36 @@ phases:
       - "playwright"
     required_tools: "Bash,Read"
     verification: "Results reported (non-blocking)"
+
+  - id: F1_fill
+    name: "Build Loop Fill — Query Linear Tickets"
+    category: build
+    blocking: false
+    expected_action: "Query Linear for top-N unstarted tickets by priority"
+    required_keywords:
+      - "Linear"
+      - "tickets"
+    required_tools: "Bash,Read"
+    verification: "Top-N unstarted tickets written to F1_fill.txt"
+
+  - id: F2_classify
+    name: "Build Loop Classify — Determine Auto-Buildable Tickets"
+    category: build
+    blocking: false
+    expected_action: "Classify tickets as AUTO_BUILDABLE or NEEDS_ARCH_DECISION"
+    required_keywords:
+      - "AUTO_BUILDABLE"
+      - "NEEDS_ARCH_DECISION"
+    required_tools: "Bash,Read"
+    verification: "Classification results written to F2_classify.txt"
+
+  - id: F3_build_${ticket_id}
+    name: "Build Loop Dispatch — Run ticket-pipeline per ticket"
+    category: build
+    blocking: false
+    expected_action: "Dispatch ticket-pipeline for each AUTO_BUILDABLE ticket"
+    required_keywords:
+      - "ticket-pipeline"
+      - "dispatch"
+    required_tools: "Bash,Read"
+    verification: "ticket-pipeline dispatched per buildable ticket"
