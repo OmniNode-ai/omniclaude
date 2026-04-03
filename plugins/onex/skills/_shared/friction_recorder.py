@@ -63,10 +63,11 @@ class FrictionSeverity(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    CRITICAL = "critical"
 
     @property
     def weight(self) -> int:
-        return {"low": 1, "medium": 3, "high": 9}[self.value]
+        return {"low": 1, "medium": 3, "high": 9, "critical": 27}[self.value]
 
 
 def normalize_surface_category(surface: str) -> str:

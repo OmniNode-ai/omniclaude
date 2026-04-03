@@ -95,6 +95,37 @@ classification_rules:
     severity: "low"
     description_template: "Notification blocked in session {payload.session_id}"
 
+  # --- Build loop failures (OMN-7380) ---
+  - rule_id: build_loop_phase_failed
+    event_pattern: "build_loop.phase.failed"
+    surface: "build_loop/phase-failed"
+    severity: "high"
+    description_template: "Build loop phase {payload.phase} failed: {payload.error_message}"
+
+  - rule_id: build_loop_circuit_breaker
+    event_pattern: "build_loop.circuit_breaker.tripped"
+    surface: "build_loop/circuit-breaker"
+    severity: "critical"
+    description_template: "Build loop circuit breaker tripped after {payload.failure_count} consecutive failures in phase {payload.phase}"
+
+  - rule_id: build_loop_dispatch_failed
+    event_pattern: "build_loop.dispatch.failed"
+    surface: "build_loop/dispatch-failed"
+    severity: "high"
+    description_template: "Build loop dispatch failed for ticket {payload.ticket_id}: {payload.error_message}"
+
+  - rule_id: build_loop_timeout
+    event_pattern: "build_loop.timeout"
+    surface: "build_loop/timeout"
+    severity: "critical"
+    description_template: "Build loop timed out after {payload.timeout_seconds}s"
+
+  - rule_id: build_loop_cycle_failed
+    event_pattern: "build_loop.cycle.failed"
+    surface: "build_loop/cycle-failed"
+    severity: "critical"
+    description_template: "Build loop cycle failed in phase {payload.final_phase}: {payload.error_message}"
+
   # --- Session-level outcomes ---
   - rule_id: session_failed
     event_pattern: "session.outcome:outcome=failed"
@@ -125,6 +156,8 @@ event_bus:
     - "onex.evt.omniclaude.circuit-breaker-tripped.v1"
     - "onex.evt.omniclaude.budget-cap-hit.v1"
     - "onex.evt.omniclaude.notification-blocked.v1"
+    - "onex.evt.omnibase-infra.build-loop-failed.v1"
+    - "onex.evt.omnibase-infra.build-loop-build-completed.v1"
   publish_topics:
     - "onex.evt.omniclaude.friction-observed.v1"
 

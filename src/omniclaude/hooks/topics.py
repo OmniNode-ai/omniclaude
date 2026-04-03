@@ -513,6 +513,17 @@ class TopicBase(StrEnum):
     CHANNEL_SMS_OUTBOUND = "onex.cmd.omniclaw.sms-outbound.v1"
     """Reply routed to SMS adapter."""
 
+    # ==========================================================================
+    # Build-loop lifecycle topics (OMN-7400)
+    # Emitted by the omnibase_infra build-loop orchestrator on completion.
+    # Subscribed by node_friction_observer_compute for friction analysis.
+    # ==========================================================================
+    BUILD_LOOP_BUILD_COMPLETED = "onex.evt.omnibase-infra.build-loop-build-completed.v1"
+    """Emitted by the build-loop orchestrator after a successful build cycle."""
+
+    BUILD_LOOP_FAILED = "onex.evt.omnibase-infra.build-loop-failed.v1"
+    """Emitted by the build-loop orchestrator when a build cycle fails."""
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

@@ -119,6 +119,34 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/build_loop.json`.
 | `run_id` | Correlation ID |
 | `extra` | `{"cycles_completed": int, "cycles_failed": int, "total_tickets_dispatched": int}` |
 
+## Delegation
+
+When `ENABLE_LOCAL_DELEGATION=true` and `ENABLE_LOCAL_INFERENCE_PIPELINE=true` are set
+(default in `cron-buildloop.sh`), the build loop delegates lightweight tasks to local
+LLMs instead of frontier Claude:
+
+| Phase | Delegation Behavior |
+|-------|-------------------|
+| CLOSING_OUT | Merge-sweep runs GitHub API calls (no LLM needed). PR polish delegates to local models via delegation orchestrator. |
+| VERIFYING | Health checks are HTTP/shell — no LLM delegation needed. |
+| FILLING | RSD scoring is pure computation — no LLM needed. |
+| CLASSIFYING | Keyword heuristics — no LLM needed. |
+| BUILDING | Dispatches ticket-pipeline per ticket. Within ticket-pipeline, the hostile-reviewer already uses local models (DeepSeek-R1, Qwen3-Coder). Testing and CI-fix phases route through the delegation orchestrator when env vars are set. |
+
+Disable delegation with `cron-buildloop.sh --no-delegation` or by unsetting the env vars.
+
+## Friction Logging
+
+All failure paths emit friction events to `$ONEX_STATE_DIR/friction/build-loop.ndjson`:
+
+- Phase failures (verification, dispatch, etc.)
+- Circuit breaker trips
+- Cycle-level failures
+- Cron script timeouts and non-zero exits
+
+These events are classified by the `node_friction_observer_compute` contract rules
+and visible to the `/friction-triage` skill and omnidash friction dashboard.
+
 ## See Also
 
 - `node_autonomous_loop_orchestrator` — orchestrates the 6-phase cycle

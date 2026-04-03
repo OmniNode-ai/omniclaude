@@ -226,7 +226,7 @@ classification_rules:
   - rule_id: bad
     event_pattern: "foo"
     surface: "tooling/foo"
-    severity: "critical"
+    severity: "extreme"
     description_template: "bad"
 """)
         with pytest.raises(ValueError, match="invalid severity"):
