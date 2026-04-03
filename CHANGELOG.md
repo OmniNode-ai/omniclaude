@@ -1,3 +1,14 @@
+## v0.22.0 (2026-04-03)
+
+### Features
+- feat: merge build loop phases F1-F3 into cron-closeout.sh [OMN-5113] (#1099)
+
+### Fixes
+- fix: E4 golden chain timeout + delegation fixture missing cost_savings (#1100)
+
+### Release metadata
+- Coordinated release: release-20260403-85e7e3
+
 ## v0.21.0 (2026-04-03)
 
 ### Features (74 commits)
