@@ -326,7 +326,9 @@ class TestCurrentScriptCompliance:
         for v in violations:
             match = re.search(r"Phase\s+(\w+)", v)
             assert match, f"Could not parse phase ID from violation: {v}"
-            phase_prefix = match.group(1)[:2]
-            assert phase_prefix not in non_violating, (
-                f"Unexpected violation in passing phase: {v}"
+            phase_id = match.group(1)
+            is_non_violating = any(
+                phase_id.startswith(prefix) or prefix.startswith(phase_id)
+                for prefix in non_violating
             )
+            assert not is_non_violating, f"Unexpected violation in passing phase: {v}"
