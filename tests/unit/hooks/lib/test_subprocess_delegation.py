@@ -51,7 +51,9 @@ class TestSubprocessHandler:
             "subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["pytest"], timeout=5),
         ):
-            result = _call_subprocess_handler("test_run", str(tmp_path), timeout_override=5)
+            result = _call_subprocess_handler(
+                "test_run", str(tmp_path), timeout_override=5
+            )
 
         assert result["pass_fail"] == "error"
         assert "Timeout" in result["output"]

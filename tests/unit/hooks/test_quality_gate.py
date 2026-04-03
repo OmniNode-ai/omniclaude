@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestQualityGateMarkers:
     """Verify quality gate is intent-specific for doc, research, test, subprocess."""
