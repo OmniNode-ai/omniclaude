@@ -42,6 +42,8 @@ class TestLlmEndpointPurpose:
             "VISION",
             "FUNCTION_CALLING",
             "REASONING",
+            "GEMINI",
+            "GLM",
         }
         actual = {member.name for member in LlmEndpointPurpose}
         assert actual == expected

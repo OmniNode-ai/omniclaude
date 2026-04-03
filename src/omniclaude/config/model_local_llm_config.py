@@ -87,6 +87,8 @@ class LlmEndpointPurpose(StrEnum):
     VISION = "vision"
     FUNCTION_CALLING = "function_calling"
     REASONING = "reasoning"
+    GEMINI = "gemini"
+    GLM = "glm"
 
 
 class LlmEndpointConfig(BaseModel):
@@ -290,6 +292,36 @@ class LocalLlmEndpointRegistry(BaseSettings):
         description="Model ID to send in API requests for the Qwen 14B endpoint",
     )
 
+    # =========================================================================
+    # FRONTIER MODEL ENDPOINTS (OMN-7410)
+    # =========================================================================
+    llm_gemini_url: HttpUrl | None = Field(
+        default=None,
+        description="Google Gemini API endpoint for frontier research/review tasks",
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        description="API key for Google Gemini",
+    )
+    llm_gemini_model_name: str = Field(
+        default="gemini-2.5-flash",
+        min_length=1,
+        description="Model ID for Gemini API requests",
+    )
+    llm_glm_url: HttpUrl | None = Field(
+        default=None,
+        description="Z.AI GLM API endpoint for frontier research/review tasks",
+    )
+    llm_glm_api_key: str | None = Field(
+        default=None,
+        description="API key for Z.AI GLM",
+    )
+    llm_glm_model_name: str = Field(
+        default="glm-4-plus",
+        min_length=1,
+        description="Model ID for GLM API requests",
+    )
+
     @field_validator(
         "llm_coder_model_name",
         "llm_coder_fast_model_name",
@@ -300,6 +332,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
         "llm_vision_model_name",
         "llm_deepseek_r1_model_name",
         "llm_qwen_14b_model_name",
+        "llm_gemini_model_name",
+        "llm_glm_model_name",
         mode="before",
     )
     @classmethod
@@ -372,6 +406,18 @@ class LocalLlmEndpointRegistry(BaseSettings):
         ge=100,
         le=60000,
         description="Max latency for general purpose endpoint",
+    )
+    llm_gemini_max_latency_ms: int = Field(
+        default=15000,
+        ge=100,
+        le=60000,
+        description="Max latency for Gemini frontier endpoint",
+    )
+    llm_glm_max_latency_ms: int = Field(
+        default=15000,
+        ge=100,
+        le=60000,
+        description="Max latency for GLM frontier endpoint",
     )
 
     # Intentionally a cached_property, not a Pydantic field. This is a private
@@ -457,6 +503,29 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 6,  # Medium: always available, balanced
             ),
         ]
+
+        # Frontier endpoints (OMN-7410): only included when not disabled
+        import os
+
+        if os.environ.get("DELEGATION_DISABLE_FRONTIER_ROUTING", "").lower() != "true":
+            endpoint_specs.extend(
+                [
+                    (
+                        self.llm_gemini_url,
+                        self.llm_gemini_model_name,
+                        LlmEndpointPurpose.GEMINI,
+                        self.llm_gemini_max_latency_ms,
+                        7,  # Frontier: preferred for research/review when available
+                    ),
+                    (
+                        self.llm_glm_url,
+                        self.llm_glm_model_name,
+                        LlmEndpointPurpose.GLM,
+                        self.llm_glm_max_latency_ms,
+                        6,  # Frontier: fallback to Gemini
+                    ),
+                ]
+            )
 
         configs: list[LlmEndpointConfig] = []
         for url, model_name, purpose, max_latency, priority in endpoint_specs:
