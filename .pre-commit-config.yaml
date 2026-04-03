@@ -350,6 +350,17 @@ repos:
         pass_filenames: false
         types: [python]
         stages: [pre-commit]
+      # OMN-7436: Detect hardcoded numeric fallback values in dashboard code
+      # Catches ternary fallbacks (? 0.87 : 0.82) and hardcoded score assignments.
+      # Suppression: add `# fallback-ok` to the flagged line.
+      - id: no-hardcoded-fallbacks
+        name: No hardcoded numeric fallbacks
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_no_hardcoded_fallbacks.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: check-ai-slop
         name: Check for AI-slop patterns
         language: system

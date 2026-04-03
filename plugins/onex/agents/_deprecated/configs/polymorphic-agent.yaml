@@ -33,6 +33,7 @@
 #   - "The user wants results fast, dispatching adds overhead" → WRONG. Dispatch.
 # ============================================================================
 
+deprecated: true
 schema_version: "1.0.0"
 mode: full
 agent_type: "polymorphic_agent"
