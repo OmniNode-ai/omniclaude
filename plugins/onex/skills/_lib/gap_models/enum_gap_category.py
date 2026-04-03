@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
 
 
-class EnumGapCategory(str, Enum):
+class EnumGapCategory(StrEnum):
     """Categories of integration drift found during gap analysis."""
 
     CONTRACT_DRIFT = "CONTRACT_DRIFT"

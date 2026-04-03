@@ -20,13 +20,13 @@ currently passing. Use --collect-only in v1.1.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, StrEnum
 from pathlib import Path
 
 import yaml
 
 
-class EnumRefStatus(str, Enum):
+class EnumRefStatus(StrEnum):
     RESOLVED = "RESOLVED"  # ref plausibly points to a real target (v1 semantics)
     WARN = "WARN"  # target found with caveats (manual, symbol not in file text)
     FAIL = "FAIL"  # ref cannot be resolved

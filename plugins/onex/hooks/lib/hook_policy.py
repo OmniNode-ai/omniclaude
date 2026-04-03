@@ -44,6 +44,7 @@ No custom YAML parser — fail closed cleanly rather than silently misparse.
 from __future__ import annotations
 
 import enum
+from enum import StrEnum
 import pathlib
 from typing import Any
 
@@ -52,14 +53,14 @@ _FLAG_DIR: str = "/tmp"  # noqa: S108
 _CONFIG_PATH: pathlib.Path = pathlib.Path(__file__).parent.parent / "config.yaml"
 
 
-class EnforcementMode(str, enum.Enum):
+class EnforcementMode(StrEnum):
     HARD = "hard"
     SOFT = "soft"
     ADVISORY = "advisory"
     DISABLED = "disabled"
 
 
-class ApprovalChannel(str, enum.Enum):
+class ApprovalChannel(StrEnum):
     TERMINAL = "terminal"
     CHAT = "chat"
     SLACK_POLL = "slack_poll"

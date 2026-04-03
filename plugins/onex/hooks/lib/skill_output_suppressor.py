@@ -21,12 +21,12 @@ from __future__ import annotations
 import json
 import re
 import sys
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
 
-class EnumSuppressionAction(str, Enum):
+class EnumSuppressionAction(StrEnum):
     suppressed = "suppressed"
     passthrough = "passthrough"
     error_preserved = "error_preserved"
