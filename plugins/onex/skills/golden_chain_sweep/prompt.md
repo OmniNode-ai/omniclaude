@@ -42,8 +42,7 @@ First, attempt to load golden_path definitions from onex_change_control contract
 ONEX_CC_PATH="${ONEX_CC_REPO_PATH:-}"
 if [ -z "$ONEX_CC_PATH" ]; then
   for candidate in \
-    "/Volumes/PRO-G40/Code/omni_home/onex_change_control" \
-    "${OMNI_HOME:-}/onex_change_control"; do
+    "${OMNI_HOME:?OMNI_HOME required}/onex_change_control"; do
     if [ -d "$candidate/contracts" ]; then
       ONEX_CC_PATH="$candidate"
       break
