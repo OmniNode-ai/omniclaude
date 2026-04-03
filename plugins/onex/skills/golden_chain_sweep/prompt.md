@@ -80,7 +80,7 @@ Hardcoded chain fallbacks can be removed when:
 
 ## Execution Steps
 
-### Step 1: Resolve Chain Definitions
+### 1. Resolve Chain Definitions
 
 Merge contract-based and hardcoded chains. Apply `--chains` filter if specified.
 
@@ -90,7 +90,7 @@ For each chain, determine:
 - `tail_table`: DB table to poll for projected row
 - `correlation_id_field`: field name for correlation (default: `correlation_id`)
 
-### Step 2: Environment Validation
+### 2. Environment Validation
 
 Verify required infrastructure is available:
 
@@ -109,7 +109,7 @@ If Kafka or PostgreSQL are unreachable:
 - In `--dry-run` mode: report all chains as SKIP with reason "infrastructure unavailable"
 - In normal mode: report chains as ERROR with connection failure details
 
-### Step 3: Build Synthetic Payloads
+### 3. Build Synthetic Payloads
 
 For each chain, generate a synthetic event with a unique correlation ID:
 
@@ -129,14 +129,14 @@ payload = {
 }
 ```
 
-### Step 4: Validate Synthetic Fixtures
+### 4. Validate Synthetic Fixtures
 
 Before publishing, validate each synthetic fixture:
 - Ensure required fields are present (correlation_id, event_type, timestamp)
 - If contract specifies a schema_name and it's importable, validate against the Pydantic model
 - If validation fails: log warning, mark chain as SKIP (not PASS), continue to next chain
 
-### Step 5: Publish and Poll (Per Chain)
+### 5. Publish and Poll (Per Chain)
 
 For each chain:
 
@@ -166,7 +166,7 @@ done
 - `ERROR`: Publish failed or DB unreachable
 - `SKIP`: Fixture validation failed or infrastructure unavailable
 
-### Step 6: Field-Level Assertions (If Contract Provides Them)
+### 6. Field-Level Assertions (If Contract Provides Them)
 
 If the contract's golden_path.output.assertions is non-empty, query the projected row and verify each assertion:
 
@@ -181,7 +181,7 @@ For each assertion, evaluate:
 
 Failed assertions change chain status from PASS to FAIL.
 
-### Step 7: Cleanup Synthetic Rows
+### 7. Cleanup Synthetic Rows
 
 ```sql
 DELETE FROM $TAIL_TABLE WHERE correlation_id LIKE 'golden-chain-%' AND correlation_id = '$CORRELATION_ID';
@@ -189,7 +189,7 @@ DELETE FROM $TAIL_TABLE WHERE correlation_id LIKE 'golden-chain-%' AND correlati
 
 Cleanup failure is logged as a warning but does not affect chain status.
 
-### Step 8: Persist Results
+### 8. Persist Results
 
 Write results to two locations:
 
