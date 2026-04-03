@@ -276,14 +276,15 @@ EOJSON
 }
 
 # Run a single headless phase with timeout.
-# Arguments: phase_name, prompt, allowed_tools
+# Arguments: phase_name, prompt, allowed_tools [, phase_timeout]
 run_phase() {
   local phase_name="$1"
   local prompt="$2"
   local allowed_tools="$3"
+  local phase_timeout="${4:-$PHASE_TIMEOUT}"
   local output_file="${RUN_DIR}/${phase_name}.txt"
 
-  log "Starting phase: ${phase_name}"
+  log "Starting phase: ${phase_name} (timeout=${phase_timeout}s)"
 
   if [[ "${DRY_RUN}" == "true" ]]; then
     log "[DRY RUN] Would execute: claude -p '${prompt:0:80}...' --allowedTools '${allowed_tools}'"
@@ -299,13 +300,13 @@ run_phase() {
     # macOS fallback: run without timeout wrapper
     timeout_cmd=""
   fi
-  ${timeout_cmd:+${timeout_cmd} "${PHASE_TIMEOUT}"} claude -p "${prompt}" \
+  ${timeout_cmd:+${timeout_cmd} "${phase_timeout}"} claude -p "${prompt}" \
     --print \
     --allowedTools "${allowed_tools}" \
     > "${output_file}" 2>&1 || exit_code=$?
 
   if [[ ${exit_code} -eq 124 ]]; then
-    log "TIMEOUT: Phase ${phase_name} exceeded ${PHASE_TIMEOUT}s"
+    log "TIMEOUT: Phase ${phase_name} exceeded ${phase_timeout}s"
     echo "TIMEOUT" >> "${output_file}"
     return 1
   elif [[ ${exit_code} -ne 0 ]]; then
@@ -781,7 +782,8 @@ Environment:
   KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BROKERS}
   INFRA_HOST=${INFRA_HOST}
   POSTGRES_PORT=${POSTGRES_PORT}" \
-    "Bash,Read,Write,Glob,Grep"; then
+    "Bash,Read,Write,Glob,Grep" \
+    1200; then
     e4_exec_failed=1
     record_strike "E4_golden_chain"
   fi
