@@ -57,7 +57,7 @@ warn_test() {
 echo "TEST 1: Qdrant Connectivity"
 echo "----------------------------"
 
-QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
+QDRANT_URL="${QDRANT_URL:-${TEST_QDRANT_URL:-http://localhost:6333}}"
 echo "Testing connection to: $QDRANT_URL"
 
 if curl -sf "$QDRANT_URL/collections" > /dev/null; then

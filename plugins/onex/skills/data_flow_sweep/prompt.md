@@ -34,8 +34,7 @@ Read `omnidash/topics.yaml` to extract all `read_model_topics` entries.
 ```bash
 OMNIDASH_PATH="${OMNIDASH_PATH:-}"
 for candidate in \
-  "/Volumes/PRO-G40/Code/omni_home/omnidash" \
-  "${OMNI_HOME:-}/omnidash"; do
+  "${OMNI_HOME:?OMNI_HOME required}/omnidash"; do
   if [ -f "$candidate/topics.yaml" ]; then
     OMNIDASH_PATH="$candidate"
     break

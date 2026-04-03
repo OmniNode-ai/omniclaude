@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"
+OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
 STATE_FILE="${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
 
 # ---------------------------------------------------------------------------

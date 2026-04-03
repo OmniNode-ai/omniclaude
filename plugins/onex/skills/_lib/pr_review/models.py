@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from functools import cached_property
 from typing import Any, Literal
 
@@ -111,7 +111,7 @@ def detect_bot_type(author: str) -> BotType:
 # =============================================================================
 
 
-class EnumPRCommentSource(str, Enum):
+class EnumPRCommentSource(StrEnum):
     """
     Source of a PR comment in GitHub.
 
@@ -131,7 +131,7 @@ class EnumPRCommentSource(str, Enum):
         return self.value
 
 
-class CommentSeverity(str, Enum):
+class CommentSeverity(StrEnum):
     """
     Severity level of a PR comment/issue.
 
@@ -170,7 +170,7 @@ class CommentSeverity(str, Enum):
         return order.get(self, 99)
 
 
-class CommentStatus(str, Enum):
+class CommentStatus(StrEnum):
     """
     Resolution status of a PR comment.
 
@@ -210,7 +210,7 @@ IssueStatus = CommentStatus
 IssueSeverity = CommentSeverity
 
 
-class BotType(str, Enum):
+class BotType(StrEnum):
     """
     Type of bot (or human) that authored a comment.
 

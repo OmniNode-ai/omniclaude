@@ -34,7 +34,7 @@ if "--scope" in args:
 Scan all ONEX contract YAMLs across repos for node descriptions.
 
 ```bash
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"
+OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
 
 # Find all contract.yaml files under node directories
 find "$OMNI_HOME"/*/src -name "contract.yaml" -path "*/nodes/*" 2>/dev/null

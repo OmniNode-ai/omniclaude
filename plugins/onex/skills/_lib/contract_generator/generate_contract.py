@@ -9,8 +9,6 @@ onex_change_control.models.model_ticket_contract.ModelTicketContract.
 
 from __future__ import annotations
 
-import re
-
 import yaml
 
 
@@ -22,7 +20,11 @@ def _ticket_id_slug(ticket_id: str) -> str:
 def _ticket_id_camel(ticket_id: str) -> str:
     """Convert 'OMN-1234' to 'Omn1234' for use in schema class names."""
     parts = ticket_id.split("-")
-    return parts[0].capitalize() + parts[1] if len(parts) == 2 else ticket_id.replace("-", "")
+    return (
+        parts[0].capitalize() + parts[1]
+        if len(parts) == 2
+        else ticket_id.replace("-", "")
+    )
 
 
 def _infer_dod_checks(dod_text: str) -> list[dict[str, object]]:
@@ -32,10 +34,20 @@ def _infer_dod_checks(dod_text: str) -> list[dict[str, object]]:
     if "test" in text_lower:
         return [{"check_type": "test_passes", "check_value": "pytest tests/ -v"}]
     if "topic" in text_lower or "kafka" in text_lower:
-        return [{"check_type": "grep", "check_value": {"file": "topics.yaml", "pattern": "topic"}}]
+        return [
+            {
+                "check_type": "grep",
+                "check_value": {"file": "topics.yaml", "pattern": "topic"},
+            }
+        ]
     if "dashboard" in text_lower or "page" in text_lower:
         return [{"check_type": "endpoint", "check_value": "http://localhost:3000/"}]
-    return [{"check_type": "command", "check_value": "echo 'TODO: add verification command'"}]
+    return [
+        {
+            "check_type": "command",
+            "check_value": "echo 'TODO: add verification command'",
+        }
+    ]
 
 
 def generate_skeleton_contract(
@@ -94,13 +106,15 @@ def generate_skeleton_contract(
     dod_evidence: list[dict[str, object]] = []
     if dod_items:
         for idx, item_text in enumerate(dod_items, start=1):
-            dod_evidence.append({
-                "id": f"dod-{idx:03d}",
-                "description": item_text,
-                "source": "generated",
-                "linear_dod_text": item_text,
-                "checks": _infer_dod_checks(item_text),
-            })
+            dod_evidence.append(
+                {
+                    "id": f"dod-{idx:03d}",
+                    "description": item_text,
+                    "source": "generated",
+                    "linear_dod_text": item_text,
+                    "checks": _infer_dod_checks(item_text),
+                }
+            )
 
     contract: dict[str, object] = {
         "schema_version": "1.0.0",
