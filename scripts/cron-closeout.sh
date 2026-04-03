@@ -28,7 +28,8 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-OMNI_HOME="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok: script runs on local machine only
+OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 STATE_DIR="${OMNI_HOME}/.onex_state/autopilot"
 CYCLE_STATE="${STATE_DIR}/cycle-state.yaml"
 LOG_DIR="/tmp/closeout-logs"
@@ -49,10 +50,12 @@ done
 # Environment
 # ---------------------------------------------------------------------------
 
-# Source credentials
+# Source credentials (set -a exports all vars to claude -p subprocesses)
 if [[ -f "${HOME}/.omnibase/.env" ]]; then
+  set -a
   # shellcheck disable=SC1091
   source "${HOME}/.omnibase/.env"
+  set +a
 fi
 
 export ONEX_RUN_ID="${RUN_ID}"
@@ -84,10 +87,7 @@ preflight() {
     missing+=("claude CLI")
   fi
 
-  # API key only required for actual execution (not dry-run)
-  if [[ "${DRY_RUN}" != "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    missing+=("ANTHROPIC_API_KEY")
-  fi
+  # Note: claude -p uses its own auth (Claude Code login), not ANTHROPIC_API_KEY
 
   if ! command -v gh &>/dev/null; then
     missing+=("gh CLI")
@@ -177,7 +177,14 @@ run_phase() {
   fi
 
   local exit_code=0
-  timeout "${PHASE_TIMEOUT}" claude -p "${prompt}" \
+  # Use gtimeout (GNU) if available, fall back to perl-based timeout on macOS
+  local timeout_cmd="timeout"
+  command -v timeout &>/dev/null || timeout_cmd="gtimeout"
+  if ! command -v "${timeout_cmd}" &>/dev/null; then
+    # macOS fallback: run without timeout wrapper
+    timeout_cmd=""
+  fi
+  ${timeout_cmd:+${timeout_cmd} "${PHASE_TIMEOUT}"} claude -p "${prompt}" \
     --print \
     --allowedTools "${allowed_tools}" \
     > "${output_file}" 2>&1 || exit_code=$?
