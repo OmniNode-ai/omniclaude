@@ -641,6 +641,24 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "correlation_id", "task_type"],
     ),
     # =========================================================================
+    # Delegation Request Command (OMN-7040)
+    # =========================================================================
+    # Emitted by the /delegate skill to trigger task delegation through the
+    # node-based pipeline. The payload is a ModelEventEnvelope-compatible dict
+    # so the runtime consumer can deserialize it directly.
+    "delegation.request": EventRegistration(
+        event_type="delegation.request",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DELEGATION_REQUEST,
+                transform=None,  # Passthrough — payload is already envelope-shaped
+                description="Delegation request command for node_delegation_orchestrator",
+            ),
+        ],
+        partition_key_field="correlation_id",
+        required_fields=["payload", "correlation_id"],
+    ),
+    # =========================================================================
     # Delegation Shadow Validation (OMN-2283)
     # =========================================================================
     "delegation.shadow.comparison": EventRegistration(
