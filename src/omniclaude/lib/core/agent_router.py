@@ -37,6 +37,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 import yaml
 
@@ -199,6 +200,11 @@ class AgentRouter:
             # Track performance timing for most recent route (guarded by _stats_lock)
             self.last_routing_timing: RoutingTiming | None = None
 
+            # Resolve emit function for routing event emission (fire-and-forget).
+            # Uses the emit client wrapper which sends events via Unix socket
+            # to the embedded publisher daemon, which fans them out to Kafka.
+            self._emit_fn = self._resolve_emit_fn()
+
             logger.info("AgentRouter initialized successfully")
 
         except FileNotFoundError:
@@ -231,6 +237,108 @@ class AgentRouter:
                     "original_error": str(e),
                 },
             ) from e
+
+    @staticmethod
+    def _resolve_emit_fn() -> Any:
+        """Resolve the emit_event function from emit_client_wrapper.
+
+        Returns the emit_event callable or None if unavailable.
+        Import is deferred to avoid hard dependency on plugin sys.path.
+        """
+        try:
+            from emit_client_wrapper import emit_event  # noqa: PLC0415
+
+            return emit_event
+        except ImportError:
+            logger.debug(
+                "emit_client_wrapper not available; routing events will not be emitted"
+            )
+            return None
+
+    def _emit_routing_event(
+        self,
+        *,
+        recommendations: list[AgentRecommendation],
+        timing: RoutingTiming,
+        routing_policy: str,
+        fallback: bool,
+        session_id: str | None = None,
+    ) -> None:
+        """Emit an llm.routing.decision event to Kafka (fire-and-forget).
+
+        Constructs a payload matching the ``llm.routing.decision`` event
+        registration (required_fields: session_id, selected_agent,
+        routing_prompt_version) and delegates to the emit daemon.
+
+        This method never raises -- emission failures are logged and swallowed.
+
+        Args:
+            recommendations: The routing result (may be empty).
+            timing: Performance timing data for the routing operation.
+            routing_policy: How the agent was selected (e.g. "trigger_match",
+                "explicit_request", "cache_hit").
+            fallback: Whether this was a fallback selection.
+            session_id: Claude Code session ID from context (if available).
+        """
+        if self._emit_fn is None:
+            return
+
+        try:
+            top = recommendations[0] if recommendations else None
+            selected_agent = top.agent_name if top else "none"
+            confidence = top.confidence.total if top else 0.0
+            reason = top.reason if top else "no_match"
+
+            # Determine agreement between trigger (fuzzy) and LLM-style scoring.
+            # In the current Phase 1 router, both paths use the same trigger
+            # matcher, so agreement is True when recommendations exist.
+            agreement = len(recommendations) > 0
+
+            payload: dict[str, object] = {
+                "correlation_id": str(uuid4()),
+                "request_id": str(uuid4()),
+                "session_id": session_id or os.getenv("CLAUDE_SESSION_ID", "unknown"),
+                "selected_agent": selected_agent,
+                "llm_agent": selected_agent,
+                "fuzzy_agent": selected_agent,
+                "agreement": agreement,
+                "confidence": confidence,
+                "latency_ms": timing.total_routing_time_us // 1000,
+                "fallback": fallback,
+                "routing_prompt_version": "phase1-trigger-v1",
+                "reason": reason,
+                "model_versions": {
+                    "llm": "phase1-trigger-scorer",
+                    "fuzzy": "phase1-trigger-matcher",
+                },
+                "routing_policy": routing_policy,
+                "cache_hit": timing.cache_hit,
+                "confidence_breakdown": (
+                    {
+                        "trigger_score": top.confidence.trigger_score,
+                        "context_score": top.confidence.context_score,
+                        "capability_score": top.confidence.capability_score,
+                        "historical_score": top.confidence.historical_score,
+                    }
+                    if top
+                    else {}
+                ),
+                "candidates_count": len(recommendations),
+            }
+
+            emitted = self._emit_fn("llm.routing.decision", payload)
+            if emitted:
+                logger.debug(
+                    "Routing decision event emitted",
+                    extra={"selected_agent": selected_agent, "topic": "llm.routing.decision"},
+                )
+            else:
+                logger.debug(
+                    "Routing decision event emission returned False (daemon unavailable or dropped)"
+                )
+
+        except Exception:  # noqa: BLE001 -- boundary: emission must never break routing
+            logger.debug("Failed to emit routing decision event", exc_info=True)
 
     def route(
         self,
@@ -337,6 +445,14 @@ class AgentRouter:
                     with self._stats_lock:
                         self.last_routing_timing = timing
 
+                    self._emit_routing_event(
+                        recommendations=result,
+                        timing=timing,
+                        routing_policy="explicit_request",
+                        fallback=False,
+                        session_id=context.get("session_id") if isinstance(context, dict) else None,
+                    )
+
                     return result
 
             # 3. Trigger-based matching with scoring
@@ -437,6 +553,15 @@ class AgentRouter:
                     "total_candidates": len(trigger_matches),
                     "routing_time_us": timing.total_routing_time_us,
                 },
+            )
+
+            # 9. Emit routing decision event to Kafka
+            self._emit_routing_event(
+                recommendations=recommendations,
+                timing=timing,
+                routing_policy="trigger_match",
+                fallback=len(recommendations) == 0,
+                session_id=context.get("session_id") if isinstance(context, dict) else None,
             )
 
             return recommendations
