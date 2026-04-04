@@ -104,6 +104,11 @@ class LlmEndpointConfig(BaseModel):
         purpose: Primary purpose this endpoint is optimized for.
         max_latency_ms: Maximum acceptable latency in milliseconds (from E0 SLOs).
         priority: Selection priority (1-10, higher is preferred).
+        api_key: Optional API key for authenticated endpoints (frontier models).
+        chat_completions_path: Path appended to URL for chat completions requests.
+            Defaults to ``/v1/chat/completions`` (OpenAI-compatible). Override for
+            providers with different path conventions (e.g. GLM uses
+            ``/chat/completions``).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -129,6 +134,14 @@ class LlmEndpointConfig(BaseModel):
         ge=1,
         le=10,
         description="Selection priority (1-10, higher is preferred)",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="API key for authenticated endpoints (frontier models)",
+    )
+    chat_completions_path: str = Field(
+        default="/v1/chat/completions",
+        description="Path appended to base URL for chat completions requests",
     )
 
 
@@ -436,8 +449,10 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for all configured (non-None) endpoints.
         """
+        # Each spec: (url, model_name, purpose, max_latency, priority, api_key, chat_path)
+        _default_path = "/v1/chat/completions"
         endpoint_specs: list[
-            tuple[HttpUrl | None, str, LlmEndpointPurpose, int, int]
+            tuple[HttpUrl | None, str, LlmEndpointPurpose, int, int, str | None, str]
         ] = [
             (
                 self.llm_coder_fast_url,
@@ -445,6 +460,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.ROUTING,
                 self.llm_coder_fast_max_latency_ms,
                 9,  # Mid-tier model for routing classification (RTX 4090, 40K ctx)
+                None,
+                _default_path,
             ),
             (
                 self.llm_coder_url,
@@ -452,6 +469,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.CODE_ANALYSIS,
                 self.llm_coder_max_latency_ms,
                 9,  # High priority: dedicated GPU (RTX 5090)
+                None,
+                _default_path,
             ),
             (
                 self.llm_embedding_url,
@@ -459,6 +478,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.EMBEDDING,
                 self.llm_embedding_max_latency_ms,
                 9,  # High priority: currently running
+                None,
+                _default_path,
             ),
             (
                 self.llm_function_url,
@@ -466,6 +487,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.FUNCTION_CALLING,
                 self.llm_function_max_latency_ms,
                 5,  # Medium priority: hot-swap, may not be running
+                None,
+                _default_path,
             ),
             (
                 self.llm_deepseek_lite_url,
@@ -473,6 +496,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.GENERAL,
                 self.llm_deepseek_lite_max_latency_ms,
                 3,  # Lower priority: hot-swap, lightweight fallback
+                None,
+                _default_path,
             ),
             (
                 self.llm_qwen_72b_url,
@@ -480,6 +505,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.REASONING,
                 self.llm_qwen_72b_max_latency_ms,
                 8,  # High priority: best for complex reasoning
+                None,
+                _default_path,
             ),
             (
                 self.llm_vision_url,
@@ -487,6 +514,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.VISION,
                 self.llm_vision_max_latency_ms,
                 9,  # High priority: only vision model
+                None,
+                _default_path,
             ),
             (
                 self.llm_deepseek_r1_url,
@@ -494,6 +523,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.REASONING,
                 self.llm_deepseek_r1_max_latency_ms,
                 7,  # Medium-high: hot-swap with 72B
+                None,
+                _default_path,
             ),
             (
                 self.llm_qwen_14b_url,
@@ -501,10 +532,13 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 LlmEndpointPurpose.GENERAL,
                 self.llm_qwen_14b_max_latency_ms,
                 6,  # Medium: always available, balanced
+                None,
+                _default_path,
             ),
         ]
 
-        # Frontier endpoints (OMN-7410): only included when not disabled
+        # Frontier endpoints (OMN-7410): only included when not disabled.
+        # Frontier providers use non-OpenAI paths and require API key auth.
         import os
 
         if os.environ.get("DELEGATION_DISABLE_FRONTIER_ROUTING", "").lower() != "true":
@@ -516,6 +550,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                         LlmEndpointPurpose.GEMINI,
                         self.llm_gemini_max_latency_ms,
                         7,  # Frontier: preferred for research/review when available
+                        self.gemini_api_key,
+                        "/v1/chat/completions",  # Gemini OpenAI-compat path
                     ),
                     (
                         self.llm_glm_url,
@@ -523,12 +559,22 @@ class LocalLlmEndpointRegistry(BaseSettings):
                         LlmEndpointPurpose.GLM,
                         self.llm_glm_max_latency_ms,
                         6,  # Frontier: fallback to Gemini
+                        self.llm_glm_api_key,
+                        "/chat/completions",  # Z.AI uses /v4/chat/completions; base URL already has /v4
                     ),
                 ]
             )
 
         configs: list[LlmEndpointConfig] = []
-        for url, model_name, purpose, max_latency, priority in endpoint_specs:
+        for (
+            url,
+            model_name,
+            purpose,
+            max_latency,
+            priority,
+            api_key,
+            chat_path,
+        ) in endpoint_specs:
             if url is not None:
                 configs.append(
                     LlmEndpointConfig(
@@ -537,6 +583,8 @@ class LocalLlmEndpointRegistry(BaseSettings):
                         purpose=purpose,
                         max_latency_ms=max_latency,
                         priority=priority,
+                        api_key=api_key,
+                        chat_completions_path=chat_path,
                     )
                 )
         return configs

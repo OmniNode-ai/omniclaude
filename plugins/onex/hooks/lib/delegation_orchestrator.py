@@ -215,8 +215,12 @@ _configure_logging()
 
 _TRUTHY = frozenset(("true", "1", "yes", "on"))
 
-# Timeout for local LLM call in seconds.  Matches local_delegation_handler.py.
-_LLM_CALL_TIMEOUT_S = 7.0
+# Minimum timeout for delegation LLM calls in seconds.
+# Delegation generates up to 2048 tokens, which takes 7-10s on Qwen3-Coder.
+# The previous 7s value caused intermittent timeouts on longer generations.
+# This is a floor; endpoints with higher SLO budgets (e.g. frontier at 15s)
+# use their configured max_latency_ms instead.
+_LLM_CALL_TIMEOUT_S = 10.0
 
 # Maximum tokens requested from the local model per task type.
 _MAX_TOKENS = 2048
@@ -398,9 +402,76 @@ _FALSY = frozenset({"false", "0", "no", "off"})
 _FRONTIER_ELIGIBLE_INTENTS: frozenset[str] = frozenset({"research", "code_review"})
 
 
+class _EndpointSelection:
+    """Resolved endpoint metadata returned by ``_select_handler_endpoint``.
+
+    Plain container (not a Pydantic model) to avoid import-order constraints
+    in the hook lib directory.
+    """
+
+    __slots__ = (
+        "api_key",
+        "chat_completions_path",
+        "handler_name",
+        "model_name",
+        "system_prompt",
+        "timeout_s",
+        "url",
+    )
+
+    def __init__(
+        self,
+        *,
+        url: str,
+        model_name: str,
+        system_prompt: str,
+        handler_name: str,
+        api_key: str | None = None,
+        chat_completions_path: str = "/v1/chat/completions",
+        timeout_s: float = _LLM_CALL_TIMEOUT_S,
+    ) -> None:
+        self.url = url
+        self.model_name = model_name
+        self.system_prompt = system_prompt
+        self.handler_name = handler_name
+        self.api_key = api_key
+        self.chat_completions_path = chat_completions_path
+        self.timeout_s = timeout_s
+
+
+def _endpoint_selection_from_config(
+    endpoint: Any,
+    system_prompt: str,
+    handler_name: str,
+) -> _EndpointSelection:
+    """Build an ``_EndpointSelection`` from an ``LlmEndpointConfig``.
+
+    The timeout is derived from the endpoint's ``max_latency_ms`` SLO but
+    floored at ``_LLM_CALL_TIMEOUT_S`` (7s) — SLO budgets represent
+    acceptable latency for interactive use, not the generation budget for
+    delegation tasks that request up to 2048 tokens.
+    """
+    try:
+        slo_timeout = float(endpoint.max_latency_ms) / 1000.0
+        timeout = max(slo_timeout, _LLM_CALL_TIMEOUT_S)
+    except (TypeError, ValueError, AttributeError):
+        timeout = _LLM_CALL_TIMEOUT_S
+    return _EndpointSelection(
+        url=str(endpoint.url).rstrip("/"),
+        model_name=endpoint.model_name,
+        system_prompt=system_prompt,
+        handler_name=handler_name,
+        api_key=getattr(endpoint, "api_key", None),
+        chat_completions_path=getattr(
+            endpoint, "chat_completions_path", "/v1/chat/completions"
+        ),
+        timeout_s=timeout,
+    )
+
+
 def _select_handler_endpoint(
     intent_value: str,
-) -> tuple[str, str, str, str] | None:
+) -> _EndpointSelection | None:
     """Resolve the LLM endpoint URL and metadata for the given intent.
 
     Looks up the routing table to find which endpoint purpose is appropriate,
@@ -416,8 +487,8 @@ def _select_handler_endpoint(
         intent_value: TaskIntent enum value string (e.g., "document", "test").
 
     Returns:
-        Tuple of ``(url, model_name, system_prompt, handler_name)`` when an
-        endpoint is configured, or None when no endpoint is available.
+        ``_EndpointSelection`` when an endpoint is configured, or None when no
+        endpoint is available.
     """
     routing = _HANDLER_ROUTING.get(intent_value)
     if routing is None:
@@ -437,14 +508,15 @@ def _select_handler_endpoint(
             ):
                 frontier_ep = registry.get_endpoint(frontier_purpose)
                 if frontier_ep is not None:
-                    url = str(frontier_ep.url).rstrip("/")
                     logger.info(
                         "Frontier routing: intent=%s -> provider=%s (model=%s)",
                         intent_value,
                         frontier_purpose.value,
                         frontier_ep.model_name,
                     )
-                    return url, frontier_ep.model_name, system_prompt, handler_name
+                    return _endpoint_selection_from_config(
+                        frontier_ep, system_prompt, handler_name
+                    )
             logger.debug(
                 "No frontier endpoint available for intent=%s, falling back to local",
                 intent_value,
@@ -454,14 +526,15 @@ def _select_handler_endpoint(
         purpose = LlmEndpointPurpose(purpose_name)
         endpoint = registry.get_endpoint(purpose)
         if endpoint is not None:
-            url = str(endpoint.url).rstrip("/")
             logger.info(
                 "Local routing: intent=%s -> purpose=%s (model=%s)",
                 intent_value,
                 purpose_name,
                 endpoint.model_name,
             )
-            return url, endpoint.model_name, system_prompt, handler_name
+            return _endpoint_selection_from_config(
+                endpoint, system_prompt, handler_name
+            )
         logger.debug(
             "No endpoint configured for purpose=%s (intent=%s)",
             purpose_name,
@@ -489,15 +562,25 @@ def _call_llm_with_system_prompt(
     system_prompt: str,
     model_name: str = "local",
     timeout_s: float = _LLM_CALL_TIMEOUT_S,
+    *,
+    api_key: str | None = None,
+    chat_completions_path: str = "/v1/chat/completions",
 ) -> tuple[str, str] | None:
-    """Call local LLM via OpenAI-compatible /v1/chat/completions with a system prompt.
+    """Call an LLM endpoint with a system prompt.
+
+    Supports both OpenAI-compatible endpoints (vLLM, local models) and
+    frontier providers (GLM, Gemini) that may use different URL paths,
+    require Bearer token auth, or return content in non-standard fields.
 
     Args:
         prompt: User prompt to send.
-        endpoint_url: Base URL of the OpenAI-compatible endpoint (no trailing slash).
+        endpoint_url: Base URL of the endpoint (no trailing slash).
         system_prompt: System-level instruction for the model.
         model_name: Model identifier to include in the request payload.
         timeout_s: HTTP request timeout in seconds.
+        api_key: Optional Bearer token for authenticated endpoints.
+        chat_completions_path: Path appended to base URL (default
+            ``/v1/chat/completions``).
 
     Returns:
         Tuple of ``(response_text, model_name)`` on success, None on any error.
@@ -520,7 +603,7 @@ def _call_llm_with_system_prompt(
             + f"\n[... prompt truncated at {_MAX_PROMPT_CHARS} chars ...]"
         )
 
-    url = f"{endpoint_url}/v1/chat/completions"
+    url = f"{endpoint_url}{chat_completions_path}"
     payload: dict[str, Any] = {
         "model": model_name,
         "messages": [
@@ -531,12 +614,16 @@ def _call_llm_with_system_prompt(
         "temperature": 0.3,
     }
 
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     try:
         # httpx scalar timeout sets all four phases (connect, read, write, pool)
         # to the same value — unlike requests which only covers read.  No
         # separate connect timeout is needed; TCP connect is bounded by timeout_s.
         with httpx.Client(timeout=timeout_s) as client:
-            response = client.post(url, json=payload)
+            response = client.post(url, json=payload, headers=headers or None)
             response.raise_for_status()
             data = response.json()
 
@@ -545,7 +632,12 @@ def _call_llm_with_system_prompt(
             logger.debug("LLM returned empty choices list")
             return None
 
-        content: str = choices[0].get("message", {}).get("content", "")
+        message = choices[0].get("message", {})
+        # Some providers (e.g. GLM) return content in ``reasoning_content``
+        # instead of (or in addition to) ``content``.
+        content: str = message.get("content", "") or message.get(
+            "reasoning_content", ""
+        )
         if not content:
             logger.debug("LLM returned empty content")
             return None
@@ -1032,7 +1124,11 @@ def orchestrate_delegation(
                 "intent": intent_value,
             }
 
-        endpoint_url, model_name, system_prompt, handler_name = endpoint_result
+        ep = endpoint_result
+        endpoint_url = ep.url
+        model_name = ep.model_name
+        system_prompt = ep.system_prompt
+        handler_name = ep.handler_name
 
         # --- Agentic path (OMN-5727) ---
         # When the classifier says the prompt is agentic-eligible, return
@@ -1105,7 +1201,13 @@ def orchestrate_delegation(
             return {"delegated": False, "reason": "redaction_error"}
 
         llm_result = _call_llm_with_system_prompt(
-            redacted_prompt, endpoint_url, system_prompt, model_name
+            redacted_prompt,
+            endpoint_url,
+            system_prompt,
+            model_name,
+            timeout_s=ep.timeout_s,
+            api_key=ep.api_key,
+            chat_completions_path=ep.chat_completions_path,
         )
         if llm_result is None:
             latency_ms = int((time.time() - start_time) * 1000)
@@ -1373,7 +1475,10 @@ def main() -> None:
 _SUBPROCESS_ROUTING: dict[str, dict[str, Any]] = {
     "lint": {"command": ["ruff", "check", "src/"], "timeout": 60},
     "format_check": {"command": ["ruff", "format", "--check", "src/"], "timeout": 60},
-    "test_run": {"command": ["pytest", "tests/", "-x", "--tb=short", "-q"], "timeout": 120},
+    "test_run": {
+        "command": ["pytest", "tests/", "-x", "--tb=short", "-q"],
+        "timeout": 120,
+    },
     "type_check": {"command": ["mypy", "src/"], "timeout": 120},
 }
 

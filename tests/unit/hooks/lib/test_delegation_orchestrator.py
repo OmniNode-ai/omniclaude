@@ -37,6 +37,21 @@ if str(_HOOKS_LIB) not in sys.path:
 import delegation_orchestrator as do  # noqa: E402 I001
 
 
+def _make_endpoint_selection(
+    url: str = "http://localhost:8100",
+    model_name: str = "Qwen2.5-72B",
+    system_prompt: str = "You are a doc expert.",
+    handler_name: str = "doc_gen",
+) -> do._EndpointSelection:
+    """Create a test ``_EndpointSelection`` with sensible defaults."""
+    return do._EndpointSelection(
+        url=url,
+        model_name=model_name,
+        system_prompt=system_prompt,
+        handler_name=handler_name,
+    )
+
+
 # ---------------------------------------------------------------------------
 # ModelTaskDelegatedPayload schema tests
 # ---------------------------------------------------------------------------
@@ -344,10 +359,9 @@ class TestSelectHandlerEndpoint:
                 result = do._select_handler_endpoint("document")
 
         assert result is not None
-        _url, model_name, system_prompt, handler_name = result
-        assert handler_name == "doc_gen"
-        assert "documentation" in system_prompt.lower()
-        assert model_name == "Qwen2.5-72B"
+        assert result.handler_name == "doc_gen"
+        assert "documentation" in result.system_prompt.lower()
+        assert result.model_name == "Qwen2.5-72B"
 
     def test_test_routes_to_code_analysis(self) -> None:
         """'test' intent routes to CODE_ANALYSIS endpoint (test_boilerplate handler)."""
@@ -366,9 +380,8 @@ class TestSelectHandlerEndpoint:
                 result = do._select_handler_endpoint("test")
 
         assert result is not None
-        _, _, system_prompt, handler_name = result
-        assert handler_name == "test_boilerplate"
-        assert "pytest" in system_prompt.lower()
+        assert result.handler_name == "test_boilerplate"
+        assert "pytest" in result.system_prompt.lower()
 
     def test_research_routes_to_code_analysis(self) -> None:
         """'research' intent routes to CODE_ANALYSIS endpoint (code_review handler)."""
@@ -387,9 +400,8 @@ class TestSelectHandlerEndpoint:
                 result = do._select_handler_endpoint("research")
 
         assert result is not None
-        _, _, system_prompt, handler_name = result
-        assert handler_name == "code_review"
-        assert "review" in system_prompt.lower()
+        assert result.handler_name == "code_review"
+        assert "review" in result.system_prompt.lower()
 
     def test_unknown_intent_returns_none(self) -> None:
         """Intent not in _HANDLER_ROUTING returns None without calling registry."""
@@ -784,16 +796,11 @@ class TestEndpointResolution:
         score = _make_score(True)
         classifier_mock = _make_classifier_mock(score, "document")
 
-        endpoint_tuple = (
-            "http://localhost:8100",
-            "Qwen2.5-72B",
-            "You are a doc expert.",
-            "doc_gen",
-        )
+        endpoint_sel = _make_endpoint_selection()
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(
-                do, "_select_handler_endpoint", return_value=endpoint_tuple
+                do, "_select_handler_endpoint", return_value=endpoint_sel
             ):
                 with patch.object(
                     do, "_call_llm_with_system_prompt", return_value=None
@@ -817,19 +824,14 @@ class TestLlmCallFailure:
 
     def _setup(
         self, monkeypatch: pytest.MonkeyPatch, intent: str = "document"
-    ) -> tuple[Any, Any, tuple[str, str, str, str]]:
+    ) -> tuple[Any, Any, do._EndpointSelection]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(True, confidence=0.95)
         classifier_mock = _make_classifier_mock(score, intent)
-        endpoint_tuple: tuple[str, str, str, str] = (
-            "http://localhost:8100",
-            "Qwen2.5-72B",
-            "system prompt",
-            "doc_gen",
-        )
-        return score, classifier_mock, endpoint_tuple
+        endpoint_sel = _make_endpoint_selection(system_prompt="system prompt")
+        return score, classifier_mock, endpoint_sel
 
     def test_llm_call_failure_returns_delegated_false(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1026,19 +1028,14 @@ class TestQualityGateFailure:
 
     def _setup(
         self, monkeypatch: pytest.MonkeyPatch, intent: str = "document"
-    ) -> tuple[Any, Any, tuple[str, str, str, str]]:
+    ) -> tuple[Any, Any, do._EndpointSelection]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         score = _make_score(True, confidence=0.95)
         classifier_mock = _make_classifier_mock(score, intent)
-        endpoint_tuple: tuple[str, str, str, str] = (
-            "http://localhost:8100",
-            "Qwen2.5-72B",
-            "system prompt",
-            "doc_gen",
-        )
-        return score, classifier_mock, endpoint_tuple
+        endpoint_sel = _make_endpoint_selection(system_prompt="system prompt")
+        return score, classifier_mock, endpoint_sel
 
     def test_quality_gate_failure_returns_delegated_false(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1169,7 +1166,7 @@ class TestOrchestratedDelegationSuccess:
         handler_name: str = "doc_gen",
         model_name: str = "Qwen2.5-72B",
         endpoint_url: str = "http://llm-embedding-host:8100",
-    ) -> tuple[Any, Any, tuple[str, str, str, str], str]:
+    ) -> tuple[Any, Any, do._EndpointSelection, str]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
@@ -1180,15 +1177,15 @@ class TestOrchestratedDelegationSuccess:
             reasons=["intent 'document' is in the delegation allow-list"],
         )
         classifier_mock = _make_classifier_mock(score, intent)
-        endpoint_tuple: tuple[str, str, str, str] = (
-            endpoint_url,
-            model_name,
-            "You are a documentation expert.",
-            handler_name,
+        endpoint_sel = _make_endpoint_selection(
+            url=endpoint_url,
+            model_name=model_name,
+            system_prompt="You are a documentation expert.",
+            handler_name=handler_name,
         )
         if llm_response is None:
             llm_response = _GOOD_DOC_RESPONSE
-        return score, classifier_mock, endpoint_tuple, llm_response
+        return score, classifier_mock, endpoint_sel, llm_response
 
     def test_happy_path_returns_delegated_true(
         self, monkeypatch: pytest.MonkeyPatch

@@ -31,7 +31,7 @@ class TestFrontierRouting:
 
         result = _select_handler_endpoint("research")
         assert result is not None
-        url, model_name, _prompt, _handler = result
+        url, model_name = result.url, result.model_name
         assert "generativelanguage" in url or "gemini" in model_name.lower()
 
     def test_research_falls_back_to_local_when_frontier_disabled(
@@ -50,7 +50,7 @@ class TestFrontierRouting:
 
         result = _select_handler_endpoint("research")
         assert result is not None
-        url, model_name, _prompt, _handler = result
+        url, model_name = result.url, result.model_name
         # Should use local endpoint, not frontier
         assert "generativelanguage" not in url
         assert "gemini" not in model_name.lower()
@@ -72,7 +72,7 @@ class TestFrontierRouting:
 
         result = _select_handler_endpoint("document")
         assert result is not None
-        url, model_name, _prompt, _handler = result
+        url, model_name = result.url, result.model_name
         assert "generativelanguage" not in url
         assert "gemini" not in model_name.lower()
         assert "glm" not in model_name.lower()
