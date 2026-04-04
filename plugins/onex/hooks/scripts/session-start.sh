@@ -517,8 +517,8 @@ start_emit_daemon_if_needed
 # The daemon serves classify_tool / reset_session / ping requests from hook shims.
 # Multiple concurrent Claude Code sessions share one daemon instance via the socket.
 # Follows the same pattern as start_emit_daemon_if_needed above.
-_HOOK_RUNTIME_SOCKET="${_TMPDIR}/omniclaude-hook-runtime.sock"
-_HOOK_RUNTIME_PID="${_TMPDIR}/omniclaude-hook-runtime.pid"
+_HOOK_RUNTIME_SOCKET="${TMPDIR:-/tmp}/omniclaude-hook-runtime.sock"
+_HOOK_RUNTIME_PID="${TMPDIR:-/tmp}/omniclaude-hook-runtime.pid"
 _HOOK_RUNTIME_CONFIG="${HOOKS_DIR}/config.yaml"
 
 start_hook_runtime_if_needed() {
