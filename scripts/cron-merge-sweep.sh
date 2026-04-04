@@ -17,7 +17,7 @@
 #   ./scripts/cron-merge-sweep.sh --repos omniclaude   # Limit to specific repos
 #   ./scripts/cron-merge-sweep.sh --resume             # Resume from checkpoint
 #
-# Requires: claude CLI, gh CLI (authenticated), ANTHROPIC_API_KEY
+# Requires: claude CLI (with OAuth or API key), gh CLI (authenticated)
 #
 # Design: Follows the headless decomposition pattern from cron-closeout.sh
 # - One task per invocation (bounded context)
@@ -92,9 +92,8 @@ preflight() {
     missing+=("claude CLI")
   fi
 
-  if [[ "${DRY_RUN}" != "true" && -z "${ANTHROPIC_API_KEY:-}" ]]; then
-    missing+=("ANTHROPIC_API_KEY")
-  fi
+  # Auth is handled by the claude CLI (OAuth session or API key).
+  # Do NOT check ANTHROPIC_API_KEY here — Claude Code sessions use OAuth.
 
   if ! command -v gh &>/dev/null; then
     missing+=("gh CLI")

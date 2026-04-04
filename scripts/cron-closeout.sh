@@ -17,7 +17,7 @@
 #   ./scripts/cron-closeout.sh --build-only # Build loop only (phases F1-F3)
 #   ./scripts/cron-closeout.sh --no-delegation  # Disable local model delegation
 #
-# Requires: claude CLI, gh CLI (authenticated), ANTHROPIC_API_KEY
+# Requires: claude CLI (with OAuth or API key), gh CLI (authenticated)
 #
 # Design: Follows the headless decomposition pattern from
 # omnibase_infra/docs/patterns/headless_decomposition.md

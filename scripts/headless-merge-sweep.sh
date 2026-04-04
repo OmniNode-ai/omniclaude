@@ -8,7 +8,7 @@
 #   ./scripts/headless-merge-sweep.sh              # auto-merge eligible PRs (default)
 #   ./scripts/headless-merge-sweep.sh --report-only # just list eligible PRs, don't merge
 #
-# Requires: claude CLI, gh CLI (authenticated), ANTHROPIC_API_KEY
+# Requires: claude CLI (with OAuth or API key), gh CLI (authenticated)
 set -euo pipefail
 
 export ONEX_RUN_ID="sweep-$(date +%s)"
