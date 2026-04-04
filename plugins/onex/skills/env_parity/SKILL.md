@@ -1,36 +1,33 @@
 ---
-description: Local Docker vs onex-dev k8s environment parity checker — detects credential drift, stale ECR tags, and missing Infisical paths
+description: Multi-machine environment conformance checker — validates settings, env files, secrets, and topology against the machine registry
 mode: full
-version: 1.0.0
+version: 2.0.0
 level: advanced
 debug: false
 category: operations
-tags: [parity, drift, credentials, ecr, infisical, k8s, docker]
+tags: [parity, drift, conformance, registry, multi-machine, settings, env]
 author: OmniClaude Team
 composable: true
 inputs:
   - name: subcommand
     type: str
-    description: "Mode: check (audit) or fix (auto-fix Infisical paths only)"
+    description: "Mode: check (audit) or fix (auto-fix conformance issues)"
     required: false
 args:
   - name: subcommand
     description: "Mode: check (default) or fix"
     required: false
-  - name: --checks
-    description: "Comma-separated check IDs (default: credential,ecr,infisical)"
+  - name: --machine-id
+    description: "Target a specific machine (default: all machines in registry)"
     required: false
-  - name: --all-checks
-    description: "Run all 8 checks including secondary (schema, services, flags, kafka, packages)"
-    required: false
-  - name: --namespace
-    description: "k8s namespace to probe (default: onex-dev)"
+  - name: --fix-remote
+    description: "Allow auto-fix on remote machines (requires fix subcommand)"
     required: false
   - name: --dry-run
     description: "Preview fix actions without executing"
     required: false
   - name: --create-tickets
-    description: "Create Linear tickets for CRITICAL findings (opt-in, not default)"
+    description: "Create Linear tickets for FAIL findings (opt-in, not default)"
     required: false
 ---
 
@@ -42,78 +39,83 @@ args:
 
 ## Overview
 
-Automated local-Docker vs onex-dev k8s parity checker. Detects:
+Registry-backed multi-machine environment conformance checker. Validates each machine in the
+fleet against its expected configuration derived from the machine registry (`machines.yaml`).
 
-- **CRITICAL** (default): credential drift, stale ECR tags, missing Infisical paths
-- **WARNING** (--all-checks): schema drift, missing deployments, feature flag mismatches, Kafka topic gaps, package version mismatches
+Replaces the previous Docker-vs-k8s parity scope with comprehensive multi-machine conformance:
 
-**Incident origin (2026-03-10):**
-1. `omniintelligence-credentials` had `POSTGRES_USER=postgres` instead of `role_omniintelligence` — DB auth failures after pod restart
-2. ECR tags deleted while still referenced in active deployment specs — `ErrImagePull` on rollout
-3. Infisical paths never seeded — InfisicalSecret 404 loops for hours
+- **Config**: `settings.json` existence, path correctness, no stale hooks blocks
+- **Env**: No duplicate keys in `~/.omnibase/.env`
+- **Secrets**: Infisical identity authenticates successfully
+- **Topology**: Plugin symlink points to canonical clone
 
-The `onex:gap` skill covers code/contract drift. This skill fills the runtime state gap.
+Unreachable machines are reported as `UNREACHABLE`, not as check failures.
+Output is grouped by machine, then by check category, then by individual check.
 
 ## Checks Catalog
 
-| check_id | severity_tier | incident_class | default | auto_fixable |
-|----------|--------------|----------------|---------|-------------|
-| `credential` | CRITICAL | DB auth failure on pod restart | yes | no |
-| `ecr` | CRITICAL | ErrImagePull on rollout | yes | no |
-| `infisical` | CRITICAL | InfisicalSecret 404 loops | yes | yes |
-| `schema` | WARNING | Migration state drift | --all-checks | no |
-| `services` | WARNING | Missing deployment | --all-checks | no |
-| `flags` | WARNING | Feature flag inconsistency | --all-checks | no |
-| `kafka` | WARNING | Missing Kafka topics in cloud | --all-checks | no |
-| `packages` | WARNING | Package version mismatch | --all-checks | no |
+| check_id | category | auto_fixable | what it checks |
+|----------|----------|-------------|----------------|
+| `config.settings_exists` | config | no | `settings.json` exists at expected path per machine |
+| `config.settings_paths` | config | yes (sync-settings) | `OMNI_HOME`, `ONEX_STATE_DIR`, statusLine match registry |
+| `config.no_hooks_block` | config | yes | No empty `hooks` block in settings.json |
+| `env.no_duplicates` | env | yes (last-wins dedup) | No duplicate keys in `~/.omnibase/.env` |
+| `secrets.infisical_identity` | secrets | no (run bootstrap) | Infisical client ID authenticates successfully |
+| `topology.plugin_symlink` | topology | yes (re-symlink) | Plugin cache is symlink to canonical clone |
 
 ## When to Use
 
-- **Post-incident**: After any DB auth failure, ErrImagePull, or InfisicalSecret error
-- **Pre-deploy**: Before promoting a new release to verify cloud state matches local
-- **Ad hoc**: When suspecting drift between local and cloud environments
+- **Post-setup**: After bootstrapping a new machine with `onex env bootstrap`
+- **Pre-deploy**: Before promoting a release to verify fleet conformance
+- **Routine**: Periodic conformance sweeps across all machines
+- **Post-incident**: After any settings-related or env-related failure
 
 ## Quick Start
 
 ```bash
-# Default: CRITICAL checks only (credential, ECR, Infisical)
-/env-parity check
+# Check all machines (default)
+/env_parity check
 
-# All 8 checks
-/env-parity check --all-checks
+# Check a specific machine
+/env_parity check --machine-id infra-server
 
-# Fix Infisical path gaps (only auto-fixable check)
-/env-parity fix --checks infisical
+# Auto-fix local machine
+/env_parity fix
+
+# Auto-fix including remote machines
+/env_parity fix --fix-remote
 
 # Dry-run fix
-/env-parity fix --checks infisical --dry-run
+/env_parity fix --dry-run
 
-# Create Linear tickets for CRITICAL findings
-/env-parity check --create-tickets
+# Create Linear tickets for FAIL findings
+/env_parity check --create-tickets
 ```
 
-## Alert Thresholds
+## Status Semantics
 
-| Severity | Action |
-|----------|--------|
-| **CRITICAL** | Fix today — active or imminent production impact |
-| **WARNING** | Fix this sprint — quality/reliability risk |
-| **INFO** | Informational — no action required |
+| Status | Meaning |
+|--------|---------|
+| **PASS** | Check passed — machine conforms to registry |
+| **WARN** | Non-blocking issue detected |
+| **FAIL** | Conformance violation — action required |
+| **UNREACHABLE** | Machine not reachable via SSH — checks skipped |
 
 ## Ticket Creation
 
 Linear ticket creation requires the explicit `--create-tickets` flag. It is NOT the default.
-This prevents ticket spam on routine parity checks.
+This prevents ticket spam on routine conformance checks.
 
-When `--create-tickets` is set, one ticket is created per CRITICAL finding using:
-- Title: `[env-parity:<check_id>] <finding title verbatim>`
+When `--create-tickets` is set, one ticket is created per FAIL finding using:
+- Title: `[env-parity:<check_id>] <machine_id>: <finding detail>`
 - Priority: 1 (Urgent)
 - Project: Active Sprint
-- Deduplication: exact prefix match on `[env-parity:<check_id>]` — skip if any existing ticket (any state) matches
+- Deduplication: exact prefix match on `[env-parity:<check_id>]` — skip if any existing ticket matches
 
 ## See Also
 
 - `system-status` — overall platform health check
 - `gap` — code/contract drift detection
-- `omnibase_infra/scripts/system_health_check.sh` — infrastructure health
-- `omnibase_infra/scripts/compare_environments.py` — the underlying probe script
+- `onex env check` — the underlying CLI command
+- `onex env bootstrap` — one-command machine setup
+- `omnibase_infra/config/machines.yaml` — the machine registry
