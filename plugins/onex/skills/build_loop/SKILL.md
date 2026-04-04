@@ -1,5 +1,5 @@
 ---
-description: Autonomous build loop — publishes cmd.build-loop.start.v1 to kick off the ONEX node-based build loop
+description: Autonomous build loop — runs the ONEX build loop workflow locally via `onex run`
 mode: full
 version: 1.0.0
 level: advanced
@@ -46,8 +46,8 @@ args:
 
 ## Overview
 
-Start the autonomous build loop. This skill publishes a `cmd.build-loop.start.v1` event
-that triggers the `node_autonomous_loop_orchestrator` to execute the full 6-phase cycle:
+Start the autonomous build loop. This skill runs the build loop workflow locally
+via `onex run`, executing the full 6-phase cycle in-process:
 
 ```
 IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLETE
@@ -60,10 +60,18 @@ IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLE
 ## Quick Start
 
 ```
-/build-loop
-/build-loop --max-cycles 3
-/build-loop --skip-closeout --dry-run
-/build-loop --max-cycles 5 --skip-closeout
+# Single cycle (default)
+cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
+uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml
+
+# With custom state directory
+uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+  --state-root "$ONEX_STATE_DIR/build-loop"
+
+# With timeout
+uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+  --state-root "$ONEX_STATE_DIR/build-loop" \
+  --timeout 600
 ```
 
 ## Phase Descriptions
@@ -89,26 +97,31 @@ IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLE
 
 Parse `--max-cycles` (default 1), `--skip-closeout` (default false), `--dry-run` (default false).
 
-### Publish Start Command
+### Execute Workflow
 
-Publish `cmd.build-loop.start.v1` to Kafka with:
-- `correlation_id`: New UUID
-- `max_cycles`: From args
-- `skip_closeout`: From args
-- `dry_run`: From args
-- `requested_at`: Current timestamp
+Run the build loop workflow locally via RuntimeLocal:
 
-### Monitor Loop Progress
+```bash
+cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
+uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+  --state-root "$ONEX_STATE_DIR/build-loop" \
+  --timeout 600
+```
 
-The orchestrator node handles the actual execution. This skill monitors progress
-by subscribing to build loop events:
-- `evt.build-loop-started.v1` — loop accepted
-- `evt.build-loop-cycle-completed.v1` — cycle finished
-- `evt.build-loop-failed.v1` — loop failed
+This executes the full 6-phase FSM in-process with:
+- In-memory event bus (no Kafka required)
+- Filesystem state (no Postgres required)
+- Direct handler invocation (no Docker runtime required)
+
+The exit code indicates the result:
+- 0 = COMPLETED (all cycles successful)
+- 1 = FAILED or TIMEOUT
+- 3 = PARTIAL (some evidence written)
 
 ### Write Skill Result
 
-Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/build_loop.json`.
+The workflow automatically writes its result to `$ONEX_STATE_DIR/build-loop/workflow_result.json`.
+This contains the full `ModelLoopOrchestratorResult` with per-cycle summaries.
 
 ## Skill Result Output
 
