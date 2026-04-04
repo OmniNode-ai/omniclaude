@@ -925,11 +925,11 @@ class TestDelegationOrchestratorIntegration:
             patch("delegation_orchestrator._cached_classifier", None),
             patch(
                 "delegation_orchestrator._select_handler_endpoint",
-                return_value=(
-                    "http://localhost:8000",
-                    "test-model",
-                    "You are a doc expert.",
-                    "doc_gen",
+                return_value=do._EndpointSelection(
+                    url="http://localhost:8000",
+                    model_name="test-model",
+                    system_prompt="You are a doc expert.",
+                    handler_name="doc_gen",
                 ),
             ),
             patch(
@@ -1010,11 +1010,11 @@ class TestDelegationOrchestratorIntegration:
             patch("delegation_orchestrator._cached_classifier", None),
             patch(
                 "delegation_orchestrator._select_handler_endpoint",
-                return_value=(
-                    "http://localhost:8000",
-                    "test-model",
-                    "You are a doc expert.",
-                    "doc_gen",
+                return_value=do._EndpointSelection(
+                    url="http://localhost:8000",
+                    model_name="test-model",
+                    system_prompt="You are a doc expert.",
+                    handler_name="doc_gen",
                 ),
             ),
             patch(
@@ -1062,11 +1062,11 @@ class TestDelegationOrchestratorIntegration:
             patch("delegation_orchestrator._cached_classifier", None),
             patch(
                 "delegation_orchestrator._select_handler_endpoint",
-                return_value=(
-                    "http://localhost:8000",
-                    "test-model",
-                    "You are a test expert.",
-                    "test_boilerplate",
+                return_value=do._EndpointSelection(
+                    url="http://localhost:8000",
+                    model_name="test-model",
+                    system_prompt="You are a test expert.",
+                    handler_name="test_boilerplate",
                 ),
             ),
             patch(
