@@ -169,6 +169,44 @@ write_daemon_status() {
     fi
 }
 
+# -----------------------------
+# Lightweight Env Sanity (OMN-7532) — non-fatal, <5ms
+# -----------------------------
+# Validates critical env vars are set and directories exist.
+# Warning only — never breaks session start.
+# Reason codes: env_required_missing (ONEX_STATE_DIR, OMNI_HOME)
+#               env_expected_missing (KAFKA_BOOTSTRAP_SERVERS)
+_env_issues=0
+_env_friction_reason=""
+if [[ -z "${ONEX_STATE_DIR:-}" ]] || [[ ! -d "${ONEX_STATE_DIR:-/nonexistent}" ]]; then
+    log "WARNING: ONEX_STATE_DIR not set or directory missing (hooks will fail)"
+    _env_issues=$((_env_issues + 1))
+    _env_friction_reason="env_required_missing"
+fi
+if [[ -z "${OMNI_HOME:-}" ]] || [[ ! -d "${OMNI_HOME:-/nonexistent}" ]]; then
+    log "WARNING: OMNI_HOME not set or directory missing"
+    _env_issues=$((_env_issues + 1))
+    _env_friction_reason="env_required_missing"
+fi
+if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    log "INFO: KAFKA_BOOTSTRAP_SERVERS not set (event emission will be disabled)"
+    # Only set reason to expected if no required vars are missing
+    if [[ -z "$_env_friction_reason" ]]; then
+        _env_friction_reason="env_expected_missing"
+    fi
+fi
+# Emit friction event to spool if any required env vars are missing
+if [[ "$_env_issues" -gt 0 && -n "${ONEX_STATE_DIR:-}" && -d "${ONEX_STATE_DIR:-/nonexistent}" ]]; then
+    _friction_dir="${ONEX_STATE_DIR}/event-spool"
+    mkdir -p "$_friction_dir" 2>/dev/null || true
+    _friction_file="${_friction_dir}/env-sanity-$(date +%s).json"
+    cat > "$_friction_file" 2>/dev/null <<FRICTION
+{"skill":"session-start","surface":"env/validation","severity":"medium","description":"Session env sanity: ${_env_issues} required env var(s) missing or dir not found (ONEX_STATE_DIR, OMNI_HOME)","reason_code":"${_env_friction_reason}","context_ticket_id":null,"session_id":"${SESSION_ID:-unknown}","timestamp":"$(date -u '+%Y-%m-%dT%H:%M:%SZ')"}
+FRICTION
+    log "Friction event emitted: $_env_friction_reason (${_env_issues} issue(s))"
+fi
+unset _env_issues _env_friction_reason _friction_dir _friction_file
+
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Boolean normalization: _normalize_bool is provided by common.sh (sourced above)
