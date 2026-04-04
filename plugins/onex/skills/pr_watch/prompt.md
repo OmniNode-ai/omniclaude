@@ -154,7 +154,7 @@ while True:
     if review_decision == "CHANGES_REQUESTED" and auto_fix and fix_cycles_used < max_review_cycles:
         # --- Auto-fix cycle ---
         fix_cycles_used += 1
-        _dispatch_pr_review_dev(
+        _dispatch_pr_review(
             pr_number=pr_number,
             ticket_id=ticket_id,
             repo=repo,
@@ -282,12 +282,12 @@ PR #{pr_number} ({ticket_id}) merged via auto-merge ✓
 
 ## Step 6: Helper functions <!-- ai-slop-ok: skill-step-heading -->
 
-### `_dispatch_pr_review_dev`
+### `_dispatch_pr_review`
 
 Dispatch a fix agent for CHANGES_REQUESTED reviews.
 
 ```python
-def _dispatch_pr_review_dev(
+def _dispatch_pr_review(
     pr_number: int,
     ticket_id: str,
     repo: str,
@@ -298,7 +298,7 @@ def _dispatch_pr_review_dev(
     Task(
         subagent_type="onex:polymorphic-agent",
         description=f"pr-watch: fix review comments for PR #{pr_number} (cycle {cycle})",
-        prompt=f"""Invoke: Skill(skill="onex:pr_review_dev", args="{pr_number}")
+        prompt=f"""Invoke: Skill(skill="onex:pr_review", args="{pr_number}")
 
         Fix all Critical, Major, and Minor issues.{nit_instruction}
         Push fixes to the PR branch for repo {repo}.

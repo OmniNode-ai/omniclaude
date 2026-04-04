@@ -212,10 +212,10 @@ Before resolving any review threads, the agent MUST follow this 4-step sequence:
 
 **Hard rule**: `gh api ... -X PUT` to resolve a thread is FORBIDDEN unless the thread has a reply from this agent explaining what was done.
 
-### Phase 1: PR Review + CI Fix — invoke pr-review-dev skill
+### Phase 1: PR Review + CI Fix — invoke pr-review skill
 
 ```
-Skill(skill="onex:pr_review_dev", args="{pr_number} {--no-ci if set}")
+Skill(skill="onex:pr_review", args="{pr_number} {--no-ci if set}")
 ```
 
 This handles fetching PR review comments, CI failures, running multi-agent parallel-build for all Critical/Major/Minor issues, and offering to fix nitpicks.

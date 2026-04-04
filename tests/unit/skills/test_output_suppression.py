@@ -158,6 +158,3 @@ def test_begin_day_pull_all_output_capped() -> None:
             "begin_day: pull-all.sh output uncapped — add '2>&1 | tail -20'\n"
             f"Block:\n{block[:300]}"
         )
-
-
-

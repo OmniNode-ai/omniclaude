@@ -104,7 +104,7 @@ Poll GitHub PR review status. Auto-fix review comments (Critical/Major/Minor by 
 Task(
   subagent_type="onex:polymorphic-agent",
   description="pr-watch: fix review comments for PR #{pr_number} (cycle {N})",
-  prompt="Invoke: Skill(skill=\"onex:pr_review_dev\", args=\"{pr_number}\")
+  prompt="Invoke: Skill(skill=\"onex:pr_review\", args=\"{pr_number}\")
 
     Review comments:
     {review_comments}

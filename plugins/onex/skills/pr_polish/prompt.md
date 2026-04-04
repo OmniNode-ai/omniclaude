@@ -259,12 +259,12 @@ if pr_number is None:
 ### 1.2 — Invoke pr-review-dev
 
 ```python
-print(f"Phase 1: Running pr-review-dev on PR #{pr_number}...")
+print(f"Phase 1: Running pr-review on PR #{pr_number}...")
 
 no_ci_flag = "--no-ci" if no_ci else ""
-Skill(skill="onex:pr_review_dev", args=f"{pr_number} {no_ci_flag}")
+Skill(skill="onex:pr_review", args=f"{pr_number} {no_ci_flag}")
 
-# pr-review-dev handles:
+# pr-review handles:
 # - fetching PR review comments via collate-issues-with-ci
 # - fetching CI failures (unless --no-ci)
 # - dispatching multi-agent parallel-build for Critical/Major/Minor
