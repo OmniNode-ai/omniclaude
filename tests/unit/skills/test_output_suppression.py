@@ -161,18 +161,3 @@ def test_begin_day_pull_all_output_capped() -> None:
 
 
 
-# ── curate_legacy ────────────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-def test_curate_legacy_find_output_capped() -> None:
-    """find commands in curate_legacy must use | head -N or -maxdepth."""
-    content = _prompt("curate_legacy")
-    for block in _bash_blocks(content):
-        if "find " not in block:
-            continue
-        has_cap = "| head" in block or "-maxdepth" in block or "| wc" in block
-        assert has_cap, (
-            "curate_legacy: find without output cap — add | head -50 or -maxdepth 3\n"
-            f"Block:\n{block[:300]}"
-        )

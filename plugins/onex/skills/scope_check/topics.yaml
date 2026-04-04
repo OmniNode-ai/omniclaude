@@ -1,4 +1,0 @@
-# Scope Check skill - topic declarations
-# No Kafka topics needed for this skill (local-only scope enforcement)
-subscribe: []
-publish: []

@@ -1,20 +1,6 @@
----
-description: Unified testing methodology — TDD red-green-refactor cycle and anti-pattern detection
-mode: both
-version: 1.0.0
-level: intermediate
-debug: false
-category: quality
-tags: [testing, tdd, anti-patterns, quality, discipline]
-author: OmniClaude Team
-composable: true
-args:
-  - name: --mode
-    description: "Mode: tdd (red-green-refactor), audit (anti-pattern scan), or full (both)"
-    required: false
----
-
 # Test Discipline
+
+> Moved from `plugins/onex/skills/test_discipline/SKILL.md` in OMN-7492.
 
 ## Overview
 

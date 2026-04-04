@@ -71,13 +71,9 @@ def test_mode_values_are_valid() -> None:
 def test_both_mode_skills_are_generic() -> None:
     """Skills with mode: both should be generic (codebase-independent)."""
     expected_both = {
-        "condition_based_waiting",
-        "defense_in_depth",
         "executing_plans",
-        "finishing_a_development_branch",
         "hostile_reviewer",
         "systematic_debugging",
-        "test_discipline",
         "writing_skills",
     }
     actual_both: set[str] = set()
