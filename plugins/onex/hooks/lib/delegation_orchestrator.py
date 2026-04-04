@@ -447,7 +447,7 @@ def _endpoint_selection_from_config(
     """Build an ``_EndpointSelection`` from an ``LlmEndpointConfig``.
 
     The timeout is derived from the endpoint's ``max_latency_ms`` SLO but
-    floored at ``_LLM_CALL_TIMEOUT_S`` (7s) — SLO budgets represent
+    floored at ``_LLM_CALL_TIMEOUT_S`` (10s) — SLO budgets represent
     acceptable latency for interactive use, not the generation budget for
     delegation tasks that request up to 2048 tokens.
     """
@@ -1528,6 +1528,7 @@ def _call_subprocess_handler(
             text=True,
             timeout=timeout,
             cwd=cwd,
+            check=False,
         )
         elapsed = time.monotonic() - start
         pass_fail = "pass" if proc.returncode == 0 else "fail"
