@@ -185,8 +185,8 @@ class TestExtractSkillId:
 
     def test_multi_word_skill(self) -> None:
         """Multi-word skill with underscores becomes hyphens."""
-        result = _extract_skill_id_from_name("node_skill_pr_review_dev_orchestrator")
-        assert result == "pr-review-dev"
+        result = _extract_skill_id_from_name("node_skill_pr_polish_orchestrator")
+        assert result == "pr-polish"
 
     def test_fallback_for_non_standard_name(self) -> None:
         """Non-standard names fall back to hyphenated full name."""
@@ -247,11 +247,11 @@ class TestSkillPathNormalization:
             vllm_backend=None,
         )
         request = dispatcher._build_skill_request(
-            skill_id="pr-review-dev",
+            skill_id="pr-polish",
             payload={},
             correlation_id=uuid4(),
         )
-        assert "skills/pr_review_dev/SKILL.md" in request.skill_path
+        assert "skills/pr_polish/SKILL.md" in request.skill_path
 
     def test_explicit_skill_path_in_payload_overrides_default(self) -> None:
         """When payload includes skill_path, normalization is not applied."""

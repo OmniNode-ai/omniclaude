@@ -38,9 +38,9 @@ def test_snake_to_pascal_multi_word() -> None:
 
 
 @pytest.mark.unit
-def test_snake_to_pascal_ci_fix_pipeline() -> None:
-    """Three-segment name including an acronym-like prefix."""
-    assert snake_to_pascal("ci_fix_pipeline") == "CiFixPipeline"
+def test_snake_to_pascal_ci_watch() -> None:
+    """Two-segment name including an acronym-like prefix."""
+    assert snake_to_pascal("ci_watch") == "CiWatch"
 
 
 @pytest.mark.unit
@@ -60,8 +60,8 @@ def test_kebab_to_snake_basic() -> None:
 
 
 @pytest.mark.unit
-def test_kebab_to_snake_ci_fix() -> None:
-    assert kebab_to_snake("ci-fix-pipeline") == "ci_fix_pipeline"
+def test_kebab_to_snake_ci_watch() -> None:
+    assert kebab_to_snake("ci-watch") == "ci_watch"
 
 
 @pytest.mark.unit

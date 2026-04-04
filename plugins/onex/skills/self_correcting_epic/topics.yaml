@@ -1,4 +1,0 @@
-produces:
-  - onex.evt.omniclaude.self-correcting-epic-gate.v1
-consumes:
-  - onex.evt.omniclaude.ticket-pipeline-completed.v1

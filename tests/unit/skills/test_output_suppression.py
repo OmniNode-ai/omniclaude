@@ -160,21 +160,6 @@ def test_begin_day_pull_all_output_capped() -> None:
         )
 
 
-# ── post_release_redeploy ────────────────────────────────────────────────────
-
-
-@pytest.mark.unit
-def test_post_release_redeploy_docker_logs_tailed() -> None:
-    """docker logs in post_release_redeploy must use --tail N."""
-    content = _prompt("post_release_redeploy")
-    for block in _bash_blocks(content):
-        if "docker logs" not in block:
-            continue
-        assert "--tail" in block, (
-            "post_release_redeploy: docker logs without --tail N — unbounded log stream\n"
-            f"Block:\n{block[:300]}"
-        )
-
 
 # ── curate_legacy ────────────────────────────────────────────────────────────
 
