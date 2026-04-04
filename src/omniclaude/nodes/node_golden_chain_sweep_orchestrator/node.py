@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Golden chain sweep orchestrator — coordinates the full validation sweep.
 
@@ -119,7 +121,9 @@ def _write_evidence(
         artifact_dir = base_dir / date_str / summary.sweep_id
         artifact_dir.mkdir(parents=True, exist_ok=True)
 
-        artifact: dict[str, Any] = {
+        artifact: dict[
+            str, Any
+        ] = {  # ONEX_EXCLUDE: dict_str_any — artifact is serialized JSON
             "sweep_id": summary.sweep_id,
             "sweep_started_at": summary.sweep_started_at,
             "sweep_completed_at": summary.sweep_completed_at,

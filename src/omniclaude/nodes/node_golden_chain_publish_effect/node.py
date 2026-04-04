@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Golden chain publish effect node — publish to Kafka, poll DB, assert, cleanup.
 
@@ -90,7 +92,9 @@ async def run_chain(
     timeout_s = payload.timeout_ms / 1000.0
     poll_interval_s = 0.5
     poll_start = time.monotonic()
-    projected_row: dict[str, Any] | None = None
+    projected_row: dict[str, Any] | None = (
+        None  # ONEX_EXCLUDE: dict_str_any — DB row is schemaless
+    )
 
     # Validate tail_table against allowed identifier pattern
     import re  # noqa: PLC0415

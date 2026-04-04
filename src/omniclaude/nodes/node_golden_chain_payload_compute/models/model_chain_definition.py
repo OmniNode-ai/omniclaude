@@ -1,4 +1,6 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
+
 # Copyright (c) 2025 OmniNode Team
 """Chain definition model — describes one Kafka-to-DB validation chain."""
 
@@ -18,7 +20,9 @@ class ModelChainAssertion(BaseModel):
     op: str = Field(
         ..., description="Assertion operator: eq, neq, gte, lte, in, contains"
     )
-    expected: Any = Field(..., description="Expected value")
+    expected: Any = Field(
+        ..., description="Expected value"
+    )  # any-ok: assertion values are polymorphic by design
 
 
 class ModelChainDefinition(BaseModel):
@@ -31,8 +35,10 @@ class ModelChainDefinition(BaseModel):
         ..., description="Kafka topic to publish synthetic event to"
     )
     tail_table: str = Field(..., description="DB table to poll for projected row")
-    fixture_template: dict[str, Any] = Field(
-        ..., description="Template payload for the synthetic event"
+    fixture_template: dict[str, Any] = (
+        Field(  # ONEX_EXCLUDE: dict_str_any — schemaless user payloads
+            ..., description="Template payload for the synthetic event"
+        )
     )
     assertions: tuple[ModelChainAssertion, ...] = Field(
         default=(), description="Field-level assertions to run against projected row"
