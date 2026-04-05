@@ -328,7 +328,16 @@ if [ "$HAS_JQ" -eq 1 ]; then
     else
       EXTRA_LIMIT_FMT="${EXTRA_LIMIT}"
     fi
-    L2_EXTRA="extra: ${EXTRA_BAR} ${EXTRA_USED_FMT}/${EXTRA_LIMIT_FMT}"
+    # Compute remaining
+    EXTRA_REMAIN=""
+    if [[ "$EXTRA_USED" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$EXTRA_LIMIT" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+      EXTRA_REMAIN_VAL=$(awk "BEGIN{printf \"%.2f\", $EXTRA_LIMIT - $EXTRA_USED}" 2>/dev/null) || EXTRA_REMAIN_VAL=""
+      if [ -n "$EXTRA_REMAIN_VAL" ]; then
+        EXTRA_REMAIN_FMT=$(printf '$%.2f' "$EXTRA_REMAIN_VAL" 2>/dev/null) || EXTRA_REMAIN_FMT="\$${EXTRA_REMAIN_VAL}"
+        EXTRA_REMAIN=" (${GREEN}${EXTRA_REMAIN_FMT} left${RESET})"
+      fi
+    fi
+    L2_EXTRA="extra: ${EXTRA_BAR} ${EXTRA_USED_FMT}/${EXTRA_LIMIT_FMT}${EXTRA_REMAIN}"
     [ -n "$EXTRA_RESET_FMT" ] && L2_EXTRA="${L2_EXTRA} resets ${EXTRA_RESET_FMT}"
   else
     L2_EXTRA="extra: ?"
