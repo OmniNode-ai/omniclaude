@@ -732,3 +732,11 @@ allowed_extras:
       Consumed by the golden chain sweep validator (OMN-7356) as a tail event
       for the intelligence evaluation chain. Contract ownership: omniintelligence.
     ticket: OMN-7356
+
+  - topic: "onex.evt.omniintelligence.llm-call-completed.v1"
+    lifecycle: telemetry
+    reason: >
+      LLM cost telemetry event emitted by session-end hook with per-session
+      token usage and model cost data. Consumed by omnidash llm_cost_aggregates
+      projection. Contract ownership: omniintelligence.
+    ticket: OMN-7570
