@@ -6,10 +6,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
 
-#: Scalar JSON types used in assertion expected values and fixture payloads.
-JsonScalar = str | int | float | bool | None
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ModelChainAssertion(BaseModel):
@@ -21,8 +20,8 @@ class ModelChainAssertion(BaseModel):
     op: str = Field(
         ..., description="Assertion operator: eq, neq, gte, lte, in, contains"
     )
-    expected: JsonScalar | list[JsonScalar] = Field(
-        ..., description="Expected value (scalar or list for 'in' operator)"
+    expected: Any = Field(  # any-ok: assertion values are polymorphic by design
+        ..., description="Expected value"
     )
 
 
@@ -36,7 +35,7 @@ class ModelChainDefinition(BaseModel):
         ..., description="Kafka topic to publish synthetic event to"
     )
     tail_table: str = Field(..., description="DB table to poll for projected row")
-    fixture_template: dict[str, JsonScalar] = Field(
+    fixture_template: dict[str, Any] = Field(  # ONEX_EXCLUDE: dict_str_any
         ..., description="Template payload for the synthetic event"
     )
     assertions: tuple[ModelChainAssertion, ...] = Field(

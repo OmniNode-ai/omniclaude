@@ -17,8 +17,7 @@ import asyncio
 import json
 import logging
 import time
-from datetime import date, datetime
-from decimal import Decimal
+from typing import Any
 
 from omniclaude.lib.kafka_publisher_base import (
     create_event_envelope,
@@ -93,9 +92,7 @@ async def run_chain(
     timeout_s = payload.timeout_ms / 1000.0
     poll_interval_s = 0.5
     poll_start = time.monotonic()
-    projected_row: (
-        dict[str, str | int | float | bool | None | datetime | date | Decimal] | None
-    ) = None
+    projected_row: dict[str, Any] | None = None  # ONEX_EXCLUDE: dict_str_any
 
     # Validate tail_table against allowed identifier pattern
     import re  # noqa: PLC0415

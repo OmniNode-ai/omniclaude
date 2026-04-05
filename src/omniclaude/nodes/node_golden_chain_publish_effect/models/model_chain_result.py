@@ -6,14 +6,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
-
-from omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_definition import (
-    JsonScalar,
-)
-
-#: Per-field assertion outcome — keys: field, op, expected, actual, passed, error.
-AssertionOutcome = dict[str, JsonScalar | bool]
 
 
 class ModelChainResult(BaseModel):
@@ -31,9 +26,9 @@ class ModelChainResult(BaseModel):
     projection_latency_ms: float = Field(
         default=-1, description="Time from publish to DB row appearance in ms"
     )
-    assertion_results: list[AssertionOutcome] = Field(
-        default_factory=list, description="Per-field assertion outcomes"
-    )
+    assertion_results: list[
+        dict[str, Any]  # ONEX_EXCLUDE: dict_str_any
+    ] = Field(default_factory=list, description="Per-field assertion outcomes")
     raw_row_preview: str = Field(
         default="", description="First 500 chars of projected row JSON"
     )
