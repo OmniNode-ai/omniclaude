@@ -22,7 +22,8 @@ class ModelEnrichedPayload(BaseModel):
     head_topic: str = Field(..., description="Kafka topic to publish to")
     tail_table: str = Field(..., description="DB table to poll")
     correlation_id: str = Field(
-        ..., description="Injected correlation_id with golden-chain- prefix"
+        ...,
+        description="Correlation ID for the event envelope (UUID or prefixed string)",
     )
     emitted_at: str = Field(..., description="ISO-8601 UTC timestamp")
     fixture: dict[str, Any] = (
@@ -35,6 +36,14 @@ class ModelEnrichedPayload(BaseModel):
     )
     timeout_ms: int = Field(
         default=15000, description="Timeout for DB poll in milliseconds"
+    )
+    lookup_column: str = Field(
+        default="correlation_id",
+        description="DB column used to locate the projected row",
+    )
+    lookup_value: str = Field(
+        default="",
+        description="Value to match against lookup_column when polling DB",
     )
 
 

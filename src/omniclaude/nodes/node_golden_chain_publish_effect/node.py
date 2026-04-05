@@ -110,6 +110,22 @@ async def run_chain(
             error_reason=f"Invalid tail_table identifier: {payload.tail_table}",
         )
 
+    # Determine lookup column and value (supports tables without correlation_id)
+    lookup_column = payload.lookup_column or "correlation_id"
+    lookup_value = payload.lookup_value or payload.correlation_id
+
+    # Validate lookup_column against allowed identifier pattern
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", lookup_column):
+        return ModelChainResult(
+            chain_name=payload.chain_name,
+            correlation_id=payload.correlation_id,
+            publish_status=publish_status,
+            publish_latency_ms=publish_latency_ms,
+            projection_status="error",
+            projection_latency_ms=-1,
+            error_reason=f"Invalid lookup_column identifier: {lookup_column}",
+        )
+
     conn = None
     try:
         conn = psycopg2.connect(db_dsn)
@@ -119,9 +135,9 @@ async def run_chain(
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             cur.execute(
-                f"SELECT * FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table name validated above
-                "WHERE correlation_id = %s LIMIT 1",
-                (payload.correlation_id,),
+                f"SELECT * FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table and column names validated above
+                f"WHERE {lookup_column} = %s LIMIT 1",  # noqa: S608  # nosec B608
+                (lookup_value,),
             )
             row = cur.fetchone()
             if row is not None:
@@ -163,14 +179,15 @@ async def run_chain(
         # Step 4: Cleanup synthetic row
         try:
             cur.execute(
-                f"DELETE FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table name validated above
-                "WHERE correlation_id = %s",
-                (payload.correlation_id,),
+                f"DELETE FROM {payload.tail_table} "  # noqa: S608  # nosec B608 — table and column names validated above
+                f"WHERE {lookup_column} = %s",  # noqa: S608  # nosec B608
+                (lookup_value,),
             )
             logger.info(
-                "Cleaned up synthetic row from %s (correlation_id=%s)",
+                "Cleaned up synthetic row from %s (%s=%s)",
                 payload.tail_table,
-                payload.correlation_id,
+                lookup_column,
+                lookup_value,
             )
         except Exception as cleanup_exc:  # noqa: BLE001 — cleanup failure is non-fatal
             logger.warning("Cleanup failed for %s: %s", payload.tail_table, cleanup_exc)
@@ -203,7 +220,7 @@ async def run_chain(
         if conn is not None:
             try:
                 conn.close()
-            except Exception:  # noqa: BLE001, S110
+            except Exception:  # noqa: BLE001, S110  # nosec B110 — cleanup close is best-effort
                 pass
 
 

@@ -1,14 +1,23 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 OmniNode Team
 """Tests for node_golden_chain_payload_compute."""
 
 from __future__ import annotations
+
+import re
 
 from omniclaude.nodes.node_golden_chain_payload_compute.chain_registry import (
     GOLDEN_CHAIN_DEFINITIONS,
     get_chain_definitions,
 )
 from omniclaude.nodes.node_golden_chain_payload_compute.node import build_payloads
+
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+# Chains that use correlation_id as DB lookup column
+_CORR_ID_CHAINS = {"registration", "delegation", "routing"}
+# Chains that use an alternate lookup column (no correlation_id in DB)
+_ALT_LOOKUP_CHAINS = {"pattern_learning", "evaluation"}
 
 
 class TestChainRegistry:
@@ -48,14 +57,40 @@ class TestChainRegistry:
         for chain in GOLDEN_CHAIN_DEFINITIONS:
             assert len(chain.assertions) > 0, f"Chain {chain.name} has no assertions"
 
-    def test_all_chains_have_correlation_id_assertion(self) -> None:
+    def test_correlation_id_chains_have_corr_assertion(self) -> None:
         for chain in GOLDEN_CHAIN_DEFINITIONS:
+            if chain.name not in _CORR_ID_CHAINS:
+                continue
             corr_assertions = [
                 a for a in chain.assertions if a.field == "correlation_id"
             ]
             assert len(corr_assertions) == 1, (
                 f"Chain {chain.name} must have exactly one correlation_id assertion"
             )
+
+    def test_alt_lookup_chains_have_no_corr_assertion(self) -> None:
+        for chain in GOLDEN_CHAIN_DEFINITIONS:
+            if chain.name not in _ALT_LOOKUP_CHAINS:
+                continue
+            corr_assertions = [
+                a for a in chain.assertions if a.field == "correlation_id"
+            ]
+            assert len(corr_assertions) == 0, (
+                f"Chain {chain.name} has no correlation_id column but has a "
+                f"correlation_id assertion"
+            )
+
+    def test_uuid_chains_have_flag_set(self) -> None:
+        uuid_chains = {"registration", "routing"}
+        for chain in GOLDEN_CHAIN_DEFINITIONS:
+            if chain.name in uuid_chains:
+                assert chain.correlation_id_is_uuid is True, (
+                    f"Chain {chain.name} targets a UUID column"
+                )
+            else:
+                assert chain.correlation_id_is_uuid is False, (
+                    f"Chain {chain.name} should not use UUID correlation_id"
+                )
 
 
 class TestBuildPayloads:
@@ -65,17 +100,29 @@ class TestBuildPayloads:
         payloads = build_payloads()
         assert len(payloads) == 5
 
-    def test_correlation_id_has_prefix(self) -> None:
+    def test_uuid_chains_produce_valid_uuids(self) -> None:
         payloads = build_payloads()
         for p in payloads:
-            assert p.correlation_id.startswith("golden-chain-"), (
-                f"Payload {p.chain_name} has wrong prefix: {p.correlation_id}"
+            chain_def = next(
+                c for c in GOLDEN_CHAIN_DEFINITIONS if c.name == p.chain_name
             )
+            if chain_def.correlation_id_is_uuid:
+                assert UUID_RE.match(p.correlation_id), (
+                    f"Chain {p.chain_name} should produce UUID correlation_id, "
+                    f"got: {p.correlation_id}"
+                )
 
-    def test_correlation_id_contains_chain_name(self) -> None:
+    def test_text_chains_produce_prefixed_ids(self) -> None:
         payloads = build_payloads()
         for p in payloads:
-            assert p.chain_name in p.correlation_id
+            chain_def = next(
+                c for c in GOLDEN_CHAIN_DEFINITIONS if c.name == p.chain_name
+            )
+            if not chain_def.correlation_id_is_uuid:
+                assert p.correlation_id.startswith("golden-chain-"), (
+                    f"Chain {p.chain_name} should produce prefixed correlation_id, "
+                    f"got: {p.correlation_id}"
+                )
 
     def test_correlation_ids_are_unique(self) -> None:
         payloads = build_payloads()
@@ -92,15 +139,30 @@ class TestBuildPayloads:
         for p in payloads:
             assert p.fixture["emitted_at"] == "2026-04-02T00:00:00Z"
 
-    def test_assertions_resolve_sentinel(self) -> None:
+    def test_corr_id_assertions_resolve_sentinel(self) -> None:
         payloads = build_payloads()
         for p in payloads:
-            corr_assertion = next(
-                a for a in p.assertions if a.field == "correlation_id"
+            corr_assertions = [a for a in p.assertions if a.field == "correlation_id"]
+            for a in corr_assertions:
+                assert a.expected == p.correlation_id
+                assert "__CORRELATION_ID__" not in str(a.expected)
+
+    def test_alt_lookup_payloads_have_unique_fixture_values(self) -> None:
+        payloads = build_payloads()
+        for p in payloads:
+            if p.lookup_column == "correlation_id":
+                continue
+            # The lookup value should be unique (contains a UUID suffix)
+            assert p.lookup_value != ""
+            assert p.lookup_value == p.fixture[p.lookup_column]
+
+    def test_lookup_column_matches_chain_definition(self) -> None:
+        payloads = build_payloads()
+        for p in payloads:
+            chain_def = next(
+                c for c in GOLDEN_CHAIN_DEFINITIONS if c.name == p.chain_name
             )
-            # The sentinel __CORRELATION_ID__ should be resolved
-            assert corr_assertion.expected == p.correlation_id
-            assert "__CORRELATION_ID__" not in str(corr_assertion.expected)
+            assert p.lookup_column == chain_def.lookup_column
 
     def test_filter_works(self) -> None:
         payloads = build_payloads(chain_filter=["registration"])

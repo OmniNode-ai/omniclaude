@@ -43,6 +43,20 @@ class ModelChainDefinition(BaseModel):
     assertions: tuple[ModelChainAssertion, ...] = Field(
         default=(), description="Field-level assertions to run against projected row"
     )
+    lookup_column: str = Field(
+        default="correlation_id",
+        description="DB column used to locate the projected row (tables without "
+        "correlation_id use an alternate key like pattern_name or session_id)",
+    )
+    lookup_fixture_key: str = Field(
+        default="correlation_id",
+        description="Key in fixture_template whose value is used for DB lookup",
+    )
+    correlation_id_is_uuid: bool = Field(
+        default=False,
+        description="When True, generate a proper UUID for correlation_id "
+        "instead of a prefixed string (required for UUID-typed DB columns)",
+    )
 
 
 __all__ = ["ModelChainAssertion", "ModelChainDefinition"]

@@ -46,22 +46,40 @@ def build_payloads(
     payloads: list[ModelEnrichedPayload] = []
 
     for chain in chains:
-        short_uuid = uuid4().hex[:12]
-        correlation_id = f"golden-chain-{chain.name}-{short_uuid}"
+        # Generate correlation_id: proper UUID for UUID-typed columns, prefixed string otherwise
+        if chain.correlation_id_is_uuid:
+            correlation_id = str(uuid4())
+        else:
+            short_uuid = uuid4().hex[:12]
+            correlation_id = f"golden-chain-{chain.name}-{short_uuid}"
 
         # Build fixture with injected correlation_id
         fixture = dict(chain.fixture_template)
         fixture["correlation_id"] = correlation_id
         fixture["emitted_at"] = emitted_at
 
-        # Resolve __CORRELATION_ID__ sentinel in assertion expected values
+        # For chains using an alternate lookup key, make the fixture value unique
+        # to avoid collisions with real data
+        lookup_value = correlation_id  # default: lookup by correlation_id
+        if chain.lookup_column != "correlation_id":
+            unique_suffix = uuid4().hex[:8]
+            base_value = fixture.get(chain.lookup_fixture_key, "")
+            unique_value = f"{base_value}-{unique_suffix}"
+            fixture[chain.lookup_fixture_key] = unique_value
+            lookup_value = unique_value
+
+        # Resolve __CORRELATION_ID__ and __LOOKUP_VALUE__ sentinels in assertions
         resolved_assertions = tuple(
             ModelChainAssertion(
                 field=a.field,
                 op=a.op,
-                expected=correlation_id
-                if a.expected == "__CORRELATION_ID__"
-                else a.expected,
+                expected=(
+                    correlation_id
+                    if a.expected == "__CORRELATION_ID__"
+                    else lookup_value
+                    if a.expected == "__LOOKUP_VALUE__"
+                    else a.expected
+                ),
             )
             for a in chain.assertions
         )
@@ -76,6 +94,8 @@ def build_payloads(
                 fixture=fixture,
                 assertions=resolved_assertions,
                 timeout_ms=timeout_ms,
+                lookup_column=chain.lookup_column,
+                lookup_value=lookup_value,
             )
         )
 
