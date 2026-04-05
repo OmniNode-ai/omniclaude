@@ -18,9 +18,11 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any
 from uuid import uuid4
 
+from omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_definition import (
+    JsonScalar,
+)
 from omniclaude.nodes.node_golden_chain_payload_compute.node import build_payloads
 from omniclaude.nodes.node_golden_chain_publish_effect.models.model_chain_result import (
     ModelChainResult,
@@ -122,8 +124,8 @@ def _write_evidence(
         artifact_dir.mkdir(parents=True, exist_ok=True)
 
         artifact: dict[
-            str, Any
-        ] = {  # ONEX_EXCLUDE: dict_str_any — artifact is serialized JSON
+            str, JsonScalar | list[dict[str, JsonScalar | list[dict[str, JsonScalar]]]]
+        ] = {
             "sweep_id": summary.sweep_id,
             "sweep_started_at": summary.sweep_started_at,
             "sweep_completed_at": summary.sweep_completed_at,

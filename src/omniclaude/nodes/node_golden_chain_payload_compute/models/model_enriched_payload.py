@@ -6,11 +6,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field
 
-from .model_chain_definition import ModelChainAssertion
+from .model_chain_definition import JsonScalar, ModelChainAssertion
 
 
 class ModelEnrichedPayload(BaseModel):
@@ -26,10 +24,8 @@ class ModelEnrichedPayload(BaseModel):
         description="Correlation ID for the event envelope (UUID or prefixed string)",
     )
     emitted_at: str = Field(..., description="ISO-8601 UTC timestamp")
-    fixture: dict[str, Any] = (
-        Field(  # ONEX_EXCLUDE: dict_str_any — schemaless fixture payloads
-            ..., description="Complete fixture payload with correlation_id injected"
-        )
+    fixture: dict[str, JsonScalar] = Field(
+        ..., description="Complete fixture payload with correlation_id injected"
     )
     assertions: tuple[ModelChainAssertion, ...] = Field(
         default=(), description="Assertions to run against projected row"
