@@ -1003,7 +1003,7 @@ class TestIsDelegatableToolCallSignals:
 
 @pytest.mark.unit
 class TestIsDelegatableIntentAllowList:
-    """Only DOCUMENT, TEST, and RESEARCH intents may be delegated."""
+    """Only DOCUMENT, TEST, RESEARCH, and IMPLEMENT intents may be delegated."""
 
     def test_debug_intent_not_delegatable(self, classifier: TaskClassifier) -> None:
         """DEBUG intent is not in the allow-list."""
@@ -1014,13 +1014,16 @@ class TestIsDelegatableIntentAllowList:
         assert result.delegatable is False
         assert any("allow-list" in r for r in result.reasons)
 
-    def test_implement_intent_not_delegatable(self, classifier: TaskClassifier) -> None:
-        """IMPLEMENT intent is not in the allow-list."""
+    def test_implement_intent_in_allow_list(self, classifier: TaskClassifier) -> None:
+        """IMPLEMENT intent is in the allow-list (may still fail confidence gate)."""
         result = classifier.is_delegatable(
             "create implement build develop a new service",
             intent=TaskIntent.IMPLEMENT,
         )
-        assert result.delegatable is False
+        if not result.delegatable:
+            assert not any(
+                "not in the delegation allow-list" in r for r in result.reasons
+            )
 
     def test_database_intent_not_delegatable(self, classifier: TaskClassifier) -> None:
         """DATABASE intent is not in the allow-list."""
@@ -1111,9 +1114,12 @@ class TestIsDelegatableConfidenceThreshold:
     def test_non_delegatable_intent_below_threshold(
         self, classifier: TaskClassifier
     ) -> None:
-        """Non-delegatable intent (IMPLEMENT) stays below threshold — the
+        """Non-delegatable intent (DATABASE) stays below threshold — the
         saturating boost only applies to DELEGATABLE_INTENTS."""
-        result = classifier.is_delegatable("build a new feature")
+        result = classifier.is_delegatable(
+            "update the database schema and insert new rows",
+            intent=TaskIntent.DATABASE,
+        )
         assert isinstance(result, ModelDelegationScore)
         assert isinstance(result.delegatable, bool)
         assert isinstance(result.confidence, float)
@@ -1220,16 +1226,18 @@ class TestIsDelegatableIntentOverride:
                 "not in the delegation allow-list" in r for r in result.reasons
             )
 
-    def test_override_intent_to_implement_rejected(
+    def test_override_intent_to_implement_accepted(
         self, classifier: TaskClassifier
     ) -> None:
-        """IMPLEMENT intent override is rejected at the allow-list gate."""
+        """IMPLEMENT intent override passes the allow-list gate."""
         result = classifier.is_delegatable(
             "document this module",
             intent=TaskIntent.IMPLEMENT,
         )
-        assert result.delegatable is False
-        assert any("not in the delegation allow-list" in r for r in result.reasons)
+        if not result.delegatable:
+            assert not any(
+                "not in the delegation allow-list" in r for r in result.reasons
+            )
 
     def test_no_override_uses_classify(self, classifier: TaskClassifier) -> None:
         """Without intent override, is_delegatable() calls classify() internally."""
@@ -1284,7 +1292,6 @@ class TestIsDelegatableSavingsEstimate:
         """_compute_savings returns 0.0 for intents not in the token map."""
         classifier = TaskClassifier()
         assert classifier._compute_savings(TaskIntent.DEBUG) == 0.0
-        assert classifier._compute_savings(TaskIntent.IMPLEMENT) == 0.0
         assert classifier._compute_savings(TaskIntent.UNKNOWN) == 0.0
 
 
@@ -1304,9 +1311,9 @@ class TestIsDelegatableClassAttributes:
             assert isinstance(intent, TaskIntent)
 
     def test_delegatable_intents_content(self) -> None:
-        """DELEGATABLE_INTENTS contains exactly DOCUMENT, TEST, RESEARCH."""
+        """DELEGATABLE_INTENTS contains exactly DOCUMENT, TEST, RESEARCH, IMPLEMENT."""
         assert (
-            frozenset({TaskIntent.DOCUMENT, TaskIntent.TEST, TaskIntent.RESEARCH})
+            frozenset({TaskIntent.DOCUMENT, TaskIntent.TEST, TaskIntent.RESEARCH, TaskIntent.IMPLEMENT})
             == TaskClassifier.DELEGATABLE_INTENTS
         )
 

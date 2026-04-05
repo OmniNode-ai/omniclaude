@@ -221,14 +221,14 @@ class TestClassifierAgenticEligibility:
         score = classifier.is_delegatable("document the pytest fixtures")
         assert score.agentic_eligible is False
 
-    def test_implement_intent_not_agentic(self) -> None:
+    def test_implement_intent_agentic_with_codebase_signals(self) -> None:
         from omniclaude.lib.task_classifier import TaskClassifier
 
         classifier = TaskClassifier()
         score = classifier.is_delegatable(
             "Implement a new API endpoint for search in this codebase"
         )
-        assert score.agentic_eligible is False
+        assert score.agentic_eligible is True
 
 
 @pytest.mark.unit

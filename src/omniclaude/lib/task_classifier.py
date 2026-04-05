@@ -430,6 +430,7 @@ class TaskClassifier:
             TaskIntent.DOCUMENT: 800,
             TaskIntent.TEST: 600,
             TaskIntent.RESEARCH: 400,
+            TaskIntent.IMPLEMENT: 1000,
         }
     )
 
