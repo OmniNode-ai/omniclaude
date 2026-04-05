@@ -434,6 +434,57 @@ print(result.outcome)
             log "routing.feedback emitted: outcome=$DERIVED_OUTCOME feedback_status=$FEEDBACK_STATUS"
         fi
 
+        # --- Emit llm.cost.completed event (OMN-7570) ---
+        # Publishes session-level token usage to onex.evt.omniintelligence.llm-call-completed.v1
+        # so omnidash can project into llm_cost_aggregates for /cost-trends dashboard.
+        # Only emits when tokens are available (non-null, > 0).
+        if [[ "$TOTAL_TOKENS_USED" != "null" ]] && [[ "$TOTAL_TOKENS_USED" -gt 0 ]] 2>/dev/null; then
+            # Extract model_id from SessionEnd payload (Claude Code provides this)
+            _model_id=$(echo "$INPUT" | jq -r '.model // .model_id // empty' 2>/dev/null) || _model_id=""
+            if [[ -z "$_model_id" ]]; then
+                _model_id="claude-unknown"
+            fi
+
+            COST_EMITTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+            if ! COST_PAYLOAD=$(jq -n \
+                --arg session_id "$SESSION_ID" \
+                --arg model_id "$_model_id" \
+                --arg correlation_id "$CORRELATION_ID" \
+                --argjson prompt_tokens "${_input_tokens:-0}" \
+                --argjson completion_tokens "${_output_tokens:-0}" \
+                --argjson total_tokens "$TOTAL_TOKENS_USED" \
+                --arg timestamp_iso "$COST_EMITTED_AT" \
+                --arg emitted_at "$COST_EMITTED_AT" \
+                --arg request_type "session" \
+                --arg reporting_source "omniclaude" \
+                '{
+                    session_id: $session_id,
+                    model_id: $model_id,
+                    correlation_id: (if $correlation_id == "" then null else $correlation_id end),
+                    prompt_tokens: $prompt_tokens,
+                    completion_tokens: $completion_tokens,
+                    total_tokens: $total_tokens,
+                    input_tokens: $prompt_tokens,
+                    output_tokens: $completion_tokens,
+                    estimated_cost_usd: 0,
+                    cost_usd: 0,
+                    timestamp_iso: $timestamp_iso,
+                    emitted_at: $emitted_at,
+                    request_type: $request_type,
+                    reporting_source: $reporting_source,
+                    usage_source: "API",
+                    request_count: 1
+                }' 2>>"$LOG_FILE"); then
+                log "WARNING: Failed to construct llm.cost.completed payload (jq failed), skipping emission"
+            elif [[ -z "$COST_PAYLOAD" || "$COST_PAYLOAD" == "null" ]]; then
+                log "WARNING: llm.cost.completed payload empty or null, skipping emission"
+            else
+                emit_via_daemon "llm.cost.completed" "$COST_PAYLOAD" 100
+                log "llm.cost.completed emitted: model=$_model_id tokens=$TOTAL_TOKENS_USED"
+            fi
+        fi
+
     ) &
     EMIT_PIDS+=($!)
 

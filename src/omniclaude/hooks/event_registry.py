@@ -1142,6 +1142,24 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["hook_name", "error_tier", "error_category", "session_id"],
     ),
+    # =========================================================================
+    # LLM Cost Telemetry (OMN-7570)
+    # =========================================================================
+    # Emitted by session-end hook with session-level token usage and cost data.
+    # Routes to onex.evt.omniintelligence.llm-call-completed.v1 which omnidash
+    # projects into llm_cost_aggregates table for /cost-trends dashboard.
+    "llm.cost.completed": EventRegistration(
+        event_type="llm.cost.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.LLM_CALL_COMPLETED,
+                transform=None,  # Passthrough — no sensitive data in cost metadata
+                description="LLM cost telemetry for omnidash llm_cost_aggregates projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "model_id", "total_tokens"],
+    ),
 }
 
 

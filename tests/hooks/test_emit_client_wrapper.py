@@ -106,6 +106,7 @@ class TestModuleImport:
             "team.task.completed",  # OMN-7022 - Team lifecycle: task completed
             "team.evidence.written",  # OMN-7022 - Team lifecycle: evidence artifact written
             "hook.health.error",  # OMN-7158 - Structured hook error event for health observability
+            "llm.cost.completed",  # OMN-7570 - LLM cost telemetry for omnidash llm_cost_aggregates
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

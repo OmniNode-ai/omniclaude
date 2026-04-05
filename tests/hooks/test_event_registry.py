@@ -822,6 +822,8 @@ class TestEventRegistryIntegration:
             "team.evidence.written",
             # Hook health observability (OMN-7158)
             "hook.health.error",
+            # LLM cost telemetry (OMN-7570)
+            "llm.cost.completed",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
