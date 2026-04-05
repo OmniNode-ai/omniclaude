@@ -42,7 +42,9 @@ def _run(
     local_decisions: list[dict[str, Any]] = []
 
     if decision_dir.is_dir():
-        repo_short = repo_slug.split("/")[-1] if "/" in repo_slug else repo_slug
+        repo_short = (
+            repo_slug.rsplit("/", maxsplit=1)[-1] if "/" in repo_slug else repo_slug
+        )
         for path in sorted(decision_dir.glob("*.json"), reverse=True)[:50]:
             try:
                 data = json.loads(path.read_text())

@@ -31,7 +31,7 @@ if "--dimension" in args:
 Resolve paths for all repos:
 
 ```bash
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"
+OMNI_HOME="${OMNI_HOME:?OMNI_HOME must be set}"
 OMNIDASH_PATH="$OMNI_HOME/omnidash"
 OMNICLAUDE_PATH="$OMNI_HOME/omniclaude"
 OMNIBASE_INFRA_PATH="$OMNI_HOME/omnibase_infra"

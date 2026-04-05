@@ -63,7 +63,7 @@ def _infer_fix_category(
             if kw.lower() in search_text:
                 return category
     # Default by surface category
-    category_part = surface.split("/")[0] if "/" in surface else surface
+    category_part = surface.split("/", maxsplit=1)[0] if "/" in surface else surface
     defaults: dict[str, EnumFixCategory] = {
         "config": EnumFixCategory.CONFIG,
         "ci": EnumFixCategory.WIRING,

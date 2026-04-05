@@ -43,6 +43,7 @@ def get_staged_files() -> list[str]:
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
         capture_output=True,
         text=True,
+        check=False,
     )
     files = []
     for f in result.stdout.strip().splitlines():

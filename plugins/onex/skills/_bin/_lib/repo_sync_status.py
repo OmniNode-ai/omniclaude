@@ -38,7 +38,7 @@ def _run(
     """Check sync status between local and remote."""
     meta = make_meta("repo_sync_status", run_id, repo_slug)
 
-    repo_name = repo_slug.split("/")[-1] if "/" in repo_slug else repo_slug
+    repo_name = repo_slug.rsplit("/", maxsplit=1)[-1] if "/" in repo_slug else repo_slug
 
     # Try to find local clone in known locations.
     # OMNI_HOME env var takes priority; fallback to ~/Code/omni_home.

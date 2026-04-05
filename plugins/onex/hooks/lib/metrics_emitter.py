@@ -267,7 +267,7 @@ def _validate_artifact_uri(uri: str) -> bool:
     # that point to remote hosts. Reject //localhost and //127.0.0.1 to
     # prevent local resource references leaking onto the evt topic.
     if uri.startswith("//"):
-        host = uri[2:].split("/", 1)[0].split(":")[0].lower()
+        host = uri[2:].split("/", 1)[0].split(":", maxsplit=1)[0].lower()
         if not host or host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104
             logger.warning(
                 f"Artifact URI references local host or has empty host, rejecting: {uri[:50]}..."
