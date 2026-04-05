@@ -1313,7 +1313,14 @@ class TestIsDelegatableClassAttributes:
     def test_delegatable_intents_content(self) -> None:
         """DELEGATABLE_INTENTS contains exactly DOCUMENT, TEST, RESEARCH, IMPLEMENT."""
         assert (
-            frozenset({TaskIntent.DOCUMENT, TaskIntent.TEST, TaskIntent.RESEARCH, TaskIntent.IMPLEMENT})
+            frozenset(
+                {
+                    TaskIntent.DOCUMENT,
+                    TaskIntent.TEST,
+                    TaskIntent.RESEARCH,
+                    TaskIntent.IMPLEMENT,
+                }
+            )
             == TaskClassifier.DELEGATABLE_INTENTS
         )
 
