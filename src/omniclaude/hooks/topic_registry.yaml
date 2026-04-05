@@ -91,6 +91,11 @@ topics:
     topic_base_constant: "SESSION_OUTCOME_CMD"
     description: "Session outcome CMD target for intelligence feedback loop"
 
+  - event_type: "llm.cost.completed"
+    topic: "onex.evt.omniintelligence.llm-call-completed.v1"
+    topic_base_constant: "LLM_CALL_COMPLETED"
+    description: "LLM cost telemetry for omnidash llm_cost_aggregates (OMN-7570)"
+
   # ---------------------------------------------------------------------------
   # Hook adapter observability topics
   # ---------------------------------------------------------------------------

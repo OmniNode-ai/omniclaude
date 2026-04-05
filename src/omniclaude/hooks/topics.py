@@ -64,6 +64,8 @@ class TopicBase(StrEnum):
     SESSION_OUTCOME_EVT = "onex.evt.omniclaude.session-outcome.v1"
     # Utilization scoring: CMD target for LLM-based scoring (OMN-5505)
     UTILIZATION_SCORING_CMD = "onex.cmd.omniintelligence.utilization-scoring.v1"
+    # LLM call completed: cost telemetry for omnidash llm_cost_aggregates (OMN-7570)
+    LLM_CALL_COMPLETED = "onex.evt.omniintelligence.llm-call-completed.v1"
 
     # ==========================================================================
     # Hook adapter observability topics (migrated to ONEX format, OMN-1552)
