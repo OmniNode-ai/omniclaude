@@ -206,9 +206,9 @@ if [ "$HAS_JQ" -eq 1 ]; then
       -H "User-Agent: claude-code/2.1.34" \
       "${USAGE_API_URL}" 2>/dev/null) || API_RESPONSE=""
 
-    # Validate response is JSON with expected structure
+    # Validate response is JSON with expected usage data (reject error responses)
     if [ -n "$API_RESPONSE" ]; then
-      VALID=$(printf '%s' "$API_RESPONSE" | jq -e 'type == "object"' 2>/dev/null) || VALID=""
+      VALID=$(printf '%s' "$API_RESPONSE" | jq -e 'type == "object" and has("error") | not' 2>/dev/null) || VALID=""
       if [ "$VALID" = "true" ]; then
         # Atomic write: temp file then mv
         CACHE_TMP="${USAGE_CACHE}.tmp.$$"
@@ -328,7 +328,16 @@ if [ "$HAS_JQ" -eq 1 ]; then
     else
       EXTRA_LIMIT_FMT="${EXTRA_LIMIT}"
     fi
-    L2_EXTRA="extra: ${EXTRA_BAR} ${EXTRA_USED_FMT}/${EXTRA_LIMIT_FMT}"
+    # Compute remaining
+    EXTRA_REMAIN=""
+    if [[ "$EXTRA_USED" =~ ^[0-9]+\.?[0-9]*$ ]] && [[ "$EXTRA_LIMIT" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+      EXTRA_REMAIN_VAL=$(awk "BEGIN{printf \"%.2f\", $EXTRA_LIMIT - $EXTRA_USED}" 2>/dev/null) || EXTRA_REMAIN_VAL=""
+      if [ -n "$EXTRA_REMAIN_VAL" ]; then
+        EXTRA_REMAIN_FMT=$(printf '$%.2f' "$EXTRA_REMAIN_VAL" 2>/dev/null) || EXTRA_REMAIN_FMT="\$${EXTRA_REMAIN_VAL}"
+        EXTRA_REMAIN=" (${GREEN}${EXTRA_REMAIN_FMT} left${RESET})"
+      fi
+    fi
+    L2_EXTRA="extra: ${EXTRA_BAR} ${EXTRA_USED_FMT}/${EXTRA_LIMIT_FMT}${EXTRA_REMAIN}"
     [ -n "$EXTRA_RESET_FMT" ] && L2_EXTRA="${L2_EXTRA} resets ${EXTRA_RESET_FMT}"
   else
     L2_EXTRA="extra: ?"
@@ -420,7 +429,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
     (
       result='{'
       first=1
-      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra"; do
+      for pair in "core:omnibase_core" "infra:omnibase_infra" "spi:omnibase_spi" "claude:omniclaude" "node:omninode_infra" "dash:omnidash" "intel:omniintelligence" "mem:omnimemory" "web:omniweb" "cc:onex_change_control"; do
         short="${pair%%:*}"; repo="${pair##*:}"
         cnt=$(gh pr list --repo "OmniNode-ai/${repo}" --state open --json number --jq 'length' 2>/dev/null || echo "0")
         [ "$first" -eq 1 ] || result="${result},"
@@ -440,7 +449,7 @@ if [ "$HAS_JQ" -eq 1 ]; then
       PR_DATA='{}'
     fi
     PR_PARTS=""
-    for short in core infra spi claude node; do
+    for short in core infra spi claude node dash intel mem web cc; do
       cnt=$(printf '%s' "$PR_DATA" | jq -r ".${short} // 0" 2>/dev/null) || cnt=0
       [[ "$cnt" =~ ^[1-9] ]] && PR_PARTS="${PR_PARTS}${short}·${cnt} "
     done

@@ -99,6 +99,7 @@ EXCLUDED_FILES: Final[frozenset[str]] = frozenset(
         "controller.py",
         "dashboard.py",
         "wiring_dispatchers.py",
+        "model_watchdog_state.py",
     }
 )
 
