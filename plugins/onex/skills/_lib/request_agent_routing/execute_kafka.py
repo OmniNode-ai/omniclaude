@@ -66,7 +66,6 @@ else:
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 sys.path.insert(0, str(OMNICLAUDE_PATH / "src"))
 from config import settings
-
 from omniclaude.hooks.topics import TopicBase
 
 try:

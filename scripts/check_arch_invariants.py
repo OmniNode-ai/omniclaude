@@ -166,7 +166,7 @@ def extract_raw_topic_literals(path: Path) -> list[tuple[int, str]]:
 def _is_io_import(module_name: str) -> bool:
     """Return True if module_name matches any IO_PACKAGES prefix."""
     # Normalise: take only the top-level package (everything before the first dot)
-    top_level = module_name.split(".")[0]
+    top_level = module_name.split(".", maxsplit=1)[0]
     return top_level in IO_PACKAGES
 
 

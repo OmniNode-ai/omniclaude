@@ -17,7 +17,7 @@ import json
 import os
 import sys
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent / "agents" / "lib"))
 from intelligence_event_client import IntelligenceEventClient
 
 
-class OperationType(str, Enum):
+class OperationType(StrEnum):
     """Operation types for intelligence requests."""
 
     QUALITY_ASSESSMENT = "QUALITY_ASSESSMENT"

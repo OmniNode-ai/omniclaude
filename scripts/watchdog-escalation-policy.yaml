@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
 # Stopgap — designed for replacement by node_watchdog_reducer (OMN-TBD)
 #
 # Declarative escalation policy for the watchdog state system.

@@ -468,7 +468,7 @@ def _call_shadow_claude(
     ):
         logger.debug(
             "Blocked non-HTTPS base_url in _call_shadow_claude: %s",
-            base_url.split("://")[0] + "://...",
+            base_url.split("://", maxsplit=1)[0] + "://...",
         )
         return None
 

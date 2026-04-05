@@ -99,7 +99,7 @@ def truncate(s: str, max_len: int, ellipsis: str = "\u2026") -> str:
 
 def shorten_branch(branch: str, max_len: int = 30) -> str:
     # Use last path segment (after last /)
-    segment = branch.split("/")[-1] if branch else ""
+    segment = branch.rsplit("/", maxsplit=1)[-1] if branch else ""
     return truncate(segment, max_len)
 
 
