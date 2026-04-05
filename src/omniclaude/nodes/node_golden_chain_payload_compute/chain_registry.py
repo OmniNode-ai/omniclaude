@@ -18,10 +18,12 @@ from omniclaude.nodes.node_golden_chain_payload_compute.models.model_chain_defin
 
 # All topics below must match entries in omnidash/topics.yaml read_model_topics
 GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
+    # agent_routing_decisions: correlation_id is UUID NOT NULL
     ModelChainDefinition(
         name="registration",
         head_topic=TopicBase.ROUTING_DECISION,
         tail_table="agent_routing_decisions",
+        correlation_id_is_uuid=True,
         fixture_template={
             "selected_agent": "golden-chain-test-agent",
             "confidence_score": "0.9500",
@@ -39,10 +41,13 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ),
         ),
     ),
+    # pattern_learning_artifacts: no correlation_id column; lookup by pattern_name
     ModelChainDefinition(
         name="pattern_learning",
         head_topic=TopicBase.PATTERN_STORED,
         tail_table="pattern_learning_artifacts",
+        lookup_column="pattern_name",
+        lookup_fixture_key="pattern_name",
         fixture_template={
             "pattern_name": "golden-chain-test-pattern",
             "pattern_type": "golden-chain-test",
@@ -55,11 +60,9 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ModelChainAssertion(
                 field="pattern_type", op="eq", expected="golden-chain-test"
             ),
-            ModelChainAssertion(
-                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
-            ),
         ),
     ),
+    # delegation_events: correlation_id is TEXT NOT NULL
     ModelChainDefinition(
         name="delegation",
         head_topic=TopicBase.TASK_DELEGATED,
@@ -84,10 +87,12 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ),
         ),
     ),
+    # llm_routing_decisions: correlation_id migrated from TEXT to UUID by 0011a
     ModelChainDefinition(
         name="routing",
         head_topic=TopicBase.LLM_ROUTING_DECISION,
         tail_table="llm_routing_decisions",
+        correlation_id_is_uuid=True,
         fixture_template={
             "selected_model": "golden-chain-test-model",
             "decision_method": "fallback",
@@ -105,10 +110,13 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ),
         ),
     ),
+    # session_outcomes: no correlation_id column; lookup by session_id (PK)
     ModelChainDefinition(
         name="evaluation",
         head_topic=TopicBase.RUN_EVALUATED,
         tail_table="session_outcomes",
+        lookup_column="session_id",
+        lookup_fixture_key="session_id",
         fixture_template={
             "outcome": "success",
             "session_id": "golden-chain-test-session",
@@ -116,10 +124,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
         assertions=(
             ModelChainAssertion(field="outcome", op="eq", expected="success"),
             ModelChainAssertion(
-                field="session_id", op="eq", expected="golden-chain-test-session"
-            ),
-            ModelChainAssertion(
-                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
+                field="session_id", op="eq", expected="__LOOKUP_VALUE__"
             ),
         ),
     ),

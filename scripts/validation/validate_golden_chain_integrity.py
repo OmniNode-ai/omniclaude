@@ -65,14 +65,23 @@ def validate() -> list[str]:
                 f"not found in TopicBase"
             )
 
-    # Check 3: All chains have a correlation_id assertion
+    # Check 3: Chains using correlation_id lookup must have a correlation_id assertion;
+    # chains using an alternate lookup column must NOT (the column doesn't exist in DB)
     for chain in GOLDEN_CHAIN_DEFINITIONS:
         corr_assertions = [a for a in chain.assertions if a.field == "correlation_id"]
-        if len(corr_assertions) != 1:
-            errors.append(
-                f"Chain '{chain.name}': expected exactly 1 correlation_id assertion, "
-                f"found {len(corr_assertions)}"
-            )
+        if chain.lookup_column == "correlation_id":
+            if len(corr_assertions) != 1:
+                errors.append(
+                    f"Chain '{chain.name}': expected exactly 1 correlation_id assertion, "
+                    f"found {len(corr_assertions)}"
+                )
+        else:
+            if len(corr_assertions) != 0:
+                errors.append(
+                    f"Chain '{chain.name}': uses alternate lookup_column "
+                    f"'{chain.lookup_column}' but has {len(corr_assertions)} "
+                    f"correlation_id assertion(s) (table lacks this column)"
+                )
 
     # Check 4: No duplicate chain names or tail tables
     names = [c.name for c in GOLDEN_CHAIN_DEFINITIONS]
