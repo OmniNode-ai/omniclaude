@@ -571,6 +571,11 @@ This ensures that if the process is killed during the wait, progress is preserve
      Log resume summary (repos done / pending / failed)
    ELSE: initialize empty state with new run_id, write initial state file
 
+0a. LOAD FAILURE HISTORY:
+    Load $ONEX_STATE_DIR/merge-sweep/failure-history.json (create empty {} if missing).
+    This is independent of --resume and --reset-state (failure history is never reset
+    by those flags — it is a long-lived cross-run dataset).
+
 1. VALIDATE: parse and validate --since date if provided
 
 2. SCAN (parallel, up to --max-parallel-repos; SKIP repos marked "done" in resume_state):
@@ -599,6 +604,17 @@ This ensures that if the process is killed during the wait, progress is preserve
    - draft / REVIEW_REQUIRED / else → ignore silently
    Check claim registry; exclude PRs with active claims from other runs.
    Apply --max-total-merges cap to candidates[] (skip if 0).
+
+3a. FAILURE HISTORY CHECK:
+    For each PR in polish_queue[], check should_skip_polish(failure_history, pr_key).
+    If CHRONIC (>=5 consecutive failures): move to skip with result: needs_human.
+    If RECIDIVIST (>=3 polishes, still failing): move to skip with result: needs_human.
+    Log warnings for STUCK PRs (>=3 consecutive failures) but still allow polish.
+
+3b. FAILURE HISTORY CLEANUP:
+    Collect all open PR keys from scan results.
+    Run cleanup_merged_prs(failure_history, all_open_pr_keys).
+    Log count of cleaned entries.
 
 4. If branch_update_queue[], candidates[], thread_resolve_queue[], and polish_queue[] are all empty:
    → emit ModelSkillResult(status=nothing_to_merge), exit
@@ -679,6 +695,9 @@ This ensures that if the process is killed during the wait, progress is preserve
    state.repos[repo].completed_at = now_iso()
    Increment per-repo counters from track results
    Write state file atomically (tmp + rename)
+   Update failure_history for each PR processed in this repo:
+     call update_failure_history() with track result and failure categories
+   Write failure-history.json atomically
 
    ON RATE LIMIT at any API call (Steps 5b, 5c, 6, 7):
      wait_seconds = handle_rate_limit(state.backoff)
@@ -762,6 +781,12 @@ Auto-merge enabled:
 Blocked (manual intervention needed):
   • OmniNode-ai/omnidash#19 — conflict resolution failed
 
+Failure history:                T tracked | C cleaned (merged)
+  ⚠️ Stuck (≥3 consecutive):    S PRs     [only if S > 0]
+    • OmniNode-ai/omniclaude#99 — 4 consecutive failures (ci_test, ci_lint)
+  🔴 Chronic (≥5 consecutive):  H PRs — skipped polish (waste of compute)  [only if H > 0]
+  ♻️ Recidivist (≥3 polishes):   R PRs — polish not fixing root cause       [only if R > 0]
+
 Status: queued | partial | error
 Run: <run_id>
 ```
@@ -799,6 +824,13 @@ Written to `$ONEX_STATE_DIR/skill-results/<run_id>/merge-sweep.json`:
   "polish_blocked": 1,
   "skipped": 1,
   "failed": 0,
+  "failure_history_summary": {
+    "total_tracked": 5,
+    "stuck_prs": 1,
+    "chronic_prs": 0,
+    "recidivist_prs": 0,
+    "cleaned_merged": 2
+  },
   "details": [
     {
       "repo": "OmniNode-ai/omnimemory",
@@ -905,6 +937,14 @@ sub-skill patterns that no longer apply in v3.0.0. Tests must be updated to veri
 
 ## Changelog
 
+- **v3.6.0** (OMN-7573): Cross-run failure history tracking. Persistent
+  `failure-history.json` tracks consecutive failures, total polishes, and failure categories
+  per PR across sweeps. Three escalation thresholds: STUCK (≥3 consecutive — warning),
+  CHRONIC (≥5 consecutive — skip polish), RECIDIVIST (≥3 polishes still failing — skip polish).
+  Auto-cleanup removes entries for merged/closed PRs. `failure_history_summary` added to
+  ModelSkillResult. Slack summary includes failure history stats with stuck/chronic/recidivist
+  callouts. Execution algorithm updated: Step 0a loads history, Step 3a checks escalation
+  thresholds, Step 3b cleans merged entries, Step 8 writes history alongside checkpoint.
 - **v3.5.0** (OMN-7083): State recovery with per-repo checkpointing. Add `--resume` flag to
   continue interrupted sweeps from last checkpoint. Add `--reset-state` to clear stale state.
   State file at `$ONEX_STATE_DIR/merge-sweep/sweep-state.json` tracks per-repo completion
@@ -984,6 +1024,160 @@ Absorbed from the former `fix-prs` skill. Per-run record at `$ONEX_STATE_DIR/pr-
 
 **Retry policy**: retry a PR only if `head_sha` changed OR `last_error_fingerprint` differs.
 If `retry_count >= 3` and neither condition is met: skip with `result: needs_human`.
+
+## Cross-Run Failure History (OMN-7573)
+
+Tracks PR failure patterns across sweep runs. Unlike the idempotency ledger (per-run, per-day),
+the failure history persists indefinitely and accumulates data across all sweeps.
+
+**Path**: `$ONEX_STATE_DIR/merge-sweep/failure-history.json`
+
+```json
+{
+  "OmniNode-ai/omniclaude#1129": {
+    "first_seen": "2026-04-05T20:42:00Z",
+    "last_seen": "2026-04-05T21:00:00Z",
+    "consecutive_failures": 1,
+    "total_failures": 1,
+    "total_polishes": 1,
+    "last_failure_categories": ["ci_test", "pr_title"],
+    "last_result": "polished_and_queued",
+    "last_run_id": "20260405-160000-ms2",
+    "runs_seen": ["20260405-160000-ms2"]
+  },
+  "OmniNode-ai/omnidash#517": {
+    "first_seen": "2026-04-05T15:30:00Z",
+    "last_seen": "2026-04-05T16:00:00Z",
+    "consecutive_failures": 2,
+    "total_failures": 2,
+    "total_polishes": 0,
+    "last_failure_categories": ["threads_blocked"],
+    "last_result": "threads_resolved_awaiting_unblock",
+    "last_run_id": "20260405-160000-ms2",
+    "runs_seen": ["20260405-153000-ms1", "20260405-160000-ms2"]
+  }
+}
+```
+
+### Failure Categories
+
+Standardized category strings for `last_failure_categories`:
+
+| Category | Trigger |
+|----------|---------|
+| `ci_test` | One or more test checks failed |
+| `ci_lint` | Lint/format/type-check failed |
+| `ci_gate` | Gate aggregator failed (Tests Gate, CI Summary) |
+| `pr_title` | PR title check failed |
+| `conflict` | `mergeable == CONFLICTING` |
+| `changes_requested` | `reviewDecision == CHANGES_REQUESTED` |
+| `threads_blocked` | BLOCKED by unresolved review threads |
+| `branch_stale` | `mergeStateStatus` BEHIND or UNKNOWN |
+| `scan_failed` | Repo scan did not return results |
+| `polish_failed` | pr-polish dispatch or execution failed |
+| `needs_human` | Exceeded retry cap, requires manual intervention |
+
+### Update Protocol
+
+**Step 3 (CLASSIFY)** — after classifying each PR, update failure history:
+
+```python
+def update_failure_history(history: dict, pr_key: str, run_id: str,
+                           track: str, result: str, categories: list[str]) -> None:
+    """Update cross-run failure history for a PR."""
+    now = now_iso()
+    if pr_key not in history:
+        history[pr_key] = {
+            "first_seen": now,
+            "last_seen": now,
+            "consecutive_failures": 0,
+            "total_failures": 0,
+            "total_polishes": 0,
+            "last_failure_categories": [],
+            "last_result": None,
+            "last_run_id": None,
+            "runs_seen": [],
+        }
+    entry = history[pr_key]
+    entry["last_seen"] = now
+    entry["last_run_id"] = run_id
+    if run_id not in entry["runs_seen"]:
+        entry["runs_seen"].append(run_id)
+
+    if result in ("failed", "blocked", "polished_partial", "needs_human",
+                   "scan_failed", "polish_failed"):
+        entry["consecutive_failures"] += 1
+        entry["total_failures"] += 1
+        entry["last_failure_categories"] = categories
+    elif result in ("auto_merge_set", "merged_directly", "polished_and_queued",
+                    "branch_updated", "threads_resolved"):
+        entry["consecutive_failures"] = 0  # reset on success
+
+    if result in ("polished_and_queued", "polished_partial"):
+        entry["total_polishes"] += 1
+
+    entry["last_result"] = result
+```
+
+**Step 8 (CHECKPOINT)** — write failure history alongside sweep state:
+
+```python
+# After updating all PR entries for the repo:
+write_json_atomic(failure_history_path, history)
+```
+
+### Cleanup Protocol
+
+When a PR is no longer open (merged or closed), remove it from failure history on the
+next sweep. Detection: PR not found in any scan result but exists in failure history.
+
+```python
+def cleanup_merged_prs(history: dict, all_open_pr_keys: set[str]) -> int:
+    """Remove entries for PRs no longer open. Returns count removed."""
+    stale = [k for k in history if k not in all_open_pr_keys]
+    for k in stale:
+        del history[k]
+    return len(stale)
+```
+
+### Escalation Thresholds
+
+| Condition | Action |
+|-----------|--------|
+| `consecutive_failures >= 3` | Log `⚠️ STUCK` in sweep summary; include in Slack notification |
+| `consecutive_failures >= 5` | Log `🔴 CHRONIC` in sweep summary; skip polish (waste of compute) |
+| `total_polishes >= 3` and still failing | Log `♻️ RECIDIVIST` — polish is not fixing the root cause |
+
+These thresholds inform classification in Step 3:
+
+```python
+def should_skip_polish(history: dict, pr_key: str) -> tuple[bool, str | None]:
+    """Check if a PR should skip polish based on failure history."""
+    entry = history.get(pr_key)
+    if not entry:
+        return False, None
+    if entry["consecutive_failures"] >= 5:
+        return True, f"CHRONIC: {entry['consecutive_failures']} consecutive failures"
+    if entry["total_polishes"] >= 3 and entry["consecutive_failures"] > 0:
+        return True, f"RECIDIVIST: polished {entry['total_polishes']}x, still failing"
+    return False, None
+```
+
+### ModelSkillResult Integration
+
+Add failure history summary to ModelSkillResult:
+
+```json
+{
+  "failure_history_summary": {
+    "total_tracked": 5,
+    "stuck_prs": 1,
+    "chronic_prs": 0,
+    "recidivist_prs": 0,
+    "cleaned_merged": 2
+  }
+}
+```
 
 ## CI Secrets Guard
 
