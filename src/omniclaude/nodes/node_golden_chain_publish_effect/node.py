@@ -220,7 +220,7 @@ async def run_chain(
         if conn is not None:
             try:
                 conn.close()
-            except Exception:  # noqa: BLE001, S110
+            except Exception:  # noqa: BLE001, S110  # nosec B110 — cleanup close is best-effort
                 pass
 
 
