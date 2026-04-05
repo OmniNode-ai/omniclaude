@@ -314,13 +314,14 @@ class TaskClassifier:
     # ---------------------------------------------------------------------------
 
     #: Task intents that are candidates for delegation to a smaller model.
-    #: Only text-only tasks with well-understood, bounded scope are allowed.
+    #: Tasks with schema-validated output (contracts, tests) are ideal candidates.
     #: Vision and tool-call tasks must NEVER appear here.
     DELEGATABLE_INTENTS: frozenset[TaskIntent] = frozenset(
         {
             TaskIntent.DOCUMENT,  # documentation generation
             TaskIntent.TEST,  # test boilerplate generation
             TaskIntent.RESEARCH,  # simple code review / research
+            TaskIntent.IMPLEMENT,  # contract-driven implementation (validated by schema)
         }
     )
 
