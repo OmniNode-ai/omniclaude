@@ -532,9 +532,54 @@ def main() -> int:
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
 
     # ------------------------------------------------------------------
+    # Pre-check: Whitelist rm on Claude Code transient paths (OMN-7567)
+    # ~/.claude/teams/ and ~/.claude/tasks/ are ephemeral agent team state.
+    # The rm HARD_BLOCK pattern catches all ~/... paths, but these are safe
+    # to remove — they are created and managed by Claude Code itself.
+    #
+    # Safety: only whitelist if the HARD_BLOCK match is solely from the rm
+    # pattern AND every rm target path is under ~/.claude/(teams|tasks)/.
+    # Mixed commands (e.g. "rm ~/.claude/teams/foo; rm -rf /") are NOT
+    # whitelisted — the non-safe rm still triggers HARD_BLOCK.
+    # ------------------------------------------------------------------
+    _is_claude_transient_rm_only = False
+    if matches_any(command, HARD_BLOCK_PATTERNS):
+        # Check if the only HARD_BLOCK match is the rm pattern (index 1)
+        _rm_hard_pattern = HARD_BLOCK_PATTERNS[1]
+        _other_hard_matched = any(
+            p.search(command) for i, p in enumerate(HARD_BLOCK_PATTERNS) if i != 1
+        )
+        if _rm_hard_pattern.search(command) and not _other_hard_matched:
+            # Split on command separators, find all rm invocations,
+            # extract their non-flag arguments (paths), and verify
+            # every path is under ~/.claude/(teams|tasks)/.
+            _segments = re.split(r"[;&|]+", command)
+            _all_rm_paths: list[str] = []
+            _has_rm = False
+            for _seg in _segments:
+                _seg = _seg.strip()
+                _rm_match = re.match(r"rm\s+(.*)", _seg)
+                if not _rm_match:
+                    continue
+                _has_rm = True
+                # Split args, skip flags (start with -)
+                for _arg in _rm_match.group(1).split():
+                    if not _arg.startswith("-"):
+                        _all_rm_paths.append(_arg)
+            if (
+                _has_rm
+                and _all_rm_paths
+                and all(
+                    p.startswith("~/.claude/teams/") or p.startswith("~/.claude/tasks/")
+                    for p in _all_rm_paths
+                )
+            ):
+                _is_claude_transient_rm_only = True
+
+    # ------------------------------------------------------------------
     # Tier 1 — HARD_BLOCK
     # ------------------------------------------------------------------
-    if matches_any(command, HARD_BLOCK_PATTERNS):
+    if matches_any(command, HARD_BLOCK_PATTERNS) and not _is_claude_transient_rm_only:
         _no_verify_re = re.compile(
             r"\bgit\b[^;|&\n]*--no-verify\b", re.IGNORECASE | re.MULTILINE
         )
