@@ -212,8 +212,39 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 # =============================================================================
 
 
+def _create_emit_client(socket_path: str, timeout: float) -> object:
+    """Create an emit client, preferring omnimarket's portable client.
+
+    Tries to import EmitClient from omnimarket.nodes.node_emit_daemon.client
+    first (portable, extracted implementation). Falls back to the built-in
+    _SocketEmitClient if omnimarket is not installed.
+
+    Sunset: This fallback can be removed once omnimarket is a required
+    dependency of omniclaude (tracked by OMN-7639).
+    """
+    try:
+        from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415
+
+        return EmitClient(socket_path=socket_path, timeout=timeout)
+    except ImportError:
+        import warnings  # noqa: PLC0415
+
+        warnings.warn(
+            "omnimarket.nodes.node_emit_daemon.client not available; "
+            "using built-in _SocketEmitClient. Install omnimarket to use "
+            "the portable emit client. (OMN-7639)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _SocketEmitClient(socket_path=socket_path, timeout=timeout)
+
+
 class _SocketEmitClient:
     """Minimal emit daemon client using raw Unix domain sockets.
+
+    DEPRECATED: Prefer omnimarket.nodes.node_emit_daemon.client.EmitClient.
+    This fallback exists for environments where omnimarket is not installed.
+    Sunset criteria: remove when omnimarket is a required dependency (OMN-7639).
 
     Implements the newline-delimited JSON protocol expected by the emit daemon.
     Protocol:
@@ -222,10 +253,9 @@ class _SocketEmitClient:
         Ping:     ``{"command": "ping"}\\n``
         Pong:     ``{"status": "ok", "queue_size": N, "spool_size": N}\\n``
 
-    This replaces the former ``omnibase_infra.runtime.emit_daemon.client.EmitClient``
-    which was removed in OMN-1945 and moved to omniclaude3.
-
     .. versionadded:: 0.2.1
+    .. deprecated:: 0.5.0
+        Use ``omnimarket.nodes.node_emit_daemon.client.EmitClient`` instead.
     """
 
     __slots__ = ("_socket_path", "_timeout")
@@ -294,7 +324,7 @@ class _SocketEmitClient:
 # =============================================================================
 
 _client_lock = threading.Lock()
-_emit_client: _SocketEmitClient | None = None
+_emit_client: _SocketEmitClient | object | None = None
 _client_initialized = False
 
 
@@ -322,7 +352,7 @@ def _get_client() -> _SocketEmitClient | None:
                     "OMNICLAUDE_EMIT_TIMEOUT", str(DEFAULT_CLIENT_TIMEOUT_SECONDS)
                 )
             )
-            _emit_client = _SocketEmitClient(
+            _emit_client = _create_emit_client(
                 socket_path=socket_path, timeout=timeout_seconds
             )
             logger.debug(

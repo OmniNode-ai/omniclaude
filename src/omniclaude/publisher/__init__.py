@@ -36,8 +36,10 @@ def __getattr__(name: str) -> object:
 
         return PublisherConfig
     if name == "EmitClient":
-        from omniclaude.publisher.emit_client import EmitClient
-
+        try:
+            from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415, I001
+        except ImportError:
+            from omniclaude.publisher.emit_client import EmitClient  # type: ignore[no-redef]  # noqa: PLC0415, I001
         return EmitClient
     if name == "EmbeddedEventPublisher":
         from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
