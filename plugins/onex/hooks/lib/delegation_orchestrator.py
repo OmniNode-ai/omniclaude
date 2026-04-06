@@ -255,6 +255,14 @@ _SYSTEM_PROMPT_RESEARCH = (
     "and explain the reasoning. Be direct and technical."
 )
 
+_SYSTEM_PROMPT_IMPLEMENT = (
+    "You are a Python implementation expert. "
+    "Write clean, well-structured code following existing codebase conventions. "
+    "Include type hints, follow PEP 604 unions (X | Y), and use Pydantic models "
+    "with frozen=True and extra='forbid'. Write complete implementations, "
+    "not stubs or placeholders."
+)
+
 # Agentic system prompts (OMN-5727) — used when agentic_eligible=True.
 # These instruct the LLM to use the available tools to do real codebase work.
 _AGENTIC_SYSTEM_PROMPT_RESEARCH = (
@@ -283,11 +291,20 @@ _AGENTIC_SYSTEM_PROMPT_DOC = (
     "documentation with accurate parameter descriptions and usage examples."
 )
 
+_AGENTIC_SYSTEM_PROMPT_IMPLEMENT = (
+    "You are a Python implementation expert with access to tools for reading files, "
+    "searching code, finding files, and running commands. "
+    "Use these tools to understand the codebase before writing code. "
+    "Read existing implementations for patterns and conventions. "
+    "Write clean, well-structured code with type hints and proper error handling."
+)
+
 # Maps task intent to agentic system prompt
 _AGENTIC_SYSTEM_PROMPTS: dict[str, str] = {
     "research": _AGENTIC_SYSTEM_PROMPT_RESEARCH,
     "test": _AGENTIC_SYSTEM_PROMPT_TEST,
     "document": _AGENTIC_SYSTEM_PROMPT_DOC,
+    "implement": _AGENTIC_SYSTEM_PROMPT_IMPLEMENT,
 }
 
 # ---------------------------------------------------------------------------
@@ -316,6 +333,12 @@ _HANDLER_ROUTING: dict[str, tuple[str, str, str, int]] = {
         _SYSTEM_PROMPT_RESEARCH,
         "code_review",
         60,
+    ),  # LlmEndpointPurpose.CODE_ANALYSIS
+    "implement": (
+        "code_analysis",
+        _SYSTEM_PROMPT_IMPLEMENT,
+        "code_impl",
+        80,
     ),  # LlmEndpointPurpose.CODE_ANALYSIS
 }
 
