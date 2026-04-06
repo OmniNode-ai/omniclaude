@@ -371,6 +371,37 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct tool payload (jq failed), skipping emission" >> "$LOG_FILE"
         else
             emit_via_daemon "tool.executed" "$PAYLOAD" 50
+
+            # Emit agent.action event (OMN-7569)
+            # Maps each tool use to the agent-action topic for downstream
+            # consumer (omninode-agent-actions-consumer) and omnidash projections.
+            AGENT_NAME="${ONEX_AGENT_NAME:-${CLAUDE_AGENT_NAME:-claude-code}}"
+            CORRELATION_ID="${ONEX_CORRELATION_ID:-${CLAUDE_SESSION_ID:-$SESSION_ID}}"
+            ACTION_PAYLOAD=$(jq -n \
+                --arg correlation_id "$CORRELATION_ID" \
+                --arg agent_name "$AGENT_NAME" \
+                --arg action_type "tool_call" \
+                --arg action_name "$TOOL_NAME" \
+                --arg action_description "$ACTION_DESCRIPTION" \
+                --argjson success "$([[ "$TOOL_SUCCESS" == "true" ]] && echo "true" || echo "false")" \
+                --arg duration_ms "${DURATION_MS:-}" \
+                --arg session_id "$SESSION_ID" \
+                --arg working_directory "${CLAUDE_PROJECT_DIR:-$(pwd)}" \
+                '{
+                    correlation_id: $correlation_id,
+                    agent_name: $agent_name,
+                    action_type: $action_type,
+                    action_name: $action_name,
+                    action_details: {action_description: $action_description},
+                    success: $success,
+                    debug_mode: true,
+                    session_id: $session_id,
+                    working_directory: $working_directory
+                } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
+            )
+            if [[ -n "$ACTION_PAYLOAD" && "$ACTION_PAYLOAD" != "null" ]]; then
+                emit_via_daemon "agent.action" "$ACTION_PAYLOAD" 50
+            fi
         fi
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
