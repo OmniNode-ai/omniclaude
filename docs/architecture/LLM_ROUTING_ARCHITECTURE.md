@@ -40,7 +40,7 @@ LocalLlmEndpointRegistry (pydantic-settings BaseSettings)
     │     → llm_embedding_url (Qwen3-Embedding-8B-4bit, M2 Ultra, priority=9)
     │
     ├── LlmEndpointPurpose.REASONING
-    │     → llm_qwen_72b_url (Qwen2.5-72B, priority=8)
+    │     → llm_qwen_72b_url (Qwen3-Coder-30B-A3B-Instruct, priority=8)
     │     → llm_deepseek_r1_url (DeepSeek-R1-Distill, priority=7)
     │     [highest priority returned by get_endpoint()]
     │
@@ -64,7 +64,7 @@ LocalLlmEndpointRegistry (pydantic-settings BaseSettings)
 | `LLM_CODER_URL` | Qwen3-Coder-30B-A3B-Instruct | `CODE_ANALYSIS` | RTX 5090 (64K ctx) | 9 |
 | `LLM_CODER_FAST_URL` | Qwen3-14B-AWQ | `ROUTING` | RTX 4090 (40K ctx) | 9 |
 | `LLM_EMBEDDING_URL` | Qwen3-Embedding-8B-4bit | `EMBEDDING` | M2 Ultra | 9 |
-| `LLM_QWEN_72B_URL` | Qwen2.5-72B | `REASONING` | M2 Ultra | 8 |
+| `LLM_QWEN_72B_URL` | Qwen3-Coder-30B-A3B-Instruct | `REASONING` | M2 Ultra | 8 |
 | `LLM_DEEPSEEK_R1_URL` | DeepSeek-R1-Distill | `REASONING` | M2 Ultra (hot-swap) | 7 |
 | `LLM_QWEN_14B_URL` | Qwen2.5-14B | `GENERAL` | M2 Pro | 6 |
 | `LLM_FUNCTION_URL` | Qwen2.5-7B | `FUNCTION_CALLING` | RTX 4090 (hot-swap) | 5 |
@@ -202,7 +202,7 @@ Each endpoint has a corresponding `_MODEL_NAME` environment variable. These cont
 LLM_CODER_MODEL_NAME        → "Qwen3-Coder-30B-A3B-Instruct"
 LLM_CODER_FAST_MODEL_NAME   → "Qwen/Qwen3-14B-AWQ"
 LLM_EMBEDDING_MODEL_NAME    → "Qwen3-Embedding-8B-4bit"
-LLM_QWEN_72B_MODEL_NAME     → "Qwen2.5-72B"
+LLM_QWEN_72B_MODEL_NAME     → "Qwen3-Coder-30B-A3B-Instruct"
 LLM_DEEPSEEK_R1_MODEL_NAME  → "DeepSeek-R1-Distill"
 LLM_QWEN_14B_MODEL_NAME     → "Qwen2.5-14B"
 ```

@@ -272,7 +272,7 @@ class TestLocalLlmEndpointRegistry:
         model_names = {ep.model_name for ep in endpoints}
         assert "Qwen3-Coder-30B-A3B-Instruct" in model_names
         assert "Qwen3-Embedding-8B-4bit" in model_names
-        assert "Qwen2.5-72B" in model_names
+        assert "Qwen3-Coder-30B-A3B-Instruct" in model_names
         assert "Qwen2-VL" in model_names
         assert "Qwen2.5-14B" in model_names
         # Hot-swap models should not be present
@@ -325,13 +325,13 @@ class TestLocalLlmEndpointRegistry:
     ) -> None:
         """Multiple endpoints for same purpose are sorted by priority descending."""
         registry = make_registry()
-        # REASONING has two endpoints: Qwen2.5-72B (priority 8) and DeepSeek-R1 (priority 7)
+        # REASONING has two endpoints: Qwen3-Coder-30B-A3B-Instruct (priority 8) and DeepSeek-R1 (priority 7)
         reasoning_endpoints = registry.get_endpoints_by_purpose(
             LlmEndpointPurpose.REASONING
         )
         assert len(reasoning_endpoints) == 2
         assert reasoning_endpoints[0].priority >= reasoning_endpoints[1].priority
-        assert reasoning_endpoints[0].model_name == "Qwen2.5-72B"
+        assert reasoning_endpoints[0].model_name == "Qwen3-Coder-30B-A3B-Instruct"
         assert reasoning_endpoints[1].model_name == "DeepSeek-R1-Distill"
 
     @pytest.mark.unit

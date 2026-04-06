@@ -184,7 +184,7 @@ class TestTaskIdFieldPresent:
             correlation_id=_SESSION_ID,
             emitted_at=_NOW,
             task_type="document",
-            delegated_to="Qwen2.5-72B",
+            delegated_to="Qwen3-Coder-30B-A3B-Instruct",
             delegated_by="doc_gen",
             quality_gate_passed=True,
             delegation_success=True,

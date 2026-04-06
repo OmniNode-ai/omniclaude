@@ -26,9 +26,9 @@ Environment variables:
     LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
     LLM_DEEPSEEK_LITE_MODEL_NAME: Model ID sent in API requests to the DeepSeek-Lite endpoint.
         Default: "DeepSeek-V2-Lite". Must be non-empty if set.
-    LLM_QWEN_72B_URL: Qwen2.5-72B large model endpoint.
-    LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the 72B endpoint.
-        Default: "Qwen2.5-72B". Override for MLX or renamed model builds. Must be non-empty if set.
+    LLM_QWEN_72B_URL: Qwen3-Coder-30B-A3B reasoning endpoint (was Qwen2.5-72B).
+    LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the reasoning endpoint.
+        Default: "Qwen3-Coder-30B-A3B-Instruct". Override for MLX or renamed model builds. Must be non-empty if set.
     LLM_VISION_URL: Qwen2-VL vision endpoint.
     LLM_VISION_MODEL_NAME: Model ID sent in API requests to the vision endpoint.
         Default: "Qwen2-VL". Must be non-empty if set.
@@ -186,7 +186,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         llm_function_model_name: Model ID sent in API requests to the function calling endpoint.
         llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
         llm_deepseek_lite_model_name: Model ID sent in API requests to the DeepSeek-Lite endpoint.
-        llm_qwen_72b_url: Large model endpoint (Qwen2.5-72B).
+        llm_qwen_72b_url: Large model endpoint (Qwen3-Coder-30B-A3B, was Qwen2.5-72B).
         llm_qwen_72b_model_name: Model ID sent in API requests to the 72B endpoint.
         llm_vision_url: Vision endpoint (Qwen2-VL).
         llm_vision_model_name: Model ID sent in API requests to the vision endpoint.
@@ -270,12 +270,12 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_qwen_72b_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen2.5-72B endpoint for documentation and analysis (M2 Ultra)",
+        description="Qwen3-Coder-30B-A3B endpoint for documentation and analysis (M2 Ultra)",
     )
     llm_qwen_72b_model_name: str = Field(
-        default="Qwen2.5-72B",
+        default="Qwen3-Coder-30B-A3B-Instruct",
         min_length=1,
-        description="Model ID to send in API requests for the 72B endpoint (override for mlx or renamed models)",
+        description="Model ID to send in API requests for the reasoning endpoint (override for mlx or renamed models)",
     )
     llm_vision_url: HttpUrl | None = Field(
         default=None,
