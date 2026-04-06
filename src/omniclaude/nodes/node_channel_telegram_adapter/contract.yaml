@@ -27,7 +27,6 @@ description: >
   sends replies via Telegram Bot API.
 
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.cmd.omniclaw.telegram-outbound.v1"
   publish_topics:

@@ -31,7 +31,6 @@ description: >
   thin bridges.
 
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.cmd.omniclaw.channel-message-received.v1"
   publish_topics:

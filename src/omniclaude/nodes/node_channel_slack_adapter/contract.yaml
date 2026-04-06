@@ -27,7 +27,6 @@ description: >
   handler sends replies via Slack Web API.
 
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.cmd.omniclaw.slack-outbound.v1"
   publish_topics:

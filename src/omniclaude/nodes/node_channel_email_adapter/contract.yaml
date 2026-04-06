@@ -27,7 +27,6 @@ description: >
   attachment metadata only (no content download).
 
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.cmd.omniclaw.email-outbound.v1"
   publish_topics:

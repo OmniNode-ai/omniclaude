@@ -35,7 +35,6 @@ description: >
 
 # Event bus topics
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.cmd.omniclaude.delegate-task.v1"
   publish_topics:

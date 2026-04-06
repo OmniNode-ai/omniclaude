@@ -25,7 +25,6 @@ description: >
   based on channel_type. Fan-out from generic reply to N adapters.
 
 event_bus:
-  event_bus_enabled: true
   subscribe_topics:
     - "onex.evt.omniclaw.channel-reply-requested.v1"
   publish_topics:
