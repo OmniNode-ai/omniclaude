@@ -48,6 +48,15 @@ from omnibase_infra.services.contract_publisher import (
     NoContractsFoundError,
 )
 
+# Export lifecycle (OMN-7659)
+from .lifecycle import (
+    LifecycleState,
+    ModelLifecycleDiagnostic,
+    on_shutdown,
+    on_start,
+    start_workers,
+)
+
 # Export plugin
 from .plugin import PluginClaude
 
@@ -58,6 +67,12 @@ from .wiring import publish_handler_contracts, wire_omniclaude_services
 from .wiring_dispatchers import ContractLoadError, wire_skill_dispatchers
 
 __all__ = [
+    # Lifecycle (OMN-7659)
+    "LifecycleState",
+    "ModelLifecycleDiagnostic",
+    "on_start",
+    "on_shutdown",
+    "start_workers",
     # Plugin (OMN-2002)
     "PluginClaude",
     # Configuration
