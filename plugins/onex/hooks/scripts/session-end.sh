@@ -313,9 +313,12 @@ print(result.outcome)
             fi
         fi
 
-        # Derive total_tokens_used from context_window in SessionEnd payload (OMN-5201 T11b).
-        # Claude Code provides context_window.current_usage.{input_tokens,output_tokens}.
-        # Uses awk to sum the two fields (avoids Python startup on this hot path).
+        # Derive total_tokens_used (OMN-5201 T11b, OMN-7602).
+        # Primary source: context_window.current_usage in SessionEnd payload.
+        # Fallback: accumulated totals from PostToolUse hooks (.usage.input_tokens
+        # / .usage.output_tokens summed across all tool calls during the session).
+        # The fallback was added in OMN-7602 because the SessionEnd payload
+        # frequently lacks context_window data, causing cost events to never emit.
         TOTAL_TOKENS_USED="null"
         _input_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.input_tokens // empty' 2>/dev/null) || _input_tokens=""
         _output_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.output_tokens // empty' 2>/dev/null) || _output_tokens=""
@@ -327,8 +330,36 @@ print(result.outcome)
             fi
         fi
 
-        # Derive files_modified_count from session accumulator (OMN-5201 T11b).
-        # Written by post_tool_use_enforcer when Write/Edit tools fire during the session.
+        # Fallback: read accumulated tokens from session accumulator (OMN-7602).
+        # PostToolUse hooks increment total_input_tokens / total_output_tokens
+        # on every tool call.  Use these when SessionEnd payload has no token data.
+        if [[ "$TOTAL_TOKENS_USED" == "null" ]] && [[ -f "$SESSION_STATE_FILE" ]]; then
+            _accum_in=$(jq -r '.total_input_tokens // 0' "$SESSION_STATE_FILE" 2>/dev/null) || _accum_in=0
+            _accum_out=$(jq -r '.total_output_tokens // 0' "$SESSION_STATE_FILE" 2>/dev/null) || _accum_out=0
+            [[ "$_accum_in" =~ ^[0-9]+$ ]] || _accum_in=0
+            [[ "$_accum_out" =~ ^[0-9]+$ ]] || _accum_out=0
+            _accum_total=$(( _accum_in + _accum_out ))
+            if [[ "$_accum_total" -gt 0 ]]; then
+                TOTAL_TOKENS_USED="$_accum_total"
+                _input_tokens="$_accum_in"
+                _output_tokens="$_accum_out"
+                log "Token usage from session accumulator: input=$_accum_in output=$_accum_out total=$_accum_total"
+            fi
+        fi
+
+        # Derive tool_calls_completed from session accumulator (OMN-7602).
+        # Overrides the tools_used_count from SessionEnd payload (which is
+        # frequently 0) with the actual count accumulated by PostToolUse hooks.
+        if [[ -f "$SESSION_STATE_FILE" ]]; then
+            _accum_tc=$(jq -r '.tool_calls_count // empty' "$SESSION_STATE_FILE" 2>/dev/null) || _accum_tc=""
+            if [[ "$_accum_tc" =~ ^[0-9]+$ ]] && [[ "$_accum_tc" -gt 0 ]]; then
+                TOOL_CALLS_COMPLETED="$_accum_tc"
+                log "Tool calls from session accumulator: $TOOL_CALLS_COMPLETED"
+            fi
+        fi
+
+        # Derive files_modified_count from session accumulator (OMN-5201 T11b, OMN-7602).
+        # Incremented by PostToolUse hooks when Write/Edit/NotebookEdit tools fire.
         FILES_MODIFIED_COUNT="null"
         if [[ -f "$SESSION_STATE_FILE" ]]; then
             _fmc=$(jq -r '.files_modified_count // empty' "$SESSION_STATE_FILE" 2>/dev/null) || _fmc=""

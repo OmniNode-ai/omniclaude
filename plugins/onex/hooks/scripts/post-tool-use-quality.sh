@@ -304,6 +304,70 @@ fi
 # Extract duration if available
 DURATION_MS=$(echo "$TOOL_INFO" | jq -r '.duration_ms // .durationMs // ""' 2>/dev/null || echo "")
 
+# -----------------------------------------------------------------------
+# Session Accumulator: Increment token + tool counters (OMN-7602)
+# -----------------------------------------------------------------------
+# Accumulates tool_calls_count, total_input_tokens, total_output_tokens,
+# and files_modified_count into the session state file at
+# /tmp/omniclaude-session-<SESSION_ID>.json.  session-end.sh reads these
+# to populate the session.outcome and llm.cost.completed events.
+#
+# The PostToolUse payload includes .usage.{input_tokens, output_tokens}
+# from the Claude API response.  We add them to running totals.
+#
+# Uses jq atomic read-modify-write with a temp file + mv to avoid partial
+# writes.  Races between concurrent PostToolUse hooks on the same session
+# are possible but unlikely and acceptable (last-writer-wins on a single
+# increment is a minor under-count, not a correctness issue).
+# -----------------------------------------------------------------------
+if [[ -n "$SESSION_ID" && "$SESSION_ID" != "unknown-session" ]]; then
+    _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+
+    # Extract token usage from PostToolUse payload (.usage.input_tokens, .usage.output_tokens)
+    _ptu_input_tokens=$(echo "$TOOL_INFO" | jq -r '.usage.input_tokens // 0' 2>/dev/null) || _ptu_input_tokens=0
+    _ptu_output_tokens=$(echo "$TOOL_INFO" | jq -r '.usage.output_tokens // 0' 2>/dev/null) || _ptu_output_tokens=0
+    # Sanitize: ensure numeric
+    [[ "$_ptu_input_tokens" =~ ^[0-9]+$ ]] || _ptu_input_tokens=0
+    [[ "$_ptu_output_tokens" =~ ^[0-9]+$ ]] || _ptu_output_tokens=0
+
+    # Determine if this tool call modified a file
+    _ptu_is_file_mod=0
+    if [[ "$TOOL_NAME" == "Write" || "$TOOL_NAME" == "Edit" || "$TOOL_NAME" == "NotebookEdit" ]]; then
+        _ptu_is_file_mod=1
+    fi
+
+    # Read existing accumulator (or start from defaults), increment, write back
+    _ACCUM_TMP="${_ACCUM_FILE}.tmp.$$"
+    if [[ -f "$_ACCUM_FILE" ]]; then
+        jq \
+            --argjson input_tokens "$_ptu_input_tokens" \
+            --argjson output_tokens "$_ptu_output_tokens" \
+            --argjson is_file_mod "$_ptu_is_file_mod" \
+            '.tool_calls_count = ((.tool_calls_count // 0) + 1)
+             | .total_input_tokens = ((.total_input_tokens // 0) + $input_tokens)
+             | .total_output_tokens = ((.total_output_tokens // 0) + $output_tokens)
+             | .files_modified_count = ((.files_modified_count // 0) + $is_file_mod)' \
+            "$_ACCUM_FILE" > "$_ACCUM_TMP" 2>/dev/null \
+            && mv "$_ACCUM_TMP" "$_ACCUM_FILE" \
+            || rm -f "$_ACCUM_TMP"
+    else
+        # No accumulator yet (e.g. tool fired before first UserPromptSubmit).
+        # Create with initial values.
+        jq -n \
+            --argjson input_tokens "$_ptu_input_tokens" \
+            --argjson output_tokens "$_ptu_output_tokens" \
+            --argjson is_file_mod "$_ptu_is_file_mod" \
+            '{
+                tool_calls_count: 1,
+                total_input_tokens: $input_tokens,
+                total_output_tokens: $output_tokens,
+                files_modified_count: $is_file_mod
+            }' > "$_ACCUM_TMP" 2>/dev/null \
+            && mv "$_ACCUM_TMP" "$_ACCUM_FILE" \
+            || rm -f "$_ACCUM_TMP"
+    fi
+fi
+
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
     (
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
