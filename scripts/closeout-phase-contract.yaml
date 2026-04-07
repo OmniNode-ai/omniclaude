@@ -44,6 +44,17 @@ phases:
     required_tools: "Bash,Read,Glob,Grep"
     verification: "Output contains DEPLOY_COMPLETE"
 
+  - id: A2b_plugin_refresh
+    name: "Plugin Refresh"
+    category: prepare
+    blocking: false
+    expected_action: "Refresh onex plugin from marketplace to pick up new code"
+    required_keywords:
+      - "plugin"
+      - "PLUGIN_REFRESH"
+    required_tools: "Bash,Read"
+    verification: "Output contains PLUGIN_REFRESH: OK or PLUGIN_REFRESH: SKIPPED"
+
   - id: A3_start_env
     name: "Infrastructure Health"
     category: prepare

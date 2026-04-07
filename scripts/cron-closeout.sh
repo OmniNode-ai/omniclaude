@@ -467,6 +467,18 @@ if ! run_phase "A2_deploy_plugin" \
   record_strike "A2_deploy_plugin"
 fi
 
+# A2b: Refresh plugin from marketplace [OMN-7734]
+# After deploying local cache, refresh the marketplace plugin so the next build loop
+# cycle picks up any new plugin code merged to omniclaude main.
+# Idempotent: no-op if already at the latest version.
+if ! run_phase "A2b_plugin_refresh" \
+  "Refresh the onex plugin from the marketplace to pick up any new code merged to omniclaude main. Run: claude plugin install onex@omninode-tools 2>&1 || true. The command is idempotent — it will report 'already installed' if current. Print PLUGIN_REFRESH: OK on success or PLUGIN_REFRESH: SKIPPED if the command is not available." \
+  "Bash,Read"; then
+  log "WARNING: Plugin refresh failed (non-blocking)"
+  # Non-blocking: plugin refresh failure should not halt the pipeline.
+  # The local cache deploy (A2) already ensures plugin files are current.
+fi
+
 # A3: Verify infrastructure health [OMN-7238: use health endpoints, not local docker]
 if ! run_phase "A3_start_env" \
   "Verify infrastructure health on host ${INFRA_HOST}. Run these checks and report status for each:
@@ -956,6 +968,7 @@ Dry Run:   ${DRY_RUN}
 Phase Results:
   A1 merge-sweep:      $(test -f "${RUN_DIR}/A1_merge_sweep.txt" && echo "executed" || echo "missing")
   A2 deploy-plugin:    $(test -f "${RUN_DIR}/A2_deploy_plugin.txt" && echo "executed" || echo "missing")
+  A2b plugin-refresh:  $(test -f "${RUN_DIR}/A2b_plugin_refresh.txt" && echo "executed" || echo "missing")
   A3 infra-health:     $(test -f "${RUN_DIR}/A3_start_env.txt" && echo "executed" || echo "missing")
   B1 runtime-sweep:    $(test -f "${RUN_DIR}/B1_runtime_sweep.txt" && echo "executed" || echo "missing")
   B2 data-flow-sweep:  $(test -f "${RUN_DIR}/B2_data_flow_sweep.txt" && echo "executed" || echo "missing")
