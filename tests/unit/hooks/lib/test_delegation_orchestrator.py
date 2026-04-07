@@ -147,6 +147,7 @@ def _make_score(
     delegate_to_model: str = "qwen2.5-14b",
     estimated_savings_usd: float = 0.0112,
     reasons: list[str] | None = None,
+    classified_intent: str = "document",
 ) -> Any:
     """Build a minimal ModelDelegationScore-compatible mock object."""
     score = MagicMock()
@@ -155,6 +156,7 @@ def _make_score(
     score.delegate_to_model = delegate_to_model
     score.estimated_savings_usd = estimated_savings_usd
     score.reasons = reasons or ["intent 'document' is in the delegation allow-list"]
+    score.classified_intent = classified_intent
     return score
 
 
@@ -661,6 +663,7 @@ class TestClassificationGate:
             confidence=0.3,
             estimated_savings_usd=0.005,
             reasons=["intent 'debug' not in allow-list"],
+            classified_intent="debug",
         )
         classifier_mock = _make_classifier_mock(score, "debug")
 
@@ -679,7 +682,7 @@ class TestClassificationGate:
         assert call_kwargs.get("delegation_success") is False
         assert call_kwargs.get("quality_gate_passed") is False
         assert "not in allow-list" in call_kwargs.get("quality_gate_reason", "")
-        assert call_kwargs.get("task_type") == "unknown"
+        assert call_kwargs.get("task_type") == "debug"
         assert call_kwargs.get("savings_usd") == pytest.approx(0.005)
 
     def test_classification_exception_returns_false(
@@ -897,35 +900,35 @@ class TestLlmCallFailure:
         assert result["delegated"] is False
         assert result.get("reason") == "pre_gate:empty_response"
 
-    def test_intent_extraction_error_emits_delegation_event(
+    def test_delegatable_no_endpoint_emits_intent_from_score(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """classify() raising -> delegated=False with intent_extraction_error and event emitted."""
+        """When delegatable but no endpoint, event uses classified_intent from score (OMN-7695)."""
         from uuid import uuid4
 
-        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
 
-        score = _make_score(True, confidence=0.92)
-        classifier_instance = MagicMock()
-        classifier_instance.is_delegatable.return_value = score
-        classifier_instance.classify.side_effect = RuntimeError("classification failed")
+        score = _make_score(True, confidence=0.92, classified_intent="test")
+        classifier_mock = _make_classifier_mock(score, "test")
 
-        with patch.object(do, "TaskClassifier", return_value=classifier_instance):
-            with patch.object(do, "_emit_delegation_event") as mock_emit:
-                result = do.orchestrate_delegation(
-                    prompt="write tests",
-                    session_id="s1",
-                    correlation_id=str(uuid4()),
-                )
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(do, "_select_handler_endpoint", return_value=None):
+                with patch.object(do, "_emit_delegation_event") as mock_emit:
+                    result = do.orchestrate_delegation(
+                        prompt="write tests",
+                        session_id="s1",
+                        correlation_id=str(uuid4()),
+                    )
 
         assert result["delegated"] is False
-        assert "pre_gate:intent_extraction_error" in result.get("reason", "")
+        assert result.get("reason") == "pre_gate:no_endpoint_configured"
+        assert result.get("intent") == "test"
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
         assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("task_type") == "test"
 
     def test_redaction_failure_aborts_delegation(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1174,7 +1177,8 @@ class TestOrchestratedDelegationSuccess:
             True,
             confidence=0.97,
             estimated_savings_usd=0.0112,
-            reasons=["intent 'document' is in the delegation allow-list"],
+            reasons=[f"intent '{intent}' is in the delegation allow-list"],
+            classified_intent=intent,
         )
         classifier_mock = _make_classifier_mock(score, intent)
         endpoint_sel = _make_endpoint_selection(

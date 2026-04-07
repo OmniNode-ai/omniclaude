@@ -887,6 +887,7 @@ class TestDelegationOrchestratorIntegration:
         score.confidence = confidence
         score.estimated_savings_usd = estimated_savings_usd
         score.reasons = reasons or ["intent 'document' is in allow-list"]
+        score.classified_intent = "document"
         return score
 
     def _make_context(self, intent_value: str = "document") -> Any:
