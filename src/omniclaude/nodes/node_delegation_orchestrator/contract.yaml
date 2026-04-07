@@ -114,6 +114,16 @@ dependencies:
     module: "omniclaude.lib.task_classifier"
     description: "Keyword-based intent classifier for delegation eligibility"
 
+# Golden path: delegation chain (task delegated -> delegation_events table)
+golden_path:
+  - "Receive delegation request on onex.cmd.omniclaude.delegate-task.v1"
+  - "Classify prompt, route to LLM backend, run quality gate"
+  - "Emit task-delegated event to onex.evt.omniclaude.task-delegated.v1"
+  - "Event consumed by node_projection_delegation in omnimarket"
+  - "Projection handler upserts row into delegation_events table"
+  - "Verify row exists with correlation_id, task_type, delegated_to fields"
+  - "Golden chain test: omnimarket/tests/test_golden_chain_projection_delegation.py"
+
 # Metadata
 metadata:
   author: OmniNode Team

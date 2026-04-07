@@ -105,6 +105,14 @@ error_handling:
     failure_threshold: 5
     reset_timeout_ms: 60000
 
+# Golden path: routing chain (emit routing decision -> agent_routing_decisions table)
+golden_path:
+  - "Emit routing decision event to onex.evt.omniclaude.routing-decision.v1"
+  - "Event consumed by node_projection_registration in omnimarket"
+  - "Projection handler upserts row into agent_routing_decisions table"
+  - "Verify row exists with correlation_id, selected_agent fields"
+  - "Golden chain test: omnimarket/tests/test_golden_chain_golden_chain_sweep.py"
+
 # Metadata
 metadata:
   author: OmniNode Team
