@@ -5,6 +5,10 @@
 Implements ProtocolDomainPlugin so that omniclaude's lifecycle can be
 managed by the kernel's generic plugin loader (OMN-2002).
 
+Non-wiring lifecycle logic (publisher init, backend init, consumer threads,
+shutdown) is delegated to ``lifecycle.py`` (OMN-7659).  PluginClaude is now
+a thin adapter that translates protocol calls into lifecycle operations.
+
 Deletion criteria
 -----------------
 Remove this entire module when the runtime supports dependency factories
@@ -22,19 +26,20 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 from typing import TYPE_CHECKING
+
+from omniclaude.runtime.lifecycle import (
+    LifecycleState,
+    on_shutdown,
+    on_start,
+    start_workers,
+)
 
 if TYPE_CHECKING:
     from omnibase_infra.runtime.protocol_domain_plugin import (
         ModelDomainPluginConfig,
         ModelDomainPluginResult,
     )
-
-    from omniclaude.nodes.node_local_llm_inference_effect.backends import (
-        VllmInferenceBackend,
-    )
-    from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +50,13 @@ _DISPLAY_NAME = "Claude Code Integration"
 class PluginClaude:
     """Transitional bootstrap adapter for Claude Code kernel integration.
 
-    Encapsulates the EmbeddedEventPublisher lifecycle and handler wiring
-    into the kernel plugin protocol.  The constructor is deliberately
-    side-effect-free (no env parsing, no network calls) so that
-    module-level protocol checks are safe.
+    Delegates lifecycle operations to ``lifecycle.on_start`` /
+    ``lifecycle.on_shutdown`` (OMN-7659).  Retains protocol wiring
+    (``wire_handlers``, ``wire_dispatchers``) which are routing-manifest
+    concerns, not lifecycle.
+
+    The constructor is deliberately side-effect-free (no env parsing,
+    no network calls) so that module-level protocol checks are safe.
 
     Deletion criteria: remove when the runtime supports dependency factories
     + dispatcher wiring from contracts.
@@ -59,14 +67,7 @@ class PluginClaude:
     # ------------------------------------------------------------------
 
     def __init__(self) -> None:
-        self._publisher: EmbeddedEventPublisher | None = None
-        self._publisher_config: object | None = None
-        self._shutdown_in_progress: bool = False
-        self._compliance_stop_event: threading.Event | None = None
-        self._compliance_thread: threading.Thread | None = None
-        self._decision_record_stop_event: threading.Event | None = None
-        self._decision_record_thread: threading.Thread | None = None
-        self._vllm_backend: VllmInferenceBackend | None = None
+        self._state = LifecycleState()
 
     # ------------------------------------------------------------------
     # Protocol properties
@@ -98,7 +99,7 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Start the EmbeddedEventPublisher.
+        """Start the EmbeddedEventPublisher via lifecycle.on_start().
 
         Creates a ``PublisherConfig`` (reads ``OMNICLAUDE_PUBLISHER_*`` from
         env) and starts the publisher.  On failure the half-initialised
@@ -115,55 +116,25 @@ class PluginClaude:
                 reason="KAFKA_BOOTSTRAP_SERVERS not set",
             )
 
-        try:
-            from omniclaude.publisher.embedded_publisher import (
-                EmbeddedEventPublisher,
-            )
-            from omniclaude.publisher.publisher_config import PublisherConfig
+        diagnostics = await on_start(self._state, kafka_servers)
 
-            publisher_config = PublisherConfig(
-                kafka_bootstrap_servers=kafka_servers,
-            )
-            publisher = EmbeddedEventPublisher(config=publisher_config)
-            await publisher.start()
-
-            self._publisher_config = publisher_config
-            self._publisher = publisher
-
-            # ---------------------------------------------------------------
-            # Instantiate VllmInferenceBackend (OMN-2799)
-            # ---------------------------------------------------------------
-            try:
-                from omniclaude.config.model_local_llm_config import (
-                    LocalLlmEndpointRegistry,
-                )
-                from omniclaude.nodes.node_local_llm_inference_effect.backends import (
-                    VllmInferenceBackend,
-                )
-
-                registry = LocalLlmEndpointRegistry()
-                self._vllm_backend = VllmInferenceBackend(registry=registry)
-                logger.info("VllmInferenceBackend initialised")
-            except Exception as exc:  # noqa: BLE001 — boundary: optional backend init
-                logger.warning("VllmInferenceBackend init failed: %s", exc)
-                self._vllm_backend = None
-
-            return ModelDomainPluginResult(
-                plugin_id=_PLUGIN_ID,
-                success=True,
-                message="EmbeddedEventPublisher started",
-                resources_created=[
-                    "embedded-event-publisher",
-                    "kafka-connection",
-                ],
-            )
-        except Exception as exc:  # noqa: BLE001 — boundary: plugin init must not crash kernel
-            # Best-effort cleanup
-            await self._cleanup_publisher()
+        # Check if publisher start failed (first diagnostic is always publisher)
+        publisher_diag = diagnostics[0] if diagnostics else None
+        if publisher_diag and not publisher_diag.success:
             return ModelDomainPluginResult.failed(
                 plugin_id=_PLUGIN_ID,
-                error_message=str(exc),
+                error_message=publisher_diag.error or "Publisher start failed",
             )
+
+        return ModelDomainPluginResult(
+            plugin_id=_PLUGIN_ID,
+            success=True,
+            message="EmbeddedEventPublisher started",
+            resources_created=[
+                "embedded-event-publisher",
+                "kafka-connection",
+            ],
+        )
 
     async def wire_handlers(
         self,
@@ -239,7 +210,7 @@ class PluginClaude:
                 config.container,
                 config.dispatch_engine,
                 config.correlation_id,
-                vllm_backend=self._vllm_backend,
+                vllm_backend=self._state.vllm_backend,
             )
 
             # Wire quirk-finding-produced.v1 subscription (OMN-2908)
@@ -279,7 +250,7 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Start background Kafka subscriber threads.
+        """Start background Kafka subscriber threads via lifecycle.start_workers().
 
         Starts two daemon subscriber threads:
         - compliance-evaluated subscriber: subscribes to
@@ -296,34 +267,6 @@ class PluginClaude:
             ModelDomainPluginResult,
         )
 
-        # Shutdown guard: if shutdown() is in progress it has already cleared
-        # subscriber threads to None but the old threads may still be draining.
-        # Spawning new threads here would create consumers racing the
-        # old ones — return early to prevent that.
-        if self._shutdown_in_progress:
-            logger.debug("Subscribers start skipped — shutdown in progress")
-            return ModelDomainPluginResult.skipped(
-                plugin_id=_PLUGIN_ID,
-                reason="shutdown in progress; subscribers not started",
-            )
-
-        # Idempotency guard: SessionStart may be called multiple times on reconnect.
-        # If both threads are still alive, return early rather than spawning second
-        # daemon threads and silently leaking the first ones.
-        if (
-            self._compliance_thread is not None
-            and self._compliance_thread.is_alive()
-            and self._decision_record_thread is not None
-            and self._decision_record_thread.is_alive()
-        ):
-            logger.debug("All subscribers already running — skipping duplicate start")
-            return ModelDomainPluginResult(
-                plugin_id=_PLUGIN_ID,
-                success=True,
-                message="Subscribers already running (idempotent)",
-                resources_created=[],
-            )
-
         bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
         if not bootstrap_servers:
             logger.debug("KAFKA_BOOTSTRAP_SERVERS not set — subscribers not started")
@@ -332,84 +275,39 @@ class PluginClaude:
                 reason="KAFKA_BOOTSTRAP_SERVERS not set; subscribers skipped",
             )
 
-        resources_created: list[str] = []
+        diagnostics = await start_workers(self._state, bootstrap_servers)
 
-        # ----------------------------------------------------------------
-        # Start compliance-evaluated subscriber
-        # ----------------------------------------------------------------
-        if self._compliance_thread is None or not self._compliance_thread.is_alive():
-            try:
-                from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
-                    run_subscriber_background as _compliance_run_bg,
+        # Check for shutdown-in-progress or idempotent skip
+        if diagnostics and diagnostics[0].component == "workers":
+            if diagnostics[0].error == "shutdown in progress":
+                return ModelDomainPluginResult.skipped(
+                    plugin_id=_PLUGIN_ID,
+                    reason="shutdown in progress; subscribers not started",
+                )
+            if "already running" in diagnostics[0].message.lower():
+                return ModelDomainPluginResult(
+                    plugin_id=_PLUGIN_ID,
+                    success=True,
+                    message="Subscribers already running (idempotent)",
+                    resources_created=[],
                 )
 
-                self._compliance_stop_event = threading.Event()
-                self._compliance_thread = _compliance_run_bg(
-                    kafka_bootstrap_servers=bootstrap_servers,
-                    group_id="omniclaude-compliance-subscriber.v1",
-                    stop_event=self._compliance_stop_event,
-                )
-                resources_created.append("compliance-subscriber-thread")
-            except Exception as exc:  # noqa: BLE001 — boundary: subscriber start must degrade
-                logger.warning("Failed to start compliance subscriber: %s", exc)
-                self._compliance_stop_event = None
-                self._compliance_thread = None
-
-        # ----------------------------------------------------------------
-        # Start decision-record subscriber (OMN-2720)
-        # ----------------------------------------------------------------
-        if (
-            self._decision_record_thread is None
-            or not self._decision_record_thread.is_alive()
-        ):
-            try:
-                from omniclaude.hooks.lib.decision_record_subscriber import (  # noqa: PLC0415
-                    run_subscriber_background as _decision_run_bg,
-                )
-
-                self._decision_record_stop_event = threading.Event()
-                self._decision_record_thread = _decision_run_bg(
-                    kafka_bootstrap_servers=bootstrap_servers,
-                    group_id="omniclaude-decision-record-subscriber.v1",
-                    stop_event=self._decision_record_stop_event,
-                )
-                resources_created.append("decision-record-subscriber-thread")
-            except Exception as exc:  # noqa: BLE001 — boundary: subscriber start must degrade
-                logger.warning("Failed to start decision-record subscriber: %s", exc)
-                self._decision_record_stop_event = None
-                self._decision_record_thread = None
+        # Collect resources from successful worker starts
+        resources_created = [
+            d.component
+            for d in diagnostics
+            if d.success and d.operation == "start" and d.component != "workers"
+        ]
+        # Include introspection if it succeeded
+        for d in diagnostics:
+            if d.component == "skill-node-introspection" and d.success:
+                resources_created.append("skill-node-introspection")
 
         if not resources_created:
             return ModelDomainPluginResult.failed(
                 plugin_id=_PLUGIN_ID,
                 error_message="All subscriber starts failed",
             )
-
-        # ----------------------------------------------------------------
-        # Publish skill node introspection events (OMN-2403)
-        # ----------------------------------------------------------------
-        # Best-effort: failures are caught by SkillNodeIntrospectionProxy
-        # and logged, never propagated. Introspection is published with the
-        # event bus from the publisher, or None if not yet started.
-        try:
-            from omniclaude.runtime.introspection import (  # noqa: PLC0415
-                SkillNodeIntrospectionProxy,
-            )
-
-            # Pass the underlying event bus (ProtocolEventBusLike), not the
-            # EmbeddedEventPublisher wrapper itself, which does not implement
-            # ProtocolEventBus.  When the publisher has not yet started,
-            # event_bus is None and publish_all() will be a silent no-op.
-            introspection_proxy = SkillNodeIntrospectionProxy(
-                event_bus=self._publisher.event_bus
-                if self._publisher is not None
-                else None,
-            )
-            published_count = await introspection_proxy.publish_all(reason="startup")
-            if published_count > 0:
-                resources_created.append("skill-node-introspection")
-        except Exception as exc:  # noqa: BLE001 — boundary: introspection is optional
-            logger.warning("Skill node introspection proxy failed to start: %s", exc)
 
         return ModelDomainPluginResult(
             plugin_id=_PLUGIN_ID,
@@ -422,7 +320,7 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Idempotent, exception-safe shutdown.
+        """Idempotent, exception-safe shutdown via lifecycle.on_shutdown().
 
         Stops the publisher and clears all references regardless of
         whether stop() raises.  Also signals the compliance subscriber
@@ -432,70 +330,33 @@ class PluginClaude:
             ModelDomainPluginResult,
         )
 
-        if self._shutdown_in_progress:
+        if self._state.shutdown_in_progress:
             return ModelDomainPluginResult.succeeded(plugin_id=_PLUGIN_ID)
 
-        self._shutdown_in_progress = True
-        try:
-            # Signal compliance subscriber to stop (non-blocking — thread drains itself)
-            if self._compliance_stop_event is not None:
-                self._compliance_stop_event.set()
-                self._compliance_stop_event = None
-                # Intentionally not joined: the daemon thread will drain its own
-                # Kafka poll loop once the stop_event is set, then exit naturally.
-                # Blocking here would delay shutdown and risk deadlock if the
-                # Kafka consumer is stuck waiting on a network call.
-                # stop_event already set; daemon self-terminates.
-                # Narrow race: if start_consumers() is called before the daemon fully stops,
-                # stop_event being set means the thread will exit without processing new work.
-                # No data loss risk — the publisher handles event delivery independently.
-            # Clear unconditionally: if _compliance_thread is set but
-            # _compliance_stop_event is None (e.g. partially initialised state),
-            # the thread reference must still be released to avoid a leak.
-            self._compliance_thread = None
+        diagnostics = await on_shutdown(self._state)
 
-            # Signal decision-record subscriber to stop (OMN-2720)
-            if self._decision_record_stop_event is not None:
-                self._decision_record_stop_event.set()
-                self._decision_record_stop_event = None
-            self._decision_record_thread = None
+        # Check for publisher stop failure
+        errors = [d.error for d in diagnostics if not d.success and d.error]
+        if errors:
+            return ModelDomainPluginResult.failed(
+                plugin_id=_PLUGIN_ID,
+                error_message="; ".join(errors),
+            )
 
-            # Close VllmInferenceBackend httpx client (OMN-2799)
-            if self._vllm_backend is not None:
-                try:
-                    await self._vllm_backend.aclose()
-                except Exception as exc:  # noqa: BLE001 — boundary: best-effort cleanup
-                    logger.debug("VllmInferenceBackend close failed: %s", exc)
-                self._vllm_backend = None
-
-            if self._publisher is None:
-                return ModelDomainPluginResult.succeeded(
-                    plugin_id=_PLUGIN_ID,
-                    message="No publisher to shut down",
-                )
-
-            errors: list[str] = []
-            try:
-                # EmbeddedEventPublisher.stop() is async
-                await self._publisher.stop()
-            except Exception as exc:  # noqa: BLE001 — boundary: shutdown must not crash
-                errors.append(str(exc))
-
-            # Clear references regardless of outcome
-            self._publisher = None
-            self._publisher_config = None
-
-            if errors:
-                return ModelDomainPluginResult.failed(
-                    plugin_id=_PLUGIN_ID,
-                    error_message="; ".join(errors),
-                )
+        # Determine message based on whether publisher was stopped
+        publisher_diags = [
+            d for d in diagnostics if d.component == "EmbeddedEventPublisher"
+        ]
+        if publisher_diags:
             return ModelDomainPluginResult.succeeded(
                 plugin_id=_PLUGIN_ID,
                 message="Publisher stopped",
             )
-        finally:
-            self._shutdown_in_progress = False
+
+        return ModelDomainPluginResult.succeeded(
+            plugin_id=_PLUGIN_ID,
+            message="No publisher to shut down",
+        )
 
     # ------------------------------------------------------------------
     # Extra: status line (not part of protocol)
@@ -503,23 +364,121 @@ class PluginClaude:
 
     def get_status_line(self) -> str:
         """Return human-readable status for diagnostics."""
-        if self._publisher is None:
+        if self._state.publisher is None:
             return "disabled"
         return "enabled (Publisher + Kafka)"
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Backward-compat accessors for tests that inspect internal state
     # ------------------------------------------------------------------
 
-    async def _cleanup_publisher(self) -> None:
-        """Best-effort cleanup after a failed initialisation."""
-        if self._publisher is not None:
-            try:
-                await self._publisher.stop()
-            except Exception:  # noqa: BLE001 — boundary: best-effort cleanup
-                logger.debug("Cleanup: publisher stop failed", exc_info=True)
-        self._publisher = None
-        self._publisher_config = None
+    @property
+    def _publisher(self) -> object | None:
+        return self._state.publisher
+
+    @_publisher.setter
+    def _publisher(self, value: object) -> None:
+        self._state.publisher = value  # type: ignore[assignment]
+
+    @property
+    def _publisher_config(self) -> object | None:
+        return self._state.publisher_config
+
+    @_publisher_config.setter
+    def _publisher_config(self, value: object) -> None:
+        self._state.publisher_config = value
+
+    @property
+    def _vllm_backend(self) -> object | None:
+        return self._state.vllm_backend
+
+    @_vllm_backend.setter
+    def _vllm_backend(self, value: object) -> None:
+        self._state.vllm_backend = value  # type: ignore[assignment]
+
+    @property
+    def _shutdown_in_progress(self) -> bool:
+        return self._state.shutdown_in_progress
+
+    @_shutdown_in_progress.setter
+    def _shutdown_in_progress(self, value: bool) -> None:
+        self._state.shutdown_in_progress = value
+
+    @property
+    def _compliance_stop_event(self) -> object | None:
+        worker = self._state.workers.get("compliance-subscriber")
+        return worker.stop_event if worker else None
+
+    @_compliance_stop_event.setter
+    def _compliance_stop_event(self, value: object) -> None:
+        # Used by tests to inject mock stop events
+        worker = self._state.workers.get("compliance-subscriber")
+        if worker is not None:
+            worker.stop_event = value  # type: ignore[assignment]
+        elif value is not None:
+            self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
+                name="compliance-subscriber",
+                stop_event=value,  # type: ignore[arg-type]
+            )
+
+    @property
+    def _compliance_thread(self) -> object | None:
+        worker = self._state.workers.get("compliance-subscriber")
+        return worker.thread if worker else None
+
+    @_compliance_thread.setter
+    def _compliance_thread(self, value: object) -> None:
+        # Used by tests to inject mock threads
+        if value is not None:
+            existing = self._state.workers.get("compliance-subscriber")
+            if existing is not None:
+                existing.thread = value  # type: ignore[assignment]
+            else:
+                self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
+                    name="compliance-subscriber",
+                    thread=value,  # type: ignore[arg-type]
+                )
+        elif "compliance-subscriber" in self._state.workers:
+            del self._state.workers["compliance-subscriber"]
+
+    @property
+    def _decision_record_stop_event(self) -> object | None:
+        worker = self._state.workers.get("decision-record-subscriber")
+        return worker.stop_event if worker else None
+
+    @_decision_record_stop_event.setter
+    def _decision_record_stop_event(self, value: object) -> None:
+        worker = self._state.workers.get("decision-record-subscriber")
+        if worker is not None:
+            worker.stop_event = value  # type: ignore[assignment]
+        elif value is not None:
+            self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
+                name="decision-record-subscriber",
+                stop_event=value,  # type: ignore[arg-type]
+            )
+
+    @property
+    def _decision_record_thread(self) -> object | None:
+        worker = self._state.workers.get("decision-record-subscriber")
+        return worker.thread if worker else None
+
+    @_decision_record_thread.setter
+    def _decision_record_thread(self, value: object) -> None:
+        if value is not None:
+            existing = self._state.workers.get("decision-record-subscriber")
+            if existing is not None:
+                existing.thread = value  # type: ignore[assignment]
+            else:
+                self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
+                    name="decision-record-subscriber",
+                    thread=value,  # type: ignore[arg-type]
+                )
+        elif "decision-record-subscriber" in self._state.workers:
+            del self._state.workers["decision-record-subscriber"]
+
+
+# Import for backward-compat property setters
+from omniclaude.runtime.lifecycle import _WorkerDescriptor  # noqa: E402
 
 
 # -----------------------------------------------------------------------

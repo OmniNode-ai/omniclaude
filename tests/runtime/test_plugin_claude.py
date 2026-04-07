@@ -456,7 +456,7 @@ class TestStartConsumers:
             result = await plugin.start_consumers(config)
 
         assert result.success is True
-        assert "compliance-subscriber-thread" in result.resources_created
+        assert "compliance-subscriber" in result.resources_created
         assert plugin._compliance_stop_event is not None
         assert plugin._compliance_thread is mock_thread
 
