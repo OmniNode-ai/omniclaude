@@ -54,6 +54,27 @@ _RATE_LIMIT_WINDOW_SECONDS = 300
 # Prune entries older than 1 hour
 _PRUNE_THRESHOLD_SECONDS = 3600
 
+# Known test-data patterns that must never reach production Slack channels.
+# Agent names containing these substrings (case-insensitive) are treated as test payloads.
+_TEST_AGENT_NAME_SUBSTRINGS = ("test-agent", "test_agent", "mock-agent", "fake-agent")
+
+# Session IDs that are known test fixtures.
+_TEST_SESSION_IDS = frozenset({"session-123", "test-session", "test-session-123"})
+
+
+def _is_test_payload(payload: dict[str, object]) -> bool:
+    """Return True if the payload looks like test data that should not trigger notifications."""
+    agent_name = str(payload.get("agent_name", "")).lower()
+    for substring in _TEST_AGENT_NAME_SUBSTRINGS:
+        if substring in agent_name:
+            return True
+
+    session_id = str(payload.get("session_id", "")).lower()
+    if session_id in _TEST_SESSION_IDS:
+        return True
+
+    return False
+
 
 def _get_rate_limit_path() -> str:
     """Return the rate limit file path, from env var or default."""
@@ -295,6 +316,15 @@ def maybe_notify_blocked(payload: dict[str, object]) -> bool:
     try:
         # R2: Guard — only proceed for blocked state
         if payload.get("state") != "blocked":
+            return False
+
+        # R2b: Guard — skip test-data payloads (OMN-7740)
+        if _is_test_payload(payload):
+            logger.debug(
+                "Skipping notification for test payload: agent=%s session=%s",
+                payload.get("agent_name"),
+                payload.get("session_id"),
+            )
             return False
 
         # R3/R6: Check SLACK_WEBHOOK_URL

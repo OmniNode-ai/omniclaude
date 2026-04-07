@@ -104,8 +104,8 @@ def _make_blocked_payload(**overrides: object) -> dict[str, object]:
     """Create a minimal blocked agent status payload dict."""
     base: dict[str, object] = {
         "state": "blocked",
-        "agent_name": "test-agent",
-        "session_id": "session-123",
+        "agent_name": "pipeline-orchestrator",
+        "session_id": "sess-abc-def-789",
         "correlation_id": str(uuid4()),
         "message": "Agent is blocked",
         "schema_version": 1,
@@ -173,6 +173,45 @@ class TestGuardChecks:
         del payload["state"]
         result = maybe_notify_blocked(payload)
         assert result is False
+
+    def test_test_agent_name_returns_false(self) -> None:
+        """Payload with agent_name containing 'test-agent' is blocked (OMN-7740)."""
+        from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
+
+        payload = _make_blocked_payload(agent_name="test-agent")
+        assert maybe_notify_blocked(payload) is False
+
+    def test_test_agent_name_case_insensitive(self) -> None:
+        """Test-agent detection is case-insensitive (OMN-7740)."""
+        from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
+
+        payload = _make_blocked_payload(agent_name="Test-Agent-Foo")
+        assert maybe_notify_blocked(payload) is False
+
+    def test_test_session_id_returns_false(self) -> None:
+        """Payload with known test session_id is blocked (OMN-7740)."""
+        from plugins.onex.hooks.lib.blocked_notifier import maybe_notify_blocked
+
+        payload = _make_blocked_payload(
+            agent_name="real-agent", session_id="session-123"
+        )
+        assert maybe_notify_blocked(payload) is False
+
+    def test_real_agent_passes_test_guard(self) -> None:
+        """Payload with real agent name and session passes the test guard (OMN-7740)."""
+        from plugins.onex.hooks.lib.blocked_notifier import _is_test_payload
+
+        payload = _make_blocked_payload(
+            agent_name="pipeline-orchestrator", session_id="abc-def-789"
+        )
+        assert _is_test_payload(payload) is False
+
+    def test_is_test_payload_mock_agent(self) -> None:
+        """Payload with mock-agent name is detected as test data (OMN-7740)."""
+        from plugins.onex.hooks.lib.blocked_notifier import _is_test_payload
+
+        payload = _make_blocked_payload(agent_name="mock-agent-1")
+        assert _is_test_payload(payload) is True
 
     def test_no_webhook_url_returns_false_with_debug_log(
         self, monkeypatch: pytest.MonkeyPatch
