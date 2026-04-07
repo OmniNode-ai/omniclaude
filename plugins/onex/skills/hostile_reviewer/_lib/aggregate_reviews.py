@@ -3,6 +3,24 @@
 # SPDX-License-Identifier: MIT
 """Multi-model hostile reviewer aggregator.
 
+.. deprecated::
+    This module is DEPRECATED as of OMN-7803 (2026-04-07).
+    The hostile_reviewer workflow has been migrated to omnimarket as a
+    deterministic ONEX node pipeline. The replacement lives at:
+
+        omnimarket/src/omnimarket/nodes/hostile_reviewer/
+
+    New nodes (PromptBuilder, InferenceAdapter, ResponseParser,
+    FindingAggregator, ConvergenceReducer, ReviewOrchestrator) replace
+    the monolithic aggregation logic in this file.
+
+    This file is retained temporarily for reference during migration
+    verification. It will be removed once the omnimarket workflow is
+    verified in production. Do NOT add new functionality here.
+
+    See: docs/plans/2026-04-07-unified-llm-workflow-migration.md — Task 11
+    Epic: OMN-7781
+
 Runs Gemini CLI, Codex CLI, Qwen3-Coder, and DeepSeek-R1 as independent
 reviewers in parallel. Writes aggregated JSON to stdout; all errors to stderr.
 Exit code: 0 on success, 1 on total failure (no models ran).
@@ -20,6 +38,16 @@ See SKILL.md "Token Budget" section for full rationale.
 """
 
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "aggregate_reviews is deprecated (OMN-7803). "
+    "Use the omnimarket hostile_reviewer node pipeline instead. "
+    "This module will be removed after production verification.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import json
 import os
