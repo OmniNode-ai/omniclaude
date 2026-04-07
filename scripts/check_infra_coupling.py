@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Infrastructure coupling detector for ONEX handler compliance.
 
@@ -326,9 +327,7 @@ def run_scan(
     result = ScanResult()
 
     for repo_name in repos:
-        files_scanned, violations = scan_repo(
-            repo_name, handlers_only=handlers_only
-        )
+        files_scanned, violations = scan_repo(repo_name, handlers_only=handlers_only)
         if files_scanned > 0:
             result.repos_scanned += 1
             result.files_scanned += files_scanned
@@ -355,7 +354,9 @@ def print_summary(result: ScanResult) -> None:
         for repo, violations in sorted(result.per_repo.items()):
             critical = sum(1 for v in violations if v.severity == "CRITICAL")
             warn = sum(1 for v in violations if v.severity == "WARN")
-            print(f"  {repo}: {len(violations)} violations ({critical} critical, {warn} warn)")
+            print(
+                f"  {repo}: {len(violations)} violations ({critical} critical, {warn} warn)"
+            )
         print()
 
     # Pattern histogram
@@ -365,9 +366,7 @@ def print_summary(result: ScanResult) -> None:
 
     if pattern_counts:
         print("By pattern:")
-        for pattern_id, count in sorted(
-            pattern_counts.items(), key=lambda x: -x[1]
-        ):
+        for pattern_id, count in sorted(pattern_counts.items(), key=lambda x: -x[1]):
             print(f"  {pattern_id}: {count}")
         print()
 
