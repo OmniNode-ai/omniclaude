@@ -9,3 +9,6 @@ topics:
   - onex.cmd.omniclaude.redeploy.v1
   - onex.evt.omniclaude.redeploy-completed.v1
   - onex.evt.omniclaude.redeploy-failed.v1
+  # Deploy daemon topics (consumed/produced by deploy-agent on .201)
+  - onex.cmd.deploy.rebuild-requested.v1
+  - onex.evt.deploy.rebuild-completed.v1

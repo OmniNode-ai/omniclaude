@@ -178,7 +178,7 @@ Output format:
   ENV_CHECK:  verify POSTGRES_PASSWORD, KAFKA_BOOTSTRAP_SERVERS
   WORKTREE:   git worktree add .../omni_worktrees/redeploy-20260301-abc123/omnibase_infra -b redeploy-20260301-abc123
   PIN_UPDATE: uv run python scripts/update-plugin-pins.py --versions "omniintelligence=0.8.0,..."
-  DEPLOY:     ./scripts/deploy-runtime.sh --execute --restart
+  DEPLOY:     kcat -P -b 192.168.86.201:19092 -t onex.cmd.deploy.rebuild-requested.v1 + poll onex.evt.deploy.rebuild-completed.v1  # onex-allow-internal-ip
   INFISICAL:  [conditional] uv run python scripts/seed-infisical.py --execute
   VERIFY:     curl http://localhost:8085/health + docker exec omninode-runtime uv pip show omniintelligence
   NOTIFY:     [FULL_ONEX only] node_slack_alerter_effect
@@ -364,25 +364,105 @@ Expected stdout (last line JSON):
 
 ### Phase 5: DEPLOY <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
-```
-worktree_path = state["worktree_path"]
+Deploy uses the **deploy daemon** on .201, which listens on Kafka for rebuild requests.
+The agent produces a `ModelRebuildRequested` event, then polls for completion.
 
-Run (from worktree_path):
-  ./scripts/deploy-runtime.sh --execute --restart
+```python
+import json
+import shlex
+import time
+import uuid
+
+DEPLOY_TOPIC = "onex.cmd.deploy.rebuild-requested.v1"
+DEPLOY_COMPLETED_TOPIC = "onex.evt.deploy.rebuild-completed.v1"
+DEPLOY_HEALTH_URL = "http://192.168.86.201:8099/health"  # onex-allow-internal-ip
+DEPLOY_POLL_INTERVAL_S = 10
+DEPLOY_TIMEOUT_S = 300  # 5 minutes max wait
+
+correlation_id = str(uuid.uuid4())
+
+# Step 1: Verify deploy daemon is healthy
+result = run(f"curl -sf {DEPLOY_HEALTH_URL}", capture=True)
+if result.returncode != 0:
+    print(f"DEPLOY FAILED: deploy daemon not reachable at {DEPLOY_HEALTH_URL}")
+    mark_phase(state, "DEPLOY", "failed", error="deploy daemon unreachable")
+    EXIT 1
+
+# Step 2: Produce ModelRebuildRequested event to Kafka
+msg = json.dumps({
+    "correlation_id": correlation_id,
+    "requested_by": f"redeploy-skill/{state['run_id']}",
+    "scope": "runtime",
+    "services": [],
+    "git_ref": "origin/main",
+})
+
+result = run(
+    f'echo {shlex.quote(msg)} | kcat -P -b 192.168.86.201:19092 -t {DEPLOY_TOPIC}',  # onex-allow-internal-ip
+    capture=True,
+)
+if result.returncode != 0:
+    print(f"DEPLOY FAILED: could not produce to {DEPLOY_TOPIC}")
+    mark_phase(state, "DEPLOY", "failed", error="kafka produce failed")
+    EXIT 1
+
+print(f"DEPLOY: rebuild requested (correlation_id={correlation_id})")
+
+# Step 3: Poll for completion by reading the completion topic
+# Use kcat consumer with timeout to watch for our correlation_id
+deadline = time.time() + DEPLOY_TIMEOUT_S
+deploy_succeeded = False
+
+while time.time() < deadline:
+    # Read latest messages from the completion topic (non-blocking, last 10 messages)
+    result = run(
+        f"kcat -C -b 192.168.86.201:19092 -t {DEPLOY_COMPLETED_TOPIC} "  # onex-allow-internal-ip
+        f"-o -10 -e -q 2>/dev/null || true",
+        capture=True,
+        timeout=15000,
+    )
+    for line in result.stdout.strip().splitlines():
+        if not line.strip():
+            continue
+        try:
+            evt = json.loads(line)
+            if evt.get("correlation_id") == correlation_id:
+                if evt.get("status") == "success":
+                    print(f"DEPLOY: rebuild completed successfully (correlation_id={correlation_id})")
+                    deploy_succeeded = True
+                    break
+                else:
+                    error_msg = evt.get("error", "unknown error")
+                    print(f"DEPLOY FAILED: rebuild failed — {error_msg}")
+                    mark_phase(state, "DEPLOY", "failed", error=error_msg, correlation_id=correlation_id)
+                    EXIT 1
+        except json.JSONDecodeError:
+            continue
+    if deploy_succeeded:
+        break
+    print(f"DEPLOY: waiting for rebuild completion... ({int(deadline - time.time())}s remaining)")
+    time.sleep(DEPLOY_POLL_INTERVAL_S)
+
+if not deploy_succeeded:
+    print(f"DEPLOY FAILED: timed out after {DEPLOY_TIMEOUT_S}s waiting for completion event")
+    mark_phase(state, "DEPLOY", "failed", error="timeout", correlation_id=correlation_id)
+    EXIT 1
+
+mark_phase(state, "DEPLOY", "completed", correlation_id=correlation_id)
 ```
 
 Expected output pattern:
 ```
-[deploy-runtime] Building omninode-runtime ...
-[deploy-runtime] docker compose build: SUCCESS
-[deploy-runtime] Stopping omninode-runtime ...
-[deploy-runtime] Starting omninode-runtime ...
-[deploy-runtime] DONE
+DEPLOY: rebuild requested (correlation_id=<uuid>)
+DEPLOY: waiting for rebuild completion... (290s remaining)
+DEPLOY: rebuild completed successfully (correlation_id=<uuid>)
 ```
 
 ```
-  -> success (exit 0): mark_phase(state, "DEPLOY", "completed")
-  -> failure (exit non-zero): mark_phase(state, "DEPLOY", "failed", error=stderr); print resume hint; EXIT 1
+  -> completion event with status=success: mark_phase(state, "DEPLOY", "completed", correlation_id=...)
+  -> completion event with status!=success: mark_phase(state, "DEPLOY", "failed"); EXIT 1
+  -> timeout (300s): mark_phase(state, "DEPLOY", "failed", error="timeout"); EXIT 1
+  -> daemon unreachable: mark_phase(state, "DEPLOY", "failed", error="deploy daemon unreachable"); EXIT 1
 ```
 
 ### Phase 5b: SCHEMA_SYNC <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
@@ -839,7 +919,7 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy
   +- Phase 2: ENV_CHECK  verify POSTGRES_PASSWORD, KAFKA_BOOTSTRAP_SERVERS, optional INFISICAL creds
   +- Phase 3: WORKTREE   create or reuse omni_worktrees/<ticket>/omnibase_infra
   +- Phase 4: PIN_UPDATE update-plugin-pins.py -> Dockerfile.runtime version pins
-  +- Phase 5: DEPLOY     deploy-runtime.sh --execute --restart
+  +- Phase 5: DEPLOY     produce ModelRebuildRequested to deploy daemon, poll for completion
   +- Phase 5c: OMNIDASH_RESTART  restart local omnidash if running (advisory)
   +- Phase 6: INFISICAL  seed-infisical.py or sync-omnibase-env.sh (if INFISICAL_ADDR set)
   +- Phase 7: VERIFY     curl health endpoints + docker exec uv pip show per-package
@@ -854,7 +934,8 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy
 |-----------|---------|
 | `@_lib/tier-routing/helpers.md` | `detect_onex_tier()` in NOTIFY phase |
 | `@_lib/slack-gate/helpers.md` | Slack credential resolution |
-| `omnibase_infra/scripts/deploy-runtime.sh` | DEPLOY phase — core deploy script |
+| Deploy daemon on .201 (`/data/omninode/deploy-agent/`) | DEPLOY phase — listens on `onex.cmd.deploy.rebuild-requested.v1` |
+| `omni_home/scripts/trigger-deploy.sh` | DEPLOY phase — standalone trigger reference |
 | `omnibase_infra/scripts/update-plugin-pins.py` | PIN_UPDATE phase — Dockerfile pin updater |
 | `omnibase_infra/scripts/seed-infisical.py` | INFISICAL phase — direct fallback |
 | `release` skill | Run before redeploy to coordinate version bumps |

@@ -111,7 +111,7 @@ and verify that health endpoints and pinned package versions match expectations.
 | 2 | `ENV_CHECK` | Per-phase env validation | Read-only, always safe |
 | 3 | `WORKTREE` | Create `omni_worktrees/<ticket>/omnibase_infra` from main HEAD | Skip if path exists and branch matches |
 | 4 | `PIN_UPDATE` | Run `update-plugin-pins.py` to rewrite `Dockerfile.runtime` version pins | Skip if already at target versions |
-| 5 | `DEPLOY` | `deploy-runtime.sh --execute --restart` from worktree | Safe: rsync + rebuild + `--force-recreate` |
+| 5 | `DEPLOY` | Produce `ModelRebuildRequested` to deploy daemon on .201 via Kafka, poll `onex.evt.deploy.rebuild-completed.v1` for result | Idempotent: correlation_id prevents duplicate processing |
 | 5b | `SCHEMA_SYNC` | `check_schema_fingerprint.py verify` — auto-stamp if stale | Idempotent: verify-then-stamp pattern |
 | 6 | `INFISICAL` | Seed new contract keys to Infisical | `seed-infisical.py` is idempotent |
 | 7 | `VERIFY` | Container manifest check via `verify_container_manifest.py` (`docker ps -a`) + curl health endpoints + in-container version checks. Restart-once policy for non-running containers. Profile-aware (core/runtime/memory). | Read-only (except restart-once recovery attempt), always safe |
@@ -241,7 +241,8 @@ Written to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`:
 - `release` skill — run before redeploy to coordinate version bumps across repos
 - `_lib/tier-routing/helpers.md` — tier detection
 - `_lib/slack-gate/helpers.md` — Slack credential resolution
-- `omnibase_infra/scripts/deploy-runtime.sh` — DEPLOY phase core script
+- Deploy daemon on .201 (`/data/omninode/deploy-agent/`) — DEPLOY phase target, listens on `onex.cmd.deploy.rebuild-requested.v1`
+- `omni_home/scripts/trigger-deploy.sh` — standalone deploy trigger script (reference implementation)
 - `omnibase_infra/scripts/update-plugin-pins.py` — PIN_UPDATE phase helper
 - `omnibase_infra/scripts/verify_deployed_versions.py` — VERIFY phase version checker (OMN-5608)
 - `omnibase_infra/scripts/seed-infisical.py` — INFISICAL phase fallback
