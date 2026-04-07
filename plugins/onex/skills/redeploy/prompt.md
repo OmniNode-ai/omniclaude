@@ -91,6 +91,7 @@ PHASES = [
     "DEPLOY",            # Phase 5
     "SCHEMA_SYNC",       # Phase 5b — detect and stamp stale schema fingerprints
     "OMNIDASH_RESTART",  # Phase 5c — restart local omnidash to reconnect (OMN-5144)
+    "PLUGIN_REFRESH",    # Phase 5d — refresh local Claude Code plugin after release (OMN-7734)
     "INFISICAL",         # Phase 6
     "VERIFY",            # Phase 7
     "K8S_VERIFY",        # Phase 7b — cloud k8s pod READY gate
@@ -571,6 +572,39 @@ OMNIDASH_RESTART: omnidash restarted successfully
   -> lifecycle script missing: mark_phase(state, "OMNIDASH_RESTART", "skipped_no_script"); CONTINUE
 ```
 
+### Phase 5d: PLUGIN_REFRESH <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
+
+```python
+# OMN-7734: Refresh the local Claude Code plugin after a release so the next
+# build loop cycle picks up the new plugin code without manual intervention.
+# Non-fatal — plugin refresh failure does not block the deploy pipeline.
+
+result = run(
+    "claude plugin install onex@omninode-tools",
+    capture=True,
+    timeout=60000,
+)
+
+if result.returncode == 0:
+    print(f"PLUGIN_REFRESH: plugin refreshed successfully")
+    mark_phase(state, "PLUGIN_REFRESH", "completed")
+else:
+    # Non-fatal: the local cache deploy (A2 in cron-closeout) is the primary
+    # refresh mechanism. Marketplace install is a secondary sync.
+    print(f"PLUGIN_REFRESH WARNING: install returned non-zero\n{result.stdout}")
+    mark_phase(state, "PLUGIN_REFRESH", "completed_with_warnings", output=result.stdout)
+```
+
+Expected output pattern:
+```
+PLUGIN_REFRESH: plugin refreshed successfully
+```
+
+```
+  -> exit 0: mark_phase(state, "PLUGIN_REFRESH", "completed")
+  -> exit non-zero: mark_phase(state, "PLUGIN_REFRESH", "completed_with_warnings"); CONTINUE
+```
+
 ### Phase 6: INFISICAL <!-- ai-slop-ok: genuine phase heading in skill orchestration, not LLM boilerplate -->
 
 ```
@@ -893,6 +927,7 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy
     "WORKTREE": "completed",
     "PIN_UPDATE": "completed",
     "DEPLOY": "completed",
+    "PLUGIN_REFRESH": "completed",
     "INFISICAL": "skipped_no_infisical",
     "VERIFY": "completed",
     "NOTIFY": "completed"
@@ -921,6 +956,7 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy
   +- Phase 4: PIN_UPDATE update-plugin-pins.py -> Dockerfile.runtime version pins
   +- Phase 5: DEPLOY     produce ModelRebuildRequested to deploy daemon, poll for completion
   +- Phase 5c: OMNIDASH_RESTART  restart local omnidash if running (advisory)
+  +- Phase 5d: PLUGIN_REFRESH   claude plugin install onex@omninode-tools (advisory)
   +- Phase 6: INFISICAL  seed-infisical.py or sync-omnibase-env.sh (if INFISICAL_ADDR set)
   +- Phase 7: VERIFY     curl health endpoints + docker exec uv pip show per-package
   +- Phase 8: NOTIFY     Slack if FULL_ONEX; stdout if EVENT_BUS or STANDALONE
