@@ -225,7 +225,7 @@ def _create_emit_client(socket_path: str, timeout: float) -> _SocketEmitClient:
     try:
         from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415
 
-        return EmitClient(socket_path=socket_path, timeout=timeout)  # type: ignore[return-value]
+        return EmitClient(socket_path=socket_path, timeout=timeout)  # type: ignore[no-any-return]
     except ImportError:
         import warnings  # noqa: PLC0415
 
