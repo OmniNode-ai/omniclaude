@@ -122,32 +122,24 @@ class TestComplianceSweepPromptMd:
         assert "Announce" in content
         assert "compliance-sweep" in content
 
-    def test_prompt_md_has_all_phases(self) -> None:
-        """prompt.md must define all 7 phases."""
+    def test_prompt_md_has_dispatch_section(self) -> None:
+        """prompt.md must define dispatch to node_compliance_sweep."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        for phase_num in range(1, 8):
-            assert f"Phase {phase_num}" in content, f"Missing Phase {phase_num}"
+        assert "node_compliance_sweep" in content
+        assert "onex run" in content
 
-    def test_prompt_md_phase_1_discovery(self) -> None:
-        """Phase 1 must scan for node directories."""
+    def test_prompt_md_dispatch_uses_omnimarket(self) -> None:
+        """Dispatch must target the omnimarket node."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "Discovery" in content
-        assert "node_" in content
-        assert "handlers" in content
+        assert "omnimarket" in content
+        assert "node_compliance_sweep" in content
 
-    def test_prompt_md_phase_2_scanner(self) -> None:
-        """Phase 2 must run the compliance scanner."""
+    def test_prompt_md_has_result_rendering(self) -> None:
+        """prompt.md must render human-readable compliance results."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "arch_handler_contract_compliance" in content or (
-            "arch-handler-contract-compliance" in content
-        )
-
-    def test_prompt_md_phase_3_aggregate(self) -> None:
-        """Phase 3 must aggregate results into sweep report."""
-        content = (SKILL_DIR / "prompt.md").read_text()
-        assert "Aggregate" in content
-        assert "compliant_pct" in content
-        assert "violation_histogram" in content or "violation histogram" in content
+        assert "Per-repo breakdown" in content
+        assert "Compliant" in content
+        assert "Imperative" in content
 
     def test_prompt_md_phase_5_summary(self) -> None:
         """Phase 5 must print human-readable summary."""
@@ -162,10 +154,10 @@ class TestComplianceSweepPromptMd:
         assert "dry-run" in content
         assert "max-tickets" in content or "max_tickets" in content
 
-    def test_prompt_md_phase_7_event_emission(self) -> None:
-        """Phase 7 must emit compliance.sweep.completed event."""
+    def test_prompt_md_has_pull_preamble(self) -> None:
+        """prompt.md must pull bare clones before scanning."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "compliance.sweep.completed" in content
+        assert "pull-all.sh" in content
 
     def test_prompt_md_has_error_handling(self) -> None:
         """prompt.md must document error handling."""
@@ -211,7 +203,7 @@ class TestComplianceSweepSkillCompleteness:
         content = (SKILL_DIR / "prompt.md").read_text()
         assert "handler" in content.lower()
         assert "violations" in content.lower() or "Violations" in content
-        assert "contract.yaml" in content
+        assert "node directory" in content
 
     def test_report_path_convention(self) -> None:
         """Report should be saved to docs/registry/compliance-scan-<date>.json."""
