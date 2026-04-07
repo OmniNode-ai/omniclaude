@@ -68,6 +68,14 @@ class ModelDelegationScore:
     the detected intent type.  Zero when ``delegatable`` is False.
     """
 
+    classified_intent: str = "unknown"
+    """The actual classified intent value (e.g. 'implement', 'research', 'test').
+
+    Always populated regardless of whether delegation is approved. Allows
+    callers to emit accurate observability events even when delegation is
+    rejected (OMN-7695).
+    """
+
     reasons: list[str] = field(default_factory=list)
     """Human-readable explanations for the delegation decision."""
 
@@ -734,31 +742,9 @@ class TaskClassifier:
         prompt_lower = prompt.lower()
         reasons: list[str] = []
 
-        # --- Gate 1: Vision tasks always stay with the primary model ----------
-        if self._has_vision_signals(prompt_lower):
-            return ModelDelegationScore(
-                delegatable=False,
-                delegate_to_model="",
-                confidence=0.0,
-                estimated_savings_usd=0.0,
-                reasons=[
-                    "prompt contains vision/image signals; must use primary model"
-                ],
-            )
-
-        # --- Gate 2: Tool-call / agentic tasks stay with primary model --------
-        if self._has_tool_call_signals(prompt_lower):
-            return ModelDelegationScore(
-                delegatable=False,
-                delegate_to_model="",
-                confidence=0.0,
-                estimated_savings_usd=0.0,
-                reasons=[
-                    "prompt contains tool-call/agentic signals; must use primary model"
-                ],
-            )
-
-        # --- Classify prompt if intent was not supplied -----------------------
+        # --- Classify prompt early so all return paths have the intent --------
+        # Moved before gates so that vision/tool-call rejections still report
+        # the actual classified intent instead of "unknown" (OMN-7695).
         if intent is None:
             task_context = self.classify(prompt)
             resolved_intent = task_context.primary_intent
@@ -777,6 +763,34 @@ class TaskClassifier:
             # intent should compute it themselves before calling is_delegatable().
             task_context = self.classify(prompt)
             classification_confidence = task_context.confidence
+
+        intent_value = resolved_intent.value
+
+        # --- Gate 1: Vision tasks always stay with the primary model ----------
+        if self._has_vision_signals(prompt_lower):
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=0.0,
+                estimated_savings_usd=0.0,
+                classified_intent=intent_value,
+                reasons=[
+                    "prompt contains vision/image signals; must use primary model"
+                ],
+            )
+
+        # --- Gate 2: Tool-call / agentic tasks stay with primary model --------
+        if self._has_tool_call_signals(prompt_lower):
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=0.0,
+                estimated_savings_usd=0.0,
+                classified_intent=intent_value,
+                reasons=[
+                    "prompt contains tool-call/agentic signals; must use primary model"
+                ],
+            )
 
         # --- Agentic eligibility (OMN-5726) -----------------------------------
         # Computed independently: agentic_eligible requires a delegatable intent,
@@ -799,6 +813,7 @@ class TaskClassifier:
                 delegate_to_model="",
                 confidence=classification_confidence,
                 estimated_savings_usd=0.0,
+                classified_intent=intent_value,
                 reasons=reasons,
             )
 
@@ -817,6 +832,7 @@ class TaskClassifier:
                 delegate_to_model="",
                 confidence=classification_confidence,
                 estimated_savings_usd=0.0,
+                classified_intent=intent_value,
                 reasons=reasons,
                 agentic_eligible=is_agentic,
             )
@@ -833,6 +849,7 @@ class TaskClassifier:
             delegate_to_model=self._DELEGATE_MODEL_NAME,
             confidence=classification_confidence,
             estimated_savings_usd=savings,
+            classified_intent=intent_value,
             reasons=reasons,
             agentic_eligible=is_agentic,
         )

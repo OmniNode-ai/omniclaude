@@ -1030,11 +1030,12 @@ def orchestrate_delegation(
                 "delegatable"
             ):
                 # Cached result says not delegatable — honour it
+                cached_intent = cached_classification.get("intent", "unknown")
                 reasons = "cached: not delegatable"
                 _emit_delegation_event(
                     session_id=session_id,
                     correlation_id=correlation_id,
-                    task_type="unknown",
+                    task_type=cached_intent,
                     handler_name="unknown",
                     model_name="unknown",
                     quality_gate_passed=False,
@@ -1080,7 +1081,7 @@ def orchestrate_delegation(
                 _emit_delegation_event(
                     session_id=session_id,
                     correlation_id=correlation_id,
-                    task_type="unknown",
+                    task_type=score.classified_intent,
                     handler_name="unknown",
                     model_name="unknown",
                     quality_gate_passed=False,
@@ -1094,34 +1095,12 @@ def orchestrate_delegation(
                     "delegated": False,
                     "reason": reasons,
                     "confidence": score.confidence,
+                    "intent": score.classified_intent,
                 }
 
-            # Extract the intent value string for routing (reuse existing classifier instance).
-            try:
-                ctx = classifier.classify(prompt)
-                intent_value = (
-                    ctx.primary_intent.value
-                )  # e.g., "document", "test", "research"
-            except Exception as exc:
-                logger.debug("Intent value extraction failed: %s", exc)
-                latency_ms = int((time.time() - start_time) * 1000)
-                _emit_delegation_event(
-                    session_id=session_id,
-                    correlation_id=correlation_id,
-                    task_type="unknown",
-                    handler_name="unknown",
-                    model_name="unknown",
-                    quality_gate_passed=False,
-                    quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-                    delegation_success=False,
-                    savings_usd=score.estimated_savings_usd,
-                    latency_ms=latency_ms,
-                    emitted_at=emitted_at,
-                )
-                return {
-                    "delegated": False,
-                    "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-                }
+            # Intent value for routing — available directly from the score
+            # (no redundant classify() call needed, OMN-7695).
+            intent_value = score.classified_intent
 
         # Gate 3: Endpoint selection for this specific task type
         endpoint_result = _select_handler_endpoint(intent_value)
