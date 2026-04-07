@@ -50,9 +50,6 @@ Related Tickets:
     - OMN-1401: Session storage in OmniMemory (current)
     - OMN-1489: Core models in omnibase_core (snapshot model)
 
-TODO(OMN-1489): When core models are available, replace all temporary TypedDicts
-in this module with ModelClaudeCodeSessionSnapshot and related models from omnibase_core.
-
 Example:
     >>> from uuid import uuid4
     >>> from omniclaude.aggregators import ConfigSessionAggregator
@@ -87,12 +84,10 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Snapshot TypedDicts (temporary until ModelClaudeCodeSessionSnapshot - OMN-1489)
+# Snapshot TypedDicts
 # =============================================================================
 
 
-# TODO(OMN-1489): Replace with ModelAggregatorMetrics from omnibase_core
-# This TypedDict is temporary until core models are available.
 class AggregatorMetricsDict(TypedDict):
     """TypedDict for aggregator metrics.
 
@@ -111,8 +106,6 @@ class AggregatorMetricsDict(TypedDict):
     sessions_finalized: int
 
 
-# TODO(OMN-1489): Replace with ModelPromptSnapshot from omnibase_core
-# This TypedDict is temporary until core models are available.
 class PromptSnapshotDict(TypedDict):
     """TypedDict for prompt snapshot serialization."""
 
@@ -124,8 +117,6 @@ class PromptSnapshotDict(TypedDict):
     causation_id: str | None
 
 
-# TODO(OMN-1489): Replace with ModelToolSnapshot from omnibase_core
-# This TypedDict is temporary until core models are available.
 class ToolSnapshotDict(TypedDict):
     """TypedDict for tool snapshot serialization."""
 
@@ -1557,8 +1548,6 @@ class SessionAggregator:
 
         return removed
 
-    # TODO(OMN-1489): Replace with proper model serialization when core models available
-    # This method creates a dict representation; should return ModelClaudeCodeSessionSnapshot.
     def _session_to_dict(self, session: SessionState) -> SessionSnapshotDict:
         """Convert session state to dictionary representation.
 
