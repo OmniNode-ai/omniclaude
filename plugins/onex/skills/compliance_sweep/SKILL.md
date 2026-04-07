@@ -1,6 +1,6 @@
 ---
-description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system and wire schema mismatches, reports violations, and optionally creates Linear tickets for remediation
-version: 1.1.0
+description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system, wire schema mismatches, and infrastructure coupling anti-patterns, reports violations, and optionally creates Linear tickets for remediation
+version: 1.2.0
 mode: full
 level: advanced
 debug: false
@@ -50,7 +50,7 @@ imperative patterns that bypass the ONEX contract system.
 
 ## What This Detects
 
-The scanner performs 6 checks:
+The scanner performs 7 checks:
 
 ### Checks 1-4: Per-handler contract compliance
 
@@ -82,6 +82,31 @@ and the model's JSON schema output.
 - Scanner: `onex_change_control.scanners.wire_schema_compliance`
 - Scanner: `onex_change_control.scanners.model_dump_drift`
 - Model: `onex_change_control.models.model_wire_schema_contract.ModelWireSchemaContract`
+
+### Check 7: Infrastructure coupling detection (OMN-7677)
+
+Runs as a separate pass using regex-based pattern matching. Detects handlers that check
+for infrastructure availability instead of relying on injected dependencies.
+
+| Check | Violation Type | What It Finds |
+|-------|---------------|---------------|
+| 7. Infrastructure coupling | `INFRASTRUCTURE_COUPLING` | Publisher/event_bus None guards, has_publisher flags, use_filesystem_fallback, publisher_available/kafka_available checks |
+
+**Anti-patterns detected**:
+- `if self._publisher is None` / `is not None` — publisher availability guards
+- `if not self._event_bus` — event bus falsy guards
+- `has_publisher` as variable/parameter — infrastructure availability flags
+- `use_filesystem_fallback` — fallback paths for missing publisher
+- `publisher_available` / `kafka_available` — explicit availability checks
+- `Optional[Publisher]` / `Publisher | None` — optional dependency type annotations
+- `event_bus or InmemoryBus()` — or-fallback patterns
+
+**Severity assignment**:
+- `CRITICAL` for files in `src/*/nodes/*/handlers/` paths (handler files)
+- `WARN` for orchestrator, plugin, runtime, and service files
+
+**Standalone script**: `scripts/check_infra_coupling.py` can run this check independently
+against any set of repos.
 
 ## Verdicts
 
@@ -130,7 +155,9 @@ This skill wraps infrastructure from `onex_change_control`:
 - **Models**: `ModelHandlerComplianceResult`, `ModelComplianceSweepReport`,
   `ModelWireSchemaContract` -- structured output compatible with omnidash consumption
 - **Enums**: `EnumComplianceVerdict`, `EnumComplianceViolation` -- classification types
-  (including `WIRE_SCHEMA_MISMATCH`, `MODEL_DUMP_DRIFT`)
+  (including `WIRE_SCHEMA_MISMATCH`, `MODEL_DUMP_DRIFT`, `INFRASTRUCTURE_COUPLING`)
+- **Script (Check 7)**: `scripts/check_infra_coupling.py` -- regex-based infrastructure
+  coupling detection with severity-based classification (CRITICAL for handlers, WARN for others)
 
 ## Ticket Creation (--create-tickets)
 

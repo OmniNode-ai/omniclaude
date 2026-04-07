@@ -138,6 +138,46 @@ If models are not importable in the scan environment (cross-repo models), log
 "Skipped: model not importable" and continue. This is expected for cross-repo
 contracts where the consumer is in a different repo.
 
+## Phase 2c: Run infrastructure coupling check (Check 7)
+
+After wire schema checks, run the infrastructure coupling detector. This uses
+regex-based pattern matching to find handlers that check for infrastructure
+availability instead of relying on injected dependencies.
+
+```bash
+# Run the standalone script
+python3 /Volumes/PRO-G40/Code/omni_home/omniclaude/scripts/check_infra_coupling.py \  # local-path-ok
+  --repos <comma-separated-repo-list> \
+  --json
+```
+
+If the script is not available, scan manually using these regex patterns against
+Python files in each repo's `src/` directory:
+
+| Pattern ID | Regex | Description |
+|-----------|-------|-------------|
+| `PUBLISHER_NONE_GUARD` | `(?:self\.)?_?\w*publisher\w* is (?:None\|not None)` | Publisher availability guard |
+| `EVENT_BUS_NONE_GUARD` | `(?:self\.)?_?event_bus is (?:None\|not None)` | Event bus availability guard |
+| `EVENT_BUS_FALSY_GUARD` | `(?:if\|elif) not (?:self\.)?_?event_bus\b` | Event bus falsy check |
+| `PUBLISHER_FALSY_GUARD` | `(?:if\|elif) not (?:self\.)?_?\w*publisher\b` | Publisher falsy check |
+| `HAS_PUBLISHER` | `\bhas_publisher\b` | Infrastructure availability flag |
+| `USE_FILESYSTEM_FALLBACK` | `\buse_filesystem_fallback\b` | Fallback for missing publisher |
+| `PUBLISHER_AVAILABLE` | `\bpublisher_available\b` | Availability flag |
+| `KAFKA_AVAILABLE` | `\bkafka_available\b` | Availability flag |
+| `PUBLISHER_NONE_ASSIGNMENT` | `(?:self\.)?_?\w*publisher\w* = None\b` | Optional publisher setup |
+| `EVENT_BUS_NONE_ASSIGNMENT` | `(?:self\.)?_?event_bus = None\b` | Optional event_bus setup |
+| `PUBLISHER_OPTIONAL_TYPE` | `Optional\[.*(?:Publisher\|EventBus)\]` or `(?:Publisher\|EventBus).*\| None` | Optional type annotation |
+| `EVENT_BUS_OR_FALLBACK` | `event_bus or ` | Or-fallback pattern |
+
+**Severity assignment**:
+- Files matching `nodes/node_*/handlers/` -> `CRITICAL`
+- All other files -> `WARN`
+
+Skip lines that start with `#` (comments). The script handles this automatically.
+
+Append infrastructure coupling violations to the compliance report under a new
+`INFRASTRUCTURE_COUPLING` violation type.
+
 ## Phase 3: Aggregate results
 
 Build a `ModelComplianceSweepReport` from the per-handler results:
@@ -181,6 +221,8 @@ Per-repo breakdown:
 Top violations:
   <violation_type>: <count>
   ...
+
+Infrastructure coupling: <N> violations (<critical> critical, <warn> warn)
 
 Overall compliance: <pct>%
 Report: docs/registry/compliance-scan-<date>.json
