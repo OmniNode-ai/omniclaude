@@ -1213,7 +1213,10 @@ class TestOrchestratedDelegationSuccess:
 
         assert result["delegated"] is True
         assert "response" in result
-        assert "[Local Model Response - Qwen3-Coder-30B-A3B-Instruct]" in result["response"]
+        assert (
+            "[Local Model Response - Qwen3-Coder-30B-A3B-Instruct]"
+            in result["response"]
+        )
         assert result["model"] == "Qwen3-Coder-30B-A3B-Instruct"
         assert result["confidence"] == pytest.approx(0.97)
         assert result["savings_usd"] == pytest.approx(0.0112)
