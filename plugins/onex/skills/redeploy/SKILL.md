@@ -113,6 +113,7 @@ and verify that health endpoints and pinned package versions match expectations.
 | 4 | `PIN_UPDATE` | Run `update-plugin-pins.py` to rewrite `Dockerfile.runtime` version pins | Skip if already at target versions |
 | 5 | `DEPLOY` | Produce `ModelRebuildRequested` to deploy daemon on .201 via Kafka, poll `onex.evt.deploy.rebuild-completed.v1` for result | Idempotent: correlation_id prevents duplicate processing |
 | 5b | `SCHEMA_SYNC` | `check_schema_fingerprint.py verify` — auto-stamp if stale | Idempotent: verify-then-stamp pattern |
+| 5d | `PLUGIN_REFRESH` | `claude plugin install onex@omninode-tools` — refresh local plugin after release | Idempotent: no-op if already current |
 | 6 | `INFISICAL` | Seed new contract keys to Infisical | `seed-infisical.py` is idempotent |
 | 7 | `VERIFY` | Container manifest check via `verify_container_manifest.py` (`docker ps -a`) + curl health endpoints + in-container version checks. Restart-once policy for non-running containers. Profile-aware (core/runtime/memory). | Read-only (except restart-once recovery attempt), always safe |
 | 7b | `K8S_VERIFY` | `k8s-pod-readiness-check.sh` — SSM-based cloud k8s pod READY gate | Read-only; exit 2 advisory when SSM unreachable |
@@ -155,6 +156,7 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
     "PIN_UPDATE":      {"status": "completed", "ts": "2026-03-01T10:00:10Z", "pins_applied": {"omniintelligence": "0.8.0"}},
     "DEPLOY":          {"status": "pending"},
     "SCHEMA_SYNC":     {"status": "pending"},
+    "PLUGIN_REFRESH":  {"status": "pending"},
     "INFISICAL":       {"status": "pending"},
     "VERIFY":          {"status": "pending"},
     "K8S_VERIFY":      {"status": "pending"},
@@ -214,6 +216,7 @@ Written to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`:
     "PIN_UPDATE": "completed",
     "DEPLOY": "completed",
     "SCHEMA_SYNC": "completed",
+    "PLUGIN_REFRESH": "completed",
     "INFISICAL": "skipped_no_infisical",
     "VERIFY": "completed",
     "K8S_VERIFY": "completed",
