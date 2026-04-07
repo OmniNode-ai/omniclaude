@@ -47,9 +47,9 @@ outputs:
 
 ## Overview
 
-Scans all OmniNode Python repos for test coverage gaps, identifies modules with
-zero or below-target coverage, checks for existing tickets, and auto-creates
-Linear tickets for uncovered modules.
+Thin skill surface that dispatches to the `node_coverage_sweep` node in omnimarket
+via `onex run`. The node scans all OmniNode Python repos for test coverage gaps,
+identifies modules with zero or below-target coverage, and reports prioritized gaps.
 
 **Announce at start:** "I'm using the coverage-sweep skill."
 
@@ -132,31 +132,35 @@ Reports include per-repo breakdown:
 
 ## Execution Steps
 
-1. Parse arguments (repos, target, dry-run, max-tickets)
-2. Initialize `CoverageScanner` with omni_home path and target
-3. Run `scanner.scan_repos(repos)` to get coverage data
-4. If `--dry-run`: report gaps and exit
-5. Fetch existing Linear tickets for dedup:
+1. Parse arguments (repos, target, dry-run, max-tickets, force-rescan)
+2. Dispatch to omnimarket node via `onex run`:
+   ```bash
+   cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+   uv run onex run node_coverage_sweep -- \
+     --repos <comma-list> \
+     --target-pct <N> \
+     --dry-run  # if set
    ```
-   mcp__linear-server__list_issues(
-     team=team_id,
-     labels=["test-coverage"]
-   )
-   ```
-6. Initialize `CoverageTicketCreator` with existing titles
-7. Build ticket requests: `creator.build_ticket_requests(scan_results, max_tickets=N)`
-8. For each ticket request, create via:
-   ```
-   mcp__linear-server__create_issue(
-     title=req.title,
-     description=req.description,
-     team=team_id,
-     project=project_id,
-     priority=req.priority,
-     labels=req.labels
-   )
-   ```
-9. Report summary: gaps found, tickets created, tickets skipped
+3. Parse the node JSON output (gaps, summary, per-repo breakdown)
+4. Render the human-readable coverage report from node output
+5. If `--dry-run`: report gaps and exit
+6. Post-dispatch ticket creation using node output:
+   - Fetch existing Linear tickets for dedup via `mcp__linear-server__list_issues`
+   - For each gap not already tracked (up to `--max-tickets`), create via
+     `mcp__linear-server__save_issue`
+7. Report summary: gaps found, tickets created, tickets skipped
+
+## Architecture
+
+```
+SKILL.md   -> descriptive documentation (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_coverage_sweep/ (business logic)
+contract   -> node_coverage_sweep/contract.yaml (inputs/outputs/topics)
+```
+
+This skill is a **thin wrapper** — it parses arguments, dispatches to the omnimarket
+node via `onex run node_coverage_sweep`, and renders results. All scanning and
+prioritization logic lives in the node handler.
 
 ## Error Handling
 

@@ -23,9 +23,10 @@ args:
 
 ## Purpose
 
-Aggregation surface that collects verification results from multiple subsystems
-and presents a single go/no-go readiness assessment. The gate is only as honest
-as the maturity and freshness of each underlying signal.
+Thin skill surface that dispatches to the `node_platform_readiness` node in
+omnimarket via `onex run`. The node collects verification results from multiple
+subsystems and presents a single go/no-go readiness assessment. The gate is only
+as honest as the maturity and freshness of each underlying signal.
 
 ## Announce
 
@@ -127,6 +128,19 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
   "degraded": ["Data flow health: stale (26h)"]
 }
 ```
+
+## Architecture
+
+```
+SKILL.md   -> descriptive documentation (this file)
+prompt.md  -> execution instructions (parse args -> onex run dispatch -> render results)
+node       -> omnimarket/src/omnimarket/nodes/node_platform_readiness/ (business logic)
+contract   -> node_platform_readiness/contract.yaml (inputs/outputs/topics)
+```
+
+This skill is a **thin wrapper** — it parses arguments, dispatches to the omnimarket
+node via `onex run node_platform_readiness`, and renders results. All verification
+logic lives in the node handler.
 
 ## Integration Points
 

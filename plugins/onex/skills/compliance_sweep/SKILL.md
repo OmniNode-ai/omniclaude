@@ -42,9 +42,11 @@ outputs:
 
 # compliance_sweep
 
-Handler contract compliance sweep. Wraps the `arch-handler-contract-compliance`
-scanner from `onex_change_control` to audit all handlers across all repos for
-imperative patterns that bypass the ONEX contract system.
+Handler contract compliance sweep. Thin skill surface that dispatches to the
+`node_compliance_sweep` node in omnimarket via `onex run`. The node wraps the
+`arch-handler-contract-compliance` scanner from `onex_change_control` to audit
+all handlers across all repos for imperative patterns that bypass the ONEX
+contract system.
 
 **Announce at start:** "I'm using the compliance-sweep skill."
 
@@ -218,8 +220,14 @@ Report: docs/registry/compliance-scan-2026-03-28.json
 
 ```
 SKILL.md   -> descriptive documentation (this file)
-prompt.md  -> execution instructions for the agent
+prompt.md  -> execution instructions (parse args -> onex run dispatch -> render results)
+node       -> omnimarket/src/omnimarket/nodes/node_compliance_sweep/ (business logic)
+contract   -> node_compliance_sweep/contract.yaml (inputs/outputs/topics)
 ```
+
+This skill is a **thin wrapper** — it parses arguments, dispatches to the omnimarket
+node via `onex run node_compliance_sweep`, and renders results. All scanning logic
+lives in the node handler.
 
 ## See Also
 

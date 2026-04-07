@@ -31,9 +31,10 @@ args:
 
 ## Purpose
 
-Run DoD evidence checks for a ticket and generate a structured verification receipt.
-This is the voluntary verification entry point that agents can invoke before marking
-a ticket as Done.
+Thin skill surface that dispatches to the `node_dod_verify` node in omnimarket via
+`onex run`. Runs DoD evidence checks for a ticket and generates a structured
+verification receipt. This is the voluntary verification entry point that agents
+can invoke before marking a ticket as Done.
 
 ---
 
@@ -48,29 +49,26 @@ a ticket as Done.
 
 ## Behavior
 
-1. **Locate ticket contract:**
-   - If `--contract-path` is provided, use that path directly
-   - Otherwise, check `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
-   - If neither works, offer to run `onex:generate-ticket-contract {ticket_id}` first
+1. **Parse arguments:**
+   - Extract `ticket_id` (required) and `--contract-path` (optional) from `$ARGUMENTS`
 
-2. **Load contract and extract `dod_evidence[]`:**
-   - Parse the YAML contract
-   - If `dod_evidence` is empty or missing, report "No DoD evidence items to verify"
-     and exit cleanly
-
-3. **Run evidence checks:**
-   Use the shared runner at `plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`:
-   ```python
-   from dod_evidence_runner import run_dod_evidence, write_evidence_receipt
-   result = run_dod_evidence(contract["dod_evidence"])
-   receipt_path = write_evidence_receipt(ticket_id, contract_path, result)
+2. **Dispatch to node_dod_verify via onex run:**
+   ```bash
+   cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+   uv run onex run node_dod_verify -- \
+     --ticket-id <ticket_id> \
+     --contract-path <path>  # if provided
    ```
 
-4. **Write evidence receipt:**
-   Receipt is written to `.evidence/{ticket_id}/dod_report.json` in the current
-   working directory. This receipt is checked by the PreToolUse completion guard hook.
+   The node handles all evidence verification internally:
+   - Locates the ticket contract (auto-detect or explicit path)
+   - Loads `dod_evidence[]` from the contract
+   - Runs evidence checks (file existence, test execution, API content, etc.)
+   - Writes the evidence receipt to `.evidence/{ticket_id}/dod_report.json`
 
-5. **Output human-readable summary:**
+3. **Render results from node output:**
+
+   Parse the JSON output and render the human-readable summary:
 
    ```
    DoD Evidence Report for OMN-1234
@@ -89,6 +87,18 @@ a ticket as Done.
    - Fix dod-002: No files matching pattern config/*.yaml
    - dod-003 was skipped (endpoint checks require live infra)
    ```
+
+## Architecture
+
+```
+SKILL.md   -> descriptive documentation (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_dod_verify/ (business logic)
+contract   -> node_dod_verify/contract.yaml (inputs/outputs/topics)
+```
+
+This skill is a **thin wrapper** — it parses arguments, dispatches to the omnimarket
+node via `onex run node_dod_verify`, and renders results. All evidence checking
+logic lives in the node handler.
 
 ---
 

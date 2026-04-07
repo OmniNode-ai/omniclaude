@@ -1,8 +1,7 @@
 # compliance_sweep prompt
 
-You are executing the **compliance-sweep** skill. This skill scans all repos for
-handler contract compliance violations using the `arch-handler-contract-compliance`
-scanner from `onex_change_control`.
+You are executing the **compliance-sweep** skill. This skill dispatches to the
+`node_compliance_sweep` node in omnimarket for handler contract compliance scanning.
 
 ## Announce
 
@@ -25,10 +24,6 @@ omnibase_infra, omniintelligence, omnimemory, omnibase_core,
 omniclaude, onex_change_control, omnibase_spi
 ```
 
-**Bare clone root**: `/Volumes/PRO-G40/Code/omni_home`  <!-- local-path-ok -->
-
-**Change control repo**: `/Volumes/PRO-G40/Code/omni_home/onex_change_control`  <!-- local-path-ok -->
-
 ## Preamble: Pull bare clones
 
 Before scanning, pull all bare clones to ensure findings reflect latest `main`:
@@ -40,168 +35,36 @@ bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local
 If `pull-all.sh` exits non-zero, **warn but continue** -- stale clones may produce
 slightly outdated findings but this is not a blocking failure.
 
-## Phase 1: Discovery
+## Execution: Dispatch to node_compliance_sweep
 
-For each repo in the scan list, find all node directories from the `main` branch.
-A node directory is a directory under `src/**/nodes/` that starts with `node_` and
-contains a `handlers/` subdirectory.
-
-```bash
-# For bare clones, use git ls-tree to find node directories
-git -C /Volumes/PRO-G40/Code/omni_home/<repo> ls-tree -r -d main --name-only \  # local-path-ok
-  | grep -E 'nodes/node_[^/]+/handlers$' \
-  | sed 's|/handlers$||' \
-  | sort -u
-```
-
-For each node directory found, record:
-- `repo`: repository name
-- `node_dir`: relative path to node directory
-- `has_contract`: whether `contract.yaml` exists in the node directory
-- `handler_count`: number of `.py` files in `handlers/` (excluding `__init__.py`)
-
-Record the total handler count across all repos.
-
-## Phase 2: Run compliance scanner
-
-For each repo, run the `arch-handler-contract-compliance` validator from
-`onex_change_control`. This requires checking out the repo content to a temporary
-location since the scanner needs filesystem access.
-
-**Option A (preferred)**: If the repo has a worktree or working copy available, use it directly:
+Build the `onex run` command from parsed arguments and dispatch to the omnimarket node.
+The node handles all scanning phases internally (discovery, AST-based compliance checks,
+wire schema validation, infrastructure coupling detection, aggregation, and report saving).
 
 ```bash
-# Check if a working copy exists (e.g., in a worktree)
-REPO_PATH="/Volumes/PRO-G40/Code/omni_home/<repo>"  # local-path-ok
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
 
-# For bare clones, we need to extract files to a temp dir
-TEMP_DIR=$(mktemp -d)
-git -C "$REPO_PATH" --work-tree="$TEMP_DIR" checkout main -- src/ 2>/dev/null
+# Build argument list from parsed flags
+ARGS=""
+if [ -n "$REPOS" ]; then
+  ARGS="$ARGS --repos $REPOS"
+fi
+if [ "$DRY_RUN" = "true" ]; then
+  ARGS="$ARGS --dry-run"
+fi
+if [ -n "$ALLOWLIST_DIR" ]; then
+  ARGS="$ARGS --allowlist-dir $ALLOWLIST_DIR"
+fi
 
-# Run the validator
-cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok
-uv run python -m onex_change_control.validators.arch_handler_contract_compliance \
-  --repo-root "$TEMP_DIR" \
-  --json 2>/dev/null
-
-# Clean up
-rm -rf "$TEMP_DIR"
+uv run onex run node_compliance_sweep -- $ARGS
 ```
 
-**Option B**: If the validator is not available (e.g., `onex_change_control` not installed),
-fall back to manual scanning:
+Capture the JSON output from stdout. The node produces a `ModelComplianceSweepReport`
+with all violation details, verdicts, and per-repo breakdowns.
 
-1. For each node directory, read `contract.yaml` via `git show main:<path>/contract.yaml`
-2. For each handler `.py` file, read via `git show main:<path>`
-3. Manually check for:
-   - Topic string literals matching `onex.evt.*` or known bare topic names
-   - Transport imports (`psycopg`, `httpx`, `aiokafka`, etc.)
-   - Whether handler is listed in contract.yaml `handler_routing`
-   - Custom methods in `node.py` beyond `__init__`
+## Post-dispatch: Render results
 
-Parse the JSON output from the validator into `ModelHandlerComplianceResult` objects.
-
-## Phase 2b: Run wire schema checks (Check 5 + Check 6)
-
-After the handler compliance scan, run wire schema validation as a separate pass.
-This operates on wire schema contract YAMLs, not handler files.
-
-**Discovery**: Find all `*_v*.yaml` files in each repo that have `topic`, `producer`,
-`consumer`, and `required_fields` keys (wire schema contract structure).
-
-**Scan directories** (search in each repo's src tree):
-```bash
-# Find wire schema contracts
-find /Volumes/PRO-G40/Code/omni_home/<repo>/src/ -name '*_v*.yaml' -type f  # local-path-ok
-```
-
-**For each wire schema contract found**:
-1. Parse with `ModelWireSchemaContract` from `onex_change_control.models`
-2. Run Check 5 (WIRE_SCHEMA_MISMATCH): if consumer model is importable, compare
-   contract `required_fields`/`optional_fields` against model field names
-3. Run Check 6 (MODEL_DUMP_DRIFT): if model is importable, compare contract field
-   types against `model_json_schema()` output
-
-**Infrastructure** (from `onex_change_control`):
-```python
-from onex_change_control.scanners.wire_schema_compliance import (
-    discover_wire_schema_contracts,
-    check_wire_schema_mismatch,
-)
-from onex_change_control.scanners.model_dump_drift import check_model_dump_drift
-```
-
-Append any violations to the compliance report. Wire schema violations use
-`WIRE_SCHEMA_MISMATCH` and `MODEL_DUMP_DRIFT` from `EnumComplianceViolation`.
-
-If models are not importable in the scan environment (cross-repo models), log
-"Skipped: model not importable" and continue. This is expected for cross-repo
-contracts where the consumer is in a different repo.
-
-## Phase 2c: Run infrastructure coupling check (Check 7)
-
-After wire schema checks, run the infrastructure coupling detector. This uses
-regex-based pattern matching to find handlers that check for infrastructure
-availability instead of relying on injected dependencies.
-
-```bash
-# Run the standalone script
-python3 /Volumes/PRO-G40/Code/omni_home/omniclaude/scripts/check_infra_coupling.py \  # local-path-ok
-  --repos <comma-separated-repo-list> \
-  --json
-```
-
-If the script is not available, scan manually using these regex patterns against
-Python files in each repo's `src/` directory:
-
-| Pattern ID | Regex | Description |
-|-----------|-------|-------------|
-| `PUBLISHER_NONE_GUARD` | `(?:self\.)?_?\w*publisher\w* is (?:None\|not None)` | Publisher availability guard |
-| `EVENT_BUS_NONE_GUARD` | `(?:self\.)?_?event_bus is (?:None\|not None)` | Event bus availability guard |
-| `EVENT_BUS_FALSY_GUARD` | `(?:if\|elif) not (?:self\.)?_?event_bus\b` | Event bus falsy check |
-| `PUBLISHER_FALSY_GUARD` | `(?:if\|elif) not (?:self\.)?_?\w*publisher\b` | Publisher falsy check |
-| `HAS_PUBLISHER` | `\bhas_publisher\b` | Infrastructure availability flag |
-| `USE_FILESYSTEM_FALLBACK` | `\buse_filesystem_fallback\b` | Fallback for missing publisher |
-| `PUBLISHER_AVAILABLE` | `\bpublisher_available\b` | Availability flag |
-| `KAFKA_AVAILABLE` | `\bkafka_available\b` | Availability flag |
-| `PUBLISHER_NONE_ASSIGNMENT` | `(?:self\.)?_?\w*publisher\w* = None\b` | Optional publisher setup |
-| `EVENT_BUS_NONE_ASSIGNMENT` | `(?:self\.)?_?event_bus = None\b` | Optional event_bus setup |
-| `PUBLISHER_OPTIONAL_TYPE` | `Optional\[.*(?:Publisher\|EventBus)\]` or `(?:Publisher\|EventBus).*\| None` | Optional type annotation |
-| `EVENT_BUS_OR_FALLBACK` | `event_bus or ` | Or-fallback pattern |
-
-**Severity assignment**:
-- Files matching `nodes/node_*/handlers/` -> `CRITICAL`
-- All other files -> `WARN`
-
-Skip lines that start with `#` (comments). The script handles this automatically.
-
-Append infrastructure coupling violations to the compliance report under a new
-`INFRASTRUCTURE_COUPLING` violation type.
-
-## Phase 3: Aggregate results
-
-Build a `ModelComplianceSweepReport` from the per-handler results:
-
-1. **Count by verdict**: COMPLIANT, IMPERATIVE, HYBRID, ALLOWLISTED, MISSING_CONTRACT
-2. **Compute compliant_pct**: `(compliant_count / total_handlers) * 100`, clamped 0-100
-3. **Build violation histogram**: count occurrences of each `EnumComplianceViolation`
-4. **Build per-repo breakdown**: for each repo, compute counts and top violations
-5. **Detect new violations**: compare against previous report if it exists at
-   `docs/registry/compliance-scan-*.json`
-
-## Phase 4: Save report
-
-Save the `ModelComplianceSweepReport` as JSON to:
-
-```
-/Volumes/PRO-G40/Code/omni_home/docs/registry/compliance-scan-<YYYY-MM-DD>.json  <!-- local-path-ok -->
-```
-
-If `--json` flag is set, also print the full JSON to stdout.
-
-## Phase 5: Print summary
-
-Print a human-readable summary:
+Parse the node output and render the human-readable summary:
 
 ```
 Handler Contract Compliance Sweep
@@ -228,144 +91,33 @@ Overall compliance: <pct>%
 Report: docs/registry/compliance-scan-<date>.json
 ```
 
-## Phase 6: Ticket creation (--create-tickets)
+If `--json` flag was set, output the raw JSON from the node instead.
+
+## Post-dispatch: Ticket creation (--create-tickets)
 
 **Skip entirely** if `--dry-run` is set or `--create-tickets` is NOT set.
 Print: "Use --create-tickets to create Linear tickets for violations."
 
-Otherwise:
+Otherwise, use the node output violations to create Linear tickets:
 
-### Group by node
-
-Group all violation results by `node_dir`. One ticket per node directory, not per handler.
-A node's ticket covers all handlers within that node.
-
-### Dedup against existing tickets
-
-For each node with violations:
-
-1. Check if the node's handlers appear in the repo's allowlist YAML with a `ticket:` field
-2. Search Linear for an open ticket containing the node name and "compliance" in the title
-3. If either check finds an existing ticket: **skip** (idempotent)
-
-### Create tickets
-
-For each node NOT already tracked (up to `--max-tickets`, default 10):
-
-**Title**: `fix(compliance): migrate <node_name> to declarative pattern`
-
-**Description** (markdown):
-
-```markdown
-## Contract Compliance Violation
-
-**Node**: `<repo>/src/<package>/nodes/<node_name>/`
-**Handlers**: <count> handlers with violations
-**Detected by**: compliance-sweep skill run <date>
-
-### Violations
-
-| Handler | Violations | Details |
-|---------|-----------|---------|
-| handler_foo.py | HARDCODED_TOPIC, UNDECLARED_TRANSPORT | hardcoded topic 'agent-actions' at line 47; imports httpx not declared in contract |
-| handler_bar.py | MISSING_HANDLER_ROUTING | handler not registered in contract.yaml handler_routing |
-
-### Required Changes
-
-**contract.yaml updates needed**:
-- Add missing topics to `event_bus.publish_topics` / `event_bus.subscribe_topics`
-- Add missing transport declarations to capabilities
-- Register all handlers in `handler_routing`
-
-**Handler updates needed**:
-- Replace hardcoded topic strings with contract-declared references
-- Remove direct DB/HTTP construction; use injected services
-
-### Context
-
-This is part of the imperative-to-declarative migration. See:
-- Plan: docs/plans/2026-03-27-imperative-to-declarative-scan.md
-- Parent ticket: OMN-6842
-```
-
-**Settings**:
-- Project: Active Sprint
-- Label: `contract-compliance`
-- Priority: 3 (Normal)
-
-### Report ticket creation
+1. Group violations by node directory (one ticket per node, not per handler)
+2. Dedup against existing Linear tickets with "compliance" in the title
+3. Create tickets (up to `--max-tickets`, default 10) via `mcp__linear-server__save_issue`
+4. Title format: `fix(compliance): migrate <node_name> to declarative pattern`
+5. Project: Active Sprint, label: `contract-compliance`
 
 After creating tickets, print:
 
 ```
 Tickets created: <N>
   OMN-XXXX: fix(compliance): migrate node_foo to declarative pattern
-  OMN-YYYY: fix(compliance): migrate node_bar to declarative pattern
   ...
 
 Remaining untracked nodes: <N> (use --max-tickets to increase limit)
 ```
 
-## Phase 7: Emit event
-
-Emit a `compliance.sweep.completed` event with:
-
-```json
-{
-  "event_type": "compliance.sweep.completed",
-  "timestamp": "<ISO-8601>",
-  "repos_scanned": <N>,
-  "total_handlers": <N>,
-  "compliant_count": <N>,
-  "compliant_pct": <float>,
-  "imperative_count": <N>,
-  "tickets_created": <N>,
-  "report_path": "docs/registry/compliance-scan-<date>.json"
-}
-```
-
-Use the standard event emission pattern (emit daemon or Kafka direct).
-If emission fails, log a warning but do not fail the skill.
-
 ## Error handling
 
-- If `onex_change_control` is not found: abort with error
+- If `onex run` fails: report the error and exit
 - If a repo is not found at `$OMNI_HOME/<repo>`: skip, record in report
-- If validator fails for a repo: record as error, continue with remaining repos
 - If Linear API fails during ticket creation: log error, continue with remaining tickets
-- If `uv` is not available: fall back to `python3` directly
-
-## Examples
-
-### Dry run (default)
-
-```
-/compliance-sweep
-
-Handler Contract Compliance Sweep
-===================================
-Repos scanned: 7
-Total handlers: 269
-Compliant: 52 (19.3%)
-Imperative: 180 (66.9%)
-Hybrid: 25 (9.3%)
-Allowlisted: 12 (4.5%)
-Missing contract: 0 (0.0%)
-...
-Use --create-tickets to create Linear tickets for violations.
-```
-
-### With ticket creation
-
-```
-/compliance-sweep --create-tickets --max-tickets 5
-
-Handler Contract Compliance Sweep
-===================================
-...
-Tickets created: 5
-  OMN-6900: fix(compliance): migrate node_baselines_effect to declarative pattern
-  OMN-6901: fix(compliance): migrate node_agent_actions_consumer to declarative pattern
-  ...
-Remaining untracked nodes: 23 (use --max-tickets to increase limit)
-```
