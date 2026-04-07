@@ -147,7 +147,7 @@ _CODE_ANALYSIS_REQUIRED_HEADINGS: tuple[str, ...] = (
 
 # Default model identifiers for each adapter.
 _CODE_ANALYSIS_DEFAULT_MODEL: str = "qwen2.5-coder-14b"
-_SUMMARIZATION_DEFAULT_MODEL: str = "qwen2.5-72b"
+_SUMMARIZATION_DEFAULT_MODEL: str = "qwen3-coder-30b-a3b-instruct"
 _SUMMARIZATION_PASSTHROUGH_MODEL: str = "passthrough"
 
 # Relevance scores for code analysis adapter.
@@ -713,7 +713,7 @@ class TestSummarizationOutputSchema:
         assert result.enrichment_type == "summarization"
 
     def test_default_model_is_qwen_72b(self) -> None:
-        """Default model for summarization is 'qwen2.5-72b'."""
+        """Default model for summarization is 'qwen3-coder-30b-a3b-instruct'."""
         result = _make_summarization_result()
         assert result.model_used == _SUMMARIZATION_DEFAULT_MODEL
 
@@ -868,12 +868,12 @@ class TestSummarizationMarkdownParsing:
         # covers both localhost and production-style host/port combinations.
         summary = (
             "## Summary\n\n"
-            "The `HandlerLlmOpenaiCompatible` handler calls `qwen2.5-72b` at "
+            "The `HandlerLlmOpenaiCompatible` handler calls `qwen3-coder-30b-a3b-instruct` at "
             "`http://localhost:8100/v1/chat/completions` with a 3-minute timeout.\n"
         )
         result = _make_summarization_result(summary_markdown=summary)
         assert "HandlerLlmOpenaiCompatible" in result.summary_markdown
-        assert "qwen2.5-72b" in result.summary_markdown
+        assert "qwen3-coder-30b-a3b-instruct" in result.summary_markdown
 
 
 # ============================================================================
@@ -1092,10 +1092,10 @@ class TestSummarizationBadOutputRecovery:
     def test_net_guard_model_used_is_set(self) -> None:
         """Even when net-token guard fires, model_used is set (LLM was called)."""
         result = _make_summarization_result(
-            model_used="qwen2.5-72b",
+            model_used="qwen3-coder-30b-a3b-instruct",
             relevance_score=1.0,
         )
-        assert result.model_used == "qwen2.5-72b"
+        assert result.model_used == "qwen3-coder-30b-a3b-instruct"
         assert result.model_used != _SUMMARIZATION_PASSTHROUGH_MODEL
 
     def test_empty_context_passthrough_result_is_valid(self) -> None:

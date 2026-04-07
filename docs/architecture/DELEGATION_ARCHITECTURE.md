@@ -46,7 +46,7 @@ delegation_orchestrator.orchestrate_delegation(prompt, session_id, correlation_i
     │
     │    Intent → LlmEndpointPurpose mapping:
     │    ┌──────────────┬────────────────────┬─────────────────────┐
-    │    │ document     │ REASONING          │ Qwen2.5-72B, R1     │
+    │    │ document     │ REASONING          │ Qwen3-Coder-30B-A3B, R1 │
     │    │ test         │ CODE_ANALYSIS      │ Qwen3-Coder-30B-A3B │
     │    │ research     │ CODE_ANALYSIS      │ Qwen3-Coder-30B-A3B │
     │    └──────────────┴────────────────────┴─────────────────────┘

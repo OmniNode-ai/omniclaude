@@ -212,7 +212,7 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 # =============================================================================
 
 
-def _create_emit_client(socket_path: str, timeout: float) -> object:
+def _create_emit_client(socket_path: str, timeout: float) -> _SocketEmitClient:
     """Create an emit client, preferring omnimarket's portable client.
 
     Tries to import EmitClient from omnimarket.nodes.node_emit_daemon.client
@@ -225,7 +225,7 @@ def _create_emit_client(socket_path: str, timeout: float) -> object:
     try:
         from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415
 
-        return EmitClient(socket_path=socket_path, timeout=timeout)
+        return EmitClient(socket_path=socket_path, timeout=timeout)  # type: ignore[no-any-return]
     except ImportError:
         import warnings  # noqa: PLC0415
 
@@ -324,7 +324,7 @@ class _SocketEmitClient:
 # =============================================================================
 
 _client_lock = threading.Lock()
-_emit_client: _SocketEmitClient | object | None = None
+_emit_client: _SocketEmitClient | None = None
 _client_initialized = False
 
 

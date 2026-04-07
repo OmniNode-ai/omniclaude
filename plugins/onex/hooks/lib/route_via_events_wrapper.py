@@ -812,7 +812,7 @@ def _get_llm_routing_url() -> tuple[str, str] | None:
     """Return the (url, model_name) pair to use for routing, or None.
 
     Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B),
-    then REASONING (Qwen2.5-72B) since no dedicated routing model is currently
+    then REASONING (Qwen3-Coder-30B-A3B) since no dedicated routing model is currently
     deployed.
 
     Returns:

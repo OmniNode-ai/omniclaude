@@ -39,7 +39,7 @@ import delegation_orchestrator as do  # noqa: E402 I001
 
 def _make_endpoint_selection(
     url: str = "http://localhost:8100",
-    model_name: str = "Qwen2.5-72B",
+    model_name: str = "Qwen3-Coder-30B-A3B-Instruct",
     system_prompt: str = "You are a doc expert.",
     handler_name: str = "doc_gen",
 ) -> do._EndpointSelection:
@@ -66,7 +66,7 @@ def _valid_payload_kwargs() -> dict[str, Any]:
         "correlation_id": uuid4(),
         "emitted_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC),
         "task_type": "document",
-        "delegated_to": "Qwen2.5-72B",
+        "delegated_to": "Qwen3-Coder-30B-A3B-Instruct",
         "delegated_by": "doc_gen",
         "quality_gate_passed": True,
         "quality_gate_reason": None,
@@ -88,7 +88,7 @@ class TestModelTaskDelegatedPayloadSchema:
         payload = ModelTaskDelegatedPayload(**kwargs)
         assert payload.task_type == "document"
         assert payload.delegated_by == "doc_gen"
-        assert payload.delegated_to == "Qwen2.5-72B"
+        assert payload.delegated_to == "Qwen3-Coder-30B-A3B-Instruct"
         assert payload.delegation_success is True
         assert payload.cost_savings_usd == pytest.approx(0.0112)
         assert payload.delegation_latency_ms == 320
@@ -346,7 +346,7 @@ class TestSelectHandlerEndpoint:
         """'document' intent routes to REASONING endpoint (doc_gen handler)."""
         mock_endpoint = MagicMock()
         mock_endpoint.url = "http://llm-reasoning-host:8101"
-        mock_endpoint.model_name = "Qwen2.5-72B"
+        mock_endpoint.model_name = "Qwen3-Coder-30B-A3B-Instruct"
 
         mock_registry_instance = MagicMock()
         mock_registry_instance.get_endpoint.return_value = mock_endpoint
@@ -361,7 +361,7 @@ class TestSelectHandlerEndpoint:
         assert result is not None
         assert result.handler_name == "doc_gen"
         assert "documentation" in result.system_prompt.lower()
-        assert result.model_name == "Qwen2.5-72B"
+        assert result.model_name == "Qwen3-Coder-30B-A3B-Instruct"
 
     def test_test_routes_to_code_analysis(self) -> None:
         """'test' intent routes to CODE_ANALYSIS endpoint (test_boilerplate handler)."""
@@ -888,7 +888,7 @@ class TestLlmCallFailure:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=("   ", "Qwen2.5-72B"),
+                    return_value=("   ", "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     result = do.orchestrate_delegation(
                         prompt="document this function", correlation_id="corr-32"
@@ -997,7 +997,7 @@ class TestLlmCallFailure:
         uses the actual configured model identifier instead of the hardcoded 'local'.
         """
         _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
-        # endpoint_tuple[1] is the model_name from the registry ("Qwen2.5-72B")
+        # endpoint_tuple[1] is the model_name from the registry ("Qwen3-Coder-30B-A3B-Instruct")
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(
@@ -1014,7 +1014,7 @@ class TestLlmCallFailure:
         mock_llm_call.assert_called_once()
         call_args = mock_llm_call.call_args
         # Positional args: (prompt, endpoint_url, system_prompt, model_name)
-        assert call_args.args[3] == "Qwen2.5-72B"
+        assert call_args.args[3] == "Qwen3-Coder-30B-A3B-Instruct"
 
 
 # ---------------------------------------------------------------------------
@@ -1052,7 +1052,7 @@ class TestQualityGateFailure:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(bad_response, "Qwen2.5-72B"),
+                    return_value=(bad_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     result = do.orchestrate_delegation(
                         prompt="document this function", correlation_id="corr-40"
@@ -1076,7 +1076,7 @@ class TestQualityGateFailure:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(bad_response, "Qwen2.5-72B"),
+                    return_value=(bad_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event") as mock_emit:
                         do.orchestrate_delegation(
@@ -1108,7 +1108,7 @@ class TestQualityGateFailure:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(bad_response, "Qwen2.5-72B"),
+                    return_value=(bad_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(
@@ -1164,7 +1164,7 @@ class TestOrchestratedDelegationSuccess:
         intent: str = "document",
         llm_response: str | None = None,
         handler_name: str = "doc_gen",
-        model_name: str = "Qwen2.5-72B",
+        model_name: str = "Qwen3-Coder-30B-A3B-Instruct",
         endpoint_url: str = "http://llm-embedding-host:8100",
     ) -> tuple[Any, Any, do._EndpointSelection, str]:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
@@ -1202,7 +1202,7 @@ class TestOrchestratedDelegationSuccess:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(llm_response, "Qwen2.5-72B"),
+                    return_value=(llm_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
@@ -1213,8 +1213,11 @@ class TestOrchestratedDelegationSuccess:
 
         assert result["delegated"] is True
         assert "response" in result
-        assert "[Local Model Response - Qwen2.5-72B]" in result["response"]
-        assert result["model"] == "Qwen2.5-72B"
+        assert (
+            "[Local Model Response - Qwen3-Coder-30B-A3B-Instruct]"
+            in result["response"]
+        )
+        assert result["model"] == "Qwen3-Coder-30B-A3B-Instruct"
         assert result["confidence"] == pytest.approx(0.97)
         assert result["savings_usd"] == pytest.approx(0.0112)
         assert result["handler"] == "doc_gen"
@@ -1238,7 +1241,7 @@ class TestOrchestratedDelegationSuccess:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(llm_response, "Qwen2.5-72B"),
+                    return_value=(llm_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event") as mock_emit:
                         with patch.object(do, "_emit_compliance_advisory"):
@@ -1268,7 +1271,7 @@ class TestOrchestratedDelegationSuccess:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(llm_response, "Qwen2.5-72B"),
+                    return_value=(llm_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(
@@ -1295,7 +1298,7 @@ class TestOrchestratedDelegationSuccess:
                 with patch.object(
                     do,
                     "_call_llm_with_system_prompt",
-                    return_value=(llm_response, "Qwen2.5-72B"),
+                    return_value=(llm_response, "Qwen3-Coder-30B-A3B-Instruct"),
                 ):
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
@@ -1479,7 +1482,7 @@ class TestEmitDelegationEvent:
         correlation_id: str = "00000000-0000-0000-0000-000000000001",
         task_type: str = "document",
         handler_name: str = "doc_gen",
-        model_name: str = "Qwen2.5-72B",
+        model_name: str = "Qwen3-Coder-30B-A3B-Instruct",
         quality_gate_passed: bool = True,
         quality_gate_reason: str = "",
         delegation_success: bool = True,
