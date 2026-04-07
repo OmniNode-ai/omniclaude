@@ -74,9 +74,7 @@ class TestWorkerDescriptor:
 
     def test_stop_sets_event_and_clears_refs(self):
         stop_event = MagicMock()
-        w = _WorkerDescriptor(
-            name="test", thread=MagicMock(), stop_event=stop_event
-        )
+        w = _WorkerDescriptor(name="test", thread=MagicMock(), stop_event=stop_event)
         w.stop()
         stop_event.set.assert_called_once()
         assert w.stop_event is None
@@ -95,9 +93,7 @@ class TestWorkerDescriptor:
 
 class TestModelLifecycleDiagnostic:
     def test_frozen(self):
-        d = ModelLifecycleDiagnostic(
-            component="test", operation="init", success=True
-        )
+        d = ModelLifecycleDiagnostic(component="test", operation="init", success=True)
         with pytest.raises(AttributeError):
             d.component = "other"  # type: ignore[misc]
 
@@ -191,8 +187,7 @@ class TestOnStart:
         # Publisher should succeed, backend should fail
         assert diagnostics[0].success is True
         assert any(
-            not d.success and d.component == "VllmInferenceBackend"
-            for d in diagnostics
+            not d.success and d.component == "VllmInferenceBackend" for d in diagnostics
         )
         assert state.publisher is not None
         assert state.vllm_backend is None
@@ -229,9 +224,7 @@ class TestStartWorkers:
                 ),
                 "omniclaude.runtime.introspection": MagicMock(
                     SkillNodeIntrospectionProxy=MagicMock(
-                        return_value=MagicMock(
-                            publish_all=AsyncMock(return_value=0)
-                        )
+                        return_value=MagicMock(publish_all=AsyncMock(return_value=0))
                     )
                 ),
             },

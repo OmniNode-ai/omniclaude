@@ -412,7 +412,14 @@ class PluginClaude:
     @_compliance_stop_event.setter
     def _compliance_stop_event(self, value: object) -> None:
         # Used by tests to inject mock stop events
-        pass
+        worker = self._state.workers.get("compliance-subscriber")
+        if worker is not None:
+            worker.stop_event = value  # type: ignore[assignment]
+        elif value is not None:
+            self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
+                name="compliance-subscriber",
+                stop_event=value,  # type: ignore[arg-type]
+            )
 
     @property
     def _compliance_thread(self) -> object | None:
@@ -422,12 +429,15 @@ class PluginClaude:
     @_compliance_thread.setter
     def _compliance_thread(self, value: object) -> None:
         # Used by tests to inject mock threads
-
         if value is not None:
-            self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
-                name="compliance-subscriber",
-                thread=value,  # type: ignore[arg-type]
-            )
+            existing = self._state.workers.get("compliance-subscriber")
+            if existing is not None:
+                existing.thread = value  # type: ignore[assignment]
+            else:
+                self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
+                    name="compliance-subscriber",
+                    thread=value,  # type: ignore[arg-type]
+                )
         elif "compliance-subscriber" in self._state.workers:
             del self._state.workers["compliance-subscriber"]
 
@@ -438,7 +448,14 @@ class PluginClaude:
 
     @_decision_record_stop_event.setter
     def _decision_record_stop_event(self, value: object) -> None:
-        pass
+        worker = self._state.workers.get("decision-record-subscriber")
+        if worker is not None:
+            worker.stop_event = value  # type: ignore[assignment]
+        elif value is not None:
+            self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
+                name="decision-record-subscriber",
+                stop_event=value,  # type: ignore[arg-type]
+            )
 
     @property
     def _decision_record_thread(self) -> object | None:
@@ -448,10 +465,14 @@ class PluginClaude:
     @_decision_record_thread.setter
     def _decision_record_thread(self, value: object) -> None:
         if value is not None:
-            self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
-                name="decision-record-subscriber",
-                thread=value,  # type: ignore[arg-type]
-            )
+            existing = self._state.workers.get("decision-record-subscriber")
+            if existing is not None:
+                existing.thread = value  # type: ignore[assignment]
+            else:
+                self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
+                    name="decision-record-subscriber",
+                    thread=value,  # type: ignore[arg-type]
+                )
         elif "decision-record-subscriber" in self._state.workers:
             del self._state.workers["decision-record-subscriber"]
 
