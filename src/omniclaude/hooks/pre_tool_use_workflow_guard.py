@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""PreToolUse workflow guard for triage-first and ticket-first enforcement (OMN-6231).
+"""PreToolUse workflow guard for triage-first, ticket-first, and write protection (OMN-6231, OMN-7810).
 
-Enforces two workflow preconditions via proxy signals:
+Enforces three workflow preconditions via proxy signals:
 
 1. Triage-first: Before any Linear epic creation (mcp__linear-server__save_issue
    with a parent-less issue that resembles an epic), check that
@@ -13,6 +13,11 @@ Enforces two workflow preconditions via proxy signals:
 2. Ticket-first: Before any git commit via the Bash tool, check that the
    current branch name contains an OMN-\\d+ pattern OR the commit message
    (if extractable from the command string) contains one.
+
+3. Canonical clone write protection (OMN-7810): Edit/Write tool calls targeting
+   files inside ``$OMNI_HOME/<repo>/`` are hard-blocked. All code changes must
+   happen in worktrees (``$OMNI_HOME/worktrees/<ticket>/<repo>/``).
+   Paths inside worktrees are allowed.
 
 IMPORTANT — scope limitations (honest about what this enforces):
 - This enforces proxy signals only. A human can bypass both checks trivially
@@ -35,6 +40,7 @@ Exits 0 (allow/pass-through), 1 (warn — allow but emit advisory), or 2 (block)
 Related:
     - OMN-6231: Enforce Triage-First and Ticket-First Workflow at the Hook Layer
     - OMN-6233: Task 4 — integration pass that extends this module
+    - OMN-7810: Canonical clone write protection hooks
 """
 
 from __future__ import annotations
@@ -70,6 +76,28 @@ _GIT_COMMIT_PATTERN = re.compile(r"\bgit\s+commit\b")
 # ---------------------------------------------------------------------------
 
 _EPIC_CREATION_TOOL = "mcp__linear-server__save_issue"
+
+# ---------------------------------------------------------------------------
+# Canonical clone write protection (OMN-7810)
+# ---------------------------------------------------------------------------
+
+# Known repo directories under omni_home (from the registry table in CLAUDE.md).
+# This list is used to distinguish canonical clones from worktrees.
+_KNOWN_REPOS = {
+    "omniclaude",
+    "omnibase_core",
+    "omnibase_infra",
+    "omnibase_spi",
+    "omnidash",
+    "omnigemini",
+    "omniintelligence",
+    "omnimemory",
+    "omninode_infra",
+    "omnimarket",
+    "omniweb",
+    "onex_change_control",
+    "omnibase_compat",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +201,70 @@ def _check_ticket_id_in_context(
 
 
 # ---------------------------------------------------------------------------
+# Canonical clone write protection (OMN-7810)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_omni_home() -> Path | None:
+    """Return the OMNI_HOME path, or None if not set."""
+    omni_home = os.environ.get("OMNI_HOME")
+    if omni_home:
+        return Path(omni_home).resolve()
+    return None
+
+
+def _check_canonical_clone_write(file_path: str) -> tuple[bool, str]:
+    """Check if a file path targets a canonical clone inside omni_home.
+
+    Returns:
+        (allowed, message) — allowed=True means write is permitted.
+        If allowed=False, message contains the block reason.
+    """
+    omni_home = _resolve_omni_home()
+    if omni_home is None:
+        # OMNI_HOME not set — can't enforce, allow
+        return True, ""
+
+    try:
+        resolved = Path(file_path).resolve()
+    except (OSError, ValueError):
+        return True, ""
+
+    # Check if path is under omni_home
+    try:
+        rel = resolved.relative_to(omni_home)
+    except ValueError:
+        # Not under omni_home at all — allow
+        return True, ""
+
+    parts = rel.parts
+    if not parts:
+        return True, ""
+
+    first_dir = parts[0]
+
+    # Allow writes to worktrees/ — that's where feature work lives
+    if first_dir == "worktrees":
+        return True, ""
+
+    # Allow writes to top-level omni_home files (plans, docs, .onex_state, etc.)
+    if first_dir not in _KNOWN_REPOS:
+        return True, ""
+
+    # This is a path inside a canonical clone — block it
+    repo_name = first_dir
+    return False, (
+        f"[workflow-guard] BLOCKED — Edit/Write to canonical clone "
+        f"'{repo_name}' in omni_home.\n"
+        f"Target: {file_path}\n"
+        f"All code changes must happen in worktrees. Create one with:\n"
+        f"  git -C $OMNI_HOME/{repo_name} worktree add "
+        f"$OMNI_HOME/worktrees/<TICKET>/{repo_name} -b <branch>\n"
+        f"Then edit files under $OMNI_HOME/worktrees/<TICKET>/{repo_name}/ instead."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Core guard logic
 # ---------------------------------------------------------------------------
 
@@ -199,6 +291,14 @@ def run_guard(stdin_json: str) -> tuple[int, str]:
     tool_input: dict[str, object] = raw_input if isinstance(raw_input, dict) else {}
 
     project_root = _resolve_project_root()
+
+    # --- Check 0: Canonical clone write protection (OMN-7810) ---
+    if tool_name in ("Edit", "Write"):
+        file_path = str(tool_input.get("file_path", ""))
+        if file_path:
+            allowed, block_reason = _check_canonical_clone_write(file_path)
+            if not allowed:
+                return 2, json.dumps({"decision": "block", "reason": block_reason})
 
     # --- Check 1: Triage-first (epic creation via Linear MCP) ---
     if tool_name == _EPIC_CREATION_TOOL:

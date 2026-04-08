@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# PreToolUse Workflow Guard Hook (OMN-6231)
-# Enforces triage-first and ticket-first workflow preconditions:
+# PreToolUse Workflow Guard Hook (OMN-6231, OMN-7810)
+# Enforces workflow preconditions:
 #
 #   1. Triage-first: warns if an epic creation (mcp__linear-server__save_issue
 #      without parentId) is attempted without a .onex_state/triage_complete
@@ -12,11 +12,14 @@
 #   2. Ticket-first: warns if a git commit (Bash: git commit) is attempted
 #      without an OMN-\d+ pattern in the branch name or commit message.
 #
-# Both checks are WARN-only (exit 1 → pass-through). They block obvious
-# bypasses but do not hard-block because proxy signals have false positives.
+#   3. Canonical clone write protection (OMN-7810): hard-blocks Edit/Write
+#      to files inside $OMNI_HOME/<repo>/. All changes must go through worktrees.
+#
+# Checks 1-2 are WARN-only (exit 1 → pass-through).
+# Check 3 is a hard block (exit 2 → rejected).
 #
 # Hook registration: hooks.json PreToolUse, matchers:
-#   "^mcp__linear-server__save_issue$" and "Bash"
+#   "^(mcp__linear-server__save_issue|Bash|Edit|Write)$"
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -51,7 +54,7 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
 }
 
 # Only intercept relevant tools
-if [[ ! "$TOOL_NAME" =~ ^(mcp__linear-server__save_issue|Bash)$ ]]; then
+if [[ ! "$TOOL_NAME" =~ ^(mcp__linear-server__save_issue|Bash|Edit|Write)$ ]]; then
     echo "$TOOL_INFO"
     exit 0
 fi
