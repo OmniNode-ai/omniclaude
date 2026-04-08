@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for pre_tool_use_workflow_guard (OMN-6231).
+"""Unit tests for pre_tool_use_workflow_guard (OMN-6231, OMN-7810).
 
-Tests triage-first and ticket-first enforcement:
+Tests triage-first, ticket-first, and canonical clone write protection:
 - Triage-first: epic creation warned without TRIAGE_COMPLETE marker
 - Ticket-first: git commit warned without OMN-\\d+ in branch or commit message
+- Write protection: Edit/Write to omni_home canonical clones blocked (OMN-7810)
 - Pass-through: everything else
 """
 
@@ -47,6 +48,23 @@ def _write_hook(file_path: str = "/project/file.py", content: str = "pass") -> s
         {
             "tool_name": "Write",
             "tool_input": {"file_path": file_path, "content": content},
+        }
+    )
+
+
+def _edit_hook(
+    file_path: str = "/project/file.py",
+    old_string: str = "old",
+    new_string: str = "new",
+) -> str:
+    return json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": file_path,
+                "old_string": old_string,
+                "new_string": new_string,
+            },
         }
     )
 
@@ -215,12 +233,20 @@ def test_git_push_not_intercepted(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_write_tool_is_passed_through(tmp_path: Path) -> None:
+def test_write_tool_passed_through_without_omni_home(tmp_path: Path) -> None:
+    """Write to arbitrary path passes when OMNI_HOME is not set."""
     hook_json = _write_hook()
-    with patch(
-        "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
-        return_value=tmp_path,
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {}, clear=False),
     ):
+        # Ensure OMNI_HOME is not set
+        import os
+
+        os.environ.pop("OMNI_HOME", None)
         exit_code, output = run_guard(hook_json)
 
     assert exit_code == 0
@@ -235,4 +261,139 @@ def test_invalid_json_fails_open() -> None:
 @pytest.mark.unit
 def test_empty_json_fails_open() -> None:
     exit_code, output = run_guard("{}")
+    assert exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Canonical clone write protection (OMN-7810)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_edit_to_canonical_clone_is_blocked(tmp_path: Path) -> None:
+    """Edit targeting omni_home/omnimarket/src/... should be hard-blocked."""
+    omni_home = tmp_path / "omni_home"
+    omni_home.mkdir()
+    (omni_home / "omnimarket" / "src").mkdir(parents=True)
+
+    file_path = str(omni_home / "omnimarket" / "src" / "handler.py")
+    hook_json = _edit_hook(file_path=file_path)
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {"OMNI_HOME": str(omni_home)}),
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 2
+    result = json.loads(output)
+    assert result["decision"] == "block"
+    assert (
+        "canonical clone" in result["reason"].lower()
+        or "worktree" in result["reason"].lower()
+    )
+
+
+@pytest.mark.unit
+def test_write_to_canonical_clone_is_blocked(tmp_path: Path) -> None:
+    """Write targeting omni_home/omniclaude/anything should be hard-blocked."""
+    omni_home = tmp_path / "omni_home"
+    omni_home.mkdir()
+    (omni_home / "omniclaude").mkdir()
+
+    file_path = str(omni_home / "omniclaude" / "new_file.py")
+    hook_json = _write_hook(file_path=file_path)
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {"OMNI_HOME": str(omni_home)}),
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 2
+    result = json.loads(output)
+    assert result["decision"] == "block"
+
+
+@pytest.mark.unit
+def test_edit_in_worktree_is_allowed(tmp_path: Path) -> None:
+    """Edit targeting omni_home/worktrees/OMN-1234/repo/src/... should be allowed."""
+    omni_home = tmp_path / "omni_home"
+    wt = omni_home / "worktrees" / "OMN-1234" / "omnimarket" / "src"
+    wt.mkdir(parents=True)
+
+    file_path = str(wt / "handler.py")
+    hook_json = _edit_hook(file_path=file_path)
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {"OMNI_HOME": str(omni_home)}),
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 0
+
+
+@pytest.mark.unit
+def test_edit_outside_omni_home_is_allowed(tmp_path: Path) -> None:
+    """Edit to a path completely outside omni_home should be allowed."""
+    omni_home = tmp_path / "omni_home"
+    omni_home.mkdir()
+
+    file_path = "/some/other/project/file.py"
+    hook_json = _edit_hook(file_path=file_path)
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {"OMNI_HOME": str(omni_home)}),
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 0
+
+
+@pytest.mark.unit
+def test_edit_to_omni_home_top_level_is_allowed(tmp_path: Path) -> None:
+    """Edit to omni_home/docs/plan.md (not a known repo) should be allowed."""
+    omni_home = tmp_path / "omni_home"
+    (omni_home / "docs").mkdir(parents=True)
+
+    file_path = str(omni_home / "docs" / "plan.md")
+    hook_json = _edit_hook(file_path=file_path)
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {"OMNI_HOME": str(omni_home)}),
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 0
+
+
+@pytest.mark.unit
+def test_write_protection_without_omni_home_env_allows(tmp_path: Path) -> None:
+    """When OMNI_HOME is unset, write protection is skipped."""
+    hook_json = _edit_hook(file_path="/fake/omnimarket/src/handler.py")
+    with (
+        patch(
+            "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+            return_value=tmp_path,
+        ),
+        patch.dict("os.environ", {}, clear=False),
+    ):
+        import os
+
+        os.environ.pop("OMNI_HOME", None)
+        exit_code, output = run_guard(hook_json)
+
     assert exit_code == 0
