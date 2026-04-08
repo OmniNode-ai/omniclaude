@@ -15,7 +15,7 @@
 #   rm ~/Library/LaunchAgents/ai.omninode.buildloop.plist
 #
 # Original: Headless build loop scheduler using claude -p
-# Requires: claude CLI, ANTHROPIC_API_KEY
+# Requires: claude CLI (uses OAuth, NOT ANTHROPIC_API_KEY)
 
 set -euo pipefail
 
