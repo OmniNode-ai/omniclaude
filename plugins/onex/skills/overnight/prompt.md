@@ -173,9 +173,9 @@ Check every 15 minutes:
 
 ### Runtime Health (.201)
 ```bash
-curl -s --connect-timeout 5 http://192.168.86.201:8085/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8085: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8085: DOWN"
-curl -s --connect-timeout 5 http://192.168.86.201:8086/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8086: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8086: DOWN"
-curl -s --connect-timeout 5 http://192.168.86.201:8087/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8087: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8087: DOWN"
+curl -s --connect-timeout 5 http://192.168.86.201:8085/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8085: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8085: DOWN" # onex-allow-internal-ip
+curl -s --connect-timeout 5 http://192.168.86.201:8086/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8086: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8086: DOWN" # onex-allow-internal-ip
+curl -s --connect-timeout 5 http://192.168.86.201:8087/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'8087: {d.get(\"status\",\"unknown\")}')" 2>/dev/null || echo "8087: DOWN" # onex-allow-internal-ip
 ```
 
 ### PR Status

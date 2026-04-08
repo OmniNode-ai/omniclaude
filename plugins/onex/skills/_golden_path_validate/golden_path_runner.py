@@ -28,10 +28,19 @@ Declaration format::
         },
         "timeout_ms": 10000,
         "assertions": [
-            {"field": "status", "op": "eq", "expected": "ok"}
+            {"field": "status", "op": "eq", "expected": "ok"},
+            {"op": "wire_schema_match", "contract_path": "/path/to/contract_v1.yaml"}
         ],
-        "schema_name": "omnibase_core.models.model_my_event.ModelMyEvent"  # optional
+        "schema_name": "omnibase_core.models.model_my_event.ModelMyEvent",  # optional
+        "wire_schema_contract": "/path/to/contract_v1.yaml"  # optional (OMN-7374)
     }
+
+Wire schema assertions (OMN-7374):
+
+    The ``wire_schema_match`` assertion validates that a received event payload
+    contains all required fields declared in a wire schema contract YAML, and
+    reports field-level mismatches. Can be used as an assertion op or as a
+    top-level ``wire_schema_contract`` declaration on the golden path.
 
 Evidence artifact path::
 
@@ -113,6 +122,14 @@ class EvidenceArtifact(BaseModel):
     schema_validation_status: str = Field(
         ...,
         description="pass | fail | skipped | not_declared",
+    )
+    wire_schema_validation_status: str = Field(
+        default="not_declared",
+        description="pass | fail | skipped | not_declared — wire schema contract validation (OMN-7374)",
+    )
+    wire_schema_mismatches: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Field-level wire schema mismatches: [{field, detail}]",
     )
     assertions: list[dict[str, Any]] = Field(
         ...,
@@ -257,9 +274,13 @@ class AssertionEngine:
 
     Each assertion dict must have:
       - ``field``: dot-separated path into the event payload
-      - ``op``: one of eq, neq, gte, lte, in, contains
-      - ``expected``: expected value
+      - ``op``: one of eq, neq, gte, lte, in, contains, wire_schema_match
+      - ``expected``: expected value (not required for wire_schema_match)
       - ``actual``: resolved actual value (injected before calling evaluate_all)
+
+    For ``wire_schema_match`` assertions, the dict must also have:
+      - ``contract_path``: path to a wire schema contract YAML
+      - ``event_data``: the full event payload (injected by the runner)
 
     Returns a list of result dicts (same keys + ``passed`` bool).
     """
@@ -269,7 +290,8 @@ class AssertionEngine:
 
         Args:
             assertions: List of assertion dicts. Each must have ``field``,
-                ``op``, ``expected``, and ``actual`` keys.
+                ``op``, ``expected``, and ``actual`` keys. For wire_schema_match,
+                ``contract_path`` and ``event_data`` are required instead.
 
         Returns:
             List of result dicts with the same keys plus a ``passed`` bool.
@@ -277,15 +299,26 @@ class AssertionEngine:
         results: list[dict[str, Any]] = []
         for assertion in assertions:
             result = dict(assertion)
-            try:
-                result["passed"] = _run_assertion(
-                    assertion["op"],
-                    assertion.get("actual"),
-                    assertion["expected"],
+            if assertion.get("op") == "wire_schema_match":
+                status, mismatches = _validate_wire_schema(
+                    assertion.get("contract_path"),
+                    assertion.get("event_data", {}),
                 )
-            except (ValueError, TypeError) as exc:
-                result["passed"] = False
-                result["error"] = str(exc)
+                result["passed"] = status == "pass"
+                result["wire_schema_status"] = status
+                result["wire_schema_mismatches"] = mismatches
+                if mismatches:
+                    result["error"] = "; ".join(m["detail"] for m in mismatches)
+            else:
+                try:
+                    result["passed"] = _run_assertion(
+                        assertion["op"],
+                        assertion.get("actual"),
+                        assertion["expected"],
+                    )
+                except (ValueError, TypeError) as exc:
+                    result["passed"] = False
+                    result["error"] = str(exc)
             results.append(result)
         return results
 
@@ -358,6 +391,7 @@ class GoldenPathRunner:
         timeout_s: float = timeout_ms / 1000.0
         assertion_decls: list[dict[str, Any]] = decl.get("assertions", [])
         schema_name: str | None = decl.get("schema_name")
+        wire_schema_contract: str | None = decl.get("wire_schema_contract")
 
         emitted_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
@@ -481,18 +515,27 @@ class GoldenPathRunner:
                 return artifact
 
             # Step 4: Run assertions
-            enriched_assertions = [
-                {**a, "actual": _get_nested(matched_event, a["field"])}
-                for a in assertion_decls
-            ]
+            enriched_assertions: list[dict[str, Any]] = []
+            for a in assertion_decls:
+                if a.get("op") == "wire_schema_match":
+                    enriched_assertions.append({**a, "event_data": matched_event})
+                else:
+                    enriched_assertions.append(
+                        {**a, "actual": _get_nested(matched_event, a["field"])}
+                    )
             assertion_results = self._assertion_engine.evaluate_all(enriched_assertions)
             all_assertions_pass = all(r["passed"] for r in assertion_results)
 
             # Step 5: Schema validation
             schema_validation_status = _validate_schema(schema_name, matched_event)
 
+            # Step 6: Wire schema validation (OMN-7374)
+            wire_schema_status, wire_schema_mismatches = _validate_wire_schema(
+                wire_schema_contract, matched_event
+            )
+
             # Determine overall status
-            if schema_validation_status == "fail":
+            if schema_validation_status == "fail" or wire_schema_status == "fail":
                 overall_status = "fail"
             elif all_assertions_pass:
                 overall_status = "pass"
@@ -513,6 +556,8 @@ class GoldenPathRunner:
                 correlation_id=correlation_id,
                 consumer_group_id=consumer_group_id,
                 schema_validation_status=schema_validation_status,
+                wire_schema_validation_status=wire_schema_status,
+                wire_schema_mismatches=wire_schema_mismatches,
                 assertions=assertion_results,
                 raw_output_preview=raw_preview,
                 kafka_offset=kafka_offset,
@@ -585,6 +630,8 @@ class GoldenPathRunner:
         kafka_offset: int,
         kafka_timestamp_ms: int,
         error_reason: str | None = None,
+        wire_schema_validation_status: str = "not_declared",
+        wire_schema_mismatches: list[dict[str, str]] | None = None,
     ) -> EvidenceArtifact:
         return EvidenceArtifact(
             node_id=node_id,
@@ -599,6 +646,8 @@ class GoldenPathRunner:
             correlation_id=correlation_id,
             consumer_group_id=consumer_group_id,
             schema_validation_status=schema_validation_status,
+            wire_schema_validation_status=wire_schema_validation_status,
+            wire_schema_mismatches=wire_schema_mismatches or [],
             assertions=assertions,
             raw_output_preview=raw_output_preview,
             kafka_offset=kafka_offset,
@@ -627,6 +676,97 @@ class GoldenPathRunner:
 # ---------------------------------------------------------------------------
 # Schema validation helper (module-level for testability)
 # ---------------------------------------------------------------------------
+
+
+def _validate_wire_schema(
+    contract_path: str | None, event_data: dict[str, Any]
+) -> tuple[str, list[dict[str, str]]]:
+    """Validate event_data against a wire schema contract YAML (OMN-7374).
+
+    Checks that all required fields declared in the contract are present in the
+    event payload, and reports field-level mismatches with detail messages.
+
+    Args:
+        contract_path: Filesystem path to a wire schema contract YAML, or None.
+        event_data: The parsed event payload dict.
+
+    Returns:
+        Tuple of (status, mismatches) where:
+        - status is "not_declared" | "skipped" | "pass" | "fail"
+        - mismatches is a list of {"field": ..., "detail": ...} dicts
+    """
+    if contract_path is None:
+        return "not_declared", []
+
+    path = Path(contract_path)
+    if not path.exists():
+        logger.warning(
+            "Wire schema contract not found: %s; skipping validation", contract_path
+        )
+        return "skipped", []
+
+    try:
+        import yaml
+
+        with path.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            logger.warning("Wire schema contract is not a dict: %s", contract_path)
+            return "skipped", []
+    except Exception as exc:
+        logger.warning("Failed to load wire schema contract %s: %s", contract_path, exc)
+        return "skipped", []
+
+    # Validate required_fields presence
+    required_fields = data.get("required_fields", [])
+    if not required_fields:
+        logger.warning("Wire schema contract has no required_fields: %s", contract_path)
+        return "skipped", []
+
+    # Build rename map: producer_name -> canonical_name for active shims
+    renamed_fields = data.get("renamed_fields", [])
+    active_renames: dict[str, str] = {}
+    for rf in renamed_fields:
+        if isinstance(rf, dict) and rf.get("shim_status") == "active":
+            active_renames[rf["producer_name"]] = rf["canonical_name"]
+
+    # Reverse map: canonical_name -> set of acceptable producer names
+    canonical_to_aliases: dict[str, set[str]] = {}
+    for producer_name, canonical_name in active_renames.items():
+        canonical_to_aliases.setdefault(canonical_name, set()).add(producer_name)
+
+    mismatches: list[dict[str, str]] = []
+    event_keys = set(event_data.keys())
+
+    for field_def in required_fields:
+        if not isinstance(field_def, dict):
+            continue
+        field_name = field_def.get("name", "")
+        if not field_name:
+            continue
+
+        # Field is present directly
+        if field_name in event_keys:
+            continue
+
+        # Check if an active rename alias is present instead
+        aliases = canonical_to_aliases.get(field_name, set())
+        if aliases & event_keys:
+            continue
+
+        mismatches.append(
+            {
+                "field": field_name,
+                "detail": (
+                    f"Required field '{field_name}' declared in wire schema contract "
+                    f"but missing from event payload"
+                ),
+            }
+        )
+
+    if mismatches:
+        return "fail", mismatches
+    return "pass", []
 
 
 def _validate_schema(schema_name: str | None, event_data: dict[str, Any]) -> str:
