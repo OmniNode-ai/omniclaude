@@ -40,7 +40,7 @@ args:
     description: "Repos scanned in parallel (default: 3)"
     required: false
   - name: --max-parallel-polish
-    description: "Concurrent pr-polish agents (default: 5; pr-polish is resource-intensive)"
+    description: "Concurrent pr-polish agents (default: 20; safety cap against runaway spawning)"
     required: false
   - name: --skip-polish
     description: Skip Track B entirely; only process merge-ready PRs
@@ -410,7 +410,7 @@ fi
 | `--max-total-merges` | 0 (unlimited) | Hard cap on Track A candidates per run. 0 = no cap. |
 | `--max-parallel-prs` | 5 | Concurrent auto-merge enable operations |
 | `--max-parallel-repos` | 3 | Repos scanned in parallel |
-| `--max-parallel-polish` | 5 | Concurrent pr-polish agents (resource-intensive) |
+| `--max-parallel-polish` | 20 | Concurrent pr-polish agents (safety cap) |
 | `--resume` | false | Resume from last checkpoint; skip already-processed repos/PRs |
 | `--reset-state` | false | Delete existing state file and start clean |
 | `--skip-polish` | false | Skip Track B entirely |

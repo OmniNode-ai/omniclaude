@@ -21,7 +21,7 @@ When `/merge-sweep [args]` is invoked:
    - `--max-total-merges <n>` — default: 0 (unlimited; set positive to cap)
    - `--max-parallel-prs <n>` — default: 5
    - `--max-parallel-repos <n>` — default: 3
-   - `--max-parallel-polish <n>` — default: 5
+   - `--max-parallel-polish <n>` — default: 20
    - `--skip-polish` — default: false; skip the pr-polish phase entirely
    - `--polish-clean-runs <n>` — default: 2; consecutive clean local-review passes required during polish
    - `--authors <list>` — default: all
@@ -1181,7 +1181,7 @@ For each PR in `polish_queue[]`, dispatch a polymorphic agent that:
 4. If yes: enables GitHub auto-merge
 5. Cleans up the worktree
 
-Run up to `--max-parallel-polish` concurrently (default 5 — pr-polish is resource-intensive).
+Run up to `--max-parallel-polish` concurrently (default 20 — safety cap against runaway spawning).
 
 Phase B is split into two sub-steps: **Step 7a** (sequential prep) and **Step 7b** (parallel batch dispatch).
 
