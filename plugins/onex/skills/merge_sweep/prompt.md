@@ -150,9 +150,18 @@ If `--repos` is provided, use that list. Otherwise, use the canonical omni_home 
 
 Known omni_home repos (update as workspace grows):
 - `OmniNode-ai/omniclaude`
+- `OmniNode-ai/omnibase_compat`
 - `OmniNode-ai/omnibase_core`
-- `OmniNode-ai/omniintelligence`
+- `OmniNode-ai/omnibase_infra`
+- `OmniNode-ai/omnibase_spi`
 - `OmniNode-ai/omnidash`
+- `OmniNode-ai/omnigemini`
+- `OmniNode-ai/omniintelligence`
+- `OmniNode-ai/omnimarket`
+- `OmniNode-ai/omnimemory`
+- `OmniNode-ai/omninode_infra`
+- `OmniNode-ai/omniweb`
+- `OmniNode-ai/onex_change_control`
 
 If a repo manifest exists at `~/Code/omni_home/repos.yaml`, read from it instead of the
 hardcoded list above.
