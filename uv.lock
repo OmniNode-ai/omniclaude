@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12, <4.0"
 resolution-markers = [
     "python_full_version >= '3.14' and platform_machine != 's390x'",
@@ -12,7 +12,7 @@ resolution-markers = [
 
 [manifest]
 overrides = [
-    { name = "omnibase-core", specifier = "==0.38.0" },
+    { name = "omnibase-core", specifier = "==0.39.0" },
     { name = "omnibase-infra", specifier = "==0.32.0" },
     { name = "omnibase-spi", specifier = "==0.20.4" },
 ]
@@ -1972,7 +1972,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.38.0"
+version = "0.39.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blake3" },
@@ -1986,9 +1986,9 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/f0/9c2971cc3328ca592f19da9afe3b95317de52d476f8b80f6ca03a273254f/omnibase_core-0.38.0.tar.gz", hash = "sha256:1667dd1047f937e5239a10a9443f754c0079b1fd8d58a061b73b0b900bdc6204", size = 8140989, upload-time = "2026-04-03T08:29:15.675Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/63/a75be3539b4046c2f9757b5da02fc5539ff0f382da84695bd1dee875b298/omnibase_core-0.39.0.tar.gz", hash = "sha256:3f57556cd65aba3af0be8e1517614f4a970b57101c9ac5e35e2b578bec5da2b9", size = 8149272, upload-time = "2026-04-06T16:36:03.186Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6b/dd/3061cb53bdd9725c216788652860d94bde720ae8883090ac4f18237faec4/omnibase_core-0.38.0-py3-none-any.whl", hash = "sha256:3ce216b042440e62db1959dd930f6807424de8511b0b03cf89a9868ead0c491a", size = 5365077, upload-time = "2026-04-03T08:29:18.665Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/9f/c08ea924136d55fd6fe8bdd41f2cbe767eb672b4510db923ad0ff0b33f16/omnibase_core-0.39.0-py3-none-any.whl", hash = "sha256:f772e2100c655beb150a899ccd2875af69fe43d9636624c6adfb30db31a5cd36", size = 5370710, upload-time = "2026-04-06T16:36:00.702Z" },
 ]
 
 [[package]]
@@ -2127,7 +2127,7 @@ requires-dist = [
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.12.0,<3.0.0" },
     { name = "discord-py", marker = "extra == 'discord'", specifier = ">=2.3.0,<3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "omnibase-core", specifier = "==0.38.0" },
+    { name = "omnibase-core", specifier = "==0.39.0" },
     { name = "omnibase-infra", specifier = "==0.32.0" },
     { name = "omnibase-spi", specifier = "==0.20.4" },
     { name = "omninode-intelligence", git = "https://github.com/OmniNode-ai/omniintelligence.git?tag=v0.23.0" },
