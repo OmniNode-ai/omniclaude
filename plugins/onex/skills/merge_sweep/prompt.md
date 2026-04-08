@@ -21,7 +21,7 @@ When `/merge-sweep [args]` is invoked:
    - `--max-total-merges <n>` — default: 0 (unlimited; set positive to cap)
    - `--max-parallel-prs <n>` — default: 5
    - `--max-parallel-repos <n>` — default: 3
-   - `--max-parallel-polish <n>` — default: 2
+   - `--max-parallel-polish <n>` — default: 5
    - `--skip-polish` — default: false; skip the pr-polish phase entirely
    - `--polish-clean-runs <n>` — default: 2; consecutive clean local-review passes required during polish
    - `--authors <list>` — default: all
@@ -1181,9 +1181,19 @@ For each PR in `polish_queue[]`, dispatch a polymorphic agent that:
 4. If yes: enables GitHub auto-merge
 5. Cleans up the worktree
 
-Run up to `--max-parallel-polish` concurrently (default 2 — pr-polish is resource-intensive).
+Run up to `--max-parallel-polish` concurrently (default 5 — pr-polish is resource-intensive).
+
+Phase B is split into two sub-steps: **Step 7a** (sequential prep) and **Step 7b** (parallel batch dispatch).
+
+---
+
+### Step 7a — Prep: Build Polish Dispatch List (Sequential)
+
+Iterate `polish_queue[]` sequentially to prepare each agent's configuration.
+Do NOT dispatch any agents yet — all dispatching happens in Step 7b.
 
 ```python
+polish_dispatch_list = []
 polish_results = []
 
 for pr in polish_queue:
@@ -1201,6 +1211,7 @@ for pr in polish_queue:
         branch = pr["headRefName"]
         print(f"WARNING: Could not fetch headRefName from API for {repo_full}#{pr_number}, "
               f"falling back to scan-time value: {branch}")
+
     pr_key = canonical_pr_key(org=base_owner, repo=base_repo_name, number=pr_number)
     omni_home = os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home"))
     worktree_base = os.environ.get("OMNI_WORKTREES", str(Path(omni_home).parent / "omni_worktrees"))
@@ -1214,11 +1225,8 @@ for pr in polish_queue:
         })
         continue
 
-    try:
-        Task(
-          subagent_type="onex:polymorphic-agent",
-          description=f"Polish PR {repo_full}#{pr_number}",
-          prompt=f"""Polish PR #{pr_number} in {repo_full} to resolve its blocking issues.
+    # Build the agent prompt for this PR
+    agent_prompt = f"""Polish PR #{pr_number} in {repo_full} to resolve its blocking issues.
 
 The PR has the following blocking state:
   Branch: {branch}
@@ -1231,7 +1239,7 @@ Steps:
 1. Fetch the branch and create a worktree:
    ```bash
    git -C {omni_home}/{repo_name} fetch origin {branch}
-   git -C {omni_home}/{repo_name} worktree add \
+   git -C {omni_home}/{repo_name} worktree add \\
      {worktree_path} {branch}
    cd {worktree_path}
 
@@ -1279,20 +1287,52 @@ Return a JSON result:
   "merged_directly": true | false,
   "error": null | "<error message>"
 }}"""
-        )
-    finally:
-        registry.release(pr_key, run_id=run_id, dry_run=dry_run)
+
+    polish_dispatch_list.append({
+        "pr_key": pr_key,
+        "pr_number": pr_number,
+        "repo_full": repo_full,
+        "repo_name": repo_name,
+        "prompt": agent_prompt,
+    })
+```
+
+---
+
+### Step 7b — Batch Dispatch: Launch All Polish Agents in Parallel (Single Message)
+
+**CRITICAL**: You MUST dispatch ALL polish agents in a SINGLE response with multiple
+parallel `Agent()` calls. Do NOT dispatch them one at a time in a loop — that is sequential
+and defeats the purpose of this step. Claude Code dispatches all Agent() calls in a single
+message concurrently.
+
+```python
+# Dispatch ALL polish agents in ONE message — they run truly in parallel.
+# In a single response, emit one Agent() call per PR in polish_dispatch_list:
+for item in polish_dispatch_list:
+    Agent(
+        name=f"polish-{item['repo_name']}-pr-{item['pr_number']}",
+        team_name=f"merge-sweep-{run_id}",
+        subagent_type="onex:_deprecated:polymorphic-agent",
+        description=f"Polish PR {item['repo_full']}#{item['pr_number']}",
+        prompt=item['prompt'],
+    )
+# IMPORTANT: All these Agent() calls MUST be in a single message/response
+# so Claude Code dispatches them concurrently, not sequentially.
+# After dispatching, release all claims (they were acquired in Step 7a).
+for item in polish_dispatch_list:
+    registry.release(item['pr_key'], run_id=run_id, dry_run=dry_run)
 ```
 
 Wait for all polish agents to complete. Collect results into `polish_results[]`.
 
 ---
 
-## 7a. Synchronization Barrier (F34)
+## Step 7c. Synchronization Barrier (F34)
 
 **Wait for both Track A and Track B agents to complete before collecting results.**
 
-Both Phase A (Steps 5b + 6 + 6a) and Phase B (Step 7) were dispatched concurrently.
+Both Phase A (Steps 5b + 6 + 6a) and Phase B (Steps 7a + 7b) were dispatched concurrently.
 Do not proceed to Step 8 until all parallel agents from both tracks have returned.
 This ensures `auto_merge_results`, `branch_update_results`, and `polish_results` are
 all fully populated before computing aggregate counts and status.
