@@ -966,12 +966,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
     # Clamp to 0 on clock skew (e.g. date fallback produces 0-0=0 which is fine)
     [[ "$_TOTAL_LATENCY_MS" -lt 0 ]] 2>/dev/null && _TOTAL_LATENCY_MS=0
     _INJECTION_OCCURRED="false"
-    [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECTION_OCCURRED="true"
-    # SessionStart may have already injected patterns (marker file exists).
-    # The session accumulator (line ~358) correctly accounts for this, but
-    # the extraction event emitter was missing it — causing every
-    # context-utilization event to report injection_occurred=false. (OMN-7810)
-    [[ "$SESSION_ALREADY_INJECTED" == "true" ]] && _INJECTION_OCCURRED="true"
+    if [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]]; then
+        _INJECTION_OCCURRED="true"
+    elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
+        _INJECTION_OCCURRED="true"
+    fi
     _EXTRACTION_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg correlation_id "$CORRELATION_ID" \
