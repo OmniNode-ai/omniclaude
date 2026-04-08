@@ -277,15 +277,15 @@ claude -p "Run ticket-pipeline for OMN-1234" \
 |----------|---------|-------|
 | `ONEX_RUN_ID` | Unique run identifier for correlation | **Mandatory** — pipeline will not start without this |
 | `ONEX_UNSAFE_ALLOW_EDITS` | Permit file edits in headless mode | Set to `1` to allow Write/Edit tools |
-| `ANTHROPIC_API_KEY` | Claude API key | Required for `claude -p` |
 | `GITHUB_TOKEN` | GitHub CLI auth | Required for PR creation and CI polling |
 | `SLACK_BOT_TOKEN` | Slack API token | Required for gate notifications |
 | `LINEAR_API_KEY` | Linear API key | Required for ticket updates |
 
+> **Note**: `ANTHROPIC_API_KEY` is **NOT required**. Claude Code sessions (including `claude -p`) authenticate via OAuth, not API keys. Do not add ANTHROPIC_API_KEY as a required env var.
+
 ```bash
 export ONEX_RUN_ID="pipeline-$(date +%s)-OMN-1234"
 export ONEX_UNSAFE_ALLOW_EDITS=1
-export ANTHROPIC_API_KEY="..."
 export GITHUB_TOKEN="..."
 export SLACK_BOT_TOKEN="..."
 export LINEAR_API_KEY="..."
