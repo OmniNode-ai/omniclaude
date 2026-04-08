@@ -1,0 +1,39 @@
+# Model Router Hook Configuration (OMN-7810)
+# Advisory-mode hook that suggests delegation to cheaper models
+# for implementation tasks that don't require Opus.
+
+# Master switch — set to false to disable entirely
+enabled: true
+
+# Enforcement mode: "advisory" (warn only) or "enforce" (hard block)
+# Start with advisory; switch to enforce after proving stable.
+mode: advisory
+
+# Tools that trigger delegation classification
+implementation_tools:
+  - Bash
+  - Read
+  - Edit
+  - Write
+  - Grep
+  - Glob
+
+# Tools that always pass through (orchestration)
+orchestration_tools:
+  - SendMessage
+  - Agent
+  - TaskCreate
+  - TaskUpdate
+  - TaskGet
+  - TaskList
+  - Skill
+  - CronCreate
+  - CronDelete
+  - CronList
+
+# Minimum complexity score (0.0-1.0) below which delegation is suggested.
+# Tasks scoring below this are considered "simple" and suitable for cheaper models.
+delegation_threshold: 0.7
+
+# Model to suggest for delegated tasks
+delegation_model: "glm-4.7-flash"
