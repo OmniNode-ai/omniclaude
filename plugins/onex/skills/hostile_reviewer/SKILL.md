@@ -23,7 +23,10 @@ args:
     description: Target GitHub repo (e.g., OmniNode-ai/omniclaude). Required with --pr.
     required: false
   - name: file
-    description: Path to a plan file to review (mutually exclusive with --pr)
+    description: Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path.
+    required: false
+  - name: plan-path
+    description: "Alias for --file: path to a plan or design document to review adversarially (mutually exclusive with --pr)"
     required: false
   - name: ticket_id
     description: Linear ticket ID for loading TCB constraints
@@ -79,13 +82,16 @@ Reviews a PR diff using multi-model adversarial review.
 /hostile-reviewer --pr 433 --repo OmniNode-ai/omniintelligence
 ```
 
-### File Mode (`--file <path>`)
+### File Mode (`--file <path>` or `--plan-path <path>`)
 
 Reviews a plan or design document using multi-model adversarial review.
 This replaces the former `/external-model-review` skill.
 
+`--plan-path` is an alias for `--file` — both are accepted and behave identically.
+
 ```bash
 /hostile-reviewer --file docs/plans/my-plan.md
+/hostile-reviewer --plan-path docs/plans/my-plan.md
 ```
 
 ### Gate Mode (`--pr <N> --repo <owner/repo> --gate`)

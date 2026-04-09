@@ -1,6 +1,6 @@
 ---
-description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, agent-left TODO/FIXME markers, and empty implementations. Scan → triage → optional Linear tickets → optional fix.
-version: 1.0.0
+description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, agent-left TODO/FIXME markers, and empty implementations.
+version: 2.0.0
 mode: full
 level: advanced
 debug: false
@@ -15,10 +15,10 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated repo names to scan (default: aislop supported repos — see supported repo list)"
+    description: "Comma-separated repo names (default: all supported repos)"
     required: false
   - name: --checks
-    description: "Comma-separated pattern categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,todo-fixme,todo-stale,empty-impls (default: all)"
+    description: "Comma-separated check categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,todo-fixme,todo-stale,empty-impls (default: all)"
     required: false
   - name: --dry-run
     description: Scan and report only — no tickets, no fixes
@@ -26,199 +26,97 @@ args:
   - name: --ticket
     description: Create Linear tickets for findings above severity threshold
     required: false
-  - name: --auto-fix
-    description: Attempt auto-fix for trivially fixable patterns (remove shims, dead vars)
-    required: false
   - name: --severity-threshold
     description: "Minimum severity to act on: WARNING | ERROR (default: WARNING)"
-    required: false
-  - name: --max-parallel-repos
-    description: "Repos scanned in parallel (default: 4)"
     required: false
 inputs:
   - name: repos
     description: "list[str] — repos to scan; empty = all"
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: clean | findings | partial | error"
+    description: "ModelSkillResult JSON; aislop-specific findings (by severity and check) are delivered in the model's output field"
 ---
 
 # AI Slop Sweep
 
-## Overview
-
-Detects AI-generated quality anti-patterns that violate ONEX platform invariants.
-These are patterns that slip through normal code review because they look syntactically
-valid but violate architectural contracts or CLAUDE.md invariants.
-
 **Announce at start:** "I'm using the aislop-sweep skill."
 
-## Supported Repo List (default scan target)
-
-Aislop scan is intentionally narrower than "all repos" to avoid signal noise from
-config-only, vendored, or non-Python repos:
+## Usage
 
 ```
-AISLOP_REPOS = [
-  "omniclaude", "omnibase_core", "omnibase_infra",
-  "omnibase_spi", "omniintelligence", "omnimemory",
-  "onex_change_control", "omnibase_compat"
-]
+/aislop-sweep                                   # Full scan, all repos
+/aislop-sweep --dry-run                         # Report only, no tickets
+/aislop-sweep --repos omniclaude,omnibase_core  # Limit repos
+/aislop-sweep --checks prohibited-patterns,hardcoded-topics
+/aislop-sweep --ticket                          # Create Linear tickets
+/aislop-sweep --severity-threshold ERROR        # Only ERROR+ findings
 ```
 
-Excluded by default: `omnidash` (Node.js), `omniweb` (PHP), `omninode_infra` (k8s YAML, no Python src/).
-Use `--repos` to override.
+## Execution
 
-> **Autonomous execution**: No Human Confirmation Gate. `--dry-run` is the only
-> preview mechanism. Without it, proceed directly to ticket creation and/or fix dispatch.
+### Step 1 — Parse arguments
 
-## CLI
+- `--repos` → comma-separated list (default: all supported repos)
+- `--checks` → comma-separated check names (default: all)
+- `--dry-run` → pass through to node
+- `--ticket` → create Linear tickets for findings above severity threshold
+- `--severity-threshold` → pass through to node (default: WARNING)
 
-```
-/aislop-sweep                                   # Full scan all repos
-/aislop-sweep --dry-run                        # Report only
-/aislop-sweep --ticket                         # Create Linear tickets for findings
-/aislop-sweep --checks phantom-callables,todo-fixme
-/aislop-sweep --repos omniclaude,omnibase_core
-/aislop-sweep --auto-fix                       # Fix trivial patterns
-```
+### Step 2 — Run node
 
-## Path Exclusions
+Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
 
-Applied to every scan and grep:
-
-```
-.git/          .venv/         node_modules/
-__pycache__/   *.pyc          dist/          build/
-docs/          examples/      fixtures/      _golden_path_validate/
-migrations/    *.generated.*  vendored/
+```bash
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_aislop_sweep \
+  [--repos <comma-list>] \
+  [--checks <comma-list>] \
+  [--severity-threshold WARNING] \
+  [--dry-run]
 ```
 
-## Check Categories + Conservative Triage Policy
+Capture stdout (JSON: `ModelSkillResult`, with aislop findings in the `output` field). Exit 0 = clean, exit 1 = findings found.
 
-**Default action by severity tier:**
+### Step 3 — Render report
 
-| Severity | Default action |
-|----------|----------------|
-| CRITICAL | Always ticket (even in dry-run, emit as finding) |
-| ERROR (HIGH confidence) | Ticket if `--ticket` set |
-| WARNING | Report only — no ticket unless `--ticket` + `--severity-threshold WARNING` |
-| INFO | Report only |
+From the JSON output display:
+- Summary: repos scanned, total findings, by-severity counts, by-check counts
+- Findings table grouped by severity (CRITICAL → ERROR → WARNING → INFO)
+- Each finding: repo, path:line, check, message, severity, confidence, ticketable, autofixable
 
-**Conservative first**: Only `prohibited-patterns`, `hardcoded-topics`, and high-confidence `phantom-callables` create tickets by default. Context-sensitive checks (`compat-shims`, `empty-impls`, `todo-fixme`) are WARNING/INFO and require explicit `--ticket --severity-threshold WARNING` to create tickets.
+### Step 4 — Ticket creation (only if `--ticket`)
 
-| Check | Pattern | Severity | Confidence rule |
-|-------|---------|----------|-----------------|
-| `prohibited-patterns` | `ONEX_EVENT_BUS_TYPE=inmemory`, `OLLAMA_BASE_URL` in .py/.sh | CRITICAL | HIGH always |
-| `hardcoded-topics` | `"onex\.` string literal in .py outside `contract.yaml` / enum | ERROR | HIGH if in src/, MEDIUM if in tests/ |
-| `phantom-callables` | Executable-looking `identifier()` or `call identifier` in **imperative** skill .md context (not prose description, not examples); identifier absent from `_lib/`, `_bin/`, any `.py` under `plugins/` | ERROR | HIGH if confirmed missing (searched 3 locations); MEDIUM if only 1 location checked |
-| `compat-shims` | `# removed`, `# backwards.compat`, `_unused_` in non-test src | WARNING | MEDIUM |
-| `empty-impls` | `^\s*pass$` in src/ outside Abstract/Protocol/stub files | WARNING | MEDIUM |
-| `todo-fixme` | `TODO`, `FIXME`, `HACK` in src/ (not tests/, not docs/) | WARNING | MEDIUM |
-| `todo-stale` | `TODO(OMN-XXXX)` where referenced ticket is Done/Canceled in Linear | ERROR | HIGH (cross-referenced against Linear); falls back to WARNING if Linear MCP unavailable |
-
-## ModelSweepFinding Schema
-
-Every finding is a structured object:
-
-```python
-{
-  "repo":        str,      # e.g. "omniclaude"
-  "path":        str,      # repo-relative path
-  "line":        int,      # 0 if whole-file
-  "check":       str,      # e.g. "prohibited-patterns"
-  "message":     str,      # human-readable description
-  "severity":    str,      # CRITICAL | ERROR | WARNING | INFO
-  "confidence":  str,      # HIGH | MEDIUM | LOW
-  "autofixable": bool,
-  "ticketable":  bool,     # confidence=HIGH AND severity>=WARNING
-}
-```
-
-**Fingerprint**: `f"{repo}:{path}:{check}:{symbol_or_line_bucket}"`
-
-## Execution Algorithm
+For each finding where `ticketable=true` (confidence=HIGH, severity≥threshold),
+create a Linear ticket via `mcp__linear-server__save_issue`. Deduplicate by
+searching for existing open tickets with the same title before creating.
 
 ```
-1. PARSE arguments; resolve repo list and check set
-
-2. SCAN (parallel, up to --max-parallel-repos):
-   For each repo + each enabled check:
-     Run grep pattern or static analysis
-     Collect (file, line, pattern, severity) tuples
-   Aggregate into findings[]
-
-3. TRIAGE:
-   Apply per-finding confidence + file-context rules:
-   - prohibited-patterns in .py/.sh → CRITICAL, HIGH confidence always
-   - hardcoded-topics in src/ → ERROR, HIGH; in tests/ → WARNING, MEDIUM
-   - phantom-callables: verify identifier absent from _lib/, _bin/, any .py under plugins/
-     → HIGH if confirmed missing; MEDIUM if path match is ambiguous
-   - compat-shims: flag only in src/ (skip tests/, docs/, skill markdown)
-   - empty-impls: skip *Abstract*, *Protocol*, *stub*, *__init__* files
-   - todo-fixme: flag only in src/ (not tests/, not docs/, not skill markdown); severity=WARNING, confidence=MEDIUM
-   - todo-stale: for each TODO(OMN-XXXX), query Linear MCP for ticket state;
-     if state.type is COMPLETED or CANCELED → severity=ERROR, confidence=HIGH, ticketable=true
-     if Linear MCP unavailable → downgrade to WARNING with explicit message:
-     "Linear MCP unavailable -- todo-stale downgraded from ERROR to WARNING"
-   Set ticketable=true when confidence=HIGH AND severity>=WARNING
-
-4. IF no findings → emit ModelSkillResult(status=clean), exit
-
-4a. FINGERPRINT + DEDUP:
-   Compute fingerprints; load $ONEX_STATE_DIR/aislop-sweep/latest/findings.json
-   Mark finding.new = fingerprint not in prior_fingerprints
-   Save to $ONEX_STATE_DIR/aislop-sweep/<run_id>/findings.json
-
-4b. GROUP findings:
-   Group key = (repo, check_family, path)
-   At most one ticket per group key unless severity=CRITICAL
-
-5. IF --dry-run → print findings table by category and confidence tier, exit
-
-6. IF --ticket:
-   For each group: ticketable=true AND new=true AND severity>=threshold:
-     Create Linear ticket: "aislop: <check_family> in <repo>:<path>"
-     Parent: active sprint, label: aislop-sweep
-
-7. IF --auto-fix:
-   Auto-fix allowlist (extremely narrow):
-   - Missing SPDX headers → stamp via `onex spdx fix`
-   - `# removed` comment on blank line → safe to remove
-   NOT auto-fixed: compat-shims with content, `_unused_` vars, empty `pass`
-   Commit + PR per repo after confirming change via post-fix re-grep.
-
-8. SUMMARY: Slack notification (best-effort)
-
-9. EMIT ModelSkillResult
+Title: aislop: <check> in <repo>:<path>
+Project: Active Sprint
+Label: aislop-sweep
 ```
 
-## ModelSkillResult
+### Step 5 — Write skill result
+
+Write to `$ONEX_STATE_DIR/skill-results/<run_id>/aislop-sweep.json`:
 
 ```json
 {
   "skill": "aislop-sweep",
   "status": "clean | findings | partial | error",
-  "run_id": "20260317-130000-b2c",
-  "repos_scanned": 8,
-  "total_findings": 23,
-  "by_severity": {"CRITICAL": 1, "ERROR": 5, "WARNING": 12, "INFO": 5},
-  "by_check": {
-    "phantom-callables": 3,
-    "compat-shims": 8,
-    "prohibited-patterns": 1,
-    "hardcoded-topics": 2,
-    "todo-fixme": 7,
-    "todo-stale": 2,
-    "empty-impls": 2
-  },
-  "tickets_created": 6,
-  "auto_fixed": 3
+  "repos_scanned": 0,
+  "total_findings": 0,
+  "by_severity": {},
+  "by_check": {}
 }
 ```
 
-Status values:
-- `clean` — zero findings
-- `findings` — findings reported (tickets/fixes applied if requested)
-- `partial` — some repos failed to scan
-- `error` — scan failures prevented completion
+## Architecture
+
+```
+SKILL.md  → thin shell: parse args → node dispatch → render results
+node      → omnimarket/src/omnimarket/nodes/node_aislop_sweep/
+contract  → node_aislop_sweep/contract.yaml
+```
+
+All scanning logic lives in the node handler. This skill does no scanning.

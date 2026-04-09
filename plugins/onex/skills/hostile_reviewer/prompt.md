@@ -8,13 +8,14 @@ synthesize. A single pass catches ~60% of issues -- you must iterate.
 ## Determine Mode
 
 Check arguments:
+- `--plan-path <path>` is an alias for `--file <path>` — normalize it first: if `--plan-path` is provided and `--file` is not, treat it as `--file <path>`.
 - If `--gate` is set AND `--pr <N> --repo <owner/repo>`: **gate mode** (see Gate Mode section below)
 - If `--gate` is set AND `--file`: error -- `--gate` requires `--pr`, not `--file`
 - If `--pr <N> --repo <owner/repo>` (no `--gate`): PR mode
 - If `--pr <N>` without `--repo`: error -- `--repo` is required with `--pr`
-- If `--file <path>`: file mode
-- If both `--pr` and `--file` are provided: error -- they are mutually exclusive
-- If neither: error -- one of `--pr` or `--file` is required
+- If `--file <path>` (or `--plan-path <path>`): file mode
+- If both `--pr` and `--file`/`--plan-path` are provided: error -- they are mutually exclusive
+- If neither: error -- one of `--pr` or `--file`/`--plan-path` is required
 
 ## Determine Convergence Mode
 

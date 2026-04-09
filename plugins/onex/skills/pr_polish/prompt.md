@@ -20,6 +20,7 @@ skip_local_review = False        # --skip-local-review
 no_ci            = False         # --no-ci
 no_push          = False         # --no-push
 no_automerge     = False         # --no-automerge
+dry_run          = False         # --dry-run (log decisions without changes)
 
 # Parse
 for token in $ARGUMENTS.split():
