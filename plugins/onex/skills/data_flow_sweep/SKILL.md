@@ -58,8 +58,7 @@ Classify each flow: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_T
 ### Phase 3 — Run node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_data_flow_sweep \
+onex run node_data_flow_sweep -- \
   [--flows '<json-array>'] \
   [--topic <topic>] \
   [--dry-run]

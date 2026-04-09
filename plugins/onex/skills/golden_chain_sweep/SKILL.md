@@ -29,8 +29,7 @@ debug: false
 ### Step 2 — Run node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_golden_chain_sweep \
+onex run node_golden_chain_sweep -- \
   [--chains <comma-list>] \
   [--timeout-ms <ms>] \
   [--projected-rows '<json>']
