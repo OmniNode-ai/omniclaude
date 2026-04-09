@@ -1,7 +1,7 @@
 ---
-description: Multi-model adversarial code review (Gemini, Codex, Qwen3-Coder, DeepSeek-R1, Claude) with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp.
+description: Multi-model adversarial code review (Gemini, Codex, Qwen3-Coder, DeepSeek-R1, Claude) with weighted-union finding aggregation and iterative convergence. Cannot rubber-stamp. Use --static for static-analysis-only mode (dead code, missing error handling, stubs, Kafka wiring, schema mismatches, hardcoded values, missing tests).
 mode: both
-version: 3.0.0
+version: 4.0.0
 level: intermediate
 debug: false
 category: review
@@ -14,16 +14,17 @@ tags:
   - quality
   - risk
   - convergence
+  - static-analysis
 author: OmniClaude Team
 args:
   - name: pr
-    description: PR number to review (mutually exclusive with --file)
+    description: PR number to review (mutually exclusive with --file). Not used in --static mode.
     required: false
   - name: repo
     description: Target GitHub repo (e.g., OmniNode-ai/omniclaude). Required with --pr.
     required: false
   - name: file
-    description: Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path.
+    description: Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path. Not used in --static mode.
     required: false
   - name: plan-path
     description: "Alias for --file: path to a plan or design document to review adversarially (mutually exclusive with --pr)"
@@ -42,6 +43,24 @@ args:
     required: false
   - name: strict
     description: "In --gate mode: block on MINOR+ findings (default blocks on MAJOR+)"
+    required: false
+  - name: static
+    description: "Static-analysis-only mode. Runs 7 code quality checks (dead code, missing error handling, stubs shipped, missing Kafka wiring, schema mismatches, hardcoded values, missing tests) without adversarial multi-model review. Use --repos and --categories to scope the scan."
+    required: false
+  - name: repos
+    description: "Comma-separated repo names to scan in --static mode (default: all Python repos in omni_home)"
+    required: false
+  - name: categories
+    description: "Comma-separated finding categories for --static mode: dead-code,missing-error-handling,stubs-shipped,missing-kafka-wiring,schema-mismatches,hardcoded-values,missing-tests (default: all)"
+    required: false
+  - name: dry-run
+    description: "In --static mode: scan and report only, no tickets created. First static run defaults to --dry-run."
+    required: false
+  - name: ticket
+    description: "In --static mode: create Linear tickets for findings (hard cap 10 per run)"
+    required: false
+  - name: max-tickets
+    description: "In --static mode: hard cap on tickets created per run (default: 10)"
     required: false
 ---
 
@@ -69,8 +88,9 @@ models alone). DeepSeek-R1 provides a local reasoning cross-check. Additional lo
 models (qwen3-coder, qwen3-14b) are available via `--models` override when broader
 coverage is needed.
 
-This skill consolidates the former `hostile-reviewer` (PR-only, Claude-only, exactly-2-risks)
-and `external-model-review` (file-only, multi-model) into a single unified skill.
+This skill consolidates the former `hostile-reviewer` (PR-only, Claude-only, exactly-2-risks),
+`external-model-review` (file-only, multi-model), and `code-review-sweep` (static analysis)
+into a single unified skill.
 
 ## Modes
 
@@ -120,6 +140,52 @@ former `review_gate` skill.
 | `status` | `"success"` (gate passed) / `"partial"` (gate blocked) |
 | `extra_status` | `"passed"` / `"blocked"` |
 | `extra` | `{"gate_verdict": str, "total_findings": int, "blocking_count": int, "agent_count": 3, "verdicts": [...]}` |
+
+### Static Mode (`--static`)
+
+Runs static analysis checks across repos without adversarial multi-model review.
+This replaces the former `/code-review-sweep` skill.
+
+```bash
+/hostile-reviewer --static                                        # Full scan all repos (first run = dry-run)
+/hostile-reviewer --static --dry-run                              # Report only
+/hostile-reviewer --static --ticket                               # Create Linear tickets for findings
+/hostile-reviewer --static --repos omniclaude,omnibase_core       # Scope to specific repos
+/hostile-reviewer --static --categories dead-code,stubs-shipped   # Scope to specific categories
+/hostile-reviewer --static --max-tickets 5                        # Lower ticket cap
+```
+
+**Finding Categories:**
+
+1. **dead-code** — Module-level unused functions/classes (LLM) + cross-file dead code (vulture, >=80% confidence)
+2. **missing-error-handling** — Bare `except:` / `except Exception:` with `pass`
+3. **stubs-shipped** — `TODO`/`FIXME`/`NotImplementedError` in non-test source
+4. **missing-kafka-wiring** — Topics declared in contract.yaml but not wired in code
+5. **schema-mismatches** — Pydantic field mismatches against contract config_keys
+6. **hardcoded-values** — IP addresses, port numbers, connection strings in source
+7. **missing-tests** — Source modules with no corresponding test file
+
+**State tracking**: `.onex_state/code-review-state.json` tracks file hashes and finding fingerprints to avoid re-scanning unchanged files and dedup findings across runs.
+
+**First-run safety**: The first invocation defaults to `--dry-run` unless explicitly overridden.
+
+**Hard cap**: 10 tickets per run (configurable via `--max-tickets`).
+
+**ModelCodeReviewFinding schema:**
+```python
+{
+  "repo":        str,      # e.g. "omniclaude"
+  "path":        str,      # repo-relative path
+  "line":        int,      # 0 if whole-file
+  "category":    str,      # e.g. "dead-code"
+  "message":     str,      # human-readable description
+  "severity":    str,      # CRITICAL | ERROR | WARNING | INFO
+  "confidence":  str,      # HIGH | MEDIUM | LOW
+  "fingerprint": str,      # dedup key: "{repo}:{path}:{line}:{category}"
+  "is_new":      bool,     # not seen in prior run
+  "ticketed":    bool,     # ticket was created
+}
+```
 
 ## Execution
 
@@ -472,3 +538,37 @@ The full per-pass breakdown is in `iteration_history`.
 
 Post result as a PR review comment (PR mode). For `blocking_issue`, use REQUEST_CHANGES;
 otherwise use COMMENT.
+
+## Static Mode Artifact
+
+In `--static` mode, write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer-static.json`:
+
+```json
+{
+  "mode": "static",
+  "run_id": "20260326-140000-a3f",
+  "repos_scanned": 8,
+  "files_scanned": 142,
+  "files_skipped_unchanged": 87,
+  "total_findings": 23,
+  "new_findings": 8,
+  "by_category": {
+    "dead-code": 5,
+    "missing-error-handling": 3,
+    "stubs-shipped": 4,
+    "missing-kafka-wiring": 2,
+    "schema-mismatches": 1,
+    "hardcoded-values": 3,
+    "missing-tests": 5
+  },
+  "tickets_created": 8,
+  "ticket_cap_hit": false,
+  "status": "clean | findings | partial | error"
+}
+```
+
+Status values for static mode:
+- `clean` — zero findings
+- `findings` — findings reported (tickets created if `--ticket` was set)
+- `partial` — some repos failed to scan
+- `error` — scan failures prevented completion

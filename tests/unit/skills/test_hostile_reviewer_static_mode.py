@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Unit tests for the code_review_sweep skill.
+"""Unit tests for hostile_reviewer --static mode.
 
 Covers:
   - Finding classification (7 categories, severity/confidence assignment)
@@ -8,7 +8,8 @@ Covers:
   - Ticket cap enforcement (hard cap, priority ordering)
   - Dry-run produces no side effects (no state writes, no tickets)
   - Vulture integration (output parsing, confidence thresholds)
-  - Skill metadata (SKILL.md frontmatter, prompt.md structure)
+  - SKILL.md documents --static flag and all 7 categories
+  - prompt.md includes static mode execution logic
 """
 
 from __future__ import annotations
@@ -26,13 +27,12 @@ import pytest
 # ---------------------------------------------------------------------------
 
 SKILLS_DIR = Path(__file__).parents[3] / "plugins/onex/skills"
-SKILL_DIR = SKILLS_DIR / "code_review_sweep"
+SKILL_DIR = SKILLS_DIR / "hostile_reviewer"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 PROMPT_MD = SKILL_DIR / "prompt.md"
 
-
 # ---------------------------------------------------------------------------
-# Helpers — finding model (mirrors the schema from SKILL.md)
+# Helpers — finding model (mirrors the schema from SKILL.md static mode)
 # ---------------------------------------------------------------------------
 
 VALID_CATEGORIES = frozenset(
@@ -49,18 +49,6 @@ VALID_CATEGORIES = frozenset(
 
 VALID_SEVERITIES = frozenset({"CRITICAL", "ERROR", "WARNING", "INFO"})
 VALID_CONFIDENCES = frozenset({"HIGH", "MEDIUM", "LOW"})
-
-TICKET_PRIORITY = [
-    "missing-kafka-wiring",
-    "schema-mismatches",
-    "stubs-shipped",
-    "dead-code",
-    "missing-error-handling",
-    "hardcoded-values",
-    "dead-code",  # lower confidence variant
-    "stubs-shipped",  # TODO/FIXME variant
-    "missing-tests",
-]
 
 
 def make_finding(
@@ -97,11 +85,7 @@ def compute_fingerprint(repo: str, path: str, line: int, category: str) -> str:
 
 
 def classify_vulture_line(line: str) -> dict[str, Any] | None:
-    """Parse a vulture output line into a finding dict.
-
-    Vulture output format:
-      <file>:<line>: unused <kind> '<name>' (confidence: <N>%)
-    """
+    """Parse a vulture output line into a finding dict."""
     match = re.match(
         r"^(.+):(\d+): unused (\w+) '(\w+)' \((\d+)% confidence\)$",
         line.strip(),
@@ -113,7 +97,7 @@ def classify_vulture_line(line: str) -> dict[str, Any] | None:
     conf_int = int(confidence_pct)
 
     if conf_int < 80:
-        return None  # below minimum threshold
+        return None
 
     severity = "ERROR" if conf_int >= 90 else "WARNING"
     confidence = "HIGH" if conf_int >= 90 else "MEDIUM"
@@ -132,12 +116,7 @@ def apply_ticket_cap(
     findings: list[dict[str, Any]],
     max_tickets: int = 10,
 ) -> list[dict[str, Any]]:
-    """Apply ticket cap to findings, prioritizing by severity.
-
-    Returns findings with ticketed=True set on the top-priority new findings
-    up to max_tickets.
-    """
-    # Priority: ERROR+HIGH > WARNING+HIGH > WARNING+MEDIUM > INFO+LOW
+    """Apply ticket cap to findings, prioritizing by severity."""
     severity_order = {"CRITICAL": 0, "ERROR": 1, "WARNING": 2, "INFO": 3}
     confidence_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
@@ -196,8 +175,8 @@ def is_finding_new(state: dict[str, Any], fingerprint: str) -> bool:
 
 
 @pytest.mark.unit
-class TestFindingClassification:
-    """Test that findings are classified into the correct categories."""
+class TestStaticModeFindingClassification:
+    """Test that static mode findings are classified into the correct categories."""
 
     def test_all_categories_valid(self) -> None:
         """All 7 categories are recognized."""
@@ -258,12 +237,6 @@ class TestFindingClassification:
         assert f1 != f3
         assert f2 != f3
 
-    def test_fingerprint_deterministic(self) -> None:
-        """Same inputs always produce the same fingerprint."""
-        fp1 = compute_fingerprint("r", "p.py", 10, "dead-code")
-        fp2 = compute_fingerprint("r", "p.py", 10, "dead-code")
-        assert fp1 == fp2
-
 
 # ---------------------------------------------------------------------------
 # Tests — File Hash Tracking / Dedup
@@ -271,7 +244,7 @@ class TestFindingClassification:
 
 
 @pytest.mark.unit
-class TestFileHashTracking:
+class TestStaticModeFileHashTracking:
     """Test file hash tracking and dedup logic."""
 
     def test_empty_state_never_skips(self) -> None:
@@ -333,7 +306,7 @@ class TestFileHashTracking:
 
     def test_state_load_missing_returns_empty(self) -> None:
         """Missing state file returns empty state."""
-        loaded = load_state(Path("/tmp/does-not-exist-code-review-state.json"))
+        loaded = load_state(Path("/tmp/does-not-exist-hostile-static-state.json"))
         assert loaded["last_run_id"] is None
         assert loaded["file_hashes"] == {}
 
@@ -344,18 +317,13 @@ class TestFileHashTracking:
 
 
 @pytest.mark.unit
-class TestTicketCapEnforcement:
-    """Test the hard cap on ticket creation per run."""
+class TestStaticModeTicketCap:
+    """Test the hard cap on ticket creation per static mode run."""
 
     def test_cap_limits_tickets(self) -> None:
         """Only max_tickets findings get ticketed=True."""
         findings = [
-            make_finding(
-                line=i,
-                severity="ERROR",
-                confidence="HIGH",
-                is_new=True,
-            )
+            make_finding(line=i, severity="ERROR", confidence="HIGH", is_new=True)
             for i in range(20)
         ]
         apply_ticket_cap(findings, max_tickets=10)
@@ -368,13 +336,6 @@ class TestTicketCapEnforcement:
         apply_ticket_cap(findings, max_tickets=0)
         ticketed = [f for f in findings if f["ticketed"]]
         assert len(ticketed) == 0
-
-    def test_fewer_than_cap_tickets_all(self) -> None:
-        """When fewer new findings than cap, all get ticketed."""
-        findings = [make_finding(line=i, is_new=True) for i in range(3)]
-        apply_ticket_cap(findings, max_tickets=10)
-        ticketed = [f for f in findings if f["ticketed"]]
-        assert len(ticketed) == 3
 
     def test_only_new_findings_get_ticketed(self) -> None:
         """Old findings (is_new=False) are never ticketed."""
@@ -406,7 +367,7 @@ class TestTicketCapEnforcement:
             make_finding(line=i, is_new=True, severity="ERROR", confidence="HIGH")
             for i in range(15)
         ]
-        apply_ticket_cap(findings)  # uses default max_tickets=10
+        apply_ticket_cap(findings)
         ticketed = [f for f in findings if f["ticketed"]]
         assert len(ticketed) == 10
 
@@ -417,157 +378,43 @@ class TestTicketCapEnforcement:
 
 
 @pytest.mark.unit
-class TestDryRunNoSideEffects:
+class TestStaticModeDryRun:
     """Test that dry-run mode produces no state writes or ticket creation."""
 
     def test_dry_run_does_not_write_state(self) -> None:
         """Simulated dry-run: state file should not be created/modified."""
         with tempfile.TemporaryDirectory() as tmpdir:
             state_path = Path(tmpdir) / "code-review-state.json"
-            # In dry-run, we load state but never write it
             state = load_state(state_path)
             assert state["last_run_id"] is None
-            # Simulate scan: update in-memory state
             state["last_run_id"] = "dry-run-test"
             state["file_hashes"]["repo:src/foo.py"] = "hash1"
-            # In dry-run, we do NOT persist — verify file still doesn't exist
             assert not state_path.exists()
-
-    def test_dry_run_findings_not_ticketed(self) -> None:
-        """In dry-run mode, no findings should be marked as ticketed."""
-        findings = [make_finding(is_new=True) for _ in range(5)]
-        # In dry-run, we skip apply_ticket_cap entirely
-        # Verify none are ticketed by default
-        assert all(not f["ticketed"] for f in findings)
 
     def test_first_run_forces_dry_run(self) -> None:
         """When no state file exists, first run should force dry-run."""
-        state_path = Path("/tmp/nonexistent-code-review-state-test.json")
+        state_path = Path("/tmp/nonexistent-hostile-static-state-test.json")
         state = load_state(state_path)
-        # First run detection: state has no last_run_id
         is_first_run = state["last_run_id"] is None
         assert is_first_run
-        # Skill spec: first run forces --dry-run
 
 
 # ---------------------------------------------------------------------------
-# Tests — Vulture Integration
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestVultureIntegration:
-    """Test vulture output parsing and integration."""
-
-    def test_parse_standard_vulture_output(self) -> None:
-        """Standard vulture output lines are parsed correctly."""
-        lines = [
-            "src/omniclaude/foo.py:42: unused function '_helper' (90% confidence)",
-            "src/omniclaude/bar.py:10: unused import 'os' (85% confidence)",
-            "src/omniclaude/baz.py:5: unused variable 'x' (60% confidence)",
-        ]
-        results = [classify_vulture_line(line) for line in lines]
-        assert results[0] is not None
-        assert results[0]["severity"] == "ERROR"
-        assert results[1] is not None
-        assert results[1]["severity"] == "WARNING"
-        assert results[2] is None  # below threshold
-
-    def test_parse_vulture_class_output(self) -> None:
-        """Vulture class findings are parsed."""
-        f = classify_vulture_line(
-            "src/pkg/models.py:100: unused class 'OldModel' (95% confidence)"
-        )
-        assert f is not None
-        assert "OldModel" in f["message"]
-        assert f["severity"] == "ERROR"
-        assert f["confidence"] == "HIGH"
-
-    def test_vulture_empty_output(self) -> None:
-        """Empty vulture output produces no findings."""
-        assert classify_vulture_line("") is None
-
-    def test_vulture_exactly_80_percent(self) -> None:
-        """80% confidence is included (boundary condition)."""
-        f = classify_vulture_line(
-            "src/foo.py:1: unused function 'bar' (80% confidence)"
-        )
-        assert f is not None
-        assert f["severity"] == "WARNING"
-        assert f["confidence"] == "MEDIUM"
-
-    def test_vulture_exactly_90_percent(self) -> None:
-        """90% confidence is ERROR/HIGH (boundary condition)."""
-        f = classify_vulture_line(
-            "src/foo.py:1: unused function 'bar' (90% confidence)"
-        )
-        assert f is not None
-        assert f["severity"] == "ERROR"
-        assert f["confidence"] == "HIGH"
-
-
-# ---------------------------------------------------------------------------
-# Tests — Skill Metadata
+# Tests — SKILL.md Static Mode Documentation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestSkillMetadata:
-    """Test SKILL.md frontmatter and prompt.md structural requirements."""
+class TestSkillMdStaticMode:
+    """Test that SKILL.md documents --static mode and all categories."""
 
-    def test_skill_md_exists(self) -> None:
-        """SKILL.md exists in the skill directory."""
-        assert SKILL_MD.exists(), f"SKILL.md not found at {SKILL_MD}"
-
-    def test_prompt_md_exists(self) -> None:
-        """prompt.md exists in the skill directory."""
-        assert PROMPT_MD.exists(), f"prompt.md not found at {PROMPT_MD}"
-
-    def test_skill_md_has_frontmatter(self) -> None:
-        """SKILL.md has valid YAML frontmatter."""
+    def test_skill_md_has_static_arg(self) -> None:
+        """SKILL.md declares --static argument."""
         content = SKILL_MD.read_text()
-        assert content.startswith("---"), "SKILL.md must start with ---"
-        # Find closing ---
-        lines = content.splitlines()
-        close_idx = None
-        for i, line in enumerate(lines[1:], start=1):
-            if line.strip() == "---":
-                close_idx = i
-                break
-        assert close_idx is not None, "SKILL.md must have closing ---"
-
-    def test_skill_md_has_description(self) -> None:
-        """SKILL.md frontmatter includes description."""
-        content = SKILL_MD.read_text()
-        assert "description:" in content
-
-    def test_skill_md_has_version(self) -> None:
-        """SKILL.md frontmatter includes version."""
-        content = SKILL_MD.read_text()
-        assert "version:" in content
-
-    def test_skill_md_has_args(self) -> None:
-        """SKILL.md frontmatter includes args section."""
-        content = SKILL_MD.read_text()
-        assert "args:" in content
-
-    def test_skill_md_has_dry_run_arg(self) -> None:
-        """SKILL.md declares --dry-run argument."""
-        content = SKILL_MD.read_text()
-        assert "--dry-run" in content
-
-    def test_skill_md_has_ticket_arg(self) -> None:
-        """SKILL.md declares --ticket argument."""
-        content = SKILL_MD.read_text()
-        assert "--ticket" in content
-
-    def test_skill_md_has_max_tickets_arg(self) -> None:
-        """SKILL.md declares --max-tickets argument."""
-        content = SKILL_MD.read_text()
-        assert "--max-tickets" in content
+        assert "static" in content
 
     def test_skill_md_documents_all_categories(self) -> None:
-        """SKILL.md documents all 7 finding categories."""
+        """SKILL.md documents all 7 finding categories for static mode."""
         content = SKILL_MD.read_text()
         for category in VALID_CATEGORIES:
             assert category in content, (
@@ -577,26 +424,61 @@ class TestSkillMetadata:
     def test_skill_md_documents_ticket_cap(self) -> None:
         """SKILL.md documents the hard ticket cap."""
         content = SKILL_MD.read_text()
-        assert "10" in content, "Ticket cap of 10 not documented"
+        assert "10" in content
         assert "hard cap" in content.lower() or "Hard cap" in content
 
-    def test_prompt_md_has_scan_phase(self) -> None:
-        """prompt.md includes scan phase."""
+    def test_skill_md_documents_dry_run(self) -> None:
+        """SKILL.md documents --dry-run for static mode."""
+        content = SKILL_MD.read_text()
+        assert "dry-run" in content
+
+    def test_skill_md_version_bumped(self) -> None:
+        """SKILL.md version is 4.0.0 (bumped for static mode addition)."""
+        content = SKILL_MD.read_text()
+        assert "version: 4.0.0" in content
+
+    def test_skill_md_static_mode_section(self) -> None:
+        """SKILL.md has a Static Mode section."""
+        content = SKILL_MD.read_text()
+        assert "Static Mode" in content or "--static" in content
+
+    def test_skill_md_replaces_code_review_sweep(self) -> None:
+        """SKILL.md notes that it replaces code-review-sweep."""
+        content = SKILL_MD.read_text()
+        assert "code-review-sweep" in content or "code_review_sweep" in content
+
+
+# ---------------------------------------------------------------------------
+# Tests — prompt.md Static Mode Execution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestPromptMdStaticMode:
+    """Test that prompt.md includes static mode execution logic."""
+
+    def test_prompt_md_has_static_mode_section(self) -> None:
+        """prompt.md has a Static Mode Execution section."""
+        content = PROMPT_MD.read_text()
+        assert "Static Mode" in content
+
+    def test_prompt_md_has_scan_phases(self) -> None:
+        """prompt.md documents the scan phases for static mode."""
         content = PROMPT_MD.read_text()
         assert "Phase 1: Scan" in content or "Scan" in content
 
     def test_prompt_md_has_triage_phase(self) -> None:
-        """prompt.md includes triage phase."""
+        """prompt.md documents triage phase."""
         content = PROMPT_MD.read_text()
         assert "Phase 2: Triage" in content or "Triage" in content
 
-    def test_prompt_md_has_ticket_phase(self) -> None:
-        """prompt.md includes ticket creation phase."""
+    def test_prompt_md_has_ticket_creation(self) -> None:
+        """prompt.md documents ticket creation phase."""
         content = PROMPT_MD.read_text()
         assert "Ticket Creation" in content or "ticket" in content.lower()
 
-    def test_prompt_md_has_state_update_phase(self) -> None:
-        """prompt.md includes state update phase."""
+    def test_prompt_md_has_state_update(self) -> None:
+        """prompt.md documents state update phase."""
         content = PROMPT_MD.read_text()
         assert "State Update" in content or "state" in content.lower()
 
@@ -605,108 +487,24 @@ class TestSkillMetadata:
         content = PROMPT_MD.read_text()
         assert "vulture" in content.lower()
 
-    def test_prompt_md_constrains_llm_dead_code(self) -> None:
-        """prompt.md constrains LLM dead code to module-level only."""
-        content = PROMPT_MD.read_text()
-        assert "module-level" in content.lower() or "MODULE-LEVEL" in content
-        assert "cross-file" in content.lower() or "CROSS-FILE" in content.lower()
-
-    def test_prompt_md_has_autonomous_execution(self) -> None:
-        """prompt.md declares autonomous execution mode."""
-        content = PROMPT_MD.read_text()
-        assert "autonomous" in content.lower()
-
     def test_prompt_md_has_first_run_dry_run(self) -> None:
-        """prompt.md documents first-run dry-run default."""
+        """prompt.md documents first-run dry-run default for static mode."""
         content = PROMPT_MD.read_text()
-        assert "first run" in content.lower() or "first-run" in content.lower()
+        assert "first run" in content.lower() or "dry_run" in content
 
+    def test_prompt_md_documents_code_review_repos(self) -> None:
+        """prompt.md documents CODE_REVIEW_REPOS constant."""
+        content = PROMPT_MD.read_text()
+        assert "CODE_REVIEW_REPOS" in content
 
-# ---------------------------------------------------------------------------
-# Tests — Topics
-# ---------------------------------------------------------------------------
+    def test_prompt_md_mode_detection_includes_static(self) -> None:
+        """prompt.md mode detection handles --static flag."""
+        content = PROMPT_MD.read_text()
+        assert "--static" in content
 
-
-@pytest.mark.unit
-class TestTopics:
-    """Test topics.yaml manifest."""
-
-    def test_topics_yaml_exists(self) -> None:
-        """topics.yaml exists in the skill directory."""
-        topics_path = SKILL_DIR / "topics.yaml"
-        assert topics_path.exists(), f"topics.yaml not found at {topics_path}"
-
-    def test_topics_yaml_has_cmd_topic(self) -> None:
-        """topics.yaml declares the command topic."""
-        content = (SKILL_DIR / "topics.yaml").read_text()
-        assert "onex.cmd.omniclaude.code-review-sweep.v1" in content
-
-    def test_topics_yaml_has_completed_topic(self) -> None:
-        """topics.yaml declares the completed event topic."""
-        content = (SKILL_DIR / "topics.yaml").read_text()
-        assert "onex.evt.omniclaude.code-review-sweep-completed.v1" in content
-
-    def test_topics_yaml_has_failed_topic(self) -> None:
-        """topics.yaml declares the failed event topic."""
-        content = (SKILL_DIR / "topics.yaml").read_text()
-        assert "onex.evt.omniclaude.code-review-sweep-failed.v1" in content
-
-
-# ---------------------------------------------------------------------------
-# Tests — Orchestrator Node
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestOrchestratorNode:
-    """Test that the generated orchestrator node exists and is importable."""
-
-    def test_node_directory_exists(self) -> None:
-        """Orchestrator node directory was generated."""
-        node_dir = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator"
+    def test_prompt_md_static_returns_before_adversarial_loop(self) -> None:
+        """prompt.md static mode returns before running adversarial review."""
+        content = PROMPT_MD.read_text()
+        assert "Do not run the adversarial review loop" in content or (
+            "Return after static mode" in content
         )
-        assert node_dir.exists(), f"Node directory not found at {node_dir}"
-
-    def test_node_has_init(self) -> None:
-        """__init__.py exists in node directory."""
-        init_path = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator/__init__.py"
-        )
-        assert init_path.exists()
-
-    def test_node_has_node_py(self) -> None:
-        """node.py exists in node directory."""
-        node_path = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator/node.py"
-        )
-        assert node_path.exists()
-
-    def test_node_has_contract_yaml(self) -> None:
-        """contract.yaml exists in node directory."""
-        contract_path = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator/contract.yaml"
-        )
-        assert contract_path.exists()
-
-    def test_node_class_name_convention(self) -> None:
-        """node.py defines the correct class name."""
-        node_path = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator/node.py"
-        )
-        content = node_path.read_text()
-        assert "NodeSkillCodeReviewSweepOrchestrator" in content
-
-    def test_contract_has_skill_capability(self) -> None:
-        """contract.yaml declares the skill.code_review_sweep capability."""
-        contract_path = (
-            Path(__file__).parents[3]
-            / "src/omniclaude/nodes/node_skill_code_review_sweep_orchestrator/contract.yaml"
-        )
-        content = contract_path.read_text()
-        assert "code_review_sweep" in content

@@ -9,13 +9,15 @@ synthesize. A single pass catches ~60% of issues -- you must iterate.
 
 Check arguments:
 - `--plan-path <path>` is an alias for `--file <path>` — normalize it first: if `--plan-path` is provided and `--file` is not, treat it as `--file <path>`.
+- If `--static`: static analysis mode (see Static Mode section below). Mutually exclusive with `--pr` and `--file`.
 - If `--gate` is set AND `--pr <N> --repo <owner/repo>`: **gate mode** (see Gate Mode section below)
 - If `--gate` is set AND `--file`: error -- `--gate` requires `--pr`, not `--file`
 - If `--pr <N> --repo <owner/repo>` (no `--gate`): PR mode
 - If `--pr <N>` without `--repo`: error -- `--repo` is required with `--pr`
 - If `--file <path>` (or `--plan-path <path>`): file mode
 - If both `--pr` and `--file`/`--plan-path` are provided: error -- they are mutually exclusive
-- If neither: error -- one of `--pr` or `--file`/`--plan-path` is required
+- If `--static` and `--pr` or `--file` are provided: error -- `--static` is mutually exclusive with `--pr` and `--file`
+- If neither `--static`, `--pr`, nor `--file`: error -- one of `--static`, `--pr`, or `--file` is required
 
 ## Determine Convergence Mode
 
@@ -377,6 +379,179 @@ When integrated with ticket-pipeline (Phase 5.5 review_gate):
 1. If gate fails, dispatch fix agents for each CRITICAL/MAJOR finding
 2. Re-run `hostile-reviewer --gate` (max 2 iterations total)
 3. If still blocked after 2 iterations, mark ticket as `review_gate_blocked` in state.yaml
+
+## Static Mode Execution (`--static`)
+
+When `--static` is set, skip the adversarial multi-model review entirely and run the
+static analysis pipeline. This is the full logic from the former `code-review-sweep` skill.
+
+**Announce**: "I'm using the hostile-reviewer skill in --static mode."
+
+### Parse Arguments
+
+```
+repos     = args.repos.split(",") if args.repos else CODE_REVIEW_REPOS
+categories = args.categories.split(",") if args.categories else ALL_CATEGORIES
+dry_run   = args.dry_run  # forced true on first run (no state file)
+ticket    = args.ticket
+max_tickets = int(args.max_tickets) if args.max_tickets else 10
+```
+
+```
+CODE_REVIEW_REPOS = [
+  "omniclaude", "omnibase_core", "omnibase_infra",
+  "omnibase_spi", "omniintelligence", "omnimemory",
+  "onex_change_control", "omnibase_compat"
+]
+
+ALL_CATEGORIES = [
+  "dead-code", "missing-error-handling", "stubs-shipped",
+  "missing-kafka-wiring", "schema-mismatches", "hardcoded-values", "missing-tests"
+]
+```
+
+### Generate run_id
+
+```
+run_id = f"{YYYYMMDD-HHMMSS}-{random6}"
+```
+
+### Load State
+
+Load from `.onex_state/code-review-state.json`:
+- If file does not exist: initialize empty state, force `dry_run = true`
+- State fields: `file_hashes` (git object hashes), `finding_fingerprints`
+
+### Phase 1: Scan (parallel, up to 4 repos)
+
+**Path exclusions** — apply to every grep/scan:
+```
+.git/  .venv/  node_modules/  __pycache__/  *.pyc  dist/  build/
+docs/  examples/  fixtures/  _golden_path_validate/  migrations/  *.generated.*  vendored/
+```
+
+**File Hash Check**: before scanning any file:
+```bash
+git hash-object <file>
+```
+If hash matches `state.file_hashes[repo:relative_path]`, skip file. After scanning, update hash.
+
+#### Category: dead-code
+
+Module-level (single-file scope only): identify functions/classes not referenced within same file.
+Cross-file (vulture subprocess):
+```bash
+cd $OMNI_HOME/<repo>  # local-path-ok
+uv run vulture src/ --min-confidence 80 --exclude .venv,__pycache__,docs 2>/dev/null || true
+```
+Parse lines: `<file>:<line>: unused <kind> '<name>' (confidence: <N>%)`
+- confidence >= 90%: severity=ERROR, confidence=HIGH
+- confidence 80-89%: severity=WARNING, confidence=MEDIUM
+
+#### Category: missing-error-handling
+
+```bash
+grep -rn "except.*:\s*$\|except Exception.*:\s*$" \
+  --include="*.py" src/ \
+  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
+  --exclude-dir=tests --exclude-dir=docs
+```
+Flag bare `except:` or `except Exception:` where the next non-blank line is `pass`.
+Severity: WARNING, confidence: HIGH.
+
+#### Category: stubs-shipped
+
+```bash
+grep -rn "TODO\|FIXME\|raise NotImplementedError" \
+  --include="*.py" src/ \
+  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
+  --exclude-dir=tests --exclude-dir=docs --exclude-dir=fixtures
+```
+Exclude abstract base class methods and `*_protocol.py` / `*_abstract.py` files.
+`NotImplementedError`: severity=ERROR, confidence=HIGH. `TODO/FIXME`: severity=INFO, confidence=LOW.
+
+#### Category: missing-kafka-wiring
+
+For each `contract.yaml` in the repo: extract topics from `subscribe`/`publish` sections,
+grep for actual producer/consumer references. Flag declared but unwired topics.
+Severity: ERROR, confidence: HIGH.
+
+#### Category: schema-mismatches
+
+For each Pydantic model in `src/`: check `model_fields` against contract `config_keys`,
+detect imports referencing renamed/deleted models.
+Severity: ERROR, confidence: HIGH.
+
+#### Category: hardcoded-values
+
+```bash
+grep -rn "\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b" \
+  --include="*.py" src/ \
+  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
+  --exclude-dir=tests --exclude-dir=docs
+```
+Exclude `127.0.0.1`, `0.0.0.0`. Also grep for `postgresql://`, `redis://`, port numbers.
+Severity: WARNING, confidence: MEDIUM.
+
+#### Category: missing-tests
+
+For each `src/<pkg>/<subpkg>/module.py`, check if `tests/**/test_module.py` exists.
+Severity: INFO, confidence: LOW.
+
+### Phase 2: Triage
+
+For each finding:
+1. Compute fingerprint: `f"{repo}:{path}:{line}:{category}"`
+2. Check `state.finding_fingerprints` — mark `is_new = fingerprint not in state`
+
+### Phase 3: Report
+
+Print findings table grouped by category. If no findings, print clean summary.
+
+### Phase 4: Ticket Creation
+
+Only if `--ticket` and NOT `--dry-run`.
+
+**HARD CAP: `max_tickets` (default 10). Never exceed.**
+
+Priority order:
+1. `missing-kafka-wiring` (ERROR, HIGH)
+2. `schema-mismatches` (ERROR, HIGH)
+3. `stubs-shipped` with NotImplementedError (ERROR, HIGH)
+4. `dead-code` with vulture >=90% (ERROR, HIGH)
+5. `missing-error-handling` (WARNING, HIGH)
+6. `hardcoded-values` (WARNING, MEDIUM)
+7. `dead-code` lower confidence (WARNING, MEDIUM)
+8. `stubs-shipped` with TODO/FIXME (INFO, LOW)
+9. `missing-tests` (INFO, LOW)
+
+For each `is_new=true` finding in priority order, create Linear ticket until cap reached.
+
+### Phase 5: State Update
+
+Only if NOT `--dry-run`. Update `.onex_state/code-review-state.json`:
+- `last_run_id`, `last_run_at`, `file_hashes`, `finding_fingerprints`
+
+### Phase 6: Write Static Result
+
+Write to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer-static.json`
+with the schema in SKILL.md (mode="static" result format).
+
+### Static Mode Failure Handling
+
+| Error | Behavior |
+|-------|----------|
+| Repo directory not found | Log warning, skip repo, continue |
+| vulture not installed | Skip dead-code cross-file check, log warning |
+| vulture timeout (>60s) | Kill subprocess, skip that repo's vulture results |
+| State file corrupt | Initialize fresh state, log warning |
+| Linear API failure | Log error, record finding as `ticketed=false` |
+| Ticket cap reached | Stop creating tickets, report remaining |
+| git hash-object fails | Scan file anyway (no skip optimization) |
+
+**Return after static mode completes. Do not run the adversarial review loop.**
+
+---
 
 ## Emit Completion Events (OMN-5861, OMN-6128)
 
