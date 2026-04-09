@@ -39,8 +39,7 @@ args:
 ### Phase 2 — Run node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_runtime_sweep \
+onex run node_runtime_sweep -- \
   --scope <all-repos|omnidash-only> \
   [--dry-run]
 ```

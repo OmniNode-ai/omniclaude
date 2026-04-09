@@ -210,6 +210,9 @@ cross-contract references.
 ### Runtime Mode Execution
 
 ```bash
+# Compliance sweep (required fields, topic naming, node_type) via omnimarket node
+onex run node_contract_sweep -- [--dry-run]
+
 # Registration-only (default)
 uv run python -m omnibase_infra.verification.cli --registration-only --json
 
@@ -282,6 +285,7 @@ omnimemory, omninode_infra, omnibase_spi, onex_change_control
 
 ```
 SKILL.md              -> thin shell (this file)
+node_contract_sweep   -> omnimarket/nodes/node_contract_sweep/ (compliance sweep: fields, topics, node_type)
 NodeContractDriftCompute -> omnimarket/nodes/node_contract_drift_compute/ (classification)
 check_drift           -> onex_change_control/scripts/validation/check_contract_drift.py
 handler_drift_analysis -> onex_change_control/handlers/handler_drift_analysis.py
@@ -289,10 +293,11 @@ boundaries            -> onex_change_control/boundaries/kafka_boundaries.yaml
 ```
 
 The skill wraps:
+- `onex run node_contract_sweep` (required-field + topic-naming compliance sweep, runtime mode)
 - `onex_change_control/scripts/validation/check_contract_drift.py` (hash-based drift, drift mode)
 - `onex_change_control/handlers/handler_drift_analysis.py` (field-level analysis, drift mode)
 - `onex_change_control/boundaries/kafka_boundaries.yaml` (boundary manifest, drift mode)
-- `omnibase_infra.verification.cli` (runtime compliance verification, runtime mode)
+- `omnibase_infra.verification.cli` (registration verification, runtime mode)
 
 ## See Also
 
