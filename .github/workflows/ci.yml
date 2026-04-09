@@ -957,6 +957,12 @@ jobs:
       - name: Check ONEX architectural invariants
         run: uv run python scripts/check_arch_invariants.py src/
 
+      - name: Validate skill-node boundary (OMN-8094)
+        # Advisory until existing skills are ported to thin triggers (OMN-8088 et al.)
+        # Remove continue-on-error once all skills pass: uv run python scripts/validation/validate_skill_node_boundary.py --strict
+        continue-on-error: true
+        run: uv run python scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills
+
   # Golden chain registry integrity (OMN-7389)
   golden-chain-integrity:
     name: Golden Chain Integrity
