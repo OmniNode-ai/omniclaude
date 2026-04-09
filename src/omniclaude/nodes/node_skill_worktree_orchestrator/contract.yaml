@@ -1,0 +1,125 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract — generated for OMN-8075
+# Node: NodeSkillWorktreeOrchestrator
+# Skill: worktree
+# Created: 2026-04-09
+#
+# Unified orchestrator shell node: consolidates worktree_sweep, worktree_triage,
+# and worktree_lifecycle into a single skill node with --audit, --triage, --prune,
+# and --cron mode arguments.
+# All heavy logic lives in the shared handler — this node is a thin shell.
+
+# Contract identifiers
+name: node_skill_worktree_orchestrator
+contract_name: node_skill_worktree_orchestrator
+node_name: node_skill_worktree_orchestrator
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: ORCHESTRATOR_GENERIC
+
+# Description
+description: >
+  Unified orchestrator node for the worktree skill.
+  Consolidates worktree_sweep (--audit), worktree_triage (--triage), and
+  worktree_lifecycle (--prune) into a single node with mode-flag dispatch.
+  Supports --cron for scheduled execution.
+  Dispatches skill invocations to the polymorphic agent via the shared
+  handle_skill_requested handler. Subscribes to command events, emits
+  outcome events on success or failure.
+
+# Strongly typed I/O models (shared across all skill nodes)
+input_model:
+  name: ModelSkillRequest
+  module: omniclaude.shared.models
+
+output_model:
+  name: ModelSkillResult
+  module: omniclaude.shared.models
+
+# Execution backend configuration
+execution:
+  backend: claude_code       # claude_code | local_llm
+  model_purpose: null        # null for claude_code; required for local_llm
+                             # valid: CODE_ANALYSIS | REASONING | ROUTING | GENERAL
+
+# Event bus configuration
+event_bus:
+  subscribe:
+    topic: "onex.cmd.omniclaude.worktree.v1"
+    consumer_group: "omniclaude.skill.worktree"
+  publish:
+    success_topic: "onex.evt.omniclaude.worktree-completed.v1"
+    failure_topic: "onex.evt.omniclaude.worktree-failed.v1"
+
+# Capabilities
+capabilities:
+  - name: skill.worktree
+    description: Dispatch worktree skill to polymorphic agent (audit/triage/prune/cron modes)
+    version: 1.0.0
+
+# IO operations
+io_operations:
+  - operation: skill_requested
+    description: Dispatch worktree skill invocation to polymorphic agent
+    handler_method: handle_skill_requested
+    input_fields:
+      - skill_name: str
+      - skill_path: str
+      - args: dict[str, str]
+      - correlation_id: UUID
+    output_fields:
+      - skill_name: str
+      - status: SkillResultStatus
+      - output: str | None
+      - error: str | None
+      - correlation_id: UUID
+    idempotent: false
+
+# Dependencies
+dependencies:
+  - name: handler_skill_requested
+    type: handler
+    function: handle_skill_requested
+    module: omniclaude.shared
+    pluggable: false
+
+# Error handling
+error_handling:
+  retry_policy:
+    max_retries: 2
+    initial_delay_ms: 500
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - SkillDispatchError
+      - SkillTimeoutError
+  circuit_breaker:
+    enabled: false
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  generated_by: generate_skill_node.py
+  maturity: stub
+  tags:
+    - orchestrator
+    - skill
+    - worktree
+    - worktree_sweep
+    - worktree_triage
+    - worktree_lifecycle

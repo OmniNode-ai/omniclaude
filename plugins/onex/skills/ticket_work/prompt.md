@@ -15,7 +15,7 @@ handler, check whether autonomous mode is active. In autonomous mode:
 
 ## Initialization
 
-When `/ticket-work {ticket_id} [--autonomous]` is invoked:
+When `/ticket-work {ticket_id} [--autonomous] [--skip-to <phase>]` is invoked:
 
 1. **Fetch the ticket:**
    ```

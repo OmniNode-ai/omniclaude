@@ -22,11 +22,6 @@ progressions:
     to: ticket_pipeline
     after_uses: 3
 
-  # PR review escalation: basic → pr-polish (full readiness loop)
-  - from: pr_review
-    to: pr_polish
-    after_uses: 5
-
   # ticket-pipeline → epic-team (scale to multi-ticket workflows)
   - from: ticket_pipeline
     to: epic_team
