@@ -1,7 +1,7 @@
 ---
 description: Full post-release runtime redeploy — syncs bare clones, updates Dockerfile plugin pins, rebuilds Docker runtime, seeds Infisical, and verifies health
 mode: full
-version: 1.0.0
+version: 2.0.0
 level: advanced
 debug: false
 category: workflow
@@ -11,27 +11,7 @@ composable: false
 inputs:
   - name: versions
     type: str
-    description: "Comma-separated plugin version pins: omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1. If omitted, auto-detected from the latest git tags in bare clones."
-    required: false
-  - name: skip_sync
-    type: bool
-    description: Skip SYNC phase (bare clones already current)
-    required: false
-  - name: skip_dockerfile_update
-    type: bool
-    description: Skip PIN_UPDATE phase
-    required: false
-  - name: skip_infisical
-    type: bool
-    description: Skip INFISICAL phase unconditionally
-    required: false
-  - name: worktree_ticket
-    type: str
-    description: "Worktree name prefix (default: redeploy-<run_id>)"
-    required: false
-  - name: verify_only
-    type: bool
-    description: Skip to VERIFY phase only (assumes runtime already running)
+    description: "Comma-separated plugin version pins: pkg=version,pkg2=version2. Auto-detected if omitted."
     required: false
   - name: dry_run
     type: bool
@@ -39,7 +19,7 @@ inputs:
     required: false
   - name: resume
     type: str
-    description: Resume from first non-completed phase in state file by run_id
+    description: Resume from first non-completed phase by run_id
     required: false
 outputs:
   - name: skill_result
@@ -48,204 +28,92 @@ outputs:
     fields:
       - status: success | failed | dry_run
       - run_id: str
-      - phases: "dict[str, phase_status]"
-      - pins_applied: "dict[str, str] | null"
 args:
   - name: --versions
-    description: "Comma-separated plugin pins: pkg=version,pkg2=version2. If omitted, auto-detected from latest git tags."
+    description: "Comma-separated plugin pins: pkg=version,pkg2=version2. Auto-detected if omitted."
     required: false
   - name: --skip-sync
-    description: Skip SYNC phase
+    description: Skip SYNC phase (bare clones already current)
     required: false
   - name: --skip-dockerfile-update
     description: Skip PIN_UPDATE phase
     required: false
   - name: --skip-infisical
-    description: Skip INFISICAL phase unconditionally
-    required: false
-  - name: --worktree-ticket
-    description: "Worktree name prefix (default: redeploy-<run_id>)"
+    description: Skip INFISICAL phase
     required: false
   - name: --verify-only
-    description: Skip all phases except VERIFY
+    description: Skip to VERIFY phase only (runtime already running)
     required: false
   - name: --dry-run
-    description: Print step commands, no execution
+    description: Print step commands without execution
     required: false
   - name: --resume
-    description: Resume from state file by run_id
+    description: Resume from first non-completed phase by run_id
     required: false
 ---
 
 # Redeploy
 
-## Dispatch Surface
+**Announce at start:** "I'm using the redeploy skill."
 
-**Target**: Headless claude -p
-
-## Overview
-
-Full post-release runtime redeploy for the OmniNode platform. Runs after a coordinated
-release to sync all bare clones, update `Dockerfile.runtime` plugin pins, rebuild and
-restart Docker runtime services, optionally seed Infisical with new contract keys,
-and verify that health endpoints and pinned package versions match expectations.
-
-**Announce at start:** "I'm using the redeploy skill to redeploy the runtime."
-
-## Quick Start
+## Usage
 
 ```
-/redeploy                                          # auto-detect latest versions from git tags
-/redeploy --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
-/redeploy --versions "omniintelligence=0.8.0" --skip-sync --dry-run
-/redeploy --verify-only --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1"
-/redeploy --resume redeploy-20260301-abc123
+/redeploy
+/redeploy --versions omniintelligence=0.8.0,omninode-claude=0.4.0
+/redeploy --skip-sync
+/redeploy --verify-only
+/redeploy --dry-run
+/redeploy --resume <run_id>
 ```
 
-## Phase Sequence
+## Execution
 
-| # | Phase | Core Action | Idempotency |
-|---|-------|-------------|-------------|
-| 0 | `PREFLIGHT` | `preflight-check.sh` — env var gate, bus tunnel, VirtioFS check | Read-only; exit 1 halts pipeline, exit 2 advisory |
-| 1 | `SYNC` | `pull-all.sh` — fast-forward all bare clones on `main` | Safe: ff-only is a no-op if already current |
-| 2 | `ENV_CHECK` | Per-phase env validation | Read-only, always safe |
-| 3 | `WORKTREE` | Create `omni_worktrees/<ticket>/omnibase_infra` from main HEAD | Skip if path exists and branch matches |
-| 4 | `PIN_UPDATE` | Run `update-plugin-pins.py` to rewrite `Dockerfile.runtime` version pins | Skip if already at target versions |
-| 5 | `DEPLOY` | Produce `ModelRebuildRequested` to deploy daemon on .201 via Kafka, poll `onex.evt.deploy.rebuild-completed.v1` for result | Idempotent: correlation_id prevents duplicate processing |
-| 5b | `SCHEMA_SYNC` | `check_schema_fingerprint.py verify` — auto-stamp if stale | Idempotent: verify-then-stamp pattern |
-| 5d | `PLUGIN_REFRESH` | `claude plugin install onex@omninode-tools` — refresh local plugin after release | Idempotent: no-op if already current |
-| 6 | `INFISICAL` | Seed new contract keys to Infisical | `seed-infisical.py` is idempotent |
-| 7 | `VERIFY` | Container manifest check via `verify_container_manifest.py` (`docker ps -a`) + curl health endpoints + in-container version checks. Restart-once policy for non-running containers. Profile-aware (core/runtime/memory). | Read-only (except restart-once recovery attempt), always safe |
-| 7b | `K8S_VERIFY` | `k8s-pod-readiness-check.sh` — SSM-based cloud k8s pod READY gate | Read-only; exit 2 advisory when SSM unreachable |
-| 7c | `OMNIDASH_VERIFY` | `verify-omnidash-health.sh` — >= 3 live data sources at localhost:3000 | Read-only; exit 2 advisory when omnidash offline |
-| 8 | `NOTIFY` | Slack via `node_slack_alerter_effect` (FULL_ONEX only) | Idempotent (run_id in message) |
+### Step 1 — Parse arguments
 
-## ENV_CHECK: Required Variables per Phase
+- `--versions` → explicit plugin pins (auto-detected from latest git tags if omitted)
+- `--skip-sync` → skip bare clone sync (already current)
+- `--skip-dockerfile-update` → skip Dockerfile pin update
+- `--skip-infisical` → skip Infisical secret seeding
+- `--verify-only` → skip deploy phases, only run health checks
+- `--dry-run` → print all commands without executing
+- `--resume <run_id>` → resume from first non-completed phase in state file
 
-| Phase Gated | Required Vars | On Failure |
-|-------------|--------------|------------|
-| SYNC | `OMNI_HOME` (default: `/Volumes/PRO-G40/Code/omni_home`) | Fail with message | <!-- local-path-ok -->
-| DEPLOY | `POSTGRES_PASSWORD`, `KAFKA_BOOTSTRAP_SERVERS` | Fail before deploy |
-| INFISICAL | `INFISICAL_ADDR`, `INFISICAL_CLIENT_ID`, `INFISICAL_CLIENT_SECRET` | Skip if `INFISICAL_ADDR` unset; fail if set but creds missing |
-
-## Tier-Aware Notifications
-
-| Tier | Notification |
-|------|-------------|
-| `FULL_ONEX` | Slack via `node_slack_alerter_effect` (start + done) |
-| `EVENT_BUS` | stdout only (no Kafka notification topic) |
-| `STANDALONE` | stdout only |
-
-Tier detection: see `@_lib/tier-routing/helpers.md`.
-
-## State File
-
-`$ONEX_STATE_DIR/state/redeploy/<run_id>.json` — written atomically after each phase completes.
-
-```json
-{
-  "run_id": "redeploy-20260301-abc123",
-  "worktree_path": "/Volumes/PRO-G40/Code/omni_worktrees/redeploy-20260301-abc123/omnibase_infra", // local-path-ok
-  "worktree_ref": "main",
-  "versions_requested": {"omniintelligence": "0.8.0", "omninode-claude": "0.4.0"},
-  "phases": {
-    "PREFLIGHT":       {"status": "completed", "ts": "2026-03-01T09:59:58Z"},
-    "SYNC":            {"status": "completed", "ts": "2026-03-01T10:00:00Z"},
-    "ENV_CHECK":       {"status": "completed", "ts": "2026-03-01T10:00:01Z"},
-    "WORKTREE":        {"status": "completed", "ts": "2026-03-01T10:00:05Z", "path": "..."},
-    "PIN_UPDATE":      {"status": "completed", "ts": "2026-03-01T10:00:10Z", "pins_applied": {"omniintelligence": "0.8.0"}},
-    "DEPLOY":          {"status": "pending"},
-    "SCHEMA_SYNC":     {"status": "pending"},
-    "PLUGIN_REFRESH":  {"status": "pending"},
-    "INFISICAL":       {"status": "pending"},
-    "VERIFY":          {"status": "pending"},
-    "K8S_VERIFY":      {"status": "pending"},
-    "OMNIDASH_VERIFY": {"status": "pending"},
-    "NOTIFY":          {"status": "pending"}
-  }
-}
-```
-
-Resume: `--resume <run_id>` skips all phases with `status: completed`.
-Cleanup: worktree is retained; pass `--cleanup` (v2) to remove after success.
-
-## VERIFY Phase Details
-
-Beyond `curl /health`, runs the standalone version verification script (OMN-5608):
+### Step 2 — Initialize node (contract verification)
 
 ```bash
-uv run python scripts/verify_deployed_versions.py \
-    --versions "omniintelligence=0.8.0,omninode-claude=0.4.0,omninode-memory=0.6.1" \
-    --container omninode-runtime
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_redeploy \
+  [--versions <pins>] \
+  [--dry-run] \
+  [--resume <run_id>]
 ```
 
-The script (`omnibase_infra/scripts/verify_deployed_versions.py`) queries each package
-version inside the container via `docker exec ... uv pip show`, compares actual vs expected,
-and exits with clear status codes:
-- Exit 0: all versions match
-- Exit 1: version mismatch detected (fail-fast with expected vs actual in output)
-- Exit 2: infrastructure error (container unreachable)
+Outputs `ModelRedeployStartCommand` JSON. Note: handler is a structural placeholder;
+full migration tracked in OMN-8004.
 
-Unit tests: `omnibase_infra/tests/unit/test_verify_deployed_versions.py` (21 tests covering
-mismatch detection, infra errors, CLI exit codes, and report formatting).
+### Step 3 — Execute redeploy phases
 
-## INFISICAL Phase Logic
+1. **PREFLIGHT**: Validate env vars, bus tunnel, and VirtioFS readiness
+2. **SYNC**: `git -C ~/.omnibase/bare/<repo> fetch --all && git reset --hard origin/main` for each repo
+3. **ENV_CHECK**: Verify required environment variables are present
+4. **WORKTREE**: Prepare worktree for deploy snapshot
+5. **PIN_UPDATE**: Update Dockerfile `ARG <pkg>_VERSION=<version>` pins from `--versions` or auto-detected tags
+6. **DEPLOY**: Trigger runtime rebuild via Kafka `onex.cmd.deploy.rebuild-requested.v1` and poll for completion
+7. **INFISICAL**: Seed updated env vars into Infisical (unless `--skip-infisical`)
+8. **VERIFY**: Health-check all runtime services; confirm endpoints respond
+9. **NOTIFY**: Emit redeploy completion notification
+
+### Step 4 — Report
+
+Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`.
+Display: phases completed, pins applied, health check results.
+
+## Architecture
 
 ```
-IF INFISICAL_ADDR unset -> status: skipped_no_infisical (not an error)
-IF INFISICAL_ADDR set AND creds missing -> fail before DEPLOY (validated in ENV_CHECK)
-IF INFISICAL_ADDR set AND creds present:
-  IF sync-omnibase-env.sh exists in worktree -> run it (dapper-soaring-falcon wrapper)
-  ELSE -> uv run python seed-infisical.py --contracts-dir .../nodes --execute
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_redeploy/ (structural placeholder)
+contract   -> node_redeploy/contract.yaml
+migration  -> OMN-8004 (full handler implementation)
 ```
-
-## Skill Result Output
-
-Written to `$ONEX_STATE_DIR/skill-results/{context_id}/redeploy.json`:
-
-```json
-{
-  "skill": "redeploy",
-  "status": "success",
-  "run_id": "redeploy-20260301-abc123",
-  "phases": {
-    "PREFLIGHT": "completed",
-    "SYNC": "completed",
-    "ENV_CHECK": "completed",
-    "WORKTREE": "completed",
-    "PIN_UPDATE": "completed",
-    "DEPLOY": "completed",
-    "SCHEMA_SYNC": "completed",
-    "PLUGIN_REFRESH": "completed",
-    "INFISICAL": "skipped_no_infisical",
-    "VERIFY": "completed",
-    "K8S_VERIFY": "completed",
-    "OMNIDASH_VERIFY": "completed",
-    "NOTIFY": "completed"
-  },
-  "pins_applied": {
-    "omniintelligence": "0.8.0",
-    "omninode-claude": "0.4.0",
-    "omninode-memory": "0.6.1"
-  }
-}
-```
-
-**Status values**: `success` | `failed` | `dry_run`
-
-## v1 Constraints
-
-- No `--no-deps` inference; existing Dockerfile install flags are preserved as-is
-- `--cleanup` flag not implemented in v1 (worktree retained after success)
-
-## See Also
-
-- `prompt.md` — authoritative phase execution logic
-- `release` skill — run before redeploy to coordinate version bumps across repos
-- `_lib/tier-routing/helpers.md` — tier detection
-- `_lib/slack-gate/helpers.md` — Slack credential resolution
-- Deploy daemon on .201 (`/data/omninode/deploy-agent/`) — DEPLOY phase target, listens on `onex.cmd.deploy.rebuild-requested.v1`
-- `omni_home/scripts/trigger-deploy.sh` — standalone deploy trigger script (reference implementation)
-- `omnibase_infra/scripts/update-plugin-pins.py` — PIN_UPDATE phase helper
-- `omnibase_infra/scripts/verify_deployed_versions.py` — VERIFY phase version checker (OMN-5608)
-- `omnibase_infra/scripts/seed-infisical.py` — INFISICAL phase fallback
