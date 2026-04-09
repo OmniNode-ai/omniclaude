@@ -26,29 +26,8 @@ args:
 
 # CodeRabbit Thread Auto-Triage
 
-Auto-triage CodeRabbit review threads on a PR. Classifies each thread by
-severity and auto-replies to Minor/Nitpick findings with an acknowledgment
-message, then resolves the thread. Major/Critical findings are left for
-substantive fixes.
+Dispatch to the deterministic node — do NOT inline any logic:
 
-## Usage
-
+```bash
+onex run node_coderabbit_triage -- --repo "${repo}" --pr "${pr}" "${@}"
 ```
-/coderabbit_triage OmniNode-ai/omniclaude 42
-/coderabbit_triage OmniNode-ai/omniclaude 42 --dry-run
-```
-
-## Severity Classification
-
-| Severity | Action | Markers |
-|----------|--------|---------|
-| Critical | Leave for fix | "critical", red circle emoji |
-| Major | Leave for fix | "major", orange circle emoji, "important" |
-| Minor | Auto-reply + resolve | "minor", yellow circle emoji, "suggestion" |
-| Nitpick | Auto-reply + resolve | "nitpick", "nit", green circle emoji, "style" |
-
-## Auto-Reply Template
-
-> Acknowledged — tracking in tech-debt backlog. This is a minor/nitpick
-> finding that does not block merge. Auto-triaged by CodeRabbit auto-triage
-> hook [OMN-6739].
