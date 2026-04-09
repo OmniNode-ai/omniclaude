@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""NodeSkillWorktreeSweepOrchestrator — thin orchestrator shell for the worktree_sweep skill.
+"""NodeSkillWorktreeOrchestrator — thin orchestrator shell for the worktree skill.
 
-Capability: skill.worktree_sweep
+Capability: skill.worktree
 All dispatch logic lives in the shared handle_skill_requested handler.
 """
 
@@ -16,17 +16,19 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeSkillWorktreeSweepOrchestrator(NodeOrchestrator):
-    """Orchestrator node for the worktree_sweep skill.
+class NodeSkillWorktreeOrchestrator(NodeOrchestrator):
+    """Orchestrator node for the unified worktree skill.
 
-    Capability: skill.worktree_sweep
+    Capability: skill.worktree
 
+    Consolidates worktree_sweep, worktree_triage, and worktree_lifecycle into
+    a single skill with --audit, --triage, --prune, and --cron mode arguments.
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:
-        """Initialize the NodeSkillWorktreeSweepOrchestrator.
+        """Initialize the NodeSkillWorktreeOrchestrator.
 
         Args:
             container: ONEX container for dependency injection.
@@ -34,4 +36,4 @@ class NodeSkillWorktreeSweepOrchestrator(NodeOrchestrator):
         super().__init__(container)
 
 
-__all__ = ["NodeSkillWorktreeSweepOrchestrator"]
+__all__ = ["NodeSkillWorktreeOrchestrator"]
