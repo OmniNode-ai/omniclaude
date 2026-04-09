@@ -81,10 +81,27 @@ If Agent Teams dispatch fails (TeamCreate error, Agent tool unavailable, auth er
 back to direct Bash, Read, Edit, Write, or Glob calls — falling back bypasses observability,
 context management, and the orchestration layer.
 
+## Pre-flight Readiness Check
+
+Before any phase executes, run the platform readiness gate:
+
+```bash
+onex run node_platform_readiness --output-format json
+```
+
+Then read `.onex_state/readiness/latest.yaml` and apply the following policy:
+
+| Overall Status | Action |
+|----------------|--------|
+| **PASS** | Proceed with Phase 0 |
+| **WARN** | Proceed with a warning — surface all degraded dimensions inline |
+| **FAIL** | **HALT** — do not start the day. Report all blockers with actionable_items. Wait for user direction. |
+
 ## Overview
 
 `/begin-day` automates the entire morning investigation loop:
 
+0. **Pre-flight** — Platform readiness gate (FAIL halts, WARN warns, PASS proceeds)
 1. **Phase 0** — Load yesterday's close-day corrections (~30s)
 2. **Phase 1** — Sync repos via `pull-all.sh` + check infra health (~2min)
 3. **Phase 2** — Dispatch 7 parallel investigation probes (~8min wall-clock)

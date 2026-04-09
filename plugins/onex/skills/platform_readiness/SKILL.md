@@ -121,13 +121,39 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
       "status": "PASS",
       "critical": true,
       "freshness": "current",
-      "details": "7/7 contracts complete"
+      "details": "7/7 contracts complete",
+      "actionable_items": []
+    },
+    {
+      "name": "ci_health",
+      "status": "FAIL",
+      "critical": true,
+      "freshness": "current",
+      "details": "omnibase_infra: 2 failing workflows",
+      "actionable_items": [
+        "Fix failing workflow: test-unit in omnibase_infra",
+        "Fix failing workflow: lint in omnibase_infra"
+      ]
     }
   ],
   "blockers": ["CI health: omnibase_infra has 2 failing workflows"],
   "degraded": ["Data flow health: stale (26h)"]
 }
 ```
+
+## Implementation
+
+1. Run the platform readiness node:
+   ```bash
+   onex run node_platform_readiness --output-format json
+   ```
+2. Read the generated artifact:
+   ```bash
+   cat .onex_state/readiness/latest.yaml
+   ```
+3. Display dimensions as a structured table with status indicators.
+4. If any dimension is FAIL: surface actionable_items for that dimension.
+5. If overall status is PASS: confirm platform is ready for overnight autonomy.
 
 ## Architecture
 
