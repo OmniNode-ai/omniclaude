@@ -59,6 +59,24 @@ args:
 
 # Overnight Session
 
+## Pre-flight Readiness Check
+
+Before dispatching the overnight node, run the platform readiness gate:
+
+```bash
+onex run node_platform_readiness --output-format json
+```
+
+Then read `.onex_state/readiness/latest.yaml` and apply the following policy:
+
+| Overall Status | Action |
+|----------------|--------|
+| **PASS** | Proceed with dispatch |
+| **WARN** | Proceed with a warning — surface all degraded dimensions inline |
+| **FAIL** | **HALT** — do not start the overnight session. Report all blockers with actionable_items. Wait for user direction. |
+
+## Dispatch
+
 Dispatch to the deterministic node — do NOT inline any logic:
 
 ```bash

@@ -129,6 +129,20 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
 }
 ```
 
+## Implementation
+
+1. Run the platform readiness node:
+   ```bash
+   onex run node_platform_readiness --output-format json
+   ```
+2. Read the generated artifact:
+   ```bash
+   cat .onex_state/readiness/latest.yaml
+   ```
+3. Display dimensions as a structured table with status indicators.
+4. If any dimension is FAIL: surface actionable_items for that dimension.
+5. If overall status is PASS: confirm platform is ready for overnight autonomy.
+
 ## Architecture
 
 ```
