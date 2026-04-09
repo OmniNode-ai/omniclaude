@@ -121,7 +121,19 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
       "status": "PASS",
       "critical": true,
       "freshness": "current",
-      "details": "7/7 contracts complete"
+      "details": "7/7 contracts complete",
+      "actionable_items": []
+    },
+    {
+      "name": "ci_health",
+      "status": "FAIL",
+      "critical": true,
+      "freshness": "current",
+      "details": "omnibase_infra: 2 failing workflows",
+      "actionable_items": [
+        "Fix failing workflow: test-unit in omnibase_infra",
+        "Fix failing workflow: lint in omnibase_infra"
+      ]
     }
   ],
   "blockers": ["CI health: omnibase_infra has 2 failing workflows"],
