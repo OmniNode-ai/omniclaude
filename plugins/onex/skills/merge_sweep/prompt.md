@@ -8,7 +8,7 @@ You are the merge-sweep skill entry point. This prompt defines the complete exec
 
 ---
 
-## Step 1: Announce
+## Announce
 
 Output:
 ```
@@ -19,7 +19,7 @@ No tool calls, file reads, or bash commands may precede this output.
 
 ---
 
-## Step 2: Parse Arguments
+## Parse Arguments
 
 Parse `$ARGUMENTS`:
 - `--repos <list>` — default: all repos in omni_home (empty list = all)
@@ -47,7 +47,7 @@ Generate `run_id` if `--run-id` not provided: `<YYYYMMDD-HHMMSS>-<random6>`.
 
 ---
 
-## Step 3: Map Args → Command Event
+## Map Args → Command Event
 
 Build the command event payload:
 
@@ -87,7 +87,7 @@ Dry run complete. No mutations performed.
 
 ---
 
-## Step 4: Publish Command Event
+## Publish Command Event
 
 Publish the command event via the emit daemon:
 
@@ -107,7 +107,7 @@ Log:
 
 ---
 
-## Step 5: Monitor Completion
+## Monitor Completion
 
 Poll `$ONEX_STATE_DIR/merge-sweep/<run_id>/result.json` every 10 seconds.
 
@@ -139,7 +139,7 @@ Log poll progress every 60 seconds:
 
 ---
 
-## Step 6: Write ModelSkillResult and Report
+## Write ModelSkillResult and Report
 
 Write the orchestrator result directly to the skill result path:
 
