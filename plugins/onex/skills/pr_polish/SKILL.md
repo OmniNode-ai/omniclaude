@@ -47,71 +47,8 @@ args:
 
 # PR Polish
 
-**Announce at start:** "I'm using the pr-polish skill."
-
-## Usage
-
-```
-/pr-polish                              # Auto-detect PR from current branch
-/pr-polish 42                           # Specific PR number
-/pr-polish --skip-conflicts             # Skip conflict resolution
-/pr-polish --required-clean-runs 2      # Fewer clean runs (headless/pipeline)
-/pr-polish --dry-run
-/pr-polish --no-automerge
-```
-
-## Execution
-
-### Step 1 — Parse arguments
-
-- `pr_number` → PR number (auto-detected from current branch if omitted)
-- `--skip-conflicts` / `--skip-pr-review` / `--skip-local-review` → phase toggles
-- `--required-clean-runs` → consecutive clean passes needed (default: 4, pipeline: 2)
-- `--dry-run` → log decisions without making changes
-- `--no-automerge` → skip enabling GitHub auto-merge at end
-
-### Step 2 — Initialize FSM
+Dispatch to the deterministic node — do NOT inline any logic:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_pr_polish \
-  [--pr-number <n>] \
-  [--skip-conflicts] \
-  [--dry-run]
-```
-
-Outputs `ModelPrPolishState` JSON with initial phase.
-
-### Step 3 — Execute phases
-
-| Phase | What It Does |
-|-------|-------------|
-| RESOLVE_CONFLICTS | Rebase onto target branch; fix conflicts |
-| FIX_CI | Read CI failures; fix code; push fix commits |
-| ADDRESS_COMMENTS | Read CodeRabbit + human review threads; address each |
-| LOCAL_REVIEW | Run local-review loop until N consecutive clean passes |
-| DONE | Enable GitHub auto-merge (unless `--no-automerge`) |
-
-Circuit breaker: 3 consecutive phase failures → FAILED.
-
-### Step 4 — Report
-
-Display final state: phase reached, conflicts resolved, CI fixes, comments addressed,
-review iterations run. If FAILED, emit friction event.
-
-## Headless Mode
-
-Safe for overnight pipeline use via `claude -p`. No interactive gates. Minimum tool set:
-
-```bash
-ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep,Task,TaskCreate,TaskUpdate,TaskGet,TaskList,SendMessage"
-claude -p --allowedTools "${ALLOWED_TOOLS}" "Run pr-polish for PR #42 --required-clean-runs 2"
-```
-
-## Architecture
-
-```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_pr_polish/ (FSM logic)
-contract   -> node_pr_polish/contract.yaml
+onex run node_pr_polish -- --pr-number "${pr_number}" "${@}"
 ```
