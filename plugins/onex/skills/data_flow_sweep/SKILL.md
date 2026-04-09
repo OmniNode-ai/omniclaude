@@ -1,7 +1,7 @@
 ---
 description: End-to-end data flow verification — for each Kafka topic in omnidash topics.yaml, verify producer emits, consumer receives (0 lag), DB table has rows, dashboard page shows data. Auto-creates Linear tickets for broken flows.
 mode: full
-version: 2.0.0
+version: 1.0.0
 level: advanced
 debug: false
 category: verification
@@ -38,24 +38,24 @@ args:
 
 ## Execution
 
-### Step 1 — Parse arguments
+### Phase 1 — Parse arguments
 
-- `--dry-run` → report only, no ticket creation
+- `--dry-run` → report only, no ticket creation; zero side effects
 - `--topic` → filter to single topic
 - `--skip-playwright` → skip Phase 4 dashboard verification
 - `--flows` → JSON array of pre-collected flow metadata (skips live Kafka/DB checks)
 
-### Step 2 — Collect flow metadata (unless `--flows` provided)
+### Phase 2 — Collect flow metadata (unless `--flows` provided)
 
 For each topic in `omnidash/topics.yaml`:
-1. Check topic existence and offset via `rpk topic describe`
-2. Check consumer group lag via `rpk group describe omnidash-read-model-v2`
-3. Check DB table row count and latest timestamp via `psql`
-4. Verify field mapping: consume 1 message, compare fields against projection handler and DB schema
+1. Check producer status via `rpk topic describe` — classify as `ACTIVE` | `EMPTY` | `MISSING`
+2. Check consumer group lag via `rpk group describe omnidash-read-model`
+3. Check DB table row count via `psql -c "SELECT COUNT(*) FROM omnidash_analytics.<table>"`
+4. Verify field mapping: compare fields against projection handler and DB schema
 
 Classify each flow: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_TABLE` | `PRODUCER_DOWN`
 
-### Step 3 — Run node
+### Phase 3 — Run node
 
 ```bash
 cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
@@ -67,21 +67,35 @@ uv run python -m omnimarket.nodes.node_data_flow_sweep \
 
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
 
-### Step 4 — Dashboard verification (unless `--skip-playwright`)
+### Phase 4 — Dashboard verification (unless `--skip-playwright`)
 
 For each `FLOWING` table, use Playwright MCP to navigate to the dashboard route and verify
 data renders (not "No data", no JS errors).
 
-### Step 5 — Report + ticket creation
+### Phase 5 — Report + ticket creation (no tickets if `--dry-run`)
 
-Display summary table with per-flow status. For each broken flow (not `FLOWING`+`VISIBLE`),
-create a Linear ticket (unless `--dry-run`):
+Display health matrix:
+
+| Topic | Producer | Consumer | DB Table | Dashboard | Status |
+|-------|----------|----------|----------|-----------|--------|
+| ...   | ACTIVE   | 0 lag    | rows     | visible   | FLOWING |
+
+For each broken flow, create a Linear ticket:
 
 ```
 Title: fix(data-flow): {topic} — {failure_classification}
 Labels: data-flow, sweep
 Project: Active Sprint
 ```
+
+## Dispatch Rules
+
+This skill is invoked autonomously by:
+- `autopilot` (daily sweep)
+- `dashboard-sweep` (after deploy)
+- `integration-sweep` (post-merge verification)
+
+Use `polymorphic-agent` routing for parallel topic checks.
 
 ## Critical Chains (always checked)
 

@@ -102,6 +102,26 @@ For each finding at or above `--severity-threshold`, search Linear for an existi
 keyed by `(repo, contract_path, drift_type)`. If none found, create via `mcp__linear-server__save_issue`.
 Stale boundaries always create tickets (boundary mismatch = potential runtime failure).
 
+Ticket Priority mapping:
+- BREAKING → Critical
+- ADDITIVE → Major
+- NON_BREAKING → Minor
+
+### Step 6 — Write skill result
+
+Write to `$ONEX_STATE_DIR/skill-results/<run-id>/contract-sweep.json`:
+
+```json
+{
+  "skill": "contract-sweep",
+  "status": "clean | drifted | breaking | error",
+  "repos_scanned": 0,
+  "drift_findings": [],
+  "boundary_findings": [],
+  "tickets_created": 0
+}
+```
+
 ## Default Repos
 
 ```
@@ -112,8 +132,9 @@ omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ## Architecture
 
 ```
-SKILL.md        -> thin shell (this file)
-check_drift     -> onex_change_control/scripts/validation/check_contract_drift.py
-drift_analysis  -> onex_change_control/handlers/handler_drift_analysis.py
-boundaries      -> onex_change_control/boundaries/kafka_boundaries.yaml
+SKILL.md              -> thin shell (this file)
+NodeContractDriftCompute -> omnimarket/nodes/node_contract_drift_compute/ (classification)
+check_drift           -> onex_change_control/scripts/validation/check_contract_drift.py
+handler_drift_analysis -> onex_change_control/handlers/handler_drift_analysis.py
+boundaries            -> onex_change_control/boundaries/kafka_boundaries.yaml
 ```
