@@ -122,8 +122,78 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/release.
 ## Safety
 
 - Slack HIGH_RISK gate required by default (bypass only with `--autonomous` or `--gate-attestation`)
+- Silence never advances the HIGH_RISK gate; explicit approval is required. NOT auto-approved on timeout.
 - `--dry-run` produces zero side effects: no bumps, PRs, tags, or PyPI triggers
 - Resume support: state written after each phase; `--resume <run_id>` skips completed phases
+- Cross-repo dependency pins use exact ==X.Y.Z format for determinism (exact pin policy)
+
+## Dependency Graph
+
+Repos are released in dependency-tier order to guarantee downstream consumers get updated pins:
+
+| Tier | Repos |
+|------|-------|
+| Tier 1 | omnibase_spi |
+| Tier 2 | omnibase_core, omnibase_compat |
+| Tier 3 | omniclaude, omniintelligence, omnimemory, omnimarket |
+| Tier 4 | omninode_infra, omnidash |
+
+Tier N+1 repos pin the released version of Tier N repos. If a Tier 2 release fails,
+Tier 3 and Tier 4 are BLOCKED.
+
+## Error Table
+
+| Error Code | Condition | Behavior |
+|------------|-----------|----------|
+| GRAPH_DRIFT | Dependency graph differs from last snapshot | Abort and report |
+| NOTHING_TO_RELEASE | No version bump inferred from commits | Skip repo (not an error) |
+| LINT_FAILED | ruff/mypy CI gate fails | TIER_BLOCKED for downstream |
+| PYPI_TIMEOUT | Package not available on PyPI after timeout | Mark as PARTIAL |
+| TIER_BLOCKED | Upstream tier failed | Skip repo, continue with others |
+| GATE_REJECTED | Slack HIGH_RISK gate denied | Abort entire release |
+
+## ModelSkillResult
+
+```python
+class ModelSkillResult:
+    status: Literal["SUCCESS", "PARTIAL", "FAILED", "DRY_RUN"]
+    repos_succeeded: list[str]
+    repos_failed: list[str]
+    run_id: str
+```
+
+## Phase State Machine
+
+Each repo progresses through this phase state machine independently:
+
+```
+PLANNED → WORKTREE → BUMPED → PINNED → CHANGELOG → LOCKED
+       → LINT → COMMITTED → PUSHED → PR_CREATED → MERGED
+       → TAGGED → PUBLISHED → DONE
+```
+
+Phases: PLANNED, WORKTREE, BUMPED, PINNED, CHANGELOG, LOCKED, LINT, COMMITTED,
+PUSHED, PR_CREATED, MERGED, TAGGED, PUBLISHED, DONE.
+
+State is written atomically after each transition using a temp file + rename
+to guarantee crash-safe resume.
+
+## Idempotency
+
+All mutations are deduplicated on resume:
+
+| Operation | Idempotency Key |
+|-----------|----------------|
+| PR dedupe | Check `gh pr list --head <branch>` before creating |
+| Tag dedupe | Check `git tag -l <version>` before tagging |
+| Worktree reuse | Reuse existing worktree at `$OMNI_HOME/worktrees/<run_id>/<repo>` |
+
+## Cross References
+
+- **merge-sweep**: Used to verify merges succeeded and queues are clear
+- **pr-safety**: Validates PR is mergeable (no conflicts, no blocking reviews)
+- **release.yml**: GitHub Action triggered post-merge for PyPI publish
+- **auto-tag-reusable**: Reusable workflow for git tag + push
 
 ## Architecture
 
