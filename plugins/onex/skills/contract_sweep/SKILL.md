@@ -211,7 +211,7 @@ cross-contract references.
 
 ```bash
 # Compliance sweep (required fields, topic naming, node_type) via omnimarket node
-onex run node_contract_sweep -- [--repos <comma-separated>] [--dry-run]
+onex run node_contract_sweep -- [--dry-run]
 
 # Registration-only (default)
 uv run python -m omnibase_infra.verification.cli --registration-only --json
