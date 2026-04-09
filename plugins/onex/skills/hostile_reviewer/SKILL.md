@@ -150,7 +150,7 @@ This replaces the former `/code-review-sweep` skill.
 /hostile-reviewer --static                                        # Full scan all repos (first run = dry-run)
 /hostile-reviewer --static --dry-run                              # Report only
 /hostile-reviewer --static --ticket                               # Create Linear tickets for findings
-/hostile-reviewer --static --repos omniclaude,omnibase_core       # Scope to specific repos
+/hostile-reviewer --static --repos omniclaude,omniintelligence    # Scope to specific repos
 /hostile-reviewer --static --categories dead-code,stubs-shipped   # Scope to specific categories
 /hostile-reviewer --static --max-tickets 5                        # Lower ticket cap
 ```
