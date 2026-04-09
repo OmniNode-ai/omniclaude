@@ -25,6 +25,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--flag-false-positive <pattern>` | none | Write a pending_review suppression entry to $ONEX_STATE_DIR/review-suppressions.yml (exits immediately after writing) |
 | `--guided` | false | Interactive guided mode with step-by-step prompts |
 | `--path <dir>` | CWD | Path to the git worktree to review. Allows running from omni_home against any worktree. |
+| `--dry-run` | false | Log review decisions without making changes (no edits, no commits) |
 
 **Examples**:
 ```bash

@@ -1,7 +1,7 @@
 ---
 description: Org-wide coordinated release pipeline — bumps versions, pins cross-repo deps, creates PRs, merges, tags, and triggers PyPI publish across all OmniNode repos in dependency-tier order
 mode: full
-version: 1.3.0
+version: 2.0.0
 level: advanced
 debug: false
 category: workflow
@@ -17,633 +17,113 @@ author: OmniClaude Team
 composable: true
 args:
   - name: repos
-    description: "Repo names to release (positional, space-separated). Default: all repos in dependency graph"
+    description: "Repo names to release (space-separated). Default: all repos in dependency graph"
     required: false
   - name: --all
-    description: "Explicitly release all repos in dependency graph (equivalent to omitting repos)"
+    description: "Explicitly release all repos in dependency graph"
     required: false
   - name: --bump
-    description: "Override bump level for all repos: major | minor | patch. Default: inferred from conventional commits"
+    description: "Override bump level: major | minor | patch. Default: inferred from conventional commits"
     required: false
   - name: --dry-run
-    description: "Show plan table and exit without making any changes. Zero side effects."
+    description: "Show plan table and exit without making changes"
     required: false
   - name: --resume
-    description: "Resume a previously failed run. Value: <run_id> from a prior state file"
+    description: "Resume a previously failed run by run_id"
     required: false
   - name: --skip-pypi-wait
-    description: "Don't block on PyPI package availability after publish trigger"
-    required: false
-  - name: --pypi-timeout-minutes
-    description: "Max minutes to wait for PyPI propagation per repo (default: 10)"
-    required: false
-  - name: --run-id
-    description: "Override the auto-generated run ID. Useful for deterministic testing."
-    required: false
-  - name: --gate-attestation
-    description: "Pre-issued gate token to bypass Slack HIGH_RISK gate (format: <slack_ts>:<run_id>)"
+    description: "Don't block on PyPI package availability after publish"
     required: false
   - name: --autonomous
-    description: "Skip Slack HIGH_RISK gate and proceed without human approval. Intended for nightly autopilot runs."
+    description: "Skip Slack HIGH_RISK gate (intended for nightly autopilot runs)"
+    required: false
+  - name: --gate-attestation
+    description: "Pre-issued gate token to bypass Slack HIGH_RISK gate"
     required: false
   - name: --require-gate
-    description: "Force Slack HIGH_RISK gate even when --autonomous is set. Safety override."
+    description: "Force Slack HIGH_RISK gate even when --autonomous is set"
     required: false
 inputs:
   - name: repos
-    description: "list[str] — repo names to release; empty list means all repos in graph"
+    description: "list[str] — repo names to release; empty = all repos in graph"
   - name: bump_override
-    description: "str | None — major | minor | patch; None means infer from commits"
+    description: "str | None — major | minor | patch; None = infer from commits"
   - name: gate_attestation
     description: "str | None — pre-issued gate token for --gate-attestation mode"
 outputs:
   - name: skill_result
-    description: "ModelSkillResult with status: SUCCESS | PARTIAL | FAILED | DRY_RUN"
+    description: "ModelSkillResult with repos_succeeded, repos_failed, run_id"
 ---
 
 # Release
 
-## Overview
-
-Composable skill that orchestrates a coordinated multi-repo release across the entire OmniNode
-package ecosystem. Repos are released in strict dependency-tier order to ensure that downstream
-packages can pin exact versions of their upstream dependencies.
-
 **Announce at start:** "I'm using the release skill."
 
-**SAFETY INVARIANT**: Release is a HIGH_RISK action. Silence is NEVER consent for
-the gate. Explicit approval required unless `--gate-attestation=<token>` is passed with a
-valid pre-issued token, or `--autonomous` is set (for nightly autopilot runs where the
-entire close-out plan was pre-approved). Use `--require-gate` with `--autonomous` to
-force the gate for safety-critical autonomous runs.
-
-## Quick Start
+## Usage
 
 ```
-/release                                          # Release all repos (infer bumps)
-/release --dry-run                                # Show plan, don't execute
-/release omnibase_core omnibase_infra             # Release specific repos only
-/release --bump minor                             # Force minor bump for all
-/release --resume release-20260225-a3f7b2         # Resume a failed run
-/release --skip-pypi-wait                         # Don't wait for PyPI propagation
-/release --gate-attestation=1740312612.000100:release-20260225-a3f7b2  # Bypass gate
-/release --autonomous                                     # Nightly autopilot (skip gate)
-/release --autonomous --require-gate                      # Autonomous but force gate anyway
+/release omniclaude omnibase_core        # Release specific repos
+/release --all --bump patch              # All repos, patch bump
+/release --dry-run                       # Show plan, no changes
+/release --resume <run_id>               # Resume failed run
+/release --autonomous                    # Skip Slack gate (nightly)
+/release --gate-attestation <token>      # Pre-issued gate bypass
 ```
 
-## Arguments
+## Execution
 
-| Argument | Type | Default | Description |
-|----------|------|---------|-------------|
-| `repos` | `list[str]` | all | Repo names to release (positional, space-separated) |
-| `--all` | flag | — | Explicitly release all repos in dependency graph |
-| `--bump` | `major\|minor\|patch` | inferred | Override bump level for all repos |
-| `--dry-run` | flag | false | Show plan table and exit; zero side effects |
-| `--resume` | `<run_id>` | — | Resume a previously failed run from its state file |
-| `--skip-pypi-wait` | flag | false | Don't block on PyPI availability after publish |
-| `--pypi-timeout-minutes` | int | 10 | Max minutes to wait for PyPI propagation per repo |
-| `--run-id` | string | auto | Override the auto-generated run ID |
-| `--gate-attestation` | `<slack_ts>:<run_id>` | — | Pre-issued gate token to bypass Slack HIGH_RISK gate |
-| `--autonomous` | flag | false | Skip Slack HIGH_RISK gate; intended for nightly autopilot runs |
-| `--require-gate` | flag | false | Force Slack gate even when `--autonomous` is set |
+### Step 1 — Parse arguments
 
-## Authorization Passthrough (OMN-6469)
+- `repos` → space-separated repo names (default: full dependency graph)
+- `--bump` → version bump level (default: inferred from conventional commits)
+- `--dry-run` → show plan table, no writes
+- `--resume <run_id>` → resume from failed phase
+- `--autonomous` → skip Slack HIGH_RISK gate (autopilot only)
+- `--gate-attestation` → pre-issued Slack gate token
 
-When this skill is invoked by autopilot with `--autonomous`:
-
-1. The `--autonomous` flag indicates the parent autopilot run has been authorized
-2. `ONEX_RUN_ID` from the parent establishes the authorization chain
-3. Do not request additional human approval when `--autonomous` is set with a valid run ID
-4. The `--require-gate` flag overrides `--autonomous` if both are present (explicit opt-in)
-
-## Dependency Graph (Tier Order)
-
-Repos are released in strict tier order. Within a tier, repos are released sequentially
-(not in parallel) to avoid race conditions on shared CI runners.
-
-```
-Tier 0: omnibase_compat       (zero OmniNode deps — releases independently)
-Tier 1: omnibase_spi          (no internal deps)
-Tier 2: omnibase_core         (depends on: omnibase_spi)
-Tier 3: omnibase_infra        (depends on: omnibase_core, omnibase_spi)
-         omniintelligence      (depends on: omnibase_core, omnibase_spi)
-         omnimemory            (depends on: omnibase_core, omnibase_spi)
-Tier 4: omniclaude            (depends on: omnibase_core, omnibase_infra, omniintelligence)
-```
-
-**Drift guard**: Before execution, the skill verifies that every repo in `omni_home` that
-declares a `pyproject.toml` with OmniNode dependencies is present in the tier graph. If a
-repo is found that is not in the graph, the skill fails immediately with `GRAPH_DRIFT`.
-
-### Tier Execution Rule
-
-A tier N repo is only released after ALL tier N-1 repos have completed (including tag push
-and optional PyPI availability confirmation). This ensures that when a tier N repo pins
-`omnibase_core==X.Y.Z`, that version is actually published and installable.
-
-## Execution Algorithm
-
-```
-1. VALIDATE
-   - If --gate-attestation is set and token format is invalid → error immediately
-   - If --resume is set → load state file, validate run_id, skip to resume point
-
-2. SCAN (sequential, per tier order):
-   For each repo:
-     a. Find last git tag matching <repo>/vX.Y.Z pattern
-     b. Read pyproject.toml version (may differ from tag if manually bumped)
-     c. Use max(tag_version, pyproject_version) as base version
-        (prevents downgrades when pyproject was bumped without a tag)
-     d. Count commits since last tag
-     e. Infer bump level from conventional commit prefixes:
-        - feat:     → minor
-        - fix:      → patch
-        - BREAKING CHANGE / feat!: / fix!: → major
-        - No unreleased commits → skip (NOTHING_TO_RELEASE for this repo)
-     f. Apply --bump override if set (overrides inference for all repos)
-     g. Compute new version from base version + bump level
-
-3. DRIFT GUARD:
-   Compare scanned repo set against hardcoded tier graph.
-   If mismatch → fail with GRAPH_DRIFT error, print expected vs actual
-
-4. PLAN DISPLAY:
-   Render table:
-     repo | tier | current | new | bump | commits | status
-   Compute plan_hash = SHA256(JSON(plan))
-
-5. If --dry-run: print table, emit ModelSkillResult(status=DRY_RUN), exit
-
-6. GATE:
-   If --gate-attestation=<token>:
-     Validate token format, use for audit trail
-   Else if --autonomous AND NOT --require-gate:
-     Log autonomous mode, set gate_token to "autonomous:<run_id>"
-   Else:
-     Post HIGH_RISK Slack gate with plan table + plan_hash
-     Invoke slack_gate_poll.py to poll for reply
-     Parse reply (approve / reject)
-     If rejected or timeout: emit ModelSkillResult(status=FAILED), exit
-
-7. EXECUTE (sequential tiers, sequential repos within tier):
-   For each tier (1 → 4):
-     For each repo in tier:
-       Execute 12 sub-steps (see Per-Repo Release Sub-Steps below)
-       Update state file after each sub-step (atomic write)
-       On failure: mark repo as FAILED, halt remaining repos in this tier + all later tiers
-
-8. CLEANUP:
-   Remove worktrees
-   Archive state file to $ONEX_STATE_DIR/state/release/archive/
-
-9. SUMMARY:
-   Print summary table: repo | old → new | PR | tag | PyPI
-   Post summary to Slack (LOW_RISK, informational)
-
-10. EMIT ModelSkillResult
-```
-
-## Per-Repo Release Sub-Steps
-
-Each repo goes through 12 sequential sub-steps. State is persisted after each sub-step
-for resume support.
-
-| Step | Name | Description |
-|------|------|-------------|
-| 1 | WORKTREE | Create worktree at `omni_worktrees/release/<run_id>/<repo>/` on branch `release/<run_id>/<repo>` |
-| 2 | BUMP | Update `version` field in `pyproject.toml` to new version. For `omnibase_infra`: also slides `VERSION_MATRIX` bounds in `version_compatibility.py` and validates `Dockerfile.runtime` plugin pins (see Per-Repo Notes below) |
-| 3 | PIN | Update dependency pins in `pyproject.toml` to `==X.Y.Z` for any same-run deps that have already completed |
-| 4 | CHANGELOG | Generate CHANGELOG entry from conventional commits since last tag |
-| 5 | LOCK | Run `uv lock` to regenerate lockfile with new version + pins |
-| 6 | LINT | Run `pre-commit run --all-files`; fail repo on hook failure |
-| 7 | COMMIT | `git commit -am "release: <repo> vX.Y.Z [OMN-XXXX]"` |
-| 8 | PUSH | Push branch via `_lib/pr-safety/safe_push()` to `origin release/<run_id>/<repo>` |
-| 9 | PR | Create PR via `gh pr create` (dedupe check first); reference `pr-safety` helpers |
-| 10 | MERGE | Merge PR via `gh pr merge --squash` (reference `auto-merge` sub-skill) |
-| 11 | TAG | Create and push tag `<repo>/vX.Y.Z` (dedupe check: skip if tag exists) |
-| 12 | PUBLISH | Trigger `release.yml` / `auto-tag-reusable.yml` GitHub Action; optionally wait for PyPI availability |
-
-### Pin Policy
-
-**MVP**: Exact pins only (`==X.Y.Z`). When a tier N repo depends on a tier N-1 repo
-that was released in the same run, the dependency specifier is updated to `==<new_version>`.
-
-Example: If `omnibase_core` was bumped to `1.5.0` in this run, then `omnibase_infra`'s
-`pyproject.toml` dependency on `omnibase_core` becomes `omnibase_core==1.5.0`.
-
-### Per-Repo Notes: omnibase_infra BUMP Actions
-
-The `omnibase_infra` repo requires three additional automated actions during Sub-Step 2 (BUMP),
-after the `pyproject.toml` version is updated. These run inline as part of the BUMP sub-step
-(not as a separate phase). See `prompt.md` Sub-Step 2b for the authoritative implementation.
-
-#### 1. version_compatibility.py — VERSION_MATRIX slide
-
-**File**: `src/omnibase_infra/runtime/version_compatibility.py`
-
-The `VERSION_MATRIX` defines the runtime-compatible version window for upstream packages
-(`omnibase_core`, `omnibase_spi`). After each coordinated release, the bounds must slide
-to match the new upstream versions.
-
-**Rule**: For each upstream package released in the same run:
-- `min_version` → new upstream version (e.g. `0.22.0` → `0.23.0`)
-- `max_version` → next minor after min (e.g. `0.23.0` → `0.24.0`)
-
-**Idempotency**: If bounds already match the target values, the file is not modified.
-
-Example — coordinated release bumping `omnibase_core` from `0.22.x` to `0.23.0`:
-
-```python
-# Before:
-VersionConstraint(
-    package="omnibase_core",
-    min_version="0.22.0",
-    max_version="0.23.0",
-),
-
-# After (auto-updated by release skill):
-VersionConstraint(
-    package="omnibase_core",
-    min_version="0.23.0",
-    max_version="0.24.0",
-),
-```
-
-#### 2. Dockerfile.runtime — pin validation
-
-**File**: `docker/Dockerfile.runtime`
-
-Runtime plugin packages (`omniintelligence`, `omninode-claude`, `omninode-memory`) are
-pinned with explicit version numbers and sometimes installed with `--no-deps` workarounds.
-
-This step is **validation-only** — it does not auto-update Dockerfile pins. Plugin packages
-are released on a separate cadence and may intentionally lag behind. The skill logs:
-- The pinned version of each plugin package
-- A warning for any package installed with `--no-deps` (workaround indicator)
-
-**When a `--no-deps` warning appears**: A separate ticket should track updating that plugin
-pin to a version with compatible transitive dependencies, at which point the `--no-deps`
-flag can be removed.
-
-#### 3. `_FALLBACK_MATRIX` sync via `update_version_matrix.py`
-
-**Script**: `scripts/update_version_matrix.py`
-
-After bumping versions or pinning dependencies, runs `update_version_matrix.py` to
-regenerate the `_FALLBACK_MATRIX` in `version_compatibility.py` from `pyproject.toml`.
-The fallback is used by installed packages without a source tree. Without this step,
-the CI job `test_fallback_matrix_sync` fails on the release PR.
-
-### Smoke Test: Dry-Run Verification
-
-To verify the `omnibase_infra` BUMP auto-updates are applied correctly without making
-any real changes, run a dry-run release targeting only `omnibase_infra` and its upstreams:
+### Step 2 — Initialize node (contract verification)
 
 ```bash
-# Dry-run: show plan + validate BUMP actions without committing
-/release omnibase_spi omnibase_core omnibase_infra --dry-run
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_release \
+  [<repos>...] \
+  [--bump <level>] \
+  [--dry-run] \
+  [--autonomous]
 ```
 
-The dry-run output should show:
-- `omnibase_infra` included in the plan with a valid bump level
-- No errors from version_compatibility.py or Dockerfile.runtime validation
+Outputs `ModelReleaseStartCommand` JSON. Note: handler is a structural placeholder;
+full migration tracked in OMN-8004.
 
-To verify the actual file mutations in isolation (without the full release pipeline),
-create a temporary worktree and simulate the BUMP step manually:
+### Step 3 — Execute release phases
 
-```bash
-# 1. Create a test worktree from main
-git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree add \  # local-path-ok
-  /tmp/infra-bump-test -b test/bump-smoke-$(date +%s)
+Processes repos in dependency-tier order (tier 0 → tier N):
 
-# 2. Simulate: bump version_compatibility.py for omnibase_core 0.23.0 → 0.24.0
-python3 - <<'EOF'
-import re, sys
+1. **GATE**: Post Slack HIGH_RISK gate (unless `--autonomous` or `--gate-attestation`)
+2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__`
+3. **PIN**: Update cross-repo dependency pins in downstream repos
+4. **PR**: Create release PR per repo via `gh pr create`; enable auto-merge
+5. **MERGE**: Wait for CI + merge queue; confirm merged
+6. **TAG**: `git tag v{version}` + push; trigger PyPI publish workflow
+7. **WAIT**: Poll PyPI for package availability (unless `--skip-pypi-wait`)
+8. **VERIFY**: Confirm installed version matches released version
 
-vc_path = "/tmp/infra-bump-test/src/omnibase_infra/runtime/version_compatibility.py"
-with open(vc_path) as f:
-    content = f.read()
+### Step 4 — Report
 
-# Check current state
-print("Current VERSION_MATRIX entry for omnibase_core:")
-m = re.search(r'VersionConstraint\([^)]*package="omnibase_core"[^)]*\)', content, re.DOTALL)
-if m:
-    print(m.group(0))
-else:
-    print("  NOT FOUND")
-EOF
+Display release table: repo, old version, new version, PR, tag, PyPI status.
+Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/release.json`.
 
-# 3. Clean up test worktree
-git -C /Volumes/PRO-G40/Code/omni_home/omnibase_infra worktree remove /tmp/infra-bump-test --force  # local-path-ok
-```
+## Safety
 
-**Acceptance criteria** (Definition of Done):
-- `version_compatibility.py` bounds slide correctly for each upstream package in the run
-- `Dockerfile.runtime` pins are logged; `--no-deps` workarounds emit warnings
-- A full `--dry-run` of `omnibase_infra` completes without errors
-- No manual edits to these files are needed in the next coordinated release
+- Slack HIGH_RISK gate required by default (bypass only with `--autonomous` or `--gate-attestation`)
+- `--dry-run` produces zero side effects: no bumps, PRs, tags, or PyPI triggers
+- Resume support: state written after each phase; `--resume <run_id>` skips completed phases
 
-## ModelSkillResult
-
-Written to `$ONEX_STATE_DIR/skill-results/<context_id>/release.json`:
-
-```json
-{
-  "skill": "release",
-  "status": "SUCCESS | PARTIAL | FAILED | DRY_RUN",
-  "run_id": "release-20260225-a3f7b2",
-  "gate_token": "<slack_ts>:<run_id>",
-  "plan_hash": "sha256:abc123...",
-  "repos_attempted": 6,
-  "repos_succeeded": 5,
-  "repos_failed": 1,
-  "repos_skipped": 0,
-  "details": [
-    {
-      "repo": "omnibase_spi",
-      "tier": 1,
-      "old_version": "1.2.0",
-      "new_version": "1.2.1",
-      "bump": "patch",
-      "commits_since_tag": 3,
-      "pr_url": "https://github.com/OmniNode-ai/omnibase_spi/pull/42",
-      "pr_number": 42,
-      "tag": "omnibase_spi/v1.2.1",
-      "pypi_status": "available | pending | skipped | failed",
-      "phase": "DONE",
-      "error": null
-    },
-    {
-      "repo": "omnibase_infra",
-      "tier": 3,
-      "old_version": "2.0.0",
-      "new_version": "2.1.0",
-      "bump": "minor",
-      "commits_since_tag": 12,
-      "pr_url": null,
-      "pr_number": null,
-      "tag": null,
-      "pypi_status": null,
-      "phase": "LINT",
-      "error": "Pre-commit hook failed: ruff found 3 errors"
-    }
-  ]
-}
-```
-
-### Status Values
-
-| Status | Description |
-|--------|-------------|
-| `SUCCESS` | All targeted repos released successfully |
-| `PARTIAL` | Some repos released, some failed; released repos are tagged and published |
-| `FAILED` | Unrecoverable error before any repo completed (gate rejected, graph drift, etc.) |
-| `DRY_RUN` | Plan displayed, no changes made |
-
-## State Model
-
-### Run ID Generation
+## Architecture
 
 ```
-run_id = "release-<YYYYMMDD>-<short_hash>"
-
-where short_hash = sha256(sorted_repo_names + date)[:6]
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_release/ (structural placeholder)
+contract   -> node_release/contract.yaml
+migration  -> OMN-8004 (full handler implementation)
 ```
-
-The run ID is deterministic given the same repo set and date, enabling idempotent resume.
-Use `--run-id` to override for testing.
-
-### State File
-
-**Path**: `$ONEX_STATE_DIR/state/release/<run_id>.json`
-
-```json
-{
-  "run_id": "release-20260225-a3f7b2",
-  "started_at": "2026-02-25T14:00:00Z",
-  "updated_at": "2026-02-25T14:15:00Z",
-  "plan_hash": "sha256:abc123...",
-  "gate_token": "<slack_ts>:<run_id>",
-  "status": "in_progress | completed | failed | partial",
-  "repos": {
-    "omnibase_spi": {
-      "tier": 1,
-      "old_version": "1.2.0",
-      "new_version": "1.2.1",
-      "bump": "patch",
-      "phase": "DONE",
-      "phase_history": [
-        {"phase": "PLANNED", "at": "2026-02-25T14:00:00Z"},
-        {"phase": "WORKTREE", "at": "2026-02-25T14:01:00Z"},
-        {"phase": "DONE", "at": "2026-02-25T14:05:00Z"}
-      ],
-      "worktree_path": "/Volumes/PRO-G40/Code/omni_worktrees/release/release-20260225-a3f7b2/omnibase_spi",  # local-path-ok
-      "branch": "release/release-20260225-a3f7b2/omnibase_spi",
-      "pr_url": "https://github.com/OmniNode-ai/omnibase_spi/pull/42",
-      "pr_number": 42,
-      "tag": "omnibase_spi/v1.2.1",
-      "error": null
-    }
-  }
-}
-```
-
-### Phase State Machine
-
-Each repo transitions through phases in strict order. No phase may be skipped except via
-resume (which re-enters at the last incomplete phase).
-
-```
-PLANNED → WORKTREE → BUMPED → PINNED → CHANGELOG → LOCKED → LINT → COMMITTED → PUSHED → PR_CREATED → MERGED → TAGGED → PUBLISHED → DONE
-```
-
-**Phase transition rules**:
-- Forward-only: a repo never moves backwards in the state machine
-- On failure: phase is set to the failing phase, `error` is populated
-- On resume: execution restarts from the failing phase (not from PLANNED)
-- DONE is terminal: a repo in DONE is never re-processed
-
-### Resume Semantics
-
-When invoked with `--resume <run_id>`:
-
-1. Load state file from `$ONEX_STATE_DIR/state/release/<run_id>.json`
-2. Validate run_id matches
-3. For each repo in tier order:
-   - If phase == `DONE`: skip entirely
-   - If phase == any other value: restart from that phase
-   - If phase == `PLANNED`: start fresh (first run or pre-scan failure)
-4. Re-display the plan table (with completed repos marked)
-5. Re-post Slack gate (unless `--gate-attestation` provided)
-6. Execute remaining work
-
-**Resume does NOT re-run completed phases.** If `omnibase_spi` is in `DONE` state, it
-will not be re-scanned, re-bumped, or re-tagged. The state file is the source of truth.
-
-### Atomic Writes
-
-State file updates use the write-to-temp-then-rename pattern:
-
-```python
-import json, os, tempfile
-
-def atomic_write_state(state: dict, path: str) -> None:
-    """Write state file atomically to prevent corruption on crash."""
-    dir_name = os.path.dirname(path)
-    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(state, f, indent=2)
-        os.rename(tmp_path, path)
-    except Exception:
-        os.unlink(tmp_path)
-        raise
-```
-
-This ensures that a crash mid-write never produces a corrupt state file. The previous
-state file is always either the old version or the new version, never a partial write.
-
-## Idempotency Keys
-
-Every mutation has a corresponding idempotency check to make resume safe:
-
-| Mutation | Idempotency Key | Check |
-|----------|----------------|-------|
-| Create worktree | `release/<run_id>/<repo>` branch + path | If worktree path exists and branch matches, reuse |
-| Version bump | `pyproject.toml` version field | If version already matches target, skip |
-| Dependency pin | `pyproject.toml` dependency specifier | If pin already matches `==X.Y.Z`, skip |
-| CHANGELOG entry | Entry header with version string | If entry for version exists, skip |
-| uv lock | `uv.lock` content hash | Always re-run (cheap, ensures consistency) |
-| Pre-commit | Pre-commit output | Always re-run (cheap, ensures clean state) |
-| Git commit | Branch HEAD content | If HEAD message matches `release: <repo> vX.Y.Z`, skip |
-| Git push | Remote branch state | If remote branch exists and matches local HEAD, skip |
-| PR creation | Open PR with matching branch | `gh pr list --head <branch>` — if PR exists, reuse |
-| PR merge | PR state | If PR is already merged, skip |
-| Tag creation | Tag existence | `git tag -l <tag>` — if tag exists, skip push |
-| PyPI publish | GitHub Action trigger | Trigger is idempotent (re-trigger is safe); PyPI rejects duplicate versions |
-
-### Branch Naming Convention
-
-```
-release/<run_id>/<repo>
-
-Example: release/release-20260225-a3f7b2/omnibase_core
-```
-
-This naming:
-- Prevents collision with feature branches
-- Encodes the run_id for audit trail
-- Allows worktree reuse on resume (same branch name = same worktree)
-
-### Run Marker
-
-- State file existence at `$ONEX_STATE_DIR/state/release/<run_id>.json` = run in progress
-- On successful completion: state file moved to `$ONEX_STATE_DIR/state/release/archive/<run_id>.json`
-- On `--resume`: state file remains in active location until completion
-- Stale runs: if a state file is older than 24 hours and status is not `completed`, it
-  is considered stale. A new run for the same repos will warn but proceed (with a new run_id).
-
-## Error Table
-
-| Error | Code | Behavior | Recovery |
-|-------|------|----------|----------|
-| Graph drift (repo in omni_home not in tier graph) | `GRAPH_DRIFT` | Fail immediately, print expected vs actual repo set | Update tier graph in SKILL.md and prompt.md |
-| No unreleased commits for a repo | `NOTHING_TO_RELEASE` | Skip repo (not an error); reduce from plan | None needed |
-| Worktree already exists (wrong branch) | `WORKTREE_CONFLICT` | Fail repo; do not clobber existing worktree | Manually remove conflicting worktree |
-| Worktree dirty (uncommitted changes) | `WORKTREE_DIRTY` | Fail repo; do not proceed with dirty state | Clean or remove worktree, then `--resume` |
-| Fallback matrix sync failure | `FALLBACK_MATRIX_SYNC_FAILED` | Fail repo; `update_version_matrix.py` could not sync `_FALLBACK_MATRIX` | Fix script or pyproject.toml, then `--resume` |
-| Pre-commit hook failure | `LINT_FAILED` | Fail repo; remaining repos in same tier + later tiers blocked | Fix lint issues, then `--resume` |
-| `uv lock` failure | `LOCK_FAILED` | Fail repo; dependency resolution error | Fix dependency conflicts, then `--resume` |
-| PR creation failure | `PR_FAILED` | Fail repo; GitHub API error or branch protection issue | Check GitHub permissions, then `--resume` |
-| PR merge failure | `MERGE_FAILED` | Fail repo; merge conflict or CI failure on PR | Resolve conflict or fix CI, then `--resume` |
-| Merge queue timeout | `MERGE_QUEUE_TIMEOUT` | Fail repo; PR stuck in merge queue >30 min | Check queue status manually, then `--resume` |
-| Tag already exists (different commit) | `TAG_CONFLICT` | Fail repo; tag points to different commit than expected | Delete stale tag manually, then `--resume` |
-| PyPI timeout | `PYPI_TIMEOUT` | Fail repo; package not available after `--pypi-timeout-minutes` | Check PyPI status, then `--resume` or `--skip-pypi-wait` |
-| Mid-chain failure | `TIER_BLOCKED` | Remaining repos in current tier + all later tiers marked `BLOCKED` | Fix failing repo, then `--resume` |
-| Gate rejected | `GATE_REJECTED` | Fail entire run; no repos modified | Re-run with corrected plan |
-| Gate timeout | `GATE_TIMEOUT` | Fail entire run; silence never advances HIGH_RISK | Re-run or provide `--gate-attestation` |
-| Invalid `--gate-attestation` format | `INVALID_GATE_TOKEN` | Fail immediately; do not scan or execute | Provide valid token |
-| State file corrupt / unparseable | `STATE_CORRUPT` | Fail immediately; cannot resume | Delete state file and start fresh run |
-| State file not found (with `--resume`) | `STATE_NOT_FOUND` | Fail immediately; nothing to resume | Start fresh run without `--resume` |
-
-## Slack Gate Message Format
-
-```
-[HIGH_RISK] release — coordinated release of N repos
-
-Run: <run_id>
-Plan Hash: <plan_hash>
-
-RELEASE PLAN:
-  Tier 1:
-    omnibase_spi       1.2.0 → 1.2.1  (patch, 3 commits)
-  Tier 2:
-    omnibase_core      1.4.0 → 1.5.0  (minor, 8 commits)
-  Tier 3:
-    omnibase_infra     2.0.0 → 2.1.0  (minor, 12 commits)
-    omniintelligence   0.9.0 → 0.9.1  (patch, 2 commits)
-    omnimemory         0.3.0 → 0.3.1  (patch, 1 commit)
-  Tier 4:
-    omniclaude         0.3.0 → 0.4.0  (minor, 15 commits)
-
-SKIPPED (no unreleased commits):
-  (none)
-
-Commands:
-  approve            — execute full release plan
-  reject             — cancel entire release
-
-This is HIGH_RISK — silence will NOT auto-advance.
-```
-
-## Credential Resolution
-
-| Credential | Source | Purpose |
-|------------|--------|---------|
-| `SLACK_BOT_TOKEN` | `~/.omnibase/.env` | Slack gate posting |
-| `SLACK_CHANNEL_ID` | `~/.omnibase/.env` | Slack channel target |
-| `GITHUB_TOKEN` | `gh auth status` | PR creation, merge, tag push |
-| `PYPI_TOKEN` | GitHub Actions secrets | PyPI publish (via release.yml) |
-
-## Sub-skills Used
-
-- `slack-gate` (v2.0.0, OMN-2627) — HIGH_RISK gate with `chat.postMessage` + reply polling
-- `slack_gate_poll.py` — reply polling helper (part of `slack-gate` skill)
-- `pr-safety` helpers — PR creation guards and claim checks
-- `auto-merge` — PR merge execution (referenced for merge strategy)
-- `merge-sweep` — merge readiness predicate (referenced for merge checks)
-
-## Cross-references
-
-| Reference | Purpose |
-|-----------|---------|
-| `skills/merge-sweep/SKILL.md` | PR merge readiness predicate, merge method |
-| `skills/_lib/pr-safety/helpers.md` | PR creation guards, claim checks |
-| `.github/workflows/release.yml` | PyPI publish trigger (per-repo) |
-| `.github/workflows/auto-tag-reusable.yml` | Tag-based release flow |
-| `skills/slack-gate/` | HIGH_RISK gate implementation |
-
-## Changelog
-
-- **v1.3.0**: Add `_FALLBACK_MATRIX` sync step — run `update_version_matrix.py` after
-  version bump to keep `_FALLBACK_MATRIX` in sync with `pyproject.toml`, preventing
-  `test_fallback_matrix_sync` CI failure on release PRs.
-- **v1.2.0**: Fix version base computation — use `max(tag_version, pyproject_version)` to
-  prevent downgrades when `pyproject.toml` was bumped without cutting a release tag.
-  Also fix omniweb tech stack reference (Node.js/pnpm, not PHP).
-- **v1.1.0** (OMN-3207): omnibase_infra BUMP automation — auto-slide VERSION_MATRIX bounds
-  in `version_compatibility.py` and validate `Dockerfile.runtime` plugin pins as part of
-  Sub-Step 2 (BUMP). Adds Per-Repo Notes section and smoke test documentation.
-- **v1.0.0** (OMN-2805): Initial interface definition — arguments, dependency graph, error
-  table, ModelSkillResult schema, state model, idempotency keys.
-
-## See Also
-
-- `merge-sweep` skill — PR merge orchestration
-- `auto-merge` skill — single-PR merge execution
-- `slack-gate` skill — HIGH_RISK gate implementation
-- `pr-safety` helpers — PR creation and mutation guards
-- OMN-2805 — this ticket (interface definition)
-- OMN-2806 — prompt.md orchestration logic
-- OMN-2807 — node shell scaffold
-- OMN-2808 — verification and testing
