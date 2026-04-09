@@ -4,8 +4,19 @@
 # Topic manifest for omniclaude skill: merge-sweep
 # Source of truth for this skill's Kafka topics.
 # After initial generation, edit intentionally when skill topic requirements change.
+#
+# v4.0.0 (OMN-8088): Skill is now a thin trigger. It publishes to the
+# pr_lifecycle_orchestrator command topic and monitors completion events.
+# The legacy omniclaude-owned topics are retained for backward compatibility
+# but are no longer actively published by this skill.
 
 topics:
+  # Publish: trigger pr_lifecycle_orchestrator
+  - onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1
+  # Subscribe: monitor orchestrator completion
+  - onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1
+  - onex.evt.omnimarket.pr-lifecycle-orchestrator-failed.v1
+  # Legacy topics (retained for backward compat — no longer published by skill)
   - onex.cmd.omniclaude.merge-sweep.v1
   - onex.evt.omniclaude.merge-sweep-completed.v1
   - onex.evt.omniclaude.merge-sweep-failed.v1

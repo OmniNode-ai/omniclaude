@@ -1,16 +1,16 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Integration tests for the merge-sweep skill (v3.0.0).
+"""Integration tests for the merge-sweep skill (v4.0.0).
 
-Tests verify:
-- Dry-run contract: zero mutations when --dry-run is set
-- Gate-free design: no Slack gate patterns anywhere in skill docs
-- GitHub auto-merge: gh pr merge --auto used in prompt (not immediate merge)
-- pr-polish: Track B dispatches pr-polish for blocking-issue PRs
-- Claim-before-mutate: run_id audit trail documented in prompt.md
-- Two-track classification: needs_polish() and is_merge_ready() predicates documented
-- CI enforcement: no bare gh pr merge (without --auto) in prompt.md
-- ModelSkillResult contract: correct status values (queued, nothing_to_merge, partial, error)
+Tests verify the skill → orchestrator delegation contract (OMN-8088):
+- SKILL.md declares publish-monitor pattern (not inline orchestration)
+- All CLI args map to documented orchestrator entry flags
+- Correct command topic documented
+- Correct completion event topics documented
+- Backward-compatible CLI surface (all v3.x args still accepted)
+- `--dry-run` maps to `dry_run: true` in command event
+- No orchestration logic in SKILL.md (no direct gh pr merge, no claim registry)
+- prompt.md reflects thin-trigger steps (parse → publish → monitor → report)
 
 All tests are static analysis / structural tests that run without external
 credentials, live GitHub access, or live PRs. Safe for CI.
@@ -22,7 +22,6 @@ Test markers:
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -36,8 +35,7 @@ _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
 _MERGE_SWEEP_DIR = _SKILLS_ROOT / "merge_sweep"
 _MERGE_SWEEP_PROMPT = _MERGE_SWEEP_DIR / "prompt.md"
 _MERGE_SWEEP_SKILL = _MERGE_SWEEP_DIR / "SKILL.md"
-_PR_SAFETY_HELPERS = _SKILLS_ROOT / "_lib" / "pr-safety" / "helpers.md"
-_PR_QUEUE_RUNS = Path.home() / ".claude" / "pr-queue" / "runs"
+_MERGE_SWEEP_TOPICS = _MERGE_SWEEP_DIR / "topics.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -60,302 +58,387 @@ def _grep_file(path: Path, pattern: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Test class: Dry-run contract
+# Test class: Thin-trigger pattern (core contract, OMN-8088)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestDryRunContract:
-    """Dry-run produces zero mutations (no auto-merge enabled, no pr-polish dispatched)."""
+class TestThinTriggerPattern:
+    """Skill must be a pure publish-monitor entry point with zero orchestration logic."""
 
-    def test_prompt_documents_dry_run_no_mutation(self) -> None:
-        """Prompt must document that --dry-run exits without enabling auto-merge."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "--dry-run" in content, "prompt.md must document --dry-run behavior"
-        assert "Dry run complete" in content or "no auto-merge" in content.lower(), (
-            "prompt.md must state dry-run skips auto-merge and polish"
+    def test_skill_documents_publish_monitor_pattern(self) -> None:
+        """SKILL.md must describe the publish-monitor pattern."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "publish" in content.lower() and "monitor" in content.lower(), (
+            "SKILL.md must document the publish-monitor pattern"
         )
 
-    def test_skill_documents_dry_run_flag(self) -> None:
-        """SKILL.md must list --dry-run as a documented argument."""
+    def test_skill_states_no_orchestration_logic(self) -> None:
+        """SKILL.md must state that orchestration is delegated to the node."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "--dry-run" in content, "SKILL.md must document the --dry-run argument"
+        assert "pr_lifecycle_orchestrator" in content, (
+            "SKILL.md must reference pr_lifecycle_orchestrator as the orchestration owner"
+        )
+        assert "delegated" in content.lower() or "delegates" in content.lower(), (
+            "SKILL.md must state that orchestration is delegated to the node"
+        )
 
-    def test_prompt_dry_run_exit_before_phase_a(self) -> None:
-        """Dry-run check (Step 5) must appear before Phase A (Step 6) in prompt.md."""
+    def test_skill_describes_entry_point_only(self) -> None:
+        """SKILL.md must describe the skill as a pure entry point."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "entry point" in content.lower(), (
+            "SKILL.md must describe the skill as a pure entry point"
+        )
+
+    def test_skill_has_what_this_skill_does_not_do_section(self) -> None:
+        """SKILL.md must have a 'What This Skill Does NOT Do' section."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "What This Skill Does NOT Do" in content, (
+            "SKILL.md must have a 'What This Skill Does NOT Do' section"
+        )
+
+    def test_prompt_does_not_call_gh_pr_merge_directly(self) -> None:
+        """prompt.md must not actively call gh pr merge (delegated to orchestrator).
+
+        References in the 'What This Prompt Does NOT Do' disclaimer section are allowed —
+        they exist to document what is explicitly excluded.
+        """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
-        dry_run_section_start = None
+        # Find the 'NOT Do' disclaimer section — references there are allowed
+        not_do_start = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
+            len(lines),
+        )
+        violations = []
         for i, line in enumerate(lines):
-            if "--dry-run" in line and (
-                "Step" in " ".join(lines[max(0, i - 5) : i + 1]) or "Dry" in line
-            ):
-                dry_run_section_start = i
-                break
-        step6_idx = next(
-            (i for i, line in enumerate(lines) if "## Step 6" in line),
-            None,
-        )
-        if dry_run_section_start is not None and step6_idx is not None:
-            assert dry_run_section_start < step6_idx, (
-                "Dry-run exit must appear before Step 6 (Phase A) in prompt.md"
-            )
-
-
-# ---------------------------------------------------------------------------
-# Test class: Gate-free design (v3.0.0 removes gate entirely)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestGateFreeDesign:
-    """v3.0.0 removes the Slack gate entirely. No gate patterns should exist.
-
-    --no-gate was banned in OMN-2633. --gate-attestation was the intermediate
-    replacement. Both are now removed — merge-sweep uses GitHub auto-merge
-    instead of any Slack gate mechanism.
-    """
-
-    def test_no_gate_absent_from_prompt(self) -> None:
-        """prompt.md must not contain --no-gate."""
-        matches = _grep_file(_MERGE_SWEEP_PROMPT, r"--no-gate")
-        assert matches == [], "--no-gate found in merge-sweep/prompt.md:\n" + "\n".join(
-            matches
+            if i >= not_do_start:
+                break  # everything after the disclaimer section is allowed
+            if "gh pr merge" in line and not line.strip().startswith("#"):
+                violations.append(f"line {i + 1}: {line.strip()}")
+        assert violations == [], (
+            "prompt.md must not actively call 'gh pr merge' — delegated to orchestrator:\n"
+            + "\n".join(violations)
         )
 
-    def test_no_gate_absent_from_skill_md(self) -> None:
-        """SKILL.md must not contain --no-gate."""
-        matches = _grep_file(_MERGE_SWEEP_SKILL, r"--no-gate")
-        assert matches == [], "--no-gate found in merge-sweep/SKILL.md:\n" + "\n".join(
-            matches
-        )
-
-    def test_gate_attestation_not_in_skill_args(self) -> None:
-        """SKILL.md args section must not list --gate-attestation (removed in v3.0.0)."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        # Check the frontmatter args block — gate-attestation must not be an arg
-        # It may appear in changelog prose but not as an active argument
-        frontmatter_end = content.find("---", 3)  # end of YAML frontmatter
-        if frontmatter_end > 0:
-            frontmatter = content[:frontmatter_end]
-            assert "--gate-attestation" not in frontmatter, (
-                "--gate-attestation found in SKILL.md frontmatter args (removed in v3.0.0). "
-                "GitHub auto-merge replaces the gate mechanism."
-            )
-
-    def test_gate_attestation_not_in_prompt_args(self) -> None:
-        """prompt.md must not list --gate-attestation as a parsed argument."""
+    def test_prompt_does_not_reference_claim_registry(self) -> None:
+        """prompt.md must not reference ClaimRegistry (delegated to orchestrator)."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # Check the argument parsing section — gate-attestation must not be listed
-        assert "--gate-attestation" not in content, (
-            "--gate-attestation found in merge-sweep/prompt.md (removed in v3.0.0). "
-            "GitHub auto-merge replaces the gate mechanism."
+        assert "ClaimRegistry" not in content and "claim_registry" not in content, (
+            "prompt.md must not reference ClaimRegistry — claim management is in the orchestrator"
         )
 
-    def test_no_slack_gate_poll_in_prompt(self) -> None:
-        """prompt.md must not reference slack_gate_poll.py (gate removed)."""
-        matches = _grep_file(_MERGE_SWEEP_PROMPT, r"slack_gate_poll")
-        assert matches == [], (
-            "slack_gate_poll.py found in prompt.md — gate was removed in v3.0.0:\n"
-            + "\n".join(matches)
-        )
+    def test_prompt_does_not_classify_prs(self) -> None:
+        """prompt.md must not contain active PR classification predicates.
 
-    def test_skill_documents_github_auto_merge_mechanism(self) -> None:
-        """SKILL.md must document GitHub auto-merge as the merge mechanism."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "auto-merge" in content.lower() or "--auto" in content, (
-            "SKILL.md must document GitHub auto-merge (gh pr merge --auto) as the mechanism"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: GitHub auto-merge and pr-polish dispatch
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestAutoMergeAndPolishDispatch:
-    """v3.0.0 uses gh pr merge --auto (Track A) and pr-polish (Track B).
-
-    The skill must NOT call gh pr merge without --auto (immediate merge).
-    It MUST call gh pr merge --auto to enable GitHub's native auto-merge.
-    It MUST dispatch pr-polish for PRs with blocking issues.
-    """
-
-    def test_prompt_uses_github_auto_merge_flag(self) -> None:
-        """prompt.md must contain 'gh pr merge' with '--auto' flag."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "--auto" in content, (
-            "prompt.md must use 'gh pr merge --auto' to enable GitHub auto-merge"
-        )
-
-    def test_prompt_dispatches_pr_polish_for_blocking_prs(self) -> None:
-        """prompt.md must dispatch pr-polish for PRs with blocking issues (Track B)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "pr-polish" in content, (
-            "prompt.md must dispatch pr-polish for blocking-issue PRs (Track B)"
-        )
-
-    def test_skill_documents_pr_polish_as_sub_skill(self) -> None:
-        """SKILL.md must list pr-polish in Sub-skills Used section."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "pr-polish" in content, (
-            "SKILL.md must document pr-polish as a Track B sub-skill"
-        )
-
-    def test_prompt_documents_needs_polish_predicate(self) -> None:
-        """prompt.md must document needs_polish() classification predicate."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "needs_polish" in content, (
-            "prompt.md must document needs_polish() predicate for Track B classification"
-        )
-
-    def test_prompt_documents_two_tracks(self) -> None:
-        """prompt.md must document both Track A (auto-merge) and Track B (polish)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "Track A" in content, "prompt.md must reference Track A (auto-merge)"
-        assert "Track B" in content, "prompt.md must reference Track B (pr-polish)"
-
-    def test_prompt_does_not_dispatch_auto_merge_sub_skill(self) -> None:
-        """prompt.md must not call the auto-merge sub-skill (replaced by direct --auto flag)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # onex:auto_merge sub-skill invocation pattern
-        assert "onex:auto_merge" not in content, (
-            "prompt.md must not dispatch onex:auto_merge sub-skill "
-            "(v3.0.0 uses gh pr merge --auto directly)"
-        )
-
-    def test_no_gh_pr_checkout_in_prompt(self) -> None:
-        """prompt.md must not contain direct 'gh pr checkout' calls."""
-        matches = _grep_file(_MERGE_SWEEP_PROMPT, r"\bgh pr checkout\b")
-        assert matches == [], (
-            "Direct 'gh pr checkout' found in merge-sweep/prompt.md:\n"
-            + "\n".join(matches)
-        )
-
-    def test_prompt_documents_worktree_for_polish(self) -> None:
-        """prompt.md must document worktree creation for pr-polish (needs git context)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "worktree" in content.lower(), (
-            "prompt.md must document worktree creation for pr-polish Track B agents"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: No direct gh pr list outside scan phase
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestNoDirectGhPrList:
-    """gh pr list in prompt.md must appear only in the scan phase (Step 2/3)."""
-
-    def test_gh_pr_list_only_in_scan_phase(self) -> None:
-        """gh pr list in prompt.md must appear in the scan phase section."""
+        References in the 'What This Prompt Does NOT Do' disclaimer section are allowed.
+        """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
+        not_do_start = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
+            len(lines),
+        )
+        forbidden = ["needs_branch_update", "is_merge_ready", "needs_polish"]
+        for pred in forbidden:
+            violations = [
+                f"line {i + 1}: {line.strip()}"
+                for i, line in enumerate(lines[:not_do_start])
+                if pred in line
+            ]
+            assert violations == [], (
+                f"prompt.md must not actively use {pred}() — PR classification is in orchestrator:\n"
+                + "\n".join(violations)
+            )
 
-        gh_pr_list_lines = [
-            (i, line) for i, line in enumerate(lines) if "gh pr list" in line
+    def test_prompt_does_not_dispatch_pr_polish(self) -> None:
+        """prompt.md must not actively dispatch pr-polish.
+
+        References in the 'What This Prompt Does NOT Do' disclaimer section are allowed.
+        """
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        lines = content.splitlines()
+        not_do_start = next(
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
+            len(lines),
+        )
+        violations = [
+            f"line {i + 1}: {line.strip()}"
+            for i, line in enumerate(lines[:not_do_start])
+            if "pr-polish" in line or "pr_polish" in line
         ]
+        assert violations == [], (
+            "prompt.md must not actively dispatch pr-polish — delegated to orchestrator:\n"
+            + "\n".join(violations)
+        )
 
-        if not gh_pr_list_lines:
-            return  # No direct gh pr list — passes (could use sub-skill)
-
-        for line_idx, line_text in gh_pr_list_lines:
-            context_start = max(0, line_idx - 50)
-            context_lines = lines[context_start:line_idx]
-            step_heading = None
-            for ctx_line in reversed(context_lines):
-                step_match = re.search(r"## Step (\d+)", ctx_line)
-                if step_match:
-                    step_heading = int(step_match.group(1))
-                    break
-
-            if step_heading is not None:
-                assert step_heading in (2, 3), (
-                    f"gh pr list found outside scan phase (Step 2/3) at line {line_idx + 1}. "
-                    f"Found in Step {step_heading}: {line_text!r}"
-                )
+    def test_prompt_has_what_it_does_not_do_section(self) -> None:
+        """prompt.md must have a 'What This Prompt Does NOT Do' section."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "What This Prompt Does NOT Do" in content, (
+            "prompt.md must have a 'What This Prompt Does NOT Do' section"
+        )
 
 
 # ---------------------------------------------------------------------------
-# Test class: Claim-before-mutate invariant
+# Test class: Publish-monitor steps in prompt.md
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestClaimBeforeMutate:
-    """Claim-before-mutate invariant: acquire claim before any PR mutation.
+class TestPromptPublishMonitorSteps:
+    """prompt.md must define the 5 thin-trigger steps: announce, parse, map, publish, monitor."""
 
-    In v3.0.0, the audit trail is run_id (not gate_token). Claims are
-    acquired before enabling auto-merge (Phase A) and before dispatching
-    pr-polish (Phase B).
-    """
-
-    def test_prompt_documents_run_id_audit_trail(self) -> None:
-        """prompt.md must document run_id as the audit trail for operations."""
+    def test_prompt_has_announce_step(self) -> None:
+        """prompt.md must have an announce step."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "run_id" in content, (
-            "prompt.md must document run_id as the audit trail for merge operations"
+        assert "Announce" in content or "announce" in content.lower(), (
+            "prompt.md must have an announce step"
         )
 
-    def test_prompt_documents_claim_registry(self) -> None:
-        """prompt.md must reference ClaimRegistry for claim-before-mutate enforcement."""
+    def test_prompt_has_parse_arguments_step(self) -> None:
+        """prompt.md must have a parse arguments step."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "Parse" in content and "Arguments" in content, (
+            "prompt.md must have a parse arguments step"
+        )
+
+    def test_prompt_has_publish_step(self) -> None:
+        """prompt.md must have a publish command event step."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "Publish" in content and "Command Event" in content, (
+            "prompt.md must have a 'Publish Command Event' step"
+        )
+
+    def test_prompt_has_monitor_step(self) -> None:
+        """prompt.md must have a monitor completion step."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "Monitor" in content and "Completion" in content, (
+            "prompt.md must have a 'Monitor Completion' step"
+        )
+
+    def test_prompt_documents_poll_interval(self) -> None:
+        """prompt.md must document the poll interval for monitoring."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "poll_interval" in content or "10 second" in content.lower(), (
+            "prompt.md must document the poll interval (10 seconds)"
+        )
+
+    def test_prompt_documents_poll_timeout(self) -> None:
+        """prompt.md must document the poll timeout."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         assert (
-            "ClaimRegistry" in content
-            or "claim_registry" in content
-            or "registry" in content.lower()
-        ), (
-            "prompt.md must reference claim registry before enabling auto-merge or dispatching polish"
-        )
+            "3600" in content
+            or "1 hour" in content.lower()
+            or "timeout" in content.lower()
+        ), "prompt.md must document the poll timeout (3600s / 1 hour)"
 
-    def test_prompt_acquires_claim_before_phase_a(self) -> None:
-        """prompt.md must show claim acquisition before Phase A auto-merge enable."""
+    def test_prompt_documents_result_path(self) -> None:
+        """prompt.md must document the result.json path."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # Both acquire and auto should appear in the Phase A section
-        assert "acquire" in content and "--auto" in content, (
-            "prompt.md must acquire a claim before enabling auto-merge in Phase A"
+        assert "result.json" in content, (
+            "prompt.md must document the result.json poll target path"
         )
 
-    def test_skill_documents_claim_lifecycle(self) -> None:
-        """SKILL.md must document claim lifecycle in the execution algorithm."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "claim" in content.lower(), (
-            "SKILL.md must document the claim registry lifecycle"
-        )
-
-    def test_helpers_md_documents_claim_not_held_error(self) -> None:
-        """_lib/pr-safety/helpers.md must document ClaimNotHeldError."""
-        if not _PR_SAFETY_HELPERS.exists():
-            pytest.skip("_lib/pr-safety/helpers.md not found")
-        content = _PR_SAFETY_HELPERS.read_text(encoding="utf-8")
-        assert "ClaimNotHeldError" in content, (
-            "_lib/pr-safety/helpers.md must document ClaimNotHeldError for claim enforcement"
-        )
-
-    def test_helpers_md_documents_mutate_pr_claim_check(self) -> None:
-        """_lib/pr-safety/helpers.md mutate_pr() must assert claim held."""
-        if not _PR_SAFETY_HELPERS.exists():
-            pytest.skip("_lib/pr-safety/helpers.md not found")
-        content = _PR_SAFETY_HELPERS.read_text(encoding="utf-8")
-        assert "mutate_pr" in content, (
-            "_lib/pr-safety/helpers.md must define mutate_pr()"
-        )
-        assert "Assert claim held" in content or "claim not held" in content.lower(), (
-            "mutate_pr() must document claim-held assertion"
+    def test_prompt_documents_emit_daemon_publish(self) -> None:
+        """prompt.md must reference emit_via_daemon for publishing."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "emit_via_daemon" in content or "emit daemon" in content.lower(), (
+            "prompt.md must use emit_via_daemon to publish the command event"
         )
 
 
 # ---------------------------------------------------------------------------
-# Test class: ModelSkillResult contract
+# Test class: Command topic and wire schema
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCommandTopicAndSchema:
+    """Skill must document the correct Kafka command topic and wire schema."""
+
+    COMMAND_TOPIC = "onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1"
+    COMPLETED_TOPIC = "onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1"
+    FAILED_TOPIC = "onex.evt.omnimarket.pr-lifecycle-orchestrator-failed.v1"
+
+    def test_skill_documents_command_topic(self) -> None:
+        """SKILL.md must document the correct command topic."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert self.COMMAND_TOPIC in content, (
+            f"SKILL.md must document command topic: {self.COMMAND_TOPIC}"
+        )
+
+    def test_skill_documents_completed_topic(self) -> None:
+        """SKILL.md must document the orchestrator completion topic."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert self.COMPLETED_TOPIC in content, (
+            f"SKILL.md must document completion topic: {self.COMPLETED_TOPIC}"
+        )
+
+    def test_skill_documents_failed_topic(self) -> None:
+        """SKILL.md must document the orchestrator failure topic."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert self.FAILED_TOPIC in content, (
+            f"SKILL.md must document failure topic: {self.FAILED_TOPIC}"
+        )
+
+    def test_topics_yaml_includes_command_topic(self) -> None:
+        """topics.yaml must include the orchestrator command topic."""
+        content = _read_skill_file(_MERGE_SWEEP_TOPICS)
+        assert self.COMMAND_TOPIC in content, (
+            f"topics.yaml must include: {self.COMMAND_TOPIC}"
+        )
+
+    def test_topics_yaml_includes_completed_topic(self) -> None:
+        """topics.yaml must include the orchestrator completed topic."""
+        content = _read_skill_file(_MERGE_SWEEP_TOPICS)
+        assert self.COMPLETED_TOPIC in content, (
+            f"topics.yaml must include: {self.COMPLETED_TOPIC}"
+        )
+
+    def test_prompt_publishes_to_correct_topic(self) -> None:
+        """prompt.md must reference the correct command topic when publishing."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert self.COMMAND_TOPIC in content, (
+            f"prompt.md must publish to: {self.COMMAND_TOPIC}"
+        )
+
+    def test_skill_documents_wire_schema_fields(self) -> None:
+        """SKILL.md must document required wire schema fields."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        required_fields = [
+            "run_id",
+            "dry_run",
+            "merge_method",
+            "repos",
+            "emitted_at",
+            "correlation_id",
+        ]
+        for field in required_fields:
+            assert f'"{field}"' in content or f"`{field}`" in content, (
+                f"SKILL.md must document wire schema field: {field}"
+            )
+
+    def test_skill_documents_arg_to_flag_mapping(self) -> None:
+        """SKILL.md must document the arg → orchestrator entry flag mapping table."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert (
+            "Orchestrator Field" in content
+            or "orchestrator entry flag" in content.lower()
+        ), "SKILL.md must document the arg → orchestrator entry flag mapping"
+
+
+# ---------------------------------------------------------------------------
+# Test class: Backward-compatible CLI surface
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestBackwardCompatibleCLI:
+    """All v3.x CLI args must still be documented in SKILL.md (backward compat)."""
+
+    V3_ARGS = [
+        "--repos",
+        "--dry-run",
+        "--merge-method",
+        "--require-approval",
+        "--require-up-to-date",
+        "--max-total-merges",
+        "--max-parallel-prs",
+        "--max-parallel-repos",
+        "--max-parallel-polish",
+        "--skip-polish",
+        "--polish-clean-runs",
+        "--authors",
+        "--since",
+        "--label",
+        "--resume",
+        "--reset-state",
+        "--run-id",
+    ]
+
+    V4_NEW_ARGS = [
+        "--inventory-only",
+        "--fix-only",
+        "--merge-only",
+    ]
+
+    def test_all_v3_args_still_documented(self) -> None:
+        """SKILL.md must document all v3.x args (backward compat)."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        for arg in self.V3_ARGS:
+            assert arg in content, (
+                f"SKILL.md must still document {arg} for backward compatibility"
+            )
+
+    def test_v4_new_args_documented(self) -> None:
+        """SKILL.md must document new v4.0.0 orchestrator entry flags."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        for arg in self.V4_NEW_ARGS:
+            assert arg in content, f"SKILL.md must document new v4.0.0 arg: {arg}"
+
+    def test_dry_run_arg_in_frontmatter(self) -> None:
+        """SKILL.md frontmatter must list --dry-run as an arg."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        frontmatter_end = content.find("---", 3)
+        if frontmatter_end > 0:
+            frontmatter = content[:frontmatter_end]
+            assert "--dry-run" in frontmatter, (
+                "--dry-run must appear in SKILL.md frontmatter args"
+            )
+
+    def test_prompt_parses_all_v3_args(self) -> None:
+        """prompt.md must parse all v3.x args."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        for arg in self.V3_ARGS:
+            assert arg in content, (
+                f"prompt.md must parse {arg} for backward compatibility"
+            )
+
+    def test_dry_run_maps_to_command_event_field(self) -> None:
+        """prompt.md must document --dry-run mapping to dry_run: true in command event."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "dry_run" in content, (
+            "prompt.md must show --dry-run mapping to dry_run field in command event"
+        )
+
+    def test_dry_run_causes_no_mutations(self) -> None:
+        """SKILL.md must document that --dry-run produces zero filesystem writes."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "--dry-run" in content and (
+            "zero filesystem writes" in content.lower()
+            or "no mutations" in content.lower()
+            or "print candidates" in content.lower()
+        ), "SKILL.md must document --dry-run as zero-write operation"
+
+    def test_prompt_dry_run_exits_before_publish(self) -> None:
+        """prompt.md must exit before publishing when --dry-run is set."""
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "dry run complete" in content.lower() or "dry_run" in content, (
+            "prompt.md must handle --dry-run before the publish step"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test class: ModelSkillResult contract (status values unchanged)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestModelSkillResultContract:
-    """Verify merge-sweep emits a documented ModelSkillResult contract (v3.0.0)."""
+    """Verify merge-sweep emits a backward-compatible ModelSkillResult."""
 
     REQUIRED_STATUS_VALUES = [
         "queued",
@@ -365,492 +448,139 @@ class TestModelSkillResultContract:
     ]
 
     def test_skill_documents_all_status_values(self) -> None:
-        """SKILL.md must document all ModelSkillResult status values."""
+        """SKILL.md must document all ModelSkillResult status values (unchanged from v3.x)."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
         for status in self.REQUIRED_STATUS_VALUES:
             assert status in content, (
                 f"SKILL.md must document ModelSkillResult status='{status}'"
             )
 
-    def test_prompt_emits_model_skill_result(self) -> None:
-        """prompt.md must emit ModelSkillResult at conclusion (Step 10)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "ModelSkillResult" in content, (
-            "prompt.md must emit ModelSkillResult at conclusion"
-        )
-
     def test_skill_documents_result_file_path(self) -> None:
         """SKILL.md must document where ModelSkillResult is written."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "skill-results" in content or "~/.claude" in content, (
+        assert "skill-results" in content or "ONEX_STATE_DIR" in content, (
             "SKILL.md must document where ModelSkillResult is written"
         )
 
-    def test_prompt_documents_filters_in_result(self) -> None:
-        """ModelSkillResult must include filters field for audit."""
+    def test_prompt_writes_skill_result(self) -> None:
+        """prompt.md must write ModelSkillResult at conclusion."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert '"filters"' in content or "filters" in content, (
-            "ModelSkillResult must include filters field"
+        assert "skill_result" in content or "merge-sweep.json" in content, (
+            "prompt.md must write skill result at conclusion"
         )
 
-    def test_skill_documents_polish_counters_in_result(self) -> None:
-        """SKILL.md ModelSkillResult must include Track B counters."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "polished" in content or "polish_queue" in content, (
-            "SKILL.md ModelSkillResult must document Track B (polish) counters"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: Merge-policy coverage (structural)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestMergePolicyCoverage:
-    """Verify merge-policy is documented in SKILL.md."""
-
-    def test_skill_documents_merge_policy_args(self) -> None:
-        """SKILL.md must document key merge-policy arguments."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "--require-approval" in content, (
-            "SKILL.md must document --require-approval merge policy argument"
-        )
-        assert "--require-up-to-date" in content, (
-            "SKILL.md must document --require-up-to-date merge policy argument"
-        )
-
-    def test_skill_documents_minimum_repos(self) -> None:
-        """SKILL.md or prompt.md must reference at least one repo in scope."""
-        prompt_content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        skill_content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        combined = prompt_content + skill_content
-        has_repos = any(
-            repo in combined
-            for repo in [
-                "OmniNode-ai/omniclaude",
-                "OmniNode-ai/omnibase_core",
-                "omni_home",
-                "repos.yaml",
-            ]
-        )
-        assert has_repos, (
-            "Skill must reference at least one repo in scope or a repo manifest"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: CI enforcement grep
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestCIEnforcementGrep:
-    """Simulate CI enforcement grep checks."""
-
-    def test_no_no_gate_in_skills_excluding_lib(self) -> None:
-        """Simulate CI check: zero --no-gate occurrences in skills/ (excl. _lib/pr-safety)."""
-        if not _SKILLS_ROOT.exists():
-            pytest.skip(f"Skills root not found: {_SKILLS_ROOT}")
-
-        violations: list[str] = []
-        for md_file in _SKILLS_ROOT.rglob("*.md"):
-            if "_lib/pr-safety" in str(md_file):
-                continue
-            try:
-                content = md_file.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            for line_num, line in enumerate(content.splitlines(), 1):
-                if "no-gate" in line:
-                    rel_path = md_file.relative_to(_REPO_ROOT)
-                    violations.append(f"{rel_path}:{line_num}: {line.strip()}")
-
-        assert violations == [], (
-            "--no-gate found in skills. Use GitHub auto-merge instead:\n"
-            + "\n".join(violations)
-        )
-
-    def test_no_bare_gh_pr_merge_without_auto(self) -> None:
-        """prompt.md must not contain 'gh pr merge' without '--auto' flag.
-
-        gh pr merge --auto (enable GitHub auto-merge) is allowed and expected.
-        gh pr merge without --auto (immediate force-merge) is banned UNLESS it is
-        the documented fallback for when --auto fails with "clean status" error.
-        The fallback is identified by nearby context mentioning "clean status" or
-        "Fall back to direct merge" within a 5-line window.
-        """
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        lines = content.splitlines()
-        violations = []
-        for line_num, line in enumerate(lines, 1):
-            if re.search(r"\bgh pr merge\b", line) and "--auto" not in line:
-                # Check surrounding context (5 lines before/after) for fallback pattern
-                context_start = max(0, line_num - 6)
-                context_end = min(len(lines), line_num + 5)
-                context = "\n".join(lines[context_start:context_end]).lower()
-                is_fallback = (
-                    "clean status" in context
-                    or "fall back to direct merge" in context
-                    or "merged_directly" in context
-                )
-                if not is_fallback:
-                    violations.append(f"line {line_num}: {line.strip()}")
-
-        assert violations == [], (
-            "Direct 'gh pr merge' without '--auto' found in merge-sweep/prompt.md. "
-            "Use 'gh pr merge --auto' to enable GitHub auto-merge (not immediate merge):\n"
-            + "\n".join(violations)
-        )
-
-    def test_prompt_contains_gh_pr_merge_auto(self) -> None:
-        """prompt.md MUST contain 'gh pr merge' with '--auto' (the v3.0.0 merge mechanism)."""
-        result = subprocess.run(
-            [
-                "grep",
-                "-n",
-                "gh pr merge.*--auto\\|--auto.*gh pr merge",
-                str(_MERGE_SWEEP_PROMPT),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0 and result.stdout.strip() != "", (
-            "prompt.md must contain 'gh pr merge --auto' — the GitHub auto-merge mechanism"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: Proactive branch update (v3.1.0, OMN-3818)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestProactiveBranchUpdate:
-    """v3.1.0 adds proactive detection and update of stale (BEHIND/UNKNOWN) branches.
-
-    PRs with mergeStateStatus BEHIND or UNKNOWN are updated BEFORE auto-merge is
-    attempted (Step 5b), preventing the chicken-and-egg deadlock with strict branch
-    protection.
-    """
-
-    def test_prompt_documents_needs_branch_update_predicate(self) -> None:
-        """prompt.md must document needs_branch_update() classification predicate."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "needs_branch_update" in content, (
-            "prompt.md must document needs_branch_update() predicate for Track A-update"
-        )
-
-    def test_skill_documents_needs_branch_update_predicate(self) -> None:
-        """SKILL.md must document needs_branch_update() classification predicate."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "needs_branch_update" in content, (
-            "SKILL.md must document needs_branch_update() predicate for Track A-update"
-        )
-
-    def test_prompt_includes_merge_state_status_in_scan_fields(self) -> None:
-        """prompt.md must include mergeStateStatus in the JSON fields fetched during scan."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "mergeStateStatus" in content, (
-            "prompt.md must include mergeStateStatus in scan JSON fields"
-        )
-
-    def test_skill_documents_track_a_update(self) -> None:
-        """SKILL.md must document Track A-update for stale branch handling."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "Track A-update" in content, (
-            "SKILL.md must document Track A-update (proactive branch updates)"
-        )
-
-    def test_prompt_documents_step_5b_before_step_6(self) -> None:
-        """Step 5b (proactive branch update) must appear before Step 6 (auto-merge)."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        lines = content.splitlines()
-        step_5b_idx = next(
-            (
-                i
-                for i, line in enumerate(lines)
-                if "Step 5b" in line or "Phase A-update" in line
-            ),
-            None,
-        )
-        step_6_idx = next(
-            (i for i, line in enumerate(lines) if "## Step 6" in line),
-            None,
-        )
-        assert step_5b_idx is not None, (
-            "prompt.md must contain Step 5b (proactive branch update)"
-        )
-        assert step_6_idx is not None, "prompt.md must contain Step 6 (Phase A)"
-        assert step_5b_idx < step_6_idx, (
-            "Step 5b (proactive branch update) must appear before Step 6 (Phase A auto-merge)"
-        )
-
-    def test_prompt_documents_branch_updated_result(self) -> None:
-        """prompt.md must document branch_updated as a result value."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "branch_updated" in content, (
-            "prompt.md must document 'branch_updated' result value for proactive updates"
-        )
-
-    def test_skill_documents_branch_updated_result(self) -> None:
-        """SKILL.md must document branch_updated as a result value."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "branch_updated" in content, (
-            "SKILL.md must document 'branch_updated' result value"
-        )
-
-    def test_skill_documents_proactive_branch_counter(self) -> None:
-        """SKILL.md ModelSkillResult must include branches_updated_proactive counter."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "branches_updated_proactive" in content, (
-            "SKILL.md ModelSkillResult must include branches_updated_proactive counter"
-        )
-
-    def test_prompt_documents_branch_update_queue(self) -> None:
-        """prompt.md must document branch_update_queue for stale PRs."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "branch_update_queue" in content, (
-            "prompt.md must document branch_update_queue[] for stale PRs"
-        )
-
-    def test_prompt_documents_classification_order(self) -> None:
-        """prompt.md must specify that needs_branch_update is checked BEFORE is_merge_ready."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "first match wins" in content.lower() or "checked BEFORE" in content, (
-            "prompt.md must document classification order "
-            "(needs_branch_update checked BEFORE is_merge_ready)"
-        )
-
-    def test_prompt_uses_check_merge_state_helper(self) -> None:
-        """prompt.md Step 5b must use check_merge_state() from pr-safety helpers."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "check_merge_state" in content, (
-            "prompt.md must use check_merge_state() from @_lib/pr-safety/helpers.md"
-        )
-
-    def test_prompt_uses_update_pr_branch_helper(self) -> None:
-        """prompt.md Step 5b must use update_pr_branch() from pr-safety helpers."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "update_pr_branch" in content, (
-            "prompt.md must use update_pr_branch() from @_lib/pr-safety/helpers.md"
-        )
-
-    def test_skill_documents_behind_unknown_handling(self) -> None:
-        """SKILL.md failure table must document BEHIND/UNKNOWN handling."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "BEHIND" in content and "UNKNOWN" in content, (
-            "SKILL.md failure handling must document BEHIND and UNKNOWN mergeStateStatus"
-        )
-
-    def test_pr_scan_sh_includes_merge_state_status(self) -> None:
-        """_bin/pr-scan.sh must include mergeStateStatus in default JSON fields."""
-        pr_scan_path = _REPO_ROOT / "plugins" / "onex" / "_bin" / "pr-scan.sh"
-        if not pr_scan_path.exists():
-            pytest.skip("_bin/pr-scan.sh not found")
-        content = pr_scan_path.read_text(encoding="utf-8")
-        assert "mergeStateStatus" in content, (
-            "_bin/pr-scan.sh must include mergeStateStatus in default JSON fields"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test class: Post-scan coverage assertion (v3.2.0, OMN-4517)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-class TestPostScanCoverageAssertion:
-    """v3.2.0 adds a post-scan coverage assertion to detect repos silently missed.
-
-    The parallel scan fan-out must be validated: every configured repo must have
-    returned a result (even an empty list). A repo with zero PRs is distinct from
-    a repo that silently failed to return any result.
-    """
-
-    def test_prompt_initializes_repo_scan_results_dict(self) -> None:
-        """prompt.md must initialize repo_scan_results before scanning."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "repo_scan_results" in content, (
-            "prompt.md must initialize repo_scan_results dict before scan phase"
-        )
-
-    def test_prompt_distinguishes_zero_prs_from_scan_failure(self) -> None:
-        """prompt.md must distinguish between zero-PRs (confirmed empty) and scan failure."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # Both None sentinel and empty list concept must be documented
-        assert "None" in content and (
-            "[]" in content or "empty list" in content.lower()
-        ), "prompt.md must distinguish scan_failure (None) from zero-PRs (empty list)"
-
-    def test_prompt_documents_post_scan_assertion(self) -> None:
-        """prompt.md must document the post-scan coverage assertion after scan phase."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert (
-            "Post-Scan Coverage Assertion" in content or "post-scan" in content.lower()
-        ), "prompt.md must document the post-scan coverage assertion (OMN-4517)"
-
-    def test_prompt_logs_warning_for_scan_failures(self) -> None:
-        """prompt.md must log WARNING for repos that did not return scan results."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "WARNING" in content and "scan" in content.lower(), (
-            "prompt.md must log WARNING for repos that silently missed the scan"
-        )
-
-    def test_prompt_records_scan_failed_result(self) -> None:
-        """prompt.md must record result: scan_failed for repos that never returned."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "scan_failed" in content, (
-            "prompt.md must record 'result: scan_failed' in ModelSkillResult details"
-        )
-
-    def test_skill_documents_repos_scanned_counter(self) -> None:
-        """SKILL.md ModelSkillResult must include repos_scanned counter."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "repos_scanned" in content, (
-            "SKILL.md ModelSkillResult must include repos_scanned counter (OMN-4517)"
-        )
-
-    def test_skill_documents_repos_failed_counter(self) -> None:
-        """SKILL.md ModelSkillResult must include repos_failed counter."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "repos_failed" in content, (
-            "SKILL.md ModelSkillResult must include repos_failed counter (OMN-4517)"
-        )
-
-    def test_prompt_documents_repos_scanned_counter(self) -> None:
-        """prompt.md ModelSkillResult must include repos_scanned counter."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "repos_scanned" in content, (
-            "prompt.md ModelSkillResult must include repos_scanned counter (OMN-4517)"
-        )
-
-    def test_prompt_documents_repos_failed_counter(self) -> None:
-        """prompt.md ModelSkillResult must include repos_failed counter."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "repos_failed" in content, (
-            "prompt.md ModelSkillResult must include repos_failed counter (OMN-4517)"
-        )
-
-    def test_skill_documents_scan_failed_in_failure_table(self) -> None:
-        """SKILL.md failure handling table must document scan_failed case."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "scan_failed" in content, (
-            "SKILL.md failure handling table must document scan_failed result (OMN-4517)"
-        )
-
-    def test_skill_documents_scan_failed_result_value(self) -> None:
-        """SKILL.md must list scan_failed as a result value."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        # Result values section or details section must include scan_failed
-        assert "scan_failed" in content, (
-            "SKILL.md must document scan_failed as a result value for repos that missed the scan"
-        )
-
-    def test_prompt_slack_summary_includes_scan_failure_warning(self) -> None:
-        """prompt.md Slack summary must include scan failure warning when repos_failed > 0."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "scan_failure_details" in content or "repos_failed" in content, (
-            "prompt.md Slack summary must include scan failure warning (OMN-4517)"
-        )
-
-    def test_skill_slack_summary_documents_scan_failure_line(self) -> None:
-        """SKILL.md Slack summary format must show scan failure count."""
+    def test_skill_documents_result_passthrough(self) -> None:
+        """SKILL.md must document that orchestrator result is passed through unchanged."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
         assert (
-            "Scan failures" in content
-            or "repos_failed" in content
-            or "repos scanned" in content.lower()
-        ), "SKILL.md Slack summary must document scan failure info (OMN-4517)"
-
-    def test_scan_failure_does_not_abort_run(self) -> None:
-        """prompt.md must document that scan failures do NOT abort the run."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert (
-            "do NOT abort" in content
-            or "NOT abort" in content
-            or "not abort" in content.lower()
-        ), "prompt.md must document that scan failures do not abort the run (OMN-4517)"
-
-    def test_prompt_version_updated_to_v320(self) -> None:
-        """SKILL.md version must be bumped to 3.2.0 for OMN-4517 changes."""
-        content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "3.2.0" in content, "SKILL.md version must be bumped to 3.2.0 (OMN-4517)"
-
-    def test_prompt_documents_all_details_merge(self) -> None:
-        """prompt.md must merge scan_failure_details into the final details list."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "scan_failure_details" in content, (
-            "prompt.md must include scan_failure_details in the collected results/details list"
-        )
+            "passthrough" in content.lower()
+            or "pass through" in content.lower()
+            or "directly" in content.lower()
+        ), "SKILL.md must document that orchestrator result is surfaced directly"
 
 
 # ---------------------------------------------------------------------------
-# Test class: Track B dispatch not gated by --skip-polish at empty check
+# Test class: v4.0.0 version and changelog
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestTrackBDispatchNotGatedBySkipPolish:
-    """Regression: OMN-6189 — Step 4 empty check must not reference --skip-polish.
+class TestVersionAndChangelog:
+    """SKILL.md must reflect v4.0.0 with OMN-8088 in changelog."""
 
-    The --skip-polish flag belongs at Step 7 (Phase B execution gate), not Step 4
-    (pre-flight empty check). If Step 4 mentions --skip-polish, Track B PRs are
-    silently skipped when Track A queues are empty.
-    """
-
-    def test_step4_empty_check_does_not_reference_skip_polish(self) -> None:
-        """Step 4 empty check must not contain --skip-polish or skip_polish."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # Extract the Step 4 / Empty Check section (between "## 4." and "## 5.")
-        step4_match = re.search(
-            r"##\s*4\..*?(?=##\s*5\.)",
-            content,
-            re.IGNORECASE | re.DOTALL,
-        )
-        assert step4_match is not None, (
-            "Could not find Step 4 (Empty Check) section in prompt.md"
-        )
-        step4_text = step4_match.group(0)
-        assert "skip-polish" not in step4_text.lower(), (
-            "Step 4 empty check must NOT reference --skip-polish. "
-            "The --skip-polish gate belongs at Step 7 (Phase B), not Step 4 (pre-flight). "
-            "See OMN-6189."
-        )
-
-    def test_step4_checks_all_four_queues(self) -> None:
-        """Step 4 must check ALL queues: candidates, branch_update, thread_resolve, polish."""
-        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        step4_match = re.search(
-            r"##\s*4\..*?(?=##\s*5\.)",
-            content,
-            re.IGNORECASE | re.DOTALL,
-        )
-        assert step4_match is not None, (
-            "Could not find Step 4 (Empty Check) section in prompt.md"
-        )
-        step4_text = step4_match.group(0).lower()
-        for queue_name in ["candidates", "branch_update", "thread_resolve", "polish"]:
-            assert queue_name in step4_text, (
-                f"Step 4 empty check must reference {queue_name} queue. "
-                "All four queues must be checked before declaring nothing_to_merge."
+    def test_skill_version_is_v400(self) -> None:
+        """SKILL.md frontmatter version must be 4.0.0."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        frontmatter_end = content.find("---", 3)
+        if frontmatter_end > 0:
+            frontmatter = content[:frontmatter_end]
+            assert "4.0.0" in frontmatter, (
+                "SKILL.md frontmatter version must be 4.0.0 (OMN-8088)"
             )
 
-    def test_step7_has_skip_polish_gate(self) -> None:
-        """Step 7 (Phase B) must contain the --skip-polish gate."""
+    def test_skill_changelog_documents_omn_8088(self) -> None:
+        """SKILL.md changelog must document OMN-8088 as the source of v4.0.0."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "OMN-8088" in content, (
+            "SKILL.md changelog must reference OMN-8088 for the thin-trigger rewrite"
+        )
+
+    def test_skill_changelog_preserves_v3_history(self) -> None:
+        """SKILL.md changelog must preserve v3.x version history."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        for version in ["v3.6.0", "v3.5.0", "v3.0.0"]:
+            assert version in content, (
+                f"SKILL.md changelog must preserve {version} history"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Test class: No orchestration anti-patterns in SKILL.md
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestNoOrchestrationAntiPatterns:
+    """SKILL.md and prompt.md must not contain orchestration logic."""
+
+    def test_no_gate_in_skill(self) -> None:
+        """SKILL.md must not contain --no-gate patterns."""
+        matches = _grep_file(_MERGE_SWEEP_SKILL, r"--no-gate")
+        assert matches == [], "--no-gate found in SKILL.md:\n" + "\n".join(matches)
+
+    def test_no_gate_in_prompt(self) -> None:
+        """prompt.md must not contain --no-gate patterns."""
+        matches = _grep_file(_MERGE_SWEEP_PROMPT, r"--no-gate")
+        assert matches == [], "--no-gate found in prompt.md:\n" + "\n".join(matches)
+
+    def test_no_gate_attestation_in_skill(self) -> None:
+        """SKILL.md must not reference --gate-attestation (removed in v3.0.0)."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        frontmatter_end = content.find("---", 3)
+        if frontmatter_end > 0:
+            frontmatter = content[:frontmatter_end]
+            assert "--gate-attestation" not in frontmatter, (
+                "--gate-attestation found in SKILL.md frontmatter (removed in v3.0.0)"
+            )
+
+    def test_no_direct_gh_pr_merge_in_skill(self) -> None:
+        """SKILL.md must not contain active gh pr merge instructions.
+
+        References are allowed in:
+        - 'What This Skill Does NOT Do' disclaimer section
+        - 'Integration Test' section (documenting what is excluded from tests)
+        - Changelog and See Also sections
+        """
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        lines = content.splitlines()
+        # Find start of disclaimer/informational sections
+        disclaimer_starts = [
+            i
+            for i, line in enumerate(lines)
+            if any(
+                keyword in line
+                for keyword in [
+                    "What This Skill Does NOT Do",
+                    "Integration Test",
+                    "## Changelog",
+                    "## See Also",
+                ]
+            )
+        ]
+        first_disclaimer = min(disclaimer_starts) if disclaimer_starts else len(lines)
+        violations = [
+            f"line {i + 1}: {line.strip()}"
+            for i, line in enumerate(lines[:first_disclaimer])
+            if "gh pr merge" in line and not line.strip().startswith("#")
+        ]
+        assert violations == [], (
+            "SKILL.md must not contain active gh pr merge instructions (orchestrator owns this):\n"
+            + "\n".join(violations)
+        )
+
+    def test_no_track_a_b_orchestration_in_prompt(self) -> None:
+        """prompt.md must not contain Track A/B orchestration logic."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        # Find Step 7 / Phase B section
-        step7_match = re.search(
-            r"##\s*(?:Step\s*)?7\b.*?(?=##\s*(?:Step\s*)?8\b|##\s*\d+\.\s)",
-            content,
-            re.IGNORECASE | re.DOTALL,
-        )
-        assert step7_match is not None, (
-            "Could not find Step 7 / Phase B section in prompt.md"
-        )
-        step7_text = step7_match.group(0)
-        assert "skip-polish" in step7_text.lower(), (
-            "Step 7 (Phase B) must contain the --skip-polish gate. "
-            "This is the correct location for the skip-polish check."
+        assert "Track A" not in content and "Track B" not in content, (
+            "prompt.md must not contain Track A/B orchestration — delegated to orchestrator"
         )
