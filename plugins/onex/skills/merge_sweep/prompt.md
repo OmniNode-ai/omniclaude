@@ -174,6 +174,22 @@ The result passes through unchanged from the orchestrator. Expected status value
 | `result.json` parse error | Log error, emit `status: error, message: malformed result` |
 | `$ONEX_STATE_DIR` not set | Log error, exit immediately |
 
+## Branch Protection Drift Diagnostic
+
+When a PR has BLOCKED merge state but all CI checks are green, this signals
+branch_protection drift: the repo's required status checks have diverged from
+what's configured in `required-checks.yaml`.
+
+If the orchestrator reports a BLOCKED + green PR in its result, surface this diagnostic:
+
+```bash
+python scripts/audit-branch-protection.py --repo <repo> --pr <N>
+```
+
+The `audit-branch-protection` script identifies which required checks are missing
+from the PR's check suite vs. the branch protection configuration, enabling targeted
+remediation without blocking the sweep.
+
 ---
 
 ## What This Prompt Does NOT Do
