@@ -1,23 +1,40 @@
 # contract_sweep prompt
 
-You are executing the **contract-sweep** skill. This skill wraps the check-drift CLI from
-`onex_change_control` to scan all repos for drifted contracts and stale Kafka boundaries.
+You are executing the **contract-sweep** skill. This skill supports three modes:
+- **drift** (default): static cross-repo contract drift detection
+- **runtime**: live runtime contract compliance verification
+- **full**: both drift and runtime sequentially
 
 ## Announce
 
-Say: "I'm using the contract-sweep skill to detect contract drift and stale boundaries across all repos."
+Say: "I'm using the contract-sweep skill to [perform drift detection / verify runtime compliance / run full contract sweep]."
 
 ## Parse arguments
 
 Extract from `$ARGUMENTS`:
 
+- `--drift` or `--mode drift` -- Run drift mode only (default if no mode specified)
+- `--runtime` or `--mode runtime` -- Run runtime mode only
+- `--full` or `--mode full` -- Run both drift and runtime modes sequentially
+
+Drift-mode-only args:
 - `--repos <comma-list>` -- Repos to scan (default: all 8)
 - `--dry-run` -- Print findings only, no ticket creation
 - `--severity-threshold <BREAKING|ADDITIVE|NON_BREAKING>` -- Min severity for tickets (default: BREAKING)
 - `--sensitivity <STRICT|STANDARD|LAX>` -- Drift sensitivity (default: STANDARD)
 - `--check-boundaries <true|false>` -- Validate Kafka boundary parity (default: true)
 
-**Repo list** (hardcoded, scan all unless `--repos` overrides):
+Runtime-mode-only args:
+- `--all` -- Run full 52-contract verification (default: registration-only)
+
+**Mode resolution** (first match wins):
+1. `--full` → mode = full
+2. `--runtime` → mode = runtime
+3. `--drift` → mode = drift
+4. `--mode <value>` → mode = <value>
+5. No mode flag → mode = drift
+
+**Repo list** (hardcoded for drift mode, scan all unless `--repos` overrides):
 ```
 omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
@@ -26,7 +43,13 @@ omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninod
 
 **Change control repo**: `$OMNI_HOME/onex_change_control`  <!-- local-path-ok -->
 
-## Preamble: Pull bare clones
+---
+
+## DRIFT MODE
+
+Run when mode is `drift` or `full`.
+
+### Preamble: Pull bare clones
 
 Before scanning, pull all bare clones to ensure findings reflect the latest `main`:
 
@@ -38,7 +61,7 @@ If `pull-all.sh` exits non-zero, **abort the sweep immediately** with an error m
 explaining that stale clones may produce ghost findings. Do not silently continue with
 stale data.
 
-## Phase 1: Contract discovery
+### Phase 1: Contract discovery
 
 For each repo, discover all contract files from the `main` branch:
 
@@ -48,7 +71,7 @@ git -C $OMNI_HOME/<repo> ls-tree -r main --name-only | grep -E '(contract|handle
 
 Build a list of `(repo, path)` pairs. Record the total count.
 
-## Phase 2: Drift detection via check-drift CLI
+### Phase 2: Drift detection via check-drift CLI
 
 **Note**: All commands use `uv run python3` if `uv` is available in the
 `onex_change_control` repo; otherwise fall back to `python3` directly.
@@ -80,7 +103,7 @@ note it in the report).
 
 For repos where drift is detected (exit code 1), proceed to Phase 3 for field-level analysis.
 
-## Phase 3: Field-level drift analysis
+### Phase 3: Field-level drift analysis
 
 For each drifted contract, perform detailed field-level analysis. Read the contract content
 from the repo and compare against any pinned baseline.
@@ -121,7 +144,7 @@ Apply the configured `--sensitivity`:
 - STANDARD: surface BREAKING + ADDITIVE
 - LAX: surface BREAKING only
 
-## Phase 4: Boundary staleness check
+### Phase 4: Boundary staleness check
 
 If `--check-boundaries` is true (default), validate the Kafka boundary manifest:
 
@@ -157,13 +180,13 @@ Record all stale boundaries with their specific failure reason.
    `onex.evt.*` naming convention but are NOT declared in `kafka_boundaries.yaml`.
    Each undeclared topic is recorded as an `undeclared_boundary` finding (MAJOR).
 
-## Phase 5: Triage and report
+### Phase 5: Triage and report (drift)
 
-### Build findings list
+#### Build findings list
 
 Combine drift findings (Phase 3) and boundary findings (Phase 4) into a unified report.
 
-### Write report
+#### Write report
 
 Create `$ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml` with this schema:
 
@@ -212,7 +235,7 @@ overall_status: "<clean|drifted|breaking>"
 tickets_created: []
 ```
 
-### Print summary
+#### Print summary
 
 ```
 Contract Drift Sweep Results
@@ -235,19 +258,19 @@ Overall status: <clean|drifted|breaking>
 Report: $ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml
 ```
 
-### Status determination
+#### Status determination
 
 - `clean` -- No drift detected, all boundaries valid
 - `drifted` -- ADDITIVE or NON_BREAKING drift only, no BREAKING drift, no stale boundaries
 - `breaking` -- Any BREAKING drift or any stale boundary found
 
-## Phase 6: Ticket creation
+### Phase 6: Ticket creation (drift)
 
 If `--dry-run` is set, skip this phase entirely. Print: "Dry run -- skipping ticket creation."
 
 Otherwise, for each finding above `--severity-threshold`:
 
-### Ticket dedup
+#### Ticket dedup
 
 Ticket identity is keyed by `(repo, contract_path, finding_type)`.
 
@@ -257,7 +280,7 @@ Before creating a ticket:
 3. If found but closed -> create a new ticket referencing the closed one
 4. If not found -> create a new ticket
 
-### Drift ticket format
+#### Drift ticket format
 
 ```
 Title: [contract-drift] BREAKING drift in <repo>/<path> [OMN-6725]
@@ -283,7 +306,7 @@ Update the pinned snapshot or revert the contract change.
 Detected by contract-sweep skill run <run-id>.
 ```
 
-### Boundary ticket format
+#### Boundary ticket format
 
 ```
 Title: [boundary-stale] <topic_name> boundary broken [OMN-6725]
@@ -305,7 +328,7 @@ Update kafka_boundaries.yaml or restore the missing file/pattern.
 Detected by contract-sweep skill run <run-id>.
 ```
 
-### Priority mapping
+#### Priority mapping
 
 | Finding Type | Linear Priority |
 |-------------|----------------|
@@ -314,17 +337,131 @@ Detected by contract-sweep skill run <run-id>.
 | ADDITIVE drift | 2 (High) |
 | NON_BREAKING drift | 3 (Medium) |
 
+---
+
+## RUNTIME MODE
+
+Run when mode is `runtime` or `full`.
+
+### Step 1: Execute verification CLI
+
+```bash
+# Registration-only (default)
+uv run python -m omnibase_infra.verification.cli --registration-only --json \
+  --output-path "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"
+
+# Full 52-contract verification (when --all is passed)
+uv run python -m omnibase_infra.verification.cli --json \
+  --output-path "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"
+```
+
+Where `<run_id>` is the current `ONEX_RUN_ID` or a timestamp-based fallback
+(`contract-sweep-<YYYYMMDD-HHMMSS>`).
+
+### Step 2: Handle exit code
+
+**Exit 0 (PASS):**
+
+Print summary:
+```
+CONTRACT_VERIFY: PASS (N checks passed)
+```
+
+No further action required. If this is the second consecutive PASS and there are
+open failure tickets from prior runs, trigger sustained-pass auto-close.
+
+**Exit 1 (FAIL):**
+
+Print failure summary:
+```
+CONTRACT_VERIFY: FAIL
+  - <contract_name>: <check_type> FAIL — <reason>
+  - <contract_name>: <check_type> FAIL — <reason>
+```
+
+Route to `auto_ticket_from_findings` with structured findings:
+
+```
+Agent(
+  subagent_type="onex:polymorphic-agent",
+  description="Create tickets from contract-verify failures",
+  prompt="Run auto_ticket_from_findings with the following findings: <findings_json>.
+    Source: contract-verify. Dedup on contract_name:check_type.
+    Do NOT create tickets for QUARANTINE results."
+)
+```
+
+Each failing check produces a finding:
+```json
+{
+  "source": "contract-verify",
+  "contract_name": "<contract_name>",
+  "check_type": "<check_type>",
+  "severity": "major",
+  "title": "[contract-verify] <contract_name>: <check_type> FAIL",
+  "description": "<detailed failure reason from CLI output>",
+  "dedup_key": "<contract_name>:<check_type>"
+}
+```
+
+If `--dry-run` is set, print failures but skip ticket creation.
+
+**Exit 2 (QUARANTINE):**
+
+Print quarantine warning:
+```
+CONTRACT_VERIFY: QUARANTINE — <reason>
+```
+
+Do NOT create tickets. Quarantine means verification infrastructure could not run
+(e.g., database unreachable, contract files missing). This is an operational issue,
+not a contract compliance failure.
+
+### Step 3: Sustained PASS auto-close
+
+When runtime produces PASS for 2 consecutive runs:
+- Query open tickets with label `contract-verify` matching the now-passing checks
+- Auto-close with comment: `Sustained PASS across 2 consecutive runs. Auto-closing.`
+- Track run history via report files in `$ONEX_STATE_DIR/contract-sweep/`
+
+---
+
+## FULL MODE
+
+Run when mode is `full`.
+
+Execute drift mode (Phases 1-6) first, then runtime mode (Steps 1-3).
+
+Print a combined summary at the end:
+
+```
+=== contract-sweep: FULL MODE ===
+
+[DRIFT] Overall status: <clean|drifted|breaking>
+[RUNTIME] CONTRACT_VERIFY: <PASS|FAIL|QUARANTINE>
+
+Combined status: <CLEAN|WARNINGS|FAILURES>
+```
+
+Combined status:
+- `CLEAN` -- drift clean AND runtime PASS
+- `WARNINGS` -- drift drifted (no BREAKING) AND/OR runtime QUARANTINE
+- `FAILURES` -- any BREAKING drift OR runtime FAIL
+
+---
+
 ## Error handling
 
-- If `check_contract_drift.py` is not found at the expected path: abort with error
+- If `check_contract_drift.py` is not found at the expected path: abort drift mode with error
 - If a repo is not found at `$OMNI_HOME/<repo>`: skip that repo, record in report as `repo_not_found`
 - If `kafka_boundaries.yaml` is not found: skip boundary checks, warn in output
 - If YAML parsing fails for a contract: record as an ERROR finding (unparseable contract)
 - If `uv` is not available: fall back to `python3` directly
+- If `omnibase_infra.verification.cli` is not found: abort runtime mode with error
 
 ## Examples
 
-### Clean sweep (no drift)
+### Drift mode — clean sweep
 
 ```
 Contract Drift Sweep Results
@@ -347,34 +484,19 @@ Overall status: clean
 Report: $ONEX_STATE_DIR/contract-sweep/20260326-143000/report.yaml
 ```
 
-### Breaking drift found
+### Runtime mode — PASS
 
 ```
-Contract Drift Sweep Results
-=============================
-Repos scanned: 8
-Total contracts: 47
-Sensitivity: STANDARD
+CONTRACT_VERIFY: PASS (52 checks passed)
+```
 
-Drift findings:
-  BREAKING:     2
-  ADDITIVE:     3
-  NON_BREAKING: 0
+### Full mode — CLEAN
 
-  BREAKING: omnibase_core/src/omnibase_core/nodes/node_example/contract.yaml
-    - MODIFIED input_schema.type: 'string' -> 'integer'
-    - REMOVED required.validation_level
+```
+=== contract-sweep: FULL MODE ===
 
-  BREAKING: omniclaude/src/omniclaude/hooks/contracts/session_started.yaml
-    - REMOVED published_events.session_started.fields.session_type
+[DRIFT] Overall status: clean
+[RUNTIME] CONTRACT_VERIFY: PASS (52 checks passed)
 
-Boundary findings:
-  Stale:      1
-
-  STALE: onex.evt.omniclaude.prompt-submitted.v1
-    Producer file missing: src/omniclaude/hooks/topics_v2.py (omniclaude)
-
-Overall status: breaking
-Report: $ONEX_STATE_DIR/contract-sweep/20260326-143000/report.yaml
-Tickets created: 3 (2 drift, 1 boundary)
+Combined status: CLEAN
 ```
