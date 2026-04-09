@@ -28,7 +28,7 @@ chain health, data flow health, runtime wiring, dashboard data, cost measurement
 applies freshness overrides, and computes the overall status.
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd $OMNI_HOME/omnimarket
 
 # Build argument list from parsed flags
 ARGS=""
