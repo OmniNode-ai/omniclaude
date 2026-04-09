@@ -4,13 +4,13 @@
 # ONEX Agent Registry - Dynamic Role System
 # Version: 1.0.0
 # Purpose: Centralized registry for all agent identities and capabilities
-# Integration: agent-polymorphic-agent (Polly) dynamic transformation system
+# Integration: agent routing and dynamic transformation system
 
 schema_version: "1.0.0"
 mode: full
 agent_type: "registry"
 mode: "full"
-total_agents: 52
+total_agents: 51
 registry_type: "dynamic_role_system"
 last_updated: "2025-11-10"
 
@@ -20,7 +20,7 @@ agent_identity:
   color: "gray"
 
 agent_philosophy:
-  core_responsibility: "Provide centralized agent identity resolution and dynamic role transformation for the polymorphic agent system"
+  core_responsibility: "Provide centralized agent identity resolution and dynamic role transformation for the agent routing system"
 
 activation_patterns:
   explicit_triggers:
@@ -53,8 +53,7 @@ intelligence_integration: {}
 # Registry Metadata
 registry_info:
   purpose: "Centralized agent identity registry for dynamic role assumption"
-  integration_agent: "agent-polymorphic-agent"
-  legacy_integration_agent: "agent-workflow-coordinator"  # Backward compatibility
+  integration_agent: "agent-registry"
   context_reduction: "75% reduction from individual .md files"
   performance_target: "<0.5ms agent identity resolution"
 
@@ -82,7 +81,7 @@ categories:
 
   coordination:
     description: "Project and workflow coordination agents"
-    count: 7
+    count: 6
     priority: "high"
 
   documentation:
@@ -308,21 +307,6 @@ agents:
     domain_context: "workflow_coordination"
     specialization_level: "expert"
 
-  polymorphic-agent:
-    name: "polymorphic-agent"
-    title: "Polymorphic Agent (Polly)"
-    description: "Multi-agent workflow coordination with polymorphic role assumption and intelligent routing for ONEX development. Dynamic transformation agent also known as Polly, poly, or workflow coordinator."
-    category: "coordination"
-    color: "purple"
-    task_agent_type: "polymorphic_agent"
-    definition_path: "${CLAUDE_PLUGIN_ROOT}/onex/agents/configs/polymorphic-agent.yaml"
-    priority: "high"
-    capabilities: ["workflow_orchestration", "agent_coordination", "role_assumption", "multi_agent_routing", "parallel_execution", "dynamic_transformation", "polymorphic_transformation"]
-    activation_triggers: ["polly", "poly", "spawn poly", "spawn polly", "polymorphic", "polymorphic agent", "workflow coordinator", "coordinate", "orchestrate workflow", "multi-agent", "workflow orchestration", "agent coordination", "dispatch for polly", "dispatch 4 pollys"]
-    aliases: ["Polly", "poly", "polly", "pollys", "agent-workflow-coordinator", "workflow-coordinator", "onex-coordinator"]
-    domain_context: "workflow_coordination"
-    specialization_level: "expert"
-
   python-fastapi-expert:
     name: "agent-python-fastapi-expert"
     title: "Python FastAPI Expert Specialist"
@@ -409,12 +393,9 @@ agents:
 
 # Dynamic Transformation Configuration
 transformation_config:
-  base_agent: "agent-polymorphic-agent"
-  legacy_base_agent: "agent-workflow-coordinator"  # Backward compatibility
   transformation_method: "identity_assumption"
   context_inheritance: true
   capability_switching: true
-  performance_target_ms: 500
 
   transformation_steps:
     1: "Parse agent identity request from user input"
@@ -431,8 +412,6 @@ claude_skills_references:
 
 # Integration Points
 integration:
-  polymorphic_agent: "Enhanced with registry-based identity resolution and dynamic transformation"
-  workflow_coordinator: "Legacy name maintained for backward compatibility"
   framework_yaml: "Full integration with existing YAML framework"
   onex_compliance: "All agents maintain ONEX standards and patterns"
   intelligence_system: "Quality & Performance Intelligence integration"

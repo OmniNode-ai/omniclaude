@@ -237,7 +237,7 @@ class TestAgentRouterRegression:
     def test_fallback_entries(
         self, router: AgentRouter, corpus_entries: list[dict[str, Any]]
     ) -> None:
-        """Verify fallback entries correctly fall through to polymorphic-agent."""
+        """Verify fallback entries correctly fall through to default."""
         fallback_entries = [
             e
             for e in corpus_entries
@@ -261,7 +261,7 @@ class TestAgentRouterRegression:
     def test_context_filter_entries(
         self, router: AgentRouter, corpus_entries: list[dict[str, Any]]
     ) -> None:
-        """Verify context filtering works correctly for polymorphic-agent edge cases."""
+        """Verify context filtering works correctly for agent routing edge cases."""
         context_entries = [
             e for e in corpus_entries if e["category"] == "context_filter"
         ]
@@ -444,17 +444,12 @@ class TestRouteViaEventsIntegration:
             f"expected {expected_agent}, got {result['selected_agent']}"
         )
 
-    def test_explicit_agent_via_wrapper(self) -> None:
-        """Prompt containing 'agent' keyword should match polymorphic-agent via trigger_match.
-
-        Note: explicit_request policy requires AgentRecommendation.is_explicit=True,
-        which the local router does not currently set. All local-router matches
-        resolve as trigger_match regardless of the trigger type.
-        """
+    def test_generic_agent_request_falls_back(self) -> None:
+        """Generic 'agent' keyword prompt falls back after polymorphic-agent removal (OMN-7115)."""
         route_via_events = self._get_route_via_events()
         result = route_via_events("use an agent to help me with this task", "corr-123")
-        assert result["selected_agent"] == "polymorphic-agent"
-        assert result["routing_policy"] == "trigger_match"
+        assert result["selected_agent"] == DEFAULT_AGENT
+        assert result["routing_policy"] == "fallback_default"
 
     def test_method_mirrors_routing_policy(self) -> None:
         """Legacy 'method' field should mirror 'routing_policy'."""
