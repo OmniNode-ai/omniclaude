@@ -94,12 +94,15 @@ full migration tracked in OMN-8004.
 
 ### Step 3 — Execute redeploy phases
 
-1. **SYNC**: `git -C ~/.omnibase/bare/<repo> fetch --all && git reset --hard origin/main` for each repo
-2. **PIN_UPDATE**: Update Dockerfile `ARG <pkg>_VERSION=<version>` pins from `--versions` or auto-detected tags
-3. **BUILD**: `docker compose build` in the deployed snapshot path
-4. **INFISICAL**: Seed updated env vars into Infisical (unless `--skip-infisical`)
-5. **RESTART**: `docker compose up -d` to roll out new images
-6. **VERIFY**: Health-check all runtime services; confirm endpoints respond
+1. **PREFLIGHT**: Validate env vars, bus tunnel, and VirtioFS readiness
+2. **SYNC**: `git -C ~/.omnibase/bare/<repo> fetch --all && git reset --hard origin/main` for each repo
+3. **ENV_CHECK**: Verify required environment variables are present
+4. **WORKTREE**: Prepare worktree for deploy snapshot
+5. **PIN_UPDATE**: Update Dockerfile `ARG <pkg>_VERSION=<version>` pins from `--versions` or auto-detected tags
+6. **DEPLOY**: Trigger runtime rebuild via Kafka `onex.cmd.deploy.rebuild-requested.v1` and poll for completion
+7. **INFISICAL**: Seed updated env vars into Infisical (unless `--skip-infisical`)
+8. **VERIFY**: Health-check all runtime services; confirm endpoints respond
+9. **NOTIFY**: Emit redeploy completion notification
 
 ### Step 4 — Report
 

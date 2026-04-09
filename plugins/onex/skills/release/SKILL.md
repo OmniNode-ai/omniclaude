@@ -43,6 +43,12 @@ args:
   - name: --require-gate
     description: "Force Slack HIGH_RISK gate even when --autonomous is set"
     required: false
+  - name: --pypi-timeout-minutes
+    description: "Minutes to wait for PyPI package availability after publish (default: 10)"
+    required: false
+  - name: --run-id
+    description: "Explicit run ID for state file naming (default: auto-generated)"
+    required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to release; empty = all repos in graph"

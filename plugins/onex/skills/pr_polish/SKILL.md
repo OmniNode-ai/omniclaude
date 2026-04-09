@@ -31,6 +31,12 @@ args:
   - name: --skip-local-review
     description: Skip local-review clean-pass loop phase
     required: false
+  - name: --no-ci
+    description: Skip CI failure fetch in PR review phase (review comments only)
+    required: false
+  - name: --no-push
+    description: Apply all fixes locally without pushing to remote
+    required: false
   - name: --dry-run
     description: Log phase decisions without making changes
     required: false

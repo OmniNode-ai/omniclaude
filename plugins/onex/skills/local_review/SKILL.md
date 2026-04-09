@@ -82,14 +82,19 @@ args:
 - `--required-clean-runs` → consecutive clean passes needed (default: 2)
 - `--no-fix` → report issues only, no code changes
 - `--no-commit` → fix but don't commit (leave staged)
+- `--dry-run` → log decisions only; do not write edits or commits
 
 ### Step 2 — Initialize FSM
 
 ```bash
 cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
 uv run python -m omnimarket.nodes.node_local_review \
+  [--uncommitted] \
+  [--since <ref>] \
   [--max-iterations <n>] \
   [--required-clean-runs <n>] \
+  [--no-fix] \
+  [--no-commit] \
   [--dry-run]
 ```
 

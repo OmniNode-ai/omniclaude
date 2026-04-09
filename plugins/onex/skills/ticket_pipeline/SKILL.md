@@ -22,7 +22,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|implement|local_review|create_pr|test_iterate|ci_watch|pr_review|auto_merge)
+    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects
