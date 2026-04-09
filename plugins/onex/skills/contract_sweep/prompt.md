@@ -343,7 +343,7 @@ Detected by contract-sweep skill run <run-id>.
 
 Run when mode is `runtime` or `full`.
 
-### Step 1: Execute verification CLI
+### Execute verification CLI
 
 ```bash
 # Registration-only (default)
@@ -358,7 +358,7 @@ uv run python -m omnibase_infra.verification.cli --json \
 Where `<run_id>` is the current `ONEX_RUN_ID` or a timestamp-based fallback
 (`contract-sweep-<YYYYMMDD-HHMMSS>`).
 
-### Step 2: Handle exit code
+### Handle exit code
 
 **Exit 0 (PASS):**
 
@@ -417,7 +417,7 @@ Do NOT create tickets. Quarantine means verification infrastructure could not ru
 (e.g., database unreachable, contract files missing). This is an operational issue,
 not a contract compliance failure.
 
-### Step 3: Sustained PASS auto-close
+### Sustained PASS auto-close
 
 When runtime produces PASS for 2 consecutive runs:
 - Query open tickets with label `contract-verify` matching the now-passing checks
