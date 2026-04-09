@@ -1,7 +1,7 @@
 ---
 description: Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers are wired in dispatch, all topics have both producer and consumer, and container logs are free of repeated errors. Auto-creates Linear tickets for unwired handlers and error-heavy containers.
 mode: full
-version: "2.0.0"
+version: "1.0.0"
 level: advanced
 debug: false
 category: verification
@@ -31,12 +31,12 @@ args:
 
 ## Execution
 
-### Step 1 — Parse arguments
+### Phase 1 — Parse arguments
 
 - `--dry-run` → pass through to node
 - `--scope` → `all-repos` (default) or `omnidash-only`
 
-### Step 2 — Run node
+### Phase 2 — Run node
 
 ```bash
 cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
@@ -47,7 +47,7 @@ uv run python -m omnimarket.nodes.node_runtime_sweep \
 
 Capture stdout (JSON: `RuntimeSweepResult`). Exit 0 = clean, exit 1 = findings.
 
-### Step 3 — Render report
+### Phase 3 — Render report
 
 From the JSON output display four summary tables:
 
@@ -59,7 +59,21 @@ From the JSON output display four summary tables:
 
 Report counts by finding type. List each finding with subject and type.
 
-### Step 4 — Ticket creation (skipped if `--dry-run`)
+### Phase 3b — Docker Log Analysis
+
+For each running container, call `get_container_logs()` via `docker_helper`:
+
+```python
+logs = docker_helper.get_container_logs(container_id, tail=500)
+```
+
+Classify container log health:
+- **CLEAN**: no errors in last 500 lines
+- **NOISY**: repeated non-fatal warnings
+- **ERROR_HEAVY**: >10% of lines are errors
+- **CRASH_LOOP**: container restarted in last 5 minutes
+
+### Phase 4 — Ticket creation (skipped if `--dry-run`)
 
 For each finding with type PLACEHOLDER_DESCRIPTION, MISSING_DESCRIPTION,
 UNWIRED_HANDLER, ORPHAN_TOPIC, PRODUCER_ONLY, or CONSUMER_ONLY, create a
@@ -73,7 +87,7 @@ Labels: wiring, runtime-sweep
 
 Skip ticket creation for REAL, WIRED, SYMMETRIC findings (healthy state).
 
-### Step 5 — Write skill result
+### Phase 5 — Write skill result
 
 Write to `$ONEX_STATE_DIR/skill-results/<run_id>/runtime-sweep.json`:
 

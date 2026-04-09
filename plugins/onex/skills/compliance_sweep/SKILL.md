@@ -1,6 +1,6 @@
 ---
 description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system, wire schema mismatches, and infrastructure coupling anti-patterns, reports violations, and optionally creates Linear tickets for remediation
-version: 2.0.0
+version: 1.2.0
 mode: full
 level: advanced
 debug: false
@@ -26,12 +26,15 @@ args:
   - name: --max-tickets
     description: "Maximum tickets to create per run (default: 10)"
     required: false
+  - name: --json
+    description: "Output results as JSON instead of formatted table"
+    required: false
 inputs:
   - name: repos
     description: "list[str] — repos to scan; empty = all"
 outputs:
   - name: skill_result
-    description: "ComplianceSweepResult JSON with violations by type and severity"
+    description: "ModelComplianceSweepReport JSON with violations by type and severity"
 ---
 
 # Compliance Sweep
@@ -46,40 +49,58 @@ outputs:
 /compliance-sweep --repos omnibase_infra       # Scan one repo
 /compliance-sweep --create-tickets             # Scan + create Linear tickets
 /compliance-sweep --create-tickets --max-tickets 5
+/compliance-sweep --json                       # JSON output
 ```
+
+## Default Repos
+
+omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omnimarket,
+omninode_infra, onex_change_control
 
 ## Execution
 
-### Step 1 — Parse arguments
+### Phase 1 — Parse arguments
 
 - `--repos` → comma-separated list (default: all handler repos)
 - `--dry-run` → pass through to node
 - `--create-tickets` → enable ticket creation after scan
 - `--max-tickets` → cap on tickets created (default: 10)
+- `--json` → output as JSON
 
-### Step 2 — Run node
+### Phase 2 — Run scanner
+
+Uses `arch-handler-contract-compliance` check from `onex_change_control`:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_compliance_sweep \
-  [--repos <comma-list>] \
-  [--dry-run]
+cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok
+python scripts/validation/handler_contract_compliance.py \
+  --root <repo>/src \
+  [--repos <comma-list>]
 ```
 
-Capture stdout (JSON: `ComplianceSweepResult`). Exit 0 = compliant, exit 1 = violations found.
+Reports violations classified by verdict and type.
 
-### Step 3 — Render report
+### Phase 3 — Render report
 
-From the JSON output display:
-- Summary: handlers scanned, compliant count, imperative count, hybrid count
-- Per-repo breakdown
-- Top violations by type (HARDCODED_TOPIC, UNDECLARED_TRANSPORT, MISSING_HANDLER_ROUTING, LOGIC_IN_NODE)
-- Each violation: repo, handler path, node name, violation type, severity, message
+Verdicts per handler: COMPLIANT, IMPERATIVE, HYBRID, ALLOWLISTED, MISSING_CONTRACT
 
-### Step 4 — Ticket creation (only if `--create-tickets` and not `--dry-run`)
+Violation types detected:
+- HARDCODED_TOPIC
+- UNDECLARED_TRANSPORT
+- MISSING_HANDLER_ROUTING
+- LOGIC_IN_NODE
+- DIRECT_DB_ACCESS
+
+Each violation: repo, handler path, node name, violation type, severity, message
+
+Output: `ModelComplianceSweepReport`
+Report path convention: `docs/registry/compliance-scan-<date>.json`
+
+### Phase 4 — Ticket creation (only if `--create-tickets` and not `--dry-run`)
 
 Group violations by node directory (one ticket per node). For each node with
 violations not already tracked in Linear, create via `mcp__linear-server__save_issue`.
+Ticket creation is idempotent — search for existing open tickets before creating.
 
 ```
 Title: fix(compliance): migrate <node_name> to declarative pattern [OMN-6843]
@@ -87,10 +108,9 @@ Project: Active Sprint
 Label: contract-compliance
 ```
 
-Limit to `--max-tickets` tickets per run (default: 10). Deduplicate by searching
-existing open tickets before creating.
+Limit to `--max-tickets` tickets per run (default: 10).
 
-### Step 5 — Write skill result
+### Phase 5 — Write skill result
 
 Write to `$ONEX_STATE_DIR/skill-results/<run_id>/compliance-sweep.json`:
 
@@ -111,6 +131,7 @@ Write to `$ONEX_STATE_DIR/skill-results/<run_id>/compliance-sweep.json`:
 SKILL.md  → thin shell: parse args → node dispatch → render results
 node      → omnimarket/src/omnimarket/nodes/node_compliance_sweep/
 contract  → node_compliance_sweep/contract.yaml
+scanner   → onex_change_control/scripts/validation/handler_contract_compliance.py
 ```
 
 All scanning logic lives in the node handler. This skill does no scanning.

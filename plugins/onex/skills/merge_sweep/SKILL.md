@@ -196,6 +196,13 @@ Slack summary format: `Repos scanned: N | Scan failures: M | Track A: X queued |
 
 **Changelog**: 3.2.0 — added post-scan coverage assertion (OMN-4517); 3.1.0 — proactive branch updates (OMN-3818).
 
+## Branch Protection Drift
+
+The sweep monitors for branch protection drift: if a repo's required status checks have
+diverged from `required-checks.yaml`, the PR will be blocked. When `BRANCH_PROTECTION`
+drift is detected, log a warning but do not block the sweep — the drift will be reported
+in the skill result for manual remediation.
+
 ## Architecture
 
 ```

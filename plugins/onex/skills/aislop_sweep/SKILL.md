@@ -64,6 +64,8 @@ outputs:
 
 ### Step 2 — Run node
 
+Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
+
 ```bash
 cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
 uv run python -m omnimarket.nodes.node_aislop_sweep \
@@ -80,7 +82,7 @@ Capture stdout (JSON: `ModelSkillResult`, with aislop findings in the `output` f
 From the JSON output display:
 - Summary: repos scanned, total findings, by-severity counts, by-check counts
 - Findings table grouped by severity (CRITICAL → ERROR → WARNING → INFO)
-- Each finding: repo, path:line, check, message, severity, confidence
+- Each finding: repo, path:line, check, message, severity, confidence, ticketable, autofixable
 
 ### Step 4 — Ticket creation (only if `--ticket`)
 
