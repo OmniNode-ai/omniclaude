@@ -37,6 +37,12 @@ args:
   - name: passes
     description: "Fixed number of passes to run. Default: iterates until 2 consecutive clean passes. Use --passes 1 for single-pass mode (backwards compat)."
     required: false
+  - name: gate
+    description: "Gate mode: run 3 parallel review agents (scope, correctness, conventions) and output a structured pass/fail/block verdict suitable for merge gating. Mutually exclusive with --file."
+    required: false
+  - name: strict
+    description: "In --gate mode: block on MINOR+ findings (default blocks on MAJOR+)"
+    required: false
 ---
 
 # hostile-reviewer
@@ -87,6 +93,33 @@ This replaces the former `/external-model-review` skill.
 /hostile-reviewer --file docs/plans/my-plan.md
 /hostile-reviewer --plan-path docs/plans/my-plan.md
 ```
+
+### Gate Mode (`--pr <N> --repo <owner/repo> --gate`)
+
+Merge gate mode. Dispatches 3 parallel review agents (scope, correctness, conventions),
+collects structured verdicts, aggregates findings by severity, and produces a structured
+`pass`/`fail` gate verdict plus `extra_status` of `passed`/`blocked` for pipeline consumption. This mode absorbs the
+former `review_gate` skill.
+
+```bash
+/hostile-reviewer --pr 433 --repo OmniNode-ai/omniclaude --gate
+/hostile-reviewer --pr 433 --repo OmniNode-ai/omniclaude --gate --strict
+```
+
+**Gate verdict output** (`extra_status`):
+- `passed`: no blocking findings across all agents
+- `blocked`: one or more blocking findings (MAJOR+ in default mode, MINOR+ in `--strict`)
+
+**Requires** `--pr` and `--repo`. Mutually exclusive with `--file`.
+
+**Skill result** (written to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`):
+
+| Field | Value |
+|-------|-------|
+| `skill_name` | `"hostile-reviewer"` |
+| `status` | `"success"` (gate passed) / `"partial"` (gate blocked) |
+| `extra_status` | `"passed"` / `"blocked"` |
+| `extra` | `{"gate_verdict": str, "total_findings": int, "blocking_count": int, "agent_count": 3, "verdicts": [...]}` |
 
 ## Execution
 
@@ -340,6 +373,7 @@ Overall convergence verdict (new in v3):
 ## When Called
 
 - **ticket-pipeline Phase 2.4** (between local_review and mergeability_gate) -- PR mode
+- **ticket-pipeline Phase 5.5 (review_gate)** -- `--gate` mode (replaces former review_gate skill)
 - **design-to-plan Phase 2c** (after R1-R7 convergence) -- file mode
 - **Standalone** for any PR or plan file
 

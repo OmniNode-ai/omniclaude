@@ -9,7 +9,9 @@ synthesize. A single pass catches ~60% of issues -- you must iterate.
 
 Check arguments:
 - `--plan-path <path>` is an alias for `--file <path>` — normalize it first: if `--plan-path` is provided and `--file` is not, treat it as `--file <path>`.
-- If `--pr <N> --repo <owner/repo>`: PR mode
+- If `--gate` is set AND `--pr <N> --repo <owner/repo>`: **gate mode** (see Gate Mode section below)
+- If `--gate` is set AND `--file`: error -- `--gate` requires `--pr`, not `--file`
+- If `--pr <N> --repo <owner/repo>` (no `--gate`): PR mode
 - If `--pr <N>` without `--repo`: error -- `--repo` is required with `--pr`
 - If `--file <path>` (or `--plan-path <path>`): file mode
 - If both `--pr` and `--file`/`--plan-path` are provided: error -- they are mutually exclusive
@@ -219,6 +221,162 @@ If file validation (STEP 0 above) was skipped and a different file was reviewed,
 - `total_passes` count
 - `consecutive_clean_at_end` count
 - Final pass `findings`, `per_model_severity_counts`, `disagreements`
+
+## Gate Mode (`--gate`)
+
+When `--gate` is set, skip the iterative convergence loop entirely and instead run 3 parallel
+review agents (scope, correctness, conventions) to produce a structured merge gate verdict.
+
+**This mode requires `--pr` and `--repo`. `--file` is incompatible with `--gate`.**
+
+### Dispatch 3 Parallel Review Agents
+
+All 3 agents are dispatched in a single message (true parallelism):
+
+```
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="hostile-reviewer gate: scope review PR #{pr_number}",
+  prompt="You are a scope review agent for PR #{pr_number} in {repo}.
+
+    Read the PR diff:
+    ```bash
+    gh pr diff {pr_number} --repo {repo}
+    ```
+
+    Read the ticket description from the PR body or linked Linear ticket.
+
+    Review the PR for scope violations:
+    - Are all changed files within the declared scope of the ticket?
+    - Are there unrelated changes bundled into this PR?
+    - Does the PR introduce changes beyond what the ticket requires?
+
+    Produce a structured verdict as JSON:
+    {\"agent\": \"scope\", \"verdict\": \"pass|fail\", \"findings\": [{\"severity\": \"CRITICAL|MAJOR|MINOR|NIT\", \"file\": \"path\", \"line\": N, \"message\": \"...\"}]}
+
+    Report the JSON verdict as your final output."
+)
+
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="hostile-reviewer gate: correctness review PR #{pr_number}",
+  prompt="You are a correctness review agent for PR #{pr_number} in {repo}.
+
+    Read the PR diff:
+    ```bash
+    gh pr diff {pr_number} --repo {repo}
+    ```
+
+    Review the PR for correctness issues:
+    - Logic errors, off-by-one, missing error handling
+    - Edge cases not covered by tests
+    - Race conditions or concurrency issues
+    - Missing or inadequate test coverage for new code
+    - Security concerns (injection, path traversal, etc.)
+
+    Produce a structured verdict as JSON:
+    {\"agent\": \"correctness\", \"verdict\": \"pass|fail\", \"findings\": [{\"severity\": \"CRITICAL|MAJOR|MINOR|NIT\", \"file\": \"path\", \"line\": N, \"message\": \"...\"}]}
+
+    Report the JSON verdict as your final output."
+)
+
+Task(
+  subagent_type="onex:polymorphic-agent",
+  description="hostile-reviewer gate: conventions review PR #{pr_number}",
+  prompt="You are a conventions review agent for PR #{pr_number} in {repo}.
+
+    Read the PR diff:
+    ```bash
+    gh pr diff {pr_number} --repo {repo}
+    ```
+
+    Read the repo's CLAUDE.md for conventions:
+    ```bash
+    cat CLAUDE.md
+    ```
+
+    Review the PR for convention violations:
+    - Naming conventions (Model prefix, Enum prefix, PEP 604 unions)
+    - ONEX compliance (frozen models, explicit timestamps, SPDX headers)
+    - CLAUDE.md rules (no backwards-compat shims, no over-engineering)
+    - Code structure (single class per file where applicable)
+    - Import patterns (no cross-boundary imports)
+
+    Produce a structured verdict as JSON:
+    {\"agent\": \"conventions\", \"verdict\": \"pass|fail\", \"findings\": [{\"severity\": \"CRITICAL|MAJOR|MINOR|NIT\", \"file\": \"path\", \"line\": N, \"message\": \"...\"}]}
+
+    Report the JSON verdict as your final output."
+)
+```
+
+### Aggregate Gate Verdict
+
+After all 3 agents return, collect their JSON verdicts and aggregate:
+
+```python
+from plugins.onex.skills._lib.review_gate.aggregator import aggregate_verdicts
+
+verdicts = [scope_verdict, correctness_verdict, conventions_verdict]
+result = aggregate_verdicts(verdicts, strict=is_strict_mode)
+# result["gate_verdict"] is "pass" or "fail"
+# result["blocking_count"] is number of blocking findings
+# result["total_findings"] is total findings across all agents
+```
+
+`is_strict_mode` = True when `--strict` flag is present (blocks on MINOR+; default blocks on MAJOR+).
+
+### Gate Decision and Output
+
+Based on `result["gate_verdict"]`:
+
+- **"pass"**: Write `ModelSkillResult` with `status="success"`, `extra_status="passed"`
+- **"fail"**: Write `ModelSkillResult` with `status="partial"`, `extra_status="blocked"`, post findings to PR
+
+When the gate fails, post a structured comment to the PR:
+
+```markdown
+## Hostile Reviewer Gate: BLOCKED
+
+| Severity | Agent | File | Line | Finding |
+|----------|-------|------|------|---------|
+| CRITICAL | scope | src/foo.py | 42 | Scope creep: file not in ticket scope |
+| MAJOR | correctness | src/bar.py | 15 | Missing error handling for None case |
+
+**{blocking_count} blocking finding(s).** Fix all blocking issues for the active gate mode before merge.
+<!-- default mode: MAJOR+ blocks; strict mode: MINOR+ blocks -->
+```
+
+Use `--request-changes` for blocked gate:
+```bash
+gh pr review {pr_number} --repo {repo} --request-changes --body "{findings_table}"
+```
+
+### Gate Result Artifact
+
+Write to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json` (same path as PR/file mode):
+
+```json
+{
+  "mode": "gate",
+  "target": "{pr_number}",
+  "gate_verdict": "pass|fail",
+  "total_findings": N,
+  "blocking_count": N,
+  "strict": false,
+  "agent_count": 3,
+  "verdicts": [...]
+}
+```
+
+Also set top-level `"overall_verdict"` to `"pass"` or `"blocking_issue"` for compatibility
+with ticket-pipeline consumers that check `result["overall_verdict"]`.
+
+### Retry Logic (when called from ticket-pipeline)
+
+When integrated with ticket-pipeline (Phase 5.5 review_gate):
+1. If gate fails, dispatch fix agents for each CRITICAL/MAJOR finding
+2. Re-run `hostile-reviewer --gate` (max 2 iterations total)
+3. If still blocked after 2 iterations, mark ticket as `review_gate_blocked` in state.yaml
 
 ## Emit Completion Events (OMN-5861, OMN-6128)
 
