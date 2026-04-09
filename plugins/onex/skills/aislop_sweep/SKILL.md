@@ -34,7 +34,7 @@ inputs:
     description: "list[str] — repos to scan; empty = all"
 outputs:
   - name: skill_result
-    description: "AislopSweepResult JSON with findings by severity and check"
+    description: "ModelSkillResult JSON; aislop-specific findings (by severity and check) are delivered in the model's output field"
 ---
 
 # AI Slop Sweep
@@ -59,6 +59,7 @@ outputs:
 - `--repos` → comma-separated list (default: all supported repos)
 - `--checks` → comma-separated check names (default: all)
 - `--dry-run` → pass through to node
+- `--ticket` → create Linear tickets for findings above severity threshold
 - `--severity-threshold` → pass through to node (default: WARNING)
 
 ### Step 2 — Run node
@@ -72,7 +73,7 @@ uv run python -m omnimarket.nodes.node_aislop_sweep \
   [--dry-run]
 ```
 
-Capture stdout (JSON: `AislopSweepResult`). Exit 0 = clean, exit 1 = findings found.
+Capture stdout (JSON: `ModelSkillResult`, with aislop findings in the `output` field). Exit 0 = clean, exit 1 = findings found.
 
 ### Step 3 — Render report
 

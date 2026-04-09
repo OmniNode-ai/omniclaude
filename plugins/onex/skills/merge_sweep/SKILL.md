@@ -133,11 +133,11 @@ Before enabling auto-merge or dispatching pr-polish, acquire a claim via the cla
 
 ### Step 6 — Phase A: enable auto-merge
 
-For each PR in `track_a_merge` (after promoting from A-resolve):
+For each PR in `track_a_merge` (after promoting from A-resolve), using the selected `--merge-method`:
 ```bash
-gh pr merge <N> --repo <repo> --squash --auto
-# If "clean status" error: retry without --auto
-gh pr merge <N> --repo <repo> --squash
+gh pr merge <N> --repo <repo> --<merge-method> --auto
+# If "clean status" error: Fall back to direct merge (retry without --auto)
+gh pr merge <N> --repo <repo> --<merge-method>
 ```
 NEVER use `--admin`. Record as `auto_merge_set` or `merged_directly`.
 
