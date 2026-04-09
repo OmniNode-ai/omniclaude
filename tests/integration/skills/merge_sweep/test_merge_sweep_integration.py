@@ -107,7 +107,11 @@ class TestThinTriggerPattern:
         lines = content.splitlines()
         # Find the 'NOT Do' disclaimer section — references there are allowed
         not_do_start = next(
-            (i for i, line in enumerate(lines) if "What This Prompt Does NOT Do" in line),
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
             len(lines),
         )
         violations = []
@@ -136,7 +140,11 @@ class TestThinTriggerPattern:
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
         not_do_start = next(
-            (i for i, line in enumerate(lines) if "What This Prompt Does NOT Do" in line),
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
             len(lines),
         )
         forbidden = ["needs_branch_update", "is_merge_ready", "needs_polish"]
@@ -159,7 +167,11 @@ class TestThinTriggerPattern:
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         lines = content.splitlines()
         not_do_start = next(
-            (i for i, line in enumerate(lines) if "What This Prompt Does NOT Do" in line),
+            (
+                i
+                for i, line in enumerate(lines)
+                if "What This Prompt Does NOT Do" in line
+            ),
             len(lines),
         )
         violations = [
@@ -227,9 +239,11 @@ class TestPromptPublishMonitorSteps:
     def test_prompt_documents_poll_timeout(self) -> None:
         """prompt.md must document the poll timeout."""
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "3600" in content or "1 hour" in content.lower() or "timeout" in content.lower(), (
-            "prompt.md must document the poll timeout (3600s / 1 hour)"
-        )
+        assert (
+            "3600" in content
+            or "1 hour" in content.lower()
+            or "timeout" in content.lower()
+        ), "prompt.md must document the poll timeout (3600s / 1 hour)"
 
     def test_prompt_documents_result_path(self) -> None:
         """prompt.md must document the result.json path."""
@@ -304,7 +318,14 @@ class TestCommandTopicAndSchema:
     def test_skill_documents_wire_schema_fields(self) -> None:
         """SKILL.md must document required wire schema fields."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        required_fields = ["run_id", "dry_run", "merge_method", "repos", "emitted_at", "correlation_id"]
+        required_fields = [
+            "run_id",
+            "dry_run",
+            "merge_method",
+            "repos",
+            "emitted_at",
+            "correlation_id",
+        ]
         for field in required_fields:
             assert f'"{field}"' in content or f"`{field}`" in content, (
                 f"SKILL.md must document wire schema field: {field}"
@@ -313,9 +334,10 @@ class TestCommandTopicAndSchema:
     def test_skill_documents_arg_to_flag_mapping(self) -> None:
         """SKILL.md must document the arg → orchestrator entry flag mapping table."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "Orchestrator Field" in content or "orchestrator entry flag" in content.lower(), (
-            "SKILL.md must document the arg → orchestrator entry flag mapping"
-        )
+        assert (
+            "Orchestrator Field" in content
+            or "orchestrator entry flag" in content.lower()
+        ), "SKILL.md must document the arg → orchestrator entry flag mapping"
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +387,7 @@ class TestBackwardCompatibleCLI:
         """SKILL.md must document new v4.0.0 orchestrator entry flags."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
         for arg in self.V4_NEW_ARGS:
-            assert arg in content, (
-                f"SKILL.md must document new v4.0.0 arg: {arg}"
-            )
+            assert arg in content, f"SKILL.md must document new v4.0.0 arg: {arg}"
 
     def test_dry_run_arg_in_frontmatter(self) -> None:
         """SKILL.md frontmatter must list --dry-run as an arg."""
@@ -452,9 +472,11 @@ class TestModelSkillResultContract:
     def test_skill_documents_result_passthrough(self) -> None:
         """SKILL.md must document that orchestrator result is passed through unchanged."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
-        assert "passthrough" in content.lower() or "pass through" in content.lower() or "directly" in content.lower(), (
-            "SKILL.md must document that orchestrator result is surfaced directly"
-        )
+        assert (
+            "passthrough" in content.lower()
+            or "pass through" in content.lower()
+            or "directly" in content.lower()
+        ), "SKILL.md must document that orchestrator result is surfaced directly"
 
 
 # ---------------------------------------------------------------------------
