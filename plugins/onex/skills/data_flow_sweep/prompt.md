@@ -5,7 +5,7 @@ You are executing the data-flow-sweep skill. This verifies end-to-end data flow 
 ## Argument Parsing
 
 ```
-/data_flow_sweep [--dry-run] [--topic <topic_name>] [--skip-playwright]
+/data_flow_sweep [--dry-run] [--topic <topic_name>] [--skip-playwright] [--flows '<json>']
 ```
 
 ```python

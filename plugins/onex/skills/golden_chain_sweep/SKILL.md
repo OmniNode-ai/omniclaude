@@ -1,27 +1,60 @@
 ---
 description: Validate end-to-end Kafka-to-DB-projection data flow for all golden chains
 mode: full
+version: 2.0.0
 level: advanced
 debug: false
 ---
 
 # golden-chain-sweep
 
-## Dispatch Surface
+**Announce at start:** "I'm using the golden-chain-sweep skill."
 
-**Target**: Direct invocation or Agent Teams
+## Usage
 
-## Purpose
+```
+/golden-chain-sweep                                 # Validate all 5 chains
+/golden-chain-sweep --chains registration,routing   # Filter chains
+/golden-chain-sweep --timeout-ms 30000              # Override timeout
+```
 
-Executes a golden chain validation sweep that verifies events flow end-to-end
-from Kafka through omnidash ReadModelConsumer projections into the
-`omnidash_analytics` database with correct field values. Extends the existing
-`golden_path_validate` skill (which tests Kafka-to-Kafka) to cover
-Kafka-to-DB-projection.
+## Execution
 
-## What It Validates
+### Step 1 — Parse arguments
 
-5 chains, each verifying one topic -> table projection:
+- `--chains` → comma-separated chain names (default: all 5)
+- `--timeout-ms` → per-chain timeout (default: 15000)
+- `--projected-rows` → JSON dict of pre-collected projection data
+
+### Step 2 — Run node
+
+```bash
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_golden_chain_sweep \
+  [--chains <comma-list>] \
+  [--timeout-ms <ms>] \
+  [--projected-rows '<json>']
+```
+
+Capture stdout (JSON: `GoldenChainSweepResult`). Exit 0 = all chains pass, exit 1 = partial/fail.
+
+### Step 3 — Render report
+
+From the JSON output display:
+
+- Summary: overall status (pass/partial/fail), chains total/passed/failed
+- Per-chain table: chain name, status, publish latency (ms), projection latency (ms)
+- Failure details: missing fields, timeout messages, error descriptions
+
+### Step 4 — Failure handling
+
+| Failure | Cause |
+|---------|-------|
+| `timeout` | omnidash consumer not running or DB unreachable |
+| `fail` | Assertion mismatch on expected fields |
+| `error` | Kafka unavailable or DB connection failure |
+
+## Chains
 
 | Chain | Head Topic | Tail Table |
 |-------|-----------|------------|
@@ -31,101 +64,10 @@ Kafka-to-DB-projection.
 | routing | `onex.evt.omniclaude.llm-routing-decision.v1` | `llm_routing_decisions` |
 | evaluation | `onex.evt.omniintelligence.run-evaluated.v1` | `session_outcomes` |
 
-## How To Run
-
-### Prerequisites
-
-1. Local Kafka/Redpanda running (`infra-up` or Docker)
-2. omnidash running (`cd omnidash && npm run dev:local`)
-3. `KAFKA_BOOTSTRAP_SERVERS=localhost:19092`
-4. `OMNIDASH_ANALYTICS_DB_URL` set to local omnidash_analytics
-
-### Invocation
+## Architecture
 
 ```
-/golden_chain_sweep
-```
-
-With chain filter:
-```
-/golden_chain_sweep --chains registration,routing
-```
-
-## Execution Steps
-
-1. **Build payloads**: The payload compute node generates synthetic events with
-   `golden-chain-{name}-{uuid}` correlation IDs for all (or filtered) chains.
-
-2. **Publish and poll** (parallel): For each chain, publish the synthetic event
-   to the head topic via aiokafka, then poll the tail table in
-   `omnidash_analytics` for a row matching the correlation_id. Timeout: 15s
-   per chain.
-
-3. **Assert**: Run field-level assertions against the projected row (e.g.,
-   `selected_agent` is not null, `correlation_id` matches).
-
-4. **Cleanup**: DELETE synthetic rows from projection tables after validation.
-
-5. **Reduce**: Aggregate per-chain results into a sweep summary with overall
-   status (pass/partial/fail).
-
-6. **Persist**: INSERT results into `golden_chain_sweep_results` table for
-   historical trend analysis.
-
-7. **Evidence**: Write evidence artifact to
-   `$ONEX_STATE_DIR/golden-chain-sweep/{date}/{sweep_id}/sweep_results.json`.
-
-## Output
-
-Displays a summary table:
-
-```
-Golden Chain Sweep: PASS (5/5 chains passed)
-
-| Chain            | Status  | Publish (ms) | Projection (ms) |
-|------------------|---------|--------------|------------------|
-| registration     | pass    |         12.3 |            234.5 |
-| pattern_learning | pass    |         11.1 |            345.6 |
-| delegation       | pass    |         10.5 |            456.7 |
-| routing          | pass    |         11.8 |            234.1 |
-| evaluation       | pass    |         12.0 |            345.2 |
-
-Sweep ID: a1b2c3d4-...
-Evidence: .onex_state/golden-chain-sweep/2026-04-02/a1b2c3d4-.../sweep_results.json
-```
-
-## Failure Modes
-
-| Failure | Behavior |
-|---------|----------|
-| Kafka unavailable | Chain shows `error` with publish failure |
-| omnidash not running (consumer down) | Chain shows `timeout` (no projected row appears) |
-| DB unreachable | Chain shows `error` with DB connection failure |
-| Assertion mismatch | Chain shows `fail` with per-field assertion details |
-| Cleanup fails | Warning logged, does not affect chain status |
-
-## Python API
-
-```python
-from omniclaude.nodes.node_golden_chain_sweep_orchestrator import (
-    ModelSweepRequest,
-    run_sweep,
-)
-
-request = ModelSweepRequest(chain_filter=["registration"])
-summary = await run_sweep(
-    request,
-    bootstrap_servers="localhost:19092",
-    db_dsn="postgresql://...",
-)
-print(summary.overall_status)  # pass | partial | fail
-```
-
-## Historical Data
-
-Sweep results are stored in `golden_chain_sweep_results` for trend analysis.
-Query via the omnidash API:
-
-```
-GET /api/intelligence/golden-chain/history?days=7
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/ (business logic)
+contract   -> node_golden_chain_sweep/contract.yaml
 ```

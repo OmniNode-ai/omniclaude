@@ -33,19 +33,7 @@ args:
 
 # contract_sweep
 
-Cross-repo contract drift detection. Wraps the `check-drift` infrastructure from
-`onex_change_control` to scan all repos for contracts that have drifted from their
-pinned baselines and Kafka boundaries that have become stale.
-
-This skill combines two detection modes:
-
-1. **Contract drift** -- Uses `check_contract_drift.py` and the `handler_drift_analysis`
-   handler from `onex_change_control` to compute canonical hashes of all contracts and
-   compare them against pinned snapshots. When drift is detected, performs field-level
-   analysis to classify changes as BREAKING, ADDITIVE, or NON_BREAKING.
-
-2. **Boundary staleness** -- Validates that cross-repo Kafka topic boundaries declared in
-   `kafka_boundaries.yaml` still match the actual producer/consumer files in each repo.
+**Announce at start:** "I'm using the contract-sweep skill."
 
 ## Usage
 
@@ -57,142 +45,64 @@ This skill combines two detection modes:
 /contract-sweep --check-boundaries false
 ```
 
-## Drift Detection Pipeline
+## Execution
 
-The skill delegates to the ONEX contract drift node pipeline in `onex_change_control`:
+### Step 1 — Parse arguments
 
-```
-NodeContractDriftCompute (detect + classify)
-    -> NodeContractDriftReducer (accumulate history)
-    -> NodeContractDriftEffect (emit events)
-```
+- `--repos` → comma-separated repo names (default: all 8)
+- `--dry-run` → findings only, no ticket creation
+- `--severity-threshold` → minimum severity for ticket creation (default: BREAKING)
+- `--sensitivity` → STRICT | STANDARD | LAX (default: STANDARD)
+- `--check-boundaries` → validate Kafka boundary YAML parity (default: true)
 
-For CLI-level invocation, it uses:
+### Step 2 — Run contract drift check
+
+For each repo, run the `check_contract_drift.py` script from `onex_change_control`:
 
 ```bash
-# Per-repo hash check
-python3 onex_change_control/scripts/validation/check_contract_drift.py \
-  --root <repo>/src --check <snapshot-file>
+cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok
+python3 scripts/validation/check_contract_drift.py \
+  --root <repo>/src \
+  --check <snapshot-file>
 ```
 
-Boundary staleness is validated by reading `kafka_boundaries.yaml` and checking
-each declared boundary with `git show` and `grep` commands against the actual
-repo contents (see prompt.md Phase 4 for the exact procedure).
+Drift is classified using `handler_drift_analysis`:
 
-## Drift Classification
+| Severity | Root Keys |
+|----------|-----------|
+| BREAKING | `algorithm`, `input_schema`, `output_schema`, `type`, `required` |
+| ADDITIVE | New fields not in breaking paths |
+| NON_BREAKING | `description`, `docs`, `changelog`, `author` |
 
-Field-level changes are classified using the `handler_drift_analysis` module:
+Sensitivity controls what surfaces: STRICT = all, STANDARD = BREAKING+ADDITIVE, LAX = BREAKING only.
 
-| Classification | Root Keys | Meaning |
-|---------------|-----------|---------|
-| **BREAKING** | `algorithm`, `input_schema`, `output_schema`, `type`, `required`, `parallel_processing`, `transaction_management` | Changes to the observable contract interface |
-| **ADDITIVE** | New fields not in breaking paths | Non-breaking additions |
-| **NON_BREAKING** | `description`, `docs`, `changelog`, `comments`, `author`, `license` | Documentation/metadata changes |
+### Step 3 — Boundary staleness check (unless `--check-boundaries false`)
 
-Sensitivity levels control which changes surface:
+Read `onex_change_control/boundaries/kafka_boundaries.yaml`. For each declared boundary verify:
+1. Producer file still exists in the producer repo
+2. Consumer file still exists in the consumer repo
+3. Topic regex still matches content in both files
+4. No undeclared cross-repo topics in code
 
-| Sensitivity | Surfaces |
-|-------------|----------|
-| **STRICT** | All changes including NON_BREAKING |
-| **STANDARD** | BREAKING + ADDITIVE (default) |
-| **LAX** | BREAKING only |
+### Step 4 — Report
 
-## Boundary Staleness Checks
-
-When `--check-boundaries` is enabled (default), the skill also validates:
-
-1. **Producer file exists** -- The declared producer file still exists in the producer repo
-2. **Consumer file exists** -- The declared consumer file still exists in the consumer repo
-3. **Topic pattern match** -- The topic regex still matches content in both files
-4. **No undeclared cross-repo topics** -- Topics in code that cross repo boundaries but are not in the boundary manifest
-
-## Severity and Ticket Creation
-
-| Drift Severity | Ticket Priority | Action |
-|---------------|-----------------|--------|
-| **BREAKING** | Critical | Always create ticket |
-| **ADDITIVE** | Major | Create if threshold <= ADDITIVE |
-| **NON_BREAKING** | Minor | Create if threshold <= NON_BREAKING |
-| **Stale boundary** | Critical | Always create ticket (boundary mismatch = potential runtime failure) |
-| **Undeclared boundary** | Major | Create if threshold <= ADDITIVE |
-
-Ticket dedup: keyed by `(repo, contract_path, drift_type)`. Before creating, search Linear
-for an open ticket matching the same key. If found, update or comment. If prior ticket is
-closed but same drift recurs, create new ticket referencing the prior closure.
-
-## Output
-
-### Report file
-
-Written to `$ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml`:
-
-```yaml
-run_id: "<YYYYMMDD-HHMMSS>"
-timestamp: "<ISO-8601>"
-repos_scanned: ["omnibase_core", ...]
-sensitivity: "STANDARD"
-total_contracts: <count>
-drift_findings:
-  - repo: "<repo>"
-    path: "<contract-path>"
-    severity: "BREAKING"
-    current_hash: "<sha256>"
-    pinned_hash: "<sha256>"
-    field_changes:
-      - path: "input_schema.type"
-        change_type: "modified"
-        is_breaking: true
-    summary: "<one-line>"
-boundary_findings:
-  - boundary_name: "<topic>"
-    issue: "producer_file_missing"
-    producer_repo: "<repo>"
-    consumer_repo: "<repo>"
-    message: "<description>"
-by_severity: {BREAKING: 0, ADDITIVE: 0, NON_BREAKING: 0}
-stale_boundaries: 0
-repos_not_found: []
-baseline_missing: []
-overall_status: "<clean|drifted|breaking>"
-tickets_created: []
-```
-
-### Summary output
+Write to `$ONEX_STATE_DIR/contract-sweep/<run-id>/report.yaml`. Display:
 
 ```
 Contract Drift Sweep Results
-=============================
-Repos scanned: 8
-Total contracts: <N>
-Sensitivity: STANDARD
-
-Drift findings:
-  BREAKING:     <N>
-  ADDITIVE:     <N>
-  NON_BREAKING: <N>
-
-Boundary findings:
-  Stale:      <N>
-  Undeclared: <N>
-
-Overall status: <clean|drifted|breaking>
+Repos scanned: 8 | Sensitivity: STANDARD
+Drift: BREAKING <n> | ADDITIVE <n> | NON_BREAKING <n>
+Boundaries: Stale <n> | Undeclared <n>
+Overall: clean | drifted | breaking
 ```
 
-### Status determination
+### Step 5 — Ticket creation (unless `--dry-run`)
 
-- `clean` -- No drift detected, all boundaries valid
-- `drifted` -- ADDITIVE or NON_BREAKING drift only, no boundary issues
-- `breaking` -- Any BREAKING drift or stale boundary found
+For each finding at or above `--severity-threshold`, search Linear for an existing open ticket
+keyed by `(repo, contract_path, drift_type)`. If none found, create via `mcp__linear-server__save_issue`.
+Stale boundaries always create tickets (boundary mismatch = potential runtime failure).
 
-## Integration
-
-- **close-day**: Run as end-of-day contract health check
-- **integration-sweep**: Complementary (integration-sweep validates DoD; contract-sweep validates drift)
-- **ci-watch**: Can be triggered after CI passes to verify no contract drift was introduced
-
-## Repo List
-
-Default scan targets (8 repos):
+## Default Repos
 
 ```
 omnibase_core, omnibase_infra, omniclaude, omniintelligence,
@@ -202,19 +112,8 @@ omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ## Architecture
 
 ```
-SKILL.md   -> descriptive documentation (this file)
-prompt.md  -> execution instructions for the agent
+SKILL.md        -> thin shell (this file)
+check_drift     -> onex_change_control/scripts/validation/check_contract_drift.py
+drift_analysis  -> onex_change_control/handlers/handler_drift_analysis.py
+boundaries      -> onex_change_control/boundaries/kafka_boundaries.yaml
 ```
-
-The skill wraps:
-- `onex_change_control/scripts/validation/check_contract_drift.py` (hash-based drift)
-- `onex_change_control/handlers/handler_drift_analysis.py` (field-level analysis)
-- `onex_change_control/boundaries/kafka_boundaries.yaml` (boundary manifest)
-
-## See Also
-
-- `contract-compliance-check` skill -- Pre-merge seam validation (per-ticket, per-branch)
-- `NodeContractDriftCompute` in `onex_change_control` -- The underlying ONEX node
-- `kafka_boundaries.yaml` -- Cross-repo Kafka boundary manifest
-- OMN-5162 -- Original check-drift script
-- OMN-6725 -- This skill's tracking ticket

@@ -1,35 +1,13 @@
 ---
 description: Autonomous build loop — runs the ONEX build loop workflow locally via `onex run`
 mode: full
-version: 1.0.0
+version: 2.0.0
 level: advanced
 debug: false
 category: workflow
 tags: [build-loop, autonomous, automation, orchestrator]
 author: OmniClaude Team
 composable: true
-inputs:
-  - name: max_cycles
-    type: int
-    description: "Maximum number of build loop cycles to run (default: 1)"
-    required: false
-  - name: skip_closeout
-    type: bool
-    description: "Skip the CLOSING_OUT phase (default: false)"
-    required: false
-  - name: dry_run
-    type: bool
-    description: "Run without side effects (default: false)"
-    required: false
-outputs:
-  - name: skill_result
-    type: ModelSkillResult
-    description: "Written to $ONEX_STATE_DIR/skill-results/{context_id}/build_loop.json"
-    fields:
-      - status: '"success" | "error"'
-      - cycles_completed: int
-      - cycles_failed: int
-      - total_tickets_dispatched: int
 args:
   - name: --max-cycles
     description: "Maximum cycles (default: 1)"
@@ -40,41 +18,61 @@ args:
   - name: --dry-run
     description: "No side effects — simulate the full loop"
     required: false
+  - name: --max-tickets
+    description: "Max tickets to dispatch per fill cycle (default: 5)"
+    required: false
+  - name: --mode
+    description: "Execution mode: build, close_out, full, observe (default: build)"
+    required: false
 ---
 
 # Build Loop
 
-## Overview
-
-Start the autonomous build loop. This skill runs the build loop workflow locally
-via `onex run`, executing the full 6-phase cycle in-process:
-
-```
-IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLETE
-```
-
 **Announce at start:** "I'm using the build-loop skill to start the autonomous build loop."
 
-**Implements**: OMN-5113
-
-## Quick Start
+## Usage
 
 ```
-# Single cycle (default)
-cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml
-
-# With custom state directory
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
-  --state-root "$ONEX_STATE_DIR/build-loop"
-
-# With timeout
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
-  --state-root "$ONEX_STATE_DIR/build-loop" \
-  --timeout 600
+/build-loop                         # Single cycle (default)
+/build-loop --max-cycles 3          # Run 3 cycles
+/build-loop --skip-closeout         # Skip CLOSING_OUT phase
+/build-loop --dry-run               # Simulate without side effects
+/build-loop --max-tickets 10        # Dispatch up to 10 tickets per fill
+/build-loop --mode close_out        # Close-out only (no fill/build)
 ```
 
-## Phase Descriptions
+## Execution
+
+### Step 1 — Parse arguments
+
+- `--max-cycles` → max loop iterations (default: 1)
+- `--skip-closeout` → skip CLOSING_OUT phase (default: false)
+- `--dry-run` → simulate all phases without side effects (default: false)
+- `--max-tickets` → tickets dispatched per fill cycle (default: 5)
+- `--mode` → build | close_out | full | observe (default: build)
+
+### Step 2 — Run node
+
+```bash
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_build_loop_orchestrator \
+  [--max-cycles <n>] \
+  [--skip-closeout] \
+  [--dry-run] \
+  [--max-tickets <n>] \
+  [--mode <mode>]
+```
+
+Capture stdout (JSON: `ModelOrchestratorResult`). Exit 0 = all cycles completed, exit 1 = any cycle failed.
+
+### Step 3 — Render report
+
+From the JSON output display:
+- Summary: cycles completed, cycles failed, total tickets dispatched
+- Per-cycle summary: phase outcomes, tickets dispatched, errors
+- Circuit breaker status (trips after 3 consecutive failures)
+
+## Phases
 
 | Phase | Node | What It Does |
 |-------|------|-------------|
@@ -87,82 +85,15 @@ uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
 
 ## Safety
 
-- **Circuit breaker**: After 3 consecutive failures, the loop halts with FAILED state.
-- **Dry run**: Use `--dry-run` to simulate without side effects.
-- **Max cycles**: Defaults to 1 cycle. Use `--max-cycles` to run multiple.
+- Circuit breaker halts after 3 consecutive phase failures
+- `--dry-run` simulates all phases without creating PRs, tickets, or merges
+- Max cycles default is 1 — increase only for overnight/cron runs
 
-## Execution Steps
+## Architecture
 
-### Parse Arguments
-
-Parse `--max-cycles` (default 1), `--skip-closeout` (default false), `--dry-run` (default false).
-
-### Execute Workflow
-
-Run the build loop workflow locally via RuntimeLocal:
-
-```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
-  --state-root "$ONEX_STATE_DIR/build-loop" \
-  --timeout 600
 ```
-
-This executes the full 6-phase FSM in-process with:
-- In-memory event bus (no Kafka required)
-- Filesystem state (no Postgres required)
-- Direct handler invocation (no Docker runtime required)
-
-The exit code indicates the result:
-- 0 = COMPLETED (all cycles successful)
-- 1 = FAILED or TIMEOUT
-- 3 = PARTIAL (some evidence written)
-
-### Write Skill Result
-
-The workflow automatically writes its result to `$ONEX_STATE_DIR/build-loop/workflow_result.json`.
-This contains the full `ModelLoopOrchestratorResult` with per-cycle summaries.
-
-## Skill Result Output
-
-| Field | Value |
-|-------|-------|
-| `skill_name` | `"build_loop"` |
-| `status` | `"success"` or `"error"` |
-| `run_id` | Correlation ID |
-| `extra` | `{"cycles_completed": int, "cycles_failed": int, "total_tickets_dispatched": int}` |
-
-## Delegation
-
-When `ENABLE_LOCAL_DELEGATION=true` and `ENABLE_LOCAL_INFERENCE_PIPELINE=true` are set
-(default in `cron-buildloop.sh`), the build loop delegates lightweight tasks to local
-LLMs instead of frontier Claude:
-
-| Phase | Delegation Behavior |
-|-------|-------------------|
-| CLOSING_OUT | Merge-sweep runs GitHub API calls (no LLM needed). PR polish delegates to local models via delegation orchestrator. |
-| VERIFYING | Health checks are HTTP/shell — no LLM delegation needed. |
-| FILLING | RSD scoring is pure computation — no LLM needed. |
-| CLASSIFYING | Keyword heuristics — no LLM needed. |
-| BUILDING | Dispatches ticket-pipeline per ticket. Within ticket-pipeline, the hostile-reviewer already uses local models (DeepSeek-R1, Qwen3-Coder). Testing and CI-fix phases route through the delegation orchestrator when env vars are set. |
-
-Disable delegation with `cron-buildloop.sh --no-delegation` or by unsetting the env vars.
-
-## Friction Logging
-
-All failure paths emit friction events to `$ONEX_STATE_DIR/friction/build-loop.ndjson`:
-
-- Phase failures (verification, dispatch, etc.)
-- Circuit breaker trips
-- Cycle-level failures
-- Cron script timeouts and non-zero exits
-
-These events are classified by the `node_friction_observer_compute` contract rules
-and visible to the `/friction-triage` skill and omnidash friction dashboard.
-
-## See Also
-
-- `node_autonomous_loop_orchestrator` — orchestrates the 6-phase cycle
-- `node_loop_state_reducer` — FSM with circuit breaker
-- `ticket-pipeline` skill — individual ticket execution (dispatched by BUILDING phase)
-- OMN-5113 — Autonomous Build Loop epic
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_build_loop_orchestrator/ (orchestrator)
+fsm        -> omnimarket/src/omnimarket/nodes/node_build_loop/ (FSM reducer)
+contract   -> node_build_loop_orchestrator/contract.yaml
+```
