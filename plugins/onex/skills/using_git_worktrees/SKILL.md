@@ -121,13 +121,22 @@ esac
 # Create worktree with new branch
 git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
-
-# MANDATORY: pre-commit hooks are not inherited by worktrees.
-# Run this immediately after creation, before any commit attempt.
-pre-commit install
 ```
 
-### 3. Run Project Setup
+### 3. Post-Creation: Install pre-commit (REQUIRED)
+
+After every worktree creation, install pre-commit hooks before writing any code:
+
+```bash
+cd $OMNI_HOME/worktrees/$TICKET/$REPO
+pre-commit install --install-hooks
+```
+
+This is mandatory — pre-commit hooks enforce hardcoded-topic lint, import ordering,
+and other checks that run on every commit. Without this step, hooks never execute.
+If pre-commit is not in the venv: `uv add pre-commit --dev` or `pip install pre-commit`.
+
+### 4. Run Project Setup
 
 Auto-detect and run appropriate setup:
 
@@ -146,7 +155,7 @@ if [ -f pyproject.toml ]; then poetry install; fi
 if [ -f go.mod ]; then go mod download; fi
 ```
 
-### 4. Verify Clean Baseline
+### 5. Verify Clean Baseline
 
 Run tests to ensure worktree starts clean:
 
@@ -162,7 +171,7 @@ go test ./...
 
 **If tests pass:** Report ready.
 
-### 5. Report Location
+### 6. Report Location
 
 ```
 Worktree ready at <full-path>
