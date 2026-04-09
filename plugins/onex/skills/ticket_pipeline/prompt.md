@@ -3152,20 +3152,20 @@ EOF
 **Trigger**: pr_review_loop complete (all human review comments addressed)
 **Skip if**: `--docs-only` flag is set (documentation-only changes don't need adversarial review)
 
-Dispatch the review gate skill to run 3 parallel adversarial review agents (scope, correctness,
-conventions) against the PR:
+Dispatch hostile-reviewer in gate mode to run 3 parallel adversarial review agents (scope,
+correctness, conventions) against the PR:
 
 ```
-Skill(skill="onex:review_gate", args="{pr_number} {repo}")
+Skill(skill="onex:hostile_reviewer", args="--pr {pr_number} --repo {repo} --gate")
 ```
 
-Read result from `~/.claude/skill-results/{context_id}/review-gate.json`.
+Read result from `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json`.
 
 - If `extra_status == "passed"`: advance to integration_verification_gate
 - If `extra_status == "blocked"`:
   - Post findings as a PR comment (formatted markdown table of CRITICAL/MAJOR findings)
   - Dispatch fix agent for each CRITICAL/MAJOR finding
-  - Re-run review gate (max 2 iterations)
+  - Re-run hostile-reviewer gate (max 2 iterations)
   - If still blocked after 2 iterations: mark ticket as `review_gate_blocked` in state.yaml,
     skip to next ticket
 

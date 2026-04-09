@@ -9,3 +9,4 @@ topics:
   - onex.cmd.omniclaude.hostile-reviewer.v1
   - onex.evt.omniclaude.hostile-reviewer-completed.v1
   - onex.evt.omniclaude.hostile-reviewer-failed.v1
+  - onex.evt.omniclaude.review-gate-verdict.v1
