@@ -5,7 +5,7 @@
     "tolerance": {
         "confidence": 0.05,
         "selected_agent": "exact",
-        "routing_policy": "exact",
+        "routing_policy": "exact"
     },
     "entries": [
         {
@@ -18,19 +18,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'rest api'",
+                "reasoning_contains": "Exact match: 'rest api'"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'rest api'",
+                    "reason": "Exact match: 'rest api'"
                 },
                 {
                     "name": "testing",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'test' (75%)",
-                },
+                    "reason": "Fuzzy match: 'test' (75%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -39,9 +39,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 16.16,
+            "generation_latency_ms": 16.16
         },
         {
             "id": 2,
@@ -53,13 +53,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'debug'",
+                "reasoning_contains": "Exact match: 'debug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'debug'",
+                    "reason": "Exact match: 'debug'"
                 }
             ],
             "router_layer": {
@@ -69,9 +69,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.96,
+            "generation_latency_ms": 11.96
         },
         {
             "id": 3,
@@ -83,13 +83,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'react'",
+                "reasoning_contains": "Exact match: 'react'"
             },
             "candidates": [
                 {
                     "name": "frontend-developer",
                     "score": 0.66,
-                    "reason": "Exact match: 'react'",
+                    "reason": "Exact match: 'react'"
                 }
             ],
             "router_layer": {
@@ -99,9 +99,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.04,
+            "generation_latency_ms": 12.04
         },
         {
             "id": 4,
@@ -113,19 +113,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'semantic commit'",
+                "reasoning_contains": "Exact match: 'semantic commit'"
             },
             "candidates": [
                 {
                     "name": "commit",
                     "score": 0.66,
-                    "reason": "Exact match: 'semantic commit'",
+                    "reason": "Exact match: 'semantic commit'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
-                },
+                    "reason": "Fuzzy match: 'react' (73%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "commit",
@@ -134,9 +134,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 13.5,
+            "generation_latency_ms": 13.5
         },
         {
             "id": 5,
@@ -148,13 +148,13 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'test' (89%)",
+                "reasoning_contains": "Fuzzy match: 'test' (89%)"
             },
             "candidates": [
                 {
                     "name": "testing",
                     "score": 0.58,
-                    "reason": "Fuzzy match: 'test' (89%)",
+                    "reason": "Fuzzy match: 'test' (89%)"
                 }
             ],
             "router_layer": {
@@ -164,9 +164,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 13.82,
+            "generation_latency_ms": 13.82
         },
         {
             "id": 6,
@@ -178,19 +178,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'performance'",
+                "reasoning_contains": "Exact match: 'performance'"
             },
             "candidates": [
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
+                    "reason": "Exact match: 'performance'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
-                },
+                    "reason": "Exact match: 'performance'"
+                }
             ],
             "router_layer": {
                 "top_agent": "performance",
@@ -199,9 +199,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 9.97,
+            "generation_latency_ms": 9.97
         },
         {
             "id": 7,
@@ -213,13 +213,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'security'",
+                "reasoning_contains": "Exact match: 'security'"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'security'",
+                    "reason": "Exact match: 'security'"
                 }
             ],
             "router_layer": {
@@ -229,9 +229,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.71,
+            "generation_latency_ms": 12.71
         },
         {
             "id": 8,
@@ -243,13 +243,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'docker'",
+                "reasoning_contains": "Exact match: 'docker'"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'docker'",
+                    "reason": "Exact match: 'docker'"
                 }
             ],
             "router_layer": {
@@ -259,9 +259,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 14.1,
+            "generation_latency_ms": 14.1
         },
         {
             "id": 9,
@@ -273,19 +273,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'monitor'",
+                "reasoning_contains": "Exact match: 'monitor'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'monitor'",
+                    "reason": "Exact match: 'monitor'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'system health'",
-                },
+                    "reason": "Exact match: 'system health'"
+                }
             ],
             "router_layer": {
                 "top_agent": "production-monitor",
@@ -294,9 +294,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 11.26,
+            "generation_latency_ms": 11.26
         },
         {
             "id": 10,
@@ -308,19 +308,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'observability'",
+                "reasoning_contains": "Exact match: 'observability'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'observability'",
+                    "reason": "Exact match: 'observability'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'observability'",
-                },
+                    "reason": "Exact match: 'observability'"
+                }
             ],
             "router_layer": {
                 "top_agent": "production-monitor",
@@ -329,9 +329,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.03,
+            "generation_latency_ms": 12.03
         },
         {
             "id": 11,
@@ -343,13 +343,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'code quality'",
+                "reasoning_contains": "Exact match: 'code quality'"
             },
             "candidates": [
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.66,
-                    "reason": "Exact match: 'code quality'",
+                    "reason": "Exact match: 'code quality'"
                 }
             ],
             "router_layer": {
@@ -359,9 +359,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.3,
+            "generation_latency_ms": 12.3
         },
         {
             "id": 12,
@@ -373,19 +373,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'pull request'",
+                "reasoning_contains": "Exact match: 'pull request'"
             },
             "candidates": [
                 {
                     "name": "pr-review",
                     "score": 0.66,
-                    "reason": "Exact match: 'pull request'",
+                    "reason": "Exact match: 'pull request'"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'code review' (71%)",
-                },
+                    "reason": "Fuzzy match: 'code review' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "pr-review",
@@ -394,9 +394,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.08,
+            "generation_latency_ms": 12.08
         },
         {
             "id": 13,
@@ -408,24 +408,24 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'research'",
+                "reasoning_contains": "Exact match: 'research'"
             },
             "candidates": [
                 {
                     "name": "research",
                     "score": 0.66,
-                    "reason": "Exact match: 'research'",
+                    "reason": "Exact match: 'research'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.56,
-                    "reason": "Fuzzy match: 'implement ui' (83%)",
+                    "reason": "Fuzzy match: 'implement ui' (83%)"
                 },
                 {
                     "name": "testing",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'test' (75%)",
-                },
+                    "reason": "Fuzzy match: 'test' (75%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "research",
@@ -434,9 +434,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 12.88,
+            "generation_latency_ms": 12.88
         },
         {
             "id": 14,
@@ -448,13 +448,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'ticket lifecycle'",
+                "reasoning_contains": "Exact match: 'ticket lifecycle'"
             },
             "candidates": [
                 {
                     "name": "ticket-manager",
                     "score": 0.66,
-                    "reason": "Exact match: 'ticket lifecycle'",
+                    "reason": "Exact match: 'ticket lifecycle'"
                 }
             ],
             "router_layer": {
@@ -464,9 +464,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.0,
+            "generation_latency_ms": 11.0
         },
         {
             "id": 15,
@@ -478,19 +478,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'collect parameters'",
+                "reasoning_contains": "Exact match: 'collect parameters'"
             },
             "candidates": [
                 {
                     "name": "parameter-collector",
                     "score": 0.66,
-                    "reason": "Exact match: 'collect parameters'",
+                    "reason": "Exact match: 'collect parameters'"
                 },
                 {
                     "name": "repository-setup",
                     "score": 0.518462,
-                    "reason": "Fuzzy match: 'repository initialization' (72%)",
-                },
+                    "reason": "Fuzzy match: 'repository initialization' (72%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "parameter-collector",
@@ -499,9 +499,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.62,
+            "generation_latency_ms": 12.62
         },
         {
             "id": 16,
@@ -513,19 +513,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'fastapi'",
+                "reasoning_contains": "Exact match: 'fastapi'"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'fastapi'",
+                    "reason": "Exact match: 'fastapi'"
                 },
                 {
                     "name": "python-fastapi-expert",
                     "score": 0.66,
-                    "reason": "Exact match: 'python'",
-                },
+                    "reason": "Exact match: 'python'"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -534,9 +534,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.88,
+            "generation_latency_ms": 12.88
         },
         {
             "id": 17,
@@ -548,19 +548,19 @@
                 "confidence": 0.541739,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'infrastructure' (78%)",
+                "reasoning_contains": "Fuzzy match: 'infrastructure' (78%)"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.541739,
-                    "reason": "Fuzzy match: 'infrastructure' (78%)",
+                    "reason": "Fuzzy match: 'infrastructure' (78%)"
                 },
                 {
                     "name": "ast-generator",
                     "score": 0.488571,
-                    "reason": "Keyword overlap (71%)",
-                },
+                    "reason": "Keyword overlap (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "devops-infrastructure",
@@ -569,9 +569,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 14.91,
+            "generation_latency_ms": 14.91
         },
         {
             "id": 18,
@@ -583,13 +583,13 @@
                 "confidence": 0.536923,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'repository setup' (77%)",
+                "reasoning_contains": "Fuzzy match: 'repository setup' (77%)"
             },
             "candidates": [
                 {
                     "name": "repository-setup",
                     "score": 0.536923,
-                    "reason": "Fuzzy match: 'repository setup' (77%)",
+                    "reason": "Fuzzy match: 'repository setup' (77%)"
                 }
             ],
             "router_layer": {
@@ -599,9 +599,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 13.24,
+            "generation_latency_ms": 13.24
         },
         {
             "id": 19,
@@ -613,19 +613,19 @@
                 "confidence": 0.598824,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'endpoint' (94%)",
+                "reasoning_contains": "Fuzzy match: 'endpoint' (94%)"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.598824,
-                    "reason": "Fuzzy match: 'endpoint' (94%)",
+                    "reason": "Fuzzy match: 'endpoint' (94%)"
                 },
                 {
                     "name": "documentation-architect",
                     "score": 0.572,
-                    "reason": "Fuzzy match: 'api documentation' (87%)",
-                },
+                    "reason": "Fuzzy match: 'api documentation' (87%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -634,9 +634,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.66,
+            "generation_latency_ms": 12.66
         },
         {
             "id": 20,
@@ -648,24 +648,24 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
                 {
                     "name": "pr-workflow",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
+                    "reason": "Keyword overlap (100%)"
                 },
                 {
                     "name": "testing",
                     "score": 0.548,
-                    "reason": "Fuzzy match: 'validation test' (80%)",
+                    "reason": "Fuzzy match: 'validation test' (80%)"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
-                },
+                    "reason": "Fuzzy match: 'react' (73%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "pr-workflow",
@@ -674,9 +674,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 12.29,
+            "generation_latency_ms": 12.29
         },
         {
             "id": 21,
@@ -688,19 +688,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'deployment'",
+                "reasoning_contains": "Exact match: 'deployment'"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'deployment'",
+                    "reason": "Exact match: 'deployment'"
                 },
                 {
                     "name": "content-summarizer",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
-                },
+                    "reason": "Keyword overlap (100%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "devops-infrastructure",
@@ -709,9 +709,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 9.84,
+            "generation_latency_ms": 9.84
         },
         {
             "id": 22,
@@ -723,10 +723,14 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'validate'",
+                "reasoning_contains": "Exact match: 'validate'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'validate'"}
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'validate'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -735,9 +739,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 10.26,
+            "generation_latency_ms": 10.26
         },
         {
             "id": 23,
@@ -749,15 +753,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'test'",
+                "reasoning_contains": "Exact match: 'test'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'test'"},
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'test'"
+                },
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'penetration test'",
-                },
+                    "reason": "Exact match: 'penetration test'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -766,9 +774,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.65,
+            "generation_latency_ms": 12.65
         },
         {
             "id": 24,
@@ -780,24 +788,24 @@
                 "confidence": 0.53,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'git commit' (75%)",
+                "reasoning_contains": "Fuzzy match: 'git commit' (75%)"
             },
             "candidates": [
                 {
                     "name": "commit",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'git commit' (75%)",
+                    "reason": "Fuzzy match: 'git commit' (75%)"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
+                    "reason": "Fuzzy match: 'react' (73%)"
                 },
                 {
                     "name": "pr-workflow",
                     "score": 0.452,
-                    "reason": "Keyword overlap (60%)",
-                },
+                    "reason": "Keyword overlap (60%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "commit",
@@ -806,9 +814,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 13.38,
+            "generation_latency_ms": 13.38
         },
         {
             "id": 25,
@@ -820,19 +828,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'kubernetes'",
+                "reasoning_contains": "Exact match: 'kubernetes'"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'kubernetes'",
+                    "reason": "Exact match: 'kubernetes'"
                 },
                 {
                     "name": "testing",
                     "score": 0.517143,
-                    "reason": "Fuzzy match: 'testing' (71%)",
-                },
+                    "reason": "Fuzzy match: 'testing' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "devops-infrastructure",
@@ -841,9 +849,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.43,
+            "generation_latency_ms": 12.43
         },
         {
             "id": 26,
@@ -855,19 +863,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'investigate'",
+                "reasoning_contains": "Exact match: 'investigate'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'investigate'",
+                    "reason": "Exact match: 'investigate'"
                 },
                 {
                     "name": "research",
                     "score": 0.66,
-                    "reason": "Exact match: 'investigate'",
-                },
+                    "reason": "Exact match: 'investigate'"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -876,9 +884,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.63,
+            "generation_latency_ms": 12.63
         },
         {
             "id": 27,
@@ -890,13 +898,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'ui component'",
+                "reasoning_contains": "Exact match: 'ui component'"
             },
             "candidates": [
                 {
                     "name": "frontend-developer",
                     "score": 0.66,
-                    "reason": "Exact match: 'ui component'",
+                    "reason": "Exact match: 'ui component'"
                 }
             ],
             "router_layer": {
@@ -906,9 +914,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.02,
+            "generation_latency_ms": 12.02
         },
         {
             "id": 28,
@@ -920,29 +928,29 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'compliance'",
+                "reasoning_contains": "Exact match: 'compliance'"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'compliance'",
+                    "reason": "Exact match: 'compliance'"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.66,
-                    "reason": "Exact match: 'code quality'",
+                    "reason": "Exact match: 'code quality'"
                 },
                 {
                     "name": "pr-review",
                     "score": 0.548,
-                    "reason": "Fuzzy match: 'assess pr' (80%)",
+                    "reason": "Fuzzy match: 'assess pr' (80%)"
                 },
                 {
                     "name": "ast-generator",
                     "score": 0.452,
-                    "reason": "Keyword overlap (60%)",
-                },
+                    "reason": "Keyword overlap (60%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "security-audit",
@@ -951,9 +959,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 4,
+                "match_count": 4
             },
-            "generation_latency_ms": 10.34,
+            "generation_latency_ms": 10.34
         },
         {
             "id": 29,
@@ -965,19 +973,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'api documentation'",
+                "reasoning_contains": "Exact match: 'api documentation'"
             },
             "candidates": [
                 {
                     "name": "documentation-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'api documentation'",
+                    "reason": "Exact match: 'api documentation'"
                 },
                 {
                     "name": "api-architect",
                     "score": 0.598824,
-                    "reason": "Fuzzy match: 'endpoint' (94%)",
-                },
+                    "reason": "Fuzzy match: 'endpoint' (94%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "documentation-architect",
@@ -986,9 +994,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.01,
+            "generation_latency_ms": 12.01
         },
         {
             "id": 30,
@@ -1000,19 +1008,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'system health'",
+                "reasoning_contains": "Exact match: 'system health'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'system health'",
+                    "reason": "Exact match: 'system health'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'system health'",
-                },
+                    "reason": "Exact match: 'system health'"
+                }
             ],
             "router_layer": {
                 "top_agent": "production-monitor",
@@ -1021,9 +1029,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.57,
+            "generation_latency_ms": 12.57
         },
         {
             "id": 31,
@@ -1035,7 +1043,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -1045,9 +1053,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 12.86,
+            "generation_latency_ms": 12.86
         },
         {
             "id": 32,
@@ -1059,13 +1067,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'debug'",
+                "reasoning_contains": "Exact match: 'debug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'debug'",
+                    "reason": "Exact match: 'debug'"
                 }
             ],
             "router_layer": {
@@ -1075,9 +1083,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 14.27,
+            "generation_latency_ms": 14.27
         },
         {
             "id": 33,
@@ -1089,10 +1097,14 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'test'",
+                "reasoning_contains": "Exact match: 'test'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'test'"}
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'test'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -1101,9 +1113,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 10.89,
+            "generation_latency_ms": 10.89
         },
         {
             "id": 34,
@@ -1115,13 +1127,13 @@
                 "confidence": 0.53,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'api design' (75%)",
+                "reasoning_contains": "Fuzzy match: 'api design' (75%)"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'api design' (75%)",
+                    "reason": "Fuzzy match: 'api design' (75%)"
                 }
             ],
             "router_layer": {
@@ -1131,9 +1143,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 13.06,
+            "generation_latency_ms": 13.06
         },
         {
             "id": 35,
@@ -1145,19 +1157,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'performance'",
+                "reasoning_contains": "Exact match: 'performance'"
             },
             "candidates": [
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
+                    "reason": "Exact match: 'performance'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
-                },
+                    "reason": "Exact match: 'performance'"
+                }
             ],
             "router_layer": {
                 "top_agent": "performance",
@@ -1166,9 +1178,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.11,
+            "generation_latency_ms": 12.11
         },
         {
             "id": 36,
@@ -1180,19 +1192,19 @@
                 "confidence": 0.548,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'pr review' (80%)",
+                "reasoning_contains": "Fuzzy match: 'pr review' (80%)"
             },
             "candidates": [
                 {
                     "name": "pr-review",
                     "score": 0.548,
-                    "reason": "Fuzzy match: 'pr review' (80%)",
+                    "reason": "Fuzzy match: 'pr review' (80%)"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'code review' (71%)",
-                },
+                    "reason": "Fuzzy match: 'code review' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "pr-review",
@@ -1201,9 +1213,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 11.26,
+            "generation_latency_ms": 11.26
         },
         {
             "id": 37,
@@ -1215,7 +1227,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -1225,9 +1237,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 0.01,
+            "generation_latency_ms": 0.01
         },
         {
             "id": 38,
@@ -1239,7 +1251,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -1249,9 +1261,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 0.01,
+            "generation_latency_ms": 0.01
         },
         {
             "id": 39,
@@ -1263,13 +1275,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'security'",
+                "reasoning_contains": "Exact match: 'security'"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'security'",
+                    "reason": "Exact match: 'security'"
                 }
             ],
             "router_layer": {
@@ -1279,9 +1291,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.33,
+            "generation_latency_ms": 11.33
         },
         {
             "id": 40,
@@ -1293,7 +1305,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1303,9 +1315,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 8.86,
+            "generation_latency_ms": 8.86
         },
         {
             "id": 41,
@@ -1317,13 +1329,13 @@
                 "confidence": 0.542857,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'async programming' (79%)",
+                "reasoning_contains": "Fuzzy match: 'async programming' (79%)"
             },
             "candidates": [
                 {
                     "name": "python-fastapi-expert",
                     "score": 0.542857,
-                    "reason": "Fuzzy match: 'async programming' (79%)",
+                    "reason": "Fuzzy match: 'async programming' (79%)"
                 }
             ],
             "router_layer": {
@@ -1333,9 +1345,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 9.58,
+            "generation_latency_ms": 9.58
         },
         {
             "id": 42,
@@ -1347,7 +1359,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1357,9 +1369,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 9.18,
+            "generation_latency_ms": 9.18
         },
         {
             "id": 43,
@@ -1371,13 +1383,13 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
                 {
                     "name": "agent-observability",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
+                    "reason": "Keyword overlap (100%)"
                 }
             ],
             "router_layer": {
@@ -1387,9 +1399,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 5.14,
+            "generation_latency_ms": 5.14
         },
         {
             "id": 44,
@@ -1401,7 +1413,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1411,9 +1423,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 11.13,
+            "generation_latency_ms": 11.13
         },
         {
             "id": 45,
@@ -1425,7 +1437,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1435,9 +1447,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.79,
+            "generation_latency_ms": 10.79
         },
         {
             "id": 46,
@@ -1449,7 +1461,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1459,9 +1471,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 9.33,
+            "generation_latency_ms": 9.33
         },
         {
             "id": 47,
@@ -1473,7 +1485,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1483,9 +1495,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 8.7,
+            "generation_latency_ms": 8.7
         },
         {
             "id": 48,
@@ -1497,7 +1509,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1507,9 +1519,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.36,
+            "generation_latency_ms": 10.36
         },
         {
             "id": 49,
@@ -1521,13 +1533,13 @@
                 "confidence": 0.554545,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'summarize log' (82%)",
+                "reasoning_contains": "Fuzzy match: 'summarize log' (82%)"
             },
             "candidates": [
                 {
                     "name": "content-summarizer",
                     "score": 0.554545,
-                    "reason": "Fuzzy match: 'summarize log' (82%)",
+                    "reason": "Fuzzy match: 'summarize log' (82%)"
                 }
             ],
             "router_layer": {
@@ -1537,9 +1549,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 8.67,
+            "generation_latency_ms": 8.67
         },
         {
             "id": 50,
@@ -1551,24 +1563,24 @@
                 "confidence": 0.568571,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'bug' (86%)",
+                "reasoning_contains": "Fuzzy match: 'bug' (86%)"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.568571,
-                    "reason": "Fuzzy match: 'bug' (86%)",
+                    "reason": "Fuzzy match: 'bug' (86%)"
                 },
                 {
                     "name": "pr-review",
                     "score": 0.548,
-                    "reason": "Fuzzy match: 'pr review' (80%)",
+                    "reason": "Fuzzy match: 'pr review' (80%)"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'code review' (71%)",
-                },
+                    "reason": "Fuzzy match: 'code review' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -1577,9 +1589,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 10.04,
+            "generation_latency_ms": 10.04
         },
         {
             "id": 51,
@@ -1591,19 +1603,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'performance'",
+                "reasoning_contains": "Exact match: 'performance'"
             },
             "candidates": [
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
+                    "reason": "Exact match: 'performance'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
-                },
+                    "reason": "Exact match: 'performance'"
+                }
             ],
             "router_layer": {
                 "top_agent": "performance",
@@ -1612,9 +1624,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 7.76,
+            "generation_latency_ms": 7.76
         },
         {
             "id": 52,
@@ -1626,19 +1638,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'troubleshoot'",
+                "reasoning_contains": "Exact match: 'troubleshoot'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'troubleshoot'",
+                    "reason": "Exact match: 'troubleshoot'"
                 },
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'deployment'",
-                },
+                    "reason": "Exact match: 'deployment'"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -1647,9 +1659,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 10.69,
+            "generation_latency_ms": 10.69
         },
         {
             "id": 53,
@@ -1661,30 +1673,34 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'validate'",
+                "reasoning_contains": "Exact match: 'validate'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'validate'"},
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'validate'"
+                },
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'security'",
+                    "reason": "Exact match: 'security'"
                 },
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'infrastructure'",
+                    "reason": "Exact match: 'infrastructure'"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.66,
-                    "reason": "Exact match: 'compliance'",
+                    "reason": "Exact match: 'compliance'"
                 },
                 {
                     "name": "pr-review",
                     "score": 0.536923,
-                    "reason": "Fuzzy match: 'compliance check' (77%)",
-                },
+                    "reason": "Fuzzy match: 'compliance check' (77%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -1693,9 +1709,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 5,
+                "match_count": 5
             },
-            "generation_latency_ms": 12.63,
+            "generation_latency_ms": 12.63
         },
         {
             "id": 54,
@@ -1707,10 +1723,14 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'test'",
+                "reasoning_contains": "Exact match: 'test'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'test'"}
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'test'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -1719,9 +1739,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.7,
+            "generation_latency_ms": 12.7
         },
         {
             "id": 55,
@@ -1733,19 +1753,19 @@
                 "confidence": 0.598824,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'endpoint' (94%)",
+                "reasoning_contains": "Fuzzy match: 'endpoint' (94%)"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.598824,
-                    "reason": "Fuzzy match: 'endpoint' (94%)",
+                    "reason": "Fuzzy match: 'endpoint' (94%)"
                 },
                 {
                     "name": "production-monitor",
                     "score": 0.556471,
-                    "reason": "Fuzzy match: 'monitor' (82%)",
-                },
+                    "reason": "Fuzzy match: 'monitor' (82%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -1754,9 +1774,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 11.4,
+            "generation_latency_ms": 11.4
         },
         {
             "id": 56,
@@ -1768,13 +1788,13 @@
                 "confidence": 0.519672,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'documentation architecture' (72%)",
+                "reasoning_contains": "Fuzzy match: 'documentation architecture' (72%)"
             },
             "candidates": [
                 {
                     "name": "documentation-architect",
                     "score": 0.519672,
-                    "reason": "Fuzzy match: 'documentation architecture' (72%)",
+                    "reason": "Fuzzy match: 'documentation architecture' (72%)"
                 }
             ],
             "router_layer": {
@@ -1784,9 +1804,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 8.9,
+            "generation_latency_ms": 8.9
         },
         {
             "id": 57,
@@ -1798,24 +1818,24 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'deployment'",
+                "reasoning_contains": "Exact match: 'deployment'"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'deployment'",
+                    "reason": "Exact match: 'deployment'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'typescript' (75%)",
+                    "reason": "Fuzzy match: 'typescript' (75%)"
                 },
                 {
                     "name": "security-audit",
                     "score": 0.517143,
-                    "reason": "Fuzzy match: 'security' (71%)",
-                },
+                    "reason": "Fuzzy match: 'security' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "devops-infrastructure",
@@ -1824,9 +1844,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 11.07,
+            "generation_latency_ms": 11.07
         },
         {
             "id": 58,
@@ -1838,10 +1858,14 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'test'",
+                "reasoning_contains": "Exact match: 'test'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'test'"}
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'test'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -1850,9 +1874,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 12.86,
+            "generation_latency_ms": 12.86
         },
         {
             "id": 59,
@@ -1864,24 +1888,24 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'frontend'",
+                "reasoning_contains": "Exact match: 'frontend'"
             },
             "candidates": [
                 {
                     "name": "frontend-developer",
                     "score": 0.66,
-                    "reason": "Exact match: 'frontend'",
+                    "reason": "Exact match: 'frontend'"
                 },
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
+                    "reason": "Exact match: 'performance'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
-                },
+                    "reason": "Exact match: 'performance'"
+                }
             ],
             "router_layer": {
                 "top_agent": "frontend-developer",
@@ -1890,9 +1914,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 10.46,
+            "generation_latency_ms": 10.46
         },
         {
             "id": 60,
@@ -1904,7 +1928,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1914,9 +1938,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.45,
+            "generation_latency_ms": 10.45
         },
         {
             "id": 61,
@@ -1928,7 +1952,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -1938,9 +1962,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 13.14,
+            "generation_latency_ms": 13.14
         },
         {
             "id": 62,
@@ -1952,7 +1976,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -1962,9 +1986,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.09,
+            "generation_latency_ms": 10.09
         },
         {
             "id": 63,
@@ -1976,7 +2000,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -1986,9 +2010,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 9.95,
+            "generation_latency_ms": 9.95
         },
         {
             "id": 64,
@@ -2000,7 +2024,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -2010,9 +2034,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 11.03,
+            "generation_latency_ms": 11.03
         },
         {
             "id": 65,
@@ -2024,7 +2048,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No matching agent found",
+                "reasoning_contains": "No matching agent found"
             },
             "candidates": [],
             "router_layer": {
@@ -2034,9 +2058,9 @@
                 "top_context_score": 0.0,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.0,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.48,
+            "generation_latency_ms": 10.48
         },
         {
             "id": 66,
@@ -2048,7 +2072,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -2058,9 +2082,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.68,
+            "generation_latency_ms": 10.68
         },
         {
             "id": 67,
@@ -2072,13 +2096,13 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (60%)",
+                "reasoning_contains": "Keyword overlap (60%)"
             },
             "candidates": [
                 {
                     "name": "polymorphic-agent",
                     "score": 0.452,
-                    "reason": "Keyword overlap (60%)",
+                    "reason": "Keyword overlap (60%)"
                 }
             ],
             "router_layer": {
@@ -2088,9 +2112,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.52,
+            "generation_latency_ms": 11.52
         },
         {
             "id": 68,
@@ -2102,24 +2126,24 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'debug'",
+                "reasoning_contains": "Exact match: 'debug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'debug'",
+                    "reason": "Exact match: 'debug'"
                 },
                 {
                     "name": "ticket-manager",
                     "score": 0.66,
-                    "reason": "Exact match: 'issue'",
+                    "reason": "Exact match: 'issue'"
                 },
                 {
                     "name": "polymorphic-agent",
                     "score": 0.542857,
-                    "reason": "Fuzzy match: 'polymorphic agent' (79%)",
-                },
+                    "reason": "Fuzzy match: 'polymorphic agent' (79%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -2128,9 +2152,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 3,
+                "match_count": 3
             },
-            "generation_latency_ms": 9.6,
+            "generation_latency_ms": 9.6
         },
         {
             "id": 69,
@@ -2142,7 +2166,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -2152,9 +2176,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 10.78,
+            "generation_latency_ms": 10.78
         },
         {
             "id": 70,
@@ -2166,13 +2190,13 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'test' (89%)",
+                "reasoning_contains": "Fuzzy match: 'test' (89%)"
             },
             "candidates": [
                 {
                     "name": "testing",
                     "score": 0.58,
-                    "reason": "Fuzzy match: 'test' (89%)",
+                    "reason": "Fuzzy match: 'test' (89%)"
                 }
             ],
             "router_layer": {
@@ -2182,9 +2206,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.35,
+            "generation_latency_ms": 11.35
         },
         {
             "id": 71,
@@ -2196,19 +2220,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'troubleshoot'",
+                "reasoning_contains": "Exact match: 'troubleshoot'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'troubleshoot'",
+                    "reason": "Exact match: 'troubleshoot'"
                 },
                 {
                     "name": "ticket-manager",
                     "score": 0.66,
-                    "reason": "Exact match: 'issue'",
-                },
+                    "reason": "Exact match: 'issue'"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -2217,9 +2241,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 8.9,
+            "generation_latency_ms": 8.9
         },
         {
             "id": 72,
@@ -2231,19 +2255,19 @@
                 "confidence": 0.53,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'deployment' (75%)",
+                "reasoning_contains": "Fuzzy match: 'deployment' (75%)"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'deployment' (75%)",
+                    "reason": "Fuzzy match: 'deployment' (75%)"
                 },
                 {
                     "name": "testing",
                     "score": 0.517143,
-                    "reason": "Fuzzy match: 'testing' (71%)",
-                },
+                    "reason": "Fuzzy match: 'testing' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "devops-infrastructure",
@@ -2252,9 +2276,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 10.26,
+            "generation_latency_ms": 10.26
         },
         {
             "id": 73,
@@ -2266,19 +2290,19 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
                 {
                     "name": "pr-review",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
+                    "reason": "Keyword overlap (100%)"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'code review' (71%)",
-                },
+                    "reason": "Fuzzy match: 'code review' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "pr-review",
@@ -2287,9 +2311,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 10.04,
+            "generation_latency_ms": 10.04
         },
         {
             "id": 74,
@@ -2301,19 +2325,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'investigate'",
+                "reasoning_contains": "Exact match: 'investigate'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'investigate'",
+                    "reason": "Exact match: 'investigate'"
                 },
                 {
                     "name": "research",
                     "score": 0.66,
-                    "reason": "Exact match: 'investigate'",
-                },
+                    "reason": "Exact match: 'investigate'"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -2322,9 +2346,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 11.3,
+            "generation_latency_ms": 11.3
         },
         {
             "id": 75,
@@ -2336,19 +2360,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'documentation quality'",
+                "reasoning_contains": "Exact match: 'documentation quality'"
             },
             "candidates": [
                 {
                     "name": "documentation-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'documentation quality'",
+                    "reason": "Exact match: 'documentation quality'"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.525263,
-                    "reason": "Fuzzy match: 'code quality' (74%)",
-                },
+                    "reason": "Fuzzy match: 'code quality' (74%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "documentation-architect",
@@ -2357,9 +2381,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 9.7,
+            "generation_latency_ms": 9.7
         },
         {
             "id": 76,
@@ -2371,7 +2395,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -2381,9 +2405,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 11.39,
+            "generation_latency_ms": 11.39
         },
         {
             "id": 77,
@@ -2395,13 +2419,13 @@
                 "confidence": 0.568571,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'vulnerability' (86%)",
+                "reasoning_contains": "Fuzzy match: 'vulnerability' (86%)"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.568571,
-                    "reason": "Fuzzy match: 'vulnerability' (86%)",
+                    "reason": "Fuzzy match: 'vulnerability' (86%)"
                 }
             ],
             "router_layer": {
@@ -2411,9 +2435,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 11.1,
+            "generation_latency_ms": 11.1
         },
         {
             "id": 78,
@@ -2425,13 +2449,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'frontend'",
+                "reasoning_contains": "Exact match: 'frontend'"
             },
             "candidates": [
                 {
                     "name": "frontend-developer",
                     "score": 0.66,
-                    "reason": "Exact match: 'frontend'",
+                    "reason": "Exact match: 'frontend'"
                 }
             ],
             "router_layer": {
@@ -2441,9 +2465,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 10.83,
+            "generation_latency_ms": 10.83
         },
         {
             "id": 79,
@@ -2455,19 +2479,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'onex tool'",
+                "reasoning_contains": "Exact match: 'onex tool'"
             },
             "candidates": [
                 {
                     "name": "ast-generator",
                     "score": 0.66,
-                    "reason": "Exact match: 'onex tool'",
+                    "reason": "Exact match: 'onex tool'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
-                },
+                    "reason": "Fuzzy match: 'react' (73%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "ast-generator",
@@ -2476,9 +2500,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.16,
+            "generation_latency_ms": 12.16
         },
         {
             "id": 80,
@@ -2490,19 +2514,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'debug'",
+                "reasoning_contains": "Exact match: 'debug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'debug'",
+                    "reason": "Exact match: 'debug'"
                 },
                 {
                     "name": "testing",
                     "score": 0.58,
-                    "reason": "Fuzzy match: 'test' (89%)",
-                },
+                    "reason": "Fuzzy match: 'test' (89%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "debug-intelligence",
@@ -2511,9 +2535,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 14.26,
+            "generation_latency_ms": 14.26
         },
         {
             "id": 81,
@@ -2525,29 +2549,29 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'security'",
+                "reasoning_contains": "Exact match: 'security'"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'security'",
+                    "reason": "Exact match: 'security'"
                 },
                 {
                     "name": "ticket-manager",
                     "score": 0.587273,
-                    "reason": "Fuzzy match: 'issue' (91%)",
+                    "reason": "Fuzzy match: 'issue' (91%)"
                 },
                 {
                     "name": "pr-review",
                     "score": 0.548,
-                    "reason": "Fuzzy match: 'pr review' (80%)",
+                    "reason": "Fuzzy match: 'pr review' (80%)"
                 },
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'code review' (71%)",
-                },
+                    "reason": "Fuzzy match: 'code review' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "security-audit",
@@ -2556,9 +2580,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 4,
+                "match_count": 4
             },
-            "generation_latency_ms": 12.45,
+            "generation_latency_ms": 12.45
         },
         {
             "id": 82,
@@ -2570,19 +2594,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'monitor'",
+                "reasoning_contains": "Exact match: 'monitor'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'monitor'",
+                    "reason": "Exact match: 'monitor'"
                 },
                 {
                     "name": "devops-infrastructure",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'deployment' (75%)",
-                },
+                    "reason": "Fuzzy match: 'deployment' (75%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "production-monitor",
@@ -2591,9 +2615,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.68,
+            "generation_latency_ms": 12.68
         },
         {
             "id": 83,
@@ -2605,15 +2629,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'testing'",
+                "reasoning_contains": "Exact match: 'testing'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'testing'"},
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'testing'"
+                },
                 {
                     "name": "research",
                     "score": 0.66,
-                    "reason": "Exact match: 'research'",
-                },
+                    "reason": "Exact match: 'research'"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -2622,9 +2650,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 12.91,
+            "generation_latency_ms": 12.91
         },
         {
             "id": 84,
@@ -2636,7 +2664,7 @@
                 "confidence": 0.5,
                 "routing_policy": "fallback_default",
                 "routing_path": "local",
-                "reasoning_contains": "No trigger matches found",
+                "reasoning_contains": "No trigger matches found"
             },
             "candidates": [],
             "router_layer": {
@@ -2646,9 +2674,9 @@
                 "top_context_score": null,
                 "top_capability_score": null,
                 "top_historical_score": null,
-                "match_count": 0,
+                "match_count": 0
             },
-            "generation_latency_ms": 14.13,
+            "generation_latency_ms": 14.13
         },
         {
             "id": 85,
@@ -2660,13 +2688,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'debug'",
+                "reasoning_contains": "Exact match: 'debug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'debug'",
+                    "reason": "Exact match: 'debug'"
                 }
             ],
             "router_layer": {
@@ -2676,9 +2704,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 2.85,
+            "generation_latency_ms": 2.85
         },
         {
             "id": 86,
@@ -2690,15 +2718,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'test'",
+                "reasoning_contains": "Exact match: 'test'"
             },
             "candidates": [
-                {"name": "testing", "score": 0.66, "reason": "Exact match: 'test'"},
+                {
+                    "name": "testing",
+                    "score": 0.66,
+                    "reason": "Exact match: 'test'"
+                },
                 {
                     "name": "security-audit",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
-                },
+                    "reason": "Keyword overlap (100%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "testing",
@@ -2707,9 +2739,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 2.81,
+            "generation_latency_ms": 2.81
         },
         {
             "id": 87,
@@ -2721,13 +2753,13 @@
                 "confidence": 0.53,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'deployment' (75%)",
+                "reasoning_contains": "Fuzzy match: 'deployment' (75%)"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'deployment' (75%)",
+                    "reason": "Fuzzy match: 'deployment' (75%)"
                 }
             ],
             "router_layer": {
@@ -2737,9 +2769,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 3.16,
+            "generation_latency_ms": 3.16
         },
         {
             "id": 88,
@@ -2751,13 +2783,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'security'",
+                "reasoning_contains": "Exact match: 'security'"
             },
             "candidates": [
                 {
                     "name": "security-audit",
                     "score": 0.66,
-                    "reason": "Exact match: 'security'",
+                    "reason": "Exact match: 'security'"
                 }
             ],
             "router_layer": {
@@ -2767,9 +2799,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 3.75,
+            "generation_latency_ms": 3.75
         },
         {
             "id": 89,
@@ -2781,19 +2813,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'performance'",
+                "reasoning_contains": "Exact match: 'performance'"
             },
             "candidates": [
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
+                    "reason": "Exact match: 'performance'"
                 },
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'performance'",
-                },
+                    "reason": "Exact match: 'performance'"
+                }
             ],
             "router_layer": {
                 "top_agent": "performance",
@@ -2802,9 +2834,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 3.74,
+            "generation_latency_ms": 3.74
         },
         {
             "id": 90,
@@ -2816,19 +2848,19 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
                 {
                     "name": "code-quality-analyzer",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
+                    "reason": "Keyword overlap (100%)"
                 },
                 {
                     "name": "pr-review",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
-                },
+                    "reason": "Keyword overlap (100%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "code-quality-analyzer",
@@ -2837,9 +2869,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 3.34,
+            "generation_latency_ms": 3.34
         },
         {
             "id": 91,
@@ -2851,19 +2883,19 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
+                    "reason": "Keyword overlap (100%)"
                 },
                 {
                     "name": "documentation-architect",
                     "score": 0.58,
-                    "reason": "Keyword overlap (100%)",
-                },
+                    "reason": "Keyword overlap (100%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -2872,9 +2904,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 2.58,
+            "generation_latency_ms": 2.58
         },
         {
             "id": 92,
@@ -2886,13 +2918,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'docs'",
+                "reasoning_contains": "Exact match: 'docs'"
             },
             "candidates": [
                 {
                     "name": "documentation-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'docs'",
+                    "reason": "Exact match: 'docs'"
                 }
             ],
             "router_layer": {
@@ -2902,9 +2934,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 2.8,
+            "generation_latency_ms": 2.8
         },
         {
             "id": 93,
@@ -2916,10 +2948,14 @@
                 "confidence": 0.58,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Keyword overlap (100%)",
+                "reasoning_contains": "Keyword overlap (100%)"
             },
             "candidates": [
-                {"name": "commit", "score": 0.58, "reason": "Keyword overlap (100%)"}
+                {
+                    "name": "commit",
+                    "score": 0.58,
+                    "reason": "Keyword overlap (100%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "commit",
@@ -2928,9 +2964,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 3.0,
+            "generation_latency_ms": 3.0
         },
         {
             "id": 94,
@@ -2942,13 +2978,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'monitor'",
+                "reasoning_contains": "Exact match: 'monitor'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'monitor'",
+                    "reason": "Exact match: 'monitor'"
                 }
             ],
             "router_layer": {
@@ -2958,9 +2994,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 3.11,
+            "generation_latency_ms": 3.11
         },
         {
             "id": 97,
@@ -2972,13 +3008,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'bug'",
+                "reasoning_contains": "Exact match: 'bug'"
             },
             "candidates": [
                 {
                     "name": "debug-intelligence",
                     "score": 0.66,
-                    "reason": "Exact match: 'bug'",
+                    "reason": "Exact match: 'bug'"
                 }
             ],
             "router_layer": {
@@ -2988,9 +3024,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 9.97,
+            "generation_latency_ms": 9.97
         },
         {
             "id": 98,
@@ -3002,13 +3038,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'what's the status'",
+                "reasoning_contains": "Exact match: 'what's the status'"
             },
             "candidates": [
                 {
                     "name": "agent-observability",
                     "score": 0.66,
-                    "reason": "Exact match: 'what's the status'",
+                    "reason": "Exact match: 'what's the status'"
                 }
             ],
             "router_layer": {
@@ -3018,9 +3054,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 9.73,
+            "generation_latency_ms": 9.73
         },
         {
             "id": 99,
@@ -3032,34 +3068,34 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'fastapi'",
+                "reasoning_contains": "Exact match: 'fastapi'"
             },
             "candidates": [
                 {
                     "name": "api-architect",
                     "score": 0.66,
-                    "reason": "Exact match: 'fastapi'",
+                    "reason": "Exact match: 'fastapi'"
                 },
                 {
                     "name": "python-fastapi-expert",
                     "score": 0.66,
-                    "reason": "Exact match: 'fastapi'",
+                    "reason": "Exact match: 'fastapi'"
                 },
                 {
                     "name": "testing",
                     "score": 0.58,
-                    "reason": "Fuzzy match: 'test' (89%)",
+                    "reason": "Fuzzy match: 'test' (89%)"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
+                    "reason": "Fuzzy match: 'react' (73%)"
                 },
                 {
                     "name": "repository-setup",
                     "score": 0.514118,
-                    "reason": "Fuzzy match: 'repo init' (71%)",
-                },
+                    "reason": "Fuzzy match: 'repo init' (71%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "api-architect",
@@ -3068,9 +3104,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 5,
+                "match_count": 5
             },
-            "generation_latency_ms": 11.79,
+            "generation_latency_ms": 11.79
         },
         {
             "id": 100,
@@ -3082,13 +3118,13 @@
                 "confidence": 0.53,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Fuzzy match: 'git commit' (75%)",
+                "reasoning_contains": "Fuzzy match: 'git commit' (75%)"
             },
             "candidates": [
                 {
                     "name": "commit",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'git commit' (75%)",
+                    "reason": "Fuzzy match: 'git commit' (75%)"
                 }
             ],
             "router_layer": {
@@ -3098,9 +3134,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 10.27,
+            "generation_latency_ms": 10.27
         },
         {
             "id": 101,
@@ -3112,19 +3148,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'benchmark'",
+                "reasoning_contains": "Exact match: 'benchmark'"
             },
             "candidates": [
                 {
                     "name": "performance",
                     "score": 0.66,
-                    "reason": "Exact match: 'benchmark'",
+                    "reason": "Exact match: 'benchmark'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.585161,
-                    "reason": "Fuzzy match: 'ui implementation' (90%)",
-                },
+                    "reason": "Fuzzy match: 'ui implementation' (90%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "performance",
@@ -3133,9 +3169,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 9.79,
+            "generation_latency_ms": 9.79
         },
         {
             "id": 102,
@@ -3147,13 +3183,13 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'deployment'",
+                "reasoning_contains": "Exact match: 'deployment'"
             },
             "candidates": [
                 {
                     "name": "devops-infrastructure",
                     "score": 0.66,
-                    "reason": "Exact match: 'deployment'",
+                    "reason": "Exact match: 'deployment'"
                 }
             ],
             "router_layer": {
@@ -3163,9 +3199,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 1,
+                "match_count": 1
             },
-            "generation_latency_ms": 8.64,
+            "generation_latency_ms": 8.64
         },
         {
             "id": 103,
@@ -3177,19 +3213,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'responsive design'",
+                "reasoning_contains": "Exact match: 'responsive design'"
             },
             "candidates": [
                 {
                     "name": "frontend-developer",
                     "score": 0.66,
-                    "reason": "Exact match: 'responsive design'",
+                    "reason": "Exact match: 'responsive design'"
                 },
                 {
                     "name": "api-architect",
                     "score": 0.53,
-                    "reason": "Fuzzy match: 'api design' (75%)",
-                },
+                    "reason": "Fuzzy match: 'api design' (75%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "frontend-developer",
@@ -3198,9 +3234,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 10.74,
+            "generation_latency_ms": 10.74
         },
         {
             "id": 104,
@@ -3212,19 +3248,19 @@
                 "confidence": 0.66,
                 "routing_policy": "trigger_match",
                 "routing_path": "local",
-                "reasoning_contains": "Exact match: 'incident response'",
+                "reasoning_contains": "Exact match: 'incident response'"
             },
             "candidates": [
                 {
                     "name": "production-monitor",
                     "score": 0.66,
-                    "reason": "Exact match: 'incident response'",
+                    "reason": "Exact match: 'incident response'"
                 },
                 {
                     "name": "frontend-developer",
                     "score": 0.521818,
-                    "reason": "Fuzzy match: 'react' (73%)",
-                },
+                    "reason": "Fuzzy match: 'react' (73%)"
+                }
             ],
             "router_layer": {
                 "top_agent": "production-monitor",
@@ -3233,9 +3269,9 @@
                 "top_context_score": 0.7,
                 "top_capability_score": 0.0,
                 "top_historical_score": 0.5,
-                "match_count": 2,
+                "match_count": 2
             },
-            "generation_latency_ms": 9.57,
-        },
-    ],
+            "generation_latency_ms": 9.57
+        }
+    ]
 }
