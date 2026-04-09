@@ -342,7 +342,8 @@ When the gate fails, post a structured comment to the PR:
 | CRITICAL | scope | src/foo.py | 42 | Scope creep: file not in ticket scope |
 | MAJOR | correctness | src/bar.py | 15 | Missing error handling for None case |
 
-**{blocking_count} blocking finding(s).** Fix CRITICAL and MAJOR issues before merge.
+**{blocking_count} blocking finding(s).** Fix all blocking issues for the active gate mode before merge.
+<!-- default mode: MAJOR+ blocks; strict mode: MINOR+ blocks -->
 ```
 
 Use `--request-changes` for blocked gate:

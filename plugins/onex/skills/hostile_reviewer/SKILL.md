@@ -98,7 +98,7 @@ This replaces the former `/external-model-review` skill.
 
 Merge gate mode. Dispatches 3 parallel review agents (scope, correctness, conventions),
 collects structured verdicts, aggregates findings by severity, and produces a structured
-`pass`/`fail`/`block` verdict suitable for automated merge gating. This mode absorbs the
+`pass`/`fail` gate verdict plus `extra_status` of `passed`/`blocked` for pipeline consumption. This mode absorbs the
 former `review_gate` skill.
 
 ```bash
