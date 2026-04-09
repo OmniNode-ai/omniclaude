@@ -61,15 +61,15 @@ IDLE -> CLOSING_OUT -> VERIFYING -> FILLING -> CLASSIFYING -> BUILDING -> COMPLE
 
 ```
 # Single cycle (default)
-cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run onex run build_loop_workflow.yaml
 
 # With custom state directory
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+uv run onex run build_loop_workflow.yaml \
   --state-root "$ONEX_STATE_DIR/build-loop"
 
 # With timeout
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+uv run onex run build_loop_workflow.yaml \
   --state-root "$ONEX_STATE_DIR/build-loop" \
   --timeout 600
 ```
@@ -102,8 +102,8 @@ Parse `--max-cycles` (default 1), `--skip-closeout` (default false), `--dry-run`
 Run the build loop workflow locally via RuntimeLocal:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnibase_infra  # local-path-ok
-uv run onex run src/omnibase_infra/workflows/build_loop_workflow.yaml \
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+uv run onex run build_loop_workflow.yaml \
   --state-root "$ONEX_STATE_DIR/build-loop" \
   --timeout 600
 ```
