@@ -341,6 +341,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_team_observability.sh"
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-skill-delegation-enforcer.sh"
+          }
+        ]
       }
     ]
   }
