@@ -824,6 +824,8 @@ class TestEventRegistryIntegration:
             "hook.health.error",
             # LLM cost telemetry (OMN-7570)
             "llm.cost.completed",
+            # Per-tool agent action (wire-missing-producers)
+            "agent.action",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

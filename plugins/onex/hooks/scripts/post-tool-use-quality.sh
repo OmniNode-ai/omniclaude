@@ -171,6 +171,44 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
                         2>>"$LOG_FILE" || true
             ) &
         fi
+        # -----------------------------------------------------------------------
+        # Skill Lifecycle Events (wire-missing-producers)
+        # Emit skill.started and skill.completed to feed skill_invocations table.
+        # Both are emitted from PostToolUse (after the tool completes) — skill.started
+        # captures the invocation, skill.completed carries the result status.
+        # Non-blocking: runs in background subshell; hook exits 0 on failure.
+        # -----------------------------------------------------------------------
+        (
+            _SKILL_RUN_ID=$(python3 -c "import uuid; print(uuid.uuid4())" 2>/dev/null || echo "")
+            if [[ -z "$_SKILL_RUN_ID" ]]; then
+                exit 0
+            fi
+            _SKILL_CORR_ID="${ONEX_CORRELATION_ID:-${CLAUDE_SESSION_ID:-$SESSION_ID}}"
+            _SKILL_ARGS_COUNT=$(echo "$TOOL_INFO" | jq -r '.tool_input.args | if . == null then 0 elif type == "object" then length elif type == "array" then length else 0 end' 2>/dev/null) || _SKILL_ARGS_COUNT=0
+            _SKILL_STARTED_PAYLOAD=$(jq -n \
+                --arg run_id "$_SKILL_RUN_ID" \
+                --arg skill_name "$SKILL_NAME" \
+                --arg skill_id "plugins/onex/skills/${SKILL_NAME#onex:}/SKILL.md" \
+                --arg repo_id "omniclaude" \
+                --arg correlation_id "$_SKILL_CORR_ID" \
+                --argjson args_count "${_SKILL_ARGS_COUNT:-0}" \
+                --arg emitted_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+                '{run_id: $run_id, skill_name: $skill_name, skill_id: $skill_id,
+                  repo_id: $repo_id, correlation_id: $correlation_id,
+                  args_count: $args_count, emitted_at: $emitted_at}' 2>/dev/null) || exit 0
+            emit_via_daemon "skill.started" "$_SKILL_STARTED_PAYLOAD" 50
+            _SKILL_COMPLETED_PAYLOAD=$(jq -n \
+                --arg run_id "$_SKILL_RUN_ID" \
+                --arg skill_name "$SKILL_NAME" \
+                --arg repo_id "omniclaude" \
+                --arg correlation_id "$_SKILL_CORR_ID" \
+                --arg status "success" \
+                --arg emitted_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+                '{run_id: $run_id, skill_name: $skill_name, repo_id: $repo_id,
+                  correlation_id: $correlation_id, status: $status,
+                  duration_ms: 0, emitted_at: $emitted_at}' 2>/dev/null) || exit 0
+            emit_via_daemon "skill.completed" "$_SKILL_COMPLETED_PAYLOAD" 50
+        ) &
     fi
 elif [[ "$TOOL_NAME" == "Task" ]]; then
     SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null) || SUBAGENT_TYPE="unknown"

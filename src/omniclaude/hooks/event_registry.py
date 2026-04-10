@@ -730,6 +730,24 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["agent_name", "session_id", "state", "message"],
     ),
     # =========================================================================
+    # Agent Action (wire-missing-producers - per-tool agent action observability)
+    # =========================================================================
+    # Emitted by post-tool-use-quality.sh for every tool call.
+    # Routes to onex.evt.omniclaude.agent-actions.v1 consumed by the
+    # omninode-agent-actions-consumer and projected into the agent_actions table.
+    "agent.action": EventRegistration(
+        event_type="agent.action",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AGENT_ACTIONS,
+                transform=None,  # Passthrough — no sensitive data in tool metadata
+                description="Per-tool agent action event for omnidash agent_actions projection",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["correlation_id", "agent_name", "action_type", "session_id"],
+    ),
+    # =========================================================================
     # Intent-to-Commit Binding (OMN-2492)
     # =========================================================================
     # Emitted by commit_intent_binder.py when a Bash PostToolUse output
