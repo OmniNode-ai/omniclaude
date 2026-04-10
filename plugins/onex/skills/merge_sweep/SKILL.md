@@ -1,7 +1,7 @@
 ---
 description: Org-wide PR sweep — enables GitHub auto-merge on ready PRs and runs pr-polish on PRs with blocking issues (CI failures, conflicts, changes requested)
 mode: full
-version: 4.0.0
+version: 5.0.0
 level: advanced
 debug: false
 category: workflow
@@ -50,6 +50,21 @@ args:
     required: false
   - name: --merge-only
     description: "Only run the merge (Track A) phase, skip fix phase"
+    required: false
+  - name: --enable-auto-rebase
+    description: "Auto-rebase stale PR branches before merge (default: true). Pass --no-enable-auto-rebase to skip."
+    required: false
+  - name: --use-dag-ordering
+    description: "Order PRs by cross-repo dependency DAG before merging (default: true). Merges omnibase_compat first, omnidash last."
+    required: false
+  - name: --enable-trivial-comment-resolution
+    description: "Resolve trivial CodeRabbit/bot review threads before merge (default: true)"
+    required: false
+  - name: --enable-admin-merge-fallback
+    description: "Admin merge fallback for PRs stuck in queue >30 min (default: false — opt-in only)"
+    required: false
+  - name: --admin-fallback-threshold-minutes
+    description: "Minutes a PR must be stuck in merge queue before admin fallback fires (default: 30)"
     required: false
 inputs:
   - name: repos
@@ -129,6 +144,55 @@ for orchestrator completion.
 | `--inventory-only` | `inventory_only: true` |
 | `--fix-only` | `fix_only: true` |
 | `--merge-only` | `merge_only: true` |
+| `--enable-auto-rebase` | `enable_auto_rebase: true` (default: true) |
+| `--use-dag-ordering` | `use_dag_ordering: true` (default: true) |
+| `--enable-trivial-comment-resolution` | `enable_trivial_comment_resolution: true` (default: true) |
+| `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: false — opt-in) |
+| `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 30) |
+
+## New Flows (v5.0.0)
+
+### 1. Auto-Rebase Flow
+
+When `--enable-auto-rebase` (default: true), stale PRs (`merge_state_status=BEHIND` or `UNKNOWN`) are rebased before the merge attempt:
+
+```
+TRIAGING → REBASING → gh pr update-branch → re-triage → MERGING
+```
+
+A `REBASING` FSM state has been added to the orchestrator. Rebase failures are logged as warnings but do not block the sweep.
+
+### 2. DAG Dependency Ordering
+
+When `--use-dag-ordering` (default: true), PRs are merged in repo dependency order to prevent downstream breakage:
+
+| Tier | Repo |
+|------|------|
+| 0 | omnibase_compat |
+| 1 | omnibase_spi |
+| 2 | omnibase_core |
+| 3 | omnibase_infra |
+| 4 | omnimarket |
+| 5 | omniclaude |
+| 6 | omniintelligence |
+| 7 | omnimemory |
+| 8 | omninode_infra |
+| 9 | onex_change_control |
+| 10 | omnidash |
+| 11 | omniweb |
+| 99 | (unknown repos — merge last) |
+
+Within each tier, GREEN PRs sort before non-green (stable sort preserves original order within same tier+status).
+
+### 3. Stuck Queue Detection
+
+During the INVENTORYING phase, the inventory compute node checks all `QUEUED` PRs for queue age via `gh pr view --json mergeQueueEntry`. PRs queued longer than `--admin-fallback-threshold-minutes` (default: 30 min) are flagged as `stuck_queue_prs` and logged as WARN-level events.
+
+If `--enable-admin-merge-fallback` is set (default: **false**, explicit opt-in required), stuck PRs are admin-merged via `gh pr merge --admin --squash`. An explicit `ADMIN MERGE TRIGGERED pr={n} repo={r}` log line is emitted before each admin merge for audit traceability. Repos without merge queue support are skipped silently.
+
+### 4. Bot Comment Resolution
+
+When `--enable-trivial-comment-resolution` (default: true), trivial CodeRabbit/bot review threads are resolved before the merge attempt. "Trivial" = comment body matches bot nit patterns (nit, nitpick, style, minor) AND the author is a known bot login (`coderabbitai`, `github-actions[bot]`, etc.). Human comments are always preserved.
 
 ## Kafka Topics
 
@@ -219,6 +283,11 @@ Status values (unchanged from v3.x for backward compatibility):
 | `--inventory-only` | false | Collect and report PR inventory without taking any action |
 | `--fix-only` | false | Only run the fix (Track B) phase |
 | `--merge-only` | false | Only run the merge (Track A) phase |
+| `--enable-auto-rebase` | true | Auto-rebase stale (behind-base) PR branches before merging. Pass `--no-enable-auto-rebase` to skip. |
+| `--use-dag-ordering` | true | Order merge PRs by cross-repo dependency DAG (omnibase_compat first, omnidash last). Pass `--no-use-dag-ordering` to skip. |
+| `--enable-trivial-comment-resolution` | true | Auto-resolve trivial CodeRabbit/bot review threads (nit/style/minor) with no human reply before merge. |
+| `--enable-admin-merge-fallback` | false | **Opt-in**: Admin merge fallback for PRs stuck in merge queue beyond threshold. Logs "ADMIN MERGE TRIGGERED" before every action. |
+| `--admin-fallback-threshold-minutes` | 30 | Minutes a PR must be in merge queue before admin fallback fires (only when `--enable-admin-merge-fallback` is set). |
 
 ## Headless Mode
 
@@ -270,6 +339,12 @@ Test coverage:
 
 ## Changelog
 
+- **v5.0.0** (OMN-8204–OMN-8208): Expose 5 new `node_pr_lifecycle_orchestrator` capabilities from OMN-8197 Workstream 2. All args map 1:1 to new `ModelPrLifecycleStartCommand` fields:
+  - `--enable-auto-rebase`: Auto-rebase stale PR branches via `gh pr update-branch` (REBASING FSM state)
+  - `--use-dag-ordering`: Dependency DAG ordering — merges omnibase_compat first, omnidash last
+  - Stuck merge queue detection in inventory (>30 min in queue → `stuck_queue_prs`)
+  - `--enable-trivial-comment-resolution`: Auto-resolve trivial bot comment threads before merge
+  - `--enable-admin-merge-fallback`: Opt-in admin merge for stuck queue PRs (default: false)
 - **v4.0.0** (OMN-8088): Rewrite as thin publish-monitor trigger. All orchestration
   logic delegated to `pr_lifecycle_orchestrator` node (omnimarket). Skill parses CLI
   args, publishes `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`, polls for

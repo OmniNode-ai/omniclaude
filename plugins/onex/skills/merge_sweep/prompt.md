@@ -42,6 +42,11 @@ Parse `$ARGUMENTS`:
 - `--inventory-only` — default: false
 - `--fix-only` — default: false
 - `--merge-only` — default: false
+- `--enable-auto-rebase` — default: true
+- `--use-dag-ordering` — default: true
+- `--enable-trivial-comment-resolution` — default: true
+- `--enable-admin-merge-fallback` — default: false
+- `--admin-fallback-threshold-minutes <n>` — default: 30
 
 Generate `run_id` if `--run-id` not provided: `<YYYYMMDD-HHMMSS>-<random6>`.
 
@@ -73,6 +78,11 @@ Build the command event payload:
   "inventory_only": <bool>,
   "fix_only": <bool>,
   "merge_only": <bool>,
+  "enable_auto_rebase": <bool>,
+  "use_dag_ordering": <bool>,
+  "enable_trivial_comment_resolution": <bool>,
+  "enable_admin_merge_fallback": <bool>,
+  "admin_fallback_threshold_minutes": <int>,
   "emitted_at": "<UTC-ISO-timestamp>",
   "correlation_id": "<uuid4>"
 }

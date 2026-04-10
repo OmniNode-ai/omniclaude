@@ -480,22 +480,22 @@ class TestModelSkillResultContract:
 
 
 # ---------------------------------------------------------------------------
-# Test class: v4.0.0 version and changelog
+# Test class: v5.0.0 version and changelog
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestVersionAndChangelog:
-    """SKILL.md must reflect v4.0.0 with OMN-8088 in changelog."""
+    """SKILL.md must reflect v5.0.0 with OMN-8208 in changelog."""
 
     def test_skill_version_is_v400(self) -> None:
-        """SKILL.md frontmatter version must be 4.0.0."""
+        """SKILL.md frontmatter version must be 5.0.0."""
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
         frontmatter_end = content.find("---", 3)
         if frontmatter_end > 0:
             frontmatter = content[:frontmatter_end]
-            assert "4.0.0" in frontmatter, (
-                "SKILL.md frontmatter version must be 4.0.0 (OMN-8088)"
+            assert "5.0.0" in frontmatter, (
+                "SKILL.md frontmatter version must be 5.0.0 (OMN-8208)"
             )
 
     def test_skill_changelog_documents_omn_8088(self) -> None:
@@ -550,6 +550,8 @@ class TestNoOrchestrationAntiPatterns:
         - 'What This Skill Does NOT Do' disclaimer section
         - 'Integration Test' section (documenting what is excluded from tests)
         - Changelog and See Also sections
+        - Admin merge fallback lines (gh pr merge --admin) — conditional privileged
+          operation documented as skill behavior, not standard orchestrator routing
         """
         content = _read_skill_file(_MERGE_SWEEP_SKILL)
         lines = content.splitlines()
@@ -571,7 +573,10 @@ class TestNoOrchestrationAntiPatterns:
         violations = [
             f"line {i + 1}: {line.strip()}"
             for i, line in enumerate(lines[:first_disclaimer])
-            if "gh pr merge" in line and not line.strip().startswith("#")
+            if "gh pr merge" in line
+            and not line.strip().startswith("#")
+            and "--admin"
+            not in line  # admin-merge fallback is intentional documented behavior
         ]
         assert violations == [], (
             "SKILL.md must not contain active gh pr merge instructions (orchestrator owns this):\n"
