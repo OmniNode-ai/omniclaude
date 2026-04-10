@@ -87,7 +87,7 @@ args:
 ### Step 2 — Initialize FSM
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd $OMNI_HOME/omnimarket
 uv run python -m omnimarket.nodes.node_local_review \
   [--uncommitted] \
   [--since <ref>] \

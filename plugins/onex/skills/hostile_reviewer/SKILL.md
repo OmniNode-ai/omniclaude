@@ -66,6 +66,24 @@ args:
 
 # hostile-reviewer
 
+**Announce at start:** "I'm using the hostile-reviewer skill."
+
+## Architecture
+
+```
+SKILL.md   -> thin shell (this file)
+node       -> omniintelligence/src/omniintelligence/review_pairing/ (multi-model review)
+entry      -> omniintelligence.review_pairing.cli_review (CLI)
+```
+
+Node invocation (working directory must be `$OMNI_HOME/omniintelligence`):
+
+```bash
+cd $OMNI_HOME/omniintelligence
+uv run python -m omniintelligence.review_pairing.cli_review \
+  --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
+```
+
 ## Dispatch Surface
 
 **Target**: Agent Teams + Local LLM
@@ -258,21 +276,24 @@ Each pass within the loop executes:
 
 **PR mode (default models):**
 ```bash
+cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --pr <N> --repo <owner/repo> --model codex --model deepseek-r1
+  --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
 ```
 
 **File mode (default models):**
 ```bash
+cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --file <path> --model codex --model deepseek-r1
+  --file <path> --model codex --model deepseek-r1 2>/dev/null
 ```
 
 When `--models` is provided, expand into repeated `--model` args dynamically:
 ```bash
 # Example: --models deepseek-r1,qwen3-14b,codex
+cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
-  --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-14b --model codex
+  --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-14b --model codex 2>/dev/null
 ```
 
 3. Parse the `ModelMultiReviewResult` JSON from stdout.

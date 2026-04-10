@@ -1,8 +1,61 @@
 ---
 description: Comprehensive PR review with strict priority-based organization and merge readiness assessment
 mode: full
+version: 5.0.0
 level: basic
 debug: false
+category: review
+tags:
+  - review
+  - pr
+  - multi-model
+  - judge-verification
+author: OmniClaude Team
+args:
+  - name: pr_number
+    description: PR number to review
+    required: true
+  - name: repo
+    description: GitHub repo (owner/repo)
+    required: true
+  - name: --dry-run
+    description: Run without posting to GitHub
+    required: false
+---
+
+# PR Review
+
+**Announce at start:** "I'm using the pr-review skill."
+
+## Node Dispatch
+
+This skill delegates to `node_pr_review_bot` in omnimarket.
+
+### Invocation
+
+```python
+# cd $OMNI_HOME/omnimarket
+from omnimarket.nodes.node_pr_review_bot.workflow_runner import run_review
+
+result = run_review(
+    pr_number=<pr_number>,
+    repo="<owner/repo>",
+    dry_run=False,  # set True to skip posting to GitHub
+)
+# result.verdict.verdict: "clean" | "risks_noted" | "blocking_issue"
+# result.verdict.total_findings, result.verdict.threads_posted
+# result.final_state.current_phase
+```
+
+### Architecture
+
+```
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_pr_review_bot/ (FSM + handlers)
+runner     -> node_pr_review_bot/workflow_runner.py (run_review entry point)
+contract   -> node_pr_review_bot/contract.yaml
+```
+
 ---
 
 ## Dispatch Surface

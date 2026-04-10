@@ -90,3 +90,48 @@ The skill delegates to two omnimarket compute nodes:
 
 Both nodes are zero-infra capable (EventBusInmemory, filesystem-only artifacts).
 Probe failures are non-fatal; the capture proceeds with available data.
+
+### capture invocation
+
+```python
+# cd $OMNI_HOME/omnimarket
+import asyncio
+from omnimarket.nodes.node_baseline_capture.handlers.handler_baseline_capture import (
+    HandlerBaselineCapture, ModelBaselineCaptureRequest,
+)
+result = asyncio.run(HandlerBaselineCapture().handle(
+    ModelBaselineCaptureRequest(
+        baseline_id="<baseline_id>",
+        probes=["github_prs", "linear_tickets", "system_health", "git_branches"],
+        label="<label>",  # optional
+        dry_run=False,
+    )
+))
+# result.artifact_path, result.probes_run, result.probes_failed
+```
+
+### compare invocation
+
+```python
+# cd $OMNI_HOME/omnimarket
+import asyncio
+from omnimarket.nodes.node_baseline_compare.handlers.handler_baseline_compare import (
+    HandlerBaselineCompare, ModelBaselineCompareRequest,
+)
+result = asyncio.run(HandlerBaselineCompare().handle(
+    ModelBaselineCompareRequest(
+        baseline_id="<baseline_id>",
+        dry_run=False,
+    )
+))
+# result.summary, result.report_path
+```
+
+## Architecture
+
+```
+SKILL.md   -> thin shell (this file)
+capture    -> omnimarket/src/omnimarket/nodes/node_baseline_capture/ (handler)
+compare    -> omnimarket/src/omnimarket/nodes/node_baseline_compare/ (handler)
+contracts  -> node_baseline_capture/contract.yaml, node_baseline_compare/contract.yaml
+```
