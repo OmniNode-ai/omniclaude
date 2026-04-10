@@ -1,13 +1,18 @@
 ---
 description: Projection table health and migration tracking — checks row count, staleness for every table in omnidash_analytics, plus migration state across all ONEX databases (pending migrations, failed state, schema fingerprint). Auto-creates Linear tickets for stale/empty tables and migration drift.
 mode: full
-version: "1.0.0"
+version: "2.0.0"
 level: advanced
 debug: false
 category: verification
 tags: [database, projections, health, sweep, close-out]
 author: omninode
 composable: true
+node_dispatch: node_platform_diagnostics
+node_dispatch_dimensions: DATABASE_PROJECTIONS
+migration_status: thin_shell
+migration_target: node_database_sweep
+migration_epic: OMN-8004
 args:
   - name: --dry-run
     description: "Report findings without creating Linear tickets (default: false)"
@@ -23,6 +28,21 @@ args:
 # Database Sweep
 
 **Skill ID**: `onex:database-sweep`
+
+## Fast Path — Node Dispatch
+
+Dispatches to `node_platform_diagnostics` for the DATABASE_PROJECTIONS dimension:
+
+```bash
+onex run node_platform_diagnostics -- --dimensions=DATABASE_PROJECTIONS
+```
+
+Returns `ModelDiagnosticsResult` with `DATABASE_PROJECTIONS` dimension status (PASS/WARN/FAIL),
+unpopulated table list, actionable items.
+
+> Note: Full database sweep with migration tracking and Linear ticket creation is a
+> separate full-skill workflow (see below). The node dispatch handles quick projection health checks.
+> When `node_database_sweep` is built (OMN-8004 Wave 2), the node dispatch will update to target that node.
 
 ## Purpose
 

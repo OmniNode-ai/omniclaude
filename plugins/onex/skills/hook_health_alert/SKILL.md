@@ -1,7 +1,7 @@
 ---
 description: Periodic hook health check with Slack alerting when error rates exceed thresholds
 mode: full
-version: "1.0.0"
+version: "2.0.0"
 level: advanced
 debug: false
 category: observability
@@ -10,6 +10,11 @@ tags:
   - health
   - alerting
   - slack
+node_dispatch: node_platform_diagnostics
+node_dispatch_dimensions: HOOK_HEALTH
+migration_status: thin_shell
+migration_target: node_platform_diagnostics
+migration_epic: OMN-8197
 args:
   - name: --dry-run
     description: "Report findings without sending Slack alerts"
@@ -26,6 +31,25 @@ args:
 ---
 
 # Hook Health Alert
+
+## Fast Path — Node Dispatch
+
+Dispatches to `node_platform_diagnostics` for the HOOK_HEALTH dimension:
+
+```bash
+onex run node_platform_diagnostics -- --dimensions=HOOK_HEALTH
+```
+
+With dry-run (reads cached artifacts, no live HTTP):
+
+```bash
+onex run node_platform_diagnostics -- --dimensions=HOOK_HEALTH --dry-run
+```
+
+Returns `ModelDiagnosticsResult` with `HOOK_HEALTH` dimension status (PASS/WARN/FAIL),
+error rate, actionable items.
+
+---
 
 ## Purpose
 
