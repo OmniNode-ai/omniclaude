@@ -24,7 +24,7 @@ args:
     description: Target GitHub repo (e.g., OmniNode-ai/omniclaude). Required with --pr.
     required: false
   - name: file
-    description: Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path. Not used in --static mode.
+    description: "Path to a plan file to review (mutually exclusive with --pr). Alias: --plan-path. Not used in --static mode."
     required: false
   - name: plan-path
     description: "Alias for --file: path to a plan or design document to review adversarially (mutually exclusive with --pr)"
