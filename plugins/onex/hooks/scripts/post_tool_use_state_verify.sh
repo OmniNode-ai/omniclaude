@@ -17,32 +17,30 @@ unset _SCRIPT_DIR _MODE_SH
 
 INPUT=$(cat)
 
-TOOL_NAME=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null || true)
-
-if [[ "$TOOL_NAME" != "Bash" ]]; then
+# Guard: jq required for JSON processing; pass through on failure
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s\n' "$INPUT"
   exit 0
 fi
 
-COMMAND=$(echo "$INPUT" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-inp = d.get('tool_input', {})
-print(inp.get('command', ''))
-" 2>/dev/null || true)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""' 2>/dev/null || true)
 
-EXIT_CODE=$(echo "$INPUT" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-resp = d.get('tool_response', {})
-# tool_response may be a string or dict
-if isinstance(resp, dict):
-    print(resp.get('exit_code', resp.get('exitCode', '0')))
-else:
-    print('0')
-" 2>/dev/null || echo "0")
+if [[ "$TOOL_NAME" != "Bash" ]]; then
+  printf '%s\n' "$INPUT"
+  exit 0
+fi
+
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || true)
+
+EXIT_CODE=$(echo "$INPUT" | jq -r '
+  if (.tool_response | type) == "object"
+  then (.tool_response.exit_code // .tool_response.exitCode // "0")
+  else "0"
+  end' 2>/dev/null || echo "0")
 
 # Only check when the command exited 0 (claimed success)
 if [[ "$EXIT_CODE" != "0" ]]; then
+  printf '%s\n' "$INPUT"
   exit 0
 fi
 
@@ -65,13 +63,17 @@ for entry in "${ALLOWLIST[@]}"; do
 done
 
 if [[ -z "$MATCHED_PORT" ]]; then
+  printf '%s\n' "$INPUT"
   exit 0
 fi
 
 # Check if the expected port is actually listening
 if ! lsof -nP -iTCP:"$MATCHED_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo ""
-  echo "⚠ Command claimed success but port $MATCHED_PORT is not listening. Verify state."
+  # Inject warning as hookSpecificOutput — must be valid JSON
+  echo "$INPUT" | jq --arg port "$MATCHED_PORT" \
+    '. + {hookSpecificOutput: {message: ("WARNING: Command claimed success but port " + $port + " is not listening. Verify state.")}}'
+  exit 0
 fi
 
+printf '%s\n' "$INPUT"
 exit 0

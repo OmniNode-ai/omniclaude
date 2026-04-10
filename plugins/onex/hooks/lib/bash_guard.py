@@ -379,8 +379,14 @@ def _check_worktree_path(command: str) -> str | None:
     if not _is_real_worktree_add(command):
         return None
 
+    # Normalize backslash line-continuations before tokenizing.
+    # Multi-line shell commands use `\` + newline as a continuation; split()
+    # treats `\` as a non-whitespace token which breaks path extraction.
+    # Only strip the continuation sequence (\+newline), not all backslashes.
+    command_flat = command.replace("\\\n", " ")
+
     # Tokenize and extract the first non-flag argument after "add"
-    tokens = command.split()
+    tokens = command_flat.split()
     worktree_path = ""
     past_add = False
     for token in tokens:

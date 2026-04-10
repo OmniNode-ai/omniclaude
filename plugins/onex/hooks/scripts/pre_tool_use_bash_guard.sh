@@ -80,11 +80,17 @@ CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || t
 # to avoid false positives on commit messages, grep patterns, etc.
 CMD_UNQUOTED=$(echo "$CMD" | sed -E "s/\"([^\"\\\\]|\\\\.)*\"//g; s/'[^']*'//g")
 if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
-    # Extract the first non-flag argument after "add" as the path
+    # Extract the first non-flag argument after "add" as the path.
+    # Strip only backslash+newline continuations (not all backslashes) so
+    # multi-line commands parse cleanly without corrupting path characters.
+    # Use Python for the substitution — macOS sed doesn't support \n in patterns.
+    CMD_FLAT=$(printf '%s' "$CMD" \
+        | python3 -c "import sys; print(sys.stdin.read().replace('\\\\\n', ' ').replace('\n', ' '))" \
+        2>/dev/null || printf '%s' "$CMD" | tr '\n' ' ')
     WORKTREE_PATH=""
     _in_add=false
-    for _token in $CMD; do
-        if [[ "$_in_add" == "true" && "$_token" != -* ]]; then
+    for _token in $CMD_FLAT; do
+        if [[ "$_in_add" == "true" && "$_token" != -* && -n "$_token" ]]; then
             WORKTREE_PATH="$_token"
             break
         fi
