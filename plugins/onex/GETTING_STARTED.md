@@ -24,37 +24,45 @@ Optional (enables observability features):
 
 ## Installation
 
-### 1. Clone the repository
+### Marketplace install (recommended)
+
+```bash
+claude plugin install onex@omninode-tools
+```
+
+That's it. Hooks, agents, and skills load automatically on the next Claude Code session.
+
+### Manual install (for contributors / development)
 
 ```bash
 git clone https://github.com/OmniNode-ai/omniclaude.git ~/Code/omniclaude
-```
-
-### 2. Install Python dependencies
-
-```bash
 cd ~/Code/omniclaude
 uv sync
-```
-
-### 3. Link the plugin to Claude Code
-
-```bash
 mkdir -p ~/.claude/plugins
 ln -s ~/Code/omniclaude/plugins/onex ~/.claude/plugins/onex
 ```
 
-Restart Claude Code (or start a new session). Hooks, agents, and skills load automatically.
+### Required: set ONEX_STATE_DIR
 
-### 4. Verify
+The plugin stores runtime state (pipeline state, skill results, logs) under `ONEX_STATE_DIR`.
+On a fresh install, it defaults to `~/.onex_state`. To persist across shell sessions, add it
+to your shell profile:
 
-Open Claude Code and run:
-
+```bash
+# ~/.zshrc or ~/.bashrc
+export ONEX_STATE_DIR="$HOME/.onex_state"
 ```
-/status
-```
 
-You should see the plugin integration tier and which services are reachable.
+Full-platform installs set this via `~/.omnibase/.env` (written automatically by `onex setup`).
+
+### Verify
+
+Open Claude Code and type `/systematic-debugging` — you should see the skill announcement.
+
+To check hook health:
+```bash
+cat ~/.onex_state/logs/hooks.log | tail -20
+```
 
 ---
 
@@ -63,20 +71,23 @@ You should see the plugin integration tier and which services are reachable.
 Create or edit `~/.env` (or your project's `.env`) with at minimum:
 
 ```bash
-# Required for PR-based workflows
+# Required for PR-based workflows (pr-polish, ci-watch, auto-merge)
 GITHUB_TOKEN=ghp_...
 
-# Required for ticket-based skills
+# Required for ticket-based skills (ticket-pipeline, ticket-work, linear-insights)
 LINEAR_API_KEY=lin_api_...
 
-# Required for Slack gate notifications (optional but recommended)
+# Required for Slack gate notifications in ticket-pipeline (optional)
 SLACK_BOT_TOKEN=xoxb-...
-
-# Required for headless / unattended pipeline runs
-ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 These must be set in the shell where Claude Code runs.
+
+> **Note**: `ANTHROPIC_API_KEY` is NOT required. Claude Code authenticates via OAuth, not API
+> keys. Do not add it — it is unused and could be logged accidentally.
+
+Skills that work with zero env vars set: `/systematic-debugging`, `/hostile-reviewer`,
+`/local-review`, `/writing-skills`, `/executing-plans`. See the table below.
 
 ---
 

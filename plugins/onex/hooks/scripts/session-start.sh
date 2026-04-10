@@ -787,7 +787,7 @@ if [[ -f "${HOOKS_LIB}/capability_probe.py" ]]; then
     # causing the "UserPromptSubmit hook error" on every session restart.
     ( "$PYTHON_CMD" "${HOOKS_LIB}/capability_probe.py" \
         --kafka "${KAFKA_BOOTSTRAP_SERVERS:-}" \
-        --intelligence "${INTELLIGENCE_SERVICE_URL:?INTELLIGENCE_SERVICE_URL required}" \
+        --intelligence "${INTELLIGENCE_SERVICE_URL:-}" \
         >/dev/null 2>>"${LOG_FILE:-/dev/null}" & )
     log "Tier detection probe started in background"
 fi

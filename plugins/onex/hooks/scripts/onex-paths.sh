@@ -8,8 +8,10 @@
 # Requires ONEX_STATE_DIR to be set in the environment.
 
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    echo "FATAL: ONEX_STATE_DIR is not set. Set it in ~/.omnibase/.env or export it." >&2
-    return 1 2>/dev/null || exit 1
+    # Auto-default to ~/.onex_state on fresh installs so hooks don't hard-fail.
+    # On full-platform installs this is set via ~/.omnibase/.env.
+    # Users can override by setting ONEX_STATE_DIR in their shell profile.
+    export ONEX_STATE_DIR="${HOME}/.onex_state"
 fi
 
 export ONEX_LOG_DIR="${ONEX_STATE_DIR}/logs"

@@ -73,6 +73,7 @@ def test_both_mode_skills_are_generic() -> None:
     expected_both = {
         "executing_plans",
         "hostile_reviewer",
+        "local_review",
         "systematic_debugging",
         "writing_skills",
     }
