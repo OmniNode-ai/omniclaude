@@ -145,7 +145,47 @@ _omniclaude_error_guard_trap() {
         fi
     fi
 
-    # --- 4. Exit 0 so Claude Code never sees the failure ---
+    # --- 4. Emit structured hook health error to Kafka (wire-missing-producers) ---
+    # Uses PYTHON_CMD and HOOKS_LIB if already set (common.sh was sourced before trap fired).
+    # Falls back to hook_error_emitter directly if available. Fire-and-forget.
+    (
+        _eg_python="${PYTHON_CMD:-}"
+        _eg_hooks_lib="${HOOKS_LIB:-}"
+
+        # Resolve Python if not already set by common.sh
+        if [[ -z "$_eg_python" ]]; then
+            # Try OMNI_HOME-based venv first, then system python3
+            if [[ -n "${OMNI_HOME:-}" && -x "${OMNI_HOME}/omniclaude/.venv/bin/python3" ]]; then
+                _eg_python="${OMNI_HOME}/omniclaude/.venv/bin/python3"
+            elif command -v python3 >/dev/null 2>&1; then
+                _eg_python="python3"
+            fi
+        fi
+
+        # Resolve hooks lib if not already set by common.sh
+        if [[ -z "$_eg_hooks_lib" ]]; then
+            _eg_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+            _eg_hooks_lib="${_eg_script_dir}/../lib"
+        fi
+
+        [[ -z "$_eg_python" ]] && exit 0
+        [[ ! -f "${_eg_hooks_lib}/hook_error_emitter.py" ]] && exit 0
+
+        # Write error message to temp file (SECURITY: avoid shell interpolation into python -c)
+        _eg_tmp=$(mktemp "/tmp/omniclaude-hook-err-XXXXXX" 2>/dev/null) || exit 0
+        printf '%s' "Hook '${_OMNICLAUDE_HOOK_NAME}' crashed with exit code ${exit_code}${_ERROR_GUARD_LAST_ERR:+: ${_ERROR_GUARD_LAST_ERR}}" > "$_eg_tmp"
+
+        "$_eg_python" -m plugins.onex.hooks.lib.hook_error_emitter \
+            --hook-name "${_OMNICLAUDE_HOOK_NAME:-unknown}" \
+            --error-file "$_eg_tmp" \
+            --session-id "${SESSION_ID:-unknown}" \
+            --python-version "$("$_eg_python" --version 2>&1)" \
+            2>/dev/null || true
+
+        rm -f "$_eg_tmp" 2>/dev/null || true
+    ) &
+
+    # --- 5. Exit 0 so Claude Code never sees the failure ---
     exit 0
 }
 
