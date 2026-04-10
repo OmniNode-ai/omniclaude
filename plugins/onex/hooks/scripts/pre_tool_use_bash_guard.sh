@@ -85,7 +85,7 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
     # multi-line commands parse cleanly without corrupting path characters.
     # Use Python for the substitution — macOS sed doesn't support \n in patterns.
     CMD_FLAT=$(printf '%s' "$CMD" \
-        | python3 -c "import sys; print(sys.stdin.read().replace('\\\\\n', ' ').replace('\n', ' '))" \
+        | "$PYTHON_CMD" -c "import sys; print(sys.stdin.read().replace('\\\\\n', ' ').replace('\n', ' '))" \
         2>/dev/null || printf '%s' "$CMD" | tr '\n' ' ')
     WORKTREE_PATH=""
     _in_add=false

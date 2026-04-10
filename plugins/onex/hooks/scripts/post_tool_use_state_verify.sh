@@ -70,8 +70,13 @@ fi
 # Check if the expected port is actually listening
 if ! lsof -nP -iTCP:"$MATCHED_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   # Inject warning as hookSpecificOutput — must be valid JSON
-  echo "$INPUT" | jq --arg port "$MATCHED_PORT" \
-    '. + {hookSpecificOutput: {message: ("WARNING: Command claimed success but port " + $port + " is not listening. Verify state.")}}'
+  echo "$INPUT" | jq --arg port "$MATCHED_PORT" '
+    .hookSpecificOutput = (.hookSpecificOutput // {}) |
+    .hookSpecificOutput.message = (
+      [(.hookSpecificOutput.message // ""), ("WARNING: Command claimed success but port " + $port + " is not listening. Verify state.")]
+      | map(select(length > 0))
+      | join("\n\n")
+    )'
   exit 0
 fi
 

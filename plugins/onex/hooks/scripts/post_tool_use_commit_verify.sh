@@ -38,4 +38,10 @@ fi
 
 # PostToolUse hooks must output the original tool JSON (passthrough).
 # Inject the verification reminder into hookSpecificOutput so Claude sees it.
-echo "$INPUT" | jq --arg msg "$MSG" '. + {hookSpecificOutput: {message: $msg}}'
+echo "$INPUT" | jq --arg msg "$MSG" '
+  .hookSpecificOutput = (.hookSpecificOutput // {}) |
+  .hookSpecificOutput.message = (
+    [(.hookSpecificOutput.message // ""), $msg]
+    | map(select(length > 0))
+    | join("\n\n")
+  )'
