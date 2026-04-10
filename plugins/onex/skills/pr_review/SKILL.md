@@ -1,8 +1,61 @@
 ---
 description: Comprehensive PR review with strict priority-based organization and merge readiness assessment
 mode: full
+version: 5.0.0
 level: basic
 debug: false
+category: review
+tags:
+  - review
+  - pr
+  - multi-model
+  - judge-verification
+author: OmniClaude Team
+args:
+  - name: pr_number
+    description: PR number to review
+    required: true
+  - name: repo
+    description: GitHub repo (owner/repo)
+    required: true
+  - name: --dry-run
+    description: Run without posting to GitHub
+    required: false
+---
+
+# PR Review
+
+**Announce at start:** "I'm using the pr-review skill."
+
+## Node Dispatch
+
+This skill delegates to `node_pr_review_bot` in omnimarket.
+
+### Invocation
+
+```python
+# cd $OMNI_HOME/omnimarket
+from omnimarket.nodes.node_pr_review_bot.workflow_runner import run_review
+
+result = run_review(
+    pr_number=<pr_number>,
+    repo="<owner/repo>",
+    dry_run=False,  # set True to skip posting to GitHub
+)
+# result.verdict.verdict: "clean" | "risks_noted" | "blocking_issue"
+# result.verdict.total_findings, result.verdict.threads_posted
+# result.final_state.current_phase
+```
+
+### Architecture
+
+```
+SKILL.md   -> thin shell (this file)
+node       -> omnimarket/src/omnimarket/nodes/node_pr_review_bot/ (FSM + handlers)
+runner     -> node_pr_review_bot/workflow_runner.py (run_review entry point)
+contract   -> node_pr_review_bot/contract.yaml
+```
+
 ---
 
 ## Dispatch Surface
@@ -66,40 +119,13 @@ EOF
 
 ---
 
-## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+## ~~LEGACY: Polymorphic-agent dispatch~~ (deprecated — use Node Dispatch above)
 
-**DO NOT run bash scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
-
-### ❌ WRONG - Running bash directly:
-```
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30)
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22)
-```
-
-### ✅ CORRECT - Dispatch to polymorphic-agent:
-```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="PR review for #30",
-  prompt="Review PR #30. Use the pr-review skill tools:
-    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30
-    2. Analyze the output and categorize issues
-    3. Report findings organized by priority (CRITICAL/MAJOR/MINOR/NIT)
-
-    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/:
-    - collate-issues <PR#> - Get all issues from PR
-    - collate-issues-with-ci <PR#> - Get PR issues + CI failures
-    - pr-quick-review <PR#> - Quick summary review
-    - fetch-pr-data <PR#> - Raw PR data from GitHub
-
-    Return a summary with:
-    - Count by priority level
-    - Merge readiness assessment
-    - List of issues to fix"
-)
-```
-
-**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running bash directly bypasses all of this.
+> **Removed:** The polymorphic-agent/bash flow described in previous versions of
+> this skill has been superseded by the `node_pr_review_bot` node-dispatch contract
+> (see **Node Dispatch** section above). The authoritative runtime is
+> `omnimarket.nodes.node_pr_review_bot` via `run_review`. Do not use the
+> polymorphic-agent or bash-script paths for new invocations.
 
 ## Skills Available
 
