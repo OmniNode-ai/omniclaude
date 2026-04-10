@@ -525,6 +525,14 @@ class TopicBase(StrEnum):
     """Reply routed to SMS adapter."""
 
     # ==========================================================================
+    # Contract drift detection topics (OMN-8013)
+    # Produced by onex_change_control governance_emitter when drift is detected.
+    # Subscribed by omnidash contract-drift-routes for projection.
+    # ==========================================================================
+    CONTRACT_DRIFT_DETECTED = "onex.evt.onex-change-control.contract-drift-detected.v1"
+    """Emitted by onex_change_control when contract drift is detected during check-drift."""
+
+    # ==========================================================================
     # Build-loop lifecycle topics (OMN-7400)
     # Emitted by the omnibase_infra build-loop orchestrator on completion.
     # Subscribed by node_friction_observer_compute for friction analysis.
