@@ -62,6 +62,13 @@ event_bus:
     success_topic: "onex.evt.omniclaude.dod_sweep-completed.v1"
     failure_topic: "onex.evt.omniclaude.dod_sweep-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.dod_sweep.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.dod_sweep-completed.v1"
+    - "onex.evt.omniclaude.dod_sweep-failed.v1"
+
 # Capabilities
 capabilities:
   - name: skill.dod_sweep

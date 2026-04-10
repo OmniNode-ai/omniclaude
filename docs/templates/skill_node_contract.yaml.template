@@ -62,6 +62,13 @@ event_bus:
     success_topic: "onex.evt.omniclaude.SKILL_NAME-completed.v1"
     failure_topic: "onex.evt.omniclaude.SKILL_NAME-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.SKILL_NAME.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.SKILL_NAME-completed.v1"
+    - "onex.evt.omniclaude.SKILL_NAME-failed.v1"
+
 # Capabilities
 capabilities:
   - name: skill.SKILL_NAME_SNAKE

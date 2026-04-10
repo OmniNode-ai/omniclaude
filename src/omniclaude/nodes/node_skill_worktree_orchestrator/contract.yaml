@@ -65,6 +65,13 @@ event_bus:
     success_topic: "onex.evt.omniclaude.worktree-completed.v1"
     failure_topic: "onex.evt.omniclaude.worktree-failed.v1"
 
+  # Canonical topic registry (gap-analysis scanner) [OMN-3373]
+  subscribe_topics:
+    - "onex.cmd.omniclaude.worktree.v1"
+  publish_topics:
+    - "onex.evt.omniclaude.worktree-completed.v1"
+    - "onex.evt.omniclaude.worktree-failed.v1"
+
 # Capabilities
 capabilities:
   - name: skill.worktree
