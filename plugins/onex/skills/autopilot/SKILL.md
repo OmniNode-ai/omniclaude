@@ -96,6 +96,7 @@ In `--mode close-out`, autopilot executes the full pipeline in 4 phases:
 - B1: dod-sweep — query tickets completed since last cycle, run dod-verify against each, flag incomplete DoD evidence
 - B2: aislop-sweep — AI anti-patterns in recent merges
 - B3: bus-audit — Kafka topic health / schema drift
+- B3b: golden-chain-sweep (ADVISORY) — run `/onex:golden_chain_sweep`; writes results to `golden_chain_sweep_results` table; advisory in Phase 1 (hard gate in Phase 2 when regression baseline exists)
 - B4: gap detect --no-fix — cross-repo integration health
 - B4b: data-verification (advisory, parallel with B1-B4) — runs all three data sweeps in dry-run:
   - `/database-sweep --dry-run` — projection table health
@@ -363,6 +364,7 @@ Each headless `claude -p` phase inherits authorization from `cron-closeout.sh`:
 - **dod-sweep**: B1 — DoD compliance audit with per-ticket verification (parallel) [OMN-6728]
 - **aislop-sweep**: B2 — AI anti-pattern detection (parallel)
 - **bus-audit**: B3 — Kafka topic health (parallel)
+- **golden-chain-sweep**: B3b — end-to-end Kafka→DB golden chain validation (parallel, advisory) [OMN-8173]
 - **gap**: B4 — cross-repo integration health (parallel)
 - **data-flow-sweep**: B4b — end-to-end Kafka->DB->UI pipeline verification (parallel, advisory)
 - **database-sweep**: B4b — projection table health check (parallel, advisory)
