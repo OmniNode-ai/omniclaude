@@ -24,6 +24,28 @@ args:
 
 # Tech Debt Sweep
 
+## Dispatch Surface
+
+**Target**: Node dispatch via `handle_skill_requested`
+
+```
+/tech-debt-sweep [args]
+        |
+        v
+onex.cmd.omniclaude.tech_debt_sweep.v1  (Kafka)
+        |
+        v
+NodeSkillTechDebtSweepOrchestrator
+  src/omniclaude/nodes/node_skill_tech_debt_sweep_orchestrator/
+  → handle_skill_requested (omniclaude.shared)
+  → claude -p (polymorphic agent executes skill)
+        |
+        v
+onex.evt.omniclaude.tech_debt_sweep-completed.v1
+```
+
+All scanning and ticket creation logic executes inside the polymorphic agent. This skill is a thin shell: parse args, dispatch to node, render results.
+
 Scans all Python repos under `omni_home` for 6 categories of tech debt, deduplicates
 findings against existing open Linear tickets, and creates one epic per category with
 closeable tickets grouped by repo and top-level source directory.

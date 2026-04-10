@@ -44,6 +44,28 @@ args:
 
 Scan documentation files across ONEX platform repos for broken references, stale content, and CLAUDE.md accuracy.
 
+## Dispatch Surface
+
+**Target**: Node dispatch via `handle_skill_requested`
+
+```
+/doc-freshness-sweep [args]
+        |
+        v
+onex.cmd.omniclaude.doc_freshness_sweep.v1  (Kafka)
+        |
+        v
+NodeSkillDocFreshnessSweepOrchestrator
+  src/omniclaude/nodes/node_skill_doc_freshness_sweep_orchestrator/
+  → handle_skill_requested (omniclaude.shared)
+  → claude -p (polymorphic agent executes skill)
+        |
+        v
+onex.evt.omniclaude.doc_freshness_sweep-completed.v1
+```
+
+All scanning logic executes inside the polymorphic agent. This skill is a thin shell: parse args, dispatch to node, render results.
+
 ## What This Skill Does
 
 1. **Scan** all `.md` files across specified repos (default: all repos under `omni_home/`)

@@ -23,7 +23,27 @@ author: OmniClaude Team
 
 ## Dispatch Surface
 
-**Target**: Agent Teams
+**Target**: Node dispatch via `handle_skill_requested`
+
+```
+/pipeline-audit [args]
+        |
+        v
+onex.cmd.omniclaude.pipeline-audit.v1  (Kafka)
+        |
+        v
+NodeSkillPipelineAuditOrchestrator
+  src/omniclaude/nodes/node_skill_pipeline_audit_orchestrator/
+  → handle_skill_requested (omniclaude.shared)
+  → claude -p (polymorphic agent, dispatches Agent Teams per phase)
+        |
+        v
+onex.evt.omniclaude.pipeline-audit-completed.v1
+```
+
+All multi-repo audit logic executes inside the polymorphic agent (which in turn dispatches Agent Teams per phase). This skill is a thin shell: parse args, dispatch to node, render results.
+
+**Agent Teams target** (within polymorphic agent execution):
 
 ## Overview
 
