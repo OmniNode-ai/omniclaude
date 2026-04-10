@@ -59,7 +59,7 @@ jobs:
 
           # Try standard branch: */omn-XXXX-* or */OMN-XXXX-*
           if [[ -z "$TICKET_ID" ]]; then
-            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "(OMN|omn)-[0-9]+" | head -1 | tr '[:lower:]' '[:upper:]')  # First OMN ID = primary ticket for this branch
+            TICKET_ID=$(printf '%s' "$BRANCH" | grep -ioE "(OMN|omn)-[0-9]+" | head -1 | tr '[:lower:]' '[:upper:]' || true)  # First OMN ID = primary ticket for this branch
           fi
 
           if [[ -z "$TICKET_ID" ]]; then
