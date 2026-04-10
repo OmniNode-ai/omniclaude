@@ -150,6 +150,50 @@ for orchestrator completion.
 | `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: false — opt-in) |
 | `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 30) |
 
+## New Flows (v5.0.0)
+
+### 1. Auto-Rebase Flow
+
+When `--enable-auto-rebase` (default: true), stale PRs (`merge_state_status=BEHIND` or `UNKNOWN`) are rebased before the merge attempt:
+
+```
+TRIAGING → REBASING → gh pr update-branch → re-triage → MERGING
+```
+
+A `REBASING` FSM state has been added to the orchestrator. Rebase failures are logged as warnings but do not block the sweep.
+
+### 2. DAG Dependency Ordering
+
+When `--use-dag-ordering` (default: true), PRs are merged in repo dependency order to prevent downstream breakage:
+
+| Tier | Repo |
+|------|------|
+| 0 | omnibase_compat |
+| 1 | omnibase_spi |
+| 2 | omnibase_core |
+| 3 | omnibase_infra |
+| 4 | omnimarket |
+| 5 | omniclaude |
+| 6 | omniintelligence |
+| 7 | omnimemory |
+| 8 | omninode_infra |
+| 9 | onex_change_control |
+| 10 | omnidash |
+| 11 | omniweb |
+| 99 | (unknown repos — merge last) |
+
+Within each tier, GREEN PRs sort before non-green (stable sort preserves original order within same tier+status).
+
+### 3. Stuck Queue Detection
+
+During the INVENTORYING phase, the inventory compute node checks all `QUEUED` PRs for queue age via `gh pr view --json mergeQueueEntry`. PRs queued longer than `--admin-fallback-threshold-minutes` (default: 30 min) are flagged as `stuck_queue_prs` and logged as WARN-level events.
+
+If `--enable-admin-merge-fallback` is set (default: **false**, explicit opt-in required), stuck PRs are admin-merged via `gh pr merge --admin --squash`. An explicit `ADMIN MERGE TRIGGERED pr={n} repo={r}` log line is emitted before each admin merge for audit traceability. Repos without merge queue support are skipped silently.
+
+### 4. Bot Comment Resolution
+
+When `--enable-trivial-comment-resolution` (default: true), trivial CodeRabbit/bot review threads are resolved before the merge attempt. "Trivial" = comment body matches bot nit patterns (nit, nitpick, style, minor) AND the author is a known bot login (`coderabbitai`, `github-actions[bot]`, etc.). Human comments are always preserved.
+
 ## Kafka Topics
 
 | Topic | Direction | Purpose |
@@ -295,7 +339,7 @@ Test coverage:
 
 ## Changelog
 
-- **v5.0.0** (OMN-8204–OMN-8208): Expose 5 new `node_pr_lifecycle_orchestrator` capabilities:
+- **v5.0.0** (OMN-8204–OMN-8208): Expose 5 new `node_pr_lifecycle_orchestrator` capabilities from OMN-8197 Workstream 2. All args map 1:1 to new `ModelPrLifecycleStartCommand` fields:
   - `--enable-auto-rebase`: Auto-rebase stale PR branches via `gh pr update-branch` (REBASING FSM state)
   - `--use-dag-ordering`: Dependency DAG ordering — merges omnibase_compat first, omnidash last
   - Stuck merge queue detection in inventory (>30 min in queue → `stuck_queue_prs`)
