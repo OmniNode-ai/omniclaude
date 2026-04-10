@@ -246,18 +246,14 @@ Inventory are rejected as CRITICAL during R8 review. This is a hard gate -- no e
 
 ### Plan Size Constraints
 
-**Hard cap: 15 tasks / ~30KB.** Before writing the plan to disk, count `## Task N:` headings and
-estimate document size.
+Split plans at natural workstream boundaries when they become unwieldy to execute — not based on
+arbitrary task counts or file size. Good split signals: independent repos, distinct deployment
+phases, or parallel tracks with no shared dependencies.
 
-- If task count exceeds 15 **or** estimated size exceeds 30KB: **STOP. Do not write the plan.**
-  Instead, split into two or more smaller plans:
-  1. Announce: "Plan exceeds size threshold (N tasks / ~XKB). Splitting into sub-plans."
-  2. Divide tasks into logical groups of ≤15 tasks each.
-  3. Write each sub-plan as a separate file: `docs/plans/YYYY-MM-DD-<feature-name>-part-N.md`
-  4. Proceed through adversarial review and Phase 3 launch for each sub-plan independently.
-
-This constraint exists because oversized plans cause context overflows and formatting failures
-in downstream ticketization. A plan that cannot be fully loaded and reviewed is a failed plan.
+When splitting is warranted:
+1. Announce: "Splitting into sub-plans at [natural boundary]."
+2. Write each sub-plan as a separate file: `docs/plans/YYYY-MM-DD-<feature-name>-part-N.md`
+3. Proceed through adversarial review and Phase 3 launch for each sub-plan independently.
 
 ---
 
