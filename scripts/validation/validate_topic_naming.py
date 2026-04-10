@@ -38,6 +38,7 @@ _KNOWN_PRODUCERS = (
     "omnimemory",
     "omnibase",
     "omnibase-infra",
+    "onex-change-control",
 )
 _PRODUCER_SEGMENT = "|".join(_KNOWN_PRODUCERS)
 

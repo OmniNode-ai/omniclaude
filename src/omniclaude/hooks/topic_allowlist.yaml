@@ -740,3 +740,19 @@ allowed_extras:
       token usage and model cost data. Consumed by omnidash llm_cost_aggregates
       projection. Contract ownership: omniintelligence.
     ticket: OMN-7570
+
+  # ---------------------------------------------------------------------------
+  # Contract drift detection topics (OMN-8013)
+  # Produced by onex_change_control governance_emitter when drift is detected.
+  # Producer segment is onex-change-control (kebab-form of onex_change_control).
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.onex-change-control.contract-drift-detected.v1"
+    lifecycle: integration
+    reason: >
+      Contract drift detection event emitted by onex_change_control
+      governance_emitter when schema drift is detected during check-drift.
+      Subscribed by omnidash contract-drift-routes for projection.
+      Producer segment is onex-change-control (kebab-form of service name).
+      No dedicated omniclaude node contract — this is a cross-repo consumer topic.
+    ticket: OMN-8013
