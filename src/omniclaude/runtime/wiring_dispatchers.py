@@ -45,6 +45,7 @@ from omniclaude.shared.models.model_skill_node_contract import (
 )
 from omniclaude.shared.models.model_skill_request import ModelSkillRequest
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
+from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
 
 if TYPE_CHECKING:
     from omnibase_core.models.events.model_event_envelope import ModelEventEnvelope
@@ -435,6 +436,7 @@ class SkillCommandDispatcher:
         result = await handle_skill_requested(
             skill_request,
             task_dispatcher=task_dispatcher,
+            event_emitter=emit_event,
         )
 
         # Emit completion event
