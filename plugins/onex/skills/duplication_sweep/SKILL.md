@@ -24,7 +24,7 @@ tags: [sweep, quality, enforcement]
 onex.cmd.omniclaude.duplication_sweep.v1  (Kafka)
         |
         v
-NodeSkillduplication_sweepOrchestrator
+NodeSkillDuplicationSweepOrchestrator
   src/omniclaude/nodes/node_skill_duplication_sweep_orchestrator/
   → handle_skill_requested (omniclaude.shared)
   → claude -p (polymorphic agent executes skill)

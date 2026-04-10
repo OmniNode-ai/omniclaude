@@ -32,7 +32,7 @@ author: OmniClaude Team
 onex.cmd.omniclaude.pipeline-audit.v1  (Kafka)
         |
         v
-NodeSkillpipeline_auditOrchestrator
+NodeSkillPipelineAuditOrchestrator
   src/omniclaude/nodes/node_skill_pipeline_audit_orchestrator/
   → handle_skill_requested (omniclaude.shared)
   → claude -p (polymorphic agent, dispatches Agent Teams per phase)

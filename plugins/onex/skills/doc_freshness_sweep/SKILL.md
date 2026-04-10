@@ -55,7 +55,7 @@ Scan documentation files across ONEX platform repos for broken references, stale
 onex.cmd.omniclaude.doc_freshness_sweep.v1  (Kafka)
         |
         v
-NodeSkilldoc_freshness_sweepOrchestrator
+NodeSkillDocFreshnessSweepOrchestrator
   src/omniclaude/nodes/node_skill_doc_freshness_sweep_orchestrator/
   → handle_skill_requested (omniclaude.shared)
   → claude -p (polymorphic agent executes skill)
