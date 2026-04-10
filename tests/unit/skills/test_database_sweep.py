@@ -35,7 +35,7 @@ class TestDatabaseSweepSkill:
         assert len(parts) >= 3, "Frontmatter not properly delimited"
         fm = yaml.safe_load(parts[1])
         assert fm["description"], "description required"
-        assert fm["version"] == "1.0.0"
+        assert fm["version"] == "2.0.0"
         assert fm["category"] == "verification"
         assert "database" in fm["tags"]
 
