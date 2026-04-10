@@ -119,40 +119,13 @@ EOF
 
 ---
 
-## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+## ~~LEGACY: Polymorphic-agent dispatch~~ (deprecated — use Node Dispatch above)
 
-**DO NOT run bash scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
-
-### ❌ WRONG - Running bash directly:
-```
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30)
-Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr_review/pr-quick-review 22)
-```
-
-### ✅ CORRECT - Dispatch to polymorphic-agent:
-```
-Task(
-  subagent_type="onex:polymorphic-agent",
-  description="PR review for #30",
-  prompt="Review PR #30. Use the pr-review skill tools:
-    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/collate-issues 30
-    2. Analyze the output and categorize issues
-    3. Report findings organized by priority (CRITICAL/MAJOR/MINOR/NIT)
-
-    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/pr_review/:
-    - collate-issues <PR#> - Get all issues from PR
-    - collate-issues-with-ci <PR#> - Get PR issues + CI failures
-    - pr-quick-review <PR#> - Quick summary review
-    - fetch-pr-data <PR#> - Raw PR data from GitHub
-
-    Return a summary with:
-    - Count by priority level
-    - Merge readiness assessment
-    - List of issues to fix"
-)
-```
-
-**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running bash directly bypasses all of this.
+> **Removed:** The polymorphic-agent/bash flow described in previous versions of
+> this skill has been superseded by the `node_pr_review_bot` node-dispatch contract
+> (see **Node Dispatch** section above). The authoritative runtime is
+> `omnimarket.nodes.node_pr_review_bot` via `run_review`. Do not use the
+> polymorphic-agent or bash-script paths for new invocations.
 
 ## Skills Available
 
