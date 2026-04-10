@@ -18,6 +18,9 @@ tags:
   - playwright
 author: OmniClaude Team
 composable: true
+migration_status: pending_node
+migration_target: node_integration_sweep
+migration_epic: OMN-7538
 args:
   - name: --date
     description: "ISO date to sweep (default: today). Filters tickets by updatedAt >= date."

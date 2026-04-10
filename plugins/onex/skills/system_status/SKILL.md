@@ -1,12 +1,36 @@
 ---
 description: Comprehensive system health monitoring — checks agent performance, database, Kafka topics, pattern discovery, and service status across the ONEX platform
 mode: full
+version: "2.0.0"
 level: advanced
 debug: true
 index: true
+node_dispatch: node_platform_diagnostics
+node_dispatch_dimensions: RUNTIME_NODES,HOOK_HEALTH
+migration_status: thin_shell
+migration_target: node_platform_diagnostics
+migration_epic: OMN-8197
 ---
 
 # System Status
+
+## Fast Path — Node Dispatch
+
+Primary fast path dispatches to `node_platform_diagnostics` for runtime node and hook health:
+
+```bash
+onex run node_platform_diagnostics -- --dimensions=RUNTIME_NODES,HOOK_HEALTH
+```
+
+For a full 7-dimension platform check:
+
+```bash
+onex run node_platform_diagnostics -- --dry-run
+```
+
+Results are returned as `ModelDiagnosticsResult` JSON with per-dimension PASS/WARN/FAIL status.
+
+---
 
 Full platform health monitoring with diagnostics and status reporting.
 
