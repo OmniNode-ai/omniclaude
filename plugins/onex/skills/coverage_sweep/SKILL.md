@@ -1,6 +1,6 @@
 ---
 description: Measure test coverage across all Python repos under omni_home, flag modules below threshold, and auto-create Linear tickets for coverage gaps
-version: 2.0.0
+version: 3.0.0
 mode: full
 level: intermediate
 debug: false
@@ -62,20 +62,10 @@ outputs:
 - `--max-tickets` → cap on Linear tickets created per run (default: 20)
 - `--force-rescan` → bypass 1-hour coverage cache
 
-### Step 2 — Run coverage scan (if cache miss or `--force-rescan`)
-
-For each repo, run:
-```bash
-cd /Volumes/PRO-G40/Code/omni_home/<repo>  # local-path-ok
-uv run pytest --cov=src/ --cov-report=json -q
-```
-
-Cache results at `~/.onex_state/coverage_cache/<repo>.json` with 1-hour TTL.
-
-### Step 3 — Run node
+### Step 2 — Dispatch to node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
 uv run python -m omnimarket.nodes.node_coverage_sweep \
   [--repos <comma-list>] \
   [--target-pct <N>] \
@@ -84,12 +74,12 @@ uv run python -m omnimarket.nodes.node_coverage_sweep \
 
 Capture stdout (JSON: `CoverageSweepResult`). Exit 0 = clean, exit 1 = gaps found.
 
-### Step 4 — Render report
+### Step 3 — Render report
 
 Display per-repo breakdown: total modules, modules below target, zero-coverage modules,
 repo average coverage %. List gaps grouped by priority (ZERO → RECENTLY_CHANGED → BELOW_TARGET).
 
-### Step 5 — Ticket creation (only if not `--dry-run`)
+### Step 4 — Ticket creation (only if not `--dry-run`)
 
 Fetch existing Linear tickets with `test-coverage` label to dedup. For each gap not already
 tracked (up to `--max-tickets`), create via `mcp__linear-server__save_issue`:
@@ -111,7 +101,9 @@ onex_change_control, omnibase_compat
 ## Architecture
 
 ```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_coverage_sweep/ (scan + gap logic)
+SKILL.md   -> thin shell: parse args -> node dispatch -> render results
+node       -> omnimarket/src/omnimarket/nodes/node_coverage_sweep/
 contract   -> node_coverage_sweep/contract.yaml
 ```
+
+All scanning logic lives in the node handler. This skill does no scanning.

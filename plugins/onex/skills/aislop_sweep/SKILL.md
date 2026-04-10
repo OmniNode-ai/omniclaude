@@ -1,6 +1,6 @@
 ---
 description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, agent-left TODO/FIXME markers, and empty implementations.
-version: 2.0.0
+version: 3.0.0
 mode: full
 level: advanced
 debug: false
@@ -67,7 +67,7 @@ outputs:
 Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
 uv run python -m omnimarket.nodes.node_aislop_sweep \
   [--repos <comma-list>] \
   [--checks <comma-list>] \

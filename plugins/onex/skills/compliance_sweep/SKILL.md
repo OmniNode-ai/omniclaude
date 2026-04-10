@@ -1,6 +1,6 @@
 ---
 description: Handler contract compliance sweep — scans all repos for imperative handlers that bypass the ONEX contract system, wire schema mismatches, and infrastructure coupling anti-patterns, reports violations, and optionally creates Linear tickets for remediation
-version: 1.2.0
+version: 2.0.0
 mode: full
 level: advanced
 debug: false
@@ -67,18 +67,17 @@ omninode_infra, onex_change_control
 - `--max-tickets` → cap on tickets created (default: 10)
 - `--json` → output as JSON
 
-### Phase 2 — Run scanner
-
-Uses `arch-handler-contract-compliance` check from `onex_change_control`:
+### Phase 2 — Dispatch to node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok
-python scripts/validation/handler_contract_compliance.py \
-  --root <repo>/src \
-  [--repos <comma-list>]
+cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
+uv run python -m omnimarket.nodes.node_compliance_sweep \
+  [--repos <comma-list>] \
+  [--checks <comma-list>] \
+  [--dry-run]
 ```
 
-Reports violations classified by verdict and type.
+Capture stdout (JSON: `ModelComplianceSweepReport`). Exit 0 = compliant, exit 1 = violations found.
 
 ### Phase 3 — Render report
 
@@ -131,7 +130,6 @@ Write to `$ONEX_STATE_DIR/skill-results/<run_id>/compliance-sweep.json`:
 SKILL.md  → thin shell: parse args → node dispatch → render results
 node      → omnimarket/src/omnimarket/nodes/node_compliance_sweep/
 contract  → node_compliance_sweep/contract.yaml
-scanner   → onex_change_control/scripts/validation/handler_contract_compliance.py
 ```
 
 All scanning logic lives in the node handler. This skill does no scanning.

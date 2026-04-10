@@ -1,7 +1,7 @@
 ---
 description: Full autonomous audit-debug-fix loop for all dashboard pages — Playwright recon, parallel systematic-debug, fix, PR, Linear ticket, re-audit, iterate until clean. Supports local and cloud targets with optional post-fix redeployment.
 mode: full
-version: 2.0.0
+version: 3.0.0
 level: advanced
 debug: false
 category: quality
@@ -72,17 +72,18 @@ args:
 - `--pages` → JSON array of pre-collected page data (skip Playwright recon)
 - Other flags pass through to the orchestration phases
 
-### Step 2 — Recon (Phase 1+2, unless `--fix-only`)
+### Step 2 — Playwright recon (unless `--fix-only`)
 
-Run Playwright recon across all dashboard routes. For each page:
+Use Playwright to collect page data across all dashboard routes. For each page:
 1. Navigate, wait for `networkidle`, capture screenshot + console errors
-2. Classify: `HEALTHY` | `EMPTY` | `MOCK` | `BROKEN` | `FLAG_GATED`
-3. Group broken pages into problem domains; assign fix tier per domain
+2. Record: route, has_data, has_js_errors, has_network_errors, visible_text, has_live_timestamps, has_mock_patterns, has_feature_flag
 
-When `--pages` is provided, skip live Playwright and pass pre-collected data directly to the node:
+### Step 3 — Dispatch to node
+
+Pass the collected page data to the node for classification and triage:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
 uv run python -m omnimarket.nodes.node_dashboard_sweep \
   --pages '<json-array>' \
   [--max-iterations <n>] \
@@ -91,7 +92,7 @@ uv run python -m omnimarket.nodes.node_dashboard_sweep \
 
 Capture stdout (JSON: `DashboardSweepResult`). Exit 0 = clean, exit 1 = issues found.
 
-### Step 3 — Fix loop (Phase 3-6, unless `--triage-only` or `--dry-run`)
+### Step 4 — Fix loop (unless `--triage-only` or `--dry-run`)
 
 Dispatch one `systematic-debugging` agent per `CODE_BUG`/`DATA_PIPELINE`/`SCHEMA_MISMATCH` domain.
 All dispatches happen in a single message for parallelism. Wait for all agents, then:
@@ -100,7 +101,7 @@ All dispatches happen in a single message for parallelism. Wait for all agents, 
 - Re-audit with Playwright (Phase 5)
 - Iterate up to `--max-iterations` (Phase 6)
 
-### Step 4 — Render report
+### Step 5 — Render report
 
 Display final page status table, fixes applied, PRs merged, tickets created, and any remaining open items.
 
@@ -127,7 +128,9 @@ Display final page status table, fixes applied, PRs merged, tickets created, and
 ## Architecture
 
 ```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_dashboard_sweep/ (classify + triage logic)
+SKILL.md   -> thin shell: Playwright recon -> node dispatch -> render results
+node       -> omnimarket/src/omnimarket/nodes/node_dashboard_sweep/
 contract   -> node_dashboard_sweep/contract.yaml
 ```
+
+All classification and triage logic lives in the node handler. This skill owns only Playwright recon and result rendering.
