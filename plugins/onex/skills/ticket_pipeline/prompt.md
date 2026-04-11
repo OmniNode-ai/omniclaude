@@ -2885,6 +2885,21 @@ a hard gate that blocks the pipeline when changed files lack tests.
    BASE_REF=$(git merge-base origin/main HEAD)
    COMMIT_SUMMARY=$(git log --oneline "$BASE_REF"..HEAD)
 
+   # Optional upstream correlation (set by dispatcher, e.g. build_loop)
+   SOURCE_CORRELATION_ID="{source_correlation_id}"  # from state, may be empty
+   SOURCE="{source}"                                # from state, may be empty
+   CORRELATION_SECTION=""
+   if [ -n "$SOURCE_CORRELATION_ID" ]; then
+       CORRELATION_SECTION=$(cat <<EOF2
+
+## Correlation
+
+correlation_id: $SOURCE_CORRELATION_ID
+source: ${SOURCE:-unknown}
+EOF2
+)
+   fi
+
    gh pr create \
      --title "feat($TICKET_ID): $TICKET_TITLE" \
      --body "$(cat <<EOF
@@ -2903,8 +2918,24 @@ $COMMIT_SUMMARY
 
 - [ ] CI passes
 - [ ] CodeRabbit review addressed
+$CORRELATION_SECTION
 EOF
 )"
+   ```
+
+   **Post a correlation comment to the Linear ticket** when a source correlation
+   is present, so the build_loop cycle that produced this work can be traced
+   from both ends (Linear -> PR, PR -> Linear):
+
+   ```python
+   source_correlation_id = state.get("source_correlation_id")
+   if source_correlation_id:
+       source_name = state.get("source", "build_loop")
+       comment_body = f"[build-loop correlation_id={source_correlation_id}] source={source_name} pr={pr_url}"
+       try:
+           mcp__linear-server__save_comment(issueId=ticket_id, body=comment_body)
+       except Exception as _comment_err:
+           print(f"Warning: Could not post correlation comment to Linear: {_comment_err}")
    ```
 
 4. **Persist PR identity to state** (immediately after PR creation):
