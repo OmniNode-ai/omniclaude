@@ -589,3 +589,118 @@ class TestNoOrchestrationAntiPatterns:
         assert "Track A" not in content and "Track B" not in content, (
             "prompt.md must not contain Track A/B orchestration — delegated to orchestrator"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test class: Pre-merge verification gate (OMN-7742)
+# ---------------------------------------------------------------------------
+
+
+_VERIFICATION_SWEEP_SKILL = _SKILLS_ROOT / "verification_sweep" / "SKILL.md"
+
+
+@pytest.mark.unit
+class TestVerifyPreMergeGate:
+    """OMN-7742: --verify wires verification_sweep into merge_sweep as a pre-merge gate."""
+
+    FAILURE_CATEGORIES = [
+        "merged",
+        "verification_failed",
+        "verification_unavailable",
+        "verification_timeout",
+        "verification_tool_error",
+        "skipped_no_mapping",
+        "skipped_by_policy",
+    ]
+
+    TARGET_MAPPING_PATTERNS = [
+        "projection",
+        "handler",
+        "route",
+        "drizzle",
+        "migrations",
+        "topics.yaml",
+        "contract.yaml",
+    ]
+
+    def test_verify_arg_in_skill_frontmatter(self) -> None:
+        """SKILL.md frontmatter must declare --verify as an arg."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        frontmatter_end = content.find("---", 3)
+        assert frontmatter_end > 0
+        frontmatter = content[:frontmatter_end]
+        assert "--verify" in frontmatter, (
+            "--verify must appear in SKILL.md frontmatter args"
+        )
+
+    def test_verify_timeout_arg_in_skill_frontmatter(self) -> None:
+        """SKILL.md frontmatter must declare --verify-timeout-seconds as an arg."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        frontmatter_end = content.find("---", 3)
+        frontmatter = content[:frontmatter_end]
+        assert "--verify-timeout-seconds" in frontmatter
+
+    def test_verify_arg_mapped_to_orchestrator_field(self) -> None:
+        """--verify must appear in the arg → orchestrator field mapping table."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "`--verify`" in content and "`verify: true`" in content, (
+            "SKILL.md must map --verify to orchestrator `verify: true` field"
+        )
+
+    def test_all_seven_failure_categories_documented(self) -> None:
+        """SKILL.md must document all 7 per-PR verification outcome categories."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        for category in self.FAILURE_CATEGORIES:
+            assert f"`{category}`" in content, (
+                f"SKILL.md must document verification category: {category}"
+            )
+
+    def test_target_mapping_patterns_documented(self) -> None:
+        """SKILL.md must document the changed-file-to-target mapping patterns."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        for pattern in self.TARGET_MAPPING_PATTERNS:
+            assert pattern in content, (
+                f"SKILL.md must document target mapping pattern: {pattern}"
+            )
+
+    def test_batch_nonblocking_semantics_documented(self) -> None:
+        """SKILL.md must state that one PR's failure does not block the batch."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL).lower()
+        assert "does not block" in content or "not block" in content, (
+            "SKILL.md must document that a single PR verification failure does "
+            "not block other PRs in the sweep"
+        )
+
+    def test_changelog_documents_omn_7742(self) -> None:
+        """Changelog must reference OMN-7742."""
+        content = _read_skill_file(_MERGE_SWEEP_SKILL)
+        assert "OMN-7742" in content, "Changelog must reference OMN-7742"
+
+    def test_verification_sweep_documents_pre_merge_mode(self) -> None:
+        """verification_sweep SKILL.md must document --pr pre-merge mode."""
+        content = _read_skill_file(_VERIFICATION_SWEEP_SKILL)
+        assert "--pr" in content, "verification_sweep must declare --pr arg"
+        assert "pre-merge" in content.lower(), (
+            "verification_sweep must document pre-merge mode"
+        )
+
+    def test_verification_sweep_documents_emittable_exit_statuses(self) -> None:
+        """verification_sweep SKILL.md must document every status it can emit.
+
+        `skipped_by_policy` is the only category it never emits — that decision
+        is made by merge_sweep before verification_sweep is ever invoked.
+        """
+        content = _read_skill_file(_VERIFICATION_SWEEP_SKILL)
+        emittable = [c for c in self.FAILURE_CATEGORIES if c != "skipped_by_policy"]
+        for category in emittable:
+            assert f"`{category}`" in content, (
+                f"verification_sweep must document exit status: {category}"
+            )
+
+    def test_verification_sweep_documents_target_mapping(self) -> None:
+        """verification_sweep SKILL.md must describe the changed-file target mapping."""
+        content = _read_skill_file(_VERIFICATION_SWEEP_SKILL)
+        for pattern in self.TARGET_MAPPING_PATTERNS:
+            assert pattern in content, (
+                f"verification_sweep must document target mapping pattern: {pattern}"
+            )

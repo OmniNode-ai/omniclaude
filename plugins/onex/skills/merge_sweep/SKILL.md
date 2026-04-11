@@ -66,6 +66,12 @@ args:
   - name: --admin-fallback-threshold-minutes
     description: "Minutes a PR must be stuck in merge queue before admin fallback fires (default: 30)"
     required: false
+  - name: --verify
+    description: "Run verification_sweep on each PR after CI passes but before enabling auto-merge. Uses changed-file-to-verification-target mapping. Neutral-skip on tool/infra errors; does not block the batch."
+    required: false
+  - name: --verify-timeout-seconds
+    description: "Per-PR verification timeout in seconds (default: 30). On timeout, PR is neutral-skipped as verification_timeout."
+    required: false
 inputs:
   - name: repos
     description: "list[str] — org/repo names to scan; empty = all"
@@ -149,6 +155,8 @@ for orchestrator completion.
 | `--enable-trivial-comment-resolution` | `enable_trivial_comment_resolution: true` (default: true) |
 | `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: false — opt-in) |
 | `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 30) |
+| `--verify` | `verify: true` (default: false — opt-in pre-merge verification gate) |
+| `--verify-timeout-seconds` | `verify_timeout_seconds` (default: 30) |
 
 ## New Flows (v5.0.0)
 
@@ -189,6 +197,63 @@ Within each tier, GREEN PRs sort before non-green (stable sort preserves origina
 During the INVENTORYING phase, the inventory compute node checks all `QUEUED` PRs for queue age via `gh pr view --json mergeQueueEntry`. PRs queued longer than `--admin-fallback-threshold-minutes` (default: 30 min) are flagged as `stuck_queue_prs` and logged as WARN-level events.
 
 If `--enable-admin-merge-fallback` is set (default: **false**, explicit opt-in required), stuck PRs are admin-merged via `gh pr merge --admin --squash`. An explicit `ADMIN MERGE TRIGGERED pr={n} repo={r}` log line is emitted before each admin merge for audit traceability. Repos without merge queue support are skipped silently.
+
+### 5. Pre-Merge Verification Gate (`--verify`, OMN-7742)
+
+When `--verify` is set, after CI passes but **before** enabling auto-merge, each PR is
+routed through `onex:verification_sweep` using a deterministic changed-file-to-target
+mapping. The gate is opt-in; the default sweep behaviour is unchanged.
+
+The per-PR check runs with a hard timeout (`--verify-timeout-seconds`, default 30s) and
+neutral-skips on any infra error. Failure on one PR does **not** block other PRs in the
+same sweep; PRs are re-evaluated on the next run (no automatic retries in v1).
+
+#### Verification target mapping
+
+First-match-wins table applied against the PR's `gh pr diff --name-only` output:
+
+| Changed-file pattern | Verification target | Check |
+|---|---|---|
+| `src/**/projection*.py`, `src/**/projector*.py` | Projection table for that module | Table exists, `row_count > 0`, sample row has all non-null required columns matching the Drizzle schema |
+| `src/**/handler*.py` (Kafka consumer) | Projection sink + summary endpoint consuming it | Endpoint returns HTTP 2xx with structurally valid JSON matching expected response shape |
+| `src/**/route*.py`, `src/**/api*.py`, `pages/api/**` | The modified API route(s) | Endpoint returns HTTP 2xx with non-error payload; response body contains expected top-level keys |
+| `drizzle/**`, `migrations/**` | All projection tables in the affected database | Tables exist, migrations applied without error, row schema matches Drizzle definition |
+| `topics.yaml`, `contract.yaml` (event bus) | Kafka topic exists + consumer group lag | Topic in `rpk topic list`, consumer group lag via `rpk group describe` |
+| No pattern match | Skip verification for this PR | Logged as `skipped_no_mapping` |
+
+The mapping is deterministic and lives in `pr_lifecycle_orchestrator` so new patterns
+can be added without editing this skill.
+
+#### Per-PR verification outcomes
+
+Each PR in the sweep is classified into exactly one of seven categories. Only
+`verification_failed` blocks auto-merge for that PR; every other category either proceeds
+to merge as usual or is a neutral skip.
+
+| Category | Meaning | PR action |
+|---|---|---|
+| `merged` | CI + verification passed (or skipped by policy) | Enable auto-merge as usual |
+| `verification_failed` | Verification ran, produced a concrete failure | PR comment with which check failed, expected vs actual, target mapping used; auto-merge **not** enabled; PR stays open for re-evaluation |
+| `verification_unavailable` | Target unreachable (service down, DB offline) | Neutral skip, WARN log, no PR comment |
+| `verification_timeout` | Did not complete within `--verify-timeout-seconds` | Neutral skip, WARN log |
+| `verification_tool_error` | `verification_sweep` itself errored (exception, missing binary) | Neutral skip, ERROR log |
+| `skipped_no_mapping` | No verification target pattern matched the diff | Normal skip, INFO log |
+| `skipped_by_policy` | `--verify` not set, or repo on the verify-exclude list | Normal skip |
+
+The merge-sweep report is extended to split PRs across all seven categories. A failure
+in one PR never short-circuits the batch: other PRs continue to their own verification
+and merge decisions independently.
+
+#### PR comment on `verification_failed`
+
+On a concrete verification failure, a single PR comment is posted with:
+
+1. Which check failed (target kind + identifier)
+2. Expected vs actual (row count, HTTP code, schema columns, etc.)
+3. The target mapping entry that selected this check
+4. A pointer to the verification receipt under `.onex_state/verification-failures/`
+
+The PR is left open; the next merge_sweep run re-evaluates it. No automatic retries.
 
 ### 4. Bot Comment Resolution
 
@@ -288,6 +353,8 @@ Status values (unchanged from v3.x for backward compatibility):
 | `--enable-trivial-comment-resolution` | true | Auto-resolve trivial CodeRabbit/bot review threads (nit/style/minor) with no human reply before merge. |
 | `--enable-admin-merge-fallback` | false | **Opt-in**: Admin merge fallback for PRs stuck in merge queue beyond threshold. Logs "ADMIN MERGE TRIGGERED" before every action. |
 | `--admin-fallback-threshold-minutes` | 30 | Minutes a PR must be in merge queue before admin fallback fires (only when `--enable-admin-merge-fallback` is set). |
+| `--verify` | false | **Opt-in**: After CI passes, run `onex:verification_sweep` per-PR using the changed-file-to-target mapping before enabling auto-merge. Only `verification_failed` blocks that PR; unavailable/timeout/tool_error are neutral skips. Failure in one PR does not block others. |
+| `--verify-timeout-seconds` | 30 | Hard per-PR verification timeout. On timeout the PR is neutral-skipped as `verification_timeout`. |
 
 ## Headless Mode
 
@@ -339,6 +406,15 @@ Test coverage:
 
 ## Changelog
 
+- **v5.1.0** (OMN-7742): Add opt-in `--verify` pre-merge verification gate. After CI
+  passes, each PR is routed through `onex:verification_sweep` using a deterministic
+  changed-file-to-target mapping (projections, handlers, API routes, migrations, event
+  bus). PRs classified into 7 categories: `merged`, `verification_failed`,
+  `verification_unavailable`, `verification_timeout`, `verification_tool_error`,
+  `skipped_no_mapping`, `skipped_by_policy`. Only `verification_failed` blocks that PR;
+  infra errors neutral-skip. Failure in one PR never blocks the batch. `--verify-timeout-seconds`
+  (default 30) controls per-PR timeout. Closes OMN-6405-class regressions where CI green
+  plus structurally correct code merged with garbage projection data.
 - **v5.0.0** (OMN-8204–OMN-8208): Expose 5 new `node_pr_lifecycle_orchestrator` capabilities from OMN-8197 Workstream 2. All args map 1:1 to new `ModelPrLifecycleStartCommand` fields:
   - `--enable-auto-rebase`: Auto-rebase stale PR branches via `gh pr update-branch` (REBASING FSM state)
   - `--use-dag-ordering`: Dependency DAG ordering — merges omnibase_compat first, omnidash last

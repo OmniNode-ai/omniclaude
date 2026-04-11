@@ -37,6 +37,12 @@ args:
   - name: --skip-dod
     description: "Skip Phase 3 DoD evidence checks"
     required: false
+  - name: --pr
+    description: "GitHub PR reference (owner/repo#number) — pre-merge mode. Selects verification targets via changed-file mapping instead of ticket contract."
+    required: false
+  - name: --timeout-seconds
+    description: "Hard timeout for a single pre-merge PR verification run (default: 30). On timeout, exits with status=verification_timeout."
+    required: false
 inputs:
   - name: tickets
     description: "list[str] — ticket IDs to verify; empty = discover from --epic"
@@ -304,8 +310,62 @@ the most recent sweep run.
 
 ---
 
+## Pre-Merge Mode (`--pr`, OMN-7742)
+
+When invoked with `--pr owner/repo#number`, verification_sweep runs in **pre-merge mode**
+as the per-PR check driven by `merge_sweep --verify`. In this mode there is no ticket
+contract to read; verification targets are selected from the PR diff using a
+deterministic changed-file-to-target mapping.
+
+### Target mapping
+
+Applied first-match-wins against `gh pr diff --name-only`:
+
+| Changed-file pattern | Verification target | Check |
+|---|---|---|
+| `src/**/projection*.py`, `src/**/projector*.py` | Projection table for that module | Table exists, `row_count > 0`, sample row has all non-null required columns matching the Drizzle schema |
+| `src/**/handler*.py` (Kafka consumer) | Projection sink + summary endpoint consuming it | Endpoint returns HTTP 2xx with structurally valid JSON matching expected response shape |
+| `src/**/route*.py`, `src/**/api*.py`, `pages/api/**` | The modified API route(s) | Endpoint returns HTTP 2xx with non-error payload; response body contains expected top-level keys |
+| `drizzle/**`, `migrations/**` | All projection tables in the affected database | Tables exist, migrations applied without error, row schema matches Drizzle definition |
+| `topics.yaml`, `contract.yaml` (event bus) | Kafka topic exists + consumer group lag | Topic in `rpk topic list`, consumer group lag via `rpk group describe` |
+| No pattern match | Skip verification for this PR | Exit `skipped_no_mapping`, status=skip |
+
+### Exit status (pre-merge mode)
+
+Maps onto the 7 merge_sweep categories. verification_sweep emits exactly one terminal
+status per `--pr` invocation:
+
+| Status | Meaning |
+|---|---|
+| `merged` | All selected checks passed, or no mapping matched and sweep exited cleanly |
+| `verification_failed` | One or more concrete check failures — receipt written under `.onex_state/verification-failures/` with expected vs actual and target mapping used |
+| `verification_unavailable` | Verification target unreachable (service down, DB offline) — neutral skip |
+| `verification_timeout` | Run exceeded `--timeout-seconds` — neutral skip |
+| `verification_tool_error` | verification_sweep itself errored (exception, missing binary) — neutral skip |
+| `skipped_no_mapping` | No changed-file pattern matched — normal skip |
+
+Pre-merge mode is non-blocking for the caller: merge_sweep reads the status and decides
+whether to enable auto-merge on that PR. `verification_failed` is the only status that
+blocks auto-merge for the individual PR; all other non-`merged` statuses are neutral
+skips that do not halt the sweep batch.
+
+### PR comment on failure
+
+In pre-merge mode, when `overall_status == verification_failed` and `--dry-run` is not
+set, a single GitHub PR comment is posted with:
+
+1. Which check failed (target kind + identifier)
+2. Expected vs actual (row count, HTTP code, schema columns, ...)
+3. The target mapping entry that selected this check
+4. A link to the receipt under `.onex_state/verification-failures/`
+
+---
+
 ## Integration Points
 
+- **merge-sweep** (`--verify`, OMN-7742): invokes verification-sweep in pre-merge mode
+  (`--pr ...`) after CI passes but before enabling auto-merge; consumes the 7-category
+  status to decide whether the PR proceeds to auto-merge
 - **epic-team**: dispatches verification-sweep after all waves complete, before DoD gate
 - **ticket-pipeline**: dispatches verification-sweep after auto-merge, before marking Done
 - **integration-sweep**: complementary — integration-sweep checks contracts and surfaces;
