@@ -97,9 +97,10 @@ def parse_pr_refs(text: str, default_repo: str | None = None) -> list[PRRef]:
     repo_key = default_repo or ""
     for num_match in _PR_NUMBER_RE.finditer(text):
         num = int(num_match.group(1))
-        if any(k[1] == num for k in refs):
+        key = (repo_key, num)
+        if key in refs:
             continue
-        refs[(repo_key, num)] = PRRef(number=num, repo=default_repo)
+        refs[key] = PRRef(number=num, repo=default_repo)
 
     return list(refs.values())
 
@@ -319,12 +320,25 @@ def main() -> int:
     labels: list[str] = list(params.get("labels") or [])
 
     # If the description wasn't passed on this update (common: status-only
-    # updates), fetch the live ticket to read DoD references.
+    # updates), fetch the live ticket to read DoD references. Fail-closed: if
+    # the fetch fails we cannot tell whether a PR is referenced, so reject
+    # rather than let the Done transition through blind.
     if not description and ticket_id:
         issue = _fetch_linear_issue(ticket_id)
-        if issue:
-            description = str(issue.get("description") or "")
-            labels = labels or list(issue.get("labels") or [])
+        if not issue:
+            decision = {
+                "decision": "block",
+                "reason": (
+                    f"[OMN-8415 done-state PR verify] Could not fetch Linear "
+                    f"ticket {ticket_id} to read DoD; refusing to mark Done "
+                    "without verifying referenced PRs. Retry once Linear is "
+                    "reachable or pass the description in the save_issue call."
+                ),
+            }
+            sys.stderr.write(json.dumps(decision) + "\n")
+            return 2
+        description = str(issue.get("description") or "")
+        labels = labels or list(issue.get("labels") or [])
 
     default_repo = os.environ.get("LINEAR_DONE_VERIFY_DEFAULT_REPO") or None
 

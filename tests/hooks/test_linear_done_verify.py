@@ -86,6 +86,18 @@ class TestParsing:
         assert len(refs) == 1
         assert refs[0].number == 202
 
+    def test_same_number_different_repos_both_preserved(self) -> None:
+        """A bare `#202` against default_repo X should not be swallowed by a
+        full URL `.../Y/pull/202` from repo Y — they are different PRs."""
+        refs = parse_pr_refs(
+            "Depends on https://github.com/OmniNode-ai/omnibase_core/pull/202 "
+            "and closes #202",
+            default_repo="OmniNode-ai/omniclaude",
+        )
+        assert len(refs) == 2
+        repos = sorted(r.repo or "" for r in refs)
+        assert repos == ["OmniNode-ai/omnibase_core", "OmniNode-ai/omniclaude"]
+
 
 class TestVerify:
     def test_allows_when_all_prs_merged(self) -> None:
@@ -218,6 +230,30 @@ class TestShellWrapper:
         )
         assert result.returncode == 0
 
+    def test_shell_fails_open_on_python_crash(self, tmp_path: Path) -> None:
+        """A Python runtime error in the verifier must not block the tool —
+        only exit code 2 (a real blocking decision) propagates."""
+        broken_lib = tmp_path / "broken.py"
+        broken_lib.write_text('raise RuntimeError("intentional crash for test")\n')
+        wrapper = tmp_path / "wrapper.sh"
+        wrapper.write_text(
+            "#!/usr/bin/env bash\n"
+            "set +e\n"
+            f'{sys.executable} "{broken_lib}"\n'
+            "rc=$?\n"
+            "if [[ $rc -eq 2 ]]; then exit 2; fi\n"
+            "exit 0\n"
+        )
+        wrapper.chmod(0o755)
+        result = subprocess.run(
+            ["bash", str(wrapper)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert result.returncode == 0
+
     def test_allows_done_with_exempt_label(self) -> None:
         result = _run_hook(
             {
@@ -251,6 +287,51 @@ class TestClassification:
             ref=PRRef(number=1, repo="a/b"), state="MERGED", merge_state="CLEAN"
         )
         assert linear_done_verify.classify_blocking(status) is False
+
+
+class TestMainFailClosed:
+    def test_main_rejects_when_linear_fetch_fails(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """If description is absent and the live Linear fetch returns None,
+        main() must exit 2 — never silently allow a Done transition."""
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_fetch_linear_issue",
+            lambda _ticket_id: None,
+        )
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {"id": "OMN-9999", "state": "Done"},
+            },
+        )
+        rc = linear_done_verify.main()
+        captured = capsys.readouterr()
+        assert rc == 2
+        assert "Could not fetch Linear ticket" in captured.err
+
+    def test_main_allows_when_description_passed_inline(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If the caller passes the description directly, no Linear fetch is
+        needed and the verifier can run on the inline content."""
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-1",
+                    "state": "Done",
+                    "description": "No PRs here.",
+                },
+            },
+        )
+        rc = linear_done_verify.main()
+        assert rc == 0
 
 
 @pytest.mark.parametrize(

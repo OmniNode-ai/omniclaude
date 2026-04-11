@@ -39,4 +39,14 @@ if [[ ! -f "$LIB_PY" ]]; then
 fi
 
 PYTHON_BIN="${PYTHON_CMD:-python3}"
-exec "$PYTHON_BIN" "$LIB_PY"
+# Only exit code 2 (blocking decision) should propagate. Any other non-zero
+# exit is a Python runtime error in the hook itself — fail open to avoid
+# blocking legitimate tool calls on a hook bug.
+set +e
+"$PYTHON_BIN" "$LIB_PY"
+rc=$?
+set -e
+if [[ "$rc" -eq 2 ]]; then
+    exit 2
+fi
+exit 0
