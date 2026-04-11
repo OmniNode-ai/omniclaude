@@ -65,13 +65,18 @@ def test_statusline_shim_resolves_to_stable_path(installed_shim: Path) -> None:
         '"weekly":{"utilization":30.0,"reset_at":"2026-03-10T00:00:00Z"}},'
         '"thinking":{"enabled":true,"budget_tokens":16000}}'
     )
+    test_home = shim.parents[2]  # $HOME used during deploy fixture
     result = subprocess.run(
         ["bash", str(shim)],
         input=mock_usage,
+        env={**os.environ, "HOME": str(test_home)},
         capture_output=True,
         text=True,
         timeout=10,
         check=False,
+    )
+    assert result.returncode == 0, (
+        f"Shim exited non-zero (exit {result.returncode}):\n{result.stderr}"
     )
     assert result.stdout.strip(), (
         "Shim produced no output when invoked with mock usage JSON"
