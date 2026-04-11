@@ -10,10 +10,20 @@
             "tickets_completed": "int",
             "tickets_failed": "int",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["run_id", "epic_id", "correlation_id"],
-        "valid_statuses": ["running", "completed", "failed", "partial", "cancelled"],
+        "sentinel_fields": [
+            "run_id",
+            "epic_id",
+            "correlation_id"
+        ],
+        "valid_statuses": [
+            "running",
+            "completed",
+            "failed",
+            "partial",
+            "cancelled"
+        ]
     },
     "phase.metrics": {
         "required_fields": {
@@ -24,10 +34,16 @@
             "duration_ms": "int",
             "tokens_used": "int",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["session_id"],
-        "valid_statuses": ["success", "failure", "skipped"],
+        "sentinel_fields": [
+            "session_id"
+        ],
+        "valid_statuses": [
+            "success",
+            "failure",
+            "skipped"
+        ]
     },
     "pr.watch.updated": {
         "required_fields": {
@@ -40,10 +56,21 @@
             "review_cycles_used": "int",
             "watch_duration_hours": "float",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["run_id", "repo", "ticket_id", "correlation_id"],
-        "valid_statuses": ["watching", "approved", "capped", "timeout", "failed"],
+        "sentinel_fields": [
+            "run_id",
+            "repo",
+            "ticket_id",
+            "correlation_id"
+        ],
+        "valid_statuses": [
+            "watching",
+            "approved",
+            "capped",
+            "timeout",
+            "failed"
+        ]
     },
     "gate.decision": {
         "required_fields": {
@@ -54,10 +81,18 @@
             "gate_type": "str",
             "wait_seconds": "float",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["gate_id", "ticket_id", "correlation_id"],
-        "valid_statuses": ["ACCEPTED", "REJECTED", "TIMEOUT"],
+        "sentinel_fields": [
+            "gate_id",
+            "ticket_id",
+            "correlation_id"
+        ],
+        "valid_statuses": [
+            "ACCEPTED",
+            "REJECTED",
+            "TIMEOUT"
+        ]
     },
     "budget.cap.hit": {
         "required_fields": {
@@ -67,9 +102,12 @@
             "tokens_budget": "int",
             "cap_reason": "str",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["run_id", "correlation_id"],
+        "sentinel_fields": [
+            "run_id",
+            "correlation_id"
+        ]
     },
     "circuit.breaker.tripped": {
         "required_fields": {
@@ -79,9 +117,12 @@
             "threshold": "int",
             "reset_timeout_seconds": "float",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["session_id", "correlation_id"],
+        "sentinel_fields": [
+            "session_id",
+            "correlation_id"
+        ]
     },
     "hostile.reviewer.completed": {
         "required_fields": {
@@ -95,10 +136,18 @@
             "critical_count": "int",
             "major_count": "int",
             "correlation_id": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["target", "correlation_id"],
-        "valid_statuses": ["clean", "risks_noted", "blocking_issue", "degraded"],
+        "sentinel_fields": [
+            "target",
+            "correlation_id"
+        ],
+        "valid_statuses": [
+            "clean",
+            "risks_noted",
+            "blocking_issue",
+            "degraded"
+        ]
     },
     "plan.review.completed": {
         "required_fields": {
@@ -111,9 +160,13 @@
             "models_used": "list",
             "correlation_id": "str",
             "completed_at": "str",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["session_id", "plan_file", "correlation_id"],
+        "sentinel_fields": [
+            "session_id",
+            "plan_file",
+            "correlation_id"
+        ]
     },
     "dod.sweep.completed": {
         "required_fields": {
@@ -125,9 +178,11 @@
             "failed": "int",
             "exempted": "int",
             "lookback_days": "int",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["run_id"],
+        "sentinel_fields": [
+            "run_id"
+        ]
     },
     "agent.status": {
         "required_fields": {
@@ -137,17 +192,21 @@
             "state": "str",
             "message": "str",
             "schema_version": "int",
-            "emitted_at": "str",
+            "emitted_at": "str"
         },
-        "sentinel_fields": ["agent_name", "session_id", "correlation_id"],
+        "sentinel_fields": [
+            "agent_name",
+            "session_id",
+            "correlation_id"
+        ],
         "valid_statuses": [
             "idle",
             "working",
             "blocked",
             "awaiting_input",
             "finished",
-            "error",
-        ],
+            "error"
+        ]
     },
     "context.enrichment": {
         "required_fields": {
@@ -160,10 +219,19 @@
             "latency_ms": "float",
             "tokens_before": "int",
             "tokens_after": "int",
-            "net_tokens_saved": "int",
+            "net_tokens_saved": "int"
         },
-        "sentinel_fields": ["session_id", "correlation_id", "channel"],
-        "valid_statuses": ["hit", "miss", "error", "inflated"],
+        "sentinel_fields": [
+            "session_id",
+            "correlation_id",
+            "channel"
+        ],
+        "valid_statuses": [
+            "hit",
+            "miss",
+            "error",
+            "inflated"
+        ]
     },
     "context.utilization": {
         "required_fields": {
@@ -174,9 +242,13 @@
             "emitted_at": "str",
             "cohort": "str",
             "injection_occurred": "bool",
-            "patterns_count": "int",
+            "patterns_count": "int"
         },
-        "sentinel_fields": ["session_id", "correlation_id", "cohort"],
+        "sentinel_fields": [
+            "session_id",
+            "correlation_id",
+            "cohort"
+        ]
     },
     "agent.match": {
         "required_fields": {
@@ -188,9 +260,14 @@
             "cohort": "str",
             "selected_agent": "str",
             "agent_match_score": "float",
-            "confidence": "float",
+            "confidence": "float"
         },
-        "sentinel_fields": ["session_id", "correlation_id", "selected_agent", "cohort"],
+        "sentinel_fields": [
+            "session_id",
+            "correlation_id",
+            "selected_agent",
+            "cohort"
+        ]
     },
     "latency.breakdown": {
         "required_fields": {
@@ -202,8 +279,12 @@
             "cohort": "str",
             "routing_time_ms": "int",
             "injection_time_ms": "int",
-            "total_hook_ms": "int",
+            "total_hook_ms": "int"
         },
-        "sentinel_fields": ["session_id", "correlation_id", "cohort"],
-    },
+        "sentinel_fields": [
+            "session_id",
+            "correlation_id",
+            "cohort"
+        ]
+    }
 }
