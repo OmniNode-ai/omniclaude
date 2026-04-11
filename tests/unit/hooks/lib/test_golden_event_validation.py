@@ -368,6 +368,7 @@ class TestGoldenPhaseMetrics:
                 phase="implement",
                 status="success",
                 duration_ms=4200,
+                emitted_at="2026-04-11T08:00:00+00:00",
                 ticket_id="OMN-6970",
                 tokens_used=12000,
                 correlation_id="corr-golden-001",
@@ -395,6 +396,7 @@ class TestGoldenPhaseMetrics:
                 phase="implement",
                 status="success",
                 duration_ms=1,
+                emitted_at="2026-04-11T08:00:00+00:00",
                 correlation_id="corr-001",
             )
 

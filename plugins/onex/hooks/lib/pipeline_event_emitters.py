@@ -546,6 +546,7 @@ def emit_phase_metrics(
     phase: str,
     status: Literal["success", "failure", "skipped"],
     duration_ms: int,
+    emitted_at: str,
     ticket_id: str | None = None,
     tokens_used: int = 0,
     correlation_id: str = "",
@@ -563,6 +564,8 @@ def emit_phase_metrics(
             "pr_review", "auto_merge").
         status: Phase outcome — exactly one of success, failure, skipped.
         duration_ms: Wall-clock milliseconds the phase consumed.
+        emitted_at: ISO-8601 timestamp captured by the caller. Per hooks/lib
+            convention, emitters never generate timestamps internally.
         ticket_id: Optional Linear ticket identifier (e.g. "OMN-6970").
         tokens_used: Optional token count consumed during the phase;
             carried in the payload for /api/phase-metrics rollups.
@@ -585,7 +588,7 @@ def emit_phase_metrics(
             "duration_ms": int(duration_ms),
             "tokens_used": int(tokens_used),
             "correlation_id": correlation_id,
-            "emitted_at": datetime.now(UTC).isoformat(),
+            "emitted_at": emitted_at,
         }
         if ticket_id is not None:
             payload["ticket_id"] = ticket_id

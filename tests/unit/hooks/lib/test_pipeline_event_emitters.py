@@ -450,6 +450,7 @@ class TestEmitPhaseMetrics:
             phase="implement",
             status="success",
             duration_ms=1234,
+            emitted_at="2026-04-11T08:00:00+00:00",
             ticket_id="OMN-6970",
             tokens_used=5000,
             correlation_id="corr-1",
@@ -478,6 +479,7 @@ class TestEmitPhaseMetrics:
             phase="pre_flight",
             status="skipped",
             duration_ms=0,
+            emitted_at="2026-04-11T08:00:00+00:00",
             correlation_id="corr-1",
         )
 
@@ -494,6 +496,7 @@ class TestEmitPhaseMetrics:
             phase="implement",
             status="success",
             duration_ms=1,
+            emitted_at="2026-04-11T08:00:00+00:00",
             correlation_id="c",
         )
 
@@ -512,6 +515,7 @@ class TestEmitPhaseMetrics:
             phase="ci_watch",
             status="failure",
             duration_ms=500,
+            emitted_at="2026-04-11T08:00:00+00:00",
             correlation_id="c",
         )
 
@@ -530,5 +534,6 @@ class TestEmitPhaseMetrics:
                 phase="implement",
                 status="success",
                 duration_ms=1,
+                emitted_at="2026-04-11T08:00:00+00:00",
                 correlation_id="c",
             )
