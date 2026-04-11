@@ -259,6 +259,10 @@ trivy*.json
 # Hook system logs (auto-generated, should not be committed)
 claude_hooks/logs/
 **/logs/
+# Explicit guard: plugin hook runtime logs must never be committed (OMN-8429)
+# Logs are redirected to ONEX_STATE_DIR/logs/ at runtime; this entry prevents
+# accidental re-creation inside the plugin source tree.
+plugins/onex/hooks/logs/
 
 # OmniBase/ONEX specific
 # (add any project-specific ignores here)
