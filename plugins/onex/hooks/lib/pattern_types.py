@@ -159,9 +159,10 @@ class InjectorInput(TypedDict, total=False):
     emit_event: bool
     injection_context: str
     include_footer: bool
+    prompt: str
 
 
-class InjectorOutput(TypedDict):
+class InjectorOutput(TypedDict, total=False):
     """
     Output schema for the pattern injector.
 
@@ -173,6 +174,9 @@ class InjectorOutput(TypedDict):
         retrieval_ms: Time taken to retrieve and format patterns.
         injection_id: Unique identifier for this injection event (for tracking).
         cohort: Experiment cohort assignment ('control' or 'treatment').
+        code_context: Optional markdown-formatted code entity context from
+            semantic Qdrant search (OMN-7218). Absent when Qdrant/embedding
+            service unavailable or prompt not supplied.
     """
 
     success: bool
@@ -182,6 +186,7 @@ class InjectorOutput(TypedDict):
     retrieval_ms: int
     injection_id: str | None
     cohort: str | None
+    code_context: str
 
 
 # =============================================================================

@@ -282,6 +282,7 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
         --arg session "${SESSION_ID:-}" \
         --arg project "${PROJECT_ROOT:-}" \
         --arg correlation "${CORRELATION_ID:-}" \
+        --arg prompt "${PROMPT:-}" \
         --argjson max_patterns "$_max_patterns" \
         --argjson min_confidence "$_min_confidence" \
         '{
@@ -290,6 +291,7 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
             session_id: $session,
             project: $project,
             correlation_id: $correlation,
+            prompt: $prompt,
             max_patterns: $max_patterns,
             min_confidence: $min_confidence
         }')"
@@ -321,6 +323,17 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
         fi
     else
         log "INFO: No learned patterns available"
+    fi
+
+    # Extract code_context (OMN-7219): the wrapper returns a markdown block
+    # when Qdrant semantic search succeeds; absent or empty on graceful
+    # degradation. Extracted regardless of PATTERN_SUCCESS so code context
+    # can inject even when pattern injection failed.
+    CODE_CONTEXT="$(echo "$PATTERN_RESULT" | jq -r '.code_context // ""' 2>/dev/null || echo '')"
+    if [[ -n "$CODE_CONTEXT" ]]; then
+        _TS_CC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "[$_TS_CC] [UserPromptSubmit] CODE_CONTEXT chars=${#CODE_CONTEXT}" >> "$TRACE_LOG"
+        log "Code entity context loaded (${#CODE_CONTEXT} chars)"
     fi
 elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
     log "Using patterns from SessionStart injection (session ${SESSION_ID:0:8}...)"
@@ -922,6 +935,7 @@ elif [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         --arg emit_warn "$EMIT_HEALTH_WARNING" \
         --arg yaml "$AGENT_YAML_INJECTION" \
         --arg patterns "$LEARNED_PATTERNS" \
+        --arg code_ctx "${CODE_CONTEXT:-}" \
         --arg enrichment "$ENRICHMENT_CONTEXT" \
         --arg advisory "$PATTERN_ADVISORY" \
         --arg intent "$INTENT_CONTEXT" \
@@ -937,6 +951,7 @@ elif [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         "<omniclaude-context trust=\"system\" source=\"hook-pipeline\">\n" +
         (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
         $yaml + "\n" + $patterns + "\n" +
+        (if $code_ctx != "" then $code_ctx + "\n" else "" end) +
         (if $enrichment != "" then $enrichment + "\n" else "" end) +
         (if $advisory != "" then $advisory + "\n" else "" end) +
         (if $intent != "" then $intent + "\n" else "" end) +
