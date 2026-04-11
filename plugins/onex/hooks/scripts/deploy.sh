@@ -28,13 +28,23 @@ cat > "$SHIM" << 'SHIM_BODY'
 # Stable launcher for the ONEX statusline — auto-discovers the current
 # plugin cache version so settings.json never needs updating after deploys.
 
-CACHE_ROOT="$HOME/.claude/plugins/cache/omninode-tools/onex"
+CACHE_ROOT="${ONEX_PLUGIN_CACHE_ROOT:-$HOME/.claude/plugins/cache/omninode-tools/onex}"
 
-# Find the highest-versioned installed copy (ls -t sorts newest first)
-VERSIONED=$(ls -td "$CACHE_ROOT"/*/hooks/scripts/statusline.sh 2>/dev/null | head -1)
+# Find the highest semver-sorted installed copy (sort -V avoids mtime races)
+VERSIONED=$(
+    ls "$CACHE_ROOT"/*/hooks/scripts/statusline.sh 2>/dev/null \
+    | sort -V \
+    | tail -1
+)
 
 if [ -z "$VERSIONED" ]; then
     # Fallback: emit minimal output so Claude Code doesn't show a blank statusline
+    echo "Claude"
+    exit 0
+fi
+
+# Guard: must be a regular readable file before exec
+if [ ! -f "$VERSIONED" ] || [ ! -r "$VERSIONED" ]; then
     echo "Claude"
     exit 0
 fi
