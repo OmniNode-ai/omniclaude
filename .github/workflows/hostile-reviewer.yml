@@ -1,0 +1,237 @@
+# SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# hostile-reviewer.yml
+#
+# Adversarial multi-model code review gate on every pull request.
+#
+# Invokes omniintelligence.review_pairing.cli_review (node-based path via
+# HandlerLlmCliSubprocess / adapter_codex_reviewer) with --model deepseek-r1.
+# Codex is excluded from the initial pilot — add --model codex once non-interactive
+# OAuth auth is confirmed on the omnibase-ci runner (OMN-8524).
+#
+# Gate semantics (pilot phase):
+#   blocked  — critical/error findings from at least one succeeded model → exit 1
+#   degraded — all models failed (infra unavailable) → exit 0 (informational, pilot)
+#   passed   — no critical/error findings → exit 0
+#
+# Reference: OMN-8524
+
+name: Hostile Reviewer
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  hostile-review:
+    name: Hostile Reviewer (adversarial gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone omniintelligence
+        run: git clone --depth=1 https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence
+
+      - name: Clone omnibase_core
+        run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
+
+      - name: Clone omnibase_compat
+        run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install omniintelligence dependencies
+        working-directory: ../omniintelligence
+        run: uv sync --all-extras
+
+      - name: Run adversarial review
+        id: review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          # DeepSeek-R1 endpoint on .201 — must be set as org/repo secret
+          LLM_DEEPSEEK_URL: ${{ secrets.LLM_DEEPSEEK_URL }}
+        working-directory: ../omniintelligence
+        run: |
+          set -euo pipefail
+
+          # Run cli_review; stdout = ModelMultiReviewResult JSON, stderr = human summary
+          REVIEW_JSON=$(uv run python -m omniintelligence.review_pairing.cli_review \
+            --pr "$PR_NUMBER" \
+            --repo "$REPO" \
+            --model deepseek-r1 \
+            2>/dev/null) || REVIEW_EXIT=$?
+
+          # If the CLI itself failed (not model degraded — actual crash), report and exit 0
+          # to avoid blocking PRs due to infrastructure issues during pilot phase.
+          if [ "${REVIEW_EXIT:-0}" -ne 0 ]; then
+            echo "verdict=degraded" >> "$GITHUB_OUTPUT"
+            echo "blocking_count=0" >> "$GITHUB_OUTPUT"
+            echo "total_findings=0" >> "$GITHUB_OUTPUT"
+            echo "models_succeeded=" >> "$GITHUB_OUTPUT"
+            echo "error=cli_review exited non-zero (all models failed or binary error)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Parse verdict from JSON using Python inline
+          VERDICT_DATA=$(echo "$REVIEW_JSON" | python3 - <<'PYEOF'
+          import json, sys
+
+          data = json.loads(sys.stdin.read())
+          models_succeeded = data.get("models_succeeded", [])
+          total_findings = data.get("total_findings", 0)
+
+          # Count blocking findings (critical or error severity)
+          blocking = 0
+          for r in data.get("results", []):
+              if not r.get("success"):
+                  continue
+              for f in r.get("findings", []):
+                  if f.get("severity") in ("critical", "error"):
+                      blocking += 1
+
+          if not models_succeeded:
+              verdict = "degraded"
+          elif blocking > 0:
+              verdict = "blocked"
+          else:
+              verdict = "passed"
+
+          print(f"verdict={verdict}")
+          print(f"blocking_count={blocking}")
+          print(f"total_findings={total_findings}")
+          print(f"models_succeeded={','.join(models_succeeded)}")
+          PYEOF
+          )
+
+          # Write outputs
+          echo "$VERDICT_DATA" >> "$GITHUB_OUTPUT"
+          echo "error=" >> "$GITHUB_OUTPUT"
+
+          # Set exit code: blocked → 1, everything else → 0 (pilot: degraded is informational)
+          VERDICT=$(echo "$VERDICT_DATA" | grep '^verdict=' | cut -d= -f2)
+          if [ "$VERDICT" = "blocked" ]; then
+            exit 1
+          fi
+
+      - name: Post review summary as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
+          REVIEW_BLOCKING: ${{ steps.review.outputs.blocking_count }}
+          REVIEW_TOTAL: ${{ steps.review.outputs.total_findings }}
+          REVIEW_MODELS: ${{ steps.review.outputs.models_succeeded }}
+          REVIEW_ERROR: ${{ steps.review.outputs.error }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const verdict = process.env.REVIEW_VERDICT || 'unknown';
+            const blocking = parseInt(process.env.REVIEW_BLOCKING || '0');
+            const total = parseInt(process.env.REVIEW_TOTAL || '0');
+            const models = process.env.REVIEW_MODELS || '';
+            const error = process.env.REVIEW_ERROR || '';
+
+            const icon = {
+              passed: '✅',
+              blocked: '🚫',
+              degraded: '⚠️',
+            }[verdict] || '❓';
+
+            const label = {
+              passed: 'PASSED',
+              blocked: 'BLOCKED',
+              degraded: 'DEGRADED (informational)',
+            }[verdict] || verdict.toUpperCase();
+
+            let note = '';
+            if (verdict === 'degraded') {
+              note = '\n\n> **Note**: All reviewer models failed or were unavailable. ' +
+                'Degraded results are informational during the pilot phase (OMN-8524) and do not block merge.';
+              if (error) note += ` Error: \`${error}\``;
+            } else if (verdict === 'blocked') {
+              note = '\n\n> **Action required**: Resolve CRITICAL/ERROR findings before merge.';
+            }
+
+            const body = [
+              `## ${icon} Hostile Reviewer — ${label}`,
+              '',
+              `**Blocking findings** (critical/error): ${blocking}  `,
+              `**Total findings**: ${total}  `,
+              `**Models succeeded**: ${models || 'none'}`,
+              note,
+              '',
+              '---',
+              '',
+              '**Gate semantics (pilot phase)**',
+              '',
+              '| Verdict | Meaning | Blocks merge? |',
+              '|---------|---------|---------------|',
+              '| `passed` | No critical/error findings | No |',
+              '| `blocked` | CRITICAL or ERROR findings found | **Yes** |',
+              '| `degraded` | All models unavailable (infra) | No (pilot) |',
+              '',
+              '_Powered by [omniintelligence.review_pairing.cli_review](https://github.com/OmniNode-ai/omniintelligence) — node-based adversarial review via HandlerLlmCliSubprocess (OMN-8524)_',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.body.includes('Hostile Reviewer')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  hostile-review-gate:
+    name: Hostile Review Gate
+    runs-on: ubuntu-latest
+    needs: [hostile-review]
+    if: always()
+    steps:
+      - name: Evaluate gate
+        run: |
+          echo "=== Hostile Review Gate ==="
+          RESULT="${{ needs.hostile-review.result }}"
+          echo "hostile-review: $RESULT"
+
+          if [ "$RESULT" = "failure" ]; then
+            echo "::error::Hostile reviewer found CRITICAL/ERROR findings — resolve before merge."
+            exit 1
+          fi
+          echo "Hostile Review Gate PASSED"
