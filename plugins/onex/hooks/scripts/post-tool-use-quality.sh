@@ -46,6 +46,24 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
+# --- Log rotation guard [OMN-8429] ---
+# Trim-in-place when log exceeds ONEX_HOOK_LOG_MAX_MB (default 50MB).
+# Keeps the most recent ONEX_HOOK_LOG_KEEP_MB (default 10MB) in $LOG_FILE
+# and stashes the rest as ${LOG_FILE}.1. Shell-native only; fast path when
+# file is under threshold (single stat + arithmetic, no I/O).
+_HOOK_LOG_MAX_MB="${ONEX_HOOK_LOG_MAX_MB:-50}"
+_HOOK_LOG_KEEP_MB="${ONEX_HOOK_LOG_KEEP_MB:-10}"
+if [[ -f "$LOG_FILE" ]]; then
+    _log_size_bytes=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    _log_size_mb=$(( _log_size_bytes / 1024 / 1024 ))
+    if [[ "$_log_size_mb" -gt "$_HOOK_LOG_MAX_MB" ]]; then
+        mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+        tail -c $(( _HOOK_LOG_KEEP_MB * 1024 * 1024 )) "${LOG_FILE}.1" > "$LOG_FILE" 2>/dev/null || touch "$LOG_FILE"
+    fi
+    unset _log_size_bytes _log_size_mb
+fi
+unset _HOOK_LOG_MAX_MB _HOOK_LOG_KEEP_MB
+
 # Guard: jq is required for JSON processing throughout this hook.
 # If unavailable, exit 0 immediately so the hook never blocks the developer.
 if ! command -v jq >/dev/null 2>&1; then
