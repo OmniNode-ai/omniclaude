@@ -1011,6 +1011,44 @@ def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_
         return {"success": False, "error": str(e)}
 
 
+def _emit_phase_metric(ticket_id, run_id, phase_name, status, phase_data, result):
+    """Fire-and-forget phase.metrics emit for omnidash /category/speed (OMN-6970).
+
+    Computes duration_ms from phase_data.started_at and completed_at, and pulls
+    tokens_used from the phase result when available. `status` reflects the
+    real phase outcome, not checkpoint persistence. Never raises — telemetry
+    must not block pipeline execution.
+    """
+    try:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import emit_phase_metrics
+        _now_iso = datetime.now(timezone.utc).isoformat()
+        _duration_ms = 0
+        try:
+            _started = phase_data.get("started_at") if isinstance(phase_data, dict) else None
+            _completed = (phase_data.get("completed_at") if isinstance(phase_data, dict) else None) or _now_iso
+            if _started:
+                _start_dt = datetime.fromisoformat(_started.replace("Z", "+00:00"))
+                _end_dt = datetime.fromisoformat(_completed.replace("Z", "+00:00"))
+                _duration_ms = int((_end_dt - _start_dt).total_seconds() * 1000)
+        except Exception:
+            _duration_ms = 0
+        _tokens_used = 0
+        if isinstance(result, dict):
+            _tokens_used = int(result.get("tokens_used", 0) or 0)
+        emit_phase_metrics(
+            session_id=run_id or "",
+            phase=phase_name,
+            status=status,
+            duration_ms=_duration_ms,
+            emitted_at=_now_iso,
+            ticket_id=ticket_id,
+            tokens_used=_tokens_used,
+            correlation_id=run_id or "",
+        )
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
 def read_checkpoint(ticket_id, run_id, phase_name):
     """Read the latest checkpoint for a phase.  Returns parsed JSON result."""
     try:
@@ -1501,7 +1539,11 @@ for phase_name in PHASE_ORDER:
         phase_data["last_error_at"] = datetime.now(timezone.utc).isoformat()
         phase_data["block_kind"] = "failed_exception"
         phase_data["blocked_reason"] = str(e)
+        phase_data["completed_at"] = phase_data["last_error_at"]
         save_state(state, state_path)
+
+        # OMN-6970: emit phase.metrics for failed exception
+        _emit_phase_metric(ticket_id, run_id, phase_name, "failure", phase_data, {})
 
         # OMN-1970: Use PipelineSlackNotifier for threaded notifications
         thread_ts = notify_sync(slack_notifier, "notify_blocked",
@@ -1522,6 +1564,9 @@ for phase_name in PHASE_ORDER:
         phase_data["completed_at"] = datetime.now(timezone.utc).isoformat()
         phase_data["artifacts"].update(result.get("artifacts", {}))
         save_state(state, state_path)
+
+        # OMN-6970: emit phase.metrics tied to real phase outcome
+        _emit_phase_metric(ticket_id, run_id, phase_name, "success", phase_data, result)
 
         # OMN-2144: Write checkpoint after phase completion (non-blocking)
         try:
@@ -1569,7 +1614,11 @@ for phase_name in PHASE_ORDER:
         phase_data["block_kind"] = result.get("block_kind", "failed_exception")
         phase_data["last_error"] = result.get("reason")
         phase_data["last_error_at"] = datetime.now(timezone.utc).isoformat()
+        phase_data["completed_at"] = phase_data["last_error_at"]
         save_state(state, state_path)
+
+        # OMN-6970: emit phase.metrics for blocked/failed phase
+        _emit_phase_metric(ticket_id, run_id, phase_name, "failure", phase_data, result)
 
         # OMN-1970: Use PipelineSlackNotifier for threaded notifications
         thread_ts = notify_sync(slack_notifier, "notify_blocked",

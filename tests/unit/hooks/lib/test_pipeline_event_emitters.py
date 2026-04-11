@@ -431,3 +431,109 @@ class TestEmitFnUnavailable:
                 final_status="converged",
                 correlation_id="c",
             )
+
+
+# ---------------------------------------------------------------------------
+# emit_phase_metrics (OMN-6970)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestEmitPhaseMetrics:
+    def test_emits_to_correct_topic(self, mock_emit_fn: MagicMock) -> None:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import (
+            emit_phase_metrics,
+        )
+
+        emit_phase_metrics(
+            session_id="sess-1",
+            phase="implement",
+            status="success",
+            duration_ms=1234,
+            emitted_at="2026-04-11T08:00:00+00:00",
+            ticket_id="OMN-6970",
+            tokens_used=5000,
+            correlation_id="corr-1",
+        )
+
+        mock_emit_fn.assert_called_once()
+        topic, payload = mock_emit_fn.call_args[0]
+        assert topic == "phase.metrics"
+        assert payload["session_id"] == "sess-1"
+        assert payload["phase"] == "implement"
+        assert payload["status"] == "success"
+        assert payload["duration_ms"] == 1234
+        assert payload["ticket_id"] == "OMN-6970"
+        assert payload["tokens_used"] == 5000
+        assert payload["correlation_id"] == "corr-1"
+        assert "event_id" in payload
+        assert "emitted_at" in payload
+
+    def test_omits_ticket_id_when_none(self, mock_emit_fn: MagicMock) -> None:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import (
+            emit_phase_metrics,
+        )
+
+        emit_phase_metrics(
+            session_id="sess-1",
+            phase="pre_flight",
+            status="skipped",
+            duration_ms=0,
+            emitted_at="2026-04-11T08:00:00+00:00",
+            correlation_id="corr-1",
+        )
+
+        _, payload = mock_emit_fn.call_args[0]
+        assert "ticket_id" not in payload
+
+    def test_rejects_empty_session_id(self, mock_emit_fn: MagicMock) -> None:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import (
+            emit_phase_metrics,
+        )
+
+        emit_phase_metrics(
+            session_id="",
+            phase="implement",
+            status="success",
+            duration_ms=1,
+            emitted_at="2026-04-11T08:00:00+00:00",
+            correlation_id="c",
+        )
+
+        mock_emit_fn.assert_not_called()
+
+    def test_silent_on_emit_failure(self, mock_emit_fn: MagicMock) -> None:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import (
+            emit_phase_metrics,
+        )
+
+        mock_emit_fn.side_effect = RuntimeError("Kafka down")
+
+        # Must not raise
+        emit_phase_metrics(
+            session_id="sess-1",
+            phase="ci_watch",
+            status="failure",
+            duration_ms=500,
+            emitted_at="2026-04-11T08:00:00+00:00",
+            correlation_id="c",
+        )
+
+    def test_silent_when_daemon_unavailable(self) -> None:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import (
+            emit_phase_metrics,
+        )
+
+        with patch(
+            "plugins.onex.hooks.lib.pipeline_event_emitters._get_emit_fn",
+            return_value=None,
+        ):
+            # Must not raise
+            emit_phase_metrics(
+                session_id="sess-1",
+                phase="implement",
+                status="success",
+                duration_ms=1,
+                emitted_at="2026-04-11T08:00:00+00:00",
+                correlation_id="c",
+            )
