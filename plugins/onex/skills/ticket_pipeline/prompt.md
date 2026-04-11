@@ -1735,6 +1735,145 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
+0. **Reality-check gate (OMN-8411):**
+
+   Before any other pre-flight action, verify the ticket description's claimed
+   file paths, function names, class names, database tables, and Kafka topics
+   match current main. If any claim is stale, halt the pipeline and write a
+   Two-Strike diagnosis document — do not proceed to lint/mypy/ledger work.
+
+   ```python
+   from pathlib import Path
+   from plugins.onex.hooks.lib.preflight_reality_check import (
+       resolve_repo_roots,
+       run_reality_check,
+       write_diagnosis,
+   )
+
+   # Pull ticket title + description from Linear MCP (re-use fetch from
+   # later phases if already cached in run state).
+   ticket = mcp__linear-server__get_issue(id=ticket_id)
+   description = ticket.get("description") or ""
+
+   # Target repos come from the ticket contract (repo field) plus any repos
+   # named in the description. Default to the current worktree's repo if
+   # contract is missing.
+   target_repo_names = state.get("target_repos") or [state.get("repo")]
+   repo_roots = [
+       Path(f"/Volumes/PRO-G40/Code/omni_worktrees/{ticket_id}/{name}")  # local-path-ok
+       for name in target_repo_names
+       if name
+   ]
+   # Fall back to canonical clones under $OMNI_HOME for repos that don't
+   # have a worktree yet (preflight reads only, so this is safe).
+   repo_roots += resolve_repo_roots(target_repo_names)
+
+   # Optional live-db + topic verifiers. When None the check skips those
+   # claim kinds (treat-as-verified) — wire real verifiers when the pipeline
+   # has DB/Kafka credentials loaded from ~/.omnibase/.env.
+   def _table_verifier(name: str) -> bool:
+       import os
+       import subprocess
+       db_url = os.environ.get("OMNIBASE_INFRA_DB_URL")
+       if not db_url:
+           return True  # fail-open when ~/.omnibase/.env is not sourced
+       try:
+           result = subprocess.run(
+               ["psql", db_url, "-tAc",
+                f"SELECT to_regclass('public.{name}') IS NOT NULL"],
+               capture_output=True, text=True, timeout=10,
+           )
+           return result.returncode == 0 and result.stdout.strip() == "t"
+       except (subprocess.SubprocessError, OSError):
+           return True  # fail-open on infra errors
+
+   def _topic_verifier(name: str) -> bool:
+       import subprocess
+       try:
+           result = subprocess.run(
+               ["docker", "exec", "omnibase-infra-redpanda",
+                "rpk", "topic", "list"],
+               capture_output=True, text=True, timeout=10,
+           )
+           return name in result.stdout
+       except (subprocess.SubprocessError, OSError):
+           return True  # fail-open on infra errors
+
+   report = run_reality_check(
+       ticket_id=ticket_id,
+       description=description,
+       repo_roots=repo_roots,
+       table_verifier=_table_verifier,
+       topic_verifier=_topic_verifier,
+   )
+
+   if report.halted:
+       docs_dir = Path.cwd() / "docs"
+       diag_path = write_diagnosis(report, docs_dir)
+       print(
+           f"[preflight-reality-check] HALT {ticket_id}: "
+           f"{len(report.failures)} of {len(report.results)} claims do not "
+           f"match main. Diagnosis: {diag_path}"
+       )
+
+       # Emit friction event so other sessions can discover the halt.
+       try:
+           from datetime import datetime, timezone
+           from plugins.onex.skills._shared.friction_recorder import (
+               FrictionEvent,
+               FrictionSeverity,
+               record_friction,
+           )
+           record_friction(
+               FrictionEvent(
+                   skill="ticket_pipeline",
+                   surface="tooling/preflight-reality-check",
+                   severity=FrictionSeverity.HIGH,
+                   description=(
+                       f"Reality-check halted {ticket_id}: "
+                       + "; ".join(
+                           f"{f.claim.kind.value}:{f.claim.value}"
+                           for f in report.failures
+                       )
+                   ),
+                   context_ticket_id=ticket_id,
+                   session_id=run_id,
+                   timestamp=datetime.now(tz=timezone.utc),
+               )
+           )
+       except Exception as exc:
+           print(f"[preflight-reality-check] friction emit failed: {exc}")
+
+       return {
+           "status": "blocked",
+           "blocking_issues": len(report.failures),
+           "nit_count": 0,
+           "artifacts": {
+               "reality_check_failures": [
+                   {
+                       "kind": f.claim.kind.value,
+                       "value": f.claim.value,
+                       "evidence": f.evidence,
+                   }
+                   for f in report.failures
+               ],
+               "diagnosis_path": str(diag_path),
+           },
+           "reason": (
+               f"Preflight reality-check failed: {len(report.failures)} "
+               f"ticket claim(s) do not match main. See {diag_path}."
+           ),
+           "block_kind": "reality_check_mismatch",
+       }
+   ```
+
+   **Halt semantics:** a reality-check halt is a hard block. The pipeline does
+   not proceed to IMPLEMENT until either (a) the ticket description is updated
+   to match main and the pipeline is re-run, or (b) the diagnosis document is
+   reviewed and the ticket is decomposed/closed. This replaces the first
+   wasted `ticket_work` cycle that would otherwise discover the mismatch
+   halfway through implementation (OMN-6972, OMN-7609, OMN-8391 all hit this).
+
 1. **Write ticket-run ledger entry:**
    ```python
    import json
