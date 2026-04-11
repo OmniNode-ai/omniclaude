@@ -39,7 +39,7 @@ class TestDemoSkillScaffolding:
         assert (self.SKILL_DIR / "SKILL.md").is_file()
 
     def test_dispatch_py_exists(self) -> None:
-        assert (self.SKILL_DIR / "dispatch.py").is_file()
+        assert (self.SKILL_DIR / "_lib" / "dispatch.py").is_file()
 
     def test_skill_md_has_frontmatter(self) -> None:
         content = (self.SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
@@ -66,7 +66,7 @@ class TestDemoSkillScaffolding:
         assert "subcommand" in arg_names
 
     def test_dispatch_module_importable(self) -> None:
-        dispatch_path = self.SKILL_DIR / "dispatch.py"
+        dispatch_path = self.SKILL_DIR / "_lib" / "dispatch.py"
         spec = importlib.util.spec_from_file_location(
             "onex_demo_dispatch", dispatch_path
         )
@@ -78,7 +78,7 @@ class TestDemoSkillScaffolding:
         assert module.SCAFFOLD_MARKER == "demo-skill-scaffolding"
 
     def _load_dispatch(self):
-        dispatch_path = self.SKILL_DIR / "dispatch.py"
+        dispatch_path = self.SKILL_DIR / "_lib" / "dispatch.py"
         spec = importlib.util.spec_from_file_location(
             "onex_demo_dispatch", dispatch_path
         )
