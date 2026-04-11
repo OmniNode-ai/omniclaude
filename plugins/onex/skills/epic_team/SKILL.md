@@ -91,6 +91,21 @@ epic-team uses Claude Code Agent Teams for all worker dispatch. The team lead (t
 creates a named team, generates task contracts, dispatches workers, monitors for stalls, and
 shuts down the team on completion.
 
+### Non-Blocking Foreground Contract [OMN-7258]
+
+`Agent(...)` dispatches return immediately — workers run as independent background sessions.
+The team lead must never `await` or block the foreground on any single worker. The wave
+monitoring loop (see "Stall Detection in Wave Dispatch" below) polls `TaskGet` status and
+only advances to the next wave when the current wave has reported terminal status or a stall
+has been handled. This is the canonical dispatch pattern referenced by Workstream D of the
+2026-04-02 Insights Plan: read epic tickets from Linear → group by repo → `TeamCreate` →
+one `Agent(team_name=...)` per ticket → poll status non-blocking. No separate
+`/dispatch-epic` skill is needed; that workflow is exactly this skill's dispatch phase.
+
+Stall detection integrates `OMN-7255` (`agent_healthcheck` + `dispatch_watchdog`): two
+minutes of zero tool calls from a worker is a stall signal, and stalled workers are killed
+and redispatched with narrower scope per the watchdog's escalation policy.
+
 ### Lifecycle
 
 ```
