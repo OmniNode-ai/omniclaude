@@ -380,6 +380,31 @@ def main() -> None:
             cohort=result.cohort,
         )
 
+        # Code context resolution (OMN-7218): semantic lookup into Qdrant
+        # `code_patterns` collection, gracefully degrades when Qdrant or the
+        # embedding service is unavailable. The prompt text is optional in
+        # the input JSON; when absent, code context resolution is skipped.
+        prompt_text = str(input_json.get("prompt", "") or "")
+        if prompt_text:
+            try:
+                from omniclaude.hooks.lib.code_context_sync import (
+                    resolve_code_context_sync,
+                )
+
+                code_context = resolve_code_context_sync(
+                    query=prompt_text,
+                    max_entities=5,
+                    timeout_seconds=1.5,
+                )
+            except Exception:
+                logger.debug(
+                    "context_injection_wrapper: code context resolution failed",
+                    exc_info=True,
+                )
+                code_context = ""
+            if code_context:
+                output["code_context"] = code_context
+
         print(json.dumps(output))
         sys.exit(0)
 
