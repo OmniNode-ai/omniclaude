@@ -350,6 +350,58 @@ class TestGoldenEpicRunUpdated:
 
 
 @pytest.mark.unit
+class TestGoldenPhaseMetrics:
+    """Golden event validation for emit_phase_metrics (OMN-6970)."""
+
+    def test_golden_payload_structure(self) -> None:
+        mock_fn, captured = make_capture_mock()
+        with patch(
+            "plugins.onex.hooks.lib.pipeline_event_emitters._get_emit_fn",
+            return_value=mock_fn,
+        ):
+            from plugins.onex.hooks.lib.pipeline_event_emitters import (
+                emit_phase_metrics,
+            )
+
+            emit_phase_metrics(
+                session_id="sess-golden-001",
+                phase="implement",
+                status="success",
+                duration_ms=4200,
+                ticket_id="OMN-6970",
+                tokens_used=12000,
+                correlation_id="corr-golden-001",
+            )
+
+        assert len(captured) == 1
+        topic, payload = captured[0]
+        assert topic == "phase.metrics"
+        validate_golden_event(payload, "phase.metrics")
+        assert_valid_status(payload, GOLDEN_SCHEMAS["phase.metrics"])
+
+    def test_rejects_empty_session_id(self) -> None:
+        """Empty session_id is rejected before emit (OMN-6907)."""
+        mock_fn, captured = make_capture_mock()
+        with patch(
+            "plugins.onex.hooks.lib.pipeline_event_emitters._get_emit_fn",
+            return_value=mock_fn,
+        ):
+            from plugins.onex.hooks.lib.pipeline_event_emitters import (
+                emit_phase_metrics,
+            )
+
+            emit_phase_metrics(
+                session_id="",
+                phase="implement",
+                status="success",
+                duration_ms=1,
+                correlation_id="corr-001",
+            )
+
+        assert len(captured) == 0
+
+
+@pytest.mark.unit
 class TestGoldenPrWatchUpdated:
     """Golden event validation for emit_pr_watch_updated."""
 

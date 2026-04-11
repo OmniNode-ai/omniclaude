@@ -1002,13 +1002,40 @@ def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_
         _cp_result = json.loads(proc.stdout) if proc.stdout.strip() else {}
         if _cp_result.get("success", False):
             print(f"Checkpoint written for phase '{phase_name}' (attempt {attempt_number}): {_cp_result.get('checkpoint_path', 'ok')}")
+            _emit_phase_metric(ticket_id, run_id, phase_name, "success", phase_payload)
             return _cp_result
         else:
             print(f"Warning: Checkpoint write failed for phase '{phase_name}': {_cp_result.get('error', proc.stderr or 'unknown')}")
+            _emit_phase_metric(ticket_id, run_id, phase_name, "failure", phase_payload)
             return {"success": False, "error": _cp_result.get("error", proc.stderr or "unknown")}
     except Exception as e:
         print(f"Warning: Checkpoint write failed for phase '{phase_name}': {e}")
+        _emit_phase_metric(ticket_id, run_id, phase_name, "failure", phase_payload)
         return {"success": False, "error": str(e)}
+
+
+def _emit_phase_metric(ticket_id, run_id, phase_name, status, phase_payload):
+    """Fire-and-forget phase.metrics emit for omnidash /category/speed (OMN-6970).
+
+    Reads duration_ms and tokens_used from phase_payload when present; phases
+    that do not populate those fields contribute count and status only. Never
+    raises — telemetry must not block pipeline execution.
+    """
+    try:
+        from plugins.onex.hooks.lib.pipeline_event_emitters import emit_phase_metrics
+        _duration_ms = int(phase_payload.get("duration_ms", 0) or 0) if isinstance(phase_payload, dict) else 0
+        _tokens_used = int(phase_payload.get("tokens_used", 0) or 0) if isinstance(phase_payload, dict) else 0
+        emit_phase_metrics(
+            session_id=run_id or "",
+            phase=phase_name,
+            status=status,
+            duration_ms=_duration_ms,
+            ticket_id=ticket_id,
+            tokens_used=_tokens_used,
+            correlation_id=run_id or "",
+        )
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
 
 
 def read_checkpoint(ticket_id, run_id, phase_name):

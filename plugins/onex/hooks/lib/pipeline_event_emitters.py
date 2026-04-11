@@ -10,6 +10,7 @@ Provides fire-and-forget emit helpers for:
     gate.decision          → onex.evt.omniclaude.gate-decision.v1
     budget.cap.hit         → onex.evt.omniclaude.budget-cap-hit.v1
     circuit.breaker.tripped → onex.evt.omniclaude.circuit-breaker-tripped.v1
+    phase.metrics          → onex.evt.omniclaude.phase-metrics.v1  (OMN-6970)
 
 These helpers are called at terminal outcome points in the epic-team, pr-watch,
 slack-gate, and ticket-pipeline skill orchestration flows. All emitters are
@@ -539,6 +540,60 @@ def emit_dod_sweep_completed(
         pass  # Telemetry must never block pipeline execution
 
 
+def emit_phase_metrics(
+    *,
+    session_id: str,
+    phase: str,
+    status: Literal["success", "failure", "skipped"],
+    duration_ms: int,
+    ticket_id: str | None = None,
+    tokens_used: int = 0,
+    correlation_id: str = "",
+) -> None:
+    """Emit a phase.metrics event (fire-and-forget, never raises).
+
+    Consumers append to phase_metrics_events with a natural dedup key of
+    (session_id, phase, emitted_at). Consumed by the omnidash
+    /category/speed view and /api/phase-metrics/* endpoints (OMN-5184).
+
+    Args:
+        session_id: Claude Code session identifier — required dedup key.
+        phase: Pipeline phase name (e.g. "pre_flight", "implement",
+            "local_review", "create_pr", "test_iterate", "ci_watch",
+            "pr_review", "auto_merge").
+        status: Phase outcome — exactly one of success, failure, skipped.
+        duration_ms: Wall-clock milliseconds the phase consumed.
+        ticket_id: Optional Linear ticket identifier (e.g. "OMN-6970").
+        tokens_used: Optional token count consumed during the phase;
+            carried in the payload for /api/phase-metrics rollups.
+        correlation_id: End-to-end correlation identifier.
+    """
+    emit_fn = _get_emit_fn()
+    if emit_fn is None:
+        return
+    # OMN-6907: Reject empty session_id — downstream dedup keys on it
+    if not _validate_required_field("session_id", session_id, "phase.metrics"):
+        return
+    if not correlation_id:
+        _warn_empty_correlation_id("phase.metrics")
+    try:
+        payload: dict[str, object] = {
+            "event_id": str(uuid.uuid4()),
+            "session_id": session_id,
+            "phase": phase,
+            "status": status,
+            "duration_ms": int(duration_ms),
+            "tokens_used": int(tokens_used),
+            "correlation_id": correlation_id,
+            "emitted_at": datetime.now(UTC).isoformat(),
+        }
+        if ticket_id is not None:
+            payload["ticket_id"] = ticket_id
+        emit_fn("phase.metrics", payload)  # type: ignore[operator]
+    except Exception:
+        pass  # Telemetry must never block pipeline execution
+
+
 __all__ = [
     "emit_epic_run_updated",
     "emit_pr_watch_updated",
@@ -548,4 +603,5 @@ __all__ = [
     "emit_hostile_reviewer_completed",
     "emit_plan_review_completed",
     "emit_dod_sweep_completed",
+    "emit_phase_metrics",
 ]

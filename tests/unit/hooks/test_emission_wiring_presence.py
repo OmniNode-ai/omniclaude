@@ -68,6 +68,7 @@ class TestEmissionWiringPresence:
             "hostile.reviewer.completed",
             "plan.review.completed",
             "dod.sweep.completed",
+            "phase.metrics",
         ],
     )
     def test_pipeline_event_emitters_has_emit_call(self, event_type: str) -> None:
