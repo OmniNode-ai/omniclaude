@@ -25,6 +25,11 @@ fi
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 LIB_PY="${PLUGIN_ROOT}/hooks/lib/linear_done_verify.py"
+
+# common.sh provides PYTHON_CMD resolution and shared helpers used by all hooks
+# that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
+# shellcheck source=/dev/null
+source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
 unset _SCRIPT_DIR _MODE_SH
 
 if [[ ! -f "$LIB_PY" ]]; then
