@@ -47,6 +47,8 @@ Parse `$ARGUMENTS`:
 - `--enable-trivial-comment-resolution` — default: true
 - `--enable-admin-merge-fallback` — default: false
 - `--admin-fallback-threshold-minutes <n>` — default: 30
+- `--verify` — default: false (opt-in pre-merge verification gate, OMN-7742)
+- `--verify-timeout-seconds <n>` — default: 30 (per-PR verification timeout)
 
 Generate `run_id` if `--run-id` not provided: `<YYYYMMDD-HHMMSS>-<random6>`.
 
@@ -83,6 +85,8 @@ Build the command event payload:
   "enable_trivial_comment_resolution": <bool>,
   "enable_admin_merge_fallback": <bool>,
   "admin_fallback_threshold_minutes": <int>,
+  "verify": <bool>,
+  "verify_timeout_seconds": <int>,
   "emitted_at": "<UTC-ISO-timestamp>",
   "correlation_id": "<uuid4>"
 }
