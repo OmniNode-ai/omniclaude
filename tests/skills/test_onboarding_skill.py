@@ -53,7 +53,9 @@ class TestOnboardingSkill:
         frontmatter = self._load_frontmatter()
         declared = {arg["name"] for arg in frontmatter["args"]}
         missing = self.EXPECTED_ARGS - declared
+        unexpected = declared - self.EXPECTED_ARGS
         assert not missing, f"SKILL.md args missing: {missing}"
+        assert not unexpected, f"SKILL.md has unexpected args: {unexpected}"
 
     def test_body_documents_all_policies(self) -> None:
         body = self._load_body()
