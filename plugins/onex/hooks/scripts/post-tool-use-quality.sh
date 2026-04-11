@@ -31,7 +31,14 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/post-tool-use.log"
+
+# --- Log path: ONEX_STATE_DIR/logs/ [OMN-8429] ---
+# Logs must never accumulate inside the plugin source or install directory.
+# ONEX_STATE_DIR is a stable, externally-configured runtime path (set in settings.json env)
+# that is independent of where the plugin script lives.  Fall back to ~/.onex_state if unset.
+_ONEX_LOG_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs"
+LOG_FILE="${_ONEX_LOG_DIR}/post-tool-use.log"
+unset _ONEX_LOG_DIR
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."

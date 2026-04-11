@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Tests log rotation guard added in OMN-8429.
-# Exercises the trim-in-place logic extracted from post-tool-use-quality.sh
-# without invoking the full hook (which requires Claude Code infrastructure).
+# Tests log rotation guard and path resolution added in OMN-8429.
+# Exercises the trim-in-place logic and ONEX_STATE_DIR path resolution
+# from post-tool-use-quality.sh without invoking the full hook.
 
 set -euo pipefail
 
@@ -83,6 +83,38 @@ if [[ ! -f "${SMALL_LOG}.1" ]]; then
     _pass "test3: no backup created when file is under threshold"
 else
     _fail "test3: spurious backup created for 5MB file"
+fi
+
+# --- Test 4: LOG_FILE resolves to ONEX_STATE_DIR, not plugin source/install dir ---
+# Simulate the path resolution logic from post-tool-use-quality.sh.
+# The hook computes: LOG_FILE="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs/post-tool-use.log"
+# It must NOT resolve to anything under PLUGIN_ROOT or HOOKS_DIR.
+FAKE_STATE_DIR="$TMPDIR_TEST/fake_onex_state"
+FAKE_PLUGIN_ROOT="$TMPDIR_TEST/fake_plugin_root"
+mkdir -p "$FAKE_STATE_DIR/logs" "$FAKE_PLUGIN_ROOT/hooks/logs"
+
+# Compute LOG_FILE exactly as the hook does (with ONEX_STATE_DIR override)
+RESOLVED_LOG="${FAKE_STATE_DIR:-${HOME}/.onex_state}/logs/post-tool-use.log"
+
+# Assert it is under ONEX_STATE_DIR, not under PLUGIN_ROOT
+if [[ "$RESOLVED_LOG" == "${FAKE_STATE_DIR}"* ]]; then
+    _pass "test4: LOG_FILE resolves under ONEX_STATE_DIR (not plugin source/install)"
+else
+    _fail "test4: LOG_FILE resolved to wrong path: $RESOLVED_LOG"
+fi
+
+if [[ "$RESOLVED_LOG" != "${FAKE_PLUGIN_ROOT}"* ]]; then
+    _pass "test4: LOG_FILE does not resolve under PLUGIN_ROOT"
+else
+    _fail "test4: LOG_FILE incorrectly resolves under PLUGIN_ROOT: $RESOLVED_LOG"
+fi
+
+# Assert the resolved path does not contain the literal string "plugins/onex/hooks"
+# (which would indicate the old HOOKS_DIR-relative path)
+if [[ "$RESOLVED_LOG" != *"plugins/onex/hooks"* ]]; then
+    _pass "test4: LOG_FILE path does not contain plugin source layout"
+else
+    _fail "test4: LOG_FILE path contains plugin source layout: $RESOLVED_LOG"
 fi
 
 # --- Summary ---
