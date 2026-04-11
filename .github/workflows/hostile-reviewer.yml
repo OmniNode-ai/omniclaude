@@ -31,7 +31,9 @@ permissions:
 jobs:
   hostile-review:
     name: Hostile Reviewer (adversarial gate)
-    runs-on: ubuntu-latest
+    # self-hosted runner on .201 required — DeepSeek-R1 at :8001 is LAN-only  # onex-allow-internal-ip
+    # LLM_DEEPSEEK_URL must be set in the runner's environment (Infisical or shell profile)
+    runs-on: [self-hosted, omnibase-ci]
     timeout-minutes: 20
 
     steps:
@@ -67,8 +69,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          # DeepSeek-R1 endpoint on .201 — must be set as org/repo secret
-          LLM_DEEPSEEK_URL: ${{ secrets.LLM_DEEPSEEK_URL }}
+          # LLM_DEEPSEEK_URL is read directly from the runner's environment (Infisical-injected
+          # or set in the runner's shell profile on .201) — no GitHub secret needed
         working-directory: ../omniintelligence
         run: |
           set -euo pipefail
@@ -220,7 +222,7 @@ jobs:
 
   hostile-review-gate:
     name: Hostile Review Gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, omnibase-ci]
     needs: [hostile-review]
     if: always()
     steps:
