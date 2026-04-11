@@ -15,6 +15,7 @@ still being built.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from typing import Any
@@ -83,9 +84,24 @@ def dispatch(  # stub-ok: scaffolding entry point, replaced in follow-up
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = list(argv if argv is not None else sys.argv[1:])
-    sub = args[0] if args else "delegation"
-    result = dispatch(sub)
+    parser = argparse.ArgumentParser(prog="/onex:demo")
+    parser.add_argument("subcommand", nargs="?", default="delegation")
+    parser.add_argument("--count", type=int, default=3)
+    parser.add_argument("--prompts", type=str, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    ns = parser.parse_args(argv if argv is not None else sys.argv[1:])
+
+    prompts = (
+        [item.strip() for item in ns.prompts.split(",") if item.strip()]
+        if ns.prompts
+        else None
+    )
+    result = dispatch(
+        ns.subcommand,
+        count=ns.count,
+        prompts=prompts,
+        dry_run=ns.dry_run,
+    )
     print(result)
     return 0 if result.get("success") else 1
 
