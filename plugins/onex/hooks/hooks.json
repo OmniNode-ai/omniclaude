@@ -116,6 +116,15 @@
         ]
       },
       {
+        "matcher": "^Agent$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_dispatch_mode_guardrail.sh"
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",
