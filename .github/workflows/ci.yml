@@ -2073,10 +2073,31 @@ jobs:
   # build is excluded: it is post-gate artifact packaging, not a gating requirement.
   # ============================================================================
 
+
+  contract-compliance:
+    name: Contract Compliance Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Clone onex_change_control
+        run: git clone --depth=1 https://github.com/OmniNode-ai/onex_change_control.git /tmp/onex_change_control
+      - name: Install pyyaml
+        run: pip install pyyaml
+      - name: Run contract compliance check
+        run: |
+          python /tmp/onex_change_control/scripts/ci/run_contract_compliance_check.py \
+            --pr ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --contracts-dir /tmp/onex_change_control/contracts
+        env:
+          EMERGENCY_BYPASS: ${{ secrets.EMERGENCY_BYPASS || '' }}
+          GH_TOKEN: ${{ github.token }}
+
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [quality-gate, tests-gate, security-gate, compliance]
+    needs: [quality-gate, tests-gate, security-gate, compliance, contract-compliance]
     if: always()
     steps:
       - name: Check all jobs passed
