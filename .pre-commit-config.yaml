@@ -368,6 +368,20 @@ repos:
         types_or: [python, markdown]
         pass_filenames: true
         stages: [pre-commit]
+
+      # OMN-8622: aislop prohibited-pattern check (fast, changed-files only)
+      # Complements check-ai-slop (docstring/boilerplate patterns) by catching
+      # prohibited env vars and compat-shims in changed Python files.
+      # CRITICAL findings block commit; WARNING findings are informational.
+      # Suppress with: # aislop: ignore
+      - id: aislop-prohibited-patterns
+        name: Aislop prohibited pattern check
+        language: system
+        entry: python scripts/ci/run_aislop_precommit.py
+        types: [python]
+        pass_filenames: true
+        stages: [pre-commit]
+
       # Auto-generate ONEX orchestrator nodes for new skills (OMN-6815)
       # Detects skills with SKILL.md but no corresponding node directory and
       # scaffolds the node automatically via generate_skill_node.py.
