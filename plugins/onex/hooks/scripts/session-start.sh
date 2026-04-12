@@ -1098,7 +1098,7 @@ fi
 # R6: Timeout is configurable via OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC (default 4).
 # R7: Stale /tmp marker cleanup runs here (files older than 24h).
 # R9: Markers are skipped entirely when SESSION_ID is empty (hooks produce different IDs).
-# R10: OMNI_WORKTREES_DIR env var controls worktree root (default /Volumes/PRO-G40/Code/omni_worktrees).  # local-path-ok
+# R10: OMNI_WORKTREES_DIR env var controls worktree root (default: ONEX_WORKTREES_ROOT, then /Volumes/PRO-G40/Code/omni_worktrees).  # local-path-ok
 
 TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
 TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
@@ -1106,7 +1106,7 @@ TICKET_CONTEXT=""
 ACTIVE_TICKET=""
 
 # R10: Configurable worktrees root directory
-OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-${ONEX_WORKTREES_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}}"  # local-path-ok: override via ONEX_WORKTREES_ROOT
 
 # R7: Clean up stale /tmp ticket marker files (older than 24h) at session start.
 # Uses -mmin +1440 (1440 minutes = 24 hours). Runs silently in background.
