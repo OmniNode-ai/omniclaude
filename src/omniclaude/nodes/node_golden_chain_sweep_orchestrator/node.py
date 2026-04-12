@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -110,12 +111,19 @@ async def run_sweep(
 def _write_evidence(
     summary: ModelSweepSummary,
     chain_results: list[ModelChainResult],
+    *,
+    _state_dir: Path | None = None,
 ) -> None:
     """Write evidence artifact to $ONEX_STATE_DIR/golden-chain-sweep/."""
     try:
-        from plugins.onex.hooks.lib.onex_state import ensure_state_dir
+        if _state_dir is not None:
+            base_dir = _state_dir
+        else:
+            from plugins.onex.hooks.lib.onex_state import (
+                ensure_state_dir,  # noqa: PLC0415
+            )
 
-        base_dir = ensure_state_dir("golden-chain-sweep")
+            base_dir = ensure_state_dir("golden-chain-sweep")
 
         date_str = summary.sweep_started_at[:10]
         artifact_dir = base_dir / date_str / summary.sweep_id
@@ -147,7 +155,9 @@ def _write_evidence(
         }
 
         artifact_path = artifact_dir / "sweep_results.json"
-        artifact_path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+        artifact_path.write_text(
+            json.dumps(artifact, indent=2, default=str), encoding="utf-8"
+        )
         logger.info("Evidence artifact written: %s", artifact_path)
     except Exception:  # noqa: BLE001 — evidence writing is best-effort; never crash the sweep
         logger.warning("Failed to write evidence artifact; skipping")

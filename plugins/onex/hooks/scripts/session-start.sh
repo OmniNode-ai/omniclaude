@@ -124,9 +124,16 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/hook-session-start.log"
 
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+
+# --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+        >> /tmp/onex-hook-error.log
+    exit 0
+fi
+LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/hook-session-start.log"
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -353,7 +360,7 @@ except Exception as e:
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
         ${KAFKA_SECONDARY_BOOTSTRAP_SERVERS:+--secondary-kafka-servers "$KAFKA_SECONDARY_BOOTSTRAP_SERVERS"} \
         --socket-path "$EMIT_DAEMON_SOCKET" \
-        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+        >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!
     log "Publisher started with PID $daemon_pid"
@@ -395,14 +402,14 @@ except Exception as e:
     fi
 
     # Publisher failed to start properly - write warning file and continue
-    mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
-    local _tmp="${HOOKS_DIR}/logs/emit-health/warning.tmp.$$"
+    mkdir -p "${ONEX_STATE_DIR}/hooks/logs/emit-health" 2>/dev/null || true
+    local _tmp="${ONEX_STATE_DIR}/hooks/logs/emit-health/warning.tmp.$$"
     cat > "$_tmp" <<WARN  # Note: unquoted delimiter -- variable expansion is intentional
-EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${HOOKS_DIR}/logs/emit-daemon.log
+EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log
 WARN
-    mv -f "$_tmp" "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
+    mv -f "$_tmp" "${ONEX_STATE_DIR}/hooks/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
     # Alert on daemon startup failure (backgrounded, non-blocking)
-    ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${EMIT_DAEMON_SOCKET} log=${HOOKS_DIR}/logs/emit-daemon.log" ) &
+    ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${EMIT_DAEMON_SOCKET} log=${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" ) &
     log "Continuing without publisher (session startup not blocked)"
     return 0
 }
@@ -417,7 +424,7 @@ _start_legacy_emit_daemon() {
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
         --socket-path "$EMIT_DAEMON_SOCKET" \
         --daemonize \
-        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+        >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
     local daemon_pid=$!
     log "Legacy daemon started with PID $daemon_pid"
     local wait_count=0
@@ -575,7 +582,7 @@ finally:
     nohup "$PYTHON_CMD" -m omniclaude.hook_runtime start \
         --socket-path "$_HOOK_RUNTIME_SOCKET" \
         ${_config_arg} \
-        >> "${HOOKS_DIR}/logs/hook-runtime-daemon.log" 2>&1 &
+        >> "${ONEX_STATE_DIR}/hooks/logs/hook-runtime-daemon.log" 2>&1 &
 
     local _hrt_launch_pid=$!
     log "Hook runtime daemon launched with PID $_hrt_launch_pid"

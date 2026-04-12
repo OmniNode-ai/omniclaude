@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Hook Log Path Lint
+
+# Layer 3 defense (OMN-8429 / plugin-runtime-architecture.md §11):
+# Blocks any hook script that derives a state path from PLUGIN_ROOT, HOOKS_DIR, or SCRIPT_DIR.
+# State must always resolve from ONEX_STATE_DIR. This lint is mandatory and blocking.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+  merge_group:
+
+jobs:
+  hook-log-path-lint:
+    name: Hook Log Path Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check hook scripts do not derive state paths from plugin tree
+        run: |
+          # All scripts must be fully migrated to ONEX_STATE_DIR. Zero violations allowed.
+          # Pattern matches any state/log path assignment or redirection targeting plugin source dirs.
+          TOTAL=$(grep -rEc '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
+            plugins/onex/hooks/scripts/ 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')
+          if [[ "$TOTAL" -gt 0 ]]; then
+            echo "ERROR: $TOTAL hook log path violation(s) found. All scripts must use ONEX_STATE_DIR."
+            grep -rEn '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
+              plugins/onex/hooks/scripts/ 2>/dev/null || true
+            echo ""
+            echo "State paths must use ONEX_STATE_DIR / ONEX_HOOKS_STATE_DIR, never PLUGIN_ROOT/HOOKS_DIR/SCRIPT_DIR."
+            exit 1
+          fi
+
+          echo "Hook log path lint: PASS (0 violations)"
