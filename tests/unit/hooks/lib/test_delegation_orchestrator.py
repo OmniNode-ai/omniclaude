@@ -1803,3 +1803,175 @@ class TestAgenticQualityGateWiring:
         assert result.get("agentic") is True
         # Failure reason must appear in the result annotation
         assert result.get("quality_gate_reason") == "content too short: 5 < 100 chars"
+
+
+# ---------------------------------------------------------------------------
+# Context turns: _load_recent_turns and _apply_context_budget (OMN-8564)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestLoadRecentTurns:
+    def test_returns_empty_for_missing_path(self) -> None:
+        assert do._load_recent_turns("") == []
+        assert do._load_recent_turns("/nonexistent/path.jsonl") == []
+
+    def test_parses_user_and_assistant_turns(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"role": "user", "content": "hello"}\n'
+            '{"role": "assistant", "content": "hi there"}\n'
+            '{"role": "user", "content": "how are you"}\n'
+        )
+        turns = do._load_recent_turns(str(transcript))
+        assert len(turns) == 3
+        assert turns[0] == {"role": "user", "content": "hello"}
+        assert turns[1] == {"role": "assistant", "content": "hi there"}
+
+    def test_skips_non_message_lines(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"type": "tool_use", "role": "user", "content": ""}\n'
+            '{"role": "user", "content": "real message"}\n'
+            'not-json-at-all\n'
+            '{"role": "assistant", "content": "response"}\n'
+        )
+        turns = do._load_recent_turns(str(transcript))
+        # Empty content skipped; non-JSON skipped
+        assert len(turns) == 2
+        assert turns[0]["content"] == "real message"
+
+    def test_respects_n_turns_limit(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        lines = "\n".join(
+            f'{{"role": "user", "content": "msg {i}"}}' for i in range(10)
+        )
+        transcript.write_text(lines + "\n")
+        turns = do._load_recent_turns(str(transcript), n_turns=4)
+        assert len(turns) == 4
+        # Should be the last 4
+        assert turns[-1]["content"] == "msg 9"
+
+    def test_extracts_text_from_block_content(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text(
+            '{"role": "user", "content": [{"type": "text", "text": "block text"}, {"type": "tool_use"}]}\n'
+        )
+        turns = do._load_recent_turns(str(transcript))
+        assert turns[0]["content"] == "block text"
+
+    def test_handles_malformed_jsonl_gracefully(self, tmp_path: Path) -> None:
+        transcript = tmp_path / "transcript.jsonl"
+        transcript.write_text("not json\n{bad}\n")
+        assert do._load_recent_turns(str(transcript)) == []
+
+
+@pytest.mark.unit
+class TestApplyContextBudget:
+    def test_keeps_all_turns_within_budget(self) -> None:
+        turns = [
+            {"role": "user", "content": "a" * 100},
+            {"role": "assistant", "content": "b" * 100},
+        ]
+        result = do._apply_context_budget("sys", turns, "prompt", max_chars=10000)
+        assert result == turns
+
+    def test_drops_oldest_turns_when_over_budget(self) -> None:
+        turns = [
+            {"role": "user", "content": "old " * 200},  # 800 chars
+            {"role": "assistant", "content": "new response"},
+        ]
+        # Budget: 8000 - len("system") - len("current") = plenty for new, not old
+        result = do._apply_context_budget(
+            "system", turns, "current", max_chars=len("system") + len("current") + 50
+        )
+        # Only the short "new response" turn should fit
+        assert len(result) == 1
+        assert result[0]["content"] == "new response"
+
+    def test_returns_empty_when_system_plus_prompt_exceeds_budget(self) -> None:
+        result = do._apply_context_budget("x" * 5000, [], "y" * 5000, max_chars=100)
+        assert result == []
+
+
+@pytest.mark.unit
+class TestCallLlmWithContextTurns:
+    """Verify that context_turns are included in the messages payload."""
+
+    def test_context_turns_prepended_before_user_prompt(self) -> None:
+        import httpx
+
+        context = [
+            {"role": "user", "content": "earlier question"},
+            {"role": "assistant", "content": "earlier answer"},
+        ]
+        captured: list[dict] = []
+
+        class _FakeResp:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                return {
+                    "choices": [{"message": {"content": "ok"}}],
+                    "model": "local",
+                }
+
+        class _FakeClient:
+            def __enter__(self) -> "_FakeClient":
+                return self
+
+            def __exit__(self, *a: object) -> None:
+                pass
+
+            def post(self, url: str, **kwargs: object) -> _FakeResp:
+                captured.append(kwargs.get("json", {}))
+                return _FakeResp()
+
+        with patch("httpx.Client", return_value=_FakeClient()):
+            do._call_llm_with_system_prompt(
+                prompt="current question",
+                endpoint_url="http://localhost:8000",
+                system_prompt="You are a helper.",
+                context_turns=context,
+            )
+
+        assert captured, "No HTTP call captured"
+        messages = captured[0]["messages"]
+        assert messages[0]["role"] == "system"
+        assert messages[1] == {"role": "user", "content": "earlier question"}
+        assert messages[2] == {"role": "assistant", "content": "earlier answer"}
+        assert messages[3] == {"role": "user", "content": "current question"}
+
+    def test_no_context_turns_sends_system_plus_user_only(self) -> None:
+        captured: list[dict] = []
+
+        class _FakeResp:
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(self) -> dict:
+                return {"choices": [{"message": {"content": "ok"}}], "model": "local"}
+
+        class _FakeClient:
+            def __enter__(self) -> "_FakeClient":
+                return self
+
+            def __exit__(self, *a: object) -> None:
+                pass
+
+            def post(self, url: str, **kwargs: object) -> _FakeResp:
+                captured.append(kwargs.get("json", {}))
+                return _FakeResp()
+
+        with patch("httpx.Client", return_value=_FakeClient()):
+            do._call_llm_with_system_prompt(
+                prompt="standalone question",
+                endpoint_url="http://localhost:8000",
+                system_prompt="sys",
+            )
+
+        messages = captured[0]["messages"]
+        assert len(messages) == 2
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"

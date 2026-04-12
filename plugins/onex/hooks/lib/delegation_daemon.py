@@ -501,6 +501,7 @@ def _handle_request(data: bytes) -> bytes:
     prompt = req["prompt"]
     correlation_id = req.get("correlation_id", "")
     session_id = req.get("session_id", "")
+    transcript_path = req.get("transcript_path", "")
 
     if orchestrate_delegation is None:
         return json.dumps(
@@ -516,6 +517,7 @@ def _handle_request(data: bytes) -> bytes:
             session_id=session_id,
             correlation_id=correlation_id,
             cached_classification=cached_classification,
+            transcript_path=transcript_path,
         )
 
         # --- Agentic dispatch (OMN-5725) ---
