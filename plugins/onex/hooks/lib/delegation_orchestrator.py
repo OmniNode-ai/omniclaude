@@ -143,6 +143,14 @@ try:
 except ImportError:  # pragma: no cover
     _run_shadow_validation = None  # type: ignore[assignment]
 
+# Agentic quality gate (OMN-8548) — imported at module level so tests can patch it.
+try:
+    from agentic_quality_gate import (  # type: ignore[import-not-found]
+        check_agentic_quality as _check_agentic_quality,
+    )
+except ImportError:  # pragma: no cover
+    _check_agentic_quality = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Classifier instance cache
 # ---------------------------------------------------------------------------
@@ -1166,7 +1174,44 @@ def orchestrate_delegation(
                 agentic_url,
                 correlation_id,
             )
-            return {
+
+            # Agentic quality gate (OMN-8548): run the gate on the prompt text so
+            # that the delegation event carries a quality_gate_reason annotation.
+            # The gate is non-blocking — a failure annotates the result but does
+            # NOT prevent the agentic loop from starting.  The daemon runs the same
+            # gate again on the completed response (delegation_daemon.py).
+            agentic_gate_reason = ""
+            if _check_agentic_quality is not None:
+                try:
+                    _gate = _check_agentic_quality(
+                        content=prompt,
+                        tool_calls_count=1,  # pre-dispatch: assume >=1 tool call
+                        iterations=2,        # pre-dispatch: assume >=2 iterations
+                    )
+                    if not _gate.passed:
+                        agentic_gate_reason = _gate.reason
+                        logger.warning(
+                            "agentic_quality_gate failed (pre-dispatch): %s",
+                            agentic_gate_reason,
+                        )
+                except Exception as exc:
+                    logger.debug("agentic_quality_gate check raised: %s", exc)
+
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=intent_value,
+                handler_name=handler_name,
+                model_name=model_name,
+                quality_gate_passed=not bool(agentic_gate_reason),
+                quality_gate_reason=agentic_gate_reason or "agentic:dispatched_to_daemon",
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=int((time.time() - start_time) * 1000),
+                emitted_at=emitted_at,
+            )
+
+            result: dict[str, Any] = {
                 "delegated": False,
                 "agentic": True,
                 "agentic_prompt": prompt,
@@ -1176,6 +1221,9 @@ def orchestrate_delegation(
                 "confidence": score.confidence,
                 "reason": "agentic_eligible",
             }
+            if agentic_gate_reason:
+                result["quality_gate_reason"] = agentic_gate_reason
+            return result
 
         # Gate 4: LLM call with task-specific system prompt
         # Redact secrets from the prompt before forwarding to the local LLM

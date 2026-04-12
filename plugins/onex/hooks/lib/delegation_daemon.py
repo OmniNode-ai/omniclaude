@@ -246,29 +246,31 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 tool_calls_count = job.result.tool_calls_count
                 tool_names = sorted(job.result.tool_names_used)
 
-                # Quality gate check (OMN-5729)
+                # Quality gate check (OMN-5729, OMN-8548): non-blocking — log and
+                # annotate the result but do not block delegation on gate failure.
+                quality_gate_reason = ""
                 if check_agentic_quality is not None:
-                    gate_result = check_agentic_quality(
-                        content=content,
-                        tool_calls_count=tool_calls_count,
-                        iterations=iterations,
-                    )
-                    if not gate_result.passed:
-                        logger.info(
-                            "Agentic quality gate failed for job %s: %s",
-                            job_id,
-                            gate_result.reason,
+                    try:
+                        gate_result = check_agentic_quality(
+                            content=content,
+                            tool_calls_count=tool_calls_count,
+                            iterations=iterations,
                         )
-                        del _agentic_jobs[job_id]
-                        return {
-                            "agentic_completed": False,
-                            "job_id": job_id,
-                            "error": f"quality_gate_failed: {gate_result.reason}",
-                        }
+                        if not gate_result.passed:
+                            quality_gate_reason = gate_result.reason
+                            logger.warning(
+                                "agentic_quality_gate failed for job %s: %s",
+                                job_id,
+                                gate_result.reason,
+                            )
+                    except Exception as exc:
+                        logger.debug(
+                            "agentic_quality_gate raised for job %s: %s", job_id, exc
+                        )
 
                 # Remove job after delivery
                 del _agentic_jobs[job_id]
-                return {
+                completed: dict[str, Any] = {
                     "agentic_completed": True,
                     "job_id": job_id,
                     "content": content,
@@ -276,6 +278,9 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                     "tool_calls_count": tool_calls_count,
                     "tool_names": tool_names,
                 }
+                if quality_gate_reason:
+                    completed["quality_gate_reason"] = quality_gate_reason
+                return completed
             if job.status == AgenticJobStatus.FAILED:
                 error = job.error or "unknown"
                 del _agentic_jobs[job_id]

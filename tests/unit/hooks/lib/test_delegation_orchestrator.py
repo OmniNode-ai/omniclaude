@@ -1709,3 +1709,97 @@ class TestClassifierInstanceCaching:
         do._reset_classifier_cache()
 
         assert do._cached_classifier is None
+
+
+# ---------------------------------------------------------------------------
+# Agentic quality gate wiring (OMN-8548)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAgenticQualityGateWiring:
+    """check_agentic_quality is called from the agentic path and annotates the result."""
+
+    def _setup(
+        self, monkeypatch: pytest.MonkeyPatch, intent: str = "research"
+    ) -> tuple[Any, Any, do._EndpointSelection]:
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+        monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
+        score = _make_score(True, confidence=0.9, classified_intent=intent)
+        score.agentic_eligible = True
+        classifier_mock = _make_classifier_mock(score, intent)
+        endpoint_sel = _make_endpoint_selection()
+        return score, classifier_mock, endpoint_sel
+
+    def test_agentic_path_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Agentic path must emit a delegation event (previously missing)."""
+        _score, classifier_mock, endpoint_sel = self._setup(monkeypatch)
+
+        with (
+            patch.object(do, "TaskClassifier", return_value=classifier_mock),
+            patch.object(do, "_select_handler_endpoint", return_value=endpoint_sel),
+            patch.object(do, "_emit_delegation_event") as mock_emit,
+            patch.object(do, "_check_agentic_quality", None),
+        ):
+            result = do.orchestrate_delegation(
+                prompt="Research error handling patterns",
+                correlation_id="corr-agentic-1",
+            )
+
+        assert result.get("agentic") is True
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs["quality_gate_reason"] == "agentic:dispatched_to_daemon"
+
+    def test_agentic_gate_pass_no_annotation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When gate passes, quality_gate_reason is not added to the result dict."""
+        _score, classifier_mock, endpoint_sel = self._setup(monkeypatch)
+
+        gate_pass = MagicMock()
+        gate_pass.passed = True
+        gate_pass.reason = ""
+
+        with (
+            patch.object(do, "TaskClassifier", return_value=classifier_mock),
+            patch.object(do, "_select_handler_endpoint", return_value=endpoint_sel),
+            patch.object(do, "_emit_delegation_event"),
+            patch.object(do, "_check_agentic_quality", return_value=gate_pass),
+        ):
+            result = do.orchestrate_delegation(
+                prompt="Research error handling patterns",
+                correlation_id="corr-agentic-2",
+            )
+
+        assert result.get("agentic") is True
+        assert "quality_gate_reason" not in result
+
+    def test_agentic_gate_fail_annotates_result_without_blocking(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Gate failure must annotate result with quality_gate_reason but not block."""
+        _score, classifier_mock, endpoint_sel = self._setup(monkeypatch)
+
+        gate_fail = MagicMock()
+        gate_fail.passed = False
+        gate_fail.reason = "content too short: 5 < 100 chars"
+
+        with (
+            patch.object(do, "TaskClassifier", return_value=classifier_mock),
+            patch.object(do, "_select_handler_endpoint", return_value=endpoint_sel),
+            patch.object(do, "_emit_delegation_event"),
+            patch.object(do, "_check_agentic_quality", return_value=gate_fail),
+        ):
+            result = do.orchestrate_delegation(
+                prompt="short",
+                correlation_id="corr-agentic-3",
+            )
+
+        # Must still return agentic=True (non-blocking)
+        assert result.get("agentic") is True
+        # Failure reason must appear in the result annotation
+        assert result.get("quality_gate_reason") == "content too short: 5 < 100 chars"
