@@ -100,7 +100,7 @@ TO=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null || true)
 
 # ── Active ticket detection — deterministic, worktree-scoped ─────────────────
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
-OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-${ONEX_WORKTREES_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}}"  # local-path-ok: override via ONEX_WORKTREES_ROOT
 ACTIVE_TICKET=""
 ACTIVE_STATE_FILE=""
 REPO_PATH=""  # initialized explicitly; used later in git gate

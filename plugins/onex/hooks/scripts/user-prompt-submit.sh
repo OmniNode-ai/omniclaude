@@ -807,7 +807,7 @@ _TICKET_INJECT_ENABLED=$(_normalize_bool "$_TICKET_INJECT_ENABLED")
 _TICKET_INJECT_TIMEOUT_SEC="${OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC:-4}"
 [[ "$_TICKET_INJECT_TIMEOUT_SEC" =~ ^[0-9]+$ ]] || _TICKET_INJECT_TIMEOUT_SEC=4
 # R10: Configurable worktrees root directory
-_OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
+_OMNI_WORKTREES_DIR="${OMNI_WORKTREES_DIR:-${ONEX_WORKTREES_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}}"  # local-path-ok: override via ONEX_WORKTREES_ROOT
 
 if [[ "$_TICKET_INJECT_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
     # R9: Skip markers (and injection) entirely when SESSION_ID is empty.

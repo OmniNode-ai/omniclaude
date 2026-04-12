@@ -97,7 +97,7 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
         [[ "$_token" == "add" ]] && _in_add=true
     done
 
-    CANONICAL_ROOT="/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+    CANONICAL_ROOT="${ONEX_WORKTREES_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok: override via ONEX_WORKTREES_ROOT for non-primary machines
     if [[ -z "$WORKTREE_PATH" ]]; then
         # Could not parse path — fail closed
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Could not parse worktree path from command" >> "$LOG_FILE"
