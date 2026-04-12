@@ -405,7 +405,7 @@ fi
 # Emit Health Check: Surface persistent failures
 # -----------------------------
 EMIT_HEALTH_WARNING=""
-_EMIT_STATUS="${HOOKS_DIR}/logs/emit-health/status"
+_EMIT_STATUS="${ONEX_STATE_DIR}/hooks/logs/emit-health/status"
 if [[ -f "$_EMIT_STATUS" ]]; then
     # Single read splits all 4 whitespace-delimited fields from the status file
     # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
