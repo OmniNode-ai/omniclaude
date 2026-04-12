@@ -35,6 +35,12 @@ outputs:
     description: "Integration surface(s) that caused halt, or empty string on complete"
 ---
 
+> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
+> Phase A/B/C/D close-out logic becomes Phase 3 dispatch targets in `/onex:session`.
+> Use `/onex:session` for new session management. Existing cron invocations of `cron-closeout.sh`
+> remain valid until the cleanup ticket removes this skill.
+> Do not add new functionality here.
+
 # autopilot
 
 **Skill ID**: `onex:autopilot`

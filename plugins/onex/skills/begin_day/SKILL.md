@@ -43,6 +43,11 @@ outputs:
     description: Path to the action plan (if Phase 4 ran)
 ---
 
+> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
+> Phase 1 health check + Phase 2 RSD priority (interactive mode) replace this skill.
+> Use `/onex:session --mode interactive` instead.
+> This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
+
 # begin-day Skill
 
 > **OMN-5349** — Automated morning investigation pipeline that pairs with `/close-day`

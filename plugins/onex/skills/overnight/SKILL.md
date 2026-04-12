@@ -57,6 +57,10 @@ args:
     required: false
 ---
 
+> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
+> Use `/onex:session --mode autonomous` instead.
+> This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
+
 # Overnight Session
 
 ## Phase 0: Session Bootstrap
