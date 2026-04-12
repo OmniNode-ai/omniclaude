@@ -22,9 +22,6 @@ args:
   - name: --autonomous
     description: "Run without human gates (default: true)"
     required: false
-  - name: --require-gate
-    description: "Opt into a Slack HIGH_RISK gate before the release step (default: false)"
-    required: false
 inputs:
   - name: mode
     description: "build | close-out"
@@ -321,7 +318,6 @@ Failures are tracked per run. The circuit breaker does NOT persist across runs.
 |------|---------|-------------|
 | `--mode` | `build` | `build` \| `close-out` |
 | `--autonomous` | `true` | No human gates in close-out sequence |
-| `--require-gate` | `false` | Opt into Slack HIGH_RISK gate before release |
 
 ---
 

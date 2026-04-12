@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the merge-sweep skill.
-  Org-wide PR merge sweep — scans all repos for merge-ready PRs and merges them in parallel after a single HIGH_RISK Slack gate
+  Org-wide PR merge sweep — scans all repos for merge-ready PRs and merges them in parallel
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.

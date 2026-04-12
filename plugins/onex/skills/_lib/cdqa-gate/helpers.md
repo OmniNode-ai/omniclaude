@@ -4,7 +4,7 @@
 
 Every merge path (ticket-pipeline Phase 5.5, auto-merge direct invocation) MUST run
 these gates before invoking the merge mutation. There is no valid bypass that does not
-require an explicit HIGH_RISK Slack gate.
+require an explicit operator Slack response.
 
 **Implements**: OMN-3189
 **Used by**: ticket-pipeline (Phase 5.5), auto-merge (pre-condition)
@@ -33,7 +33,7 @@ Invoke: Skill(skill="onex:contract_compliance_check", args="{ticket_id}")
 **Result routing**:
 - `PASS` → proceed to Gate 2
 - `WARN` → log warning, proceed to Gate 2 (warnings are non-blocking)
-- `BLOCK` → post Slack HIGH_RISK bypass gate (see Bypass Protocol); halt until resolved
+- `BLOCK` → post Slack Slack bypass notification (see Bypass Protocol); halt until resolved
 
 ### Gate 2: arch-invariants CI check
 
@@ -49,7 +49,7 @@ gh pr checks {pr_number} --repo {repo} --json name,conclusion \
 **Result routing**:
 - `success` → proceed to Gate 3
 - `skipped` → log warning, proceed to Gate 3
-- `failure` or `cancelled` → BLOCK; post Slack HIGH_RISK bypass gate
+- `failure` or `cancelled` → BLOCK; post Slack Slack bypass notification
 - `not_found` → log warning "arch-invariants check not found — skipping gate", proceed to Gate 3
 
 ### Gate 3: AI-slop CI check
@@ -66,7 +66,7 @@ gh pr checks {pr_number} --repo {repo} --json name,conclusion \
 **Result routing**:
 - `success` → all gates passed; proceed to merge
 - `skipped` → log warning, proceed to merge
-- `failure` or `cancelled` → BLOCK; post Slack HIGH_RISK bypass gate
+- `failure` or `cancelled` → BLOCK; post Slack Slack bypass notification
 - `not_found` → log warning "ai-slop check not found — skipping gate", proceed to merge
 
 ---
@@ -115,7 +115,7 @@ record as an array element. The file is a JSON array of gate log records.
 
 ## Bypass Protocol
 
-A BLOCK result can only be bypassed via an explicit HIGH_RISK Slack gate. There is no
+A BLOCK result can only be bypassed via an explicit operator Slack response. There is no
 `--no-verify` flag, no silent skip, and no retry-without-fix.
 
 ### Anti-pattern: soft-pass
@@ -128,9 +128,9 @@ not `PASS`. Do not retry BLOCK results to fish for a PASS.
 
 When any gate returns BLOCK:
 
-1. Post HIGH_RISK Slack gate:
+1. Post Slack notification (via _lib/slack-gate helpers):
    ```
-   [HIGH_RISK] CDQA gate blocked for {ticket_id} PR #{pr_number}
+   [CDQA BLOCK] CDQA gate blocked for {ticket_id} PR #{pr_number}
 
    Gate: {gate_name}
    Result: BLOCK
@@ -201,5 +201,5 @@ If no record: run all 3 gates before merge
 - `contract-compliance-check` skill (OMN-2978) — Gate 1 implementation
 - `ticket-pipeline` skill — Phase 5.5 orchestration
 - `auto-merge` skill — direct invocation pre-condition
-- `slack-gate` skill — HIGH_RISK gate primitives used in bypass flow
+- `_lib/slack-gate/helpers.md` — Slack credential resolution and post_gate() used in bypass flow
 - OMN-3189 — implementation ticket
