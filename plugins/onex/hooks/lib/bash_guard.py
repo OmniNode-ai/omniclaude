@@ -364,9 +364,12 @@ CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # =============================================================================
 
 
-CANONICAL_WORKTREE_ROOT = os.environ.get(
-    "ONEX_WORKTREES_ROOT", str(Path.home() / "Code" / "omni_worktrees")
-)
+_DEFAULT_WORKTREE_ROOT = str(Path.home() / "Code" / "omni_worktrees")
+CANONICAL_WORKTREE_ROOT = (
+    os.environ.get("ONEX_WORKTREES_ROOT")
+    or os.environ.get("OMNI_WORKTREES_DIR")
+    or _DEFAULT_WORKTREE_ROOT
+).rstrip("/")  # strip trailing slash to prevent prefix-check false negatives
 
 
 def _check_worktree_path(command: str) -> str | None:
