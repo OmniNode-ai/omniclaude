@@ -37,13 +37,14 @@ class TestSkillMd:
         content = _read(_SKILL_MD)
         assert "--dry-run" in content
 
-    def test_all_six_checks_documented(self) -> None:
+    def test_all_checks_documented(self) -> None:
         content = _read(_SKILL_MD)
         for check in (
             "phantom-callables",
             "compat-shims",
             "prohibited-patterns",
             "hardcoded-topics",
+            "hardcoded-paths",
             "todo-fixme",
             "empty-impls",
         ):
@@ -113,11 +114,12 @@ class TestPromptMd:
             "prompt.md must show --dry-run exits before ticket creation"
         )
 
-    def test_all_six_grep_patterns_present(self) -> None:
+    def test_all_grep_patterns_present(self) -> None:
         content = _read(_PROMPT_MD)
         for check in (
             "prohibited-patterns",
             "hardcoded-topics",
+            "hardcoded-paths",
             "phantom-callables",
             "compat-shims",
             "empty-impls",
@@ -257,3 +259,9 @@ class TestCuratedCorpus:
             pytest.skip("Sample slop fixture not found")
         content = _SAMPLE_SLOP.read_text()
         assert "pass" in content
+
+    def test_hardcoded_path_detected_in_fixture(self) -> None:
+        if not _SAMPLE_SLOP.exists():
+            pytest.skip("Sample slop fixture not found")
+        content = _SAMPLE_SLOP.read_text()
+        assert "/Volumes/" in content
