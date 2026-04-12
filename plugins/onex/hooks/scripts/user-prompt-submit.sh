@@ -120,6 +120,8 @@ SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/de
 # limitation — sessionId should always be present in normal Claude Code operation.
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
+TRANSCRIPT_PATH="$(printf %s "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo "")"
+
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
     # Privacy contract for dual-emission via daemon fan-out:
     #   - onex.evt.* topics receive ONLY prompt_preview (100-char redacted) + prompt_length
@@ -600,8 +602,9 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
         # Fast path: daemon socket (< 50ms classification + LLM call)
         _DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
         if [[ -S "$_DELEGATION_SOCK" ]]; then
-            _DAEMON_REQ=$(jq -cn --arg prompt "$PROMPT" --arg corr "$CORRELATION_ID" --arg sess "$SESSION_ID" \
-                '{prompt: $prompt, correlation_id: $corr, session_id: $sess}')
+            _DAEMON_REQ=$(jq -cn --arg prompt "$PROMPT" --arg corr "$CORRELATION_ID" \
+                --arg sess "$SESSION_ID" --arg tp "$TRANSCRIPT_PATH" \
+                '{prompt: $prompt, correlation_id: $corr, session_id: $sess, transcript_path: $tp}')
             DELEGATION_RESULT="$(printf '%s\n' "$_DAEMON_REQ" | socat -t2 - UNIX-CONNECT:"$_DELEGATION_SOCK" 2>/dev/null || echo "")"
             if [[ -n "$DELEGATION_RESULT" ]]; then
                 log "Delegation via daemon (fast path)"
@@ -612,7 +615,7 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
         _DELEGATION_TIMEOUT_SEC="${OMNICLAUDE_DELEGATION_TIMEOUT_SEC:-12}"
         if [[ -z "$DELEGATION_RESULT" ]] || ! jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
             set +e
-            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout "$_DELEGATION_TIMEOUT_SEC" "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" 2>>"$LOG_FILE")"
+            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout "$_DELEGATION_TIMEOUT_SEC" "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" --transcript-path "$TRANSCRIPT_PATH" 2>>"$LOG_FILE")"
             set -e
         fi
 
