@@ -1805,7 +1805,6 @@ class TestCallLlmWithContextTurns:
     """Verify that context_turns are included in the messages payload."""
 
     def test_context_turns_prepended_before_user_prompt(self) -> None:
-        import httpx
 
         context = [
             {"role": "user", "content": "earlier question"},
@@ -1824,7 +1823,7 @@ class TestCallLlmWithContextTurns:
                 }
 
         class _FakeClient:
-            def __enter__(self) -> "_FakeClient":
+            def __enter__(self) -> _FakeClient:
                 return self
 
             def __exit__(self, *a: object) -> None:
@@ -1860,7 +1859,7 @@ class TestCallLlmWithContextTurns:
                 return {"choices": [{"message": {"content": "ok"}}], "model": "local"}
 
         class _FakeClient:
-            def __enter__(self) -> "_FakeClient":
+            def __enter__(self) -> _FakeClient:
                 return self
 
             def __exit__(self, *a: object) -> None:

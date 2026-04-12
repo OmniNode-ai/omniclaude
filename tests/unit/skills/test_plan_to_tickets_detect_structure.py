@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 """Tests for plan_to_tickets detect_structure() — OMN-8491: § heading support."""
+
 from __future__ import annotations
 
 import sys
@@ -20,7 +21,6 @@ if str(_lib_dir) not in sys.path:
     sys.path.insert(0, str(_lib_dir))
 
 from detect_structure import detect_structure  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
