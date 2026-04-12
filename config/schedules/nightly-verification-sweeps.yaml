@@ -11,22 +11,22 @@
 schedules:
   - name: nightly-data-flow-sweep
     description: >
-      Run data_flow_sweep in dry-run mode nightly to catch regression
+      Run data_flow_sweep nightly to catch regression
       in Kafka topic -> projection -> dashboard data flow.
     cron: "3 2 * * *"  # 2:03 AM local (offset from :00 to avoid fleet pile-up)
     prompt: >
-      Run /data_flow_sweep --dry-run.
+      Run /data_flow_sweep.
       If any FAIL results, create a friction event and report findings.
     recurring: true
     durable: true
 
   - name: nightly-runtime-sweep
     description: >
-      Run runtime_sweep in dry-run mode nightly to catch handler wiring
+      Run runtime_sweep nightly to catch handler wiring
       regressions across all repos.
     cron: "7 3 * * *"  # 3:07 AM local
     prompt: >
-      Run /runtime_sweep --dry-run --scope all-repos.
+      Run /runtime_sweep --scope all-repos.
       If any FAIL results, create a friction event and report findings.
     recurring: true
     durable: true
