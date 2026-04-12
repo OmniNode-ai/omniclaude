@@ -52,8 +52,10 @@ def _omni_home_roots() -> list[Path]:
     # Also cover the canonical worktrees root so foreground edits to active
     # worktrees are blocked while an overseer contract drives.
     worktrees_root = Path(
-        os.environ.get("ONEX_WORKTREES_ROOT", "/Volumes/PRO-G40/Code/omni_worktrees")
-    )  # local-path-ok: override via ONEX_WORKTREES_ROOT for non-primary machines
+        os.environ.get("ONEX_WORKTREES_ROOT")
+        or os.environ.get("OMNI_WORKTREES_DIR")
+        or "/Volumes/PRO-G40/Code/omni_worktrees"
+    )  # local-path-ok: override via ONEX_WORKTREES_ROOT or OMNI_WORKTREES_DIR
     if worktrees_root.exists():
         roots.append(worktrees_root.resolve())
     return roots

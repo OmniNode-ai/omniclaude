@@ -363,9 +363,12 @@ CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # =============================================================================
 
 
-CANONICAL_WORKTREE_ROOT = os.environ.get(
-    "ONEX_WORKTREES_ROOT", "/Volumes/PRO-G40/Code/omni_worktrees"
-)  # local-path-ok: override via ONEX_WORKTREES_ROOT for non-primary machines
+_DEFAULT_WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"
+CANONICAL_WORKTREE_ROOT = (
+    os.environ.get("ONEX_WORKTREES_ROOT")
+    or os.environ.get("OMNI_WORKTREES_DIR")
+    or _DEFAULT_WORKTREE_ROOT
+).rstrip("/")  # local-path-ok: override via ONEX_WORKTREES_ROOT or OMNI_WORKTREES_DIR
 
 
 def _check_worktree_path(command: str) -> str | None:
