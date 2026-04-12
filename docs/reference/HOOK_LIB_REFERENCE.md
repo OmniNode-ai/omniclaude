@@ -88,7 +88,6 @@ unless listed under **Public Entrypoints**.
 
 | Module | Purpose |
 |--------|---------|
-| `action_logging_helpers.py` | Helper utilities for ActionLogger integration |
 | `attribution_binder.py` | Attribution binding (M4) |
 | `auth_gate_adapter.py` | PreToolUse authorization gate adapter |
 | `blocked_notifier.py` | Sends Slack message when an agent reports blocked state |
