@@ -17,4 +17,8 @@ def process_event() -> None:
     pass  # should be flagged WARNING
 
 
+# hardcoded-paths (machine-specific absolute path, no env var)
+REPO_ROOT = "/Volumes/PRO-G40/Code/omni_home"  # should be flagged ERROR
+
+
 # NOT flagged: TODO in a test file (excluded by policy)
