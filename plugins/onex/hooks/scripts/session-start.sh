@@ -124,9 +124,16 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/hook-session-start.log"
 
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+
+# --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+        >> /tmp/onex-hook-error.log
+    exit 0
+fi
+LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/hook-session-start.log"
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
