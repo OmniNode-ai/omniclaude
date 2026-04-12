@@ -29,11 +29,12 @@ jobs:
       - name: Check hook scripts do not derive state paths from plugin tree
         run: |
           # All scripts must be fully migrated to ONEX_STATE_DIR. Zero violations allowed.
-          TOTAL=$(grep -rEc '(LOG_FILE|STATE_DIR|LOG_DIR)\s*=.*\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)' \
+          # Pattern matches any state/log path assignment or redirection targeting plugin source dirs.
+          TOTAL=$(grep -rEc '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
             plugins/onex/hooks/scripts/ 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')
           if [[ "$TOTAL" -gt 0 ]]; then
             echo "ERROR: $TOTAL hook log path violation(s) found. All scripts must use ONEX_STATE_DIR."
-            grep -rEn '(LOG_FILE|STATE_DIR|LOG_DIR)\s*=.*\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)' \
+            grep -rEn '(=|>>|>)[[:space:]]*["'"'"']?\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)[^}]*\}?[/"].*\b(log|state|dedup|health)\b' \
               plugins/onex/hooks/scripts/ 2>/dev/null || true
             echo ""
             echo "State paths must use ONEX_STATE_DIR / ONEX_HOOKS_STATE_DIR, never PLUGIN_ROOT/HOOKS_DIR/SCRIPT_DIR."

@@ -63,14 +63,16 @@ mkdir -p "$(dirname "$LOG_FILE")"
 # file is under threshold (single stat + arithmetic, no I/O).
 _HOOK_LOG_MAX_MB="${ONEX_HOOK_LOG_MAX_MB:-50}"
 _HOOK_LOG_KEEP_MB="${ONEX_HOOK_LOG_KEEP_MB:-10}"
+[[ "$_HOOK_LOG_MAX_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_MAX_MB=50
+[[ "$_HOOK_LOG_KEEP_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_KEEP_MB=10
 if [[ -f "$LOG_FILE" ]]; then
     _log_size_bytes=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
-    _log_size_mb=$(( _log_size_bytes / 1024 / 1024 ))
-    if [[ "$_log_size_mb" -gt "$_HOOK_LOG_MAX_MB" ]]; then
+    _log_max_bytes=$(( _HOOK_LOG_MAX_MB * 1024 * 1024 ))
+    if [[ "$_log_size_bytes" -gt "$_log_max_bytes" ]]; then
         mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
         tail -c $(( _HOOK_LOG_KEEP_MB * 1024 * 1024 )) "${LOG_FILE}.1" > "$LOG_FILE" 2>/dev/null || touch "$LOG_FILE"
     fi
-    unset _log_size_bytes _log_size_mb
+    unset _log_size_bytes _log_max_bytes
 fi
 unset _HOOK_LOG_MAX_MB _HOOK_LOG_KEEP_MB
 

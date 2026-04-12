@@ -35,6 +35,7 @@ HOOKS_LIB="${HOOKS_DIR}/lib"
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
     echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
+    cat
     exit 0
 fi
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/output-suppressor.log"

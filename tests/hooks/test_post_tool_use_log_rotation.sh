@@ -23,12 +23,14 @@ _rotate_if_needed() {
 
     local _HOOK_LOG_MAX_MB="$ONEX_HOOK_LOG_MAX_MB"
     local _HOOK_LOG_KEEP_MB="$ONEX_HOOK_LOG_KEEP_MB"
+    [[ "$_HOOK_LOG_MAX_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_MAX_MB=50
+    [[ "$_HOOK_LOG_KEEP_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_KEEP_MB=10
 
     if [[ -f "$LOG_FILE" ]]; then
-        local _log_size_bytes
+        local _log_size_bytes _log_max_bytes
         _log_size_bytes=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
-        local _log_size_mb=$(( _log_size_bytes / 1024 / 1024 ))
-        if [[ "$_log_size_mb" -gt "$_HOOK_LOG_MAX_MB" ]]; then
+        _log_max_bytes=$(( _HOOK_LOG_MAX_MB * 1024 * 1024 ))
+        if [[ "$_log_size_bytes" -gt "$_log_max_bytes" ]]; then
             mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
             tail -c $(( _HOOK_LOG_KEEP_MB * 1024 * 1024 )) "${LOG_FILE}.1" > "$LOG_FILE" 2>/dev/null || touch "$LOG_FILE"
         fi
@@ -83,6 +85,17 @@ if [[ ! -f "${SMALL_LOG}.1" ]]; then
     _pass "test3: no backup created when file is under threshold"
 else
     _fail "test3: spurious backup created for 5MB file"
+fi
+
+# --- Test 3b: rotation triggers when file is just over threshold (50MB + 1B) ---
+BOUNDARY_LOG="$TMPDIR_TEST/boundary.log"
+dd if=/dev/urandom of="$BOUNDARY_LOG" bs=1M count=50 2>/dev/null
+echo "x" >> "$BOUNDARY_LOG"  # add 1 byte to push past 50MB exactly
+_rotate_if_needed "$BOUNDARY_LOG" 50 10
+if [[ -f "${BOUNDARY_LOG}.1" ]]; then
+    _pass "test3b: rotation triggered for file just over threshold (50MB+1B)"
+else
+    _fail "test3b: rotation did not trigger for file just over threshold (50MB+1B)"
 fi
 
 # --- Test 4: LOG_FILE resolves to ONEX_STATE_DIR/hooks/logs/, not plugin source/install dir ---

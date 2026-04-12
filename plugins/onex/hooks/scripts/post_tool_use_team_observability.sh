@@ -57,6 +57,7 @@ HOOKS_LIB="${HOOKS_DIR}/lib"
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
     echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
+    cat
     exit 0
 fi
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/team-observability.log"
@@ -83,11 +84,11 @@ fi
 TOOL_NAME=$(printf '%s\n' "$HOOK_EVENT" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL_NAME="unknown"
 
 # --- Dedup state directory ---
-DEDUP_DIR="${HOOKS_DIR}/logs/team-observability-dedup"
+DEDUP_DIR="${ONEX_STATE_DIR}/hooks/logs/team-observability-dedup"
 mkdir -p "$DEDUP_DIR" 2>/dev/null || true
 
 # --- Failure counter for degraded-health marker ---
-HEALTH_DIR="${HOOKS_DIR}/logs/hook-health"
+HEALTH_DIR="${ONEX_STATE_DIR}/hooks/logs/hook-health"
 mkdir -p "$HEALTH_DIR" 2>/dev/null || true
 FAIL_COUNTER_FILE="${HEALTH_DIR}/team-observability-failures"
 DEGRADED_MARKER="${HEALTH_DIR}/team-observability.degraded"
