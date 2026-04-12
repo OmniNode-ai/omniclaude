@@ -586,10 +586,23 @@ def _select_handler_endpoint(
 # Conversation context helpers
 # ---------------------------------------------------------------------------
 
+def _get_int_env(name: str, default: int, *, minimum: int = 0) -> int:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is invalid; using default %d", name, raw, default)
+        return default
+    return max(value, minimum)
+
+
 # Number of recent conversation turns to include as context (configurable).
-_DEFAULT_CONTEXT_TURNS = int(os.environ.get("DELEGATION_CONTEXT_TURNS", "6"))
+# A value of 0 disables context (returns empty); negative values are clamped to 0.
+_DEFAULT_CONTEXT_TURNS = _get_int_env("DELEGATION_CONTEXT_TURNS", 6, minimum=0)
 # Total character budget for context turns (system + turns + current prompt).
-_CONTEXT_MAX_CHARS = int(os.environ.get("DELEGATION_CONTEXT_MAX_CHARS", "8000"))
+_CONTEXT_MAX_CHARS = _get_int_env("DELEGATION_CONTEXT_MAX_CHARS", 8000, minimum=0)
 
 
 def _load_recent_turns(
@@ -636,6 +649,8 @@ def _load_recent_turns(
                 if not isinstance(content, str) or not content.strip():
                     continue
                 messages.append({"role": role, "content": content})
+        if n_turns == 0:
+            return []
         return messages[-n_turns:] if len(messages) > n_turns else messages
     except Exception as exc:
         print(f"[delegation_orchestrator] WARNING: could not read transcript: {exc}", file=sys.stderr)
