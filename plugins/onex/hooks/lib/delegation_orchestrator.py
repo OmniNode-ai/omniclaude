@@ -583,6 +583,93 @@ def _select_handler_endpoint(
 
 
 # ---------------------------------------------------------------------------
+# Conversation context helpers
+# ---------------------------------------------------------------------------
+
+# Number of recent conversation turns to include as context (configurable).
+_DEFAULT_CONTEXT_TURNS = int(os.environ.get("DELEGATION_CONTEXT_TURNS", "6"))
+# Total character budget for context turns (system + turns + current prompt).
+_CONTEXT_MAX_CHARS = int(os.environ.get("DELEGATION_CONTEXT_MAX_CHARS", "8000"))
+
+
+def _load_recent_turns(
+    transcript_path: str,
+    n_turns: int = _DEFAULT_CONTEXT_TURNS,
+) -> list[dict[str, str]]:
+    """Load the last *n_turns* user/assistant pairs from the Claude Code transcript.
+
+    The transcript is a JSONL file written by Claude Code where each line is a
+    JSON object.  We look for lines with ``role`` in {``user``, ``assistant``}
+    and extract their ``content`` text.  Only the last *n_turns* messages are
+    returned (oldest first) so the LLM sees them in chronological order.
+
+    Returns an empty list when the transcript is absent, empty, or unreadable.
+    """
+    if not transcript_path:
+        return []
+    try:
+        p = Path(transcript_path)
+        if not p.is_file():
+            return []
+        messages: list[dict[str, str]] = []
+        with p.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                role = obj.get("role")
+                if role not in ("user", "assistant"):
+                    continue
+                content = obj.get("content", "")
+                # content may be a list of blocks (tool use) — extract text only.
+                if isinstance(content, list):
+                    text_parts = [
+                        block.get("text", "")
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    ]
+                    content = "\n".join(filter(None, text_parts))
+                if not isinstance(content, str) or not content.strip():
+                    continue
+                messages.append({"role": role, "content": content})
+        return messages[-n_turns:] if len(messages) > n_turns else messages
+    except Exception as exc:
+        print(f"[delegation_orchestrator] WARNING: could not read transcript: {exc}", file=sys.stderr)
+        return []
+
+
+def _apply_context_budget(
+    system_prompt: str,
+    context_turns: list[dict[str, str]],
+    current_prompt: str,
+    max_chars: int = _CONTEXT_MAX_CHARS,
+) -> list[dict[str, str]]:
+    """Trim *context_turns* so the total payload stays within *max_chars*.
+
+    System prompt and current prompt are always preserved.  Oldest turns are
+    dropped first until the budget is satisfied.
+    """
+    fixed = len(system_prompt) + len(current_prompt)
+    if fixed >= max_chars:
+        return []
+    budget = max_chars - fixed
+    kept: list[dict[str, str]] = []
+    # Walk newest-first, accumulate until budget exhausted.
+    for turn in reversed(context_turns):
+        turn_len = len(turn["content"])
+        if budget - turn_len < 0:
+            break
+        kept.append(turn)
+        budget -= turn_len
+    kept.reverse()
+    return kept
+
+
+# ---------------------------------------------------------------------------
 # LLM call
 # ---------------------------------------------------------------------------
 
@@ -596,6 +683,7 @@ def _call_llm_with_system_prompt(
     *,
     api_key: str | None = None,
     chat_completions_path: str = "/v1/chat/completions",
+    context_turns: list[dict[str, str]] | None = None,
 ) -> tuple[str, str] | None:
     """Call an LLM endpoint with a system prompt.
 
@@ -612,6 +700,9 @@ def _call_llm_with_system_prompt(
         api_key: Optional Bearer token for authenticated endpoints.
         chat_completions_path: Path appended to base URL (default
             ``/v1/chat/completions``).
+        context_turns: Optional list of recent conversation turns (user/assistant)
+            to prepend before the current prompt.  Each entry is
+            ``{"role": "user"|"assistant", "content": str}``.
 
     Returns:
         Tuple of ``(response_text, model_name)`` on success, None on any error.
@@ -634,13 +725,16 @@ def _call_llm_with_system_prompt(
             + f"\n[... prompt truncated at {_MAX_PROMPT_CHARS} chars ...]"
         )
 
+    # Build messages: system → recent context turns → current user prompt.
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if context_turns:
+        messages.extend(context_turns)
+    messages.append({"role": "user", "content": prompt})
+
     url = f"{endpoint_url}{chat_completions_path}"
     payload: dict[str, Any] = {
         "model": model_name,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ],
+        "messages": messages,
         "max_tokens": _MAX_TOKENS,
         "temperature": 0.3,
     }
@@ -959,6 +1053,7 @@ def orchestrate_delegation(
     correlation_id: str,
     emitted_at: datetime | None = None,
     cached_classification: dict[str, Any] | None = None,
+    transcript_path: str = "",
 ) -> dict[str, Any]:
     """Orchestrate delegation with task-type routing and quality gate.
 
@@ -992,6 +1087,9 @@ def orchestrate_delegation(
             Valkey cache.  When provided, skips the internal ``_classify_prompt()``
             call and uses it directly.  Expected keys: ``intent``, ``confidence``,
             ``delegatable``.
+        transcript_path: Path to the Claude Code conversation transcript JSONL.
+            When provided, the last DELEGATION_CONTEXT_TURNS messages are prepended
+            before the current prompt so the local model has conversation context.
 
     Returns:
         Dict with at minimum ``{"delegated": bool}``.
@@ -1250,6 +1348,14 @@ def orchestrate_delegation(
             )
             return {"delegated": False, "reason": "redaction_error"}
 
+        # Load conversation context from transcript and apply character budget.
+        raw_turns = _load_recent_turns(transcript_path)
+        context_turns = _apply_context_budget(system_prompt, raw_turns, redacted_prompt)
+        if raw_turns and not context_turns:
+            logger.debug("All context turns dropped by character budget")
+        elif raw_turns:
+            logger.debug("Including %d context turns in delegation payload", len(context_turns))
+
         llm_result = _call_llm_with_system_prompt(
             redacted_prompt,
             endpoint_url,
@@ -1258,6 +1364,7 @@ def orchestrate_delegation(
             timeout_s=ep.timeout_s,
             api_key=ep.api_key,
             chat_completions_path=ep.chat_completions_path,
+            context_turns=context_turns if context_turns else None,
         )
         if llm_result is None:
             latency_ms = int((time.time() - start_time) * 1000)
@@ -1447,7 +1554,7 @@ def main() -> None:
 
     Invocation:
         printf '%s' "$PROMPT_B64" | python3 delegation_orchestrator.py \\
-            --prompt-stdin <correlation_id> [session_id]
+            --prompt-stdin <correlation_id> [session_id] [--transcript-path <path>]
 
     Reads base64-encoded prompt from stdin, decodes it, and calls
     orchestrate_delegation(). Prints JSON result to stdout.
@@ -1460,18 +1567,32 @@ def main() -> None:
         print(json.dumps({"delegated": False, "reason": "missing_args"}))
         sys.exit(0)
 
-    # Expected: --prompt-stdin <correlation_id> [session_id]
+    # Expected: --prompt-stdin <correlation_id> [session_id] [--transcript-path <path>]
     if len(args) < 2:
         print(json.dumps({"delegated": False, "reason": "missing_args"}))
         sys.exit(0)
 
     correlation_id = args[1]
-    session_id = args[2] if len(args) >= 3 else ""
+    # Parse remaining positional/flag args
+    transcript_path = ""
+    session_id = ""
+    remaining = args[2:]
+    i = 0
+    while i < len(remaining):
+        if remaining[i] == "--transcript-path" and i + 1 < len(remaining):
+            transcript_path = remaining[i + 1]
+            i += 2
+        elif not remaining[i].startswith("--") and not session_id:
+            session_id = remaining[i]
+            i += 1
+        else:
+            i += 1
 
     logger.debug(
-        "delegation_orchestrator CLI invoked: correlation_id=%s session_id=%s",
+        "delegation_orchestrator CLI invoked: correlation_id=%s session_id=%s transcript=%s",
         correlation_id,
         session_id[:8] if session_id else "(empty)",
+        bool(transcript_path),
     )
 
     try:
@@ -1495,6 +1616,7 @@ def main() -> None:
             prompt=prompt,
             correlation_id=correlation_id,
             session_id=session_id,
+            transcript_path=transcript_path,
         )
     except Exception as exc:
         logger.debug("Unexpected error in orchestrate_delegation: %s", exc)

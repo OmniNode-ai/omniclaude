@@ -108,6 +108,7 @@ class TestDelegationOrchestratorCLI:
             prompt=prompt,
             correlation_id=corr_id,
             session_id="",
+            transcript_path="",
         )
         assert result == expected
 
@@ -132,6 +133,7 @@ class TestDelegationOrchestratorCLI:
             prompt=prompt,
             correlation_id=corr_id,
             session_id=session_id,
+            transcript_path="",
         )
         assert result == expected
 
@@ -214,6 +216,7 @@ class TestDelegationOrchestratorCLI:
             prompt=prompt,
             correlation_id="corr-id",
             session_id="sess-id",
+            transcript_path="",
         )
         assert result == expected
 
