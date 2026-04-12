@@ -14,7 +14,7 @@ When `/aislop-sweep [args]` is invoked:
 
 2. **Parse arguments** from `$ARGUMENTS`:
    - `--repos <list>` — default: AISLOP_REPOS constant
-   - `--checks <list>` — default: all 6 check categories
+   - `--checks <list>` — default: all 7 check categories
    - `--dry-run` — default: false
    - `--ticket` — default: false
    - `--auto-fix` — default: false
@@ -100,6 +100,36 @@ grep -rn "TODO\|FIXME\|HACK" \
   src/ 2>/dev/null || true
 ```
 
+**hardcoded-paths** (ERROR in src/scripts/ — no env var override; WARNING if env var fallback present):
+
+Scan all source and script files for machine-specific absolute paths hardcoded as runtime defaults.
+```bash
+# Pattern 1: /Volumes/<name>/ string literals (macOS external volumes)
+rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
+  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
+  -n '"/Volumes/[A-Za-z]' src/ scripts/ 2>/dev/null || true
+
+# Pattern 2: /Users/<name>/ string literals (macOS home dirs)
+rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
+  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
+  -n '"/Users/[a-z]' src/ scripts/ 2>/dev/null || true
+
+# Pattern 3: LAN IP defaults (192.168.86.x) not preceded by os.environ / process.env / getenv
+rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
+  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
+  -n '192\.168\.86\.' src/ scripts/ 2>/dev/null || true
+```
+
+**Allowlist** — skip lines containing any of:
+- `# local-path-ok` — explicitly annotated as machine-local
+- `# onex-allow-internal-ip` — explicitly approved LAN IP usage
+- `# kafka-fallback-ok` — Kafka broker fallback, tracked separately
+- Lines inside `tests/`, `docs/`, `*.md`, `.env.example`, lock files
+
+**Post-filter** (hardcoded-paths severity):
+- Line contains `os.environ.get(` or `os.getenv(` or `process.env.` before the literal → WARNING (has env var fallback but wrong default)
+- Otherwise → ERROR (no env var escape hatch at all)
+
 ## Phase 2: Triage
 
 For each finding, create a `ModelSweepFinding`:
@@ -126,6 +156,8 @@ Apply triage rules:
 - `compat-shims`: WARNING, MEDIUM, ticketable=false
 - `empty-impls`: WARNING, MEDIUM, ticketable=false
 - `todo-fixme`: INFO, LOW, ticketable=false
+- `hardcoded-paths` ERROR (no env var): ERROR, HIGH, autofixable=false, ticketable=true
+- `hardcoded-paths` WARNING (env var fallback with bad default): WARNING, MEDIUM, autofixable=false, ticketable=true
 
 **Fingerprint**: `f"{repo}:{path}:{check}:{str(line // 10 * 10)}"`
 
@@ -196,6 +228,7 @@ Emit ModelSkillResult:
     "compat-shims": 0,
     "prohibited-patterns": 0,
     "hardcoded-topics": 0,
+    "hardcoded-paths": 0,
     "todo-fixme": 0,
     "empty-impls": 0
   },
