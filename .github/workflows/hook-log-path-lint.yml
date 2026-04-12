@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Hook Log Path Lint
+
+# Layer 3 defense (OMN-8429 / plugin-runtime-architecture.md §11):
+# Blocks any hook script that derives a state path from PLUGIN_ROOT, HOOKS_DIR, or SCRIPT_DIR.
+# State must always resolve from ONEX_STATE_DIR. This lint is mandatory and blocking.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/onex/hooks/scripts/**'
+  merge_group:
+
+jobs:
+  hook-log-path-lint:
+    name: Hook Log Path Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check hook scripts do not derive state paths from plugin tree
+        run: |
+          # Scripts fully migrated to ONEX_STATE_DIR (must stay at 0 violations):
+          CLEAN_SCRIPTS=(
+            "plugins/onex/hooks/scripts/post-tool-use-quality.sh"
+          )
+          # Known pre-existing violations tracked in OMN-8429 Phase 1 backlog.
+          # These are excluded from this gate; they must not increase.
+          # TODO: migrate remaining scripts and remove exclusions (OMN-8429).
+          KNOWN_VIOLATION_COUNT=10
+
+          FAIL=0
+          for script in "${CLEAN_SCRIPTS[@]}"; do
+            MATCHES=$(grep -En '(LOG_FILE|STATE_DIR|LOG_DIR)\s*=.*\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)' "$script" 2>/dev/null || true)
+            if [[ -n "$MATCHES" ]]; then
+              echo "ERROR: $script must not derive state paths from plugin tree:"
+              echo "$MATCHES"
+              FAIL=1
+            fi
+          done
+
+          # Count total violations across all scripts; fail if count exceeds known baseline
+          TOTAL=$(grep -rEc '(LOG_FILE|STATE_DIR|LOG_DIR)\s*=.*\$\{?(PLUGIN_ROOT|HOOKS_DIR|SCRIPT_DIR)' \
+            plugins/onex/hooks/scripts/ 2>/dev/null | awk -F: '{sum+=$2} END{print sum+0}')
+          if [[ "$TOTAL" -gt "$KNOWN_VIOLATION_COUNT" ]]; then
+            echo "ERROR: Hook log path violations increased from baseline $KNOWN_VIOLATION_COUNT to $TOTAL."
+            echo "New violations were added. Fix them before merging."
+            FAIL=1
+          fi
+
+          if [[ "$FAIL" -eq 1 ]]; then
+            echo ""
+            echo "State paths must use ONEX_STATE_DIR / ONEX_HOOKS_STATE_DIR, never PLUGIN_ROOT/HOOKS_DIR/SCRIPT_DIR."
+            exit 1
+          fi
+
+          echo "Hook log path lint: PASS (clean scripts clean; total violations=$TOTAL <= baseline $KNOWN_VIOLATION_COUNT)"

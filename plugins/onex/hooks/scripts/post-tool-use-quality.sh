@@ -34,11 +34,14 @@ HOOKS_LIB="${HOOKS_DIR}/lib"
 
 # --- Log path: ONEX_STATE_DIR/logs/ [OMN-8429] ---
 # Logs must never accumulate inside the plugin source or install directory.
-# ONEX_STATE_DIR is a stable, externally-configured runtime path (set in settings.json env)
-# that is independent of where the plugin script lives.  Fall back to ~/.onex_state if unset.
-_ONEX_LOG_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs"
-LOG_FILE="${_ONEX_LOG_DIR}/post-tool-use.log"
-unset _ONEX_LOG_DIR
+# ONEX_STATE_DIR must be set in settings.json env (via OMNI_HOME). No fallback to ~/.onex_state:
+# a silent fallback would write state invisible to cross-machine tooling (no-informational-gates policy).
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+        >> /tmp/onex-hook-error.log
+    exit 0
+fi
+LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/post-tool-use.log"
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."

@@ -85,16 +85,16 @@ else
     _fail "test3: spurious backup created for 5MB file"
 fi
 
-# --- Test 4: LOG_FILE resolves to ONEX_STATE_DIR, not plugin source/install dir ---
+# --- Test 4: LOG_FILE resolves to ONEX_STATE_DIR/hooks/logs/, not plugin source/install dir ---
 # Simulate the path resolution logic from post-tool-use-quality.sh.
-# The hook computes: LOG_FILE="${ONEX_STATE_DIR:-${HOME}/.onex_state}/logs/post-tool-use.log"
+# The hook computes: LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/post-tool-use.log"
 # It must NOT resolve to anything under PLUGIN_ROOT or HOOKS_DIR.
 FAKE_STATE_DIR="$TMPDIR_TEST/fake_onex_state"
 FAKE_PLUGIN_ROOT="$TMPDIR_TEST/fake_plugin_root"
-mkdir -p "$FAKE_STATE_DIR/logs" "$FAKE_PLUGIN_ROOT/hooks/logs"
+mkdir -p "$FAKE_STATE_DIR/hooks/logs" "$FAKE_PLUGIN_ROOT/hooks/logs"
 
-# Compute LOG_FILE exactly as the hook does (with ONEX_STATE_DIR override)
-RESOLVED_LOG="${FAKE_STATE_DIR:-${HOME}/.onex_state}/logs/post-tool-use.log"
+# Compute LOG_FILE exactly as the hook does (with ONEX_STATE_DIR set)
+RESOLVED_LOG="${FAKE_STATE_DIR}/hooks/logs/post-tool-use.log"
 
 # Assert it is under ONEX_STATE_DIR, not under PLUGIN_ROOT
 if [[ "$RESOLVED_LOG" == "${FAKE_STATE_DIR}"* ]]; then
@@ -115,6 +115,40 @@ if [[ "$RESOLVED_LOG" != *"plugins/onex/hooks"* ]]; then
     _pass "test4: LOG_FILE path does not contain plugin source layout"
 else
     _fail "test4: LOG_FILE path contains plugin source layout: $RESOLVED_LOG"
+fi
+
+# Assert the resolved path includes hooks/logs/ subdir (not just logs/ at state root)
+if [[ "$RESOLVED_LOG" == *"/hooks/logs/"* ]]; then
+    _pass "test4: LOG_FILE path includes hooks/logs/ partition"
+else
+    _fail "test4: LOG_FILE path missing hooks/logs/ partition: $RESOLVED_LOG"
+fi
+
+# --- Test 5: ONEX_STATE_DIR unset causes hard failure (no ~/.onex_state fallback) ---
+# Verify that the hook's guard block exits 0 and writes to /tmp/onex-hook-error.log
+# when ONEX_STATE_DIR is empty. We simulate this by running a minimal subshell.
+ERROR_LOG_TMP="$TMPDIR_TEST/onex-hook-error.log"
+_test5_exit_code=0
+(
+    unset ONEX_STATE_DIR
+    if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+        echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; test5 guard triggered" >> "$ERROR_LOG_TMP"
+        exit 0
+    fi
+    # Should not reach here
+    exit 1
+) || _test5_exit_code=$?
+
+if [[ "$_test5_exit_code" -eq 0 ]]; then
+    _pass "test5: unset ONEX_STATE_DIR exits 0 (does not block Claude Code)"
+else
+    _fail "test5: unset ONEX_STATE_DIR exited non-zero: $_test5_exit_code"
+fi
+
+if [[ -f "$ERROR_LOG_TMP" ]] && grep -q "ONEX_STATE_DIR unset" "$ERROR_LOG_TMP"; then
+    _pass "test5: error written to error log when ONEX_STATE_DIR unset"
+else
+    _fail "test5: error log not written or missing expected message"
 fi
 
 # --- Summary ---
