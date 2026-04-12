@@ -31,7 +31,17 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/post-tool-use.log"
+
+# --- Log path: ONEX_STATE_DIR/logs/ [OMN-8429] ---
+# Logs must never accumulate inside the plugin source or install directory.
+# ONEX_STATE_DIR must be set in settings.json env (via OMNI_HOME). No fallback to ~/.onex_state:
+# a silent fallback would write state invisible to cross-machine tooling (no-informational-gates policy).
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+        >> /tmp/onex-hook-error.log
+    exit 0
+fi
+LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/post-tool-use.log"
 
 # Detect project root
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
@@ -45,6 +55,26 @@ fi
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
+
+# --- Log rotation guard [OMN-8429] ---
+# Trim-in-place when log exceeds ONEX_HOOK_LOG_MAX_MB (default 50MB).
+# Keeps the most recent ONEX_HOOK_LOG_KEEP_MB (default 10MB) in $LOG_FILE
+# and stashes the rest as ${LOG_FILE}.1. Shell-native only; fast path when
+# file is under threshold (single stat + arithmetic, no I/O).
+_HOOK_LOG_MAX_MB="${ONEX_HOOK_LOG_MAX_MB:-50}"
+_HOOK_LOG_KEEP_MB="${ONEX_HOOK_LOG_KEEP_MB:-10}"
+[[ "$_HOOK_LOG_MAX_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_MAX_MB=50
+[[ "$_HOOK_LOG_KEEP_MB" =~ ^[0-9]+$ ]] || _HOOK_LOG_KEEP_MB=10
+if [[ -f "$LOG_FILE" ]]; then
+    _log_size_bytes=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    _log_max_bytes=$(( _HOOK_LOG_MAX_MB * 1024 * 1024 ))
+    if [[ "$_log_size_bytes" -gt "$_log_max_bytes" ]]; then
+        mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+        tail -c $(( _HOOK_LOG_KEEP_MB * 1024 * 1024 )) "${LOG_FILE}.1" > "$LOG_FILE" 2>/dev/null || touch "$LOG_FILE"
+    fi
+    unset _log_size_bytes _log_max_bytes
+fi
+unset _HOOK_LOG_MAX_MB _HOOK_LOG_KEEP_MB
 
 # Guard: jq is required for JSON processing throughout this hook.
 # If unavailable, exit 0 immediately so the hook never blocks the developer.

@@ -563,7 +563,7 @@ emit_via_daemon() {
     local event_type="$1"
     local payload="$2"
     local timeout_ms="${3:-50}"
-    local health_dir="${HOOKS_DIR}/logs/emit-health"
+    local health_dir="${ONEX_STATE_DIR}/hooks/logs/emit-health"
     # Status file is keyed per event_type so failure counters are isolated.
     # A sanitized form of event_type is used to produce a safe filename.
     local _safe_event_type
@@ -754,7 +754,7 @@ _try_restart_emit_daemon() {
     nohup "$PYTHON_CMD" -m omniclaude.publisher start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
         --socket-path "$socket_path" \
-        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+        >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!
     log "Emit daemon: Respawned with PID $daemon_pid, socket: $socket_path"

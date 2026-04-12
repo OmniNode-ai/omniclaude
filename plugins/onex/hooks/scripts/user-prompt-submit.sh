@@ -27,7 +27,14 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/hook-enhanced.log"
+
+# --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+        >> /tmp/onex-hook-error.log
+    exit 0
+fi
+LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/hook-enhanced.log"
 
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
@@ -398,7 +405,7 @@ fi
 # Emit Health Check: Surface persistent failures
 # -----------------------------
 EMIT_HEALTH_WARNING=""
-_EMIT_STATUS="${HOOKS_DIR}/logs/emit-health/status"
+_EMIT_STATUS="${ONEX_STATE_DIR}/hooks/logs/emit-health/status"
 if [[ -f "$_EMIT_STATUS" ]]; then
     # Single read splits all 4 whitespace-delimited fields from the status file
     # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
