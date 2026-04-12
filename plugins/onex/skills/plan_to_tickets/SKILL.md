@@ -113,11 +113,18 @@ If file doesn't exist, report error and stop.
 **Detection Cascade:**
 1. If `## Task N:` sections exist → use them (`task_sections`, canonical)
 2. Else if `## Phase N:` sections exist → use them (`phase_sections`, legacy alias)
-3. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
-4. Else if `## Step N:` headings exist → use them (`step_sections`)
-5. Else if flat checklist items exist → use them (`flat_tasks`)
+3. Else if `§N` or `§N.x` headings exist → use them (`section_headings`) [OMN-8491]
+4. Else if generic numbered `## N.` headings exist → use them (`numbered_h2`)
+5. Else if `## Step N:` headings exist → use them (`step_sections`)
+6. Else if flat checklist items exist → use them (`flat_tasks`)
 
 If none match → fail fast: `"Plans must use ## Task N: headings. Use design-to-plan."`
+
+**§ heading format** (`section_headings`):
+- `§1 Title text` or `§1.2 Sub-section title`
+- Numbers normalize to `P1`, `P1_2` (dots → underscores)
+- Content spans to the next `§` heading or end of file
+- Dependencies parsed from `Dependencies:` / `Depends on:` lines, same as Task/Phase arms
 
 ```python
 import re
@@ -198,6 +205,46 @@ def detect_structure(content: str, source_path: str | None = None) -> ModelPlanD
 
     if phase_matches:
         return _extract_numbered_entries(phase_matches, 'Phase', 'phase_sections')
+
+    # Try § headings (OMN-8491): §1 Title or §1.2 Title
+    SECTION_RE = re.compile(r'^§(\d+(?:\.\d+)*)\s+(.*)', re.MULTILINE)
+    section_matches = list(SECTION_RE.finditer(content))
+
+    if section_matches:
+        entries = []
+        for i, match in enumerate(section_matches):
+            num = match.group(1)
+            entry_id = num.replace('.', '_')
+            title = f'§{num} {match.group(2).strip()}'
+
+            start = match.end()
+            end = section_matches[i + 1].start() if i + 1 < len(section_matches) else len(content)
+            entry_content = content[start:end].strip()
+            deps = parse_dependencies(entry_content)
+
+            entries.append({
+                'id': f'P{entry_id}',
+                'title': title,
+                'content': entry_content,
+                'dependencies': deps,
+            })
+
+        # Duplicate ID check
+        seen_ids = {}
+        for entry in entries:
+            if entry['id'] in seen_ids:
+                raise ValueError(
+                    f"Duplicate section ID '{entry['id']}' found. "
+                    f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
+                    "Fix plan file to use unique numbers."
+                )
+            seen_ids[entry['id']] = entry['title']
+
+        return ModelPlanDocument(
+            structure_type=EnumPlanStructureType('section_headings'),
+            entries=entries,
+            source_path=source_path,
+        )
 
     # Try Milestone table (legacy fallback)
     # Expected format: | **M1** | Deliverable | Dependencies |
