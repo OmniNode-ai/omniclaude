@@ -209,8 +209,8 @@ Write `sweep_results.json`:
         {
             "name": "registration",
             "status": "pass",
-            "publish_ms": 12.3,
-            "projection_ms": 234.5,
+            "publish_latency_ms": 12.3,
+            "projection_latency_ms": 234.5,
             "assertions_passed": 2,
             "assertions_failed": 0
         }
@@ -220,8 +220,8 @@ Write `sweep_results.json`:
 
 2. **Database** (if available):
 ```sql
-INSERT INTO golden_chain_sweep_results (sweep_id, chain_name, status, publish_ms, projection_ms, created_at)
-VALUES ('$SWEEP_ID', '$CHAIN_NAME', '$STATUS', $PUBLISH_MS, $PROJECTION_MS, NOW());
+INSERT INTO golden_chain_sweep_results (sweep_id, chain_name, status, publish_latency_ms, projection_latency_ms, created_at)
+VALUES ('$SWEEP_ID', '$CHAIN_NAME', '$STATUS', $PUBLISH_LATENCY_MS, $PROJECTION_LATENCY_MS, NOW());
 ```
 
 ---
