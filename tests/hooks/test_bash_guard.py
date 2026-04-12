@@ -964,7 +964,7 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
 
     def test_worktree_add_returns_advisory(self) -> None:
         out, code = self._run(
-            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-TEST/repo feat/my-branch"
         )
         self.assertEqual(code, 0)
         data = json.loads(out)
@@ -972,7 +972,7 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
 
     def test_advisory_mentions_precommit_install(self) -> None:
         out, _ = self._run(
-            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-TEST/repo feat/my-branch"
         )
         data = json.loads(out)
         self.assertIn("pre-commit install", data["advisory"])
@@ -980,7 +980,7 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
     def test_advisory_mentions_bypass_path(self) -> None:
         """Advisory should distinguish raw git worktree add from the managed path."""
         out, _ = self._run(
-            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo feat/my-branch"  # local-path-ok
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-TEST/repo feat/my-branch"
         )
         msg = json.loads(out)["advisory"].lower()
         self.assertTrue(
@@ -1005,7 +1005,7 @@ class TestWorktreeAddAdvisory(unittest.TestCase):
 
     def test_advisory_exit_code_is_0(self) -> None:
         _, code = self._run(
-            "git -C /some/repo worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-TEST/repo branch"  # local-path-ok
+            f"git -C /some/repo worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-TEST/repo branch"
         )
         self.assertEqual(code, 0)
 
