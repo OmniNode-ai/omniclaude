@@ -1,0 +1,5 @@
+# Source tree — do not auto-load hooks from this directory.
+# Hooks must run from the installed cache: ~/.claude/plugins/cache/omninode-tools/onex/<version>/
+# This sentinel is a best-effort Layer 2 suppression (see plugin-runtime-architecture.md §11).
+# Its effect is unconfirmed pending Claude Code discovery API documentation.
+# Layer 1 (ONEX_STATE_DIR path decoupling) is the primary enforced defense.
