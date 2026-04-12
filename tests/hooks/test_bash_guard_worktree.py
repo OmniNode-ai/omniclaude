@@ -62,7 +62,7 @@ class TestWorktreePathEnforcement:
         """git worktree add to canonical path is allowed."""
         stdout, code = _run_main(
             _bash_input(
-                "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-1234/repo -b test-branch"  # local-path-ok
+                f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1234/repo -b test-branch"
             )
         )
         assert code == 0
@@ -106,7 +106,7 @@ class TestWorktreePathEnforcement:
     def test_check_worktree_path_allows_canonical(self) -> None:
         """_check_worktree_path returns None for valid canonical path."""
         result = bash_guard._check_worktree_path(
-            "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-99/repo -b feat"  # local-path-ok
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-99/repo -b feat"
         )
         assert result is None
 
@@ -154,7 +154,7 @@ class TestWorktreeFalsePositives:
         """Actual git worktree add to canonical path is still allowed."""
         stdout, code = _run_main(
             _bash_input(
-                "git worktree add /Volumes/PRO-G40/Code/omni_worktrees/OMN-1234/repo -b feat"  # local-path-ok
+                f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1234/repo -b feat"
             )
         )
         assert code == 0
