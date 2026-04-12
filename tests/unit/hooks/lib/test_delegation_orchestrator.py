@@ -1833,7 +1833,7 @@ class TestLoadRecentTurns:
         transcript.write_text(
             '{"type": "tool_use", "role": "user", "content": ""}\n'
             '{"role": "user", "content": "real message"}\n'
-            'not-json-at-all\n'
+            "not-json-at-all\n"
             '{"role": "assistant", "content": "response"}\n'
         )
         turns = do._load_recent_turns(str(transcript))

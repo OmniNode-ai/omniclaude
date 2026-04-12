@@ -961,9 +961,7 @@ class TestClaudeHookEventEmission:
             assert result.topic == TopicBase.CLAUDE_HOOK_EVENT
             # Verify the topic was passed to publish
             call_kwargs = mock_bus.publish.call_args.kwargs
-            assert (
-                call_kwargs["topic"] == TopicBase.CLAUDE_HOOK_EVENT
-            )
+            assert call_kwargs["topic"] == TopicBase.CLAUDE_HOOK_EVENT
 
     @pytest.mark.asyncio
     async def test_emit_claude_hook_event_publish_failure(self) -> None:
