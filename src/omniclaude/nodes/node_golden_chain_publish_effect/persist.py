@@ -76,7 +76,7 @@ async def persist_sweep_results(
                     status,
                     result.publish_latency_ms,
                     result.projection_latency_ms,
-                    json.dumps(result.assertion_results),
+                    json.dumps(result.assertion_results, default=str),
                     result.error_reason,
                     result.correlation_id,
                 ),
