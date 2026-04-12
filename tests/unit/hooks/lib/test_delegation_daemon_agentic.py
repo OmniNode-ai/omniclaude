@@ -277,3 +277,62 @@ class TestAgenticDispatch:
             data = json.loads(resp)
             assert data.get("agentic_dispatched") is True
             assert "job_id" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: agentic quality gate non-blocking (OMN-8548)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestAgenticQualityGateNonBlocking:
+    """Quality gate failures annotate but do not block agentic result delivery."""
+
+    _long_content = (
+        "The delegation system in omniclaude uses a ReAct-style agentic loop "
+        "that iteratively calls the local LLM with tool definitions. "
+        "See delegation_daemon.py:line 197 for the run loop implementation."
+    )
+
+    def _make_completed_job(self, content: str = "") -> AgenticJob:
+        fake_result = MagicMock()
+        fake_result.content = content or self._long_content
+        fake_result.iterations = 3
+        fake_result.tool_calls_count = 5
+        fake_result.tool_names_used = {"read_file", "search_content"}
+        fake_result.status = MagicMock(value="success")
+
+        job = AgenticJob(job_id="qg1", session_id="session-1", prompt="test")
+        job.status = AgenticJobStatus.COMPLETED
+        job.result = fake_result
+        job.completed_at = time.monotonic()
+        return job
+
+    def test_gate_pass_returns_agentic_completed_true(self) -> None:
+        """Happy path: gate passes, result delivered with agentic_completed=True."""
+        job = self._make_completed_job()
+        with _agentic_jobs_lock:
+            _agentic_jobs["qg1"] = job
+
+        result = _poll_agentic_jobs("session-1")
+
+        assert result["agentic_completed"] is True
+        assert result["content"] == self._long_content
+        assert "quality_gate_reason" not in result
+
+    def test_gate_fail_still_returns_agentic_completed_true(self) -> None:
+        """Gate failure must annotate result but NOT block delivery (non-blocking)."""
+        gate_fail = MagicMock()
+        gate_fail.passed = False
+        gate_fail.reason = "insufficient tool calls: 0 < 1"
+
+        job = self._make_completed_job()
+        with _agentic_jobs_lock:
+            _agentic_jobs["qg1"] = job
+
+        with patch.object(_mod, "check_agentic_quality", return_value=gate_fail):
+            result = _poll_agentic_jobs("session-1")
+
+        assert result["agentic_completed"] is True
+        assert result.get("quality_gate_reason") == "insufficient tool calls: 0 < 1"
+        assert "qg1" not in _agentic_jobs

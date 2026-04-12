@@ -378,9 +378,8 @@ class TestFailurePath3QualityGateRejection:
         with _agentic_jobs_lock:
             _agentic_jobs["gate-fail"] = job
         poll_result = _poll_agentic_jobs("gate-session")
-        assert poll_result.get("agentic_completed") is not True or poll_result.get(
-            "quality_gate_failed"
-        )
+        assert poll_result.get("agentic_completed") is True
+        assert poll_result.get("quality_gate_reason")
         assert "gate-fail" not in _agentic_jobs
 
 
