@@ -15,9 +15,9 @@ from omniclaude.nodes.node_golden_chain_payload_compute.node import build_payloa
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 # Chains that use correlation_id as DB lookup column
-_CORR_ID_CHAINS = {"registration", "delegation", "routing"}
+_CORR_ID_CHAINS = {"registration", "delegation", "routing", "evaluation"}
 # Chains that use an alternate lookup column (no correlation_id in DB)
-_ALT_LOOKUP_CHAINS = {"pattern_learning", "evaluation"}
+_ALT_LOOKUP_CHAINS = {"pattern_learning"}
 
 
 class TestChainRegistry:
