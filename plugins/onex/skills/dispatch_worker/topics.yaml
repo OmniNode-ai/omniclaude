@@ -1,0 +1,5 @@
+publish:
+  - onex.cmd.omnimarket.dispatch-worker-compile.v1
+
+subscribe:
+  - onex.evt.omnimarket.dispatch-worker-compiled.v1
