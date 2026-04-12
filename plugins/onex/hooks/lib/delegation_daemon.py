@@ -80,10 +80,12 @@ except ImportError:  # pragma: no cover
 
 try:
     from delegation_orchestrator import (  # type: ignore[import-not-found]
+        _emit_delegation_event,
         orchestrate_delegation,
     )
 except ImportError:  # pragma: no cover
     orchestrate_delegation = None  # type: ignore[assignment]
+    _emit_delegation_event = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Agentic loop import (after path setup)
@@ -131,6 +133,7 @@ class AgenticJob:
     job_id: str
     session_id: str
     prompt: str
+    correlation_id: str = ""
     started_at: float = field(default_factory=time.monotonic)
     completed_at: float | None = None
     status: AgenticJobStatus = AgenticJobStatus.RUNNING
@@ -172,6 +175,7 @@ def _start_agentic_job(
     system_prompt: str,
     endpoint_url: str,
     working_dir: str | None = None,
+    correlation_id: str = "",
 ) -> str:
     """Start an agentic loop in a background thread and return the job ID.
 
@@ -181,12 +185,18 @@ def _start_agentic_job(
         system_prompt: System prompt for the agentic LLM.
         endpoint_url: Base URL of the LLM endpoint.
         working_dir: Optional working directory for tool operations.
+        correlation_id: Correlation ID for distributed tracing.
 
     Returns:
         A unique job_id string.
     """
     job_id = str(uuid.uuid4())[:8]
-    job = AgenticJob(job_id=job_id, session_id=session_id, prompt=prompt)
+    job = AgenticJob(
+        job_id=job_id,
+        session_id=session_id,
+        prompt=prompt,
+        correlation_id=correlation_id,
+    )
 
     with _agentic_jobs_lock:
         _agentic_jobs[job_id] = job
@@ -268,8 +278,23 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                             "agentic_quality_gate raised for job %s: %s", job_id, exc
                         )
 
-                # Remove job after delivery
+                # Remove job after delivery and emit terminal success event
+                latency_ms = int((time.monotonic() - job.started_at) * 1000)
                 del _agentic_jobs[job_id]
+                if _emit_delegation_event is not None:
+                    _emit_delegation_event(
+                        session_id=job.session_id,
+                        correlation_id=job.correlation_id,
+                        task_type="agentic",
+                        handler_name="agentic_loop",
+                        model_name="agentic",
+                        quality_gate_passed=not bool(quality_gate_reason),
+                        quality_gate_reason=quality_gate_reason,
+                        delegation_success=True,
+                        savings_usd=0.0,
+                        latency_ms=latency_ms,
+                        emitted_at=datetime.now(UTC),
+                    )
                 completed: dict[str, Any] = {
                     "agentic_completed": True,
                     "job_id": job_id,
@@ -283,7 +308,22 @@ def _poll_agentic_jobs(session_id: str) -> dict[str, Any]:
                 return completed
             if job.status == AgenticJobStatus.FAILED:
                 error = job.error or "unknown"
+                latency_ms = int((time.monotonic() - job.started_at) * 1000)
                 del _agentic_jobs[job_id]
+                if _emit_delegation_event is not None:
+                    _emit_delegation_event(
+                        session_id=job.session_id,
+                        correlation_id=job.correlation_id,
+                        task_type="agentic",
+                        handler_name="agentic_loop",
+                        model_name="agentic",
+                        quality_gate_passed=False,
+                        quality_gate_reason=error,
+                        delegation_success=False,
+                        savings_usd=0.0,
+                        latency_ms=latency_ms,
+                        emitted_at=datetime.now(UTC),
+                    )
                 return {
                     "agentic_completed": False,
                     "job_id": job_id,
@@ -508,6 +548,7 @@ def _handle_request(data: bytes) -> bytes:
                     prompt=agentic_prompt,
                     system_prompt=system_prompt,
                     endpoint_url=endpoint_url,
+                    correlation_id=correlation_id,
                 )
                 return json.dumps(
                     {
