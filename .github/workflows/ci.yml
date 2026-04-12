@@ -2095,16 +2095,15 @@ jobs:
         working-directory: onex_change_control
         run: uv sync --all-extras
 
-      - name: Validate contract YAML files
+      - name: Run contract compliance check
         working-directory: onex_change_control
         run: |
-          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -name "OMN-*.yaml" 2>/dev/null)
-          if [ -z "$CONTRACTS" ]; then
-            echo "No contract YAML files found — skipping validation"
-            exit 0
-          fi
-          uv run validate-yaml $CONTRACTS
+          uv run python scripts/ci/run_contract_compliance_check.py \
+            --pr ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --contracts-dir contracts
         env:
+          EMERGENCY_BYPASS: ${{ secrets.EMERGENCY_BYPASS || '' }}
           GH_TOKEN: ${{ github.token }}
 
   ci-summary:
