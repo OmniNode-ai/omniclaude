@@ -128,13 +128,6 @@ class TopicBase(StrEnum):
     EPIC_STATUS = "onex.evt.omniclaude.epic-status.v1"
 
     # ==========================================================================
-    # Agent inbox directed topic base (OMN-8634)
-    # Directed messages use a dynamic topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
-    # Use build_agent_inbox_directed_topic(agent_id) to construct the full topic name.
-    # ==========================================================================
-    AGENT_INBOX_DIRECTED_BASE = "onex.evt.omniclaude.agent-inbox"  # noqa: arch-topic-naming
-
-    # ==========================================================================
     # Personality logging telemetry topics (OMN-3294)
     # Lifecycle: Telemetry (best-effort, may be sampled) — governed by
     #            node_personality_logging_effect/contract.yaml
@@ -687,11 +680,16 @@ def build_topic(base: str) -> str:
     return base
 
 
+# Base prefix for per-agent directed inbox topics (OMN-8634).
+# Not a TopicBase member — not a full canonical topic name.
+# Full topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
+AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"
+
+
 def build_agent_inbox_directed_topic(agent_id: str) -> str:
     """Return the directed agent inbox topic for a specific agent.
 
     Directed inbox topics are per-agent: ``onex.evt.omniclaude.agent-inbox.{agent_id}.v1``.
-    Uses ``TopicBase.AGENT_INBOX_DIRECTED_BASE`` as the canonical prefix.
 
     Args:
         agent_id: The agent identifier to embed in the topic name.
@@ -704,4 +702,4 @@ def build_agent_inbox_directed_topic(agent_id: str) -> str:
         'onex.evt.omniclaude.agent-inbox.agent-001.v1'
     """
     agent_id = _validate_topic_segment(agent_id, "agent_id")
-    return f"{TopicBase.AGENT_INBOX_DIRECTED_BASE}.{agent_id}.v1"
+    return f"{AGENT_INBOX_DIRECTED_BASE}.{agent_id}.v1"
