@@ -74,6 +74,7 @@ import re
 import sys
 import threading
 import urllib.request
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Validator catch event emission (OMN-5549)
@@ -364,8 +365,8 @@ CONTEXT_ADVISORY_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 CANONICAL_WORKTREE_ROOT = os.environ.get(
-    "ONEX_WORKTREES_ROOT", "/Volumes/PRO-G40/Code/omni_worktrees"
-)  # local-path-ok: override via ONEX_WORKTREES_ROOT for non-primary machines
+    "ONEX_WORKTREES_ROOT", str(Path.home() / "Code" / "omni_worktrees")
+)
 
 
 def _check_worktree_path(command: str) -> str | None:
