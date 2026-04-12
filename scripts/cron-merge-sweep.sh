@@ -33,7 +33,10 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-OMNI_HOME="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok: script runs on local machine only
+# Resolve OMNI_HOME: prefer env var, fall back to resolving relative to script location
+# Script lives at omni_home/omniclaude/scripts/cron-merge-sweep.sh → two levels up
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+OMNI_HOME="${OMNI_HOME:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 STATE_DIR="${OMNI_HOME}/.onex_state/merge-sweep-results"
 LOG_DIR="/tmp/merge-sweep-logs"
 PHASE_TIMEOUT=900  # 15 minutes — merge-sweep can be slow with polish
@@ -89,7 +92,7 @@ preflight() {
   local missing=()
 
   if ! command -v claude &>/dev/null; then
-    missing+=("claude CLI")
+    missing+=("claude CLI (ensure ~/.local/bin is in PATH)")
   fi
 
   # Auth is handled by the claude CLI (OAuth session or API key).
@@ -256,6 +259,7 @@ EOF
 # ===========================================================================
 
 log "=== Merge-sweep run ${RUN_ID} starting ==="
+log "OMNI_HOME: ${OMNI_HOME}"
 log "State dir: ${STATE_DIR}"
 log "Sweep args:${SWEEP_ARGS:- (none)}"
 

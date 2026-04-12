@@ -1,5 +1,5 @@
 ---
-description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, agent-left TODO/FIXME markers, and empty implementations.
+description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, hardcoded absolute paths and LAN IPs, agent-left TODO/FIXME markers, and empty implementations.
 version: 3.0.0
 mode: full
 level: advanced
@@ -18,7 +18,7 @@ args:
     description: "Comma-separated repo names (default: all supported repos)"
     required: false
   - name: --checks
-    description: "Comma-separated check categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,todo-fixme,todo-stale,empty-impls (default: all)"
+    description: "Comma-separated check categories: phantom-callables,compat-shims,prohibited-patterns,hardcoded-topics,hardcoded-paths,todo-fixme,todo-stale,empty-impls (default: all)"
     required: false
   - name: --dry-run
     description: Scan and report only — no tickets, no fixes
