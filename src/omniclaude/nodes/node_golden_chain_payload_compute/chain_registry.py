@@ -110,13 +110,11 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
             ),
         ),
     ),
-    # session_outcomes: no correlation_id column; lookup by session_id (PK)
+    # session_outcomes: correlation_id column added by migration 0058 (OMN-8521)
     ModelChainDefinition(
         name="evaluation",
         head_topic=TopicBase.RUN_EVALUATED,
         tail_table="session_outcomes",
-        lookup_column="session_id",
-        lookup_fixture_key="session_id",
         fixture_template={
             "outcome": "success",
             "session_id": "golden-chain-test-session",
@@ -124,7 +122,7 @@ GOLDEN_CHAIN_DEFINITIONS: tuple[ModelChainDefinition, ...] = (
         assertions=(
             ModelChainAssertion(field="outcome", op="eq", expected="success"),
             ModelChainAssertion(
-                field="session_id", op="eq", expected="__LOOKUP_VALUE__"
+                field="correlation_id", op="eq", expected="__CORRELATION_ID__"
             ),
         ),
     ),
