@@ -295,7 +295,7 @@ class TopicBase(StrEnum):
     """State update for an in-flight pr-watch session (one row per run_id in pr_watch_state)."""
 
     GATE_DECISION = "onex.evt.omniclaude.gate-decision.v1"
-    """Append-only gate outcome (ACCEPTED, REJECTED, TIMEOUT) emitted by slack-gate."""
+    """Append-only gate outcome (ACCEPTED, REJECTED, TIMEOUT) emitted by gate-aware skills."""
 
     BUDGET_CAP_HIT = "onex.evt.omniclaude.budget-cap-hit.v1"
     """Emitted when the token budget threshold is exceeded during context injection."""

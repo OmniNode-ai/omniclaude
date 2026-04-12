@@ -23,7 +23,6 @@ Parse from `$ARGUMENTS`:
 |----------|---------|-------------|
 | `--mode <mode>` | `build` | `build` or `close-out` |
 | `--autonomous` | `true` | No human gates |
-| `--require-gate` | `false` | Opt-in Slack HIGH_RISK gate before release |
 | `--reconcile-tags` | `false` | Auto-create git tags to align with pyproject.toml versions (F40) |
 
 If `--mode` is not provided, default to `build`.
@@ -794,17 +793,6 @@ Add to the autopilot argument table:
 
 Integration-sweep passed. Proceed to release.
 
-**If `--require-gate`**:
-- Post a Slack HIGH_RISK gate message:
-  ```
-  [autopilot] Integration sweep PASSED. Ready to release. Reply APPROVE to proceed.
-  ```
-- Wait for explicit APPROVE reply before continuing.
-- If not approved within timeout: record `halt` with message "Release gate timed out — no approval received."
-
-**If not `--require-gate`** (default — `--autonomous`):
-- Proceed automatically. No gate.
-
 Run:
 ```
 /release --bump patch
@@ -1238,6 +1226,5 @@ Execute end-to-end without stopping between steps unless explicitly halted by:
 - C1 (release) failure
 - C2 (redeploy) failure
 - Circuit breaker trigger (3 consecutive failures)
-- `--require-gate` timeout (C1, if opted in)
 
 Do not pause between steps to ask the user. `--require-gate` is the only opt-in pause mechanism.

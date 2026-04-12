@@ -1,11 +1,11 @@
 ---
-description: Merge a GitHub PR when all gates pass; uses Slack HIGH_RISK gate by default
+description: Merge a GitHub PR when all gates pass; proceeds automatically after CI is clean
 mode: full
 version: 1.0.0
 level: advanced
 debug: false
 category: workflow
-tags: [pr, github, merge, automation, slack-gate]
+tags: [pr, github, merge, automation]
 author: OmniClaude Team
 composable: true
 inputs:
@@ -23,7 +23,7 @@ inputs:
     required: false
   - name: gate_timeout_hours
     type: float
-    description: "Shared wall-clock budget in hours for the entire merge flow (CI readiness poll + Slack gate reply poll combined). Default: 24. If either phase exhausts this budget, the skill exits with status: timeout."
+    description: "Wall-clock budget in hours for the CI readiness poll. Default: 24. If the budget is exhausted, the skill exits with status: timeout."
     required: false
   - name: delete_branch
     type: bool
@@ -69,9 +69,8 @@ args:
 
 ## Overview
 
-Merge a GitHub PR after posting a Slack HIGH_RISK gate. A human must reply "merge" to proceed.
-Silence does NOT consent — this gate requires explicit approval. Exit when PR is merged, held,
-or timed out.
+Merge a GitHub PR after CI is clean. Proceeds automatically — no Slack approval gate.
+Exit when PR is merged or an error occurs.
 
 **Announce at start:** "I'm using the auto-merge skill to merge PR #{pr_number}."
 
@@ -119,7 +118,7 @@ message: `"CDQA gates not passed — run contract-compliance-check and verify CI
 
 ## Merge Flow (Tier-Aware)
 
-**Timeout model**: `gate_timeout_hours` is a single shared wall-clock budget for the entire flow (Steps 2 + 4 combined). A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted in either phase, the skill exits with `status: timeout`.
+**Timeout model**: `gate_timeout_hours` is the wall-clock budget for CI readiness polling. A wall-clock start time is recorded on entry; each poll checks elapsed time against this budget. If the budget is exhausted, the skill exits with `status: timeout`.
 
 ### Step 1: Fetch PR State (Tier-Aware) <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
@@ -147,28 +146,17 @@ ${CLAUDE_PLUGIN_ROOT}/_bin/pr-merge-readiness.sh --pr {pr_number} --repo {repo}
 
 ### Step 2: Poll CI Readiness <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
-Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the shared `gate_timeout_hours` budget):
+Poll CI readiness (check every 60s until `mergeStateStatus == "CLEAN"`; consumes from the `gate_timeout_hours` budget):
    - Each cycle: fetch `mergeable` and `mergeStateStatus`, log both fields:
      ```text
      [auto-merge] poll cycle {N}: mergeable={mergeable} mergeStateStatus={mergeStateStatus}
      ```
-   - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to gate
+   - `mergeStateStatus == "CLEAN"`: exit poll loop, proceed to merge
    - `mergeStateStatus == "DIRTY"`: exit immediately with `status: error`, message: "PR has merge conflicts -- resolve before retrying"
    - `mergeStateStatus == "BEHIND"`, `"BLOCKED"`, `"UNSTABLE"`, `"HAS_HOOKS"`, or `"UNKNOWN"`: continue polling
    - Poll deadline exceeded (`gate_timeout_hours` elapsed): exit with `status: timeout`, message: "CI readiness poll timed out -- mergeStateStatus never reached CLEAN"
 
-### Step 3: Post HIGH_RISK Slack Gate <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
-
-Post HIGH_RISK Slack gate (see message format below).
-
-### Step 4: Poll for Slack Reply <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
-
-Poll for Slack reply (check every 5 minutes; this phase shares the same `gate_timeout_hours` budget started in Step 2):
-   - On "merge" reply: execute merge (see Step 5)
-   - On reject/hold reply (e.g., "hold", "cancel", "no"): exit with `status: held`
-   - On budget exhausted: exit with `status: timeout`
-
-### Step 5: Execute Merge (Explicit `gh` Exception) <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
+### Step 3: Execute Merge (Explicit `gh` Exception) <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 **The merge mutation always uses `gh pr merge` directly** -- this is an explicit exception
 to the tier routing policy. Rationale: the merge is a thin CLI call (single mutation, no
@@ -182,7 +170,7 @@ gh pr merge {pr_number} --repo {repo} --{strategy} {--delete-branch if delete_br
 This exception is documented and intentional. All other PR operations (view, list, checks)
 use tier-aware routing.
 
-### Step 6: Post Merge Notification and Close Linear Ticket <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
+### Step 4: Post Merge Notification and Close Linear Ticket <!-- ai-slop-ok: genuine process step heading in skill documentation, not LLM boilerplate -->
 
 After a successful merge:
 
@@ -208,24 +196,6 @@ After a successful merge:
    (branch name extraction: `git branch --show-current | grep -ioE '(OMN|omn)-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]'`; only reliable when session is checked out on the PR branch — returns empty string if HEAD is detached)
 3. Skip update if neither resolves to a valid ID
 
-## Slack Gate Message Format
-
-```
-[HIGH_RISK] auto-merge: Ready to merge PR #{pr_number}
-
-Repo: {repo}
-PR: {pr_title}
-Strategy: {strategy}
-Branch: {branch_name}
-
-All gates passed:
-  CI: passed
-  PR Review: approved (or changes resolved)
-
-Reply "merge" to proceed. Silence = HOLD (this gate requires explicit approval).
-Gate expires in {gate_timeout_hours}h.
-```
-
 ## Skill Result Output
 
 **Output contract:** `ModelSkillResult` from `omnibase_core.models.skill`
@@ -237,7 +207,7 @@ Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json`
 | Field | Value |
 |-------|-------|
 | `skill_name` | `"auto-merge"` |
-| `status` | One of the canonical string values: `"success"`, `"gated"`, `"error"` (see mapping below) |
+| `status` | One of the canonical string values: `"success"`, `"error"` (see mapping below) |
 | `extra_status` | Domain-specific status string (see mapping below) |
 | `run_id` | Correlation ID |
 | `repo` | Repository slug (org/repo) |
@@ -252,14 +222,12 @@ Write to: `$ONEX_STATE_DIR/skill-results/{context_id}/auto_merge.json`
 | Current status | Canonical `status` (string value) | `extra_status` |
 |----------------|-----------------------------------|----------------|
 | `merged` | `"success"` (`EnumSkillResultStatus.SUCCESS`) | `"merged"` |
-| `held` | `"gated"` (`EnumSkillResultStatus.GATED`) | `"held"` |
 | `timeout` | `"error"` (`EnumSkillResultStatus.ERROR`) | `"timeout"` |
 | `error` | `"error"` (`EnumSkillResultStatus.ERROR`) | `null` |
 
 **Behaviorally significant `extra_status` values:**
 - `"merged"` → ticket-pipeline treats as SUCCESS; clears ledger, updates Linear to Done
-- `"held"` → ticket-pipeline treats as GATED; pipeline exits with `held` state (non-terminal), awaits human "merge" reply to resume
-- `"timeout"` → ticket-pipeline treats as ERROR; merge gate expired — retryable with a new pipeline run
+- `"timeout"` → ticket-pipeline treats as ERROR; CI readiness poll timed out — retryable with a new pipeline run
 
 **Promotion rule for `extra` fields:** If a field appears in 3+ producer skills, open a ticket to evaluate promotion to a first-class field. If any orchestrator consumer (epic-team, ticket-pipeline) branches on `extra["x"]`, that field MUST be promoted.
 
@@ -282,7 +250,7 @@ Example result:
 }
 ```
 
-**`ticket_id`**: The Linear ticket identifier closed in Step 6 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
+**`ticket_id`**: The Linear ticket identifier closed in Step 4 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
 
 **`extra["ticket_close_status"]`** values:
 - `"closed"`: `mcp__linear-server__save_issue` succeeded; ticket marked Done
@@ -342,7 +310,7 @@ exec claude --skill onex:auto_merge \
 
 | Invocation | Description |
 |------------|-------------|
-| `/auto-merge 123 org/repo` | Interactive: merge PR 123 with default HIGH_RISK gate (24h timeout) |
+| `/auto-merge 123 org/repo` | Interactive: merge PR 123 after CI is clean (24h timeout) |
 | `/auto-merge 123 org/repo --strategy merge` | Interactive: use merge commit strategy |
 | `Skill(skill="onex:auto_merge", args="123 org/repo --gate-timeout-hours 48")` | Programmatic: composable invocation from orchestrator |
 | `auto-merge.sh 123 org/repo --no-delete-branch` | Shell: direct invocation, keep branch after merge |
@@ -369,7 +337,6 @@ Tier detection: see `@_lib/tier-routing/helpers.md`.
 - `pr-watch` skill (runs before auto-merge; Phase 5 in ticket-pipeline)
 - `contract-compliance-check` skill (CDQA Gate 1, OMN-2978)
 - `_lib/cdqa-gate/helpers.md` (CDQA gate protocol, bypass flow, result schema — OMN-3189)
-- `slack-gate` skill (LOW_RISK/MEDIUM_RISK/HIGH_RISK gate primitives)
 - `_bin/pr-merge-readiness.sh` -- STANDALONE merge readiness backend
 - `_lib/tier-routing/helpers.md` -- tier detection and routing helpers
 - OMN-2525 -- implementation ticket

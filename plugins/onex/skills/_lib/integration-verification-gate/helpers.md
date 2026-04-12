@@ -268,7 +268,7 @@ record as an array element. The file is a JSON array of gate log records.
 
 ## Bypass Protocol
 
-A BLOCK result can only be bypassed via an explicit HIGH_RISK Slack gate. There is no
+A BLOCK result can only be bypassed via an explicit operator Slack response. There is no
 `--no-verify` flag, no silent skip, and no retry-without-fix.
 
 ### Anti-pattern: soft-pass
@@ -281,9 +281,9 @@ must be logged as `WARN`, not `PASS`. Do not retry BLOCK results to fish for a P
 
 When any node returns BLOCK:
 
-1. Post HIGH_RISK Slack gate:
+1. Post Slack notification (via _lib/slack-gate helpers):
    ```
-   [HIGH_RISK] Integration verification gate blocked for {ticket_id} PR #{pr_number}
+   [INTEGRATION BLOCK] Integration verification gate blocked for {ticket_id} PR #{pr_number}
 
    Node: {node_name}
    Result: BLOCK
@@ -343,7 +343,7 @@ by calling `get_kafka_nodes_from_pr`, `check_fixture_exists`, and `run_fixture` 
 merged PR in the wave.
 
 The post-wave check uses the same gate log schema and the same bypass protocol. If any node
-BLOCKs, the epic-team posts a `HIGH_RISK` gate and waits for an `integration-bypass` reply
+BLOCKs, the epic-team posts a Slack notification and waits for an `integration-bypass` reply
 before declaring the wave complete.
 
 ---

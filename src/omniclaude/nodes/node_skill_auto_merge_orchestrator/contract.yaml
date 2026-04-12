@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the auto-merge skill.
-  Merge a GitHub PR when all gates pass; uses Slack HIGH_RISK gate by default
+  Merge a GitHub PR when all gates pass; proceeds automatically after CI is clean
   Dispatches skill invocations to the polymorphic agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.

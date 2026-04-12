@@ -11,7 +11,6 @@ tags:
   - pypi
   - pipeline
   - cross-repo
-  - high-risk
   - org-wide
 author: OmniClaude Team
 composable: true
@@ -34,14 +33,8 @@ args:
   - name: --skip-pypi-wait
     description: "Don't block on PyPI package availability after publish"
     required: false
-  - name: --autonomous
-    description: "Skip Slack HIGH_RISK gate (intended for nightly autopilot runs)"
-    required: false
   - name: --gate-attestation
-    description: "Pre-issued gate token to bypass Slack HIGH_RISK gate"
-    required: false
-  - name: --require-gate
-    description: "Force Slack HIGH_RISK gate even when --autonomous is set"
+    description: "Pre-issued gate token for audit trail"
     required: false
   - name: --pypi-timeout-minutes
     description: "Minutes to wait for PyPI package availability after publish (default: 10)"
@@ -72,8 +65,7 @@ outputs:
 /release --all --bump patch              # All repos, patch bump
 /release --dry-run                       # Show plan, no changes
 /release --resume <run_id>               # Resume failed run
-/release --autonomous                    # Skip Slack gate (nightly)
-/release --gate-attestation <token>      # Pre-issued gate bypass
+/release --gate-attestation <token>      # Pre-issued gate token for audit trail
 ```
 
 ## Execution
@@ -84,8 +76,7 @@ outputs:
 - `--bump` → version bump level (default: inferred from conventional commits)
 - `--dry-run` → show plan table, no writes
 - `--resume <run_id>` → resume from failed phase
-- `--autonomous` → skip Slack HIGH_RISK gate (autopilot only)
-- `--gate-attestation` → pre-issued Slack gate token
+- `--gate-attestation` → pre-issued gate token for audit trail
 
 ### Step 2 — Initialize node (contract verification)
 
@@ -105,7 +96,7 @@ full migration tracked in OMN-8004.
 
 Processes repos in dependency-tier order (tier 0 → tier N):
 
-1. **GATE**: Post Slack HIGH_RISK gate (unless `--autonomous` or `--gate-attestation`)
+1. **GATE**: Validate gate attestation (if provided) or proceed automatically
 2. **BUMP**: For each repo — infer or apply version bump; update `pyproject.toml` + `__version__`
 3. **PIN**: Update cross-repo dependency pins in downstream repos
 4. **PR**: Create release PR per repo via `gh pr create`; enable auto-merge
@@ -121,8 +112,7 @@ Write `ModelSkillResult` to `$ONEX_STATE_DIR/skill-results/{context_id}/release.
 
 ## Safety
 
-- Slack HIGH_RISK gate required by default (bypass only with `--autonomous` or `--gate-attestation`)
-- Silence never advances the HIGH_RISK gate; explicit approval is required. NOT auto-approved on timeout.
+- Proceeds automatically — no Slack approval gate
 - `--dry-run` produces zero side effects: no bumps, PRs, tags, or PyPI triggers
 - Resume support: state written after each phase; `--resume <run_id>` skips completed phases
 - Cross-repo dependency pins use exact ==X.Y.Z format for determinism (exact pin policy)
@@ -150,7 +140,7 @@ Tier 3 and Tier 4 are BLOCKED.
 | LINT_FAILED | ruff/mypy CI gate fails | TIER_BLOCKED for downstream |
 | PYPI_TIMEOUT | Package not available on PyPI after timeout | Mark as PARTIAL |
 | TIER_BLOCKED | Upstream tier failed | Skip repo, continue with others |
-| GATE_REJECTED | Slack HIGH_RISK gate denied | Abort entire release |
+| GATE_REJECTED | Gate attestation invalid | Abort entire release |
 
 ## ModelSkillResult
 

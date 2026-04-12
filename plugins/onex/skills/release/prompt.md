@@ -22,8 +22,6 @@ When `/release [args]` is invoked:
    - `--pypi-timeout-minutes <n>` — default: 10
    - `--run-id <id>` — default: auto-generated
    - `--gate-attestation <token>` — default: none
-   - `--autonomous` — default: false; skip the Slack HIGH_RISK gate (proceed without human approval)
-   - `--require-gate` — default: false; force the Slack gate even when `--autonomous` is set
 
 3. **Generate or restore run_id**:
    - If `--resume <run_id>` provided: use that run_id, load state file
@@ -325,70 +323,18 @@ def compute_plan_hash(plan: list[dict]) -> str:
     return "sha256:" + hashlib.sha256(plan_json.encode()).hexdigest()[:12]
 ```
 
-### Step 2.2: Post HIGH_RISK Gate
+### Step 2.2: Validate Gate Attestation (if provided)
 
 ```
 IF --gate-attestation=<token>:
   → Token already validated in Step 0.1
   → Use token for audit trail
-  → Skip Slack gate posting
-  → Proceed directly to Phase 3
-
-ELSE IF --autonomous AND NOT --require-gate:
-  → Log: "Autonomous mode — skipping HIGH_RISK gate"
-  → Set gate_token to "autonomous:<run_id>" for audit trail
   → Proceed directly to Phase 3
 
 ELSE:
-  → Post HIGH_RISK gate to Slack with plan table + plan_hash
-  → Use slack-gate skill for implementation
+  → Set gate_token to "autonomous:<run_id>" for audit trail
+  → Proceed directly to Phase 3
 ```
-
-**Slack gate message format**:
-
-```
-[HIGH_RISK] release — coordinated release of N repos
-
-Run: <run_id>
-Plan Hash: <plan_hash>
-
-RELEASE PLAN:
-  Tier 1:
-    omnibase_spi       1.2.0 → 1.2.1  (patch, 3 commits)
-  Tier 2:
-    omnibase_core      1.4.0 → 1.5.0  (minor, 8 commits)
-  Tier 3:
-    omnibase_infra     2.0.0 → 2.1.0  (minor, 12 commits)
-    omniintelligence   0.9.0 → 0.9.1  (patch, 2 commits)
-    omnimemory         0.3.0 → 0.3.1  (patch, 1 commit)
-  Tier 4:
-    omniclaude         0.3.0 → 0.4.0  (minor, 15 commits)
-
-Commands:
-  approve            — execute full release plan
-  reject             — cancel entire release
-
-This is HIGH_RISK — silence will NOT auto-advance.
-```
-
-**Credential resolution**: `~/.omnibase/.env` (SLACK_BOT_TOKEN, SLACK_CHANNEL_ID).
-
-**Gate polling**: Invoke `slack_gate_poll.py` from the `slack-gate` skill:
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/slack-gate/slack_gate_poll.py \
-  --channel "$SLACK_CHANNEL_ID" \
-  --thread-ts "$THREAD_TS" \
-  --bot-token "$SLACK_BOT_TOKEN" \
-  --timeout-minutes "1440" \
-  --accept-keywords '["approve", "release", "yes", "proceed"]' \
-  --reject-keywords '["reject", "cancel", "no", "hold", "deny"]'
-```
-
-**Poll exit codes**:
-- 0 (ACCEPTED): proceed to Phase 3
-- 1 (REJECTED): emit ModelSkillResult(status="FAILED", error="GATE_REJECTED"), exit
-- 2 (TIMEOUT): emit ModelSkillResult(status="FAILED", error="GATE_TIMEOUT"), exit
 
 ### Step 2.3: Initialize State File
 
@@ -1402,8 +1348,7 @@ It does NOT dispatch to polymorphic agents for individual steps.
 | `skills/_lib/pr-safety/helpers.md` | Sub-Step 9 (PR) | PR creation guards, claim checks |
 | `.github/workflows/release.yml` | Sub-Step 12 (PUBLISH) | PyPI publish trigger (per-repo) |
 | `.github/workflows/auto-tag-reusable.yml` | Sub-Step 12 (PUBLISH) | Tag-based release flow |
-| `skills/slack-gate/` | Phase 2 | HIGH_RISK gate posting and polling |
-| `skills/slack-gate/slack_gate_poll.py` | Phase 2 | Reply polling helper |
+| `skills/_lib/slack-gate/helpers.md` | Phase 2 | Slack credential resolution |
 
 ---
 
@@ -1422,9 +1367,9 @@ It does NOT dispatch to polymorphic agents for individual steps.
   ├─ Phase 1: Plan Display
   │   └─ If --dry-run: print plan, emit DRY_RUN result, EXIT
   │
-  ├─ Phase 2: Slack Gate
+  ├─ Phase 2: Gate Attestation
   │   ├─ 2.1: Compute plan hash
-  │   ├─ 2.2: Post HIGH_RISK gate (or validate --gate-attestation)
+  │   ├─ 2.2: Validate --gate-attestation (or proceed automatically)
   │   └─ 2.3: Initialize state file
   │
   ├─ Phase 3: Execute (per tier, per repo)

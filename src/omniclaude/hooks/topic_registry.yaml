@@ -427,7 +427,7 @@ topics:
   - event_type: "gate.decision"
     topic: "onex.evt.omniclaude.gate-decision.v1"
     topic_base_constant: "GATE_DECISION"
-    description: "Gate outcome (ACCEPTED/REJECTED/TIMEOUT) emitted by slack-gate"
+    description: "Gate outcome (ACCEPTED/REJECTED/TIMEOUT) emitted by gate-aware skills"
 
   - event_type: "budget.cap.hit"
     topic: "onex.evt.omniclaude.budget-cap-hit.v1"
