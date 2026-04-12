@@ -586,6 +586,7 @@ def _select_handler_endpoint(
 # Conversation context helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_int_env(name: str, default: int, *, minimum: int = 0) -> int:
     raw = os.environ.get(name, "")
     if not raw:
@@ -653,7 +654,10 @@ def _load_recent_turns(
             return []
         return messages[-n_turns:] if len(messages) > n_turns else messages
     except Exception as exc:
-        print(f"[delegation_orchestrator] WARNING: could not read transcript: {exc}", file=sys.stderr)
+        print(
+            f"[delegation_orchestrator] WARNING: could not read transcript: {exc}",
+            file=sys.stderr,
+        )
         return []
 
 
@@ -1364,12 +1368,25 @@ def orchestrate_delegation(
             return {"delegated": False, "reason": "redaction_error"}
 
         # Load conversation context from transcript and apply character budget.
+        # Redact secrets from each turn's content before shipping to the local LLM.
         raw_turns = _load_recent_turns(transcript_path)
+        try:
+            raw_turns = [
+                {"role": t["role"], "content": _redact_secrets(t["content"])}
+                for t in raw_turns
+            ]
+        except Exception as exc:
+            logger.debug(
+                "Context turn redaction failed; dropping context turns: %s", exc
+            )
+            raw_turns = []
         context_turns = _apply_context_budget(system_prompt, raw_turns, redacted_prompt)
         if raw_turns and not context_turns:
             logger.debug("All context turns dropped by character budget")
         elif raw_turns:
-            logger.debug("Including %d context turns in delegation payload", len(context_turns))
+            logger.debug(
+                "Including %d context turns in delegation payload", len(context_turns)
+            )
 
         llm_result = _call_llm_with_system_prompt(
             redacted_prompt,
