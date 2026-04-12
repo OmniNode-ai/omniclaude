@@ -1696,9 +1696,9 @@ class TestClassifierInstanceCaching:
             do.orchestrate_delegation(prompt="document that", correlation_id="c-4")
 
         assert first_init_count == 1, "FirstClassifier should be instantiated once"
-        assert second_init_count == 1, (
-            "SecondClassifier should be instantiated once (cache miss due to class change)"
-        )
+        assert (
+            second_init_count == 1
+        ), "SecondClassifier should be instantiated once (cache miss due to class change)"
 
     def test_reset_classifier_cache_clears_cached_instance(self) -> None:
         """_reset_classifier_cache() sets _cached_classifier back to None."""
