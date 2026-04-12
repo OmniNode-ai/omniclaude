@@ -756,3 +756,20 @@ allowed_extras:
       Producer segment is onex-change-control (kebab-form of service name).
       No dedicated omniclaude node contract — this is a cross-repo consumer topic.
     ticket: OMN-8013
+
+  # ---------------------------------------------------------------------------
+  # Agent inbox directed topic base (OMN-8634)
+  # Directed inbox topics are per-agent and use a dynamic suffix:
+  # onex.evt.omniclaude.agent-inbox.{agent_id}.v1
+  # The base prefix is registered here; full topics are built by
+  # build_agent_inbox_directed_topic(agent_id) in topics.py.
+  # ---------------------------------------------------------------------------
+
+  - topic: "onex.evt.omniclaude.agent-inbox"
+    lifecycle: integration
+    reason: >
+      Base prefix for directed agent inbox topics (OMN-8634). Full topic names are
+      dynamic: onex.evt.omniclaude.agent-inbox.{agent_id}.v1. Cannot be declared in
+      a single contract event_bus entry due to the per-agent dynamic suffix.
+      Built via build_agent_inbox_directed_topic() helper in topics.py.
+    ticket: OMN-8634

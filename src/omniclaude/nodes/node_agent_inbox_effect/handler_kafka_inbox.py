@@ -33,7 +33,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Final
 
-from omniclaude.hooks.topics import TopicBase
+from omniclaude.hooks.topics import TopicBase, build_agent_inbox_directed_topic
 from omniclaude.nodes.node_agent_inbox_effect.models import (
     ModelInboxDeliveryResult,
     ModelInboxMessage,
@@ -44,9 +44,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-#: Topic template for directed agent inbox messages.
-TOPIC_DIRECTED_TEMPLATE: Final[str] = "onex.evt.omniclaude.agent-inbox.{agent_id}.v1"  # noqa: arch-topic-naming
 
 #: Static topic for epic broadcast status messages (epic_id is a payload field).
 TOPIC_BROADCAST_TEMPLATE: Final[str] = TopicBase.EPIC_STATUS
@@ -243,7 +240,7 @@ class HandlerKafkaInbox:
             The resolved topic string.
         """
         if message.target_agent_id is not None:
-            return TOPIC_DIRECTED_TEMPLATE.format(agent_id=message.target_agent_id)
+            return build_agent_inbox_directed_topic(message.target_agent_id)
         if message.target_epic_id is not None:
             return TOPIC_BROADCAST_TEMPLATE
         raise ValueError("Message must have target_agent_id or target_epic_id")
@@ -279,5 +276,4 @@ __all__ = [
     "EmitFn",
     "HandlerKafkaInbox",
     "TOPIC_BROADCAST_TEMPLATE",
-    "TOPIC_DIRECTED_TEMPLATE",
 ]
