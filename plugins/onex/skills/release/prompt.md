@@ -22,6 +22,8 @@ When `/release [args]` is invoked:
    - `--pypi-timeout-minutes <n>` — default: 10
    - `--run-id <id>` — default: auto-generated
    - `--gate-attestation <token>` — default: none
+   - `--autonomous` — skip HIGH_RISK gate (silence NEVER advances)
+   - `--require-gate` — force HIGH_RISK gate even when --autonomous is set
 
 3. **Generate or restore run_id**:
    - If `--resume <run_id>` provided: use that run_id, load state file
@@ -325,15 +327,27 @@ def compute_plan_hash(plan: list[dict]) -> str:
 
 ### Step 2.2: Validate Gate Attestation (if provided)
 
+This phase posts a HIGH_RISK Slack gate via `onex:slack_gate` before executing any
+mutations. Silence NEVER advances the gate — only an explicit approval response does.
+`--autonomous` skips the gate for automated pipelines; `--require-gate` forces the gate
+even when `--autonomous` is set.
+
 ```
 IF --gate-attestation=<token>:
   → Token already validated in Step 0.1
   → Use token for audit trail
   → Proceed directly to Phase 3
 
-ELSE:
+ELIF --autonomous AND NOT --require-gate:
+  → Skip HIGH_RISK gate
   → Set gate_token to "autonomous:<run_id>" for audit trail
   → Proceed directly to Phase 3
+
+ELSE:
+  → Post HIGH_RISK Slack gate via onex:slack_gate
+  → Wait for explicit approval (silence NEVER advances)
+  → Set gate_token from approval response
+  → Proceed to Phase 3
 ```
 
 ### Step 2.3: Initialize State File
