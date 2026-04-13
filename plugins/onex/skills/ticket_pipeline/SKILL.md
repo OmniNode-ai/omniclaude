@@ -33,9 +33,6 @@ args:
   - name: --auto-merge
     description: Force auto_merge=true
     required: false
-  - name: --require-gate
-    description: Require explicit HIGH_RISK gate before merging
-    required: false
   - name: --docs-only
     description: Assert all changes are documentation-only; skips integration verification
     required: false

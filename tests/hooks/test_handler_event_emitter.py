@@ -380,7 +380,7 @@ class TestSuccessfulEmission:
             result = await emit_hook_event(payload)
 
             assert result.success is True
-            assert "onex.evt.omniclaude.session-started.v1" in result.topic
+            assert TopicBase.SESSION_STARTED in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_uses_entity_id_as_partition_key(self) -> None:
@@ -958,12 +958,10 @@ class TestClaudeHookEventEmission:
 
             # Verify correct topic name
             assert result.success is True
-            assert result.topic == "onex.cmd.omniintelligence.claude-hook-event.v1"
+            assert result.topic == TopicBase.CLAUDE_HOOK_EVENT
             # Verify the topic was passed to publish
             call_kwargs = mock_bus.publish.call_args.kwargs
-            assert (
-                call_kwargs["topic"] == "onex.cmd.omniintelligence.claude-hook-event.v1"
-            )
+            assert call_kwargs["topic"] == TopicBase.CLAUDE_HOOK_EVENT
 
     @pytest.mark.asyncio
     async def test_emit_claude_hook_event_publish_failure(self) -> None:

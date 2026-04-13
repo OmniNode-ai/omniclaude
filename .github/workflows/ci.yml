@@ -1846,6 +1846,25 @@ jobs:
           retention-days: 30
 
   # ============================================================================
+  # AISLOP SWEEP GATE (OMN-8622)
+  # Detects AI-generated quality anti-patterns: prohibited env vars, hardcoded
+  # Kafka topics (outside enum definitions), and backwards-compat shims.
+  # Fails on CRITICAL or ERROR findings. Warn-only for WARNING findings.
+  # NOTE: This gate must pass on main — land AFTER hardcoded-path fixes merge.
+  # ============================================================================
+  aislop-sweep:
+    name: Aislop Sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Detect AI anti-patterns
+        run: python scripts/ci/run_aislop_sweep.py
+
+  # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
   # Do NOT rename without following the Branch Protection Migration Safety
@@ -1902,6 +1921,8 @@ jobs:
       - skill-contract-validation
       # Golden chain integrity (OMN-7389)
       - golden-chain-integrity
+      # AI anti-pattern detection (OMN-8622)
+      - aislop-sweep
     if: always()
     steps:
       - name: Check quality results
@@ -1937,7 +1958,8 @@ jobs:
             "mode-metadata-guard=${{ needs.mode-metadata-guard.result }}" \
             "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
             "skill-contract-validation=${{ needs.skill-contract-validation.result }}" \
-            "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}"; do
+            "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
+            "aislop-sweep=${{ needs.aislop-sweep.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
@@ -2073,10 +2095,44 @@ jobs:
   # build is excluded: it is post-gate artifact packaging, not a gating requirement.
   # ============================================================================
 
+
+  contract-compliance:
+    name: Contract Compliance Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Checkout onex_change_control
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          path: onex_change_control
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'onex_change_control/uv.lock'
+
+      - name: Install onex_change_control
+        working-directory: onex_change_control
+        run: uv sync --all-extras
+
+      - name: Validate contract YAML files
+        working-directory: onex_change_control
+        run: |
+          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -name "OMN-*.yaml" 2>/dev/null)
+          if [ -z "$CONTRACTS" ]; then
+            echo "No contract YAML files found — skipping validation"
+            exit 0
+          fi
+          uv run validate-yaml $CONTRACTS
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [quality-gate, tests-gate, security-gate, compliance]
+    needs: [quality-gate, tests-gate, security-gate, compliance, contract-compliance]
     if: always()
     steps:
       - name: Check all jobs passed

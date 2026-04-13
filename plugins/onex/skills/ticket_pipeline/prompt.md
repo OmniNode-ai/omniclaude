@@ -7,7 +7,7 @@ You are executing the ticket-pipeline skill. This prompt defines the complete or
 Parse arguments from the skill invocation:
 
 ```
-/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-gate] [--require-tests]
+/ticket-pipeline {ticket_id} [--skip-to PHASE] [--dry-run] [--force-run] [--auto-merge] [--require-tests]
 ```
 
 ```python
@@ -26,7 +26,7 @@ if not re.match(r'^[A-Z]+-\d+$', ticket_id):
 dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 auto_merge = "--auto-merge" in args
-require_gate = "--require-gate" in args  # Explicit opt-in to HIGH_RISK merge gate; disables auto-merge path
+require_gate = False  # Slack HIGH_RISK gate removed; auto-merge proceeds automatically
 require_tests = "--require-tests" in args  # Hard-gate test coverage: block pipeline if changed files lack tests
 docs_only = "--docs-only" in args  # Only generate/update documentation, skip implementation
 skip_test_iterate = "--skip-test-iterate" in args  # Skip the test-iterate phase (OMN-6891)
@@ -88,7 +88,7 @@ policy:
   max_pr_review_cycles: 3
   max_test_iterations: 5      # Max iterations for test-iterate loop (OMN-6891)
   skip_test_iterate: false    # Skip the test-iterate phase entirely
-  auto_merge: true            # Default true; set false only via --require-gate
+  auto_merge: true            # Default true; always auto-merges after CI is clean
   policy_auto_merge: true     # Mirrors auto_merge at pipeline start; read at Phase 6
   slack_on_merge: true
   merge_gate_timeout_hours: 48
@@ -370,12 +370,10 @@ else:
             "max_pr_review_cycles": 3,
             "max_test_iterations": max_test_iterations,
             "skip_test_iterate": skip_test_iterate or docs_only,
-            # auto_merge defaults to True (auto-merge is the normal path).
-            # Set to False only when --require-gate is explicitly passed.
-            "auto_merge": False if require_gate else True,
-            # policy_auto_merge mirrors the above at pipeline start time.
+            "auto_merge": True,
+            # policy_auto_merge mirrors auto_merge at pipeline start time.
             # Phase 6 reads this from state (never re-evaluates the CLI flag).
-            "policy_auto_merge": False if require_gate else True,
+            "policy_auto_merge": True,
             "slack_on_merge": True,
             "merge_gate_timeout_hours": 48,
             "merge_strategy": "squash",
@@ -405,8 +403,6 @@ else:
         }
     }
 
-# Override: --auto-merge flag forces auto_merge=True even if --require-gate was also passed
-# (--auto-merge wins; --require-gate is the opt-out, --auto-merge is the explicit opt-in)
 if auto_merge:
     state["policy"]["auto_merge"] = True
     state["policy"]["policy_auto_merge"] = True
@@ -3389,7 +3385,7 @@ implementation including NEEDS_GATE predicate, one-shot merge check, and excepti
 **Summary:**
 - Compute `NEEDS_GATE` from `state["auto_merge_armed"]`, current PR labels, and `policy_auto_merge`
 - **Normal path** (`NEEDS_GATE=False`): one-shot check if already merged → if yes, update Linear + clear ledger; if no, exit with `auto_merge_pending` (pr-watch handles merge observation)
-- **Exception path** (`NEEDS_GATE=True`): dispatch auto-merge skill with HIGH_RISK gate; after approval, `gh pr merge {pr_url} --squash`
+- **Exception path** (`NEEDS_GATE=True`): dispatch auto-merge skill directly (no gate); `gh pr merge {pr_url} --squash`
 
 4. **Dry-run behavior:** NEEDS_GATE computation runs. Merge and Linear update are skipped. State records `dry_run: true`.
 
@@ -3402,7 +3398,6 @@ implementation including NEEDS_GATE predicate, one-shot merge check, and excepti
 **Exit conditions:**
 - **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
 - **Completed (auto_merge_pending):** GitHub auto-merge armed; pr-watch observes completion
-- **Completed (held):** Waiting for human "merge" reply on Slack HIGH_RISK gate (NEEDS_GATE=true)
 - **Failed:** merge errors
 
 ---
@@ -3789,7 +3784,7 @@ following the schema in `_lib/integration-verification-gate/helpers.md`.
 
 **Bypass Protocol:**
 
-When any node returns BLOCK, post HIGH_RISK Slack gate following the bypass protocol in
+When any node returns BLOCK, post Slack bypass notification following the bypass protocol in
 `_lib/integration-verification-gate/helpers.md`. Requires explicit
 `integration-bypass {ticket_id} <justification> <follow_up_ticket_id>` reply.
 Silence = HOLD. On hold: clear ledger, exit with `status: held`.
@@ -3843,7 +3838,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
    NEEDS_GATE = (
        state.get("auto_merge_armed") == False
        or any(label in HOLD_LABELS for label in _pr_labels)
-       or policy_auto_merge == False  # explicit --require-gate override only
+       or policy_auto_merge == False
    )
    ```
 
@@ -3915,9 +3910,9 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 
    ```python
    hold_reason = state.get("hold_reason", "unknown")
-   print(f"NEEDS_GATE=true; hold_reason={hold_reason}; entering HIGH_RISK gate")
+   print(f"NEEDS_GATE=true; hold_reason={hold_reason}; dispatching auto-merge directly")
 
-   # Dispatch auto-merge to a separate agent using existing HIGH_RISK gate flow
+   # Dispatch auto-merge to a separate agent — proceeds automatically, no gate
    Task(
      subagent_type="onex:polymorphic-agent",
      description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
@@ -3926,17 +3921,15 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
          args=\"--pr {pr_number} --ticket-id {ticket_id} --strategy {merge_strategy} --gate-timeout-hours {merge_gate_timeout_hours}\")
 
        Note: NEEDS_GATE=true for this PR (hold_reason: {hold_reason}).
-       The HIGH_RISK gate will fire and wait for operator 'merge' reply.
-       After gate approval: gh pr merge {pr_url} --squash
+       After CI is clean: gh pr merge {pr_url} --squash
        Any 'already merged' error from gh is caught and treated as success.
        Read the ModelSkillResult from $ONEX_STATE_DIR/skill-results/{context_id}/auto-merge.json
-       Report back with: status (merged|held|failed), merged_at, branch_deleted."
+       Report back with: status (merged|failed), merged_at, branch_deleted."
    )
 
    # Handle result:
    # merged → clear ledger, post Slack, update Linear to Done, emit status
-   # held   → pipeline exits cleanly (ledger entry stays; human replies "merge" to gate)
-   # failed → post Slack MEDIUM_RISK gate, clear ledger with error note, stop pipeline
+   # failed → post Slack notification, clear ledger with error note, stop pipeline
    ```
 
 **Handle completed (merged) result:**
@@ -3959,13 +3952,12 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 **Mutations:**
 - `phases.auto_merge.started_at`
 - `phases.auto_merge.completed_at`
-- `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged` | `held`, merged_at, branch_deleted)
+- `phases.auto_merge.artifacts` (status: `merged_via_auto` | `auto_merge_pending` | `merged`, merged_at, branch_deleted)
 - `$ONEX_STATE_DIR/pipelines/ledger.json` (entry cleared on merged)
 
 **Exit conditions:**
 - **Completed (merged_via_auto):** Already merged; Linear set to Done, ledger cleared
 - **Completed (auto_merge_pending):** GitHub auto-merge armed; pr-watch observes completion
-- **Completed (held):** Waiting for human "merge" reply on Slack HIGH_RISK gate (NEEDS_GATE=true)
 - **Failed:** merge errors
 
 ---

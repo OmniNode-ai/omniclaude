@@ -106,7 +106,7 @@ class ModelPrWatchUpdatedEvent(BaseModel):
 
 
 class ModelGateDecisionEvent(BaseModel):
-    """Gate outcome emitted by the slack-gate skill.
+    """Gate outcome emitted by gate-aware skills (e.g. decision_store conflict resolution).
 
     Emitted exactly once per gate invocation at each terminal outcome.
     Consumers append to gate_decisions keyed by gate_id (event table).
@@ -116,7 +116,7 @@ class ModelGateDecisionEvent(BaseModel):
         gate_id: Unique identifier for the gate invocation.
         decision: Gate outcome — exactly one of ACCEPTED, REJECTED, TIMEOUT.
         ticket_id: Linear ticket identifier for which the gate was raised.
-        gate_type: Gate risk level (HIGH_RISK, MEDIUM_RISK).
+        gate_type: Gate type label.
         wait_seconds: Wall-clock seconds from gate posting to decision.
         responder: Slack user who responded (None on TIMEOUT).
         correlation_id: End-to-end correlation identifier.

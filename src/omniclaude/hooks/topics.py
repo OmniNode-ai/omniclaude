@@ -295,7 +295,7 @@ class TopicBase(StrEnum):
     """State update for an in-flight pr-watch session (one row per run_id in pr_watch_state)."""
 
     GATE_DECISION = "onex.evt.omniclaude.gate-decision.v1"
-    """Append-only gate outcome (ACCEPTED, REJECTED, TIMEOUT) emitted by slack-gate."""
+    """Append-only gate outcome (ACCEPTED, REJECTED, TIMEOUT) emitted by gate-aware skills."""
 
     BUDGET_CAP_HIT = "onex.evt.omniclaude.budget-cap-hit.v1"
     """Emitted when the token budget threshold is exceeded during context injection."""
@@ -678,3 +678,28 @@ def build_topic(base: str) -> str:
     base = _validate_topic_segment(base, "base")
     _validate_topic_name(base)
     return base
+
+
+# Base prefix for per-agent directed inbox topics (OMN-8634).
+# Not a TopicBase member — not a full canonical topic name.
+# Full topic: AGENT_INBOX_DIRECTED_BASE + "." + agent_id + ".v1"
+AGENT_INBOX_DIRECTED_BASE: str = "onex.evt.omniclaude.agent-inbox"  # noqa: arch-topic-naming
+
+
+def build_agent_inbox_directed_topic(agent_id: str) -> str:
+    """Return the directed agent inbox topic for a specific agent.
+
+    Directed inbox topics are per-agent: ``onex.evt.omniclaude.agent-inbox.{agent_id}.v1``.
+
+    Args:
+        agent_id: The agent identifier to embed in the topic name.
+
+    Returns:
+        Full canonical topic name for the given agent.
+
+    Examples:
+        >>> build_agent_inbox_directed_topic("agent-001")
+        'onex.evt.omniclaude.agent-inbox.agent-001.v1'
+    """
+    agent_id = _validate_topic_segment(agent_id, "agent_id")
+    return f"{AGENT_INBOX_DIRECTED_BASE}.{agent_id}.v1"

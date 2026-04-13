@@ -52,8 +52,8 @@ Behavior:
 2. Call `NodeDecisionStoreEffect` to persist the entry.
 3. Run `structural_confidence()` against all existing entries in the same domain.
 4. For each conflict with confidence > 0.0, call `compute_severity()`.
-5. If any severity is HIGH: post Slack gate via `slack-gate` skill (HIGH_RISK tier) and
-   wait for operator resolution via Slack command grammar.
+5. If any severity is HIGH: post Slack conflict notification (via `_lib/slack-gate` helpers)
+   and wait for operator resolution via Slack command grammar.
 6. If structural confidence >= 0.6: fire async `semantic_check_async()` — non-blocking.
 7. Emit `decision-conflict-status-changed.v1` event for each new conflict (status = OPEN).
 8. Emit `decision-conflict-status-changed.v1` on each subsequent status transition
@@ -146,19 +146,11 @@ Behavior:
 
 ---
 
-## Conflict Resolution (Slack Gate)
+## Conflict Resolution (Slack Notification)
 
-When a HIGH severity conflict is detected after `record`, the pipeline invokes the
-`slack-gate` skill with `HIGH_RISK` tier, posting a conflict notification to Slack and
-blocking until an operator resolves the conflict.
-
-### Integration with slack-gate
-
-HIGH conflicts use the existing `slack-gate` HIGH_RISK gate interface:
-- See `omniclaude/plugins/onex/skills/slack-gate/SKILL.md` for gate interface details
-- The conflict notification is posted as a HIGH_RISK gate
-- All other HIGH_RISK gates (e.g. auto-merge) are unaffected; only decision conflicts use
-  this grammar
+When a HIGH severity conflict is detected after `record`, the pipeline posts a conflict
+notification to Slack (via `_lib/slack-gate` credential helpers) and blocks until an
+operator resolves the conflict via the command grammar below.
 
 ### Slack Command Grammar
 
@@ -197,7 +189,7 @@ Actions:
 
 ```
 1. record sub-operation detects HIGH conflict
-2. Invoke slack-gate skill (HIGH_RISK tier) -> post conflict message to Slack
+2. Post conflict notification to Slack (via _lib/slack-gate helpers)
 3. Pipeline blocks (polling for Slack replies)
 4. Operator replies with: proceed | hold | dismiss
 5. For proceed:

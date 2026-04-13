@@ -215,15 +215,10 @@ Summary:
 
 ## Conflict Resolution Gate (Slack)
 
-When `record` detects a HIGH severity conflict, post to the `slack-gate` skill with
-`HIGH_RISK` tier and pause the pipeline.
+When `record` detects a HIGH severity conflict, post a conflict notification via
+`_lib/slack-gate` helpers (credential resolution + chat.postMessage) and pause the pipeline.
 
-### Integration with slack-gate skill
-
-HIGH conflicts trigger the existing `slack-gate` skill using the `HIGH_RISK` tier interface.
-See `omniclaude/plugins/onex/skills/slack-gate/SKILL.md` for the full gate interface.
-
-The gate message format:
+The notification format:
 
 ```
 [HIGH CONFLICT] Decision conflict detected — pipeline paused.

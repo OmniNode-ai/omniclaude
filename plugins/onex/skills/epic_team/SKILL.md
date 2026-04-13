@@ -227,7 +227,7 @@ epic-team orchestrates these independently-invocable primitives:
 | Sub-Skill | Purpose | Ticket |
 |-----------|---------|--------|
 | `decompose-epic` | Analyze epic → create Linear child tickets | OMN-2522 |
-| `slack-gate` | LOW_RISK / MEDIUM_RISK / HIGH_RISK human gates | OMN-2521 |
+| `slack-gate` | LOW_RISK notification gate (one-way, silence=proceed) | OMN-2521 |
 | `ticket-pipeline` | Per-ticket pipeline (implement → review → PR → CI → merge) | — |
 | `verification-sweep` | Post-orchestration endpoint/DB/DoD verification | OMN-7254 |
 
@@ -239,7 +239,7 @@ epic-team orchestrates these independently-invocable primitives:
 | `local-review` | Review + fix loop | — |
 | `ci-watch` | Poll CI, auto-fix failures | OMN-2523 |
 | `pr-watch` | Poll PR reviews, auto-fix comments | OMN-2524 |
-| `auto-merge` | Merge PR with HIGH_RISK Slack gate | OMN-2525 |
+| `auto-merge` | Merge PR automatically after CI is clean | OMN-2525 |
 
 Each layer is independently invocable:
 - `ticket-pipeline` runs standalone without `epic-team`
@@ -778,7 +778,7 @@ never imply all tickets passed when exemptions are present.
 - `pr-watch` skill (OMN-2524) — PR review polling and auto-fix
 - `auto-merge` skill (OMN-2525) — merge gate
 - `decompose-epic` skill (OMN-2522) — empty epic auto-decompose
-- `slack-gate` skill (OMN-2521) — LOW/MEDIUM/HIGH_RISK gates
+- `slack-gate` skill (OMN-2521) — LOW_RISK notification gate
 - `verification-sweep` skill (OMN-7254) — post-orchestration endpoint/DB/DoD verification
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
 - Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
