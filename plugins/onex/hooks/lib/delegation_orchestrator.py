@@ -786,8 +786,7 @@ def _call_llm_with_system_prompt(
             logger.debug("LLM returned empty content")
             return None
 
-        _returned_model_name: str = data.get("model") or "local-model"
-        return content, _returned_model_name
+        return content, model_name
 
     except Exception as exc:
         logger.debug("LLM call failed: %s: %s", type(exc).__name__, exc)
@@ -1303,7 +1302,7 @@ def orchestrate_delegation(
                     _gate = _check_agentic_quality(
                         content=prompt,
                         tool_calls_count=1,  # pre-dispatch: assume >=1 tool call
-                        iterations=2,        # pre-dispatch: assume >=2 iterations
+                        iterations=2,  # pre-dispatch: assume >=2 iterations
                     )
                     if not _gate.passed:
                         agentic_gate_reason = _gate.reason
@@ -1321,7 +1320,8 @@ def orchestrate_delegation(
                 handler_name=handler_name,
                 model_name=model_name,
                 quality_gate_passed=not bool(agentic_gate_reason),
-                quality_gate_reason=agentic_gate_reason or "agentic:dispatched_to_daemon",
+                quality_gate_reason=agentic_gate_reason
+                or "agentic:dispatched_to_daemon",
                 delegation_success=False,
                 savings_usd=score.estimated_savings_usd,
                 latency_ms=int((time.time() - start_time) * 1000),
