@@ -114,7 +114,7 @@ rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
   --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
   -n '"/Users/[a-z]' src/ scripts/ 2>/dev/null || true
 
-# Pattern 3: LAN IP defaults (192.168.86.x) not preceded by os.environ / process.env / getenv
+# Pattern 3: LAN IP defaults (192.168.86.x) not preceded by os.environ / process.env / getenv  # onex-allow-internal-ip
 rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
   --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
   -n '192\.168\.86\.' src/ scripts/ 2>/dev/null || true

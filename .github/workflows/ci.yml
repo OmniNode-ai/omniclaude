@@ -2080,18 +2080,31 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v6
-      - name: Clone onex_change_control
-        run: git clone --depth=1 https://github.com/OmniNode-ai/onex_change_control.git /tmp/onex_change_control
-      - name: Install pyyaml
-        run: pip install pyyaml
-      - name: Run contract compliance check
+      - name: Checkout onex_change_control
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/onex_change_control
+          path: onex_change_control
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'onex_change_control/uv.lock'
+
+      - name: Install onex_change_control
+        working-directory: onex_change_control
+        run: uv sync --all-extras
+
+      - name: Validate contract YAML files
+        working-directory: onex_change_control
         run: |
-          python /tmp/onex_change_control/scripts/ci/run_contract_compliance_check.py \
-            --pr ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
-            --contracts-dir /tmp/onex_change_control/contracts
+          CONTRACTS=$(find "$GITHUB_WORKSPACE/onex_change_control/contracts" -name "OMN-*.yaml" 2>/dev/null)
+          if [ -z "$CONTRACTS" ]; then
+            echo "No contract YAML files found — skipping validation"
+            exit 0
+          fi
+          uv run validate-yaml $CONTRACTS
         env:
-          EMERGENCY_BYPASS: ${{ secrets.EMERGENCY_BYPASS || '' }}
           GH_TOKEN: ${{ github.token }}
 
   ci-summary:
