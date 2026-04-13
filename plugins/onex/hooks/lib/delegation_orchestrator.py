@@ -1127,7 +1127,7 @@ def orchestrate_delegation(
                 correlation_id=correlation_id,
                 task_type="unknown",
                 handler_name="unknown",
-                model_name="unknown",
+                model_name="not_routed",
                 quality_gate_passed=False,
                 quality_gate_reason="feature_disabled",
                 delegation_success=False,
@@ -1162,7 +1162,7 @@ def orchestrate_delegation(
                     correlation_id=correlation_id,
                     task_type=cached_intent,
                     handler_name="unknown",
-                    model_name="unknown",
+                    model_name="not_routed",
                     quality_gate_passed=False,
                     quality_gate_reason=reasons,
                     delegation_success=False,
@@ -1186,7 +1186,7 @@ def orchestrate_delegation(
                     correlation_id=correlation_id,
                     task_type="unknown",
                     handler_name="unknown",
-                    model_name="unknown",
+                    model_name="not_routed",
                     quality_gate_passed=False,
                     quality_gate_reason=f"classification_error: {type(exc).__name__}",
                     delegation_success=False,
@@ -1208,7 +1208,7 @@ def orchestrate_delegation(
                     correlation_id=correlation_id,
                     task_type=score.classified_intent,
                     handler_name="unknown",
-                    model_name="unknown",
+                    model_name="not_routed",
                     quality_gate_passed=False,
                     quality_gate_reason=reasons,
                     delegation_success=False,
@@ -1236,7 +1236,7 @@ def orchestrate_delegation(
                 correlation_id=correlation_id,
                 task_type=intent_value,
                 handler_name="unknown",
-                model_name="unknown",
+                model_name="not_routed",
                 quality_gate_passed=False,
                 quality_gate_reason="pre_gate:no_endpoint_configured",
                 delegation_success=False,
@@ -1303,7 +1303,7 @@ def orchestrate_delegation(
                     _gate = _check_agentic_quality(
                         content=prompt,
                         tool_calls_count=1,  # pre-dispatch: assume >=1 tool call
-                        iterations=2,        # pre-dispatch: assume >=2 iterations
+                        iterations=2,  # pre-dispatch: assume >=2 iterations
                     )
                     if not _gate.passed:
                         agentic_gate_reason = _gate.reason
@@ -1321,7 +1321,8 @@ def orchestrate_delegation(
                 handler_name=handler_name,
                 model_name=model_name,
                 quality_gate_passed=not bool(agentic_gate_reason),
-                quality_gate_reason=agentic_gate_reason or "agentic:dispatched_to_daemon",
+                quality_gate_reason=agentic_gate_reason
+                or "agentic:dispatched_to_daemon",
                 delegation_success=False,
                 savings_usd=score.estimated_savings_usd,
                 latency_ms=int((time.time() - start_time) * 1000),
@@ -1357,7 +1358,7 @@ def orchestrate_delegation(
                 correlation_id=correlation_id,
                 task_type=intent_value,
                 handler_name=handler_name,
-                model_name="unknown",
+                model_name="not_routed",
                 quality_gate_passed=False,
                 quality_gate_reason="pre_gate:redaction_error",
                 delegation_success=False,
