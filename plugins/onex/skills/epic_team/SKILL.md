@@ -329,19 +329,64 @@ Agent(
 **Before dispatching any ticket in a wave**, the team lead performs a lightweight verification
 pass to catch misaligned tickets early -- before they consume a full pipeline run.
 
+### Worker Model Enforcement
+
+All workers dispatched by epic-team MUST use **Sonnet** (not Opus). Do NOT dispatch workers with
+`model: opus` or leave the model unspecified in environments where Opus is the default.
+
+Add to every `Agent()` dispatch prompt:
+
+```
+MODEL: claude-sonnet-4-6
+```
+
+Rationale: Opus is reserved for orchestrator-level reasoning. Worker cost scales with the number
+of tickets; Sonnet is sufficient for implementation tasks.
+
+---
+
+### ONEX Pattern Gate (pre-dispatch static review)
+
+**Before dispatching any ticket in a wave**, run `hostile_reviewer --static` on each task
+description to catch ONEX anti-patterns before they consume a full pipeline run.
+
+**Invoke:**
+```
+Skill(skill="onex:hostile_reviewer", args="--static --text \"<task_description>\"")
+```
+
+**Block dispatch if any of the following patterns are detected:**
+
+| Anti-pattern | Example | Action |
+|---|---|---|
+| Docker service design in a ticket | "Create a new Docker service for..." | BLOCK |
+| String field types (untyped primitives) | `name: str`, `id: str` instead of typed models | BLOCK |
+| Hardcoded topic strings | `"onex.evt.foo.v1"` literal in task description | BLOCK |
+
+**On block**: Mark the ticket as `pattern_gate_failed` in `state.yaml` with the violation detail.
+Add a Linear comment: `"[epic-team] Pattern gate blocked dispatch: {violation}"`. Do NOT dispatch.
+Escalate to user if more than 2 tickets in a wave are blocked by the pattern gate.
+
+**On pass**: Record `pattern_gate: passed` in the ticket's contract before Agent() dispatch.
+
+---
+
 ### Verification Steps (per ticket, before Agent() dispatch)
 
-1. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
+1. **ONEX pattern gate**: Run `hostile_reviewer --static` on task description (see above). Block
+   on violations before performing any further checks.
+
+2. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
    - Description is non-empty and contains actionable content
    - Repo target is identifiable (from title, description, or labels)
    - No blocking dependencies are in non-Done state
 
-2. **Approach sanity check**: For each ticket, state in the dispatch prompt:
+3. **Approach sanity check**: For each ticket, state in the dispatch prompt:
    - What the ticket requires (1-sentence summary)
    - Which repo and approximate files will be modified
    - Any known constraints or patterns to follow
 
-3. **Skip unready tickets**: If a ticket fails verification:
+5. **Skip unready tickets**: If a ticket fails verification:
    - Mark as `skipped` in `state.yaml` with reason: `"verification_failed: {detail}"`
    - Add a Linear comment: "Skipped by epic-team: {reason}"
    - Do NOT dispatch -- move to next ticket in wave
