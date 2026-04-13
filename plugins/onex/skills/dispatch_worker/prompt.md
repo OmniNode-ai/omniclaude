@@ -118,6 +118,17 @@ Save the returned task ID.
 
 ---
 
+## Create Team
+
+Call:
+```
+TeamCreate(name=result.proposed_agent_spawn_args["team_name"])
+```
+
+This registers the team before agents are spawned into it.
+
+---
+
 ## Spawn Agent
 
 Call:
@@ -133,6 +144,26 @@ Agent(
 
 ---
 
+## Chain Verifier
+
+After the implementation agent completes (Agent() returns), spawn the verifier:
+
+```
+Agent(
+    name="verifier-<task_id>",
+    team_name=result.proposed_agent_spawn_args["team_name"],
+    subagent_type="agent-task-verifier",
+    prompt="Verify task <task_id>. Contract targets: <spec.targets>. Expected scope: <spec.scope>. Write receipt to .onex_state/verification/<task_id>.yaml with fields: task_id, status (PASS|FAIL), checks, reason, verifier_agent, timestamp."
+)
+```
+
+After the verifier agent completes:
+- Read `.onex_state/verification/<task_id>.yaml`
+- If `status: FAIL` → call `TaskUpdate(task_id=<task_id>, status=in_progress, notes="verification failed: <reason>")` then stop. Do NOT re-dispatch a fixer — the orchestrator handles re-dispatch.
+- If `status: PASS` → proceed to Report.
+
+---
+
 ## Report
 
 Output:
@@ -142,6 +173,7 @@ Output:
   targets: <targets>
   cap: <wall_clock_cap_min> min
   collision fences: <N> active workers fenced
+  verification: PASS
 ```
 
 ---
@@ -153,4 +185,6 @@ Output:
 | node_dispatch_worker import error | Print traceback, stop |
 | YAML parse error | `ERROR: invalid YAML spec — <error>`, stop |
 | TaskCreate failure | Log error, do NOT spawn agent |
+| TeamCreate failure | Log error, continue (non-fatal — team may already exist) |
 | Agent() spawn failure | Log error, mark task in_progress with note |
+| Verifier receipt missing | Log warning, mark task in_progress with note "verifier receipt not written" |
