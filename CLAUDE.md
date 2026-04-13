@@ -4,6 +4,16 @@
 
 ---
 
+## First time on a new Mac / after a session reset
+
+To restore session crons (merge-sweep, dispatch-engine, overseer-verify):
+```bash
+bash omniclaude/scripts/setup-session-crons.sh
+```
+Then paste the printed one-liner into the Claude Code session. The automated path is OMN-8568.
+
+---
+
 ## Skill Usage Policy
 
 - Before any task, check if a matching skill exists. If it does, use it.
