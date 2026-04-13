@@ -48,7 +48,7 @@ Skip if `--skip-health` is set (warn: "Skipping health gate — emergency mode")
 
 Before running live probes:
 1. Read `.onex_state/session/last_health.yaml` if it exists — note any regressions
-2. Run `/onex:recall` with query "recent health issues infrastructure runtime" — incorporate findings
+2. Invoke the `recall` skill (sub-skill invocation, not Bash) with query "recent health issues infrastructure runtime" — incorporate findings into Phase 1 context
 
 ### Step 3b: Run 8 health dimensions
 

@@ -148,10 +148,10 @@ The following skills are dispatch targets — they remain standalone and are cal
 | File | Purpose |
 |------|---------|
 | `.onex_state/session/current_session_id` | Active session ID (`sess-{date}-{time}`) |
-| `.onex_state/session/in_flight.yaml` | Execution state for resume/recovery |
-| `.onex_state/session/last_health.yaml` | Health snapshot from previous session |
-| `.onex_state/session/ledger.jsonl` | One JSON line per completed session |
-| `.onex_state/session/standing_orders.json` | Persistent operator priority overrides |
+| `.onex_state/session/in_flight.yaml` | Execution state for resume/recovery (written by orchestrator) |
+| `.onex_state/session/last_health.yaml` | Health snapshot from previous session (written by orchestrator) |
+| `.onex_state/session/ledger.jsonl` | One JSON line per completed session (written by orchestrator) |
+| `.onex_state/session/standing_orders.json` | Persistent operator priority overrides (read by Phase 2, written by operator or agent) |
 
 ---
 

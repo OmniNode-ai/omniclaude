@@ -4,6 +4,10 @@
 
 Capability: skill.session
 All dispatch logic lives in the shared handle_skill_requested handler.
+
+NOTE: This is a pre-commit hook generated stub. The full backing node
+(node_session_orchestrator) lives in omnimarket/ and is implemented in OMN-8340
+per docs/plans/2026-04-11-unified-session-orchestrator-plan.md Wave 3.
 """
 
 from __future__ import annotations

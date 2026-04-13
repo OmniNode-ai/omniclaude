@@ -24,9 +24,9 @@ args:
 ---
 
 > **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
-> Phase 1 reads `.onex_state/` pipeline state as health dimension 8 (Repo Sync) and checks
-> `in_flight.yaml` for resumable session state. Use `/onex:session` to recover — it will detect
-> and resume any interrupted session automatically.
+> Phase 1 reads `.onex_state/session/in_flight.yaml` to detect and resume interrupted sessions
+> automatically. Pipeline state shown by this skill is now a Phase 1 health input.
+> Use `/onex:session` to recover — it will detect resumable sessions at startup.
 > This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
 
 # Crash Recovery
