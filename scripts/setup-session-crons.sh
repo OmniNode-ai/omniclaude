@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# setup-session-crons.sh — Manual fallback to recreate the four session crons
+# setup-session-crons.sh — Manual fallback to recreate the six session crons
 #
 # The automated path is OMN-8568 (session-bootstrap-contract Rev 7, omnimarket PR #241).
 # Use this script when starting sessions before that PR merges, or after a session reset.
@@ -12,8 +12,8 @@
 #   dispatch-engine  every 10 min  — Linear backlog dispatcher
 #   contract-verify  every 15 min  — ModelTicketContract backfill + enforcement
 #   overseer-verify  every 15 min  — Completion verifier + anti-passivity audit
-#   data-flow-sweep  every 60 min  — Kafka→DB→dashboard end-to-end flow verification (at :30)
-#   runtime-sweep    every 60 min  — Node wiring + handler registration + container health (at :00)
+#   data-flow-sweep  every 60 min  — Kafka→DB→dashboard end-to-end flow verification (at :23)
+#   runtime-sweep    every 60 min  — Node wiring + handler registration + container health (at :47)
 #
 # Because CronCreate/CronList are Claude Code session tools (not CLI commands), this
 # script cannot call them directly. Instead it writes a bootstrap file that you paste
@@ -229,12 +229,12 @@ crons = [
     },
     {
         "name": "data-flow-sweep",
-        "schedule": "30 * * * *",
+        "schedule": "23 * * * *",
         "prompt": """${DATA_FLOW_SWEEP_PROMPT}"""
     },
     {
         "name": "runtime-sweep",
-        "schedule": "0 * * * *",
+        "schedule": "47 * * * *",
         "prompt": """${RUNTIME_SWEEP_PROMPT}"""
     },
 ]
