@@ -395,6 +395,15 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-skill-delegation-enforcer.sh"
           }
         ]
+      },
+      {
+        "matcher": "CronCreate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post_tool_use_cron_action_guard.sh"
+          }
+        ]
       }
     ]
   }
