@@ -2629,6 +2629,18 @@ class ModelTaskDelegatedPayload(BaseModel):
         min_length=1,
         description="Model identifier that received the delegated task",
     )
+
+    @field_validator("delegated_to")
+    @classmethod
+    def reject_sentinel_model_name(cls, v: str) -> str:
+        _SENTINEL_VALUES = {"unknown", "n/a", ""}
+        if v.lower() in _SENTINEL_VALUES:
+            raise ValueError(
+                f"delegated_to must not be a sentinel value; got {v!r}. "
+                "Use routing_outcome to express non-routing outcomes."
+            )
+        return v
+
     delegated_by: str = Field(
         ...,
         min_length=1,

@@ -300,6 +300,29 @@ class TestValidatePayload:
         )
         assert len(missing) == 0
 
+    def test_validate_payload_task_delegated_requires_delegated_to(self) -> None:
+        """task.delegated must require delegated_to field (OMN-8024)."""
+        from omniclaude.hooks.event_registry import validate_payload
+
+        # Missing delegated_to
+        missing = validate_payload(
+            "task.delegated",
+            {"session_id": "abc", "correlation_id": "xyz", "task_type": "document"},
+        )
+        assert "delegated_to" in missing
+
+        # Valid — all four required fields present
+        missing = validate_payload(
+            "task.delegated",
+            {
+                "session_id": "abc",
+                "correlation_id": "xyz",
+                "task_type": "document",
+                "delegated_to": "Qwen3-Coder-30B-A3B-Instruct",
+            },
+        )
+        assert len(missing) == 0
+
 
 # =============================================================================
 # get_partition_key() Tests
