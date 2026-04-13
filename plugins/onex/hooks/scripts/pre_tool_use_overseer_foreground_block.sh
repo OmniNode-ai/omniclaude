@@ -34,14 +34,6 @@ mkdir -p "$(dirname "$LOG_FILE")"
 # Read stdin
 TOOL_INFO=$(cat)
 
-# Fast path: if the flag file doesn't exist, skip everything. This keeps the
-# hook below the 100ms budget when no overseer is active (the common case).
-FLAG_PATH="${ONEX_STATE_DIR}/overseer-active.flag"
-if [[ ! -f "$FLAG_PATH" ]]; then
-    echo "$TOOL_INFO"
-    exit 0
-fi
-
 # Parse tool name — fail open on bad JSON
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"
@@ -49,7 +41,15 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
     exit 0
 }
 
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] overseer flag present, checking $TOOL_NAME" >> "$LOG_FILE"
+# Fast path: if the flag file doesn't exist AND no CLAUDE_AGENT_ID is set,
+# the Python guard has nothing to check — skip the subprocess entirely.
+FLAG_PATH="${ONEX_STATE_DIR}/overseer-active.flag"
+if [[ ! -f "$FLAG_PATH" ]] && [[ -z "${CLAUDE_AGENT_ID:-}" ]]; then
+    echo "$TOOL_INFO"
+    exit 0
+fi
+
+echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] checking $TOOL_NAME (flag=$([ -f "$FLAG_PATH" ] && echo present || echo absent), agent=${CLAUDE_AGENT_ID:-unset})" >> "$LOG_FILE"
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
@@ -62,14 +62,19 @@ EXIT_CODE=$?
 set -e
 
 if [[ $EXIT_CODE -eq 2 ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED $TOOL_NAME: overseer active" >> "$LOG_FILE"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED $TOOL_NAME: delegation guard fired" >> "$LOG_FILE"
     printf '\a' >&2
     echo "$RESULT"
     trap - EXIT
     exit 2
 elif [[ $EXIT_CODE -eq 0 ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ALLOWED $TOOL_NAME (flag present but not targeting repo)" >> "$LOG_FILE"
-    echo "$TOOL_INFO"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ALLOWED $TOOL_NAME" >> "$LOG_FILE"
+    # Python may emit a warn-mode JSON advisory; pass it through unchanged.
+    if [[ -n "$RESULT" ]] && [[ "$RESULT" != "{}" ]]; then
+        echo "$RESULT"
+    else
+        echo "$TOOL_INFO"
+    fi
     exit 0
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ERROR: guard failed with code $EXIT_CODE, failing open" >> "$LOG_FILE"

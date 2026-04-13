@@ -6,6 +6,13 @@ OMN-8376 — when `.onex_state/overseer-active.flag` exists, foreground Bash/Edi
 tools targeting repo paths under ``$OMNI_HOME`` are blocked so the lead agent cannot
 drift into manual fixes while an overseer (OMN-8375 HandlerOvernight) is driving.
 
+Secondary detection path (TaskList fallback): when the flag file is absent the guard
+also queries the Claude Code TaskList for in-progress tasks owned by a different agent
+updated within the last 15 minutes.  If any such tasks exist the delegation warning is
+emitted under the configured enforcement mode (warn or block).  The current agent ID is
+read from ``CLAUDE_AGENT_ID``; when absent the check is skipped (conservative — the
+guard only fires when it can positively identify a foreign owner).
+
 Read-only tools (Read, Grep, Glob, TaskList, SendMessage, ...) are not routed to this
 guard via the hooks.json matcher — they remain allowed unconditionally.
 
@@ -20,7 +27,8 @@ Flag location: ``$ONEX_STATE_DIR/overseer-active.flag`` (falls back to
 
 Exit codes:
     0 — allow (flag absent, tool not targeting repo path, or non-matching tool)
-    2 — block (flag present AND tool targets a path under $OMNI_HOME)
+    2 — block (flag present AND tool targets a path under $OMNI_HOME, OR TaskList
+              fallback fires in block-mode enforcement)
 """
 
 from __future__ import annotations
@@ -28,10 +36,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 BLOCK_TOOLS = frozenset({"Bash", "Edit", "Write", "NotebookEdit", "MultiEdit"})
+
+# How long (seconds) an in-progress foreign task must have been updated within
+# to count as "actively running" for the TaskList fallback check.
+_TASKLIST_RECENCY_SECONDS = 15 * 60  # 15 minutes
 
 
 def _flag_path() -> Path:
@@ -143,6 +157,64 @@ def _targets_repo_path(tool_name: str, tool_input: dict, roots: list[Path]) -> b
     return False
 
 
+def _enforcement_mode() -> str:
+    """Return the configured enforcement mode: 'block', 'warn', or 'silent'."""
+    return os.environ.get("ENFORCEMENT_MODE", "warn").lower()
+
+
+def _tasklist_has_foreign_active_task(current_agent_id: str) -> bool:
+    """Return True if TaskList contains an in-progress task owned by a different agent
+    updated within the last ``_TASKLIST_RECENCY_SECONDS`` seconds.
+
+    Uses ``claude task list --output json`` (the Claude Code CLI).  Any failure
+    (binary absent, JSON parse error, unexpected schema) is treated as False so
+    the check fails open — we never block when we cannot determine task ownership.
+    """
+    try:
+        result = subprocess.run(
+            ["claude", "task", "list", "--output", "json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+    if result.returncode != 0:
+        return False
+
+    try:
+        tasks = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return False
+
+    if not isinstance(tasks, list):
+        return False
+
+    now = datetime.now(tz=UTC)
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if task.get("status") != "in_progress":
+            continue
+        owner = task.get("owner") or task.get("assignee") or ""
+        if owner == current_agent_id:
+            continue
+        updated_raw = task.get("updated_at") or task.get("updatedAt") or ""
+        if not updated_raw:
+            continue
+        try:
+            updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            continue
+        age = (now - updated_at).total_seconds()
+        if age <= _TASKLIST_RECENCY_SECONDS:
+            return True
+
+    return False
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -162,6 +234,24 @@ def main() -> int:
 
     flag = _flag_path()
     if not flag.exists():
+        # TaskList fallback: check for in-progress tasks owned by a different agent.
+        current_agent_id = os.environ.get("CLAUDE_AGENT_ID", "")
+        if current_agent_id and _tasklist_has_foreign_active_task(current_agent_id):
+            roots = _omni_home_roots()
+            if _targets_repo_path(tool_name, tool_input, roots):
+                mode = _enforcement_mode()
+                reason = (
+                    "Delegation guard (TaskList fallback): an in-progress task owned "
+                    "by another agent was updated within the last 15 minutes. "
+                    "Delegate instead of executing foreground work."
+                )
+                if mode == "block":
+                    print(json.dumps({"decision": "block", "reason": reason}))
+                    return 2
+                elif mode != "silent":
+                    # warn mode — emit advisory, allow the tool
+                    print(json.dumps({"decision": "warn", "reason": reason}))
+                    return 0
         print("{}")
         return 0
 
