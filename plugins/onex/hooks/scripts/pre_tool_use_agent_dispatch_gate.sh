@@ -79,8 +79,13 @@ SESSION_ID=$(printf '%s\n' "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""
 CONTEXT_FILE="${ONEX_STATE_DIR:-/tmp}/hooks/skill-context/${SESSION_ID}.json"
 
 ACTIVE_SKILL=""
+_SENTINEL_READ_OK=0
 if [[ -n "$SESSION_ID" && -f "$CONTEXT_FILE" ]]; then
-    ACTIVE_SKILL=$(jq -r '.skill_name // ""' "$CONTEXT_FILE" 2>/dev/null) || ACTIVE_SKILL=""
+    if ACTIVE_SKILL=$(jq -r '.skill_name // ""' "$CONTEXT_FILE" 2>/dev/null); then
+        _SENTINEL_READ_OK=1
+    else
+        ACTIVE_SKILL=""
+    fi
 fi
 
 # Pass if active skill is dispatch_worker
@@ -90,12 +95,13 @@ if [[ "$ACTIVE_SKILL" == "onex:dispatch_worker" || "$ACTIVE_SKILL" == "dispatch_
     exit 0
 fi
 
-# Fail open if sentinel is unreadable (no session_id, missing file)
-if [[ -z "$SESSION_ID" || ! -f "$CONTEXT_FILE" ]]; then
+# Fail open if sentinel is unreadable (no session_id, missing file, or parse failure)
+if [[ -z "$SESSION_ID" || ! -f "$CONTEXT_FILE" || "$_SENTINEL_READ_OK" -eq 0 ]]; then
     echo "[$TIMESTAMP] [$_OMNICLAUDE_HOOK_NAME] PASS (no sentinel — fail open) session_id=${SESSION_ID}" >> "$LOG_FILE" 2>/dev/null || true
     printf '%s\n' "$TOOL_INFO"
     exit 0
 fi
+unset _SENTINEL_READ_OK
 
 # Block: direct Agent() call outside dispatch_worker context
 AGENT_NAME=$(printf '%s\n' "$TOOL_INFO" | jq -r '.tool_input.name // "(unnamed)"' 2>/dev/null) || AGENT_NAME="(unnamed)"
