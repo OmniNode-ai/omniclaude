@@ -35,8 +35,11 @@ Generate a session ID in the format `sess-{YYYYMMDD}-{HHMM}` (e.g., `sess-202604
 Write to `.onex_state/session/current_session_id`.
 
 If `.onex_state/session/in_flight.yaml` exists and `resumable: true`, read it and announce:
-"Found resumable session from {last_checkpoint}. Resuming from phase {current_phase}."
-Then skip to the appropriate phase.
+"Found resumable session from {last_checkpoint}. Running mandatory Phase 1 health gate before resuming."
+Then proceed to Step 3 (Phase 1 health gate). Do NOT skip Phase 1 — the environment may have
+degraded since the session was interrupted. Only after Phase 1 returns PROCEED or FIX_ONLY
+should execution continue from `{current_phase}`. If Phase 1 returns HALT, stop and report
+the blocking health dimensions before resuming any dispatch work.
 
 ---
 
