@@ -798,14 +798,14 @@ class TestBadOutputRecovery:
             with patch.object(ldh, "_classify_prompt", return_value=score_fn()):
                 with patch.object(
                     ldh,
-                    "_get_delegate_endpoint_url",
-                    return_value="http://localhost:8200",
+                    "_get_delegate_endpoint",
+                    return_value=("http://localhost:8200", "test-model"),
                 ):
                     # Intentional design: the outer patch.object contexts for
-                    # _classify_prompt and _get_delegate_endpoint_url are shared
+                    # _classify_prompt and _get_delegate_endpoint are shared
                     # across all bad_response iterations below.  This is correct
                     # because both mocks represent configuration/static behavior
-                    # (classification result and endpoint URL) that does not vary
+                    # (classification result and endpoint tuple) that does not vary
                     # between LLM response scenarios — they are set once per
                     # (prompt, score_fn) pair and remain stable.  If handle_delegation
                     # were ever refactored to re-call _classify_prompt multiple times
