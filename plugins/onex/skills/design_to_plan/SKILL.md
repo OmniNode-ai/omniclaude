@@ -644,9 +644,50 @@ Record in the plan output or review artifact:
 
 - After adversarial review converges (or caps at 3 rounds), proceed to multi-model adversarial review (Phase 2c).
 - At most one additional R1-R8 pass is allowed only when Phase 2c returns actionable CRITICAL/MAJOR findings with concrete evidence.
-- After that optional extra pass, proceed to Phase 3 with no further re-review loops.
+- After that optional extra pass, proceed to the Phase 2→3 gate (below) before launching.
 - If the user says "looks good" or "ship it" during brainstorm, skip remaining questions and proceed.
 - After Phase 3 launch handoff, the design-to-plan skill is DONE. Do not continue.
+
+---
+
+### Mandatory Phase 2→3 Gate: ONEX Pattern Review
+
+**This gate is mandatory and blocks Phase 3 launch. It cannot be skipped or silently passed.**
+
+After Phase 2 adversarial review converges (and after Phase 2c multi-model review if run),
+invoke `hostile_reviewer --static` on the saved plan file before proceeding to Phase 3:
+
+```
+Skill(skill="onex:hostile_reviewer", args="--static --file <plan_file_path>")
+```
+
+**The gate MUST find issues or escalate — it cannot silently pass.** If `hostile_reviewer`
+returns no findings, treat it as a reviewer failure and escalate to the user: `"Pattern gate
+returned no findings — hostile_reviewer may have degraded. Manual review required before launch."`
+
+**Block Phase 3 if any of the following are detected:**
+
+| Anti-pattern | Severity | Action |
+|---|---|---|
+| Docker service design in any task | CRITICAL | Fix task before launch |
+| String field types (`str` without typed model) in schemas | MAJOR | Fix task before launch |
+| Hardcoded topic strings as literals | MAJOR | Fix task before launch |
+| New type introduced without Known Types Inventory entry | CRITICAL | Add inventory + justification |
+| Runtime state reference without source citation | CRITICAL | Add source citation |
+
+**On findings**: Fix the flagged tasks in the plan, re-save, and run one final R1 count integrity
+check before proceeding to Phase 3. Do NOT launch with unresolved CRITICAL or MAJOR findings.
+
+**Record gate result** in the plan file under a `## Pattern Gate Result` section:
+
+```markdown
+## Pattern Gate Result
+
+- Invoked: `hostile_reviewer --static --file <path>`
+- Findings: [N CRITICAL, N MAJOR, N MINOR]
+- Actions taken: [list of fixes or "none required"]
+- Gate status: PASSED / ESCALATED
+```
 
 ---
 
@@ -658,6 +699,8 @@ Phase 3 flows automatically from Phase 2b convergence. It is not optional.
 - [ ] Plan file written to disk (not just assembled in memory)
 - [ ] Adversarial review converged (or capped at round 3 with user-acknowledged unresolved issues)
 - [ ] External model review ran (Phase 2c) or was skipped due to model unavailability
+- [ ] Phase 2→3 ONEX Pattern Gate ran and recorded `## Pattern Gate Result` in plan file
+- [ ] No unresolved CRITICAL or MAJOR pattern gate findings
 - [ ] Plan contains an acceptance criteria section
 
 **Routing decision** (output as structured `routing:` block at end of plan file):
