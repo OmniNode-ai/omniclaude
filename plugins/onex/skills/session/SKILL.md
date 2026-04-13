@@ -1,5 +1,5 @@
 ---
-description: Unified Session Orchestrator — single entry point replacing overnight/autopilot/begin_day/handoff/crash_recovery. Three-phase control loop: health gate → RSD scoring → dispatch. Supports interactive (daytime) and autonomous (overnight) modes. Backed by node_session_orchestrator in omnimarket.
+description: "Unified Session Orchestrator — single entry point replacing overnight/autopilot/begin_day/handoff/crash_recovery. Three-phase control loop: health gate → RSD scoring → dispatch. Supports interactive (daytime) and autonomous (overnight) modes. Backed by node_session_orchestrator in omnimarket."
 version: 1.0.0
 mode: full
 level: advanced
