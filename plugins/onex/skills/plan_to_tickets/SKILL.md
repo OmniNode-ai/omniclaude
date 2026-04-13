@@ -67,8 +67,16 @@ the skill MUST refuse to proceed and report which rule was violated.
    warn and skip architecture validation (do not silently create cross-repo tickets).
    Print: `"Warning: --repo not specified. Architecture validation skipped for external deps."`
 
+6. **`epic_id` must be set on the plan contract before ticketization.**
+   Before creating any tickets, check the plan file's YAML frontmatter (or a companion
+   `.contract.yaml` file in the same directory) for `epic_id`. The value must be present
+   and match `^OMN-\d+$`. If missing or blank, fail fast with:
+   `"epic_id is not set on this plan contract. Set epic_id: OMN-XXXX in the plan frontmatter before running plan_to_tickets."`
+   If the plan file has no frontmatter at all, treat `epic_id` as missing and fail fast.
+   This check is exempt only when `--dry-run` is passed (dry-runs may be exploratory).
+
 These rules are enforced in Step 2 (after structure detection) and Step 7.5 (architecture
-validation). The skill MUST check all five before proceeding to ticket creation.
+validation). The skill MUST check all six before proceeding to ticket creation.
 
 ---
 
@@ -1145,6 +1153,47 @@ manual commit banner.
 ## Main Execution Flow
 
 ```python
+import re as _re
+import yaml as _yaml
+
+# Step 0: Enforce epic_id pre-flight (Rule 6 — skipped only for --dry-run)
+_EPIC_ID_RE = _re.compile(r'^OMN-\d+$')
+
+def _extract_frontmatter_epic_id(plan_path: str, content: str) -> str | None:
+    """Extract epic_id from YAML frontmatter (---...---) or companion .contract.yaml."""
+    from pathlib import Path
+
+    # Try YAML frontmatter in the plan file itself
+    fm_match = _re.match(r'^---\s*\n(.*?)\n---\s*\n', content, _re.DOTALL)
+    if fm_match:
+        try:
+            fm = _yaml.safe_load(fm_match.group(1))
+            if isinstance(fm, dict):
+                return fm.get('epic_id')  # May be None
+        except _yaml.YAMLError:
+            pass
+
+    # Try companion .contract.yaml
+    companion = Path(plan_path).with_suffix('.contract.yaml')
+    if companion.exists():
+        try:
+            data = _yaml.safe_load(companion.read_text(encoding='utf-8'))
+            if isinstance(data, dict):
+                return data.get('epic_id')
+        except (_yaml.YAMLError, OSError):
+            pass
+
+    return None  # No frontmatter and no companion contract
+
+if not args.dry_run:
+    _epic_id_value = _extract_frontmatter_epic_id(args.plan_file, content_raw)
+    if not _epic_id_value or not _EPIC_ID_RE.match(str(_epic_id_value).strip()):
+        print(
+            "epic_id is not set on this plan contract. "
+            "Set epic_id: OMN-XXXX in the plan frontmatter before running plan_to_tickets."
+        )
+        raise SystemExit(1)
+
 # Step 1: Read plan file
 content = read_plan_file(args.plan_file)
 
