@@ -42,6 +42,12 @@ args:
   - name: --run-id
     description: "Explicit run ID for state file naming (default: auto-generated)"
     required: false
+  - name: --autonomous
+    description: "Skip the HIGH_RISK gate (for automated pipelines); silence NEVER advances the gate"
+    required: false
+  - name: --require-gate
+    description: "Force HIGH_RISK gate even when --autonomous is set"
+    required: false
 inputs:
   - name: repos
     description: "list[str] — repo names to release; empty = all repos in graph"
