@@ -65,4 +65,15 @@ if [[ -n "$SESSION_ID" ]]; then
     touch "/tmp/omniclaude-skill-loaded-${SESSION_ID}" 2>/dev/null || true
 fi
 
+# Write session skill-context sentinel for dispatch gate hook [OMN-8510]
+# Lets pre_tool_use_agent_dispatch_gate.sh know which skill is active this session.
+if [[ -n "$SESSION_ID" && -n "$SKILL_NAME" ]]; then
+    _CONTEXT_DIR="${ONEX_STATE_DIR:-/tmp}/hooks/skill-context"
+    mkdir -p "$_CONTEXT_DIR" 2>/dev/null || true
+    printf '{"session_id":"%s","skill_name":"%s","timestamp":"%s"}\n' \
+        "$SESSION_ID" "$SKILL_NAME" "$(date -u +%FT%TZ)" \
+        > "${_CONTEXT_DIR}/${SESSION_ID}.json" 2>/dev/null || true
+    unset _CONTEXT_DIR
+fi
+
 exit 0
