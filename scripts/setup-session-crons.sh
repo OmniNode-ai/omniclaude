@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# setup-session-crons.sh — Manual fallback to recreate the four session crons
+# setup-session-crons.sh — Manual fallback to recreate the six session crons
 #
 # The automated path is OMN-8568 (session-bootstrap-contract Rev 7, omnimarket PR #241).
 # Use this script when starting sessions before that PR merges, or after a session reset.
@@ -12,6 +12,8 @@
 #   dispatch-engine  every 10 min  — Linear backlog dispatcher
 #   contract-verify  every 15 min  — ModelTicketContract backfill + enforcement
 #   overseer-verify  every 15 min  — Completion verifier + anti-passivity audit
+#   data-flow-sweep  every 60 min  — Kafka→DB→dashboard end-to-end flow verification (at :23)
+#   runtime-sweep    every 60 min  — Node wiring + handler registration + container health (at :47)
 #
 # Because CronCreate/CronList are Claude Code session tools (not CLI commands), this
 # script cannot call them directly. Instead it writes a bootstrap file that you paste
@@ -160,6 +162,42 @@ Check for PRs merged or tickets Done in the last hour. For each, run: uv run pyt
 
 This tick MUST end with: (a) all recent completions verified, (b) all unworked tickets either dispatched or explicitly blocked with reason.'
 
+DATA_FLOW_SWEEP_PROMPT='DATA FLOW SWEEP — verify end-to-end Kafka→DB→dashboard data flows.
+
+Run the data-flow-sweep skill:
+  Skill(skill="onex:data_flow_sweep", args="--skip-playwright")
+
+This checks every topic in omnidash/topics.yaml: producer emits, consumer lag 0, DB table has rows.
+
+**If findings exist (exit 1):**
+- Report each broken flow to team-lead: SendMessage(to="team-lead", content="[data-flow-sweep] BROKEN: <topic> — <classification>")
+- Tickets are auto-created by the skill (unless --dry-run)
+
+**If clean (exit 0):** silent — no report needed.
+
+Rules:
+- Always pass --skip-playwright when running unattended (no browser session)
+- Run at 30-min offset from runtime-sweep to spread load
+- If node_data_flow_sweep is unreachable, report to team-lead and skip ticket creation'
+
+RUNTIME_SWEEP_PROMPT='RUNTIME SWEEP — verify node wiring, handler registration, and container health.
+
+Run the runtime-sweep skill:
+  Skill(skill="onex:runtime_sweep")
+
+This checks all contract-declared handlers are wired in dispatch, all topics have both producer and consumer, and containers are not in crash loops.
+
+**If findings exist (exit 1):**
+- Report summary to team-lead: SendMessage(to="team-lead", content="[runtime-sweep] FINDINGS: <count> — types: <types>")
+- Tickets are auto-created by the skill (unless --dry-run)
+
+**If clean (exit 0):** silent — no report needed.
+
+Rules:
+- Default scope is all-repos; use --scope omnidash-only if runtime is degraded
+- If node_runtime_sweep is unreachable, report to team-lead and skip ticket creation
+- Do not attempt to fix wiring inline — create tickets and escalate'
+
 # ---------------------------------------------------------------------------
 # Build JSON
 # ---------------------------------------------------------------------------
@@ -188,6 +226,16 @@ crons = [
         "name": "overseer-verify",
         "schedule": "*/15 * * * *",
         "prompt": """${OVERSEER_VERIFY_PROMPT}"""
+    },
+    {
+        "name": "data-flow-sweep",
+        "schedule": "23 * * * *",
+        "prompt": """${DATA_FLOW_SWEEP_PROMPT}"""
+    },
+    {
+        "name": "runtime-sweep",
+        "schedule": "47 * * * *",
+        "prompt": """${RUNTIME_SWEEP_PROMPT}"""
     },
 ]
 
