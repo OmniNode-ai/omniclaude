@@ -25,7 +25,7 @@ When `/ticket-work {ticket_id} [--autonomous] [--skip-to <phase>]` is invoked:
 2. **Parse the contract** from the ticket description:
    - Look for `## Contract` section followed by a YAML code block
    - If found: parse and validate the YAML
-   - If not found: create initial contract (phase: intake)
+   - If not found: **auto-generate a stub ModelTicketContract** (see intake phase handler below) and embed it in the ticket description before proceeding. This is MANDATORY — no ticket may enter the work pipeline without a contract.
 
 3. **Announce current state:**
    ```
@@ -114,7 +114,53 @@ hardening_tickets: []
 **Entry:** Always allowed (initial phase)
 
 **Actions:**
-1. Create contract if not exists
+1. Create contract if not exists. If no `## Contract` section is found in the ticket description, generate a **stub ModelTicketContract** and embed it immediately:
+
+   ```python
+   ticket = mcp__linear-server__get_issue(id=ticket_id)
+   title  = ticket.title
+   repo   = os.path.basename(os.getcwd())
+
+   # Seam detection from title
+   scan_text = title.lower()
+   seam_signals = {
+       'kafka': 'topics', 'topic': 'topics', 'consumer': 'topics', 'producer': 'topics',
+       'schema': 'events', 'payload': 'events', 'event model': 'events',
+       'spi': 'protocols', 'protocol': 'protocols',
+       'envelope': 'envelopes',
+       'endpoint': 'public_api', 'route': 'public_api', ' api': 'public_api',
+   }
+   inferred_ifaces = list(dict.fromkeys(v for k, v in seam_signals.items() if k in scan_text))
+   is_seam  = 'true' if inferred_ifaces else 'false'
+   ifaces_yaml = '\n'.join(f'  - "{s}"' for s in inferred_ifaces) if inferred_ifaces else '  []'
+   completeness = 'full' if inferred_ifaces else 'stub'
+
+   contract_yaml = f"""schema_version: "1.0.0"
+ticket_id: "{ticket_id}"
+summary: "{title}"
+is_seam_ticket: {is_seam}
+interface_change: {is_seam}
+interfaces_touched:
+{ifaces_yaml}
+contract_completeness: {completeness}
+evidence_requirements:
+  - kind: tests
+    description: "Unit tests pass"
+    command: "uv run pytest tests/ -m unit -x"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""\
+"""
+   existing_desc = ticket.description or ''
+   updated_desc  = existing_desc.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
+   mcp__linear-server__save_issue(id=ticket_id, description=updated_desc)
+   print(f"[intake] Stub contract generated and embedded ({completeness})")
+   ```
+
 2. Set identity fields:
    - `ticket_id`: From Linear ticket identifier
    - `title`: From Linear ticket title
@@ -122,7 +168,7 @@ hardening_tickets: []
 3. Save contract to ticket description
 4. **Auto-advance to research phase** (no human gate needed)
 
-**Mutations allowed:** Create contract only
+**Mutations allowed:** Create/embed contract only
 
 **Exit to research:** Automatic after contract creation (no confirmation needed)
 
