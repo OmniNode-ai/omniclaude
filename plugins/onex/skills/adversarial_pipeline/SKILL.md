@@ -1,6 +1,6 @@
 ---
 description: Autonomous 3-stage adversarial plan-to-ticket pipeline — design_to_plan → hostile_reviewer gate (≥3 issues required) → plan_to_tickets. All stages run as background agents. Zero foreground work.
-mode: background
+mode: full
 version: 1.0.0
 level: advanced
 debug: false
