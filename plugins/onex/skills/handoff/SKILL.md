@@ -20,8 +20,10 @@ args:
 
 > **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
 > Session state persistence is now handled automatically by `node_session_orchestrator` —
-> it writes `last_health.yaml`, `in_flight.yaml`, and `standing_orders.json` on every
-> phase transition. The manual context-capture workflow is replaced by structured execution state.
+> it writes `last_health.yaml` and `in_flight.yaml` on every phase transition.
+> `standing_orders.json` is read by Phase 2 RSD scoring but is **not** written by the
+> orchestrator — it is written by the operator or an authorized agent outside the session loop.
+> The manual context-capture workflow is replaced by structured execution state.
 > This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
 
 # /handoff — Opt-in Session Continuity
