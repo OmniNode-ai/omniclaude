@@ -135,6 +135,29 @@ class TestModelTaskDelegatedPayloadSchema:
         assert payload.emitted_at.tzinfo is not None
         assert payload.emitted_at.tzinfo == UTC
 
+    @pytest.mark.parametrize(
+        "sentinel", ["unknown", "Unknown", "UNKNOWN", "n/a", "N/A"]
+    )
+    def test_delegated_to_rejects_sentinel_values(self, sentinel: str) -> None:
+        """delegated_to with sentinel strings must raise ValidationError (OMN-8024)."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        kwargs["delegated_to"] = sentinel
+        with pytest.raises(
+            ValidationError, match="delegated_to must not be a sentinel value"
+        ):
+            ModelTaskDelegatedPayload(**kwargs)
+
+    def test_delegated_to_accepts_valid_model_name(self) -> None:
+        """delegated_to with a real model name must construct successfully (OMN-8024)."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        kwargs["delegated_to"] = "DeepSeek-R1-Distill-Qwen-14B-AWQ"
+        payload = ModelTaskDelegatedPayload(**kwargs)
+        assert payload.delegated_to == "DeepSeek-R1-Distill-Qwen-14B-AWQ"
+
 
 # ---------------------------------------------------------------------------
 # Helpers

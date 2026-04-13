@@ -638,7 +638,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["session_id", "correlation_id", "task_type"],
+        required_fields=["session_id", "correlation_id", "task_type", "delegated_to"],
     ),
     # =========================================================================
     # Delegation Request Command (OMN-7040)
