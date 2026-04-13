@@ -153,8 +153,8 @@ def _is_delegation_enabled() -> bool:
     return delegation in _TRUTHY
 
 
-def _get_delegate_endpoint_url() -> str | None:
-    """Resolve the LLM endpoint URL to use for delegation.
+def _get_delegate_endpoint() -> tuple[str, str] | None:
+    """Resolve the LLM endpoint URL and canonical model name for delegation.
 
     Uses LocalLlmEndpointRegistry with LlmEndpointPurpose.GENERAL as the
     primary purpose for delegation tasks (documentation, tests, research).
@@ -162,7 +162,7 @@ def _get_delegate_endpoint_url() -> str | None:
     registry is not available.
 
     Returns:
-        URL string (no trailing slash) or None if unconfigured.
+        Tuple of (url, canonical_model_name) or None if unconfigured.
     """
     try:
         _ensure_src_on_path()
@@ -175,7 +175,7 @@ def _get_delegate_endpoint_url() -> str | None:
         registry = LocalLlmEndpointRegistry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.GENERAL)
         if endpoint is not None:
-            return str(endpoint.url).rstrip("/")
+            return str(endpoint.url).rstrip("/"), endpoint.model_name
         logger.debug("No GENERAL endpoint configured in registry")
         return None
     except ImportError:
@@ -185,7 +185,10 @@ def _get_delegate_endpoint_url() -> str | None:
 
     # Fallback: use LLM_QWEN_14B_URL directly (Qwen2.5-14B on Mac Mini)
     url = os.environ.get("LLM_QWEN_14B_URL", "").strip().rstrip("/")
-    return url if url else None
+    if url:
+        fallback_model = os.environ.get("LLM_QWEN_14B_MODEL_NAME", "Qwen2.5-14B")
+        return url, fallback_model
+    return None
 
 
 def _classify_prompt(prompt: str) -> Any:
@@ -208,6 +211,7 @@ def _classify_prompt(prompt: str) -> Any:
 def _call_local_llm(
     prompt: str,
     endpoint_url: str,
+    canonical_model_name: str = "local-model",
     timeout_s: float = _LLM_CALL_TIMEOUT_S,
 ) -> tuple[str, str] | None:
     """Call local LLM via OpenAI-compatible /v1/chat/completions endpoint.
@@ -267,8 +271,7 @@ def _call_local_llm(
             logger.debug("LLM returned empty content")
             return None
 
-        model_name = data.get("model") or "local-model"
-        return content, model_name
+        return content, canonical_model_name
 
     except httpx.TimeoutException:
         logger.debug("LLM call timed out after %.1fs", timeout_s)
@@ -393,16 +396,17 @@ def handle_delegation(
         }
 
     # Gate 3: Endpoint resolution
-    endpoint_url = _get_delegate_endpoint_url()
-    if not endpoint_url:
+    endpoint_resolved = _get_delegate_endpoint()
+    if not endpoint_resolved:
         return {
             "delegated": False,
             "reason": "no_endpoint_configured",
             "confidence": score.confidence,
         }
+    endpoint_url, canonical_model_name = endpoint_resolved
 
     # Gate 4: LLM call
-    result = _call_local_llm(prompt, endpoint_url)
+    result = _call_local_llm(prompt, endpoint_url, canonical_model_name)
     if result is None:
         return {
             "delegated": False,
@@ -420,10 +424,7 @@ def handle_delegation(
             "reason": "empty_response",
             "confidence": score.confidence,
         }
-    # Guard: model_name should always be a non-empty string (the call-site uses
-    # `data.get("model") or "local-model"` as a fallback), but defensive
-    # normalisation here prevents AttributeError in _format_delegated_response
-    # if a caller or test stub returns None for the model name.
+    # Guard: defensive normalisation for test stubs that return None for model_name.
     if not model_name or not model_name.strip():
         model_name = "local-model"
     latency_ms = int((time.time() - start_time) * 1000)

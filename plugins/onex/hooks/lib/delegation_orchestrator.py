@@ -786,8 +786,7 @@ def _call_llm_with_system_prompt(
             logger.debug("LLM returned empty content")
             return None
 
-        _returned_model_name: str = data.get("model") or "local-model"
-        return content, _returned_model_name
+        return content, model_name
 
     except Exception as exc:
         logger.debug("LLM call failed: %s: %s", type(exc).__name__, exc)

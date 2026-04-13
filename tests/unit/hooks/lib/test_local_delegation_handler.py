@@ -178,7 +178,7 @@ class TestClassificationGate:
             True, confidence=0.95, delegate_to_model="qwen2.5-14b"
         )
         with patch.object(ldh, "_classify_prompt", return_value=score):
-            with patch.object(ldh, "_get_delegate_endpoint_url", return_value=None):
+            with patch.object(ldh, "_get_delegate_endpoint", return_value=None):
                 result = ldh.handle_delegation("explain how kafka works", "corr-12")
         # Should reach endpoint gate, not classification gate
         assert result["delegated"] is False
@@ -203,7 +203,7 @@ class TestEndpointResolution:
         self._enable_flags(monkeypatch)
         score = _make_delegation_score(True, confidence=0.95)
         with patch.object(ldh, "_classify_prompt", return_value=score):
-            with patch.object(ldh, "_get_delegate_endpoint_url", return_value=None):
+            with patch.object(ldh, "_get_delegate_endpoint", return_value=None):
                 result = ldh.handle_delegation("explain this", "corr-20")
         assert result["delegated"] is False
         assert result.get("reason") == "no_endpoint_configured"
@@ -216,9 +216,25 @@ class TestEndpointResolution:
         with patch.dict(
             "sys.modules", {"omniclaude.config.model_local_llm_config": None}
         ):
-            url = ldh._get_delegate_endpoint_url()
-        # The fallback strips trailing slashes; test_url has none, so expect exact match.
+            result = ldh._get_delegate_endpoint()
+        assert result is not None
+        url, model_name = result
         assert url == test_url
+        assert model_name == "Qwen2.5-14B"
+
+    def test_endpoint_from_env_var_with_custom_model_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """LLM_QWEN_14B_MODEL_NAME overrides the fallback model name."""
+        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://test-host:8999")
+        monkeypatch.setenv("LLM_QWEN_14B_MODEL_NAME", "my-custom-model")
+        with patch.dict(
+            "sys.modules", {"omniclaude.config.model_local_llm_config": None}
+        ):
+            result = ldh._get_delegate_endpoint()
+        assert result is not None
+        _, model_name = result
+        assert model_name == "my-custom-model"
 
     def test_endpoint_empty_string_treated_as_none(
         self, monkeypatch: pytest.MonkeyPatch
@@ -228,8 +244,8 @@ class TestEndpointResolution:
         with patch.dict(
             "sys.modules", {"omniclaude.config.model_local_llm_config": None}
         ):
-            url = ldh._get_delegate_endpoint_url()
-        assert url is None
+            result = ldh._get_delegate_endpoint()
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -242,11 +258,11 @@ class TestLlmCall:
     """_call_local_llm returns (text, model) on success, None on failure."""
 
     def test_successful_call(self) -> None:
-        """Successful HTTP response → (response_text, model_name) tuple."""
+        """Successful HTTP response → (response_text, canonical_model_name) tuple."""
         mock_response = MagicMock()
         mock_response.is_success = True
         mock_response.json.return_value = {
-            "model": "qwen2.5-14b",
+            "model": "qwen2.5-14b-server-alias",
             "choices": [{"message": {"content": "Here is the documentation."}}],
         }
 
@@ -256,12 +272,15 @@ class TestLlmCall:
         mock_client.post = MagicMock(return_value=mock_response)
 
         with patch("httpx.Client", return_value=mock_client):
-            result = ldh._call_local_llm("explain this", "http://localhost:8200")
+            result = ldh._call_local_llm(
+                "explain this", "http://localhost:8200", "Qwen2.5-14B-Instruct"
+            )
 
         assert result is not None
         text, model = result
         assert text == "Here is the documentation."
-        assert model == "qwen2.5-14b"
+        # Server returned "qwen2.5-14b-server-alias" but we use the canonical name.
+        assert model == "Qwen2.5-14B-Instruct"
 
     def test_empty_choices_returns_none(self) -> None:
         """Empty choices list → None."""
@@ -339,16 +358,12 @@ class TestLlmCall:
             result = ldh._call_local_llm("explain this", "http://localhost:8200")
         assert result is None
 
-    def test_null_model_field_uses_default(self) -> None:
-        """Regression test: API returning {"model": null} must not raise AttributeError.
-
-        data.get('model', 'local-model') returns None when the key is present but
-        null; using `or 'local-model'` coerces null to the default instead.
-        """
+    def test_default_canonical_model_name_used_when_not_provided(self) -> None:
+        """When no canonical_model_name is passed, the default 'local-model' is returned."""
         mock_response = MagicMock()
         mock_response.is_success = True
         mock_response.json.return_value = {
-            "model": None,
+            "model": "server-alias-ignored",
             "choices": [{"message": {"content": "answer"}}],
         }
 
@@ -381,12 +396,14 @@ class TestLlmCall:
         mock_client.post = MagicMock(return_value=mock_response)
 
         with patch("httpx.Client", return_value=mock_client):
-            result = ldh._call_local_llm(long_prompt, "http://localhost:8200")
+            result = ldh._call_local_llm(
+                long_prompt, "http://localhost:8200", "Qwen2.5-14B-Instruct"
+            )
 
         assert result is not None
         text, model = result
         assert text == "Truncated response."
-        assert model == "qwen2.5-14b"
+        assert model == "Qwen2.5-14B-Instruct"
 
         # Verify the payload sent to the mock contained the truncation marker
         call_args = mock_client.post.call_args
@@ -404,12 +421,46 @@ class TestLlmCall:
         score = _make_delegation_score(True, confidence=0.95)
         with patch.object(ldh, "_classify_prompt", return_value=score):
             with patch.object(
-                ldh, "_get_delegate_endpoint_url", return_value="http://localhost:8200"
+                ldh,
+                "_get_delegate_endpoint",
+                return_value=("http://localhost:8200", "Qwen2.5-14B"),
             ):
                 with patch.object(ldh, "_call_local_llm", return_value=None):
                     result = ldh.handle_delegation("explain kafka", "corr-30")
         assert result["delegated"] is False
         assert result.get("reason") == "llm_call_failed"
+
+    def test_canonical_model_name_used_not_server_response(self) -> None:
+        """Registry canonical name is returned even when server returns a different alias.
+
+        This is the core regression test for OMN-8022: vLLM may return a shortened
+        or differently-cased ID; we must use the configured name from the registry.
+        """
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            # vLLM returns an abbreviated alias — must be ignored.
+            "model": "qwen3-coder",
+            "choices": [{"message": {"content": "Here is the answer."}}],
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post = MagicMock(return_value=mock_response)
+
+        canonical = "Qwen3-Coder-30B-A3B-Instruct"
+        with patch("httpx.Client", return_value=mock_client):
+            result = ldh._call_local_llm(
+                "explain this", "http://localhost:8000", canonical
+            )
+
+        assert result is not None
+        _, model = result
+        assert model == canonical, (
+            f"Expected canonical name '{canonical}', got '{model}' — "
+            "server-returned alias must not leak into delegation events"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -537,15 +588,15 @@ class TestHandleDelegationHappyPath:
         with patch.object(ldh, "_classify_prompt", return_value=score):
             with patch.object(
                 ldh,
-                "_get_delegate_endpoint_url",
-                return_value="http://llm-mid-host:8200",
+                "_get_delegate_endpoint",
+                return_value=("http://llm-mid-host:8200", "Qwen2.5-14B-Instruct"),
             ):
                 with patch.object(
                     ldh,
                     "_call_local_llm",
                     return_value=(
                         "Kafka is an event streaming platform.",
-                        "qwen2.5-14b",
+                        "Qwen2.5-14B-Instruct",
                     ),
                 ):
                     result = ldh.handle_delegation(
@@ -554,8 +605,8 @@ class TestHandleDelegationHappyPath:
 
         assert result["delegated"] is True
         assert "response" in result
-        assert "[Local Model Response - qwen2.5-14b]" in result["response"]
-        assert result["model"] == "qwen2.5-14b"
+        assert "[Local Model Response - Qwen2.5-14B-Instruct]" in result["response"]
+        assert result["model"] == "Qwen2.5-14B-Instruct"
         assert result["confidence"] == pytest.approx(0.97)
         assert result["savings_usd"] == pytest.approx(0.0056)
         assert isinstance(result["latency_ms"], int)
@@ -571,12 +622,14 @@ class TestHandleDelegationHappyPath:
 
         with patch.object(ldh, "_classify_prompt", return_value=score):
             with patch.object(
-                ldh, "_get_delegate_endpoint_url", return_value="http://localhost:8200"
+                ldh,
+                "_get_delegate_endpoint",
+                return_value=("http://localhost:8200", "Qwen2.5-14B"),
             ):
                 with patch.object(
                     ldh,
                     "_call_local_llm",
-                    return_value=("The answer to your question is 42.", "local"),
+                    return_value=("The answer to your question is 42.", "Qwen2.5-14B"),
                 ):
                     result = ldh.handle_delegation("what is the answer", "corr-content")
 
@@ -697,13 +750,13 @@ class TestMainCli:
             with patch.object(ldh, "_classify_prompt", return_value=score):
                 with patch.object(
                     ldh,
-                    "_get_delegate_endpoint_url",
-                    return_value="http://localhost:8200",
+                    "_get_delegate_endpoint",
+                    return_value=("http://localhost:8200", "Qwen2.5-14B-Instruct"),
                 ):
                     with patch.object(
                         ldh,
                         "_call_local_llm",
-                        return_value=("Here is the answer.", "qwen2.5-14b"),
+                        return_value=("Here is the answer.", "Qwen2.5-14B-Instruct"),
                     ):
                         with pytest.raises(SystemExit) as exc_info:
                             ldh.main()
