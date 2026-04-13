@@ -95,6 +95,13 @@ For each repo under `$OMNI_HOME/`, find contract YAMLs that declare `subscribe` 
 find "$OMNI_HOME"/*/src -name "contract.yaml" -exec grep -l "subscribe\|publish" {} \;
 ```
 
+**Entry-point format rules — DO NOT flag these as malformed:**
+
+- `module.path` (package form, no colon) — valid; omnimarket uses this exclusively
+- `module.path:ClassName` (class form, colon-separated) — valid; other repos may use this
+- Both forms are resolvable by `importlib.import_module`. Only flag a format error if import fails.
+- `test_all_node_entry_points_are_package_form.py` enforces the omnimarket convention — never override it.
+
 **Output table:**
 
 | Handler File | Topic | Wiring Status |
