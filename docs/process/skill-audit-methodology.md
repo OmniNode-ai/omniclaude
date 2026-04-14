@@ -100,7 +100,7 @@ Manual run:
 /onex:skill_functional_audit --skip-invocation  # Level 1+2 only, no live calls
 ```
 
-Audit artifacts: `${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/<timestamp>.yaml`
+Audit artifacts: `$ONEX_STATE_DIR/skill-audits/<timestamp>.yaml`
 
 ---
 

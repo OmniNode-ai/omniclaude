@@ -7,6 +7,7 @@ when omnibase_core >= 0.40 (which adds EnumPlanStructureType.SECTION_HEADINGS).
 For omnibase_core == 0.39 the returned object is a _PlanDocumentCompat shim that
 exposes the same attribute surface so callers need not branch.
 """
+
 from __future__ import annotations
 
 import re
@@ -19,8 +20,12 @@ __all__ = ["detect_structure", "parse_dependencies", "parse_dependency_string"]
 # Regex patterns
 # ---------------------------------------------------------------------------
 
-_TASK_RE = re.compile(r"^## Task\s+(\d+(?:\.\d+)?):\s*(.+?)$", re.MULTILINE | re.IGNORECASE)
-_PHASE_RE = re.compile(r"^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$", re.MULTILINE | re.IGNORECASE)
+_TASK_RE = re.compile(
+    r"^## Task\s+(\d+(?:\.\d+)?):\s*(.+?)$", re.MULTILINE | re.IGNORECASE
+)
+_PHASE_RE = re.compile(
+    r"^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$", re.MULTILINE | re.IGNORECASE
+)
 _SECTION_RE = re.compile(r"^§(\d+(?:\.\d+)*)\s+(.*)", re.MULTILINE)
 _H2_RE = re.compile(r"^## ", re.MULTILINE)
 _TITLE_RE = re.compile(r"^# (.+?)$", re.MULTILINE)
@@ -29,6 +34,7 @@ _TITLE_RE = re.compile(r"^# (.+?)$", re.MULTILINE)
 # ---------------------------------------------------------------------------
 # Compat shim — matches ModelPlanDocument / ModelPlanEntry surface used in tests
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class _PlanEntryCompat:
@@ -60,6 +66,7 @@ class _PlanDocumentCompat:
 # ---------------------------------------------------------------------------
 # Try to use omnibase_core types; fall back to compat shim if enum is missing
 # ---------------------------------------------------------------------------
+
 
 def _make_doc(
     structure_type_str: str,
@@ -111,6 +118,7 @@ def _make_doc(
 # ---------------------------------------------------------------------------
 # Core parsing helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_title(content: str) -> str:
     m = _TITLE_RE.search(content)
@@ -204,6 +212,7 @@ def _extract_section_entries(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def detect_structure(content: str, source_path: str | None = None) -> Any:
     """Detect plan structure and return a plan document.

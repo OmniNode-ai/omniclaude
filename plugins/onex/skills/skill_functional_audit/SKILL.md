@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: false
 args:
   - name: --output
-    description: "Output path for the audit YAML (default: ${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/<timestamp>.yaml)"
+    description: "Output path for the audit YAML (default: ${ONEX_STATE_DIR}/skill-audits/<timestamp>.yaml)"
     required: false
   - name: --fail-on-facade
     description: "Exit nonzero if any FACADE/STUB verdict found without a tracked Linear ticket (default: true)"
@@ -218,7 +218,7 @@ Write the full audit to disk:
 
 ```bash
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-ONEX_STATE_DIR="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}"
+if [[ -z "${ONEX_STATE_DIR:-}" ]]; then echo "ERROR: ONEX_STATE_DIR must be set" >&2; exit 1; fi
 OUTPUT_PATH="${ONEX_STATE_DIR}/skill-audits/${TIMESTAMP}.yaml"
 mkdir -p "${ONEX_STATE_DIR}/skill-audits/"
 ```
@@ -250,7 +250,7 @@ skills:
   # ... all 91 entries
 ```
 
-Also write a human-readable summary to `${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/latest-summary.md`.
+Also write a human-readable summary to `${ONEX_STATE_DIR}/skill-audits/latest-summary.md`.
 
 ---
 
@@ -291,7 +291,7 @@ Skills audited: 91
   STUB:     0
   BROKEN:   0
 
-Audit artifact: ${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/20260414T030000Z.yaml
+Audit artifact: ${ONEX_STATE_DIR}/skill-audits/20260414T030000Z.yaml
 
 Gate: PASS (all facades have Linear tickets)
 ```
@@ -316,11 +316,11 @@ Update this table when tickets are resolved or new findings are added.
 
 This skill is scheduled via CronCreate to run nightly:
 
-```
+```text
 CronCreate("0 3 * * *", "/onex:skill_functional_audit", recurring=true)
 ```
 
-If the audit FAILS (untracked facades found), it writes a friction event to `.onex_state/friction/` and sends a message to the overnight overseer.
+If the audit FAILS (untracked facades found), it writes a friction event to `${ONEX_STATE_DIR}/friction/` and sends a message to the overnight overseer.
 
 ---
 
