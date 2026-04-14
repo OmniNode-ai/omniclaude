@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: false
 args:
   - name: --output
-    description: "Output path for the audit YAML (default: .onex_state/skill-audits/<timestamp>.yaml)"
+    description: "Output path for the audit YAML (default: ${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/<timestamp>.yaml)"
     required: false
   - name: --fail-on-facade
     description: "Exit nonzero if any FACADE/STUB verdict found without a tracked Linear ticket (default: true)"
@@ -108,9 +108,9 @@ Skills requiring interactive session context or that modify session state:
 
 ```
 session, onboarding, handoff, crash_recovery, begin_day, executing_plans,
-resume_session, set_session, login, using_git_worktrees, rrh, demo,
+resume_session, set_session, login, using_git_worktrees, demo,
 systematic_debugging, writing_skills, insights_to_plan, authorize,
-worktree, decompose_epic, ticket_plan
+worktree, decompose_epic, ticket_plan, rrh
 ```
 
 ### READ-ONLY (invoke if --skip-invocation not set, assert output schema)
@@ -124,7 +124,7 @@ database_sweep, decision_store, dispatch_watchdog, doc_freshness_sweep,
 dod_verify, duplication_sweep, env_parity, feature_dashboard, gap,
 golden_chain_sweep, hook_health_alert, linear_insights, linear_triage,
 observability, pipeline_audit, plan_audit, platform_readiness, pr_watch,
-preflight, recall, rewind, rrh, runtime_sweep, tech_debt_sweep,
+preflight, recall, rewind, runtime_sweep, tech_debt_sweep,
 verification_sweep, verify_plugin
 ```
 
@@ -218,8 +218,9 @@ Write the full audit to disk:
 
 ```bash
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-OUTPUT_PATH=".onex_state/skill-audits/${TIMESTAMP}.yaml"
-mkdir -p .onex_state/skill-audits/
+ONEX_STATE_DIR="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}"
+OUTPUT_PATH="${ONEX_STATE_DIR}/skill-audits/${TIMESTAMP}.yaml"
+mkdir -p "${ONEX_STATE_DIR}/skill-audits/"
 ```
 
 Artifact schema:
@@ -249,7 +250,7 @@ skills:
   # ... all 91 entries
 ```
 
-Also write a human-readable summary to `.onex_state/skill-audits/latest-summary.md`.
+Also write a human-readable summary to `${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/latest-summary.md`.
 
 ---
 
@@ -290,7 +291,7 @@ Skills audited: 91
   STUB:     0
   BROKEN:   0
 
-Audit artifact: .onex_state/skill-audits/20260414T030000Z.yaml
+Audit artifact: ${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/20260414T030000Z.yaml
 
 Gate: PASS (all facades have Linear tickets)
 ```

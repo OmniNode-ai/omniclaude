@@ -37,7 +37,7 @@ def test_inmemory_guard_blocks_session_start() -> None:
         f"stderr: {result.stderr}"
     )
     assert (
-        "inmemory" in result.stderr.lower() or "FORBIDDEN" in result.stderr
+        "inmemory" in result.stderr.lower() or "forbidden" in result.stderr.lower()
     ), (  # aislop: ignore
         f"Expected 'inmemory' or 'FORBIDDEN' in stderr.\nstderr: {result.stderr}"
     )

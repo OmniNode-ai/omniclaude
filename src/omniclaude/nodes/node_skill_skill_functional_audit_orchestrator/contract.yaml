@@ -56,18 +56,18 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.skill_functional_audit.v1"
-    consumer_group: "omniclaude.skill.skill_functional_audit"
+    topic: "onex.cmd.omniclaude.skill-functional-audit.v1"
+    consumer_group: "omniclaude.skill.skill-functional-audit"
   publish:
-    success_topic: "onex.evt.omniclaude.skill_functional_audit-completed.v1"
-    failure_topic: "onex.evt.omniclaude.skill_functional_audit-failed.v1"
+    success_topic: "onex.evt.omniclaude.skill-functional-audit-completed.v1"
+    failure_topic: "onex.evt.omniclaude.skill-functional-audit-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.skill_functional_audit.v1"
+    - "onex.cmd.omniclaude.skill-functional-audit.v1"
   publish_topics:
-    - "onex.evt.omniclaude.skill_functional_audit-completed.v1"
-    - "onex.evt.omniclaude.skill_functional_audit-failed.v1"
+    - "onex.evt.omniclaude.skill-functional-audit-completed.v1"
+    - "onex.evt.omniclaude.skill-functional-audit-failed.v1"
 
 # Capabilities
 capabilities:

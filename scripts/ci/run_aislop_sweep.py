@@ -81,9 +81,11 @@ def main() -> int:
     for raw in grep(r"ONEX_EVENT_BUS_TYPE=inmemory\|OLLAMA_BASE_URL"):
         path, lineno, content = parse_grep_line(raw)
         stripped = content.strip()
-        # Skip lines that *describe* the prohibition (rule=, message=, comment, suppression)
+        # Skip lines that *describe* the prohibition (rule=, message=, suppression).
+        # Note: bare `#` was too broad — it suppressed any commented line including
+        # real violations with unrelated inline comments. Only skip explicit markers.
         if re.search(
-            r"rule=|message=|#|FORBIDDEN|forbidden|is FORBIDDEN|aislop: ignore",
+            r"rule=|message=|FORBIDDEN|forbidden|is FORBIDDEN|aislop:\s*ignore",
             stripped,
         ):
             continue

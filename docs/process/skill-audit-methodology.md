@@ -90,17 +90,17 @@ There is no "pre-existing issue" exemption. A FACADE or STUB skill is a bug rega
 
 The `/onex:skill_functional_audit` skill implements all three levels and runs nightly:
 
-```
+```bash
 CronCreate("0 3 * * *", "/onex:skill_functional_audit", recurring=true)
 ```
 
 Manual run:
-```
+```bash
 /onex:skill_functional_audit
 /onex:skill_functional_audit --skip-invocation  # Level 1+2 only, no live calls
 ```
 
-Audit artifacts: `.onex_state/skill-audits/<timestamp>.yaml`
+Audit artifacts: `${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/skill-audits/<timestamp>.yaml`
 
 ---
 
