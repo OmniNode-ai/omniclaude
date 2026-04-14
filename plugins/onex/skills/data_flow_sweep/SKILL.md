@@ -49,7 +49,7 @@ args:
 
 For each topic in `omnidash/topics.yaml`:
 1. Check producer status via `rpk topic describe` — classify as `ACTIVE` | `EMPTY` | `MISSING`
-2. Check consumer group lag via `rpk group describe omnidash-read-model`
+2. Check consumer group lag via `rpk group describe omnidash-read-model-v1`
 3. Check DB table row count via `psql -c "SELECT COUNT(*) FROM omnidash_analytics.<table>"`
 4. Verify field mapping: compare fields against projection handler and DB schema
 
