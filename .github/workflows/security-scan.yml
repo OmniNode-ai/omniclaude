@@ -87,7 +87,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (push diff)
         if: github.event_name == 'push'
-        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@47e7b7cd74f578e1e3145d48f669f22fd1330ca6  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           base: ${{ github.event.before }}
@@ -96,7 +96,7 @@ jobs:
 
       - name: TruffleHog Secret Scanning (full scan)
         if: github.event_name != 'push'
-        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b  # v3.93.7 (pinned 2026-03-04)
+        uses: trufflesecurity/trufflehog@47e7b7cd74f578e1e3145d48f669f22fd1330ca6  # v3.93.7 (pinned 2026-03-04)
         with:
           path: ./
           extra_args: --only-verified
@@ -221,7 +221,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Checkov (IaC scanner)
-        uses: bridgecrewio/checkov-action@002cd2e8cc0fe0535e6f364509e091c1a9870efa  # v12.1347.0 (pinned 2026-03-04)
+        uses: bridgecrewio/checkov-action@de2bfaecd21d58ef232e0d2a3391c33c32c460d7  # v12.1347.0 (pinned 2026-03-04)
         with:
           directory: .
           framework: dockerfile,github_actions

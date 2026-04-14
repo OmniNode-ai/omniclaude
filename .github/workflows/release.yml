@@ -92,7 +92,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           files: |
@@ -150,7 +150,7 @@ jobs:
           ls -la "$GITHUB_WORKSPACE/omniclaude-plugin-${VERSION}.zip"
 
       - name: Attach plugin artifact to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           files: omniclaude-plugin-*.zip
