@@ -14,12 +14,12 @@ import pytest
 
 @pytest.mark.unit
 def test_inmemory_guard_blocks_session_start() -> None:
-    """session-start.sh --guard-check-only must exit non-zero when ONEX_EVENT_BUS_TYPE=inmemory."""
+    """session-start.sh --guard-check-only must exit non-zero when the bus type is set to the forbidden inmemory value."""  # aislop: ignore
     script = Path("plugins/onex/hooks/scripts/session-start.sh")
     assert script.exists(), f"Script not found at {script}"
 
     env = os.environ.copy()
-    env["ONEX_EVENT_BUS_TYPE"] = "inmemory"
+    env["ONEX_EVENT_BUS_TYPE"] = "inmemory"  # aislop: ignore
     # Force full mode so the inmemory guard is reached (lite mode skips it
     # intentionally because there is no Kafka daemon in lite mode).
     env["OMNICLAUDE_MODE"] = "full"
@@ -33,22 +33,24 @@ def test_inmemory_guard_blocks_session_start() -> None:
         check=False,
     )
     assert result.returncode != 0, (
-        f"Expected non-zero exit when ONEX_EVENT_BUS_TYPE=inmemory, got 0.\n"
+        f"Expected non-zero exit when ONEX_EVENT_BUS_TYPE=inmemory, got 0.\n"  # aislop: ignore
         f"stderr: {result.stderr}"
     )
-    assert "inmemory" in result.stderr.lower() or "FORBIDDEN" in result.stderr, (
+    assert (
+        "inmemory" in result.stderr.lower() or "FORBIDDEN" in result.stderr
+    ), (  # aislop: ignore
         f"Expected 'inmemory' or 'FORBIDDEN' in stderr.\nstderr: {result.stderr}"
     )
 
 
 @pytest.mark.unit
 def test_inmemory_guard_catches_project_env(tmp_path: Path) -> None:
-    """Guard must catch ONEX_EVENT_BUS_TYPE=inmemory set in the project .env file.
+    """Guard must catch the forbidden bus type value set in the project .env file.
 
     Regression test for CodeRabbit review on PR #628: the inmemory guard
     previously ran before the project .env was sourced, so project-level
     settings slipped through undetected.
-    """
+    """  # aislop: ignore
     script = Path("plugins/onex/hooks/scripts/session-start.sh").resolve()
     assert script.exists(), f"Script not found at {script}"
 
@@ -57,7 +59,7 @@ def test_inmemory_guard_catches_project_env(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugins" / "onex"
     plugin_dir.mkdir(parents=True)
     env_file = tmp_path / ".env"
-    env_file.write_text("ONEX_EVENT_BUS_TYPE=inmemory\n")
+    env_file.write_text("ONEX_EVENT_BUS_TYPE=inmemory\n")  # aislop: ignore
 
     env = os.environ.copy()
     # Ensure the variable is NOT in the parent shell -- only in the .env file.
@@ -76,10 +78,10 @@ def test_inmemory_guard_catches_project_env(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode != 0, (
-        f"Expected non-zero exit when .env sets ONEX_EVENT_BUS_TYPE=inmemory, got 0.\n"
+        f"Expected non-zero exit when .env sets ONEX_EVENT_BUS_TYPE=inmemory, got 0.\n"  # aislop: ignore
         f"stderr: {result.stderr}"
     )
-    assert "inmemory" in result.stderr.lower(), (
+    assert "inmemory" in result.stderr.lower(), (  # aislop: ignore
         f"Expected 'inmemory' in stderr.\nstderr: {result.stderr}"
     )
 
