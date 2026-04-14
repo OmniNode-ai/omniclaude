@@ -258,10 +258,10 @@ Also write a human-readable summary to `${ONEX_STATE_DIR}/skill-audits/latest-su
 
 If `--fail-on-facade` is true (default):
 
-1. Collect all skills with verdict `FACADE` or `STUB`
+1. Collect all skills with verdict `FACADE`, `STUB`, or `PARTIAL`
 2. For each, check if a Linear ticket is recorded in the skill record's `linear_ticket` field
-3. If ANY facade/stub has no `linear_ticket`: **FAIL** (exit nonzero)
-4. If all facade/stub skills have tracked Linear tickets: **PASS** (exit 0, log warning)
+3. If ANY facade/stub/partial has no `linear_ticket`: **FAIL** (exit nonzero)
+4. If all facade/stub/partial skills have tracked Linear tickets: **PASS** (exit 0, log warning)
 
 Failure message format:
 
