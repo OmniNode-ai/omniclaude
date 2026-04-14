@@ -206,6 +206,32 @@ remediation without blocking the sweep.
 
 ---
 
+## BLOCKED PR Cause Diagnosis (OMN-8811)
+
+Before reporting any PR as BLOCKED or dispatching a fixer worker, run the following
+against the PR to determine the exact root cause:
+
+```bash
+gh pr view <N> --repo <org/repo> --json statusCheckRollup,reviewDecision,reviewThreads
+```
+
+Categorize as exactly ONE of these mutually exclusive causes:
+
+| Category | Condition |
+|---|---|
+| `CI_FAILING` | `statusCheckRollup` contains any check with state FAILURE, ERROR, or PENDING |
+| `CR_THREADS_OPEN` | `reviewThreads` contains any unresolved thread (regardless of CI state) |
+| `QUEUE_STALE` | Armed for merge queue but queue not advancing; no CI failures, no open threads |
+| `APPROVED_PENDING_MERGE` | `reviewDecision == APPROVED`, all CI green, in merge queue and advancing normally |
+
+**Rules:**
+- Report the category name, not a qualitative description.
+- `CI_FAILING` takes precedence over `CR_THREADS_OPEN` when both are true.
+- Never call a PR "stale queue" if it has open review threads — that is `CR_THREADS_OPEN`.
+- False-positive guard: before dispatching any fixer, verify `gh pr view <N> --json state` returns `OPEN`. If `MERGED`, reclaim the dispatched.yaml slot and skip.
+
+---
+
 ## What This Prompt Does NOT Do
 
 - Scan GitHub repos
