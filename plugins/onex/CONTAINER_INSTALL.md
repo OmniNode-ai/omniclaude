@@ -22,7 +22,6 @@ Set these via your shell environment, `~/.omnibase/.env`, or `~/.claude/settings
 | `OMNICLAUDE_MODE` | No | `lite` (in containers) | Force `full` or `lite` mode |
 | `ENABLE_LOCAL_INFERENCE_PIPELINE` | No | `false` | Enable local LLM inference features |
 | `ENABLE_LOCAL_ENRICHMENT` | No | `false` | Enable context enrichment |
-| `ENABLE_LOCAL_DELEGATION` | No | `false` | Enable task delegation daemon |
 
 ## What Works Without Infrastructure
 

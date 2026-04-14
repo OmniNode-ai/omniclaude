@@ -68,7 +68,6 @@ export ONEX_UNSAFE_ALLOW_EDITS=1
 
 if [[ "${ENABLE_DELEGATION}" == "true" ]]; then
   export ENABLE_LOCAL_INFERENCE_PIPELINE=true
-  export ENABLE_LOCAL_DELEGATION=true
 fi
 
 # ---------------------------------------------------------------------------
@@ -112,7 +111,6 @@ check_delegation_health() {
     echo "WARN: Delegation enabled but LLM_CODER_URL and LLM_CODER_FAST_URL not set. Disabling delegation."
     ENABLE_DELEGATION=false
     export ENABLE_LOCAL_INFERENCE_PIPELINE=false
-    export ENABLE_LOCAL_DELEGATION=false
     return 0
   fi
 
@@ -138,7 +136,6 @@ check_delegation_health() {
     echo "WARN: Disabling delegation for this run. Build loop will use frontier Claude only."
     ENABLE_DELEGATION=false
     export ENABLE_LOCAL_INFERENCE_PIPELINE=false
-    export ENABLE_LOCAL_DELEGATION=false
   fi
 }
 
@@ -284,7 +281,6 @@ log "State dir: ${RUN_DIR}"
 
 if [[ "${DRY_RUN}" == "true" ]]; then
   log "[DRY RUN] Would execute: claude -p '/build-loop --max-cycles ${MAX_CYCLES}' --allowedTools '...'"
-  log "[DRY RUN] ENABLE_LOCAL_DELEGATION=${ENABLE_LOCAL_DELEGATION:-false}"
   log "[DRY RUN] ENABLE_LOCAL_INFERENCE_PIPELINE=${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}"
   log "Dry run complete."
   exit 0

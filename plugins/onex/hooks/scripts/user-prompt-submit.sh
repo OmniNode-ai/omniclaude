@@ -577,179 +577,28 @@ if [[ -n "$AGENTIC_WORK_PRODUCT" ]]; then
 fi
 
 # -----------------------------
-# Local Model Delegation Dispatch (OMN-2271, OMN-7103)
+# Delegation Bridge (OMN-8746)
 # -----------------------------
-# Two dispatch paths:
-# 1. SYNC (fast local LLMs <3s): daemon socket → immediate response → inject
-# 2. ASYNC (node-based via Kafka): classify → emit command → node handles → collect next prompt
-#
-# The sync path is kept for backward compat and fast local models.
-# The Kafka command is ALWAYS emitted when delegatable (for dashboard/metrics),
-# but the sync path provides the immediate response when available.
-DELEGATION_RESULT=""
-DELEGATION_ACTIVE="false"
-_DELEGATION_KILL_SWITCH=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-true}")
-_HAS_LLM_ENDPOINTS="false"
-[[ -n "${LLM_CODER_URL:-}" || -n "${LLM_DEEPSEEK_R1_URL:-}" || -n "${LLM_GLM_URL:-}" ]] && _HAS_LLM_ENDPOINTS="true"
-
-if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "false" ]] \
-        && [[ "$WORKFLOW_DETECTED" != "true" ]] \
-        && [[ ! "$PROMPT" =~ ^/ ]]; then
-    DELEGATION_HANDLER="${HOOKS_LIB}/delegation_orchestrator.py"
-    if [[ -f "$DELEGATION_HANDLER" ]]; then
-        log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
-
-        # Fast path: daemon socket (< 50ms classification + LLM call)
-        _DELEGATION_SOCK="/tmp/omniclaude-delegation.sock"
-        if [[ -S "$_DELEGATION_SOCK" ]]; then
-            _DAEMON_REQ=$(jq -cn --arg prompt "$PROMPT" --arg corr "$CORRELATION_ID" \
-                --arg sess "$SESSION_ID" --arg tp "$TRANSCRIPT_PATH" \
-                '{prompt: $prompt, correlation_id: $corr, session_id: $sess, transcript_path: $tp}')
-            DELEGATION_RESULT="$(printf '%s\n' "$_DAEMON_REQ" | socat -t2 - UNIX-CONNECT:"$_DELEGATION_SOCK" 2>/dev/null || echo "")"
-            if [[ -n "$DELEGATION_RESULT" ]]; then
-                log "Delegation via daemon (fast path)"
+# Publish a delegation-request command to the ONEX node pipeline for every
+# non-slash, non-automated prompt. node_delegation_orchestrator on .201
+# handles routing, LLM inference, and quality gating.
+# Requires Kafka to be reachable — there is no local prose fallback.
+if [[ "$WORKFLOW_DETECTED" != "true" ]] && [[ ! "$PROMPT" =~ ^/ ]]; then
+    _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
+    if [[ -f "$_BRIDGE_SCRIPT" ]]; then
+        (
+            _BRIDGE_PROMPT="$(printf '%s' "$PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
+            if [[ -n "$_BRIDGE_PROMPT" ]]; then
+                CLAUDE_SESSION_ID="$SESSION_ID" \
+                    "$PYTHON_CMD" "$_BRIDGE_SCRIPT" "$_BRIDGE_PROMPT" \
+                    --correlation-id "$CORRELATION_ID" \
+                    >> "$LOG_FILE" 2>&1
             fi
-        fi
-
-        # Fallback: direct Python invocation
-        _DELEGATION_TIMEOUT_SEC="${OMNICLAUDE_DELEGATION_TIMEOUT_SEC:-12}"
-        if [[ -z "$DELEGATION_RESULT" ]] || ! jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
-            set +e
-            DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout "$_DELEGATION_TIMEOUT_SEC" "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" "$SESSION_ID" --transcript-path "$TRANSCRIPT_PATH" 2>>"$LOG_FILE")"
-            set -e
-        fi
-
-        # Auto-start daemon in background for next invocation
-        if [[ ! -S "$_DELEGATION_SOCK" ]]; then
-            nohup "$PYTHON_CMD" "${HOOKS_LIB}/delegation_daemon.py" --start >>"$LOG_FILE" 2>&1 &
-            disown
-        fi
-
-        # Validate output
-        if [[ -n "$DELEGATION_RESULT" ]] && jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
-            DELEGATION_ACTIVE="$(jq -r '.delegated // false' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'false')"
-        else
-            log "WARNING: delegation produced non-JSON output, skipping"
-            DELEGATION_RESULT=""
-            DELEGATION_ACTIVE="false"
-        fi
-
-        # --- Node-based Kafka command emission (OMN-7103) ---
-        # Always emit the delegation command to Kafka for dashboard metrics,
-        # regardless of whether the sync path succeeded. The node-based
-        # orchestrator consumes this for async delegation and observability.
-        _DEL_CONFIDENCE="$(jq -r '.confidence // 0' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '0')"
-        _DEL_INTENT="$(jq -r '.intent // "unknown"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'unknown')"
-        if [[ "$_DEL_CONFIDENCE" != "0" ]] && [[ "$_DEL_INTENT" != "unknown" ]]; then
-            # Fire-and-forget Kafka emit for delegation orchestrator node
-            _emit_event "delegate.task" "{\"prompt_length\": ${#PROMPT}, \"intent\": \"$_DEL_INTENT\", \"confidence\": $_DEL_CONFIDENCE, \"correlation_id\": \"$CORRELATION_ID\", \"session_id\": \"$SESSION_ID\", \"delegated_sync\": $DELEGATION_ACTIVE}" 2>/dev/null &
-            log "Delegation Kafka command emitted: intent=$_DEL_INTENT confidence=$_DEL_CONFIDENCE"
-
-            # --- Delegation bridge (OMN-8689): publish real command to node pipeline ---
-            # Gated by ENABLE_DELEGATION_BRIDGE=true. Belt+suspenders: the legacy
-            # delegate.task emit above stays for dashboard metrics; this bridge adds
-            # the actual delegation-request command that node_delegation_orchestrator
-            # consumes. When ENABLE_DELEGATION_BRIDGE is unset or false this block
-            # is a no-op, preserving existing behaviour exactly.
-            _DELEGATION_BRIDGE=$(_normalize_bool "${ENABLE_DELEGATION_BRIDGE:-false}")
-            if [[ "$_DELEGATION_BRIDGE" == "true" ]]; then
-                _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
-                if [[ -f "$_BRIDGE_SCRIPT" ]]; then
-                    _BRIDGE_PROMPT_B64="$PROMPT_B64"
-                    (
-                        _BRIDGE_PROMPT="$(printf '%s' "$_BRIDGE_PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
-                        if [[ -n "$_BRIDGE_PROMPT" ]]; then
-                            CLAUDE_SESSION_ID="$SESSION_ID" \
-                                "$PYTHON_CMD" "$_BRIDGE_SCRIPT" "$_BRIDGE_PROMPT" \
-                                --correlation-id "$CORRELATION_ID" \
-                                >> "$LOG_FILE" 2>&1
-                        fi
-                    ) &
-                    disown
-                    log "Delegation bridge: published to node pipeline (intent=$_DEL_INTENT corr=$CORRELATION_ID)"
-                else
-                    log "WARNING: delegation bridge enabled but run.py not found at $_BRIDGE_SCRIPT"
-                fi
-            fi
-        fi
-
-        # --- Agentic dispatch handling (OMN-5728 — Phase 2: Dispatch) ---
-        # When the daemon starts an agentic loop in the background, inject a
-        # status message so Claude knows work is in progress.
-        _AGENTIC_DISPATCHED="$(jq -r '.agentic_dispatched // false' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'false')"
-        if [[ "$_AGENTIC_DISPATCHED" == "true" ]]; then
-            _AGENTIC_JOB_ID="$(jq -r '.job_id // "?"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '?')"
-            log "Agentic loop dispatched: job=$_AGENTIC_JOB_ID"
-            _TS_DISP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            echo "[$_TS_DISP] [UserPromptSubmit] AGENTIC_DISPATCHED job=$_AGENTIC_JOB_ID" >> "$TRACE_LOG"
-            # Inject a note that research is in progress — the work product
-            # will be collected on the next prompt via the poll phase above.
-            _AGENTIC_STATUS_CTX="[A local model is researching this topic in the background. The results will be available on your next prompt. In the meantime, you can answer based on your own knowledge or ask the user to wait a moment.]"
-            printf %s "$INPUT" | jq --arg ctx "$_AGENTIC_STATUS_CTX" --arg jid "$_AGENTIC_JOB_ID" \
-                '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-                 .hookSpecificOutput.additionalContext = $ctx |
-                 .hookSpecificOutput.metadata.agentic_dispatched = true |
-                 .hookSpecificOutput.metadata.agentic_job_id = $jid' \
-                2>>"$LOG_FILE" \
-                || { log "ERROR: Agentic dispatch jq output failed, passing through raw input"; printf %s "$INPUT"; }
-            exit 0
-        fi
-
-        if [[ "$DELEGATION_ACTIVE" == "true" ]]; then
-            DELEGATED_RESPONSE="$(jq -r '.response // ""' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '')"
-            DELEGATED_MODEL="$(jq -r '.model // "local-model"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'local-model')"
-            DELEGATED_LATENCY="$(jq -r '.latency_ms // 0' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '0')"
-            log "Delegation active: model=$DELEGATED_MODEL latency=${DELEGATED_LATENCY}ms"
-            _TS_DEL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            echo "[$_TS_DEL] [UserPromptSubmit] DELEGATED model=$DELEGATED_MODEL latency_ms=$DELEGATED_LATENCY confidence=$(jq -r '.confidence // 0' <<< "$DELEGATION_RESULT")" >> "$TRACE_LOG"
-        else
-            DELEGATION_REASON="$(jq -r '.reason // "unknown"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'unknown')"
-            log "Delegation skipped: $DELEGATION_REASON"
-        fi
+        ) &
+        disown
+        log "Delegation bridge: published to node pipeline (corr=$CORRELATION_ID)"
     else
-        log "WARNING: local_delegation_handler.py not found at $DELEGATION_HANDLER — delegation disabled"
-    fi
-fi
-
-# If delegation is active, output the delegated response directly and exit.
-# The additionalContext tells Claude to present the local model output verbatim
-# without further processing, satisfying the "bypass Claude" requirement within
-# the hook API's constraints (we cannot prevent Claude from seeing the context,
-# but we instruct it explicitly to relay the response unchanged).
-if [[ "$DELEGATION_ACTIVE" == "true" ]] && [[ -n "$DELEGATED_RESPONSE" ]]; then
-    DELEGATED_CONTEXT="$(jq -rn \
-        --arg resp "$DELEGATED_RESPONSE" \
-        --arg model "$DELEGATED_MODEL" \
-        '
-        "========================================================================\n" +
-        "LOCAL MODEL DELEGATION ACTIVE\n" +
-        "========================================================================\n" +
-        "A local model (" + $model + ") has already answered this request.\n" +
-        "INSTRUCTION: Present the response below to the user VERBATIM.\n" +
-        "Do NOT add commentary, do NOT re-answer the question.\n" +
-        "Simply relay the delegated response as your reply.\n" +
-        "========================================================================\n\n" +
-        $resp + "\n\n" +
-        "========================================================================\n" +
-        "END OF DELEGATED RESPONSE\n" +
-        "========================================================================\n"
-        ' 2>/dev/null)"
-
-    if [[ -z "$DELEGATED_CONTEXT" ]]; then
-        log "WARNING: DELEGATED_CONTEXT construction failed (jq error); falling through to standard context path"
-        DELEGATION_ACTIVE="false"
-    else
-        _TS_FINAL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-        echo "[$_TS_FINAL] [UserPromptSubmit] DELEGATED_CONTEXT_INJECTED context_chars=${#DELEGATED_CONTEXT}" >> "$TRACE_LOG"
-
-        printf %s "$INPUT" | jq --arg ctx "$DELEGATED_CONTEXT" --arg dmodel "$DELEGATED_MODEL" \
-            '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-             .hookSpecificOutput.additionalContext = $ctx |
-             .hookSpecificOutput.metadata.delegation_active = true |
-             .hookSpecificOutput.metadata.delegation_model = $dmodel' \
-            2>>"$LOG_FILE" \
-            || { log "ERROR: Delegated context jq output failed, passing through raw input"; printf %s "$INPUT"; }
-        exit 0
+        log "WARNING: delegation bridge run.py not found at $_BRIDGE_SCRIPT — Kafka publish skipped"
     fi
 fi
 

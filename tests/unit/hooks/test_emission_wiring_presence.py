@@ -175,12 +175,6 @@ class TestEmissionWiringPresence:
         source = _read_source("static_context_snapshot.py")
         assert 'emit_event("static.context.edit.detected"' in source
 
-    # -- delegation_orchestrator.py ------------------------------------------
-
-    def test_delegation_orchestrator_has_emit_call(self) -> None:
-        source = _read_source("delegation_orchestrator.py")
-        assert "emit_event(" in source
-
     # -- bash_guard.py -------------------------------------------------------
 
     def test_bash_guard_has_emit_call(self) -> None:
