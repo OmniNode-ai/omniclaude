@@ -508,7 +508,10 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
             (
                 "qwen3-coder",
                 lambda: run_http_model(
-                    "qwen3-coder", _url, "Qwen3-Coder-30B-A3B-Instruct", diff
+                    "qwen3-coder",
+                    _url,
+                    "cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit",
+                    diff,
                 ),
             )
         )
@@ -518,7 +521,10 @@ def run_all_models(pr_number: str, repo: str) -> ModelAggregateResult:
             (
                 "deepseek-r1",
                 lambda: run_http_model(
-                    "deepseek-r1", _ds_url, "DeepSeek-R1-Distill", diff
+                    "deepseek-r1",
+                    _ds_url,
+                    "mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit",
+                    diff,
                 ),
             )
         )
