@@ -61,9 +61,9 @@ fi
 # Inject advisory to dispatch hostile reviewer
 # -----------------------------------------------------------------------
 if [[ -n "$PR_URL" ]]; then
-    ADVISORY="[Auto Review] A PR was just created at ${PR_URL}. Dispatch /onex:hostile_reviewer against this PR to catch scope creep, bugs, and convention violations before merge."
+    ADVISORY="[Auto Review — REQUIRED] A PR was just created at ${PR_URL}. hostile_reviewer is a hard pre-merge gate [OMN-8702]: gh pr merge will be blocked until hostile_reviewer passes. Dispatch now: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate"
 else
-    ADVISORY="[Auto Review] A PR was just created. Dispatch /onex:hostile_reviewer against the new PR to catch scope creep, bugs, and convention violations before merge."
+    ADVISORY="[Auto Review — REQUIRED] A PR was just created. hostile_reviewer is a hard pre-merge gate [OMN-8702]: gh pr merge will be blocked until hostile_reviewer passes. Dispatch: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate"
 fi
 
 # Log the event

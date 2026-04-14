@@ -331,7 +331,12 @@ result = aggregate_verdicts(verdicts, strict=is_strict_mode)
 
 Based on `result["gate_verdict"]`:
 
-- **"pass"**: Write `ModelSkillResult` with `status="success"`, `extra_status="passed"`
+- **"pass"**: Write `ModelSkillResult` with `status="success"`, `extra_status="passed"`. Then write sentinel:
+  ```bash
+  mkdir -p "$ONEX_STATE_DIR/hostile-review-pass"
+  echo '{"pr":"{pr_number}","repo":"{repo}","verdict":"pass","ts":"{iso_timestamp}"}' \
+    > "$ONEX_STATE_DIR/hostile-review-pass/{pr_number}.json"
+  ```
 - **"fail"**: Write `ModelSkillResult` with `status="partial"`, `extra_status="blocked"`, post findings to PR
 
 When the gate fails, post a structured comment to the PR:
