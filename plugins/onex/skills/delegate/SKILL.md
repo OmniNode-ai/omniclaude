@@ -1,5 +1,5 @@
 ---
-description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka command event. Classifies prompt, wraps in envelope, publishes to delegation-request topic.
+description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps in envelope, publishes to delegation-request topic. Requires Kafka to be reachable — no local prose fallback.
 mode: full
 level: advanced
 debug: true
@@ -207,7 +207,7 @@ onex.evt.omnibase-infra.delegation-completed.v1 --> omnidash
 
 ## Related
 
-- **Existing delegation hook**: `plugins/onex/hooks/lib/delegation_orchestrator.py` (being replaced by this pipeline)
+- **Bridge implementation**: `plugins/onex/skills/delegate/_lib/run.py`
 - **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
 - **Topics**: `src/omniclaude/hooks/topics.py` (`TopicBase.DELEGATION_REQUEST`)
-- **Plan**: `docs/plans/2026-03-30-delegation-pipeline.md`
+- **Architecture**: `docs/architecture/DELEGATION_ARCHITECTURE.md`

@@ -89,18 +89,14 @@ Claude Code (stdin JSON)
          │
          ▼
     ┌────┴──────────────────────────────────────────┐
-    │  local_delegation_handler.py (optional)       │
-    │  [if ENABLE_LOCAL_DELEGATION=true             │
-    │   AND ENABLE_LOCAL_INFERENCE_PIPELINE=true]   │
+    │  Delegation bridge (fire-and-forget)          │
+    │  delegate/_lib/run.py (background subprocess) │
     │                                               │
-    │  delegation_orchestrator.py:                  │
-    │    1. TaskClassifier.is_delegatable()         │
-    │    2. Endpoint selection by intent type       │
-    │    3. LLM call (7s timeout)                  │
-    │    4. Quality gate (heuristic, <5ms)          │
+    │  TaskClassifier.classify(prompt)              │
+    │  → publish to delegation-request.v1 (Kafka)  │
+    │  → node_delegation_orchestrator on .201       │
     │                                               │
-    │  If delegated=True: response injected into    │
-    │  additionalContext, Claude is bypassed        │
+    │  Requires Kafka. No local prose fallback.     │
     └────┬──────────────────────────────────────────┘
          │
          ▼

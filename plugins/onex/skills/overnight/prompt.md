@@ -262,7 +262,6 @@ Follow the delegation routing from standing orders:
 - Architecture, multi-file changes -> Frontier (OpenAI/Google)
 
 Environment variables for local inference should already be set:
-- ENABLE_LOCAL_DELEGATION=true
 - ENABLE_LOCAL_INFERENCE_PIPELINE=true
 
 ## Reporting
