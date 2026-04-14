@@ -653,14 +653,15 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
             # is a no-op, preserving existing behaviour exactly.
             _DELEGATION_BRIDGE=$(_normalize_bool "${ENABLE_DELEGATION_BRIDGE:-false}")
             if [[ "$_DELEGATION_BRIDGE" == "true" ]]; then
-                _BRIDGE_SCRIPT="${HOOKS_LIB}/../skills/delegate/run.py"
+                _BRIDGE_SCRIPT="${PLUGIN_ROOT}/skills/delegate/_lib/run.py"
                 if [[ -f "$_BRIDGE_SCRIPT" ]]; then
                     _BRIDGE_PROMPT_B64="$PROMPT_B64"
                     (
-                        _BRIDGE_PROMPT="$(printf '%s' "$_BRIDGE_PROMPT_B64" | base64 --decode 2>/dev/null || echo "")"
+                        _BRIDGE_PROMPT="$(printf '%s' "$_BRIDGE_PROMPT_B64" | base64 -d 2>/dev/null || echo "")"
                         if [[ -n "$_BRIDGE_PROMPT" ]]; then
                             CLAUDE_SESSION_ID="$SESSION_ID" \
                                 "$PYTHON_CMD" "$_BRIDGE_SCRIPT" "$_BRIDGE_PROMPT" \
+                                --correlation-id "$CORRELATION_ID" \
                                 >> "$LOG_FILE" 2>&1
                         fi
                     ) &

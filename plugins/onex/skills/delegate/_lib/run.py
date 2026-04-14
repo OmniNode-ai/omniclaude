@@ -35,12 +35,14 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # sys.path setup
 # ---------------------------------------------------------------------------
-_SKILL_DIR = Path(__file__).parent
-_HOOKS_LIB = _SKILL_DIR.parent.parent / "hooks" / "lib"
+_LIB_DIR = Path(__file__).parent  # delegate/_lib/
+_SKILL_DIR = _LIB_DIR.parent  # delegate/
+_PLUGIN_ROOT = _SKILL_DIR.parent.parent  # plugins/onex/
+_HOOKS_LIB = _PLUGIN_ROOT / "hooks" / "lib"
 if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-_SRC_PATH = _SKILL_DIR.parent.parent.parent.parent.parent / "src"
+_SRC_PATH = _PLUGIN_ROOT.parent.parent.parent / "src"
 if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
 
@@ -76,6 +78,7 @@ def classify_and_publish(
     prompt: str,
     source_file: str | None = None,
     max_tokens: int = 2048,
+    correlation_id: str | None = None,
 ) -> dict:
     """Classify *prompt* and publish a delegation request via the emit daemon.
 
@@ -100,7 +103,7 @@ def classify_and_publish(
             ),
         }
 
-    correlation_id = str(uuid.uuid4())
+    correlation_id = correlation_id or str(uuid.uuid4())
     now_iso = datetime.now(UTC).isoformat()
 
     delegation_payload = {
@@ -134,7 +137,6 @@ def classify_and_publish(
             "error": "emit_event returned falsy — delegation request not queued",
             "correlation_id": correlation_id,
             "topic": _DELEGATION_REQUEST_TOPIC,
-            "envelope": envelope,
         }
 
     return {
@@ -161,6 +163,7 @@ def main() -> None:
     parser.add_argument("prompt", nargs="+", help="The task to delegate")
     parser.add_argument("--source-file", default=None)
     parser.add_argument("--max-tokens", type=int, default=2048)
+    parser.add_argument("--correlation-id", default=None)
     args = parser.parse_args()
 
     prompt = " ".join(args.prompt)
@@ -168,6 +171,7 @@ def main() -> None:
         prompt=prompt,
         source_file=args.source_file,
         max_tokens=args.max_tokens,
+        correlation_id=args.correlation_id,
     )
 
     print(json.dumps(result, indent=2))
