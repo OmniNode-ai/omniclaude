@@ -42,7 +42,7 @@ _HOOKS_LIB = _PLUGIN_ROOT / "hooks" / "lib"
 if _HOOKS_LIB.exists() and str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
-_SRC_PATH = _PLUGIN_ROOT.parent.parent.parent / "src"
+_SRC_PATH = _PLUGIN_ROOT.parent.parent / "src"
 if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
     sys.path.insert(0, str(_SRC_PATH))
 
@@ -50,7 +50,7 @@ if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
 # Imports
 # ---------------------------------------------------------------------------
 try:
-    from omniclaude.lib.task_classifier import TaskClassifier, TaskIntent
+    from omniclaude.lib.task_classifier import TaskClassifier
 
     _HAS_CLASSIFIER = True
 except ImportError:
@@ -64,9 +64,7 @@ except (ImportError, AttributeError):
     _DELEGATION_REQUEST_TOPIC = ""  # fallback; emit still works via event_type key
 
 DELEGATABLE: frozenset[object] = (
-    frozenset({TaskIntent.TEST, TaskIntent.DOCUMENT, TaskIntent.RESEARCH})
-    if _HAS_CLASSIFIER
-    else frozenset()
+    TaskClassifier.DELEGATABLE_INTENTS if _HAS_CLASSIFIER else frozenset()
 )
 
 # ---------------------------------------------------------------------------
@@ -94,21 +92,24 @@ def classify_and_publish(
     classifier = TaskClassifier()
     result = classifier.classify(prompt)
 
-    if result.intent not in DELEGATABLE:
+    intent = result.primary_intent
+    if intent not in DELEGATABLE:
         return {
             "success": False,
             "error": (
-                f"Task type '{result.intent.value}' is not delegatable. "
+                f"Task type '{intent.value}' is not delegatable. "
                 "Only test/document/research tasks can be delegated."
             ),
         }
 
-    correlation_id = correlation_id or str(uuid.uuid4())
+    correlation_id = (
+        correlation_id or os.environ.get("ONEX_RUN_ID") or str(uuid.uuid4())
+    )
     now_iso = datetime.now(UTC).isoformat()
 
     delegation_payload = {
         "prompt": prompt,
-        "task_type": result.intent.value,
+        "task_type": intent.value,
         "source_session_id": os.environ.get("CLAUDE_SESSION_ID"),
         "source_file_path": source_file,
         "correlation_id": correlation_id,
@@ -142,7 +143,7 @@ def classify_and_publish(
     return {
         "success": True,
         "correlation_id": correlation_id,
-        "task_type": result.intent.value,
+        "task_type": intent.value,
         "topic": _DELEGATION_REQUEST_TOPIC,
     }
 
