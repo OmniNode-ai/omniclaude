@@ -63,6 +63,18 @@ args:
 
 # Overnight Session
 
+## Tools Required (OMN-8708)
+
+This skill spawns workers via `Agent()`. Workers run in fresh sessions where dispatch tools
+are **deferred** (schema not pre-loaded). Any spawned worker that itself dispatches agents
+must call this at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Inject this as the first instruction in every `Agent()` dispatch prompt.
+
 ## Phase 0: Session Bootstrap
 
 Run this FIRST, before any other phase:

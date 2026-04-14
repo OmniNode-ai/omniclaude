@@ -18,6 +18,20 @@ args:
 
 # Epic Team Orchestration
 
+## Tools Required (OMN-8708)
+
+This skill spawns workers via `Agent(team_name=...)`. Workers run in fresh sessions where
+the `Agent` tool is **deferred** (schema not pre-loaded). Any worker that needs to dispatch
+further sub-agents (e.g. a `ticket-pipeline` worker spawning a verifier) must call:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+**Inject this as the first line of every `Agent()` dispatch prompt in the wave loop.** The
+worker must call it before any other tool use. Without it, recursive dispatch fails silently
+with "Agent tool unavailable".
+
 ## Mode Declaration
 
 **This skill operates in BUILD mode only.**
@@ -413,7 +427,10 @@ TaskCreate(subject="{ticket_id}: {title}", description=ticket_requirements)
 Agent(
   name="worker-{ticket_id}",
   team_name="epic-{epic_id}",
-  prompt="You are executing ticket {ticket_id} for epic {epic_id}.
+  prompt="FIRST ACTION — fetch deferred dispatch tool schemas (OMN-8708):
+    ToolSearch(query=\"select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet\", max_results=5)
+
+    You are executing ticket {ticket_id} for epic {epic_id}.
 
     Ticket: {ticket_id} - {title}
     URL: {url}

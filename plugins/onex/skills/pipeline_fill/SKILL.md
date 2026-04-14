@@ -33,6 +33,19 @@ args:
 
 # Pipeline Fill
 
+## Tools Required (OMN-8708)
+
+This skill spawns sub-workers via `Agent()`. Workers run in fresh sessions where the `Agent`
+tool is **deferred** (schema not pre-loaded). Any worker that itself needs to dispatch
+sub-agents must fetch the schema at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Add this call as the first action in every dispatch prompt that includes downstream `Agent()`
+calls. Without it, the worker will see "Agent tool unavailable" when it tries to spawn.
+
 ## Backing Node
 
 **This skill is a thin wrapper over `node_pipeline_fill` in omnimarket.**

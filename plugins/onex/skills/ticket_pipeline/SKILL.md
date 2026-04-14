@@ -40,6 +40,19 @@ args:
 
 # Ticket Pipeline
 
+## Tools Required (OMN-8708)
+
+Workers running `ticket-pipeline` run in fresh sessions where dispatch tools are **deferred**.
+If a `ticket-pipeline` worker needs to spawn sub-agents (e.g. a verifier agent), it must
+fetch the schema at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Dispatch prompts from `epic-team` include this step automatically. Standalone invocations
+from headless or cron contexts must include it explicitly.
+
 **Announce at start:** "I'm using the ticket-pipeline skill."
 
 ## Usage

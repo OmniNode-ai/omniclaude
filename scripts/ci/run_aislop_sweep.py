@@ -36,6 +36,11 @@ EXCLUDE_DIRS = [
 
 EXCLUDE_ARGS = [arg for d in EXCLUDE_DIRS for arg in ("--exclude-dir", d)]
 
+# Pattern strings stored as constants so the aislop tool doesn't flag its own source.
+_PROHIBITED_GREP_PATTERN = (
+    "ONEX_EVENT_BUS_TYPE=inmemory\\|OLLAMA_BASE_URL"  # aislop: ignore
+)
+
 
 @dataclass
 class Finding:
@@ -78,7 +83,7 @@ def main() -> int:
     findings: list[Finding] = []
 
     # --- prohibited-patterns (CRITICAL) ---
-    for raw in grep(r"ONEX_EVENT_BUS_TYPE=inmemory\|OLLAMA_BASE_URL"):
+    for raw in grep(_PROHIBITED_GREP_PATTERN):
         path, lineno, content = parse_grep_line(raw)
         stripped = content.strip()
         # Skip lines that *describe* the prohibition (rule=, message=, suppression).
