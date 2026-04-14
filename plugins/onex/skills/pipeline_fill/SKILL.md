@@ -162,3 +162,31 @@ All state written to `.onex_state/pipeline-fill/`:
 /loop 5m /pipeline-fill --wave-cap 8   # Aggressive fill
 /loop 30m /pipeline-fill --wave-cap 3  # Conservative fill
 ```
+
+## Verification
+
+After each cycle (including no-op cycles), the backing node writes three observable
+artifacts to `.onex_state/pipeline-fill/` relative to `$OMNI_HOME`:
+
+| File | Written when | Contents |
+|------|-------------|----------|
+| `dispatched.yaml` | Tickets dispatched (not dry-run) | `in_flight`, `completed`, `failed` lists with ticket IDs, timestamps, RSD scores |
+| `scores.yaml` | After RSD scoring (any cycle with candidates) | Ranked ticket IDs with `rsd_score`, `priority`, timestamp |
+| `last-run.yaml` | Every cycle including no-ops | `timestamp`, `correlation_id`, `candidates_found`, `candidates_after_filter`, `dispatched`, `wave_status`, optional `skip_reason` |
+
+**To confirm a cycle ran:**
+
+```bash
+# Check last-run timestamp
+cat $OMNI_HOME/.onex_state/pipeline-fill/last-run.yaml
+
+# Confirm in-flight tracking is populated
+cat $OMNI_HOME/.onex_state/pipeline-fill/dispatched.yaml
+
+# Inspect score ranking from last cycle
+cat $OMNI_HOME/.onex_state/pipeline-fill/scores.yaml
+```
+
+If `last-run.yaml` is absent or stale, the node has not executed. A cycle that
+skips dispatch (wave cap, no candidates, all below min-score) still writes
+`last-run.yaml` with a `skip_reason` field.
