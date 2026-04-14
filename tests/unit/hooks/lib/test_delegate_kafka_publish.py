@@ -31,36 +31,46 @@ for _p in (_DELEGATE_LIB, _HOOKS_LIB):
     if _p.exists() and str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+# Module-level keys to save/restore — only the modules we inject/reload.
+_MANAGED_KEYS = frozenset({"emit_client_wrapper", "run"})
 
-@pytest.fixture
-def delegate_run_with_mock_emit() -> pytest.Generator[
-    tuple[ModuleType, MagicMock], None, None
-]:
-    """Load delegate run.py with a mocked emit_client_wrapper.
 
-    Saves and restores sys.modules so reload side-effects don't leak.
-    """
-    mock_emit = MagicMock(return_value=True)
+def _make_delegate_run(emit_return: bool) -> tuple[ModuleType, MagicMock]:
+    """Load delegate run.py with a mocked emit_client_wrapper."""
+    mock_emit = MagicMock(return_value=emit_return)
     mock_module = MagicMock()
     mock_module.emit_event = mock_emit
 
-    saved = dict(sys.modules)
-    sys.modules["emit_client_wrapper"] = mock_module
+    # Snapshot only the managed keys
+    saved = {k: sys.modules.get(k) for k in _MANAGED_KEYS}
 
-    # Remove stale cached module so reload picks up the mock
+    sys.modules["emit_client_wrapper"] = mock_module
     sys.modules.pop("run", None)
 
     import run as delegate_run  # noqa: PLC0415
 
     importlib.reload(delegate_run)
 
-    yield delegate_run, mock_emit
+    return delegate_run, mock_emit, saved
 
-    # Restore sys.modules exactly (remove any modules added by reload)
-    to_remove = [k for k in sys.modules if k not in saved]
-    for k in to_remove:
-        del sys.modules[k]
-    sys.modules.update(saved)
+
+def _restore(saved: dict) -> None:
+    """Restore only the managed keys in sys.modules."""
+    for k in _MANAGED_KEYS:
+        if saved[k] is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = saved[k]
+
+
+@pytest.fixture
+def delegate_run_with_mock_emit() -> pytest.Generator[
+    tuple[ModuleType, MagicMock], None, None
+]:
+    """Load delegate run.py with a mocked emit_client_wrapper (returns True)."""
+    delegate_run, mock_emit, saved = _make_delegate_run(emit_return=True)
+    yield delegate_run, mock_emit
+    _restore(saved)
 
 
 @pytest.fixture
@@ -68,24 +78,9 @@ def delegate_run_with_failing_emit() -> pytest.Generator[
     tuple[ModuleType, MagicMock], None, None
 ]:
     """Load delegate run.py with an emit_client_wrapper that returns False."""
-    mock_emit = MagicMock(return_value=False)
-    mock_module = MagicMock()
-    mock_module.emit_event = mock_emit
-
-    saved = dict(sys.modules)
-    sys.modules["emit_client_wrapper"] = mock_module
-    sys.modules.pop("run", None)
-
-    import run as delegate_run  # noqa: PLC0415
-
-    importlib.reload(delegate_run)
-
+    delegate_run, mock_emit, saved = _make_delegate_run(emit_return=False)
     yield delegate_run, mock_emit
-
-    to_remove = [k for k in sys.modules if k not in saved]
-    for k in to_remove:
-        del sys.modules[k]
-    sys.modules.update(saved)
+    _restore(saved)
 
 
 class TestDelegateKafkaPublish:
