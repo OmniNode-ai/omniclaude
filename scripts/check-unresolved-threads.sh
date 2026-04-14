@@ -11,10 +11,10 @@ OWNER="${1:?owner required}"
 REPO="${2:?repo required}"
 PR_NUMBER="${3:?pr_number required}"
 
-QUERY='query($owner: String!, $repo: String!, $pr: Int!) {
+QUERY='query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $endCursor) {
         nodes {
           isResolved
           comments(first: 1) {
@@ -26,28 +26,32 @@ QUERY='query($owner: String!, $repo: String!, $pr: Int!) {
             }
           }
         }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
   }
 }'
 
-# CodeRabbit patterns: bot login or signature markers in body
+# CodeRabbit patterns: bot login or signature markers in body; // "" guards null fields
 CR_JQ='[
-  .data.repository.pullRequest.reviewThreads.nodes[]
+  .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
   | select(
       .comments.nodes[0] != null and (
-        (.comments.nodes[0].author.login | test("coderabbitai"; "i")) or
-        (.comments.nodes[0].body | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
+        ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
+        ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
       )
     )
 ] | length'
 
-COUNT=$(gh api graphql \
+COUNT=$(gh api graphql --paginate \
   -f query="$QUERY" \
   -F owner="$OWNER" \
   -F repo="$REPO" \
   -F pr="$PR_NUMBER" \
-  --jq "$CR_JQ")
+  | jq -s "$CR_JQ")
 
 echo "$COUNT"
