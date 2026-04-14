@@ -644,6 +644,32 @@ if [[ "$_HAS_LLM_ENDPOINTS" == "true" ]] && [[ "$_DELEGATION_KILL_SWITCH" != "fa
             # Fire-and-forget Kafka emit for delegation orchestrator node
             _emit_event "delegate.task" "{\"prompt_length\": ${#PROMPT}, \"intent\": \"$_DEL_INTENT\", \"confidence\": $_DEL_CONFIDENCE, \"correlation_id\": \"$CORRELATION_ID\", \"session_id\": \"$SESSION_ID\", \"delegated_sync\": $DELEGATION_ACTIVE}" 2>/dev/null &
             log "Delegation Kafka command emitted: intent=$_DEL_INTENT confidence=$_DEL_CONFIDENCE"
+
+            # --- Delegation bridge (OMN-8689): publish real command to node pipeline ---
+            # Gated by ENABLE_DELEGATION_BRIDGE=true. Belt+suspenders: the legacy
+            # delegate.task emit above stays for dashboard metrics; this bridge adds
+            # the actual delegation-request command that node_delegation_orchestrator
+            # consumes. When ENABLE_DELEGATION_BRIDGE is unset or false this block
+            # is a no-op, preserving existing behaviour exactly.
+            _DELEGATION_BRIDGE=$(_normalize_bool "${ENABLE_DELEGATION_BRIDGE:-false}")
+            if [[ "$_DELEGATION_BRIDGE" == "true" ]]; then
+                _BRIDGE_SCRIPT="${HOOKS_LIB}/../skills/delegate/run.py"
+                if [[ -f "$_BRIDGE_SCRIPT" ]]; then
+                    _BRIDGE_PROMPT_B64="$PROMPT_B64"
+                    (
+                        _BRIDGE_PROMPT="$(printf '%s' "$_BRIDGE_PROMPT_B64" | base64 --decode 2>/dev/null || echo "")"
+                        if [[ -n "$_BRIDGE_PROMPT" ]]; then
+                            CLAUDE_SESSION_ID="$SESSION_ID" \
+                                "$PYTHON_CMD" "$_BRIDGE_SCRIPT" "$_BRIDGE_PROMPT" \
+                                >> "$LOG_FILE" 2>&1
+                        fi
+                    ) &
+                    disown
+                    log "Delegation bridge: published to node pipeline (intent=$_DEL_INTENT corr=$CORRELATION_ID)"
+                else
+                    log "WARNING: delegation bridge enabled but run.py not found at $_BRIDGE_SCRIPT"
+                fi
+            fi
         fi
 
         # --- Agentic dispatch handling (OMN-5728 — Phase 2: Dispatch) ---
