@@ -82,6 +82,18 @@ outputs:
 
 # Merge Sweep
 
+## Tools Required (OMN-8708)
+
+When `merge-sweep` is invoked as a dispatched worker from another orchestrator (e.g. `session`
+or `overnight`), it runs in a fresh session where dispatch tools are **deferred**. If this
+worker needs to spawn sub-agents for `pr-polish` or Track B work, it must fetch at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+The dispatch prompt from the parent orchestrator must include this as its first instruction.
+
 ## Overview
 
 Thin trigger skill for the PR lifecycle pipeline. Parses CLI args, maps them to

@@ -40,6 +40,18 @@ outputs:
 
 # autopilot
 
+## Tools Required (OMN-8708)
+
+When autopilot phases spawn sub-workers via `Agent()`, those workers run in fresh sessions
+where dispatch tools are **deferred**. Any sub-worker needing to spawn further agents must
+call at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Include this as the first instruction in every `Agent()` dispatch prompt.
+
 **Skill ID**: `onex:autopilot`
 **Version**: 3.0.0
 **Owner**: omniclaude

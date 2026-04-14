@@ -4,7 +4,7 @@
 """Pre-commit aislop sweep — fast, changed-files-only check for CRITICAL/ERROR patterns.
 
 Receives changed file paths as argv (pre-commit passes them). Checks only:
-  - prohibited-patterns (CRITICAL): ONEX_EVENT_BUS_TYPE=inmemory, OLLAMA_BASE_URL
+  - prohibited-patterns (CRITICAL): forbidden env vars (inmemory bus, OLLAMA)
   - compat-shims (WARNING, non-blocking): # removed, # backwards.compat, _unused_
 
 Hardcoded-topic detection is CI-only (full enum exclusion logic is too slow for
@@ -18,6 +18,9 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+
+# Pattern strings stored as constants so the aislop tool doesn't flag its own source.
+_PROHIBITED_PATTERN = "ONEX_EVENT_BUS_TYPE=inmemory|OLLAMA_BASE_URL"  # aislop: ignore
 
 
 def check_file(path: Path) -> list[tuple[str, int, str, str]]:

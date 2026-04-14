@@ -54,6 +54,19 @@ outputs:
 
 ---
 
+## Tools Required (OMN-8708)
+
+This skill spawns workers via `Agent()`. Workers run in fresh sessions where dispatch tools
+are **deferred** (schema not pre-loaded). Any worker that needs to itself dispatch sub-agents
+must fetch the schema at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Inject this call as the first step in every Phase 3 dispatch prompt that includes downstream
+`Agent()` calls (e.g. `session` workers calling `merge_sweep` or `epic_team`).
+
 ## Supersedes
 
 This skill replaces 5 legacy skills. They are kept for backward compatibility but deprecated:

@@ -28,6 +28,18 @@ args:
 
 # Build Loop
 
+## Tools Required (OMN-8708)
+
+`build-loop` dispatches workers via `Agent()`. Workers run in fresh sessions where dispatch
+tools are **deferred** (schema not pre-loaded). Any worker that needs to further dispatch
+sub-agents must fetch the schema at session start:
+
+```
+ToolSearch(query="select:Agent,SendMessage,TaskCreate,TaskUpdate,TaskGet", max_results=5)
+```
+
+Include this as the first instruction in every `Agent()` dispatch prompt emitted by the loop.
+
 **Announce at start:** "I'm using the build-loop skill to start the autonomous build loop."
 
 ## Usage
