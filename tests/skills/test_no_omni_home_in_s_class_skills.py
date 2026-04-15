@@ -5,6 +5,8 @@
 import re
 from pathlib import Path
 
+import pytest
+
 # S-class skills per docs/plans/2026-04-14-standalone-plugin-distribution.md
 # These are standalone-capable skills that must not reference $OMNI_HOME.
 S_CLASS_SKILLS = [
@@ -63,6 +65,7 @@ def _skill_files(skill_name: str) -> list[Path]:
     return list(skill_dir.glob("*.md")) if skill_dir.exists() else []
 
 
+@pytest.mark.unit
 def test_no_omni_home_refs_in_s_class_skills() -> None:
     offenders: list[str] = []
     for skill_name in S_CLASS_SKILLS:
