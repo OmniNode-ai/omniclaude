@@ -102,19 +102,9 @@ Availability is determined by:
 - `gemini`: omnigemini sibling plugin installed and responding
 
 **Missing sibling plugin**: If a requested model requires a sibling plugin (e.g., `gemini` requires
-`omnigemini`) and that plugin is unavailable, the skill raises a structured `SkillRoutingError`
-rather than silently degrading or falling back to prose:
-
-```json
-{
-  "error": "SkillRoutingError",
-  "model": "gemini",
-  "reason": "omnigemini plugin not installed or not responding",
-  "available_models": ["codex", "deepseek-r1"]
-}
-```
-
-The calling workflow must handle `SkillRoutingError` explicitly. Silent degradation is forbidden.
+`omnigemini`) and that plugin is unavailable, the model runner returns an empty findings list and
+logs a warning. The aggregate result reflects only the models that succeeded. Callers should
+verify `models_succeeded` in the output and escalate if critical models are absent.
 
 ## Description
 
