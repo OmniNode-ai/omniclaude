@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# PR Contract Presence + Completeness Gate (OMN-8909)
+#
+# Strict companion to contract-validation.yml. Enforces:
+# - Runtime-touching PRs with OMN ticket refs MUST have a contract YAML
+# - Contract dod_evidence MUST be non-empty for runtime-touching PRs
+#
+# Phase 1: warn-only — posts PR comment on violations, always exits 0.
+# Phase 2: flip to blocking when FP rate < 5% over 20+ PRs.
+
+name: Validate PR Contracts
+
+on:
+  pull_request:
+    branches: [main, develop]
+  merge_group:
+
+concurrency:
+  group: validate-pr-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-pr-contracts:
+    name: validate-pr-contracts
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Skip merge_group events
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "::notice::merge_group event — validate-pr-contracts skipped."
+
+      - name: Checkout
+        if: github.event_name != 'merge_group'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout omnibase_infra (for validation script)
+        if: github.event_name != 'merge_group'
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omnibase_infra
+          path: _omnibase_infra
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        if: github.event_name != 'merge_group'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        if: github.event_name != 'merge_group'
+        run: pip install pyyaml
+
+      - name: Gather PR metadata
+        if: github.event_name != 'merge_group'
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr view "$PR_NUMBER" --json body -q .body > /tmp/pr_body.txt || true
+          gh pr diff "$PR_NUMBER" --name-only > /tmp/diff_files.txt || true
+
+      - name: Run contract validation
+        if: github.event_name != 'merge_group'
+        id: validate
+        env:
+          PR_DIFF_FILES_PATH: /tmp/diff_files.txt
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY_PATH: /tmp/pr_body.txt
+          CONTRACTS_PATH: contracts
+        run: |
+          # Read file contents into env vars for the script
+          export PR_DIFF_FILES="$(cat /tmp/diff_files.txt 2>/dev/null || echo '')"
+          export PR_BODY="$(cat /tmp/pr_body.txt 2>/dev/null || echo '')"
+
+          python _omnibase_infra/scripts/validate_pr_contracts.py > /tmp/validation_output.txt 2>&1
+          EXIT_CODE=$?
+
+          cat /tmp/validation_output.txt
+
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::warning::Contract validation found issues (warn-only mode)."
+          fi
+
+      - name: Post PR comment on findings
+        if: github.event_name != 'merge_group' && steps.validate.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          BODY="## ⚠️ Contract Validation Findings (warn-only)
+
+          $(cat /tmp/validation_output.txt)
+
+          ---
+          *This check is in **warn-only mode** (Phase 1). It will become blocking once false-positive rate < 5% over 20+ PRs.*
+          *Ticket: OMN-8909 | Epic: OMN-8908*"
+
+          gh pr comment "$PR_NUMBER" --body "$BODY" || echo "::warning::Failed to post PR comment"
+
+      # Phase 1: always exit 0 (warn-only)
+      - name: Gate result (warn-only)
+        if: github.event_name != 'merge_group'
+        run: |
+          echo "::notice::validate-pr-contracts completed (warn-only mode). Exit code from validation: ${{ steps.validate.outputs.exit_code }}"
+          exit 0
