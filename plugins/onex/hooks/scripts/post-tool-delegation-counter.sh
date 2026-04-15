@@ -108,7 +108,7 @@ fi
 
 # --- Meta/conversational tools — skip counting entirely ---
 case "$TOOL_NAME" in
-    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList|TaskOutput|TaskStop)
+    Agent|AskUserQuestion|ExitPlanMode|EnterPlanMode|EnterWorktree|TeamCreate|TeamDelete|SendMessage|TaskCreate|TaskUpdate|TaskGet|TaskList|TaskStop)
         printf '%s\n' "$TOOL_INFO"
         exit 0
         ;;
