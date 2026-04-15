@@ -161,6 +161,13 @@ checks:
     gate: "Omni Standards Gate"
     rationale: "Forbidden legacy patterns absent (dual model dirs, poetry.lock)"
 
+  # Tier A-Runtime (validate-agent-configs.yml)
+  - name: "Agent Config Schema Validation"
+    tier: A-Runtime
+    workflow: validate-agent-configs.yml
+    gate: null
+    rationale: "Validates agent config YAMLs against ModelAgentConfig Pydantic schema from onex_change_control (OMN-8910)"
+
   # Tier C (profile / informational)
   - name: "Merge Test Coverage"
     tier: C
