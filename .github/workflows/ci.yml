@@ -1900,6 +1900,17 @@ jobs:
             echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
           fi
 
+  # Skill monorepo-ref lint gate (OMN-8795 SD-08)
+  # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
+  # Land this PR last in the SD wave so the gate goes green on merge.
+  skill-monorepo-ref-gate:
+    name: Skill Monorepo-Ref Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect monorepo refs in skill files
+        run: bash scripts/check-skill-monorepo-refs.sh
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1961,6 +1972,8 @@ jobs:
       - aislop-sweep
       # Agent YAML contract validation (OMN-8914)
       - agent-contract-validation
+      # Skill monorepo-ref lint gate (OMN-8795 SD-08)
+      - skill-monorepo-ref-gate
     if: always()
     steps:
       - name: Check quality results
@@ -1998,7 +2011,8 @@ jobs:
             "skill-contract-validation=${{ needs.skill-contract-validation.result }}" \
             "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
             "aislop-sweep=${{ needs.aislop-sweep.result }}" \
-            "agent-contract-validation=${{ needs.agent-contract-validation.result }}"; do
+            "agent-contract-validation=${{ needs.agent-contract-validation.result }}" \
+            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
