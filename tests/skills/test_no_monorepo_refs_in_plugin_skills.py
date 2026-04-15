@@ -54,8 +54,13 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def test_no_monorepo_refs(skill_file: Path) -> None:
     lines = skill_file.read_text().splitlines()
     violations: list[str] = []
+    escape_hatch_with_reason = re.compile(r"#\s*local-path-ok\b\s+.+")
     for lineno, line in enumerate(lines, start=1):
         if _ESCAPE_HATCH in line:
+            if not escape_hatch_with_reason.search(line):
+                violations.append(
+                    f"  line {lineno}: escape hatch requires a reason after '# local-path-ok'"
+                )
             continue
         for pattern, message in FORBIDDEN_PATTERNS:
             if re.search(pattern, line):
