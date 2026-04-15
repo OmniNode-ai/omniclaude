@@ -27,10 +27,13 @@ source "${_SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
+# Preserve whether the caller actually supplied ONEX_STATE_DIR.
+_INPUT_ONEX_STATE_DIR="${ONEX_STATE_DIR:-}"
+
 # Resolve ONEX_STATE_DIR
 source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 
-if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+if [[ -z "${_INPUT_ONEX_STATE_DIR}" ]]; then
     # Drain stdin before fail-open so upstream writer is not blocked
     cat > /dev/null
     echo "{}"

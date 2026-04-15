@@ -27,10 +27,13 @@ source "${_SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
+# Preserve whether the caller actually supplied ONEX_STATE_DIR.
+_INPUT_ONEX_STATE_DIR="${ONEX_STATE_DIR:-}"
+
 # Resolve ONEX_STATE_DIR
 source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 
-if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
+if [[ -z "${_INPUT_ONEX_STATE_DIR}" ]]; then
     # Drain stdin before fail-open so upstream writer is not blocked
     cat > /dev/null
     echo "{}"
@@ -43,6 +46,12 @@ REASON=$(echo "$EVENT_JSON" | jq -r '.reason // .error // ""' 2>/dev/null || ech
 AGENT_NAME=$(echo "$EVENT_JSON" | jq -r '.agent_name // .agentName // "unknown"' 2>/dev/null || echo "unknown")
 SESSION_ID=$(echo "$EVENT_JSON" | jq -r '.session_id // .sessionId // "unknown"' 2>/dev/null || echo "unknown")
 TURN_COUNT=$(echo "$EVENT_JSON" | jq -r '.turn_count // .turnCount // null' 2>/dev/null || echo "null")
+
+# Sanitize string fields: strip newlines and escape double-quotes to prevent YAML injection
+_sanitize() { printf '%s' "$1" | tr -d '\n\r' | sed 's/"/\\"/g'; }
+REASON=$(_sanitize "$REASON")
+AGENT_NAME=$(_sanitize "$AGENT_NAME")
+SESSION_ID=$(_sanitize "$SESSION_ID")
 
 DATE_PREFIX=$(date -u +%Y-%m-%d)
 TS_NS=$(date -u +%s%N 2>/dev/null || date -u +%s)

@@ -67,7 +67,7 @@ def test_stop_failure_writes_friction_yaml() -> None:
         assert result.returncode == 0, f"Hook failed: {result.stderr}"
 
         friction_files = list(
-            Path(tmpdir).glob("friction/*-stop-failure-pipeline-worker.yaml")
+            Path(tmpdir).glob("friction/*-stop-failure-pipeline-worker-*.yaml")
         )
         assert len(friction_files) == 1, (
             f"Expected 1 friction file, got {len(friction_files)}. "
@@ -93,7 +93,9 @@ def test_stop_failure_unknown_agent() -> None:
             tmpdir,
         )
         assert result.returncode == 0
-        friction_files = list(Path(tmpdir).glob("friction/*-stop-failure-unknown.yaml"))
+        friction_files = list(
+            Path(tmpdir).glob("friction/*-stop-failure-unknown-*.yaml")
+        )
         assert len(friction_files) == 1
         data = yaml.safe_load(friction_files[0].read_text())
         assert data["severity"] == "P1"
@@ -110,7 +112,7 @@ def test_stop_failure_null_turn_count() -> None:
         )
         assert result.returncode == 0
         friction_files = list(
-            Path(tmpdir).glob("friction/*-stop-failure-worker-x.yaml")
+            Path(tmpdir).glob("friction/*-stop-failure-worker-x-*.yaml")
         )
         assert len(friction_files) == 1
         data = yaml.safe_load(friction_files[0].read_text())
