@@ -5,9 +5,8 @@
 # PreToolUse Idle Notification Rate Limiter (OMN-8924)
 #
 # Drops idle_notification SendMessage calls to at most 1 per 60s per agent_id.
-# Non-idle messages always pass. Excess notifications are dropped silently
-# (no permissionDenied — returns the original tool input unchanged so Claude
-# still "sends" but downstream sees nothing).
+# Non-idle messages always pass. Excess idle_notifications are blocked via
+# permissionDenied (exit 2) to prevent Claude from sending them downstream.
 #
 # Pass conditions (exit 0, tool_input forwarded):
 #   - tool_name is not SendMessage
@@ -15,7 +14,7 @@
 #   - First idle_notification in the 60s window for this agent_id
 #   - IDLE_RATELIMIT_DISABLED=1 kill switch
 #
-# Drop condition (exit 0, permissionDenied response):
+# Drop condition (exit 2, permissionDenied returned):
 #   - Subsequent idle_notification within the 60s window for this agent_id
 #
 # Hook registration: hooks.json PreToolUse, matcher "^SendMessage$"
@@ -34,7 +33,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "FATAL: ONEX_STATE_DIR not set" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { cat >/dev/null; echo "FATAL: ONEX_STATE_DIR not set" >&2; exit 1; }
 LOG_FILE="${ONEX_HOOK_LOG}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
