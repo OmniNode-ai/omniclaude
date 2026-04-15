@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos via gh)"
+    description: "Comma-separated list of repos to scan (default: all repos found under ${ONEX_WORKTREES_ROOT:-~/omni_worktrees} via local worktree enumeration)"
     required: false
   - name: --dry-run
     description: "List superseded PRs without closing them"

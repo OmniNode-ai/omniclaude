@@ -73,7 +73,7 @@ Shell:   <shell>
 ONEX_STATE_DIR: <path or UNSET>
 ```
 
-Mark WARN if `ONEX_STATE_DIR` is UNSET — state-backed skills will use `~/.onex_state` as default.
+Mark FAIL if `ONEX_STATE_DIR` is UNSET — state-backed skills require this variable to be set; no fallback path is provided.
 Mark PASS otherwise (identity is informational).
 
 ---
