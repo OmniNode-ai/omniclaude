@@ -28,8 +28,6 @@ on:
     types: [submitted, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  pull_request_review_thread:
-    types: [resolved, unresolved]
   issue_comment:
     types: [created, edited, deleted]
 
