@@ -15,11 +15,16 @@ def test_no_hardcoded_mcp_linear_in_skill_prompts() -> None:
 
     DoD gate for OMN-8824. Fails before migration, passes after all 42 files are ported.
     """
-    offenders = [
-        str(f.relative_to(SKILLS_DIR.parent.parent.parent))
-        for f in SKILLS_DIR.rglob("*")
-        if f.is_file() and PATTERN.search(f.read_text())
-    ]
+    offenders = []
+    for f in SKILLS_DIR.rglob("*"):
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if PATTERN.search(text):
+            offenders.append(str(f.relative_to(SKILLS_DIR.parent.parent.parent)))
     assert not offenders, (
         f"mcp__linear-server__ found in {len(offenders)} file(s):\n"
         + "\n".join(f"  {o}" for o in sorted(offenders))
