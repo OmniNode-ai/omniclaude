@@ -84,7 +84,7 @@ def test_hooks_json_script_paths() -> None:
         resolved = _resolve_path(command)
 
         exists = resolved is not None and resolved.exists() and resolved.is_file()
-        executable = exists and os.access(resolved, os.X_OK)
+        executable = exists and resolved is not None and os.access(resolved, os.X_OK)
 
         status = "OK" if (exists and executable) else "BROKEN"
         report_lines.append(
