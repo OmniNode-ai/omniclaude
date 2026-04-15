@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# OMN-8837: Poll for CLEAN+armed PRs that missed the auto-merge event trigger.
+# auto-merge.yml only fires on fresh events; a PR that becomes CLEAN while no
+# event is in flight sits stuck indefinitely. This workflow runs every 15 minutes
+# and calls enqueuePullRequest (GraphQL) on any PR that is CLEAN, has an
+# autoMergeRequest set, and is not already in the merge queue.
+name: Auto-Merge Stale Poller
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  poll-and-enqueue:
+    name: Enqueue Stale CLEAN+Armed PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enqueue stale CLEAN+armed PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          OWNER="${GH_REPO%%/*}"
+          REPO="${GH_REPO##*/}"
+
+          # Fetch all open PRs with merge state, auto-merge, and merge queue status
+          PRS=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequests(states: OPEN, first: 50) {
+                  nodes {
+                    number
+                    id
+                    author { login }
+                    mergeStateStatus
+                    autoMergeRequest { mergeMethod }
+                    isInMergeQueue
+                    isDraft
+                  }
+                }
+              }
+            }
+          ' -f owner="$OWNER" -f repo="$REPO")
+
+          echo "$PRS" | jq -r '
+            .data.repository.pullRequests.nodes[] |
+            select(
+              .author.login == "jonahgabriel" and
+              .mergeStateStatus == "CLEAN" and
+              .autoMergeRequest != null and
+              .isInMergeQueue == false and
+              .isDraft == false
+            ) |
+            "\(.number) \(.id)"
+          ' | while read -r PR_NUMBER NODE_ID; do
+            echo "Enqueueing PR #$PR_NUMBER (node: $NODE_ID)"
+            RESULT=$(gh api graphql -f query='
+              mutation($prId: ID!) {
+                enqueuePullRequest(input: { pullRequestId: $prId }) {
+                  mergeQueueEntry {
+                    id
+                    position
+                  }
+                }
+              }
+            ' -f prId="$NODE_ID" 2>&1) || true
+
+            if echo "$RESULT" | grep -q '"id"'; then
+              POSITION=$(echo "$RESULT" | jq -r '.data.enqueuePullRequest.mergeQueueEntry.position // "?"')
+              echo "PR #$PR_NUMBER enqueued at position $POSITION"
+            elif echo "$RESULT" | grep -qiE "already in the queue|already enqueued"; then
+              echo "PR #$PR_NUMBER already in queue (race condition tolerated)"
+            else
+              echo "PR #$PR_NUMBER enqueue result: $RESULT"
+            fi
+          done
+
+          echo "Stale poller complete"
