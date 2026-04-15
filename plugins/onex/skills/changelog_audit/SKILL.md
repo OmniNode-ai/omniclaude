@@ -42,7 +42,7 @@ Fetch, parse, and classify changelog entries for a target dependency since the l
 |--------|-----|
 | `claude-code` | https://code.claude.com/docs/en/changelog |
 | `anthropic-sdk-python` | https://github.com/anthropics/anthropic-sdk-python/blob/main/CHANGELOG.md |
-| `github-cli` | https://github.com/cli/cli/blob/trunk/CHANGELOG.md |
+| `github-cli` | https://github.com/cli/cli/releases |
 | `uv` | https://github.com/astral-sh/uv/blob/main/CHANGELOG.md |
 | `kafka-python` | https://github.com/dpkp/kafka-python/blob/master/CHANGES.md |
 | `custom-url` | Provide via `--url` arg |
