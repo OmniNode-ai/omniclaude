@@ -22,6 +22,9 @@ args:
   - name: --dry-run
     description: "Parse and classify but do not create Linear tickets or update state"
     required: false
+  - name: --url
+    description: "Changelog URL to fetch when --target is custom-url (https only, no private hosts)"
+    required: false
 ---
 
 # /onex:changelog_audit

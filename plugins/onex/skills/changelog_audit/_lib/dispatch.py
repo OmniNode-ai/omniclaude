@@ -17,7 +17,14 @@ import subprocess
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import urlopen
+
+_ALLOWED_SCHEMES = frozenset({"https"})
+_PRIVATE_HOSTS = re.compile(
+    r"^(localhost|127\.|0\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)",
+    re.IGNORECASE,
+)
 
 CHANGELOG_URLS: dict[str, str] = {
     "claude-code": "https://code.claude.com/docs/en/changelog",
@@ -74,9 +81,10 @@ def _onex_state_dir() -> Path:
     return candidates[0]
 
 
-def _audit_dir() -> Path:
+def _audit_dir(create: bool = False) -> Path:
     d = _onex_state_dir() / "changelog_audit"
-    d.mkdir(parents=True, exist_ok=True)
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -96,6 +104,7 @@ def _load_last_audit_date(target: str) -> date | None:
 
 
 def _save_last_audit_date(target: str, audit_date: date) -> None:
+    _audit_dir(create=True)
     p = _last_audit_path(target)
     p.write_text(
         json.dumps(
@@ -182,13 +191,12 @@ def _grep_workspace(pattern: str) -> list[str]:
         result = subprocess.run(
             [
                 "grep",
-                "-rn",
+                "-rl",
                 "--include=*.py",
                 "--include=*.yaml",
                 "--include=*.yml",
                 "--include=*.md",
                 "--include=*.json",
-                "-l",
                 pattern,
                 workspace,
             ],
@@ -230,21 +238,23 @@ def _create_linear_ticket(target: str, entry: dict[str, Any]) -> str | None:
             ),
         )
         return ticket_id
-    except ImportError:
-        # Linear MCP tooling not available in this execution context — record to friction log
+    except Exception as exc:
+        surface = (
+            "linear/ticket-create-skipped"
+            if isinstance(exc, ImportError)
+            else "linear/ticket-create-failed"
+        )
         friction_path = _onex_state_dir() / "state" / "friction" / "friction.ndjson"
         friction_path.parent.mkdir(parents=True, exist_ok=True)
         record = {
-            "skill": "changelog_audit",
-            "surface": "linear/ticket-create-skipped",
-            "severity": "low",
-            "description": f"Linear ticket creation skipped for {target} entry: {entry['text'][:80]}",
+            "skill": "changelog-audit",
+            "surface": surface,
+            "severity": "low" if isinstance(exc, ImportError) else "medium",
+            "description": f"Linear ticket creation failed for {target} entry: {entry['text'][:80]} — {exc}",
             "timestamp": datetime.now(UTC).isoformat(),
         }
         with friction_path.open("a") as fh:
             fh.write(json.dumps(record) + "\n")
-        return None
-    except Exception:
         return None
 
 
@@ -255,7 +265,7 @@ def _write_report(
     ticket_ids: dict[int, str],
     workspace_usages: dict[int, list[str]],
 ) -> Path:
-    report_path = _audit_dir() / f"{target}-{audit_date.isoformat()}.md"
+    report_path = _audit_dir(create=True) / f"{target}-{audit_date.isoformat()}.md"
 
     lines = [
         f"# Changelog Audit: {target}",
@@ -290,7 +300,7 @@ def _write_report(
 
 def _regenerate_dashboard() -> Path:
     """Write DASHBOARD.md summarising audit state across all known targets."""
-    audit_dir = _audit_dir()
+    audit_dir = _audit_dir(create=True)
     today = datetime.now(tz=UTC).date()
     rows: list[str] = []
 
@@ -384,6 +394,17 @@ def dispatch(
             return {
                 "success": False,
                 "error": "custom-url target requires --url argument.",
+            }
+        parsed = urlparse(custom_url)
+        if parsed.scheme not in _ALLOWED_SCHEMES:
+            return {
+                "success": False,
+                "error": f"custom-url must use https, got scheme '{parsed.scheme}'.",
+            }
+        if _PRIVATE_HOSTS.match(parsed.hostname or ""):
+            return {
+                "success": False,
+                "error": f"custom-url must not target private/local hosts, got '{parsed.hostname}'.",
             }
         url = custom_url
     else:
