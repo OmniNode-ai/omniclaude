@@ -321,6 +321,7 @@ class TestRouteViaEventsIntegration:
         # Store for use in tests
         self._registry_path = registry_path
         self._router = router
+        self._monkeypatch = monkeypatch
 
     def _get_route_via_events(self):
         """Import route_via_events with patched router to use project registry."""
@@ -337,6 +338,13 @@ class TestRouteViaEventsIntegration:
         # refactors singleton management, this test will correctly
         # break (signaling the need to update the injection approach).
         route_via_events_wrapper._router_instance = self._router  # noqa: SLF001
+
+        # Disable always-on ONEX node routing so these tests exercise the
+        # legacy AgentRouter path with the injected test router. Must be
+        # applied after reload, which rebinds module-level functions.
+        self._monkeypatch.setattr(
+            route_via_events_wrapper, "_use_onex_routing_nodes", lambda: False
+        )
         return route_via_events_wrapper.route_via_events
 
     def test_empty_prompt_returns_fallback(self) -> None:
@@ -488,6 +496,7 @@ class TestCrossValidation:
         self,
         router: AgentRouter,
         corpus_entries: list[dict[str, Any]],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """
         For every corpus entry with a non-empty prompt, verify that the
@@ -500,6 +509,13 @@ class TestCrossValidation:
 
         importlib.reload(route_via_events_wrapper)
         route_via_events_wrapper._router_instance = self._router  # noqa: SLF001
+
+        # Disable always-on ONEX node routing so cross-validation exercises
+        # the legacy AgentRouter path that _determine_expected_agent_and_policy
+        # mirrors.
+        monkeypatch.setattr(
+            route_via_events_wrapper, "_use_onex_routing_nodes", lambda: False
+        )
 
         mismatches: list[str] = []
 

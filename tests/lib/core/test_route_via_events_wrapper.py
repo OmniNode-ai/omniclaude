@@ -158,6 +158,13 @@ class TestRouteViaEventsIntelligent:
 class TestRouteViaEventsWithMockedRouter:
     """Tests using mocked AgentRouter for deterministic behavior."""
 
+    @pytest.fixture(autouse=True)
+    def _disable_onex_routing(self, monkeypatch):
+        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        monkeypatch.setattr(
+            "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
+        )
+
     def test_high_confidence_match_uses_recommended_agent(self):
         """High confidence match should route to the recommended agent."""
         # Create mock recommendation with high confidence
@@ -426,6 +433,13 @@ class TestCandidateListFormatting:
     downstream consumers (Claude, local LLM).
     """
 
+    @pytest.fixture(autouse=True)
+    def _disable_onex_routing(self, monkeypatch):
+        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        monkeypatch.setattr(
+            "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
+        )
+
     def test_candidates_array_is_always_present(self):
         """Candidates array must always exist in routing result, even if empty."""
         result = route_via_events("test prompt", "corr-123")
@@ -647,6 +661,13 @@ class TestCandidateListFormatting:
 
 class TestConfidenceThreshold:
     """Tests for confidence threshold behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _disable_onex_routing(self, monkeypatch):
+        """Force legacy AgentRouter path; ONEX node routing tested separately."""
+        monkeypatch.setattr(
+            "route_via_events_wrapper._use_onex_routing_nodes", lambda: False
+        )
 
     def test_confidence_threshold_is_defined(self):
         """Confidence threshold constant should be defined."""
