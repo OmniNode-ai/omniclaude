@@ -23,9 +23,13 @@ def test_no_hardcoded_mcp_linear_calls_in_prompt() -> None:
 
     Fails before migration (8 sites present), passes after.
     """
+    import re
+
     content = PROMPT_MD.read_text()
     violations = [
-        line.strip() for line in content.splitlines() if "mcp__linear-server__" in line
+        line.strip()
+        for line in content.splitlines()
+        if re.search(r"mcp__linear[-_]server__", line)
     ]
     assert not violations, (
         f"Found {len(violations)} hardcoded mcp__linear-server__ call site(s) in prompt.md:\n"
