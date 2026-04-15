@@ -56,15 +56,18 @@ if [[ -n "${_BOOTSTRAP_STATE_DIR:-}" ]] && command -v jq >/dev/null 2>&1; then
     mkdir -p "$SEEN_DIR"
 
     PROMPT="$(echo "$STDIN_DATA" | jq -r '.tool_input.prompt // empty' 2>/dev/null || true)"
+    SCHEDULE="$(echo "$STDIN_DATA" | jq -r '.tool_input.schedule // empty' 2>/dev/null || true)"
 
     if [[ -n "$PROMPT" ]]; then
-        if echo "$PROMPT" | grep -q "Overseer tick"; then
+        # Validate both schedule (cron expression) and prompt content to prevent
+        # loose substring matches from triggering bootstrap with wrong crons.
+        if [[ "$SCHEDULE" == "*/15 * * * *" ]] && echo "$PROMPT" | grep -q "Overseer tick"; then
             touch "${SEEN_DIR}/overseer"
         fi
-        if echo "$PROMPT" | grep -q "Merge sweep"; then
+        if [[ "$SCHEDULE" == "23 * * * *" ]] && echo "$PROMPT" | grep -q "Merge sweep"; then
             touch "${SEEN_DIR}/merge_sweep"
         fi
-        if echo "$PROMPT" | grep -q "Dispatch haiku health worker"; then
+        if [[ "$SCHEDULE" == "3 * * * *" ]] && echo "$PROMPT" | grep -q "Dispatch haiku health worker"; then
             touch "${SEEN_DIR}/health_check"
         fi
 
