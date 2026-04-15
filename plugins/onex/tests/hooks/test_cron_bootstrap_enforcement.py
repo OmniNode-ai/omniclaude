@@ -102,6 +102,7 @@ class TestStopSessionBootstrapGuard:
         env = {
             **os.environ,
             "ONEX_STATE_DIR": str(tmp_path),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
         }
         stdin = json.dumps(
             {"sessionId": "test-session", "completion_status": "complete"}
@@ -130,6 +131,7 @@ class TestStopSessionBootstrapGuard:
         env = {
             **os.environ,
             "ONEX_STATE_DIR": str(tmp_path),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
         }
         stdin = json.dumps(
             {"sessionId": "test-session", "completion_status": "complete"}
@@ -156,6 +158,7 @@ class TestUserPromptBootstrapInjector:
         env = {
             **os.environ,
             "ONEX_STATE_DIR": str(tmp_path),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
         }
         stdin = json.dumps({"sessionId": "test-session", "prompt": "do some work"})
         result = subprocess.run(
@@ -186,6 +189,7 @@ class TestUserPromptBootstrapInjector:
         env = {
             **os.environ,
             "ONEX_STATE_DIR": str(tmp_path),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
         }
         stdin = json.dumps({"sessionId": "test-session", "prompt": "do some work"})
         result = subprocess.run(

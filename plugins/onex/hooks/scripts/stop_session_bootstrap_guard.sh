@@ -19,7 +19,10 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then
     source "$_MODE_SH"
-    [[ "$(omniclaude_mode)" == "lite" ]] && exit 0
+    if [[ "$(omniclaude_mode)" == "lite" ]]; then
+        cat > /dev/null
+        exit 0
+    fi
 fi
 unset _SCRIPT_DIR _MODE_SH
 
