@@ -199,6 +199,18 @@ phases:
 
 ---
 
+## Tracker DI Initialization
+
+```python
+from omnibase_infra.services.project_tracker.resolver import resolve_project_tracker
+
+tracker = resolve_project_tracker()
+```
+
+Use `tracker.*` for all ticket operations. Never call Linear MCP tools directly.
+
+---
+
 ## Initialization
 
 When `/ticket-pipeline {ticket_id}` is invoked:

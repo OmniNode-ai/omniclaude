@@ -99,6 +99,18 @@ Create Linear tickets from a plan markdown file. Parses phases or milestones, cr
 
 ---
 
+## Tracker DI Initialization
+
+```python
+from omnibase_infra.services.project_tracker.resolver import resolve_project_tracker
+
+tracker = resolve_project_tracker()
+```
+
+Use `tracker.*` for all ticket operations. Never call Linear MCP tools directly.
+
+---
+
 ## Step 1: Read and Validate Plan File <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
