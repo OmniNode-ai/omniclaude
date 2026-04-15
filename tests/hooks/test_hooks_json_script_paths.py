@@ -48,8 +48,8 @@ def _resolve_command(command: str) -> Path:
 def test_hook_command_exists(event_name: str, command: str) -> None:
     """Assert the hook command resolves to an existing file."""
     path = _resolve_command(command)
-    assert path.exists(), (
-        f"Hook command for '{event_name}' points to non-existent file:\n"
+    assert path.is_file(), (
+        f"Hook command for '{event_name}' does not resolve to a regular file:\n"
         f"  raw command: {command!r}\n"
         f"  resolved:    {path}\n"
         "Update hooks.json or restore the missing script."
