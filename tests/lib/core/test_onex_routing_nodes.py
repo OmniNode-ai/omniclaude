@@ -3,10 +3,10 @@
 """Tests for ONEX routing node path in route_via_events_wrapper.
 
 Verifies:
-- Feature flag USE_ONEX_ROUTING_NODES toggles between ONEX and legacy paths
+- ONEX path is active whenever nodes are loadable (always-on, OMN-8781)
 - ONEX path: builds ModelRoutingRequest, calls compute handler, shapes result
 - Stats pre-fetching and caching
-- Graceful fallback when ONEX nodes fail
+- Graceful fallback when ONEX nodes fail or are unavailable
 - Result format matches legacy path shape
 """
 
@@ -113,24 +113,25 @@ def _reset_onex_singletons():
 
 
 # ---------------------------------------------------------------------------
-# Feature Flag Tests
+# ONEX Availability Tests
 # ---------------------------------------------------------------------------
 
 
-class TestOnexFeatureFlag:
-    """Tests for USE_ONEX_ROUTING_NODES feature flag."""
+class TestOnexRoutingAvailability:
+    """Tests for ONEX routing node availability (always-on when loadable).
 
-    def test_flag_disabled_uses_legacy_path(self, monkeypatch):
-        """When flag is off, ONEX path is not used."""
-        monkeypatch.delenv("USE_ONEX_ROUTING_NODES", raising=False)
+    OMN-8781: USE_ONEX_ROUTING_NODES flag removed — routing is unconditional
+    when nodes are loadable.
+    """
+
+    def test_nodes_unavailable_uses_legacy_path(self):
+        """When ONEX nodes are not loadable, legacy path is used."""
         result = route_via_events("test prompt", "corr-123")
         assert "selected_agent" in result
         assert result["routing_path"] in VALID_ROUTING_PATHS
 
-    def test_flag_enabled_uses_onex_path(self, monkeypatch):
-        """When flag is on and nodes available, ONEX path is used."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
-
+    def test_nodes_available_uses_onex_path(self):
+        """When nodes available, ONEX path is used unconditionally."""
         mock_compute = MagicMock()
         mock_compute.compute_routing = AsyncMock(return_value=_make_routing_result())
         mock_emitter = MagicMock()
@@ -139,7 +140,6 @@ class TestOnexFeatureFlag:
         )
         mock_history = MagicMock()
 
-        # Create a mock router with registry
         mock_router = MagicMock()
         mock_router.registry = {
             "agents": {
@@ -168,26 +168,17 @@ class TestOnexFeatureFlag:
         assert result["routing_policy"] == "trigger_match"
         mock_compute.compute_routing.assert_called_once()
 
-    def test_flag_false_string_disables(self, monkeypatch):
-        """Explicit 'false' disables ONEX path."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "false")
+    def test_use_onex_routing_nodes_returns_true_when_nodes_available(self):
+        """_use_onex_routing_nodes returns True iff _get_onex_nodes() is not None."""
         from route_via_events_wrapper import _use_onex_routing_nodes
 
-        assert _use_onex_routing_nodes() is False
+        with patch("route_via_events_wrapper._get_onex_nodes", return_value=None):
+            assert _use_onex_routing_nodes() is False
 
-    def test_flag_true_string_enables(self, monkeypatch):
-        """Explicit 'true' enables ONEX path."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
-        from route_via_events_wrapper import _use_onex_routing_nodes
-
-        assert _use_onex_routing_nodes() is True
-
-    def test_flag_1_enables(self, monkeypatch):
-        """'1' enables ONEX path."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "1")
-        from route_via_events_wrapper import _use_onex_routing_nodes
-
-        assert _use_onex_routing_nodes() is True
+        with patch(
+            "route_via_events_wrapper._get_onex_nodes", return_value={"key": "val"}
+        ):
+            assert _use_onex_routing_nodes() is True
 
 
 # ---------------------------------------------------------------------------
@@ -199,10 +190,8 @@ class TestOnexRoutingPath:
     """Tests for the ONEX node routing path."""
 
     @pytest.fixture
-    def onex_env(self, monkeypatch):
-        """Enable ONEX routing and return mock objects."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
-
+    def onex_env(self):
+        """Set up ONEX routing mock objects."""
         mock_compute = MagicMock()
         mock_emitter = MagicMock()
         mock_emitter.emit_routing_decision = AsyncMock(
@@ -438,9 +427,8 @@ class TestOnexRoutingPath:
 class TestOnexGracefulFallback:
     """Tests that ONEX failures fall back to legacy path."""
 
-    def test_compute_handler_error_falls_back(self, monkeypatch):
+    def test_compute_handler_error_falls_back(self):
         """Compute handler error triggers fallback to legacy path."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         mock_compute = MagicMock()
         mock_compute.compute_routing = AsyncMock(
@@ -475,10 +463,9 @@ class TestOnexGracefulFallback:
         assert result["selected_agent"] is not None
         assert "routing_path" in result
 
-    def test_partial_handler_init_does_not_cache_stale_state(self, monkeypatch):
+    def test_partial_handler_init_does_not_cache_stale_state(self):
         """Partial handler init (first succeeds, second raises) returns None
         and does NOT leave stale globals that corrupt subsequent calls."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         import route_via_events_wrapper as mod
 
@@ -508,9 +495,8 @@ class TestOnexGracefulFallback:
         assert mod._emit_handler is None
         assert mod._history_handler is None
 
-    def test_handlers_unavailable_falls_back(self, monkeypatch):
+    def test_handlers_unavailable_falls_back(self):
         """When ONEX handlers can't be created, falls back to legacy."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         with patch("route_via_events_wrapper._get_onex_handlers", return_value=None):
             result = route_via_events("test prompt", "corr-123")
@@ -518,9 +504,8 @@ class TestOnexGracefulFallback:
         assert result["selected_agent"] is not None
         assert "routing_path" in result
 
-    def test_router_unavailable_falls_back(self, monkeypatch):
+    def test_router_unavailable_falls_back(self):
         """When AgentRouter is unavailable, ONEX path falls back."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         mock_compute = MagicMock()
         mock_emitter = MagicMock()
@@ -546,9 +531,8 @@ class TestOnexGracefulFallback:
 class TestStatsPrefetching:
     """Tests for routing stats pre-fetching and caching."""
 
-    def test_stats_passed_to_compute_request(self, monkeypatch):
+    def test_stats_passed_to_compute_request(self):
         """Pre-fetched stats are passed to the ModelRoutingRequest."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         from omniclaude.nodes.node_routing_history_reducer.models import (
             ModelAgentRoutingStats,

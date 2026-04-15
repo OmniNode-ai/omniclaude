@@ -156,7 +156,7 @@ def _get_onex_nodes() -> dict[str, Any] | None:
             return _onex_nodes_cache
         except ImportError:
             logger.debug(
-                "ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored"
+                "ONEX routing nodes not available, falling back to legacy path"
             )
             return None
 
@@ -672,7 +672,7 @@ def _emit_llm_routing_fallback(
         logger.debug("Failed to emit llm routing fallback: %s", exc)
 
 
-# ONEX routing node singletons (USE_ONEX_ROUTING_NODES)
+# ONEX routing node singletons
 _compute_handler: Any = None
 _emit_handler: Any = None
 _history_handler: Any = None
@@ -688,13 +688,11 @@ _TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
 
 
 def _use_onex_routing_nodes() -> bool:
-    """Check if ONEX routing nodes feature flag is enabled.
+    """Check if ONEX routing nodes are available (always-on when loadable).
 
     Triggers lazy loading of ONEX nodes on first check.
     """
-    if _get_onex_nodes() is None:
-        return False
-    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
+    return _get_onex_nodes() is not None
 
 
 def _parse_routing_timeout(
@@ -1550,9 +1548,9 @@ def route_via_events(
     """
     Route user prompt using intelligent trigger matching and confidence scoring.
 
-    When USE_ONEX_ROUTING_NODES is enabled, delegates to ONEX compute and
-    effect nodes. Otherwise uses AgentRouter directly. Returns an empty string
-    (no agent selected) when no good match is found.
+    Delegates to ONEX compute and effect nodes when available (always-on).
+    Falls back to AgentRouter when ONEX nodes are not loadable. Returns an
+    empty string (no agent selected) when no good match is found.
 
     Args:
         prompt: User prompt to route
