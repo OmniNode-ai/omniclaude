@@ -17,4 +17,4 @@ jobs:
     with:
       pr-number: ${{ github.event.pull_request.number || github.event.issue.number }}
     secrets:
-      github-token: ${{ secrets.CROSS_REPO_PAT }}
+      CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
