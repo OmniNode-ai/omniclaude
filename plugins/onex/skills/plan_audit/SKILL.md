@@ -17,7 +17,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repo
-    description: "Repo name to audit (default: current repo under omni_home)"
+    description: "Repo name to audit (default: resolved from git root)"
     required: false
   - name: --since-days
     description: "Staleness threshold in days (default: 14)"
