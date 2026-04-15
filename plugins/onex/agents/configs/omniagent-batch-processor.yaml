@@ -291,3 +291,9 @@ transformation_context:
     - "Apply cost optimization strategies to all batch operations"
     - "Ensure comprehensive analysis quality across all tasks"
     - "Optimize for scalability and parallel execution performance"
+
+# Tool restrictions: batch processors must not create/manage cron schedules (OMN-8842)
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList

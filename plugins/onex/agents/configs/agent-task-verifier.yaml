@@ -41,3 +41,9 @@ behavioral_directives:
   - "Write evidence to .onex_state/evidence/{task_id}/verifier-check.yaml"
   - "Report PASS or FAIL with per-check breakdown"
   - "Compare your results against self-check evidence and flag disagreements"
+
+# Tool restrictions: task verifiers must not create/manage cron schedules (OMN-8842)
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
