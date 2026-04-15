@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+name: hook_dispatch_claim_pretool
+ticket_id: "OMN-8928"
+summary: >
+  PreToolUse hook on Agent and Bash tools. Extracts a deterministic
+  blocker_id from tool input using regex rules and acquires a filesystem
+  claim. Emits permissionDenied if a live claim exists by another agent.
+event: PreToolUse
+matcher: "^(Agent|Bash)$"
+script: hook_dispatch_claim_pretool.sh
+lib: dispatch_claim_gate.py
+kill_switch: DISPATCH_CLAIM_GATE_DISABLED
+golden_path:
+  - Agent tool fires with prompt containing "fix containers on 192.168.86.201"  # onex-allow-internal-ip
+  - First agent acquires claim (action=acquired)
+  - Second agent with identical prompt receives permissionDenied (action=blocked)
+  - After TTL expires, claim is auto-reaped and next agent acquires freely
+dod_evidence:
+  - kind: tests
+    description: "8 unit tests pass (extraction rules + E2E race)"
+    command: "uv run pytest tests/hooks/test_dispatch_claim_pretool.py -v"
+  - kind: smoke
+    description: "CLI smoke test: first acquired, second blocked"
+    command: "python3 plugins/onex/hooks/lib/dispatch_claim_gate.py check /tmp/smoke_claims"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"

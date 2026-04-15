@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+name: hook_verifier_role_guard
+ticket_id: "OMN-8925"
+summary: >
+  PreToolUse hook on Agent tool. Checks the is_verifier flag in the
+  agent's YAML config. Blocks dispatch if is_verifier=true. Fail-safe:
+  missing or unreadable YAML blocks rather than passing.
+event: PreToolUse
+matcher: "^Agent$"
+script: hook_verifier_role_guard.sh
+lib: verifier_role_guard.py
+kill_switch: VERIFIER_ROLE_GUARD_DISABLED
+golden_path:
+  - Worker agent (is_verifier=false) dispatches Agent() — passes
+  - Verifier agent (is_verifier=true) attempts Agent() — blocked with permissionDenied
+  - Agent with no YAML config — blocked (fail-safe)
+  - Agent YAML found by agent_identity.name scan (not only filename) — PASS/BLOCK as appropriate
+dod_evidence:
+  - kind: tests
+    description: "5 unit tests pass (non-verifier passes, verifier blocked, missing YAML blocked, identity-name lookup, absent flag defaults to pass)"
+    command: "uv run pytest tests/hooks/test_verifier_role_guard.py -v"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"

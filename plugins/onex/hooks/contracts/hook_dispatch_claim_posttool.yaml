@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+name: hook_dispatch_claim_posttool
+ticket_id: "OMN-8929"
+summary: >
+  PostToolUse hook on Agent and Bash tools. Mirrors pretool extraction
+  rules and releases the dispatch claim after tool completion.
+  Only the owning agent may release; non-owners are silently ignored.
+event: PostToolUse
+matcher: "^(Agent|Bash)$"
+script: hook_dispatch_claim_posttool.sh
+lib: dispatch_claim_release.py
+kill_switch: DISPATCH_CLAIM_GATE_DISABLED
+golden_path:
+  - Agent tool completes (success or failure)
+  - Posttool hook extracts same blocker_id via same regex rules
+  - Owner's claim file is deleted (action=released)
+  - A different agent attempting release is silently skipped (action=not_owner)
+  - Next pretool check on same resource returns action=pass (no live claim)
+dod_evidence:
+  - kind: tests
+    description: "8 unit tests pass (no-match, not-found, not-owner, release, double-release, E2E lifecycle)"
+    command: "uv run pytest tests/hooks/test_dispatch_claim_posttool.py -v"
+  - kind: smoke
+    description: "CLI smoke: not_owner -> released -> not_found"
+    command: "python3 plugins/onex/hooks/lib/dispatch_claim_release.py smoke /tmp/smoke_release"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"

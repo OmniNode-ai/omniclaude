@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+schema_version: "1.0.0"
+name: hook_idle_notification_ratelimit
+ticket_id: "OMN-8924"
+summary: >
+  PreToolUse hook on SendMessage tool. Rate-limits idle_notification
+  messages to at most 1 per 60 seconds per agent_id. Non-idle messages
+  always pass through unchanged.
+event: PreToolUse
+matcher: "^SendMessage$"
+script: hook_idle_notification_ratelimit.sh
+lib: idle_ratelimit.py
+kill_switch: IDLE_RATELIMIT_DISABLED
+golden_path:
+  - Agent sends idle_notification — first one in 60s window passes
+  - Second idle_notification within 60s is dropped (permissionDenied)
+  - After 60s elapses, next idle_notification passes again
+  - Non-idle SendMessage always passes regardless of frequency
+dod_evidence:
+  - kind: tests
+    description: "5 unit tests pass (first allows, second drops, non-idle passes, window resets)"
+    command: "uv run pytest tests/hooks/test_idle_notification_ratelimit.py -v"
+  - kind: ci
+    description: "CI pipeline green"
+    command: "gh pr checks"
