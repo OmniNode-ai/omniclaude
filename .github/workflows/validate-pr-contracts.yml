@@ -89,8 +89,10 @@ jobs:
           export PR_DIFF_FILES="$(cat /tmp/diff_files.txt 2>/dev/null || echo '')"
           export PR_BODY="$(cat /tmp/pr_body.txt 2>/dev/null || echo '')"
 
+          set +e
           python _omnibase_infra/scripts/validate_pr_contracts.py > /tmp/validation_output.txt 2>&1
           EXIT_CODE=$?
+          set -e
 
           cat /tmp/validation_output.txt
 
