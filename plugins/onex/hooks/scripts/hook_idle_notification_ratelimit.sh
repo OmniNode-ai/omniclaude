@@ -13,6 +13,7 @@
 #   - message type is not "idle_notification"
 #   - First idle_notification in the 60s window for this agent_id
 #   - IDLE_RATELIMIT_DISABLED=1 kill switch
+#   - onex-paths.sh fails (fail-open: infra/config failures must not block tool use)
 #
 # Drop condition (exit 2, permissionDenied returned):
 #   - Subsequent idle_notification within the 60s window for this agent_id
@@ -33,7 +34,11 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 unset _SELF SCRIPT_DIR
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { cat >/dev/null; echo "FATAL: ONEX_STATE_DIR not set" >&2; exit 1; }
+if ! source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh"; then
+    echo "FATAL: ONEX_STATE_DIR not set" >&2
+    cat
+    exit 0
+fi
 LOG_FILE="${ONEX_HOOK_LOG}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
