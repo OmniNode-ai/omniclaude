@@ -160,7 +160,12 @@ Check for PRs merged or tickets Done in the last hour. For each, run: uv run pyt
 3. If gap > 0 (unworked tickets exist, no workers dispatched): THIS IS A FAILURE. Spawn workers for the gap NOW. Do not just report it.
 4. Did any dispatched work use the dogfood path (node_dispatch_worker + local model)? Or all Claude agents? Log which.
 
-This tick MUST end with: (a) all recent completions verified, (b) all unworked tickets either dispatched or explicitly blocked with reason.'
+**Part 3 — env-sync.log alert check (MANDATORY every tick)**
+Run: cd $OMNI_HOME/omniclaude && uv run python -m plugins.onex.skills.env_sync_alert.check
+- Exit 0: clean, no action needed
+- Exit 1: alert fired — friction YAML written to $ONEX_STATE_DIR/friction/. SendMessage to team-lead: "[env-sync-alert] ALERT: <description from friction file>". Do NOT skip this step.
+
+This tick MUST end with: (a) all recent completions verified, (b) all unworked tickets either dispatched or explicitly blocked with reason, (c) env-sync alert check completed.'
 
 DATA_FLOW_SWEEP_PROMPT='DATA FLOW SWEEP — verify end-to-end Kafka→DB→dashboard data flows.
 
