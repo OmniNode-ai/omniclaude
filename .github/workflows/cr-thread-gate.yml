@@ -5,9 +5,12 @@ name: CR Thread Gate
 on:
   workflow_call:
     secrets:
-      CR_GATE_PAT:
+      CROSS_REPO_PAT:
         description: "GitHub PAT with read:discussion scope for CR thread queries"
-        required: true
+        required: false
+      github-token:
+        description: "Deprecated: pass CROSS_REPO_PAT instead"
+        required: false
     inputs:
       repo:
         description: "Target repo name (owner/repo or bare name). Defaults to caller's github.repository."
@@ -69,7 +72,7 @@ jobs:
 
       - name: Check unresolved CodeRabbit threads
         env:
-          GH_TOKEN: ${{ secrets.CR_GATE_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
         run: |
           PR="${{ steps.resolve-pr.outputs.pr }}"
           if [ -z "$PR" ]; then
