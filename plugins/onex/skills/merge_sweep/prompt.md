@@ -206,6 +206,45 @@ remediation without blocking the sweep.
 
 ---
 
+## BLOCKED PR Cause Diagnosis (OMN-8811)
+
+Before reporting any PR as BLOCKED or dispatching a fixer worker, run the following
+against the PR to determine the exact root cause:
+
+```bash
+# Step 1: fetch CI, review decision, and review threads
+gh pr view <N> --repo <org/repo> --json statusCheckRollup,reviewDecision,reviewThreads
+
+# Step 2: fetch merge queue membership and position (gh pr view --json does not expose these)
+gh api graphql -f query='
+  query($owner:String!,$repo:String!,$number:Int!){
+    repository(owner:$owner,name:$repo){
+      pullRequest(number:$number){
+        mergeQueueEntry{ position estimatedTimeToMerge enqueued }
+      }
+    }
+  }
+' -f owner=<org> -f repo=<repo> -F number=<N>
+```
+
+Categorize as exactly ONE of these mutually exclusive causes (evaluated in order):
+
+| Priority | Category | Condition |
+|---|---|---|
+| 1 | `CI_FAILING` | `statusCheckRollup` contains any check with state FAILURE, ERROR, or PENDING |
+| 2 | `CR_THREADS_OPEN` | `reviewThreads` contains any unresolved thread **and** CI is not failing |
+| 3 | `QUEUE_STALE` | `mergeQueueEntry` is present but `position` has not changed across sweep ticks; no CI failures, no open threads |
+| 4 | `APPROVED_PENDING_MERGE` | `mergeQueueEntry` present and advancing (position decreasing or `estimatedTimeToMerge` set); `reviewDecision == APPROVED`, all CI green |
+
+**Rules:**
+- Report the category name, not a qualitative description.
+- Evaluate in priority order: `CI_FAILING` → `CR_THREADS_OPEN` → `QUEUE_STALE` → `APPROVED_PENDING_MERGE`. The first matching category wins.
+- Never call a PR "stale queue" if it has open review threads — that is `CR_THREADS_OPEN`.
+- A PR with no `mergeQueueEntry` and no other blockers is `APPROVED_PENDING_MERGE` only if `reviewDecision == APPROVED` and all CI green; otherwise classify by whichever blocker applies.
+- False-positive guard: before dispatching any fixer, verify `gh pr view <N> --json state` returns `OPEN`. If `MERGED`, reclaim the dispatched.yaml slot and skip.
+
+---
+
 ## What This Prompt Does NOT Do
 
 - Scan GitHub repos
