@@ -393,9 +393,9 @@ try:
     if git_result.failed:
         raise AutomationError("Git checkout failed", step=1)
 
-    # Step 2: Update Linear
+    # Step 2: Update issue state via tracker adapter
     try:
-        mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
+        await tracker.update_issue(issue_id=ticket_id, updates={"state": "In Progress"})
     except Exception as e:
         if branch_created:  # Only delete if we created it
             checkout_result = run("git checkout -")  # Return to previous branch first
@@ -675,10 +675,12 @@ def persist_contract_locally(ticket_id: str, contract: dict) -> None:
 
     Path: $ONEX_STATE_DIR/tickets/{ticket_id}/contract.yaml
     """
+    import os
     import yaml
     from pathlib import Path
 
-    tickets_dir = Path.home() / ".claude" / "tickets" / ticket_id
+    onex_state_dir = os.environ["ONEX_STATE_DIR"]
+    tickets_dir = Path(onex_state_dir) / "tickets" / ticket_id
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
     contract_path = tickets_dir / "contract.yaml"
