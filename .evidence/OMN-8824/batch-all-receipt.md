@@ -59,7 +59,7 @@ ported to `tracker.*` DI pattern in a single atomic commit.
 
 ## Enforcement Test
 
-```
+```text
 tests/skills/test_no_mcp_linear_calls_in_skill_prompts.py::test_no_hardcoded_mcp_linear_in_skill_prompts PASSED
 ```
 
