@@ -31,7 +31,8 @@ cd "$HOME" 2>/dev/null || cd /tmp || true
 source "${_SCRIPT_DIR}/onex-paths.sh" 2>/dev/null || true
 
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    # fallback so hook never blocks
+    # Drain stdin before fail-open so upstream writer is not blocked
+    cat > /dev/null
     echo "{}"
     exit 0
 fi
@@ -44,6 +45,7 @@ AGENT_NAME=$(echo "$EVENT_JSON" | jq -r '.agent_name // .agentName // ""' 2>/dev
 SESSION_ID=$(echo "$EVENT_JSON" | jq -r '.session_id // .sessionId // "unknown"' 2>/dev/null || echo "unknown")
 
 DATE_PREFIX=$(date -u +%Y-%m-%d)
+TS_NS=$(date -u +%s%N 2>/dev/null || date -u +%s)
 # Sanitize tool name for filename
 SAFE_TOOL=$(printf '%s' "$TOOL_NAME" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')
 [[ -z "$SAFE_TOOL" ]] && SAFE_TOOL="unknown"
@@ -51,10 +53,11 @@ SAFE_TOOL=$(printf '%s' "$TOOL_NAME" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:
 FRICTION_DIR="${ONEX_STATE_DIR}/friction"
 mkdir -p "$FRICTION_DIR" 2>/dev/null || true
 
-FRICTION_FILE="${FRICTION_DIR}/${DATE_PREFIX}-permission-denied-${SAFE_TOOL}.yaml"
+FRICTION_FILE="${FRICTION_DIR}/${DATE_PREFIX}-permission-denied-${SAFE_TOOL}-${TS_NS}.yaml"
 
 # Write friction YAML (P2 — tool denials are significant but not P1)
-cat > "$FRICTION_FILE" <<YAML
+# Fail-open: full disk or unwritable dir must not block the hook
+cat > "$FRICTION_FILE" <<YAML || true
 id: permission-denied-${SAFE_TOOL}-${SESSION_ID:0:8}
 date: ${DATE_PREFIX}
 severity: P2

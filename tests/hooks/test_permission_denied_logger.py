@@ -115,11 +115,13 @@ def test_permission_denied_no_retry_in_output() -> None:
 
 
 @pytest.mark.unit
-def test_permission_denied_no_onex_state_dir_exits_zero() -> None:
-    """Hook exits 0 and emits {} when ONEX_STATE_DIR is unset (infra failure tolerance).
+def test_permission_denied_no_onex_state_dir_exits_zero_and_writes_no_file() -> None:
+    """Hook exits 0 and emits {} when ONEX_STATE_DIR is unset.
 
-    onex-paths.sh will auto-default to $HOME/.onex_state when ONEX_STATE_DIR is unset,
-    so we use a real temp dir for HOME so the hook can still cd there successfully.
+    Per repo contract, ONEX_STATE_DIR must be set; unset is an infra failure.
+    The hook must degrade gracefully (fail-open) without writing any friction file,
+    even if onex-paths.sh would auto-default to $HOME/.onex_state.
+    We set HOME to a temp dir to verify no file is created there.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         env = os.environ.copy()
@@ -135,5 +137,11 @@ def test_permission_denied_no_onex_state_dir_exits_zero() -> None:
             cwd=_REPO_ROOT,
             env=env,
         )
-    assert result.returncode == 0
-    assert json.loads(result.stdout) == {}
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == {}
+        # No friction file must be written to the fallback HOME dir
+        written = list(Path(tmpdir).rglob("*.yaml"))
+        assert written == [], (
+            f"Hook must not write fallback state when ONEX_STATE_DIR is unset, "
+            f"but found: {written}"
+        )
