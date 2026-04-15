@@ -77,11 +77,12 @@ uv run python -m omnimarket.nodes.node_ticket_work \
 Outputs `ModelTicketWorkStartCommand` JSON. Note: handler is a structural placeholder;
 full migration tracked in OMN-8004.
 
-### Step 3 — Execute ticket phases via MCP
+### Step 3 — Execute ticket phases via tracker DI
 
-This skill uses `runtime: mcp` — it invokes Linear MCP tools directly:
+This skill uses `ProtocolProjectTracker` DI (resolved via `resolve_project_tracker()`) for all
+Linear operations. The tracker adapter handles routing automatically.
 
-1. **INTAKE**: Fetch ticket via `mcp__linear-server__get_issue`; parse contract YAML block
+1. **INTAKE**: Fetch ticket via `tracker.get_issue()`; parse contract YAML block
 2. **RESEARCH**: Read relevant code, check existing implementations
 3. **QUESTIONS**: Surface blockers → human gate (skipped in `--autonomous` mode)
 4. **SPEC**: Write implementation spec to ticket description

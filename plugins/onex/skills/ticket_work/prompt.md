@@ -2,6 +2,19 @@
 
 You are executing contract-driven ticket work. This prompt defines the complete orchestration logic.
 
+## Tracker DI Initialization
+
+Before executing any phase that reads or writes ticket data, resolve the project tracker:
+
+```python
+from omnibase_infra.services.project_tracker.resolver import resolve_project_tracker
+
+tracker: ProtocolProjectTracker = resolve_project_tracker()
+```
+
+Use `tracker.*` methods for all ticket operations. The tracker adapter handles routing to Linear
+or the local stub automatically — never call Linear MCP tools directly from this skill.
+
 ## Autonomous Mode
 
 If `--autonomous` was passed, gate behavior changes across all phases. Before running any phase
@@ -18,8 +31,8 @@ handler, check whether autonomous mode is active. In autonomous mode:
 When `/ticket-work {ticket_id} [--autonomous] [--skip-to <phase>]` is invoked:
 
 1. **Fetch the ticket:**
-   ```
-   mcp__linear-server__get_issue(id="{ticket_id}")
+   ```python
+   issue = await tracker.get_issue(issue_id="{ticket_id}")
    ```
 
 2. **Parse the contract** from the ticket description:
@@ -117,8 +130,8 @@ hardening_tickets: []
 1. Create contract if not exists. If no `## Contract` section is found in the ticket description, generate a **stub ModelTicketContract** and embed it immediately:
 
    ```python
-   ticket = mcp__linear-server__get_issue(id=ticket_id)
-   title  = ticket.title
+   issue  = await tracker.get_issue(issue_id=ticket_id)
+   title  = issue.title
    repo   = os.path.basename(os.getcwd())
 
    # Seam detection from title
@@ -155,9 +168,9 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""\
 """
-   existing_desc = ticket.description or ''
+   existing_desc = issue.description or ''
    updated_desc  = existing_desc.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
-   mcp__linear-server__save_issue(id=ticket_id, description=updated_desc)
+   await tracker.update_issue(issue_id=ticket_id, updates={"description": updated_desc})
    print(f"[intake] Stub contract generated and embedded ({completeness})")
    ```
 
@@ -286,7 +299,7 @@ emergency_bypass:
 **BEFORE ANY IMPLEMENTATION WORK BEGINS**, when user approves spec (says "approve spec", "build it", etc.), you MUST execute these steps IN ORDER:
 
 1. **Create git branch** using Linear's suggested branch name:
-   - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
+   - Get branch name from `tracker.get_issue(issue_id="{ticket_id}")` response field `branchName`
    - Linear auto-generates this based on ticket ID and title
    - **Check if branch already exists before creating:**
    ```bash
@@ -309,13 +322,13 @@ emergency_bypass:
    Track `BRANCH_CREATED` for rollback safety.
 
 2. **Update Linear status** to "In Progress":
-   ```
-   mcp__linear-server__update_issue(id="{ticket_id}", state="In Progress")
+   ```python
+   await tracker.update_issue(issue_id="{ticket_id}", updates={"state": "In Progress"})
    ```
 
    > **Note**: This assumes the workspace uses "In Progress" as the active state name.
-   > If the update fails with "state not found", query available states with
-   > `mcp__linear-server__list_issue_statuses(team="{team_id}")` and use the appropriate state name.
+   > If the update fails with "state not found", check the tracker adapter documentation
+   > for valid state names for the current workspace.
 
 3. **Update contract** with branch name:
    - Set `branch` field to the git branch name
@@ -645,16 +658,16 @@ def update_description_with_contract(description: str, contract: dict) -> str:
 ### Saving to Linear
 
 After any contract mutation:
-```
-mcp__linear-server__update_issue(
-    id="{ticket_id}",
-    description="{updated_description}"
+```python
+await tracker.update_issue(
+    issue_id="{ticket_id}",
+    updates={"description": "{updated_description}"},
 )
 ```
 
 ### Local Persistence
 
-After saving to Linear, also persist locally for hook access:
+After saving via the tracker, also persist locally for hook access:
 
 ```python
 def persist_contract_locally(ticket_id: str, contract: dict) -> None:
@@ -690,7 +703,7 @@ except OSError as e:
 # Continue workflow - Linear has the authoritative copy
 ```
 
-Call this after every `mcp__linear-server__update_issue()` that modifies the contract.
+Call this after every `tracker.update_issue()` call that modifies the contract.
 
 ---
 

@@ -167,6 +167,8 @@ class TestTicketWorkMandatoryContract:
 
     def test_save_issue_called_to_embed_contract(self) -> None:
         content = self.PROMPT_FILE.read_text(encoding="utf-8")
-        assert "save_issue" in content, (
-            "ticket_work must call save_issue to embed the auto-generated contract"
+        # After OMN-8823 migration: save_issue replaced by tracker.update_issue (DI pattern)
+        assert "tracker.update_issue" in content, (
+            "ticket_work must call tracker.update_issue to embed the auto-generated contract "
+            "(OMN-8823: mcp__linear-server__save_issue replaced by ProtocolProjectTracker DI)"
         )
