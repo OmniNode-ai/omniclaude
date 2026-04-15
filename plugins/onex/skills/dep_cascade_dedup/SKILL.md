@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos discovered via gh repo list OmniNode-ai)"
+    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos discovered via gh repo list OmniNode-ai --json name)"
     required: false
   - name: --dry-run
     description: "List superseded PRs without closing them"
