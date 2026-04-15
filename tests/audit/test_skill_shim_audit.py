@@ -3,11 +3,15 @@
 """Smoke test: skill_shim_audit.yaml is present and structurally valid."""
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_skill_shims.py"
 OMNI_HOME = Path(os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home")))
 AUDIT_PATH = OMNI_HOME / ".onex_state" / "skill_shim_audit.yaml"
 
@@ -31,9 +35,28 @@ VALID_CLASSIFICATIONS = {"deterministic", "prose-heavy"}
 
 
 @pytest.fixture(scope="module")
-def audit() -> dict:
-    assert AUDIT_PATH.exists(), f"Audit YAML missing: {AUDIT_PATH}"
-    with open(AUDIT_PATH, encoding="utf-8") as f:
+def audit(tmp_path_factory: pytest.TempPathFactory) -> dict:
+    # Prefer pre-generated audit artifact (local dev flow). In CI, generate
+    # on-demand into a tmp OMNI_HOME so the test is self-contained.
+    if AUDIT_PATH.exists():
+        audit_file = AUDIT_PATH
+    else:
+        tmp_home = tmp_path_factory.mktemp("omni_home_audit")
+        env = os.environ.copy()
+        env["OMNI_HOME"] = str(tmp_home)
+        result = subprocess.run(
+            [sys.executable, str(AUDIT_SCRIPT)],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        audit_file = tmp_home / ".onex_state" / "skill_shim_audit.yaml"
+        assert audit_file.exists(), (
+            f"Audit script failed to produce {audit_file}\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    with open(audit_file, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return data
 
