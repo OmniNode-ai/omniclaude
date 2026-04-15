@@ -24,13 +24,13 @@ Quick system health check that provides a comprehensive snapshot of the entire O
 ## How to Use
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/_lib/execute.py
 ```
 
 ### Optional Arguments
 
 ```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/_lib/execute.py \
   --format json \
   --verbose
 ```
@@ -121,7 +121,7 @@ if result.returncode != 0:
 #!/bin/bash
 # Run health check every 5 minutes
 while true; do
-  python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/execute.py
+  python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/_lib/execute.py
   sleep 300
 done
 ```
@@ -130,7 +130,7 @@ done
 
 ```bash
 # Check health before deployment
-python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system_status/check_system_health/_lib/execute.py
 if [ $? -eq 0 ]; then
   echo "System healthy, proceeding with deployment"
   docker-compose up -d
