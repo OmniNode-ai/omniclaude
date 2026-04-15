@@ -73,9 +73,9 @@ Print: `DoD sweep look-back: {SINCE_DAYS} days (since-last-cycle: {last_cycle_ts
 Query Linear for tickets completed within the look-back window:
 
 ```python
-# Use mcp__linear-server__list_issues to find completed tickets
+# Use tracker.list_issues to find completed tickets
 # Filter by completedAt within the look-back window
-issues = mcp__linear-server__list_issues(
+issues = tracker.list_issues(
     team="Omninode",
     state="Done",
     # Filter by completedAt >= (now - SINCE_DAYS)

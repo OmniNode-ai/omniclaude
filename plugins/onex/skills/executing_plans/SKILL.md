@@ -97,7 +97,7 @@ gh pr view <PR-number> --json state,mergeable,mergeStateStatus,statusCheckRollup
 
 Before Step 2, verify Linear MCP availability (see `_shared/linear-availability-check.md`):
 
-1. Call `mcp__linear-server__list_teams`
+1. Call `tracker.list_teams`
 2. If unavailable (or `--local` flag is set):
    - Log: "Linear MCP unavailable — entering local ticket mode"
    - In Step 2: Still run plan structure validation (task parsing, dependency check).

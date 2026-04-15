@@ -67,7 +67,7 @@ If `--fix-only`:
 If `--dry-run`:
 - Set `DRY_RUN=true`; all write operations below are annotated `[DRY_RUN — skipped]`
 - No `Task()` dispatches
-- No `mcp__linear-server__*` calls
+- No `tracker.*` calls
 - No `gh pr create` or `gh pr merge` calls
 - No deploy actions (Phase 4b fully skipped)
 - Screenshots and JSON artifacts ARE written (read-only observation is always safe)
@@ -438,7 +438,7 @@ If `--triage-only`: stop here. Print triage.json path.
 For each `feature_gaps` entry in triage.json, create a Linear ticket immediately:
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   title="feat: {domain_id} — upstream data producer needed for {pages}",
   teamId="{omniclaude_team_id}",
   parentId="OMN-5057",
@@ -609,7 +609,7 @@ EOF
 ### 4.2 Create Linear Ticket
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   title="fix(dashboard): {domain_id} — {root_cause}",
   teamId="{omniclaude_team_id}",
   parentId="OMN-5057",
@@ -958,4 +958,4 @@ When `DRY_RUN=true`:
 ```
 
 Screenshots and JSON artifacts are written even in dry run (observation is always safe).
-No `Task()` dispatches, no `mcp__linear-server__*` writes, no `gh pr` commands, no Docker/kubectl commands.
+No `Task()` dispatches, no `tracker.*` writes, no `gh pr` commands, no Docker/kubectl commands.

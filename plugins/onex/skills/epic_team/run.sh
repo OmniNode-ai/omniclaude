@@ -44,13 +44,13 @@ ADDITIONAL_ARGS=("$@")
 # Covers: Linear/GitHub MCP, Task dispatch, file writes for worktrees, bash for git ops.
 # Does NOT include: browser tools, arbitrary web fetch, interactive UI tools.
 ALLOWED_TOOLS=(
-  "mcp__linear-server__get_issue"
-  "mcp__linear-server__list_issues"
-  "mcp__linear-server__save_issue"
-  "mcp__linear-server__save_comment"
-  "mcp__linear-server__list_projects"
-  "mcp__linear-server__get_project"
-  "mcp__linear-server__list_teams"
+  "tracker.get_issue"
+  "tracker.list_issues"
+  "tracker.save_issue"
+  "tracker.save_comment"
+  "tracker.list_projects"
+  "tracker.get_project"
+  "tracker.list_teams"
   "Bash"
   "Read"
   "Write"

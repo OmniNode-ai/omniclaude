@@ -196,7 +196,7 @@ ticket_dir=$(dirname "${worktree_path}")
 rmdir "${ticket_dir}" 2>/dev/null
 ```
 
-**LOST_WORK — create recovery ticket via `mcp__linear-server__save_issue`:**
+**LOST_WORK — create recovery ticket via `tracker.save_issue`:**
 - Title: `recover: uncommitted work in {ticket_id}/{repo_name}`
 - High priority, includes diff stat and recovery steps.
 

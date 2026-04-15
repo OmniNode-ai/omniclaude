@@ -179,7 +179,7 @@ After a successful merge:
    ```python
    if ticket_id:
        try:
-           mcp__linear-server__save_issue(id=ticket_id, state="Done")
+           tracker.save_issue(id=ticket_id, state="Done")
        except Exception as e:
            print(f"[auto-merge] Warning: Could not mark {ticket_id} as Done: {e}")
            # Non-blocking: merge already succeeded; do not fail the skill
@@ -253,7 +253,7 @@ Example result:
 **`ticket_id`**: The Linear ticket identifier closed in Step 4 (e.g. `"OMN-3262"`), or `null` if no ticket was identified.
 
 **`extra["ticket_close_status"]`** values:
-- `"closed"`: `mcp__linear-server__save_issue` succeeded; ticket marked Done
+- `"closed"`: `tracker.save_issue` succeeded; ticket marked Done
 - `"skipped"`: No `ticket_id` could be resolved — explicit arg absent and branch-name extraction returned empty
 - `"failed"`: `save_issue` call raised an exception; merge still succeeded (non-blocking)
 - `null`: Step 6 was not reached (skill exited before merge — `status` is `gated`, `error`)

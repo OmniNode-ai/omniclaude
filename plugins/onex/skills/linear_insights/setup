@@ -15,9 +15,9 @@ set -euo pipefail
 #   --clear-cache Clear all cached data
 #
 # Data Sources:
-#   - Linear MCP: mcp__linear-server__list_teams
-#   - Linear MCP: mcp__linear-server__list_projects
-#   - Linear MCP: mcp__linear-server__list_users
+#   - Linear MCP: tracker.list_teams
+#   - Linear MCP: tracker.list_projects
+#   - Linear MCP: tracker.list_users
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,9 +71,9 @@ Examples:
 
 MCP Queries (--init mode):
   The --init operation will instruct you to run these Linear MCP queries:
-    1. mcp__linear-server__list_teams()
-    2. mcp__linear-server__list_projects()
-    3. mcp__linear-server__list_users()
+    1. tracker.list_teams()
+    2. tracker.list_projects()
+    3. tracker.list_users()
 
   Results are used to generate config.yaml with:
     - Team IDs and keys
@@ -316,7 +316,7 @@ do_init() {
     md_echo "Execute this MCP query to get team information:"
     md_echo ""
     md_echo '```python'
-    md_echo "teams_result = mcp__linear-server__list_teams()"
+    md_echo "teams_result = tracker.list_teams()"
     md_echo '```'
     md_echo ""
     md_echo "**Expected Response Fields**:"
@@ -331,7 +331,7 @@ do_init() {
     md_echo "Execute this MCP query to get all projects:"
     md_echo ""
     md_echo '```python'
-    md_echo "projects_result = mcp__linear-server__list_projects("
+    md_echo "projects_result = tracker.list_projects("
     md_echo "    member=\"me\","
     md_echo "    limit=50"
     md_echo ")"
@@ -350,7 +350,7 @@ do_init() {
     md_echo "Execute this MCP query to get user information:"
     md_echo ""
     md_echo '```python'
-    md_echo "users_result = mcp__linear-server__list_users()"
+    md_echo "users_result = tracker.list_users()"
     md_echo '```'
     md_echo ""
     md_echo "**Expected Response Fields per User**:"
@@ -383,7 +383,7 @@ do_init() {
     md_echo "# ============================================================================="
     md_echo "# USER CONFIGURATION"
     md_echo "# ============================================================================="
-    md_echo "# Replace with values from mcp__linear-server__list_users()"
+    md_echo "# Replace with values from tracker.list_users()"
     md_echo "user:"
     md_echo '  id: "<USER_ID>"'
     md_echo '  name: "<USER_NAME>"'
@@ -393,7 +393,7 @@ do_init() {
     md_echo "# ============================================================================="
     md_echo "# TEAM CONFIGURATION"
     md_echo "# ============================================================================="
-    md_echo "# Replace with values from mcp__linear-server__list_teams()"
+    md_echo "# Replace with values from tracker.list_teams()"
     md_echo "teams:"
     md_echo "  TeamName:"
     md_echo '    id: "<TEAM_ID>"'
@@ -402,7 +402,7 @@ do_init() {
     md_echo "# ============================================================================="
     md_echo "# PROJECT CONFIGURATION"
     md_echo "# ============================================================================="
-    md_echo "# Replace with values from mcp__linear-server__list_projects()"
+    md_echo "# Replace with values from tracker.list_projects()"
     md_echo "projects:"
     md_echo "  ProjectShortcut:"
     md_echo '    id: "<PROJECT_ID>"'
@@ -479,13 +479,13 @@ result = {
         {
             "step": 1,
             "name": "List Teams",
-            "tool": "mcp__linear-server__list_teams",
+            "tool": "tracker.list_teams",
             "parameters": {}
         },
         {
             "step": 2,
             "name": "List Projects",
-            "tool": "mcp__linear-server__list_projects",
+            "tool": "tracker.list_projects",
             "parameters": {
                 "member": "me",
                 "limit": 50
@@ -494,7 +494,7 @@ result = {
         {
             "step": 3,
             "name": "List Users",
-            "tool": "mcp__linear-server__list_users",
+            "tool": "tracker.list_users",
             "parameters": {}
         }
     ],
@@ -573,7 +573,7 @@ do_refresh() {
     md_echo "### 1. Projects"
     md_echo ""
     md_echo '```python'
-    md_echo "projects_result = mcp__linear-server__list_projects("
+    md_echo "projects_result = tracker.list_projects("
     md_echo "    member=\"me\","
     md_echo "    limit=50"
     md_echo ")"
@@ -582,7 +582,7 @@ do_refresh() {
     md_echo "### 2. Teams"
     md_echo ""
     md_echo '```python'
-    md_echo "teams_result = mcp__linear-server__list_teams()"
+    md_echo "teams_result = tracker.list_teams()"
     md_echo '```'
     md_echo ""
     md_echo "---"
@@ -633,12 +633,12 @@ done)
     "mcp_queries": [
         {
             "name": "List Projects",
-            "tool": "mcp__linear-server__list_projects",
+            "tool": "tracker.list_projects",
             "parameters": {"member": "me", "limit": 50}
         },
         {
             "name": "List Teams",
-            "tool": "mcp__linear-server__list_teams",
+            "tool": "tracker.list_teams",
             "parameters": {}
         }
     ],
@@ -695,7 +695,7 @@ do_validate() {
         if [[ -n "$shortcut" ]]; then
             local id=$(get_project_id "$shortcut")
             if [[ -n "$id" ]]; then
-                md_echo "| $shortcut | \`$id\` | \`mcp__linear-server__get_project(query=\"$id\")\` |"
+                md_echo "| $shortcut | \`$id\` | \`tracker.get_project(query=\"$id\")\` |"
             else
                 md_echo "| $shortcut | **MISSING** | - |"
             fi
@@ -717,7 +717,7 @@ do_validate() {
             local id=$(get_project_id "$shortcut")
             if [[ -n "$id" ]]; then
                 md_echo "# $shortcut"
-                md_echo "result_${shortcut} = mcp__linear-server__get_project(query=\"$id\")"
+                md_echo "result_${shortcut} = tracker.get_project(query=\"$id\")"
                 md_echo ""
             fi
         fi
@@ -782,7 +782,7 @@ $(get_project_shortcuts | while read -r shortcut; do
     if [[ -n "$shortcut" ]]; then
         id=$(get_project_id "$shortcut")
         if [[ -n "$id" ]]; then
-            echo "        {\"shortcut\": \"$shortcut\", \"id\": \"$id\", \"query\": \"mcp__linear-server__get_project(query=\\\"$id\\\")\"},"
+            echo "        {\"shortcut\": \"$shortcut\", \"id\": \"$id\", \"query\": \"tracker.get_project(query=\\\"$id\\\")\"},"
         fi
     fi
 done)

@@ -127,7 +127,7 @@ all_ticket_refs = set(re.findall(r"OMN-\d+", plan_body))
 # Verify each extracted ticket ID exists in Linear
 missing_tickets = []
 for ticket_id in all_ticket_refs:
-    result = mcp__linear-server__get_issue(id=ticket_id)
+    result = tracker.get_issue(id=ticket_id)
     if result is None or result.get("error"):
         missing_tickets.append(ticket_id)
 

@@ -358,7 +358,7 @@ def escalate_to_blocked(
     4. Log escalation event to dispatch log
     """
     # Move to Blocked in Linear
-    mcp__linear_server__save_issue(
+    tracker.save_issue(
         identifier=ticket_id,
         status="Blocked",
         comment=f"Auto-blocked: agent stalled {attempt_count} times. "

@@ -81,7 +81,7 @@ CronCreate("*/15 * * * *", "/pipeline-fill", recurring=true)
 
 # Headless (publishes to node event bus)
 claude -p "/pipeline-fill" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,Agent,mcp__linear-server__*"
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,Agent,tracker.*"
 ```
 
 **Announce at start:** "I'm using the pipeline-fill skill to select and dispatch the highest-acceleration ticket."
@@ -93,7 +93,7 @@ using the same logic as `HandlerPipelineFill`:
 
 ### Phase 1: Query Linear
 
-Query for unstarted tickets in the Active Sprint using `mcp__linear-server__list_issues`.
+Query for unstarted tickets in the Active Sprint using `tracker.list_issues`.
 
 **Filters:**
 - State: `Backlog` or `Todo` (not `In Progress`, `In Review`, `Done`, `Canceled`)

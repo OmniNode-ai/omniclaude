@@ -102,7 +102,7 @@ Otherwise, use the node output violations to create Linear tickets:
 
 1. Group violations by node directory (one ticket per node, not per handler)
 2. Dedup against existing Linear tickets with "compliance" in the title
-3. Create tickets (up to `--max-tickets`, default 10) via `mcp__linear-server__save_issue`
+3. Create tickets (up to `--max-tickets`, default 10) via `tracker.save_issue`
 4. Title format: `fix(compliance): migrate <node_name> to declarative pattern`
 5. Project: Active Sprint, label: `contract-compliance`
 

@@ -112,7 +112,7 @@ Complete regeneration from Linear state.
 #### 1. Fetch all epics
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   state="not done",
   limit=250
 )
@@ -125,7 +125,7 @@ children still open -- these are data quality issues to surface, not hide).
 #### 2. Fetch children for each epic
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   parentId=epic_id,
   limit=50
 )
@@ -175,7 +175,7 @@ Parse MASTER_TICKET_PLAN.md to extract all `OMN-XXXX` ticket IDs mentioned.
 
 ```
 For each ticket_id in parsed_ids:
-    mcp__linear-server__get_issue(id=ticket_id)
+    tracker.get_issue(id=ticket_id)
 ```
 
 Batch in groups of 20 to avoid rate limits.

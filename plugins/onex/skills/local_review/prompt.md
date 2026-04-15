@@ -121,7 +121,7 @@ Phase 0: Pre-existing issue scan
 
        b. For each fingerprint, search for an existing ticket:
           ```
-          existing = mcp__linear-server__list_issues(query="gap:{fingerprint[:8]}")
+          existing = tracker.list_issues(query="gap:{fingerprint[:8]}")
           ```
           Then apply state table:
 
@@ -152,7 +152,7 @@ Phase 0: Pre-existing issue scan
 
        d. When commenting on an existing ticket (skip creation):
           ```
-          mcp__linear-server__create_comment(issueId=existing_ticket_id,
+          tracker.create_comment(issueId=existing_ticket_id,
             body="Re-detected in run {run_id}: {failure_kind} {check_name} in {repo_relative_path}")
           ```
 
