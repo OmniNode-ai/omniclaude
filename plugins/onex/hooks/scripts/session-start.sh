@@ -1576,7 +1576,7 @@ if [[ -n "${INFISICAL_ADDR:-}" ]]; then
   mkdir -p "$(dirname "${_sync_log}")" || true
   _sync_script="${OMNIBASE_INFRA_DIR:-}/scripts/sync-omnibase-env.py"
   if [[ -f "${_sync_script}" ]]; then
-    (uv run python "${_sync_script}" >> "${_sync_log}" 2>&1) &
+    (uv --project "${OMNIBASE_INFRA_DIR}" run python "${_sync_script}" >> "${_sync_log}" 2>&1) &
     disown || true
   else
     log "Opportunistic env sync skipped: sync script not found at ${_sync_script}"
