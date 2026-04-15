@@ -42,6 +42,12 @@ for file in "${SKILL_FILES[@]}"; do
   while IFS= read -r line; do
     lineno=$((lineno + 1))
     if [[ "$line" == *"$ESCAPE_HATCH"* ]]; then
+      # Require a reason after the marker (e.g. "# local-path-ok: <reason>")
+      if ! echo "$line" | grep -qE '#\s*local-path-ok\b\s+\S'; then
+        rel="${file#"$REPO_ROOT/"}"
+        echo "::error file=$rel,line=$lineno::escape hatch '# local-path-ok' requires a reason (e.g. '# local-path-ok: <why>')"
+        FAILED=true
+      fi
       continue
     fi
     for i in "${!PATTERNS[@]}"; do
