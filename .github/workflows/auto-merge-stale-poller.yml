@@ -14,7 +14,6 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
   pull-requests: write
 
 jobs:
@@ -33,26 +32,51 @@ jobs:
           REPO="${GH_REPO##*/}"
 
           # Fetch all open PRs with merge state, auto-merge, and merge queue status
-          PRS=$(gh api graphql -f query='
-            query($owner: String!, $repo: String!) {
-              repository(owner: $owner, name: $repo) {
-                pullRequests(states: OPEN, first: 50) {
-                  nodes {
-                    number
-                    id
-                    author { login }
-                    mergeStateStatus
-                    autoMergeRequest { mergeMethod }
-                    isInMergeQueue
-                    isDraft
+          # Paginate via cursor until hasNextPage is false
+          ALL_NODES="[]"
+          CURSOR=""
+          while true; do
+            if [ -n "$CURSOR" ]; then
+              PAGE=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!, $after: String) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequests(states: OPEN, first: 100, after: $after) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        number id
+                        author { login }
+                        mergeStateStatus
+                        autoMergeRequest { mergeMethod }
+                        isInMergeQueue isDraft
+                      }
+                    }
                   }
-                }
-              }
-            }
-          ' -f owner="$OWNER" -f repo="$REPO")
+                }' -f owner="$OWNER" -f repo="$REPO" -f after="$CURSOR")
+            else
+              PAGE=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequests(states: OPEN, first: 100) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        number id
+                        author { login }
+                        mergeStateStatus
+                        autoMergeRequest { mergeMethod }
+                        isInMergeQueue isDraft
+                      }
+                    }
+                  }
+                }' -f owner="$OWNER" -f repo="$REPO")
+            fi
+            ALL_NODES=$(echo "$ALL_NODES $PAGE" | jq -s '.[0] + [.[1].data.repository.pullRequests.nodes[]]')
+            HAS_NEXT=$(echo "$PAGE" | jq -r '.data.repository.pullRequests.pageInfo.hasNextPage')
+            [ "$HAS_NEXT" = "true" ] || break
+            CURSOR=$(echo "$PAGE" | jq -r '.data.repository.pullRequests.pageInfo.endCursor')
+          done
 
-          echo "$PRS" | jq -r '
-            .data.repository.pullRequests.nodes[] |
+          echo "$ALL_NODES" | jq -r '
+            .[] |
             select(
               .author.login == "jonahgabriel" and
               .mergeStateStatus == "CLEAN" and
@@ -72,7 +96,8 @@ jobs:
                   }
                 }
               }
-            ' -f prId="$NODE_ID" 2>&1) || true
+            ' -f prId="$NODE_ID" 2>&1)
+            ENQUEUE_EXIT=$?
 
             if echo "$RESULT" | grep -q '"id"'; then
               POSITION=$(echo "$RESULT" | jq -r '.data.enqueuePullRequest.mergeQueueEntry.position // "?"')
@@ -80,7 +105,8 @@ jobs:
             elif echo "$RESULT" | grep -qiE "already in the queue|already enqueued"; then
               echo "PR #$PR_NUMBER already in queue (race condition tolerated)"
             else
-              echo "PR #$PR_NUMBER enqueue result: $RESULT"
+              echo "ERROR: PR #$PR_NUMBER enqueue failed (exit $ENQUEUE_EXIT): $RESULT" >&2
+              exit 1
             fi
           done
 
