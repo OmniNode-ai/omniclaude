@@ -70,7 +70,7 @@ Run `check-migration-conflicts` from onex_change_control. Parse output for
 EXACT_DUPLICATE and NAME_CONFLICT. Any finding is a FAIL.
 
 ### D4: Cross-Repo Model Name Collision
-For each repo under $OMNI_HOME, grep `class Model[A-Z]` in `src/` (excluding
+For each repo (discovered via `gh repo list OmniNode-ai --json name`), grep `class Model[A-Z]` in `src/` (excluding
 `tests/` and `fixtures/` directories). Collect (class_name, repo, file_path).
 Treat duplicate model names as WARN by default unless the duplicate appears in
 production codepaths outside `omnibase_core`, in which case escalate to FAIL.

@@ -83,7 +83,7 @@ fi
 ### Step 3 — Invoke WorkflowRunner
 
 ```bash
-OMNIMARKET_ROOT="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}/omnimarket"  # local-path-ok
+OMNIMARKET_ROOT="${OMNIMARKET_ROOT:-$(python3 -c 'import importlib.util; s=importlib.util.find_spec("omnimarket"); print(s.submodule_search_locations[0].split("/src/")[0]) if s else exit(1)' 2>/dev/null)}"
 
 cd "${OMNIMARKET_ROOT}" && uv run python - <<'PYEOF'
 import sys, os, json

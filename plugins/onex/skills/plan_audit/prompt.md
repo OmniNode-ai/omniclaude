@@ -15,7 +15,7 @@ ticket coverage, and staleness — and produces a PASS/WARN/FAIL report per plan
 
 | Arg | Default | Description |
 |-----|---------|-------------|
-| `--repo` | current repo | Repo name under omni_home/ to audit |
+| `--repo` | current repo | Repo name to audit (resolved from git root) |
 | `--since-days` | 14 | Staleness threshold in days |
 | `--fail-only` | false | Suppress PASS/WARN output |
 | `--dry-run` | false | Report only, no ticket creation |
@@ -26,8 +26,7 @@ ticket coverage, and staleness — and produces a PASS/WARN/FAIL report per plan
 
 ```bash
 REPO="${REPO:-$(basename $(git rev-parse --show-toplevel))}"
-OMNI_HOME="${OMNI_HOME:-$HOME/Code/omni_home}"
-PLANS_DIR="$OMNI_HOME/$REPO/docs/plans"
+PLANS_DIR="$(git rev-parse --show-toplevel)/docs/plans"
 SINCE_DAYS="${SINCE_DAYS:-14}"
 ```
 
@@ -149,7 +148,7 @@ If the plan body has no milestone headings at all, check4 = WARN "No milestone s
 ### Step 7: Check 5 — Staleness check <!-- ai-slop-ok: skill-step-heading -->
 
 ```bash
-LAST_MODIFIED=$(git -C "$OMNI_HOME/$REPO" log -1 --format=%ai -- "docs/plans/$(basename $PLAN_FILE)" 2>/dev/null)
+LAST_MODIFIED=$(git -C "$PLANS_DIR/.." log -1 --format=%ai -- "docs/plans/$(basename $PLAN_FILE)" 2>/dev/null)
 ```
 
 ```python

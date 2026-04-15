@@ -44,7 +44,7 @@ targets: [omnimarket#202, OMN-8375]
 "
 
 # From file
-/dispatch_worker $OMNI_HOME/docs/plans/workers/pr-202-fix.yaml
+/dispatch_worker ~/docs/plans/workers/pr-202-fix.yaml
 
 # Dry run (print compiled prompt, no spawn)
 /dispatch_worker --dry-run "

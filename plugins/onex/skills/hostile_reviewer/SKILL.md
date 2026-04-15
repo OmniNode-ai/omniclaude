@@ -48,7 +48,7 @@ args:
     description: "Static-analysis-only mode. Runs 7 code quality checks (dead code, missing error handling, stubs shipped, missing Kafka wiring, schema mismatches, hardcoded values, missing tests) without adversarial multi-model review. Use --repos and --categories to scope the scan."
     required: false
   - name: repos
-    description: "Comma-separated repo names to scan in --static mode (default: all Python repos in omni_home)"
+    description: "Comma-separated repo names to scan in --static mode (default: all Python repos in the OmniNode-ai org)"
     required: false
   - name: categories
     description: "Comma-separated finding categories for --static mode: dead-code,missing-error-handling,stubs-shipped,missing-kafka-wiring,schema-mismatches,hardcoded-values,missing-tests (default: all)"
@@ -76,10 +76,9 @@ node       -> omniintelligence/src/omniintelligence/review_pairing/ (multi-model
 entry      -> omniintelligence.review_pairing.cli_review (CLI)
 ```
 
-Node invocation (working directory must be `$OMNI_HOME/omniintelligence`):
+Node invocation (working directory must be the `omniintelligence` repo root):
 
 ```bash
-cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
   --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
 ```
@@ -276,14 +275,12 @@ Each pass within the loop executes:
 
 **PR mode (default models):**
 ```bash
-cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
   --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
 ```
 
 **File mode (default models):**
 ```bash
-cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
   --file <path> --model codex --model deepseek-r1 2>/dev/null
 ```
@@ -291,7 +288,6 @@ uv run python -m omniintelligence.review_pairing.cli_review \
 When `--models` is provided, expand into repeated `--model` args dynamically:
 ```bash
 # Example: --models deepseek-r1,qwen3-14b,codex
-cd $OMNI_HOME/omniintelligence
 uv run python -m omniintelligence.review_pairing.cli_review \
   --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-14b --model codex 2>/dev/null
 ```

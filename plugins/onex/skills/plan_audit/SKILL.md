@@ -152,7 +152,7 @@ PASS plans:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--repo <name>` | current repo | Repo to audit (resolved under omni_home/) |
+| `--repo <name>` | current repo | Repo to audit (resolved from git root) |
 | `--since-days N` | 14 | Staleness threshold in days |
 | `--fail-only` | false | Only emit FAIL lines (quiet mode) |
 | `--dry-run` | false | No ticket creation |

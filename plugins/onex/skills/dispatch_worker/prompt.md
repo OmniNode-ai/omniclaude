@@ -53,7 +53,6 @@ Stop.
 Execute the node via CLI:
 
 ```bash
-cd $OMNI_HOME/omnimarket
 uv run python -c "
 import json, yaml, sys
 from omnimarket.nodes.node_dispatch_worker.handlers.handler_dispatch_worker import HandlerDispatchWorker

@@ -446,7 +446,6 @@ If hash matches `state.file_hashes[repo:relative_path]`, skip file. After scanni
 Module-level (single-file scope only): identify functions/classes not referenced within same file.
 Cross-file (vulture subprocess):
 ```bash
-cd $OMNI_HOME/<repo>  # local-path-ok
 uv run vulture src/ --min-confidence 80 --exclude .venv,__pycache__,docs 2>/dev/null || true
 ```
 Parse lines: `<file>:<line>: unused <kind> '<name>' (confidence: <N>%)`

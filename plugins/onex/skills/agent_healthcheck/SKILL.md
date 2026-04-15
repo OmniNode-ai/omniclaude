@@ -267,7 +267,7 @@ def write_recovery_checkpoint(
     """Write a recovery checkpoint for a stalled agent.
 
     Checkpoint is written to:
-    $OMNI_HOME/.onex_state/pipeline_checkpoints/{ticket_id}/recovery-{timestamp}.yaml
+    $ONEX_STATE_DIR/pipeline_checkpoints/{ticket_id}/recovery-{timestamp}.yaml
 
     Returns:
         {"path": str, "timestamp": str}

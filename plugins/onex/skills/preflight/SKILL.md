@@ -50,7 +50,6 @@ If NOT MOUNTED:
 - Action: User must manually mount the drive before proceeding.
 
 If MOUNTED:
-- Verify `$OMNI_HOME` resolves correctly: `ls "$OMNI_HOME/omniclaude" 2>/dev/null && echo "OMNI_HOME resolves" || echo "OMNI_HOME broken"`
 - Mark check: PASS
 
 ---
@@ -62,7 +61,7 @@ hostname
 uname -m
 sw_vers -productVersion 2>/dev/null || lsb_release -d 2>/dev/null || echo "Linux"
 echo "Shell: $SHELL"
-echo "OMNI_HOME: ${OMNI_HOME:-UNSET}"
+echo "ONEX_STATE_DIR: ${ONEX_STATE_DIR:-UNSET}"
 ```
 
 Report the full identity block:
@@ -71,10 +70,10 @@ Machine: <hostname>
 Arch:    <architecture>
 OS:      <version>
 Shell:   <shell>
-OMNI_HOME: <path or UNSET>
+ONEX_STATE_DIR: <path or UNSET>
 ```
 
-Mark FAIL if `OMNI_HOME` is UNSET — sessions cannot function without it.
+Mark WARN if `ONEX_STATE_DIR` is UNSET — state-backed skills will use `~/.onex_state` as default.
 Mark PASS otherwise (identity is informational).
 
 ---
