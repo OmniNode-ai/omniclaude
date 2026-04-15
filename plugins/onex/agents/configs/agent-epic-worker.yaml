@@ -218,3 +218,9 @@ performance_characteristics:
 
 onex_integration: {}
 intelligence_integration: {}
+
+# Tool restrictions: background workers must not create/manage cron schedules (OMN-8842)
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
