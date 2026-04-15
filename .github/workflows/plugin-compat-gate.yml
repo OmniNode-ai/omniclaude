@@ -17,8 +17,7 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'plugins/onex/plugin-compat.yaml'
-      - 'plugins/onex/tests/test_plugin_compat_yaml.py'
+      - 'plugins/onex/**'
       - '.github/workflows/plugin-compat-gate.yml'
   pull_request:
     branches: [main, develop]

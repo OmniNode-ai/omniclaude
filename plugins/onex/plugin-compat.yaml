@@ -8,7 +8,8 @@
 #   2. ModelXxxCommand fields may be added (backward-compatible).
 #   3. Fields may NOT be renamed or removed without a .v2 topic.
 #   4. ProtocolNodeReceipt fields may be added.
-#   5. Plugin CI asserts compatibility against min_runtime_version and max_runtime_version.
+#   5. Plugin CI validates compatibility metadata shape and version-window ordering.
+#      Runtime handshake enforcement is performed by the omnimarket runtime loader.
 #
 # Read by: omnimarket.runtime.version_handshake.load_compat_matrix()
 # CI gate:  .github/workflows/plugin-compat-gate.yml (omniclaude)

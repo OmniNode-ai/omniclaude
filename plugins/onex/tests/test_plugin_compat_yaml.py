@@ -127,9 +127,9 @@ class TestPluginCompatYamlNodes:
             )
 
     def test_minimum_node_count(self, compat_doc: dict) -> None:
-        # DoD requires all 47 R-class nodes declared — we have ~47 nodes with event_bus topics
+        # DoD requires exactly 47 R-class nodes declared
         node_count = len(compat_doc["nodes"])
-        assert node_count >= 40, (
-            f"Expected at least 40 R-class nodes declared, got {node_count}. "
+        assert node_count == 47, (
+            f"Expected exactly 47 R-class nodes declared, got {node_count}. "
             "Add missing nodes to plugin-compat.yaml."
         )
