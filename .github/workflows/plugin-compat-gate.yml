@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# plugin-compat-gate.yml — CI gate: plugin ships only with plugin-compat.yaml
+#
+# DoD gate for OMN-8789 SD-02:
+#   1. Fails if plugins/onex/plugin-compat.yaml is absent (hard fail, not advisory).
+#   2. Validates YAML structure via pytest (schema tests in plugins/onex/tests/).
+#
+# When this fails:
+#   - YAML absent: add plugins/onex/plugin-compat.yaml with full R-class node declarations.
+#   - Schema test failure: fix plugin-compat.yaml schema — see test_plugin_compat_yaml.py.
+
+name: Plugin Compat Gate
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'plugins/onex/plugin-compat.yaml'
+      - 'plugins/onex/tests/test_plugin_compat_yaml.py'
+      - '.github/workflows/plugin-compat-gate.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'plugins/onex/**'
+      - '.github/workflows/plugin-compat-gate.yml'
+  merge_group:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  plugin-compat-gate:
+    name: Plugin compat.yaml presence + schema
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 10
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Assert plugin-compat.yaml exists
+        run: |
+          COMPAT_PATH="plugins/onex/plugin-compat.yaml"
+          if [ ! -f "$COMPAT_PATH" ]; then
+            echo "::error file=${COMPAT_PATH}::plugin-compat.yaml is required but not found."
+            echo "Every plugin release must ship with plugins/onex/plugin-compat.yaml"
+            echo "declaring all R-class node topics and the runtime compatibility window."
+            echo "See OMN-8789 for the schema specification."
+            exit 1
+          fi
+          echo "OK: $COMPAT_PATH found"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: uv-plugin-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run plugin-compat.yaml schema tests
+        run: |
+          uv run pytest plugins/onex/tests/test_plugin_compat_yaml.py -v \
+            --tb=short \
+            -p no:warnings

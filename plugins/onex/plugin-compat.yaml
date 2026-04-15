@@ -1,0 +1,407 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# plugin-compat.yaml — OmniClaude / ONEX Plugin Compatibility Matrix
+#
+# Schema rules (§ 7.3 — CI-enforced):
+#   1. Topic names are immutable once published. Append `.v2` for breaking changes.
+#   2. ModelXxxCommand fields may be added (backward-compatible).
+#   3. Fields may NOT be renamed or removed without a .v2 topic.
+#   4. ProtocolNodeReceipt fields may be added.
+#   5. Plugin CI asserts compatibility against min_runtime_version and max_runtime_version.
+#
+# Read by: omnimarket.runtime.version_handshake.load_compat_matrix()
+# CI gate:  .github/workflows/plugin-compat-gate.yml (omniclaude)
+#           .github/workflows/plugin-compat-gate.yml (omnimarket)
+#
+# OMN-8789: SD-02
+
+plugin: onex
+plugin_version: "0.23.0"
+
+# Compatibility window: plugin works with runtimes in [min, max).
+# max_runtime_version is exclusive (semver ~= semantics per § 7.3).
+min_runtime_version: "0.2.0"
+max_runtime_version: "1.0.0"
+
+# Per-node topic and schema_version declarations for all R-class nodes.
+# schema_version tracks the Kafka message schema version for each topic.
+# "v1" → first published schema; increment with .v2 topic on breaking change.
+nodes:
+  - node: node_aislop_sweep
+    topics:
+      - name: onex.cmd.omnimarket.aislop-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.aislop-sweep-completed.v1
+        schema_version: v1
+        role: publish
+      - name: onex.evt.omnimarket.aislop-sweep-finding.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_autopilot_orchestrator
+    topics:
+      - name: onex.cmd.omnimarket.autopilot-orchestrator-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.autopilot-orchestrator-completed.v1
+        schema_version: v1
+        role: publish
+      - name: onex.evt.omnimarket.autopilot-orchestrator-phase-transition.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_baseline_capture
+    topics:
+      - name: onex.cmd.omnimarket.baseline-capture-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.baseline-captured.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_baseline_compare
+    topics:
+      - name: onex.cmd.omnimarket.baseline-compare-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnibase-infra.baselines-computed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_build_dispatch_effect
+    topics:
+      - name: onex.cmd.omnimarket.build-loop-build.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_build_loop
+    topics:
+      - name: onex.cmd.omnimarket.build-loop-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.build-loop.dod-checked.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_build_loop_orchestrator
+    topics:
+      - name: onex.cmd.omnimarket.build-loop-orchestrator-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.build-loop-orchestrator-phase-transition.v1
+        schema_version: v1
+        role: publish
+      - name: onex.evt.omnimarket.build-loop-orchestrator-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_ci_watch
+    topics:
+      - name: onex.cmd.omnimarket.ci-watch-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_close_out
+    topics:
+      - name: onex.cmd.omnimarket.close-out-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_closeout_effect
+    topics:
+      - name: onex.cmd.omnimarket.closeout-effect-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_coderabbit_triage
+    topics:
+      - name: onex.cmd.omnimarket.coderabbit-triage-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_compliance_sweep
+    topics:
+      - name: onex.cmd.omnimarket.compliance-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_contract_sweep
+    topics:
+      - name: onex.cmd.omnimarket.contract-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_coverage_sweep
+    topics:
+      - name: onex.cmd.omnimarket.coverage-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_create_ticket
+    topics:
+      - name: onex.cmd.omnimarket.create-ticket-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_dashboard_sweep
+    topics:
+      - name: onex.cmd.omnimarket.dashboard-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_data_flow_sweep
+    topics:
+      - name: onex.cmd.omnimarket.data-flow-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_data_verification
+    topics:
+      - name: onex.cmd.omnimarket.data-verification-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_database_sweep
+    topics:
+      - name: onex.cmd.omnimarket.database-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_design_to_plan
+    topics:
+      - name: onex.cmd.omnimarket.design-to-plan-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.sweep-result.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_dispatch_worker
+    topics:
+      - name: onex.cmd.omnimarket.dispatch-worker-compile.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_doc_freshness_sweep
+    topics:
+      - name: onex.cmd.omnimarket.doc-freshness-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_dod_verify
+    topics:
+      - name: onex.cmd.omnimarket.dod-verify-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_duplication_sweep
+    topics:
+      - name: onex.cmd.omnimarket.duplication-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_environment_health_scanner
+    topics:
+      - name: onex.cmd.omnimarket.environment-health-scan-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_golden_chain_sweep
+    topics:
+      - name: onex.cmd.omnimarket.golden-chain-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+
+  - node: node_hostile_reviewer
+    topics:
+      - name: onex.cmd.omnimarket.hostile-reviewer-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.hostile-reviewer-phase-transition.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_integration_test_runner
+    topics:
+      - name: onex.cmd.omnimarket.integration-test-runner-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.integration-test-runner-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_linear_triage
+    topics:
+      - name: onex.cmd.omnimarket.linear-triage-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.linear-triage-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_local_review
+    topics:
+      - name: onex.cmd.omnimarket.local-review-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.local-review-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_merge_sweep
+    topics:
+      - name: onex.cmd.omnimarket.merge-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.merge-sweep-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_nightly_loop_controller
+    topics:
+      - name: onex.cmd.omnimarket.nightly-loop-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.nightly-loop-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_onboarding
+    topics:
+      - name: onex.cmd.omnimarket.onboarding-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.onboarding-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_overnight
+    topics:
+      - name: onex.cmd.omnimarket.overnight-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.overnight-session-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_overseer_verifier
+    topics:
+      - name: onex.cmd.omnimarket.overseer-verify.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.overseer-verifier-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_plan_to_tickets
+    topics:
+      - name: onex.cmd.omnimarket.plan-to-tickets-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.plan-to-tickets-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_platform_diagnostics
+    topics:
+      - name: onex.cmd.omnimarket.platform-diagnostics-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.platform-diagnostics-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_platform_readiness
+    topics:
+      - name: onex.cmd.omnimarket.platform-readiness-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.platform-readiness-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_pr_review_bot
+    topics:
+      - name: onex.cmd.omnimarket.pr-review-bot-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.pr-review-bot-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_process_watchdog
+    topics:
+      - name: onex.cmd.omnimarket.watchdog-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.watchdog-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_release
+    topics:
+      - name: onex.cmd.omnimarket.release-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.release-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_retention_cleanup
+    topics:
+      - name: onex.cmd.omnimarket.retention-cleanup-requested.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.retention-cleanup-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_runtime_sweep
+    topics:
+      - name: onex.cmd.omnimarket.runtime-sweep-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.runtime-sweep-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_session_bootstrap
+    topics:
+      - name: onex.cmd.omnimarket.session-bootstrap-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.session-bootstrap-completed.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_session_post_mortem
+    topics:
+      - name: onex.cmd.omnimarket.session-post-mortem-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.session-post-mortem.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_ticket_pipeline
+    topics:
+      - name: onex.cmd.omnimarket.ticket-pipeline-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.ticket-pipeline-completed.v1
+        schema_version: v1
+        role: publish
+      - name: onex.evt.omnimarket.ticket-pipeline-phase-transition.v1
+        schema_version: v1
+        role: publish
+
+  - node: node_ticket_work
+    topics:
+      - name: onex.cmd.omnimarket.ticket-work-start.v1
+        schema_version: v1
+        role: subscribe
+      - name: onex.evt.omnimarket.ticket-work-completed.v1
+        schema_version: v1
+        role: publish
