@@ -76,3 +76,30 @@ def test_two_agents_independent_windows(state_file) -> None:
     assert state_file.should_allow_idle_notification("agent-y", now=1010.0) is False
     # But agent-z (new) is allowed
     assert state_file.should_allow_idle_notification("agent-z", now=1010.0) is True
+
+
+@pytest.mark.unit
+def test_concurrent_calls_exactly_one_passes(state_file, tmp_path, monkeypatch) -> None:
+    """Concurrent processes must not both pass within the same window."""
+    import concurrent.futures
+
+    monkeypatch.setenv("ONEX_STATE_DIR", str(tmp_path))
+
+    import importlib
+
+    import idle_ratelimit as rl
+
+    importlib.reload(rl)
+
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as ex:
+        futures = [
+            ex.submit(rl.should_allow_idle_notification, "agent-concurrent", now=1000.0)
+            for _ in range(20)
+        ]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    assert results.count(True) == 1, (
+        f"Expected exactly 1 pass under concurrency, got {results.count(True)}"
+    )
+    assert results.count(False) == 19
