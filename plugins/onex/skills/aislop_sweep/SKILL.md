@@ -67,15 +67,12 @@ outputs:
 Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
 
 ```bash
-cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_aislop_sweep \
-  [--repos <comma-list>] \
-  [--checks <comma-list>] \
-  [--severity-threshold WARNING] \
-  [--dry-run]
+onex run-node node_aislop_sweep \
+  --input '{"repos": "<comma-list>", "checks": "<comma-list>", "severity_threshold": "WARNING", "dry_run": false}' \
+  --timeout 300
 ```
 
-Capture stdout (JSON: `ModelSkillResult`, with aislop findings in the `output` field). Exit 0 = clean, exit 1 = findings found.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = findings found.
 
 ### Step 3 — Render report
 

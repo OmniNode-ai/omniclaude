@@ -79,15 +79,12 @@ from headless or cron contexts must include it explicitly.
 ### Step 2 — Initialize FSM
 
 ```bash
-cd $OMNI_HOME/omnimarket
-uv run python -m omnimarket.nodes.node_ticket_pipeline \
-  <ticket_id> \
-  [--skip-to <phase>] \
-  [--skip-test-iterate] \
-  [--dry-run]
+onex run-node node_ticket_pipeline \
+  --input '{"ticket_id": "<ticket_id>", "skip_to": null, "skip_test_iterate": false, "dry_run": false}' \
+  --timeout 300
 ```
 
-Outputs `ModelPipelineState` JSON with initial phase. Use this to confirm FSM wiring.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Outputs `ModelPipelineState` JSON with initial phase.
 
 ### Step 3 — Execute phases
 

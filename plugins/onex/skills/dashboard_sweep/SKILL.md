@@ -83,14 +83,12 @@ Use Playwright to collect page data across all dashboard routes. For each page:
 Pass the collected page data to the node for classification and triage:
 
 ```bash
-cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_dashboard_sweep \
-  --pages '<json-array>' \
-  [--max-iterations <n>] \
-  [--dry-run]
+onex run-node node_dashboard_sweep \
+  --input '{"pages": [], "max_iterations": 3, "dry_run": false}' \
+  --timeout 300
 ```
 
-Capture stdout (JSON: `DashboardSweepResult`). Exit 0 = clean, exit 1 = issues found.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = issues found.
 
 ### Step 4 — Fix loop (unless `--triage-only` or `--dry-run`)
 
