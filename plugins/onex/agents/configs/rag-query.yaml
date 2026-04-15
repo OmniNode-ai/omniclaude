@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: rag
+purpose: "Execute semantic RAG queries against the ONEX knowledge base to retrieve relevant context and patterns."
 mode: full
 agent_type: "rag_query"
 mode: "full"

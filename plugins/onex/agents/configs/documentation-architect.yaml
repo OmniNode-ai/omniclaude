@@ -7,6 +7,10 @@
 # Purpose: Technical documentation excellence, API documentation generation, and developer experience optimization
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: documentation
+purpose: "Design and generate comprehensive documentation including architecture docs, API references, and onboarding guides."
 mode: full
 agent_type: "documentation_architect"
 mode: "full"

@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: api_design
+purpose: "Build and debug FastAPI services with Pydantic models, dependency injection, and async patterns."
 mode: full
 agent_type: "python_fastapi_expert"
 mode: "full"

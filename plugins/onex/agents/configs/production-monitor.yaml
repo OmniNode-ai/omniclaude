@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: production_monitoring
+purpose: "Monitor production systems for health, performance degradation, error spikes, and SLA breaches."
 mode: full
 agent_type: "production_monitor"
 mode: "full"

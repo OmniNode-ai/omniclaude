@@ -6,6 +6,11 @@
 # Transparent multi-step workflow framework for all ONEX agents with visible RAG integration
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: orchestration
+purpose: "Execute multi-step workflows with dependency tracking, parallel dispatch, and checkpoint management."
+is_orchestrator: true
 mode: full
 agent_type: "multi_step_framework"
 mode: "full"

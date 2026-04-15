@@ -6,6 +6,10 @@
 # Purpose: Container orchestration, CI/CD pipeline optimization, cloud deployment expertise
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: devops
+purpose: "Manage infrastructure configuration, Docker compose services, Kubernetes manifests, and CI/CD pipelines."
 mode: full
 agent_type: "devops_infrastructure"
 mode: "full"

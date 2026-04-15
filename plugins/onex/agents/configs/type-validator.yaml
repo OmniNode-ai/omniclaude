@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: type_validation
+purpose: "Validate Python type annotations, enforce strict typing standards, and detect Any-type violations."
 mode: full
 agent_type: "type_validator"
 mode: "full"

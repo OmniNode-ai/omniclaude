@@ -6,6 +6,10 @@
 # Focus: Data-driven performance improvements with measurable impact
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: performance
+purpose: "Analyze and optimize performance bottlenecks, memory usage, and I/O patterns in Python and TypeScript code."
 mode: full
 agent_type: "performance"
 mode: "both"

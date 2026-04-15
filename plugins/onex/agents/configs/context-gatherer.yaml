@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: context_gathering
+purpose: "Gather and synthesize context from repository structure, tickets, and documentation before task execution."
 mode: full
 agent_type: "context_gatherer"
 mode: "full"

@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: code_quality
+purpose: "Analyze code quality metrics, detect anti-patterns, and produce actionable improvement recommendations."
 mode: full
 agent_type: "code_quality"
 mode: "both"

@@ -6,6 +6,10 @@
 # Version: 1.0.0
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: git_workflow
+purpose: "Generate well-formed git commit messages following conventional commits format with ticket references."
 mode: full
 agent_type: "commit"
 mode: "both"

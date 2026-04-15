@@ -6,6 +6,10 @@
 # Distinct from debug-intelligence specialist - this handles structured investigation and documentation
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: debugging
+purpose: "Diagnose and resolve bugs using systematic four-phase debugging: observe, hypothesize, test, fix."
 mode: full
 agent_type: "debug"
 mode: "both"

@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: security
+purpose: "Conduct security audits identifying vulnerabilities, OWASP top-10 risks, secret exposure, and access control gaps."
 mode: full
 agent_type: "security_audit"
 mode: "both"

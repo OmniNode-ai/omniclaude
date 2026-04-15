@@ -7,6 +7,10 @@
 # Integration: agent routing and dynamic transformation system
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: agent_registry
+purpose: "Maintain the agent registry, validate agent YAML definitions, and resolve agent routing requests."
 mode: full
 agent_type: "registry"
 mode: "full"

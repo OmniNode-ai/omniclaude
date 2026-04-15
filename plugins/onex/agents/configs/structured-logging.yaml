@@ -6,6 +6,10 @@
 # Systematic logging implementation with centralized policies and RAG-enhanced debugging intelligence
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: observability
+purpose: "Design and implement structured logging patterns with correlation IDs, log levels, and Kafka emission."
 mode: full
 agent_type: "structured_logging"
 mode: "full"

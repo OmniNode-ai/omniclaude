@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: velocity_tracking
+purpose: "Track sprint velocity metrics, compute throughput, and surface delivery trends for planning."
 mode: full
 agent_type: "velocity_tracker"
 mode: "full"

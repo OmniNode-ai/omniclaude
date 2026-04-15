@@ -6,6 +6,13 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
+domain: batch_processing
+purpose: "Process batches of items autonomously in a background worker context without scheduling new cron jobs."
 mode: full
 agent_type: "omnibatch_processor"
 mode: "full"

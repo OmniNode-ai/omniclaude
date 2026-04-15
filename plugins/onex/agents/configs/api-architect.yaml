@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: api_design
+purpose: "Design RESTful and event-driven APIs with OpenAPI specifications, contract-first patterns, and ONEX compliance."
 mode: full
 agent_type: "api_architect"
 mode: "both"

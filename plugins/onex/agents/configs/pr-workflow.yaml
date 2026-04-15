@@ -6,6 +6,10 @@
 # Version: 1.0.0
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: pr_workflow
+purpose: "Manage the full pull request lifecycle from creation through review, approval, and merge queue entry."
 mode: full
 agent_type: "pr_workflow"
 mode: "both"
