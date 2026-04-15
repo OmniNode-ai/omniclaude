@@ -15,7 +15,7 @@ author: OmniClaude Team
 composable: true
 args:
   - name: --repos
-    description: "Comma-separated list of repos to scan (default: all repos found under ${ONEX_WORKTREES_ROOT:-~/omni_worktrees} via local worktree enumeration)"
+    description: "Comma-separated list of repos to scan (default: all OmniNode-ai repos discovered via gh repo list OmniNode-ai)"
     required: false
   - name: --dry-run
     description: "List superseded PRs without closing them"
@@ -61,7 +61,7 @@ Designed to run as a post-release hook or on-demand cleanup.
 
 ### Step 1: Discover repos and open dep PRs <!-- ai-slop-ok: skill-step-heading -->
 
-For each repo (all repos under `${ONEX_WORKTREES_ROOT:-~/omni_worktrees}` or filtered by `--repos`): <!-- local-path-ok -->
+For each repo (all OmniNode-ai repos discovered via `gh repo list OmniNode-ai --json name`, or filtered by `--repos`):
 
 ```bash
 gh pr list --repo OmniNode-ai/{repo} --state open --label "${label:-dependencies}" --json number,title,headRefName,author,createdAt
