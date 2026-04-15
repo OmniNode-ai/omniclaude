@@ -8,6 +8,7 @@
 schema_version: "1.0.0"
 mode: full
 agent_type: "task_verifier"
+is_verifier: true
 
 agent_identity:
   name: "agent-task-verifier"
