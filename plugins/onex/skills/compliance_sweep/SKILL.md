@@ -70,14 +70,12 @@ omninode_infra, onex_change_control
 ### Phase 2 — Dispatch to node
 
 ```bash
-cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_compliance_sweep \
-  [--repos <comma-list>] \
-  [--checks <comma-list>] \
-  [--dry-run]
+onex run-node node_compliance_sweep \
+  --input '{"repos": "<comma-list>", "checks": "<comma-list>", "dry_run": false}' \
+  --timeout 300
 ```
 
-Capture stdout (JSON: `ModelComplianceSweepReport`). Exit 0 = compliant, exit 1 = violations found.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = compliant, exit 1 = violations found.
 
 ### Phase 3 — Render report
 

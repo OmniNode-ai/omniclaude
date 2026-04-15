@@ -347,13 +347,17 @@ Run when mode is `runtime` or `full`.
 
 ```bash
 # Registration-only (default)
-uv run python -m omnibase_infra.verification.cli --registration-only --json \
-  --output-path "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"
+onex run-node node_contract_sweep \
+  --input '{"registration_only": true, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
+  --timeout 300
 
 # Full 52-contract verification (when --all is passed)
-uv run python -m omnibase_infra.verification.cli --json \
-  --output-path "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"
+onex run-node node_contract_sweep \
+  --input '{"registration_only": false, "dry_run": false, "output_path": "$ONEX_STATE_DIR/contract-sweep/<run_id>/runtime-report.json"}' \
+  --timeout 300
 ```
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 Where `<run_id>` is the current `ONEX_RUN_ID` or a timestamp-based fallback
 (`contract-sweep-<YYYYMMDD-HHMMSS>`).

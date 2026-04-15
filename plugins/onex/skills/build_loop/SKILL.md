@@ -66,16 +66,12 @@ Include this as the first instruction in every `Agent()` dispatch prompt emitted
 ### Step 2 — Run node
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_build_loop_orchestrator \
-  [--max-cycles <n>] \
-  [--skip-closeout] \
-  [--dry-run] \
-  [--max-tickets <n>] \
-  [--mode <mode>]
+onex run-node node_build_loop_orchestrator \
+  --input '{"max_cycles": 1, "skip_closeout": false, "dry_run": false, "max_tickets": 5, "mode": "build"}' \
+  --timeout 300
 ```
 
-Capture stdout (JSON: `ModelOrchestratorResult`). Exit 0 = all cycles completed, exit 1 = any cycle failed.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = all cycles completed, exit 1 = any cycle failed.
 
 ### Step 3 — Render report
 
