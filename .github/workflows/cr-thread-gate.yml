@@ -4,11 +4,11 @@ name: CR Thread Gate
 # Required status check string: "cr-thread-gate / CodeRabbit Thread Check"
 on:
   workflow_call:
-    inputs:
-      github-token:
-        description: "GitHub token with read:discussion scope"
+    secrets:
+      CR_GATE_PAT:
+        description: "GitHub PAT with read:discussion scope for CR thread queries"
         required: true
-        type: string
+    inputs:
       repo:
         description: "Target repo name (owner/repo or bare name). Defaults to caller's github.repository."
         required: false
@@ -42,7 +42,7 @@ jobs:
 
       - name: Check unresolved CodeRabbit threads
         env:
-          GH_TOKEN: ${{ inputs.github-token }}
+          GH_TOKEN: ${{ secrets.CR_GATE_PAT }}
         run: |
           chmod +x scripts/check-unresolved-threads.sh
           COUNT=$(bash scripts/check-unresolved-threads.sh \
