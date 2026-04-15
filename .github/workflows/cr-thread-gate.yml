@@ -1,0 +1,57 @@
+name: CR Thread Gate
+# Reusable workflow — call via:
+#   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
+# Required status check string: "cr-thread-gate / CodeRabbit Thread Check"
+on:
+  workflow_call:
+    inputs:
+      github-token:
+        description: "GitHub token with read:discussion scope"
+        required: true
+        type: string
+      repo:
+        description: "Target repo name (owner/repo or bare name). Defaults to caller's github.repository."
+        required: false
+        type: string
+        default: ""
+      pr-number:
+        description: "Pull request number to check"
+        required: true
+        type: string
+
+jobs:
+  gate:
+    name: CodeRabbit Thread Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout omniclaude scripts
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omniclaude
+          ref: main
+          sparse-checkout: scripts/check-unresolved-threads.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve repo name
+        id: resolve-repo
+        run: |
+          REPO="${{ inputs.repo }}"
+          [ -z "$REPO" ] && REPO="${{ github.repository }}"
+          # Strip owner prefix if present (owner/repo -> repo)
+          echo "repo=${REPO##*/}" >> "$GITHUB_OUTPUT"
+
+      - name: Check unresolved CodeRabbit threads
+        env:
+          GH_TOKEN: ${{ inputs.github-token }}
+        run: |
+          chmod +x scripts/check-unresolved-threads.sh
+          COUNT=$(bash scripts/check-unresolved-threads.sh \
+            "${{ github.repository_owner }}" \
+            "${{ steps.resolve-repo.outputs.repo }}" \
+            "${{ inputs.pr-number }}")
+          echo "Unresolved CodeRabbit threads: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::$COUNT unresolved CodeRabbit thread(s). Resolve all CR threads before merging."
+            exit 1
+          fi
+          echo "All CodeRabbit threads resolved."
