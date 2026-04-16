@@ -121,7 +121,7 @@ rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
 ```
 
 **Allowlist** — skip lines containing any of:
-- `# local-path-ok` — explicitly annotated as machine-local
+- `# local-path-ok: <reason>` — explicitly annotated as machine-local
 - `# onex-allow-internal-ip` — explicitly approved LAN IP usage
 - `# kafka-fallback-ok` — Kafka broker fallback, tracked separately
 - Lines inside `tests/`, `docs/`, `*.md`, `.env.example`, lock files

@@ -97,7 +97,7 @@ model_args = " ".join(f"--model {m}" for m in models)
 #### PR Mode
 
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --pr {pr_number} --repo {repo} --persona analytical-strict {model_args}
 ```
 
@@ -131,7 +131,7 @@ If the script exits non-zero, **stop immediately**. Do NOT proceed. Do NOT subst
 The `target` field in the result JSON MUST equal `TARGET_FILE` (the resolved absolute path).
 
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --file {TARGET_FILE} --persona analytical-strict {model_args}
 ```
 

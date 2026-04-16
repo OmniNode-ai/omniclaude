@@ -676,7 +676,7 @@ Report: $ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md
 
 After writing the report files, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths -- including early exits such as zero findings:
 
-ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json} <!-- local-path-ok -->
+ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json} # local-path-ok: example path in documentation
 
 If the skill exits early (zero findings, dry-run short-circuit, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.
 
@@ -1158,7 +1158,7 @@ The skill:
 
 After writing gap-fix-output.json, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths -- including early exits such as all findings gated or zero auto-dispatchable findings:
 
-GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json} <!-- local-path-ok -->
+GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json} # local-path-ok: example path in documentation
 
 In `--dry-run` mode: still emit the path (no actual file written, but path is computed from source_run_id). If the skill exits early (all gated, zero eligible findings, dry-run, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.
 

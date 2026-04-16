@@ -79,7 +79,7 @@ entry      -> omniintelligence.review_pairing.cli_review (CLI)
 Node invocation (working directory must be the `omniintelligence` repo root):
 
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
 ```
 
@@ -275,20 +275,20 @@ Each pass within the loop executes:
 
 **PR mode (default models):**
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --pr <N> --repo <owner/repo> --model codex --model deepseek-r1 2>/dev/null
 ```
 
 **File mode (default models):**
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --file <path> --model codex --model deepseek-r1 2>/dev/null
 ```
 
 When `--models` is provided, expand into repeated `--model` args dynamically:
 ```bash
 # Example: --models deepseek-r1,qwen3-14b,codex
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --pr <N> --repo <owner/repo> --model deepseek-r1 --model qwen3-14b --model codex 2>/dev/null
 ```
 

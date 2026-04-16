@@ -39,9 +39,9 @@ Runtime-mode-only args:
 omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
 
-**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `/Volumes/PRO-G40/Code/omni_home`)  <!-- local-path-ok -->
+**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `/Volumes/PRO-G40/Code/omni_home`)  # local-path-ok: example default value in documentation
 
-**Change control repo**: `$ONEX_REGISTRY_ROOT/onex_change_control`  <!-- local-path-ok -->
+**Change control repo**: `$ONEX_REGISTRY_ROOT/onex_change_control`  # local-path-ok: canonical repo path reference in documentation
 
 ---
 
@@ -66,7 +66,7 @@ stale data.
 For each repo, discover all contract files from the `main` branch:
 
 ```bash
-git -C $ONEX_REGISTRY_ROOT/<repo> ls-tree -r main --name-only | grep -E '(contract|handler_contract)\.yaml$'  # local-path-ok
+git -C $ONEX_REGISTRY_ROOT/<repo> ls-tree -r main --name-only | grep -E '(contract|handler_contract)\.yaml$'  # local-path-ok: command example using canonical repo path
 ```
 
 Build a list of `(repo, path)` pairs. Record the total count.
