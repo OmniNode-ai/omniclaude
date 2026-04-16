@@ -131,6 +131,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR 
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
     echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; ONEX_REGISTRY_ROOT may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
+    cat >/dev/null || true
     exit 0
 fi
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/hook-session-start.log"

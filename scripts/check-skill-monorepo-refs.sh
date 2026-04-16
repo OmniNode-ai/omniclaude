@@ -5,7 +5,7 @@
 # CI lint gate: fail if any skill file contains monorepo-local references.
 # OMN-8795 (SD-08) — companion to tests/skills/test_no_monorepo_refs_in_plugin_skills.py
 #
-# Escape hatch: append "# local-path-ok" to the offending line to suppress.
+# Escape hatch: append "# local-path-ok: <reason>" to the offending line to suppress.
 
 set -euo pipefail
 

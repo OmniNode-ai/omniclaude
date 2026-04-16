@@ -35,8 +35,9 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/autopilot"
+STATE_DIR="${ONEX_STATE_DIR}/autopilot"
 CYCLE_STATE="${STATE_DIR}/cycle-state.yaml"
 LOG_DIR="/tmp/closeout-logs"
 PHASE_TIMEOUT=600  # 10 minutes per phase
@@ -262,7 +263,7 @@ emit_friction() {
   local error_msg="${3:-}"
   local ts
   ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  local friction_dir="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}/friction"
+  local friction_dir="${ONEX_STATE_DIR}/friction"
   mkdir -p "${friction_dir}"
   local record
   record=$(cat <<EOJSON
@@ -431,7 +432,7 @@ if [[ -x "${WATCHDOG_CHECK}" ]]; then
   if [[ "${WATCHDOG_ACTION}" == "alert_user" ]]; then
     echo "WATCHDOG BLOCK: Escalation level ${WATCHDOG_LEVEL}. Not restarting."
     echo "Run: $(dirname "$0")/watchdog-state-read.sh closeout"
-    echo "To reset after fixing: rm ${ONEX_REGISTRY_ROOT}/.onex_state/watchdog/loop-health.json"
+    echo "To reset after fixing: rm ${ONEX_STATE_DIR}/watchdog/loop-health.json"
     WATCHDOG_PHASE="watchdog_block"; WATCHDOG_EXIT_CODE=5; exit 5
   fi
 

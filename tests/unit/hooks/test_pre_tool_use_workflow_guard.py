@@ -234,7 +234,7 @@ def test_git_push_not_intercepted(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_write_tool_passed_through_without_omni_home(tmp_path: Path) -> None:
-    """Write to arbitrary path passes when ONEX_REGISTRY_ROOT is not set."""
+    """Write to arbitrary path passes when OMNI_HOME is not set."""
     hook_json = _write_hook()
     with (
         patch(
@@ -243,10 +243,10 @@ def test_write_tool_passed_through_without_omni_home(tmp_path: Path) -> None:
         ),
         patch.dict("os.environ", {}, clear=False),
     ):
-        # Ensure ONEX_REGISTRY_ROOT is not set
+        # Ensure OMNI_HOME is not set (implementation checks OMNI_HOME, not ONEX_REGISTRY_ROOT)
         import os
 
-        os.environ.pop("ONEX_REGISTRY_ROOT", None)
+        os.environ.pop("OMNI_HOME", None)
         exit_code, output = run_guard(hook_json)
 
     assert exit_code == 0
@@ -382,7 +382,7 @@ def test_edit_to_omni_home_top_level_is_allowed(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_write_protection_without_omni_home_env_allows(tmp_path: Path) -> None:
-    """When ONEX_REGISTRY_ROOT is unset, write protection is skipped."""
+    """When OMNI_HOME is unset, write protection is skipped."""
     hook_json = _edit_hook(file_path="/fake/omnimarket/src/handler.py")
     with (
         patch(
@@ -393,7 +393,7 @@ def test_write_protection_without_omni_home_env_allows(tmp_path: Path) -> None:
     ):
         import os
 
-        os.environ.pop("ONEX_REGISTRY_ROOT", None)
+        os.environ.pop("OMNI_HOME", None)
         exit_code, output = run_guard(hook_json)
 
     assert exit_code == 0
