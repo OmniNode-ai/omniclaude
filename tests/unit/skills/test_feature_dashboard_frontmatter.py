@@ -225,8 +225,8 @@ class TestFeatureDashboardBody:
 
     def test_ticketize_linear_tool_documented(self) -> None:
         _, body = _parse_frontmatter(_SKILL_MD)
-        assert "mcp__linear-server__save_issue" in body, (
-            "ticketize mode must document the Linear MCP tool to call"
+        assert "tracker.save_issue" in body, (
+            "ticketize mode must document the tracker DI method to call (OMN-8824)"
         )
 
     def test_ticket_title_format_documented(self) -> None:

@@ -643,7 +643,7 @@ for r in sorted(repos):
     echo "Call this MCP tool to get Linear Done issues:"
     echo ""
     echo '```python'
-    echo "mcp__linear-server__list_issues("
+    echo "tracker.list_issues("
     echo "    assignee=\"me\","
     echo "    state=\"Done\","
 

@@ -99,6 +99,18 @@ Create Linear tickets from a plan markdown file. Parses phases or milestones, cr
 
 ---
 
+## Tracker DI Initialization
+
+```python
+from omnibase_infra.services.project_tracker.resolver import resolve_project_tracker
+
+tracker = resolve_project_tracker()
+```
+
+Use `tracker.*` for all ticket operations. Never call Linear MCP tools directly.
+
+---
+
 ## Step 1: Read and Validate Plan File <!-- ai-slop-ok: pre-existing step structure -->
 
 ```python
@@ -454,7 +466,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
         Epic issue dict with 'id' and 'identifier', or None if --no-create-epic and not found
     """
     # Search for existing epic by title
-    issues = mcp__linear-server__list_issues(
+    issues = tracker.list_issues(
         query=epic_title,
         team=team,
         limit=50
@@ -518,7 +530,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
         params["project"] = project
 
     try:
-        epic = mcp__linear-server__create_issue(**params)
+        epic = tracker.create_issue(**params)
         print(f"Created epic: {epic.get('identifier', 'unknown')} - {epic.get('title', epic_title)}")
         return epic
     except Exception as e:
@@ -623,7 +635,7 @@ def build_ticket_description(entry: dict, structure_type: str, arch_violation_ov
 ```python
 def check_existing_ticket(title: str, team: str) -> dict | None:
     """Check if ticket with same title already exists."""
-    issues = mcp__linear-server__list_issues(
+    issues = tracker.list_issues(
         query=title,
         team=team,
         limit=50
@@ -732,7 +744,7 @@ def validate_plan_dependencies(
         violations = validate_dependencies(
             ticket_repo=plan_repo,
             blocked_by_ids=[dep],
-            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+            fetch_ticket_fn=lambda id: tracker.get_issue(id=id)
         )
 
         errors = filter_errors(violations)
@@ -854,7 +866,7 @@ def create_tickets_batch(
                     if len(merged) > MAX_DESC_SIZE:
                         merged = merged[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
 
-                    mcp__linear-server__update_issue(
+                    tracker.update_issue(
                         id=existing['id'],
                         description=merged
                     )
@@ -915,7 +927,7 @@ def create_tickets_batch(
             if blocked_by:
                 params["blockedBy"] = blocked_by
 
-            result = mcp__linear-server__create_issue(**params)
+            result = tracker.create_issue(**params)
             results['created'].append({
                 'entry': entry,
                 'ticket': result,
@@ -959,7 +971,7 @@ def create_tickets_batch(
                 all_blocked_by = validated_first_pass + new_blocked_by
 
                 # Update ticket with combined dependencies
-                mcp__linear-server__update_issue(
+                tracker.update_issue(
                     id=item['ticket']['id'],
                     blockedBy=all_blocked_by
                 )

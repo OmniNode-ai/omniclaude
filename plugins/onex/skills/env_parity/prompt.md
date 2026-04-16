@@ -121,12 +121,12 @@ For each CRITICAL finding:
 
 1. Search for existing tickets with exact prefix match:
    ```
-   mcp__linear-server__list_issues(query="[env-parity:<check_id>]", team="Omninode")
+   tracker.list_issues(query="[env-parity:<check_id>]", team="Omninode")
    ```
 2. If any ticket exists (any state), skip creation for this finding.
 3. If no match, create ticket:
    ```
-   mcp__linear-server__save_issue(
+   tracker.save_issue(
      title="[env-parity:<check_id>] <finding.title verbatim>",
      team="Omninode",
      priority=1,

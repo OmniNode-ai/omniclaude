@@ -361,7 +361,7 @@ result = {
         "queries": [
             {
                 "purpose": "Get all project issues for progress calculation",
-                "tool": "mcp__linear-server__list_issues",
+                "tool": "tracker.list_issues",
                 "parameters": {
                     "project": "$project_id",
                     "limit": 500
@@ -369,7 +369,7 @@ result = {
             },
             {
                 "purpose": "Get completed issues (last 7 days) for velocity",
-                "tool": "mcp__linear-server__list_issues",
+                "tool": "tracker.list_issues",
                 "parameters": {
                     "project": "$project_id",
                     "state": "Done",
@@ -379,7 +379,7 @@ result = {
             },
             {
                 "purpose": "Get backlog issues for remaining work",
-                "tool": "mcp__linear-server__list_issues",
+                "tool": "tracker.list_issues",
                 "parameters": {
                     "project": "$project_id",
                     "state": "Backlog",
@@ -388,7 +388,7 @@ result = {
             },
             {
                 "purpose": "Get in-progress issues",
-                "tool": "mcp__linear-server__list_issues",
+                "tool": "tracker.list_issues",
                 "parameters": {
                     "project": "$project_id",
                     "state": "In Progress",
@@ -522,7 +522,7 @@ if $( [[ "$SHOW_BLOCKERS" == "true" ]] && echo "True" || echo "False" ):
     result["blockers_detail"] = {
         "query": {
             "description": "Get blocked issues with duration calculation",
-            "tool": "mcp__linear-server__list_issues",
+            "tool": "tracker.list_issues",
             "parameters": {
                 "project": "$project_id",
                 "limit": 100
@@ -644,7 +644,7 @@ PYTHON_EOF
         md_echo "### 1. All Project Issues (Progress)"
         md_echo ""
         md_echo '```python'
-        md_echo "mcp__linear-server__list_issues("
+        md_echo "tracker.list_issues("
         md_echo "    project=\"$project_id\","
         md_echo "    limit=500"
         md_echo ")"
@@ -653,7 +653,7 @@ PYTHON_EOF
         md_echo "### 2. Completed Issues (Velocity)"
         md_echo ""
         md_echo '```python'
-        md_echo "mcp__linear-server__list_issues("
+        md_echo "tracker.list_issues("
         md_echo "    project=\"$project_id\","
         md_echo "    state=\"Done\","
         md_echo "    limit=100"
@@ -665,7 +665,7 @@ PYTHON_EOF
         md_echo "### 3. Backlog Issues (Remaining Work)"
         md_echo ""
         md_echo '```python'
-        md_echo "mcp__linear-server__list_issues("
+        md_echo "tracker.list_issues("
         md_echo "    project=\"$project_id\","
         md_echo "    state=\"Backlog\","
         md_echo "    limit=200"
@@ -675,7 +675,7 @@ PYTHON_EOF
         md_echo "### 4. In Progress Issues"
         md_echo ""
         md_echo '```python'
-        md_echo "mcp__linear-server__list_issues("
+        md_echo "tracker.list_issues("
         md_echo "    project=\"$project_id\","
         md_echo "    state=\"In Progress\","
         md_echo "    limit=50"
@@ -801,7 +801,7 @@ PYTHON_EOF
             md_echo ""
             md_echo '```python'
             md_echo "# Get all issues, then filter by blocked labels"
-            md_echo "issues = mcp__linear-server__list_issues("
+            md_echo "issues = tracker.list_issues("
             md_echo "    project=\"$project_id\","
             md_echo "    limit=100"
             md_echo ")"
@@ -835,7 +835,7 @@ PYTHON_EOF
             md_echo "Count issues in Backlog with priority Urgent or High:"
             md_echo ""
             md_echo '```python'
-            md_echo "backlog_issues = mcp__linear-server__list_issues("
+            md_echo "backlog_issues = tracker.list_issues("
             md_echo "    project=\"$project_id\","
             md_echo "    state=\"Backlog\","
             md_echo "    limit=100"
@@ -1010,7 +1010,7 @@ result["mcp_queries"] = {
     "queries": [
         {
             "purpose": "Get all projects with issue counts",
-            "tool": "mcp__linear-server__list_projects",
+            "tool": "tracker.list_projects",
             "parameters": {
                 "member": "me",
                 "limit": 50
@@ -1040,7 +1040,7 @@ PYTHON_EOF
         md_echo "Get all projects with their status:"
         md_echo ""
         md_echo '```python'
-        md_echo "mcp__linear-server__list_projects("
+        md_echo "tracker.list_projects("
         md_echo "    member=\"me\","
         md_echo "    limit=50"
         md_echo ")"

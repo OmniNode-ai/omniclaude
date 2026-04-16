@@ -80,7 +80,7 @@ repo average coverage %. List gaps grouped by priority (ZERO → RECENTLY_CHANGE
 ### Step 4 — Ticket creation (only if not `--dry-run`)
 
 Fetch existing Linear tickets with `test-coverage` label to dedup. For each gap not already
-tracked (up to `--max-tickets`), create via `mcp__linear-server__save_issue`:
+tracked (up to `--max-tickets`), create via `tracker.save_issue`:
 
 ```
 Title: test(coverage): add tests for <module> (<repo>)

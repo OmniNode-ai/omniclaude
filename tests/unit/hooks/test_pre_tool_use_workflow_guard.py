@@ -35,6 +35,17 @@ def _linear_save_hook(parent_id: str | None = None, title: str = "My Epic") -> s
     return json.dumps(payload)
 
 
+def _tracker_save_hook(parent_id: str | None = None, title: str = "My Epic") -> str:
+    """Migrated tracker.* equivalent of _linear_save_hook."""
+    payload: dict = {
+        "tool_name": "tracker.save_issue",
+        "tool_input": {"title": title},
+    }
+    if parent_id is not None:
+        payload["tool_input"]["parentId"] = parent_id
+    return json.dumps(payload)
+
+
 def _bash_commit_hook(command: str) -> str:
     return json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
 
@@ -116,6 +127,38 @@ def test_child_issue_creation_skips_triage_check(tmp_path: Path) -> None:
         return_value=tmp_path,
     ):
         exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 0
+
+
+@pytest.mark.unit
+def test_tracker_save_issue_without_triage_marker_warns(tmp_path: Path) -> None:
+    """tracker.save_issue (migrated API) triggers triage-first check identically."""
+    hook_json = _tracker_save_hook()
+    with patch(
+        "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+        return_value=tmp_path,
+    ):
+        exit_code, output = run_guard(hook_json)
+
+    assert exit_code == 1
+    result = json.loads(output)
+    assert result["decision"] == "warn"
+
+
+@pytest.mark.unit
+def test_tracker_save_issue_with_triage_marker_passes(tmp_path: Path) -> None:
+    """tracker.save_issue passes when triage marker is present."""
+    state_dir = tmp_path / ".onex_state"
+    state_dir.mkdir()
+    (state_dir / "triage_complete").touch()
+
+    hook_json = _tracker_save_hook()
+    with patch(
+        "omniclaude.hooks.pre_tool_use_workflow_guard._resolve_project_root",
+        return_value=tmp_path,
+    ):
+        exit_code, _ = run_guard(hook_json)
 
     assert exit_code == 0
 

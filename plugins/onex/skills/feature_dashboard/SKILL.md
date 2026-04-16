@@ -134,7 +134,7 @@ Sort discovered skills by name (alphabetical, deterministic).
    a. Announce:
       - If `is_batched=True`: "Creating batched ticket for {gap_count} identical gaps across {len(affected_skills)} skills"
       - If `is_batched=False`: "Creating ticket for {affected_skills[0]} ({gap_count} gaps)"
-   b. Call `mcp__linear-server__save_issue` with:
+   b. Call `tracker.save_issue` with:
       - `title`: the `title` field from the ticket descriptor (includes worst_severity)
       - `description`: the `description` field from the ticket descriptor
       - `team`: value from `--team` arg (default: `OmniNode`)
@@ -283,7 +283,7 @@ Scoring:
 **Pass condition**: `metadata.ticket` in `contract.yaml` matches `OMN-[1-9]\d+` (non-zero, not
 the placeholder `OMN-XXXX`).
 
-**If `--online true`**: verify the ticket ID exists via `mcp__linear-server__get_issue`. WARN
+**If `--online true`**: verify the ticket ID exists via `tracker.get_issue`. WARN
 if ticket exists but is Done/Cancelled. FAIL if ticket ID not found.
 
 **Evidence (PASS)**: `"metadata.ticket='{ticket_id}'"`

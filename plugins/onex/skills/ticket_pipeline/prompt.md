@@ -199,6 +199,18 @@ phases:
 
 ---
 
+## Tracker DI Initialization
+
+```python
+from omnibase_infra.services.project_tracker.resolver import resolve_project_tracker
+
+tracker = resolve_project_tracker()
+```
+
+Use `tracker.*` for all ticket operations. Never call Linear MCP tools directly.
+
+---
+
 ## Initialization
 
 When `/ticket-pipeline {ticket_id}` is invoked:
@@ -538,7 +550,7 @@ if not _state_file_existed and skip_to is None and not force_run:
     # Prefer gitBranchName from Linear ticket fetch; fall back to derived slug.
     # The ticket fetch in pre_flight hasn't run yet, so attempt a lightweight fetch here.
     try:
-        _issue = mcp__linear-server__get_issue(id=ticket_id)
+        _issue = tracker.get_issue(id=ticket_id)
         _branch = (_issue or {}).get("branchName") or (_issue or {}).get("gitBranchName")
     except Exception:
         _branch = None
@@ -638,7 +650,7 @@ if not _state_file_existed and skip_to is None and not force_run:
                       f"(merged at {_merged_prs[0].get('mergedAt', '?')}). Skipping ticket.")
                 if not dry_run:
                     try:
-                        mcp__linear-server__update_issue(id=ticket_id, state="Done")
+                        tracker.update_issue(id=ticket_id, state="Done")
                     except Exception as e:
                         print(f"[auto-detect] Linear update failed: {e}")
                 else:
@@ -918,7 +930,7 @@ from linear_contract_patcher import (
 )
 
 # Read current contract from Linear
-issue = mcp__linear-server__get_issue(id=ticket_id)
+issue = tracker.get_issue(id=ticket_id)
 description = issue["description"] or ""
 
 # Extract and validate
@@ -935,7 +947,7 @@ if not extract_result.success:
 # Patch contract safely
 patch_result = patch_contract_yaml(description, new_yaml_str)
 if patch_result.success:
-    mcp__linear-server__update_issue(id=ticket_id, description=patch_result.patched_description)
+    tracker.update_issue(id=ticket_id, description=patch_result.patched_description)
 else:
     # YAML validation failed — do NOT write
     notify_sync(slack_notifier, "notify_blocked",
@@ -948,7 +960,7 @@ else:
 # Update pipeline status (separate from contract)
 status_result = patch_pipeline_status(description, status_yaml_str)
 if status_result.success:
-    mcp__linear-server__update_issue(id=ticket_id, description=status_result.patched_description)
+    tracker.update_issue(id=ticket_id, description=status_result.patched_description)
 ```
 
 ### Checkpoint Helpers (OMN-2144)
@@ -1361,7 +1373,7 @@ artifacts:"""
 
     # Fetch current description
     try:
-        issue = mcp__linear-server__get_issue(id=ticket_id)
+        issue = tracker.get_issue(id=ticket_id)
         description = issue["description"] or ""
     except Exception as e:
         print(f"Warning: Failed to fetch Linear issue {ticket_id}: {e}")
@@ -1381,7 +1393,7 @@ artifacts:"""
         return  # Do not write invalid YAML
 
     try:
-        mcp__linear-server__update_issue(id=ticket_id, description=result.patched_description)
+        tracker.update_issue(id=ticket_id, description=result.patched_description)
     except Exception as e:
         print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
         # Non-blocking: Linear update failure is logged but does not stop pipeline
@@ -1748,7 +1760,7 @@ def execute_phase(phase_name, state):
 
    # Pull ticket title + description from Linear MCP (re-use fetch from
    # later phases if already cached in run state).
-   ticket = mcp__linear-server__get_issue(id=ticket_id)
+   ticket = tracker.get_issue(id=ticket_id)
    description = ticket.get("description") or ""
 
    # Target repos come from the ticket contract (repo field) plus any repos
@@ -1998,7 +2010,7 @@ def execute_phase(phase_name, state):
 
        # 2. Budget exhausted: create ticket without dedup, mark dedup_skipped: True
        if queries_used >= query_budget:
-           new_ticket = mcp__linear-server__create_issue(
+           new_ticket = tracker.create_issue(
                title=f"[pre-existing] {issue['rule']} in {issue['file']} [fingerprint:{fp_hash}]",
                description=(
                    f"Pre-existing issue deferred from pipeline Phase 0.\n\n"
@@ -2024,7 +2036,7 @@ def execute_phase(phase_name, state):
            continue
 
        # 3. Search Linear for existing ticket with this fingerprint
-       search_results = mcp__linear-server__list_issues(
+       search_results = tracker.list_issues(
            query=f"[fingerprint:{fp_hash}]",
            team=team_id,
            states=["Backlog", "Todo", "In Progress"],
@@ -2042,7 +2054,7 @@ def execute_phase(phase_name, state):
        else:
            # No existing ticket: create new one with fingerprint embedded in title
            no_line_note = "" if issue.get('line') else "\nLine: N/A (coarse dedup — no line info available)"
-           new_ticket = mcp__linear-server__create_issue(
+           new_ticket = tracker.create_issue(
                title=f"[pre-existing] {issue['rule']} in {issue['file']} [fingerprint:{fp_hash}]",
                description=(
                    f"Pre-existing issue deferred from pipeline Phase 0.\n\n"
@@ -2214,7 +2226,7 @@ onex_change_control repo not found), emit a friction event with the error detail
    from pathlib import Path
 
    # --- Step 0.1: Fetch branchName from Linear ---
-   issue = mcp__linear-server__get_issue(id=ticket_id)
+   issue = tracker.get_issue(id=ticket_id)
    branch_name = (issue.get("branchName") or issue.get("gitBranchName") or "").strip()
    if not branch_name:
        result = {
@@ -2338,7 +2350,7 @@ onex_change_control repo not found), emit a friction event with the error detail
            )
            print(f"WARNING: {stale_msg}")
            try:
-               mcp__linear-server__create_comment(
+               tracker.create_comment(
                    issueId=ticket_id,
                    body=f"[ticket-pipeline] Stale branch detected: {stale_msg}"
                )
@@ -2355,7 +2367,7 @@ onex_change_control repo not found), emit a friction event with the error detail
    # --- Step 0.9: Update Linear → In Progress (only after successful checkout) ---
    if not dry_run:
        try:
-           mcp__linear-server__update_issue(id=ticket_id, state="In Progress")
+           tracker.update_issue(id=ticket_id, state="In Progress")
        except Exception as e:
            print(f"Warning: Failed to update Linear state to In Progress: {e}")
            # Non-blocking: Linear update failure does not stop pipeline
@@ -3139,7 +3151,7 @@ EOF
    # "completed" or "cancelled". If state.type is absent, treat as open.
    if not skip_auto_merge:
        try:
-           _issue = mcp__linear-server__get_issue(id=ticket_id, includeRelations=True)
+           _issue = tracker.get_issue(id=ticket_id, includeRelations=True)
            open_blockers = [
                t["identifier"] for t in (_issue.get("blockedBy") or [])
                if (t.get("state") or {}).get("type") not in ("completed", "cancelled")
@@ -3229,7 +3241,7 @@ EOF
    ```python
    if not dry_run:
        try:
-           mcp__linear-server__update_issue(id=ticket_id, state="In Review")
+           tracker.update_issue(id=ticket_id, state="In Review")
        except Exception as e:
            print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
            # Non-blocking: Linear update failure is logged but does not stop pipeline
@@ -3863,7 +3875,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
                pr_url=pr_url,
            )
            try:
-               mcp__linear-server__update_issue(id=ticket_id, state="Done")
+               tracker.update_issue(id=ticket_id, state="Done")
            except Exception as _le:
                print(f"Warning: Failed to update Linear to Done: {_le}")
            # Clear ledger
@@ -3944,7 +3956,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 
    # Update Linear to Done
    try:
-       mcp__linear-server__update_issue(id=ticket_id, state="Done")
+       tracker.update_issue(id=ticket_id, state="Done")
    except Exception as e:
        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
    ```

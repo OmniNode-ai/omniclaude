@@ -266,8 +266,8 @@ overlapping dedup keys.
 ### List open tickets under the epic
 
 ```python
-# Pseudocode -- executed via mcp__linear-server__list_issues tool call
-existing_tickets = mcp__linear-server__list_issues(
+# Pseudocode -- executed via tracker.list_issues tool call
+existing_tickets = tracker.list_issues(
     parentId=epic_id,
     state="Backlog,Todo,In Progress",
     limit=250,
@@ -337,8 +337,8 @@ For each group (potential ticket):
 For each group that has net-new findings:
 
 ```python
-# Pseudocode -- executed via mcp__linear-server__save_issue tool call
-mcp__linear-server__save_issue(
+# Pseudocode -- executed via tracker.save_issue tool call
+tracker.save_issue(
     title=f"[Tech Debt] {category_label}: {repo}/{directory} ({new_count} findings)",
     team="Omninode",
     project=project or "Active Sprint",
