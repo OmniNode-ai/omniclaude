@@ -134,7 +134,7 @@ Sort discovered skills by name (alphabetical, deterministic).
    a. Announce:
       - If `is_batched=True`: "Creating batched ticket for {gap_count} identical gaps across {len(affected_skills)} skills"
       - If `is_batched=False`: "Creating ticket for {affected_skills[0]} ({gap_count} gaps)"
-   b. Call `tracker.save_issue` (via `mcp__linear-server__save_issue`) with:
+   b. Call `tracker.save_issue` with:
       - `title`: the `title` field from the ticket descriptor (includes worst_severity)
       - `description`: the `description` field from the ticket descriptor
       - `team`: value from `--team` arg (default: `OmniNode`)
