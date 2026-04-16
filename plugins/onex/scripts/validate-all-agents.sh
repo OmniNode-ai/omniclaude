@@ -76,11 +76,11 @@ for yaml_file in yaml_files:
             for key in ("explicit_triggers", "primary_triggers", "automatic_triggers", "triggers"):
                 val = ap.get(key, [])
                 if isinstance(val, list):
-                    triggers.extend(str(x) for x in val)
+                    triggers.extend(val)
         if not triggers and "triggers" in raw:
             val = raw["triggers"]
             if isinstance(val, list):
-                triggers.extend(str(x) for x in val)
+                triggers.extend(val)
 
         contract_data = {
             "name": name,
