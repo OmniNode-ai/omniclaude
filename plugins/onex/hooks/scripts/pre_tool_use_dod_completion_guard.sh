@@ -87,8 +87,33 @@ if [[ -z "$TICKET_ID" ]]; then
     exit 0
 fi
 
-# Check for evidence receipt
-EVIDENCE_DIR=".evidence/$TICKET_ID"
+# Resolve evidence receipt location — configuration-driven, no hardcoded layout.
+#
+# REQUIRED env var: ONEX_EVIDENCE_ROOT — absolute path to the evidence root dir.
+# Receipts are written to: $ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json
+#
+# This decouples the hook from any specific governance-repo name or layout.
+# OmniNode's default deployment sets ONEX_EVIDENCE_ROOT to the
+# onex_change_control/evidence path via ~/.omnibase/.env, but the hook itself
+# makes no assumptions about that. Other orgs / forks / users pointing at their
+# own governance repo just set the env var to wherever they want receipts.
+#
+# Fail-loud-on-missing: the hook refuses to run if ONEX_EVIDENCE_ROOT is unset
+# or points at a non-existent directory. No silent fallbacks.
+# Per ~/.claude/CLAUDE.md "Fail-fast on missing env, not silent fallback".
+if [[ -z "${ONEX_EVIDENCE_ROOT:-}" ]]; then
+    echo "ERROR: ONEX_EVIDENCE_ROOT not set. The DoD completion guard requires" >&2
+    echo "       an explicit evidence-root directory. Configure it in" >&2
+    echo "       ~/.omnibase/.env or export ONEX_EVIDENCE_ROOT=<absolute-path>." >&2
+    exit 1
+fi
+
+if [[ ! -d "$ONEX_EVIDENCE_ROOT" ]]; then
+    echo "ERROR: ONEX_EVIDENCE_ROOT=$ONEX_EVIDENCE_ROOT is not a directory." >&2
+    exit 1
+fi
+
+EVIDENCE_DIR="$ONEX_EVIDENCE_ROOT/$TICKET_ID"
 RECEIPT_PATH="$EVIDENCE_DIR/dod_report.json"
 
 POLICY_MODE="${DOD_ENFORCEMENT_MODE:-hard}"
