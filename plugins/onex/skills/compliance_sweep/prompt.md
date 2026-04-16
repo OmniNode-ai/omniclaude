@@ -119,5 +119,5 @@ Remaining untracked nodes: <N> (use --max-tickets to increase limit)
 ## Error handling
 
 - If `onex run` fails: report the error and exit
-- If a repo is not found at `$OMNI_HOME/<repo>`: skip, record in report
+- If a repo is not found at `$OMNI_HOME/<repo>`: skip, record in report  # local-path-ok documentation reference to canonical repo path
 - If Linear API fails during ticket creation: log error, continue with remaining tickets

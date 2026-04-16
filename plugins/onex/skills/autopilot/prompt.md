@@ -702,7 +702,7 @@ Check circuit breaker.
 Run duplication-sweep to detect structural collisions across repos:
 
 ```
-/duplication-sweep --omni-home $OMNI_HOME
+/duplication-sweep --omni-home $OMNI_HOME  # local-path-ok command example passing canonical repos root
 ```
 
 **Halt policy:** HALT on any FAIL finding from checks D1-D4. WARN findings
@@ -710,7 +710,7 @@ are logged but do not halt. B8 halts because duplicate Drizzle tables, topic
 registration conflicts, and migration collisions are immediate structural defects
 that can cause silent data routing failures in the current release.
 
-**Skip condition:** If $OMNI_HOME is not set or the directory does not exist,
+**Skip condition:** If $OMNI_HOME is not set or the directory does not exist,  # local-path-ok references canonical repos root env var
 skip with warning "OMNI_HOME not available for duplication sweep."
 
 - On success (all PASS/WARN): record `pass`, continue.

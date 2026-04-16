@@ -195,7 +195,7 @@ Write results to two locations:
 
 1. **State directory**:
 ```bash
-SWEEP_DIR="${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/golden-chain-sweep/$(date -u +%Y-%m-%d)/$SWEEP_ID"
+SWEEP_DIR="$ONEX_STATE_DIR/golden-chain-sweep/$(date -u +%Y-%m-%d)/$SWEEP_ID"
 mkdir -p "$SWEEP_DIR"
 ```
 

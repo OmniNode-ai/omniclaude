@@ -1760,7 +1760,7 @@ def execute_phase(phase_name, state):
        for name in target_repo_names
        if name
    ]
-   # Fall back to canonical clones under $OMNI_HOME for repos that don't
+   # Fall back to canonical clones under $OMNI_HOME for repos that don't  # local-path-ok references canonical repo clones
    # have a worktree yet (preflight reads only, so this is safe).
    repo_roots += resolve_repo_roots(target_repo_names)
 

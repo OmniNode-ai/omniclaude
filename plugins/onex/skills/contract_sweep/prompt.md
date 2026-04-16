@@ -75,25 +75,25 @@ Build a list of `(repo, path)` pairs. Record the total count.
 
 **Note**: All commands use `uv run python3` if `uv` is available in the
 `onex_change_control` repo; otherwise fall back to `python3` directly.
-Snapshot files are stored at `$OMNI_HOME/onex_change_control/drift/<repo>.sha256`.
+Snapshot files are stored at `$OMNI_HOME/onex_change_control/drift/<repo>.sha256`.  # local-path-ok references canonical repo clone
 
 For each repo, run the check-drift script to compute a canonical hash of all
 event-related contract sections (`published_events`, `event_bus`):
 
 ```bash
-cd $OMNI_HOME/onex_change_control  # local-path-ok
+cd $OMNI_HOME/onex_change_control  # local-path-ok references canonical repo clone
 uv run python3 scripts/validation/check_contract_drift.py \
-  --root $OMNI_HOME/<repo>/src --print
+  --root $OMNI_HOME/<repo>/src --print  # local-path-ok command example using canonical repo path
 ```
 
 This prints a SHA-256 hash. Compare it against any existing snapshot:
 
 ```bash
 # Check if a snapshot exists for this repo
-SNAPSHOT_FILE="$OMNI_HOME/onex_change_control/drift/<repo>.sha256"
+SNAPSHOT_FILE="$OMNI_HOME/onex_change_control/drift/<repo>.sha256"  # local-path-ok command example using canonical repo path
 if [ -f "$SNAPSHOT_FILE" ]; then
   uv run python3 scripts/validation/check_contract_drift.py \
-    --root $OMNI_HOME/<repo>/src --check "$SNAPSHOT_FILE"
+    --root $OMNI_HOME/<repo>/src --check "$SNAPSHOT_FILE"  # local-path-ok command example using canonical repo path
   # Exit 0 = clean, Exit 1 = drift detected
 fi
 ```
@@ -112,7 +112,7 @@ For each contract YAML discovered in Phase 1:
 
 1. Read current content:
    ```bash
-   git -C $OMNI_HOME/<repo> show main:<path>
+   git -C $OMNI_HOME/<repo> show main:<path>  # local-path-ok command example using canonical repo path
    ```
 
 2. Compute canonical hash using the same algorithm as `handler_drift_analysis.py`:
@@ -149,27 +149,27 @@ Apply the configured `--sensitivity`:
 If `--check-boundaries` is true (default), validate the Kafka boundary manifest:
 
 ```bash
-BOUNDARIES="$OMNI_HOME/onex_change_control/src/onex_change_control/boundaries/kafka_boundaries.yaml"
+BOUNDARIES="$OMNI_HOME/onex_change_control/src/onex_change_control/boundaries/kafka_boundaries.yaml"  # local-path-ok command example using canonical repo path
 ```
 
 For each boundary entry in the YAML:
 
 1. **Producer file exists**:
    ```bash
-   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> > /dev/null 2>&1
+   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
    ```
    If not found -> stale boundary (CRITICAL)
 
 2. **Consumer file exists**:
    ```bash
-   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> > /dev/null 2>&1
+   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
    ```
    If not found -> stale boundary (CRITICAL)
 
 3. **Topic pattern match**:
    ```bash
-   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> | grep -qE "<topic_pattern>"
-   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> | grep -qE "<topic_pattern>"
+   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
+   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
    ```
    If pattern not found in either file -> stale boundary (CRITICAL)
 
@@ -457,7 +457,7 @@ Combined status:
 ## Error handling
 
 - If `check_contract_drift.py` is not found at the expected path: abort drift mode with error
-- If a repo is not found at `$OMNI_HOME/<repo>`: skip that repo, record in report as `repo_not_found`
+- If a repo is not found at `$OMNI_HOME/<repo>`: skip that repo, record in report as `repo_not_found`  # local-path-ok documentation reference to canonical repo path
 - If `kafka_boundaries.yaml` is not found: skip boundary checks, warn in output
 - If YAML parsing fails for a contract: record as an ERROR finding (unparseable contract)
 - If `uv` is not available: fall back to `python3` directly
