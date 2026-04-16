@@ -19,7 +19,7 @@
 # Check 3 is a hard block (exit 2 → rejected).
 #
 # Hook registration: hooks.json PreToolUse, matchers:
-#   "^(mcp__linear-server__save_issue|Bash|Edit|Write)$"
+#   "^(mcp__linear-server__save_issue|tracker\.save_issue|Bash|Edit|Write)$"
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
@@ -54,7 +54,7 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
 }
 
 # Only intercept relevant tools
-if [[ ! "$TOOL_NAME" =~ ^(mcp__linear-server__save_issue|Bash|Edit|Write)$ ]]; then
+if [[ ! "$TOOL_NAME" =~ ^(mcp__linear-server__save_issue|tracker\.save_issue|Bash|Edit|Write)$ ]]; then
     echo "$TOOL_INFO"
     exit 0
 fi
