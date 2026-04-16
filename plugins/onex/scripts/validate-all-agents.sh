@@ -66,8 +66,7 @@ for yaml_file in yaml_files:
             continue
 
         identity = raw.get("agent_identity", {})
-        stem = yaml_file.stem
-        name = identity.get("name") or (("agent-" + stem) if not stem.startswith("agent-") else stem)
+        name = identity.get("name")
         description = identity.get("description", "")
 
         # Build trigger list from all known schema locations
@@ -89,8 +88,8 @@ for yaml_file in yaml_files:
             "model": raw.get("model"),
             "triggers": triggers,
             "disallowedTools": raw.get("disallowedTools"),
-            "domain": raw.get("domain") or raw.get("domain_context"),
-            "purpose": raw.get("purpose") or raw.get("agent_philosophy", {}).get("core_responsibility"),
+            "domain": raw.get("domain"),
+            "purpose": raw.get("purpose"),
             "is_orchestrator": raw.get("is_orchestrator", False),
         }
 

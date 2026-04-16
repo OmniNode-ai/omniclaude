@@ -9,14 +9,21 @@ Instantiating this model from a raw agent YAML dict auto-validates on load.
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Pattern: agent-[a-z][a-z0-9-]+
 _NAME_RE = re.compile(r"^agent-[a-z][a-z0-9-]+$")
 
-EnumModel = Literal["opus", "sonnet", "haiku"]
+
+class EnumModel(StrEnum):
+    """Claude model tiers for agent routing."""
+
+    OPUS = "opus"
+    SONNET = "sonnet"
+    HAIKU = "haiku"
 
 
 class ModelAgentContract(BaseModel):

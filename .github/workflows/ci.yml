@@ -1885,8 +1885,14 @@ jobs:
         run: uv sync --frozen
 
       - name: Validate all agent YAML contracts
-        continue-on-error: true
-        run: bash plugins/onex/scripts/validate-all-agents.sh
+        id: validator
+        run: |
+          if bash plugins/onex/scripts/validate-all-agents.sh; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
+          fi
 
   # ============================================================================
   # GATE AGGREGATORS
