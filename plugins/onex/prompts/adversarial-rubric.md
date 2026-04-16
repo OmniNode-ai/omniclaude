@@ -75,4 +75,4 @@ Anti-patterns to detect in any plan, design, or implementation proposal. Each en
 
 ## Usage
 
-This rubric is consumed by `hostile_reviewer --static` via `--rubric docs/plans/adversarial-rubric.md`. Each pattern match is a finding. The adversarial pipeline gate requires ≥3 findings before proceeding to ticket creation — if fewer are found, the pipeline escalates to the user rather than rubber-stamping the plan.
+This rubric is consumed by `hostile_reviewer --static` via `--rubric plugins/onex/prompts/adversarial-rubric.md`. Each pattern match is a finding. The adversarial pipeline gate requires ≥3 findings before proceeding to ticket creation — if fewer are found, the pipeline escalates to the user rather than rubber-stamping the plan.
