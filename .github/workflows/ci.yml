@@ -1161,6 +1161,19 @@ jobs:
         ports:
           - 6379:6379
 
+    env:
+      # Database environment variables must be available to all steps,
+      # not just the test step, to prevent psycopg2 OS-user fallback
+      # (which causes "FATAL: role root does not exist" on CI runners)
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379/0
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DATABASE: test_db
+      TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1190,15 +1203,6 @@ jobs:
         run: uv run python scripts/generate_skill_node.py --all
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379/0
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DATABASE: test_db
-          TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
           # Run all tests across both directories, split into 5 groups
           # Exit code 5 = no tests collected (expected for some splits)
@@ -1266,6 +1270,18 @@ jobs:
         ports:
           - 5432:5432
 
+    env:
+      # Database environment variables at job level to prevent psycopg2 OS-user fallback
+      DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+      OMNICLAUDE_DB_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: hooks_test
+      POSTGRES_PASSWORD: hooks_test
+      POSTGRES_DATABASE: hooks_test_db
+      PGPASSWORD: hooks_test
+      SEMANTIC_SEARCH_URL: http://localhost:8055
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1290,12 +1306,6 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Initialize hooks database
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_USER: hooks_test
-          POSTGRES_PASSWORD: hooks_test
-          POSTGRES_DB: hooks_test_db
-          PGPASSWORD: hooks_test
         run: |
           until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -1306,15 +1316,6 @@ jobs:
           fi
 
       - name: Run hooks tests
-        env:
-          DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
-          OMNICLAUDE_DB_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: hooks_test
-          POSTGRES_PASSWORD: hooks_test
-          POSTGRES_DATABASE: hooks_test_db
-          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
             uv run pytest tests/hooks/ -v \
@@ -1422,16 +1423,21 @@ jobs:
         ports:
           - 5432:5432
 
+    env:
+      # Database environment variables at job level to prevent psycopg2 OS-user fallback
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: schema_test
+      POSTGRES_PASSWORD: schema_test
+      POSTGRES_DATABASE: schema_test_db
+      POSTGRES_DB: schema_test_db
+      PGPASSWORD: schema_test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Validate database schema
-        env:
-          POSTGRES_HOST: localhost
-          PGPASSWORD: schema_test
-          POSTGRES_USER: schema_test
-          POSTGRES_DB: schema_test_db
         run: |
           until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
