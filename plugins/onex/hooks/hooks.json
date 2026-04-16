@@ -31,9 +31,25 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_session_bootstrap_guard.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user_prompt_bootstrap_injector.sh"
+          }
+        ]
+      },
       {
         "hooks": [
           {
