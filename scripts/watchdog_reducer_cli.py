@@ -49,10 +49,10 @@ from omniclaude.shared.models.model_watchdog_state import (  # noqa: E402
     save_state,
 )
 
-OMNI_HOME = Path(
-    __import__("os").environ.get("OMNI_HOME", str(Path.home() / "omni_home"))
+ONEX_REGISTRY_ROOT = Path(
+    __import__("os").environ.get("ONEX_REGISTRY_ROOT", str(Path.home() / "omni_home"))
 )
-STATE_DIR = OMNI_HOME / ".onex_state" / "watchdog"
+STATE_DIR = ONEX_REGISTRY_ROOT / ".onex_state" / "watchdog"
 
 
 def _apply_event_with_lock(

@@ -17,6 +17,10 @@ FORBIDDEN_PATTERNS = [
         "Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead",
     ),
     (
+        r"\$OMNI_HOME",  # local-path-ok: this file IS the pattern registry
+        "Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead of legacy $OMNI_HOME",
+    ),
+    (
         r"uv run python -m omni",
         "Use 'onex run <node_name>' instead — see OMN-8770 standalone install",
     ),

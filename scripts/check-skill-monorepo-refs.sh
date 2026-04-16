@@ -23,9 +23,11 @@ PAT_2='\/Users\/jonah\/' # local-path-ok: pattern registry — enforcing this li
 MSG_2='Hardcoded user path — use environment variable instead'
 PAT_3='\/Volumes\/PRO-G40\/' # local-path-ok: pattern registry — enforcing this literal
 MSG_3='Hardcoded volume path — use environment variable instead'
+PAT_4='\$OMNI_HOME'
+MSG_4='Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead of legacy $OMNI_HOME'
 
-PATTERNS=("$PAT_0" "$PAT_1" "$PAT_2" "$PAT_3")
-MESSAGES=("$MSG_0" "$MSG_1" "$MSG_2" "$MSG_3")
+PATTERNS=("$PAT_0" "$PAT_1" "$PAT_2" "$PAT_3" "$PAT_4")
+MESSAGES=("$MSG_0" "$MSG_1" "$MSG_2" "$MSG_3" "$MSG_4")
 
 ESCAPE_HATCH='# local-path-ok'
 FAILED=false
