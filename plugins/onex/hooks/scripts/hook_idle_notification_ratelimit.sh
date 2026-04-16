@@ -41,7 +41,13 @@ if ! source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh"; then
 fi
 LOG_FILE="${ONEX_HOOK_LOG}"
 
-mkdir -p "$(dirname "$LOG_FILE")"
+mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+
+# Safe logging helper - never blocks on write failures
+safe_log() {
+    local msg="$1"
+    printf '%s\n' "$msg" >>"$LOG_FILE" 2>/dev/null || true
+}
 
 # Kill switch
 if [[ "${IDLE_RATELIMIT_DISABLED:-0}" == "1" ]]; then
@@ -71,7 +77,15 @@ if [[ "$MSG_TYPE" != "idle_notification" ]]; then
 fi
 
 # Locate Python
-source "${HOOKS_DIR}/scripts/common.sh"
+if ! source "${HOOKS_DIR}/scripts/common.sh"; then
+    # Infra/config failure: fail open
+    echo "$TOOL_INFO"
+    exit 0
+fi
+if [[ -z "${PYTHON_CMD:-}" ]]; then
+    echo "FATAL: no valid Python interpreter found" >&2
+    exit 1
+fi
 
 AGENT_ID="${CLAUDE_AGENT_ID:-unknown}"
 
@@ -91,18 +105,18 @@ set -e
 
 if [[ $EXIT_CODE -ne 0 ]] || [[ -z "$ALLOW" ]]; then
     # Fail open on error
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ratelimit check failed (exit=$EXIT_CODE); failing open" >> "$LOG_FILE"
+    safe_log "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] ratelimit check failed (exit=$EXIT_CODE); failing open"
     echo "$TOOL_INFO"
     exit 0
 fi
 
 if [[ "$ALLOW" == "1" ]]; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] idle_notification ALLOWED for agent=${AGENT_ID}" >> "$LOG_FILE"
+    safe_log "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] idle_notification ALLOWED for agent=${AGENT_ID}"
     echo "$TOOL_INFO"
     exit 0
 fi
 
 # Drop: return permissionDenied to suppress the notification
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] idle_notification DROPPED (rate limit) for agent=${AGENT_ID}" >> "$LOG_FILE"
+safe_log "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] idle_notification DROPPED (rate limit) for agent=${AGENT_ID}"
 printf '{"type":"permissionDenied","message":"idle_notification rate limited (1 per 60s per agent)"}'
 exit 2
