@@ -1864,6 +1864,36 @@ jobs:
       - name: Detect AI anti-patterns
         run: python scripts/ci/run_aislop_sweep.py
 
+  # Agent YAML contract validation (OMN-8914)
+  agent-contract-validation:
+    name: Agent Contract Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Validate all agent YAML contracts
+        id: validator
+        run: |
+          if bash plugins/onex/scripts/validate-all-agents.sh; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
+          fi
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1923,6 +1953,8 @@ jobs:
       - golden-chain-integrity
       # AI anti-pattern detection (OMN-8622)
       - aislop-sweep
+      # Agent YAML contract validation (OMN-8914)
+      - agent-contract-validation
     if: always()
     steps:
       - name: Check quality results
@@ -1959,7 +1991,8 @@ jobs:
             "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
             "skill-contract-validation=${{ needs.skill-contract-validation.result }}" \
             "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
-            "aislop-sweep=${{ needs.aislop-sweep.result }}"; do
+            "aislop-sweep=${{ needs.aislop-sweep.result }}" \
+            "agent-contract-validation=${{ needs.agent-contract-validation.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
