@@ -206,10 +206,13 @@ def _check_ticket_id_in_context(
 
 
 def _resolve_omni_home() -> Path | None:
-    """Return the OMNI_HOME path, or None if not set."""
-    omni_home = os.environ.get("OMNI_HOME")
-    if omni_home:
-        return Path(omni_home).resolve()
+    """Return the registry root path, or None if not set.
+
+    Reads ONEX_REGISTRY_ROOT (canonical name) with OMNI_HOME as fallback.
+    """
+    registry_root = os.environ.get("ONEX_REGISTRY_ROOT") or os.environ.get("OMNI_HOME")
+    if registry_root:
+        return Path(registry_root).resolve()
     return None
 
 
