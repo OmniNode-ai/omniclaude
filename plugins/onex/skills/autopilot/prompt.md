@@ -147,7 +147,7 @@ For each remaining worktree directory:
 import subprocess
 from pathlib import Path
 
-worktree_root = Path(os.environ.get("OMNI_WORKTREES", "/Volumes/PRO-G40/Code/omni_worktrees"))  # local-path-ok
+worktree_root = Path(os.environ.get("OMNI_WORKTREES", "/Volumes/PRO-G40/Code/omni_worktrees"))  # local-path-ok: env var default fallback
 dirty_worktrees = []
 stale_worktrees = []
 
@@ -609,7 +609,7 @@ If rerun is NOT needed: use the existing result from the artifact. Skip to Step 
 **Step 3: Rerun Playwright (only when stale, missing, or unavailable)**
 
 ```bash
-OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok: env var default fallback
 ```
 
 3a. Check Playwright is installed:
@@ -702,7 +702,7 @@ Check circuit breaker.
 Run duplication-sweep to detect structural collisions across repos:
 
 ```
-/duplication-sweep --omni-home $OMNI_HOME  # local-path-ok command example passing canonical repos root
+/duplication-sweep --omni-home $ONEX_REGISTRY_ROOT  # local-path-ok command example passing canonical repos root
 ```
 
 **Halt policy:** HALT on any FAIL finding from checks D1-D4. WARN findings
@@ -710,8 +710,8 @@ are logged but do not halt. B8 halts because duplicate Drizzle tables, topic
 registration conflicts, and migration collisions are immediate structural defects
 that can cause silent data routing failures in the current release.
 
-**Skip condition:** If $OMNI_HOME is not set or the directory does not exist,  # local-path-ok references canonical repos root env var
-skip with warning "OMNI_HOME not available for duplication sweep."
+**Skip condition:** If $ONEX_REGISTRY_ROOT is not set or the directory does not exist,  # local-path-ok references canonical repos root env var
+skip with warning "ONEX_REGISTRY_ROOT not available for duplication sweep."
 
 - On success (all PASS/WARN): record `pass`, continue.
 - On FAIL: record `halt`. **HALT**. Report failing checks (D1-D4) and their findings.

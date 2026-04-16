@@ -13,7 +13,7 @@ import pytest
 # Each entry: (regex_pattern, replacement_guidance)
 FORBIDDEN_PATTERNS = [
     (
-        r"\$OMNI_HOME",
+        r"\$ONEX_REGISTRY_ROOT",
         "Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead",
     ),
     (

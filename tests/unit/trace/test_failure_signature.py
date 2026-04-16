@@ -69,22 +69,26 @@ class TestNormalizeFailureOutput:
 
     def test_strips_absolute_path(self) -> None:
         """Absolute paths with repo_root prefix must be stripped."""
-        raw = "Error in /home/user/myproject/src/router.py line 42"  # local-path-ok
+        raw = "Error in /home/user/myproject/src/router.py line 42"  # local-path-ok: test fixture string
         normalized = normalize_failure_output(
             raw,
-            "/home/user/myproject",  # local-path-ok
+            "/home/user/myproject",  # local-path-ok: test fixture path
         )
-        assert "/home/user/myproject" not in normalized  # local-path-ok
+        assert (
+            "/home/user/myproject" not in normalized  # local-path-ok: test fixture path
+        )
         assert "src/router.py" in normalized
 
     def test_strips_absolute_path_without_trailing_slash(self) -> None:
         """Absolute paths work even when repo_root has no trailing slash."""
-        raw = "Error in /home/user/myproject/src/foo.py"  # local-path-ok
+        raw = "Error in /home/user/myproject/src/foo.py"  # local-path-ok: test fixture string
         normalized = normalize_failure_output(
             raw,
-            "/home/user/myproject/",  # local-path-ok
+            "/home/user/myproject/",  # local-path-ok: test fixture path
         )
-        assert "/home/user/myproject" not in normalized  # local-path-ok
+        assert (
+            "/home/user/myproject" not in normalized  # local-path-ok: test fixture path
+        )
 
     def test_empty_repo_root_no_crash(self) -> None:
         """Empty repo_root should not cause errors and should skip path stripping."""
@@ -126,7 +130,7 @@ class TestNormalizeFailureOutput:
 class TestComputeFailureSignatureDeterminism:
     """The core property: same failure => same fingerprint."""
 
-    REPO_ROOT = "/home/user/myproject"  # local-path-ok
+    REPO_ROOT = "/home/user/myproject"  # local-path-ok: test fixture path
     REPRO_CMD = "uv run pytest tests/test_router.py::TestRouter::test_intent -v"
     SUSPECTED_FILES = ["src/router.py"]
 
@@ -198,20 +202,20 @@ AssertionError: Expected 200, got 404
 
     def test_path_difference_same_fingerprint(self) -> None:
         """Same failure from different repo root paths must produce same fingerprint."""
-        output_user1 = f"/home/alice/myproject/tests/test_router.py {self.BASE_OUTPUT}"  # local-path-ok
-        output_user2 = f"/home/bob/myproject/tests/test_router.py {self.BASE_OUTPUT}"  # local-path-ok
+        output_user1 = f"/home/alice/myproject/tests/test_router.py {self.BASE_OUTPUT}"  # local-path-ok: test fixture path
+        output_user2 = f"/home/bob/myproject/tests/test_router.py {self.BASE_OUTPUT}"  # local-path-ok: test fixture path
 
         sig1 = compute_failure_signature(
             failure_type=FailureType.TEST_FAIL,
             raw_output=output_user1,
-            repo_root="/home/alice/myproject",  # local-path-ok
+            repo_root="/home/alice/myproject",  # local-path-ok: test fixture path
             repro_command=self.REPRO_CMD,
             suspected_files=self.SUSPECTED_FILES,
         )
         sig2 = compute_failure_signature(
             failure_type=FailureType.TEST_FAIL,
             raw_output=output_user2,
-            repo_root="/home/bob/myproject",  # local-path-ok
+            repo_root="/home/bob/myproject",  # local-path-ok: test fixture path
             repro_command=self.REPRO_CMD,
             suspected_files=self.SUSPECTED_FILES,
         )

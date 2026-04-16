@@ -286,7 +286,7 @@ may not have all infra running.
 
 1. Locate the omnidash repo:
    ```bash
-   OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+   OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok: env var default fallback
    ```
    - If directory does not exist: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
      `evidence="omnidash directory not found at $OMNIDASH_DIR"`. Skip remaining sub-steps.
@@ -332,7 +332,7 @@ Verify Drizzle schema definitions match migration DDL.
 
 **Check 1 -- Run omnidash parity script:**
 ```bash
-OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok: env var default fallback
 cd $OMNIDASH_DIR && npm run db:check-drizzle-parity
 ```
 Exit 0 = PASS. Exit 1 = FAIL with specific table mismatches.

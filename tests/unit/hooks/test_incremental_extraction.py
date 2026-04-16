@@ -10,7 +10,7 @@ import pytest
 from omniclaude.hooks.handler_incremental_extraction import IncrementalExtractionHandler
 
 # Use generic paths for testing (no local-path violations)
-_TEST_PREFIX = "/tmp/test_worktrees/"  # local-path-ok
+_TEST_PREFIX = "/tmp/test_worktrees/"  # local-path-ok: test temp directory
 
 DEFAULT_CONFIG = {
     "enabled": True,

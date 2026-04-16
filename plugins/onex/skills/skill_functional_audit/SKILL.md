@@ -74,7 +74,7 @@ It did NOT verify:
 Walk `plugins/onex/skills/` and collect all skill directories (exclude `_shared`, `_lib`, `_bin`, `_golden_path_validate`):
 
 ```bash
-ls "${OMNI_HOME}/omniclaude/plugins/onex/skills/" | \
+ls "${ONEX_REGISTRY_ROOT}/omniclaude/plugins/onex/skills/" | \
   grep -v "^_\|__pycache__\|__init__\|progression.yaml\|slack-gate" | sort
 ```
 

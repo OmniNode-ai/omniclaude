@@ -48,7 +48,7 @@ When `/redeploy [args]` is invoked:
        """Read latest v* git tag from each plugin repo's bare clone."""
        versions: dict[str, str] = {}
        for pkg_name, repo_name in PLUGIN_REPO_MAP.items():
-           repo_path = f"{OMNI_HOME}/{repo_name}"
+           repo_path = f"{ONEX_REGISTRY_ROOT}/{repo_name}"
            # Prefer git describe (reachable from HEAD), fall back to sorted tag list
            tag = run(
                f'git -C {repo_path} describe --tags --abbrev=0 --match "v*" 2>/dev/null',
@@ -78,8 +78,8 @@ When `/redeploy [args]` is invoked:
 ```python
 import os
 
-OMNI_HOME = os.environ.get("OMNI_HOME", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok
-WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+ONEX_REGISTRY_ROOT = os.environ.get("ONEX_REGISTRY_ROOT", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok: env var default fallback
+WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok: env var default fallback
 STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/redeploy")
 
 PHASES = [
@@ -175,7 +175,7 @@ IF --dry-run:
 Output format:
 ```
 [DRY RUN] redeploy run_id=redeploy-20260301-abc123
-  SYNC:       bash /Volumes/PRO-G40/Code/omni_home/docs/tools/pull-all.sh  # local-path-ok
+  SYNC:       bash /Volumes/PRO-G40/Code/omni_home/docs/tools/pull-all.sh  # local-path-ok: example output in documentation
   ENV_CHECK:  verify POSTGRES_PASSWORD, KAFKA_BOOTSTRAP_SERVERS
   WORKTREE:   git worktree add .../omni_worktrees/redeploy-20260301-abc123/omnibase_infra -b redeploy-20260301-abc123
   PIN_UPDATE: uv run python scripts/update-plugin-pins.py --versions "omniintelligence=0.8.0,..."
@@ -225,7 +225,7 @@ Expected output pattern:
 ```
 PREFLIGHT OK: POSTGRES_PASSWORD=***
 PREFLIGHT OK: KAFKA_BOOTSTRAP_SERVERS=localhost:29092
-PREFLIGHT OK: OMNI_HOME=/Volumes/PRO-G40/Code/omni_home  # local-path-ok
+PREFLIGHT OK: ONEX_REGISTRY_ROOT=/Volumes/PRO-G40/Code/omni_home  # local-path-ok: example output in documentation
 PREFLIGHT OK: ENABLE_ENV_SYNC_PROBE=true
 PREFLIGHT OK: cloud bus tunnel reachable (localhost:29092)
 PREFLIGHT OK: all checks passed
@@ -243,7 +243,7 @@ PREFLIGHT OK: all checks passed
 IF --skip-sync:
   mark_phase(state, "SYNC", "skipped_by_flag"); CONTINUE
 
-bash "${OMNI_HOME}/docs/tools/pull-all.sh"
+bash "${ONEX_REGISTRY_ROOT}/docs/tools/pull-all.sh"
 ```
 
 Expected output pattern:
@@ -315,9 +315,9 @@ if os.path.isdir(worktree_path):
         mark_phase(state, "WORKTREE", "failed"); EXIT 1
 else:
     # Pull latest main, then create worktree
-    run(f"git -C {OMNI_HOME}/omnibase_infra pull --ff-only")
+    run(f"git -C {ONEX_REGISTRY_ROOT}/omnibase_infra pull --ff-only")
     os.makedirs(os.path.dirname(worktree_path), exist_ok=True)
-    run(f"git -C {OMNI_HOME}/omnibase_infra worktree add {worktree_path} -b {branch}")
+    run(f"git -C {ONEX_REGISTRY_ROOT}/omnibase_infra worktree add {worktree_path} -b {branch}")
     state["worktree_path"] = worktree_path
     mark_phase(state, "WORKTREE", "completed", path=worktree_path, reused=False)
 ```
@@ -532,7 +532,7 @@ SCHEMA_SYNC: fingerprint stamped and deployment artifact updated
 # to fresh Kafka consumers with correct topic subscriptions.
 # Advisory only — omnidash not running is fine (skip silently).
 
-omnidash_lifecycle = f"{OMNI_HOME}/omnibase_infra/scripts/omnidash-lifecycle.sh"
+omnidash_lifecycle = f"{ONEX_REGISTRY_ROOT}/omnibase_infra/scripts/omnidash-lifecycle.sh"
 
 if not os.path.isfile(omnidash_lifecycle):
     print("OMNIDASH_RESTART: lifecycle script not found — skipping")
@@ -560,7 +560,7 @@ Expected output pattern:
 OMNIDASH_RESTART: restarting omnidash...
 [omnidash] Stopping omnidash...
 [omnidash] Stopped.
-[omnidash] Starting omnidash from: /Volumes/PRO-G40/Code/omni_home/omnidash  # local-path-ok
+[omnidash] Starting omnidash from: /Volumes/PRO-G40/Code/omni_home/omnidash  # local-path-ok: example output in documentation
 [omnidash] Server healthy on port 3000 (startup took ~8s)
 OMNIDASH_RESTART: omnidash restarted successfully
 ```

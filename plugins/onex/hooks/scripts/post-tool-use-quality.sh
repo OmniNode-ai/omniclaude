@@ -34,10 +34,10 @@ HOOKS_LIB="${HOOKS_DIR}/lib"
 
 # --- Log path: ONEX_STATE_DIR/logs/ [OMN-8429] ---
 # Logs must never accumulate inside the plugin source or install directory.
-# ONEX_STATE_DIR must be set in settings.json env (via OMNI_HOME). No fallback to ~/.onex_state:
+# ONEX_STATE_DIR must be set in settings.json env (via ONEX_REGISTRY_ROOT). No fallback to ~/.onex_state:
 # a silent fallback would write state invisible to cross-machine tooling (no-informational-gates policy).
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; ONEX_REGISTRY_ROOT may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
     exit 0
 fi

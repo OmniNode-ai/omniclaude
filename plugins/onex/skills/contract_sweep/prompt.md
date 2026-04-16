@@ -39,9 +39,9 @@ Runtime-mode-only args:
 omnibase_core, omnibase_infra, omniclaude, omniintelligence, omnimemory, omninode_infra, omnibase_spi, onex_change_control
 ```
 
-**Bare clone root**: `$OMNI_HOME` (typically `/Volumes/PRO-G40/Code/omni_home`)  <!-- local-path-ok -->
+**Bare clone root**: `$ONEX_REGISTRY_ROOT` (typically `/Volumes/PRO-G40/Code/omni_home`)  <!-- local-path-ok -->
 
-**Change control repo**: `$OMNI_HOME/onex_change_control`  <!-- local-path-ok -->
+**Change control repo**: `$ONEX_REGISTRY_ROOT/onex_change_control`  <!-- local-path-ok -->
 
 ---
 
@@ -54,7 +54,7 @@ Run when mode is `drift` or `full`.
 Before scanning, pull all bare clones to ensure findings reflect the latest `main`:
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok: example command in documentation
 ```
 
 If `pull-all.sh` exits non-zero, **abort the sweep immediately** with an error message
@@ -66,7 +66,7 @@ stale data.
 For each repo, discover all contract files from the `main` branch:
 
 ```bash
-git -C $OMNI_HOME/<repo> ls-tree -r main --name-only | grep -E '(contract|handler_contract)\.yaml$'  # local-path-ok
+git -C $ONEX_REGISTRY_ROOT/<repo> ls-tree -r main --name-only | grep -E '(contract|handler_contract)\.yaml$'  # local-path-ok
 ```
 
 Build a list of `(repo, path)` pairs. Record the total count.
@@ -75,25 +75,25 @@ Build a list of `(repo, path)` pairs. Record the total count.
 
 **Note**: All commands use `uv run python3` if `uv` is available in the
 `onex_change_control` repo; otherwise fall back to `python3` directly.
-Snapshot files are stored at `$OMNI_HOME/onex_change_control/drift/<repo>.sha256`.  # local-path-ok references canonical repo clone
+Snapshot files are stored at `$ONEX_REGISTRY_ROOT/onex_change_control/drift/<repo>.sha256`.  # local-path-ok references canonical repo clone
 
 For each repo, run the check-drift script to compute a canonical hash of all
 event-related contract sections (`published_events`, `event_bus`):
 
 ```bash
-cd $OMNI_HOME/onex_change_control  # local-path-ok references canonical repo clone
+cd $ONEX_REGISTRY_ROOT/onex_change_control  # local-path-ok references canonical repo clone
 uv run python3 scripts/validation/check_contract_drift.py \
-  --root $OMNI_HOME/<repo>/src --print  # local-path-ok command example using canonical repo path
+  --root $ONEX_REGISTRY_ROOT/<repo>/src --print  # local-path-ok command example using canonical repo path
 ```
 
 This prints a SHA-256 hash. Compare it against any existing snapshot:
 
 ```bash
 # Check if a snapshot exists for this repo
-SNAPSHOT_FILE="$OMNI_HOME/onex_change_control/drift/<repo>.sha256"  # local-path-ok command example using canonical repo path
+SNAPSHOT_FILE="$ONEX_REGISTRY_ROOT/onex_change_control/drift/<repo>.sha256"  # local-path-ok command example using canonical repo path
 if [ -f "$SNAPSHOT_FILE" ]; then
   uv run python3 scripts/validation/check_contract_drift.py \
-    --root $OMNI_HOME/<repo>/src --check "$SNAPSHOT_FILE"  # local-path-ok command example using canonical repo path
+    --root $ONEX_REGISTRY_ROOT/<repo>/src --check "$SNAPSHOT_FILE"  # local-path-ok command example using canonical repo path
   # Exit 0 = clean, Exit 1 = drift detected
 fi
 ```
@@ -112,7 +112,7 @@ For each contract YAML discovered in Phase 1:
 
 1. Read current content:
    ```bash
-   git -C $OMNI_HOME/<repo> show main:<path>  # local-path-ok command example using canonical repo path
+   git -C $ONEX_REGISTRY_ROOT/<repo> show main:<path>  # local-path-ok command example using canonical repo path
    ```
 
 2. Compute canonical hash using the same algorithm as `handler_drift_analysis.py`:
@@ -149,27 +149,27 @@ Apply the configured `--sensitivity`:
 If `--check-boundaries` is true (default), validate the Kafka boundary manifest:
 
 ```bash
-BOUNDARIES="$OMNI_HOME/onex_change_control/src/onex_change_control/boundaries/kafka_boundaries.yaml"  # local-path-ok command example using canonical repo path
+BOUNDARIES="$ONEX_REGISTRY_ROOT/onex_change_control/src/onex_change_control/boundaries/kafka_boundaries.yaml"  # local-path-ok command example using canonical repo path
 ```
 
 For each boundary entry in the YAML:
 
 1. **Producer file exists**:
    ```bash
-   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
+   git -C $ONEX_REGISTRY_ROOT/<producer_repo> show main:<producer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
    ```
    If not found -> stale boundary (CRITICAL)
 
 2. **Consumer file exists**:
    ```bash
-   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
+   git -C $ONEX_REGISTRY_ROOT/<consumer_repo> show main:<consumer_file> > /dev/null 2>&1  # local-path-ok command example using canonical repo path
    ```
    If not found -> stale boundary (CRITICAL)
 
 3. **Topic pattern match**:
    ```bash
-   git -C $OMNI_HOME/<producer_repo> show main:<producer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
-   git -C $OMNI_HOME/<consumer_repo> show main:<consumer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
+   git -C $ONEX_REGISTRY_ROOT/<producer_repo> show main:<producer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
+   git -C $ONEX_REGISTRY_ROOT/<consumer_repo> show main:<consumer_file> | grep -qE "<topic_pattern>"  # local-path-ok command example using canonical repo path
    ```
    If pattern not found in either file -> stale boundary (CRITICAL)
 
@@ -457,7 +457,7 @@ Combined status:
 ## Error handling
 
 - If `check_contract_drift.py` is not found at the expected path: abort drift mode with error
-- If a repo is not found at `$OMNI_HOME/<repo>`: skip that repo, record in report as `repo_not_found`  # local-path-ok documentation reference to canonical repo path
+- If a repo is not found at `$ONEX_REGISTRY_ROOT/<repo>`: skip that repo, record in report as `repo_not_found`  # local-path-ok documentation reference to canonical repo path
 - If `kafka_boundaries.yaml` is not found: skip boundary checks, warn in output
 - If YAML parsing fails for a contract: record as an ERROR finding (unparseable contract)
 - If `uv` is not available: fall back to `python3` directly

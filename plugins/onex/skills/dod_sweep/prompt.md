@@ -34,7 +34,7 @@ pipeline, positioned between merge-sweep (A1) and integration-sweep (B5).
 ### Step 1: Resolve paths and look-back window <!-- ai-slop-ok: skill-step-heading -->
 
 ```bash
-ONEX_CC_REPO_PATH="${ONEX_CC_REPO_PATH:-$HOME/onex_change_control}"  # local-path-ok
+ONEX_CC_REPO_PATH="${ONEX_CC_REPO_PATH:-$HOME/onex_change_control}"  # local-path-ok: env var default fallback
 CONTRACTS_DIR="${CONTRACTS_DIR:-$ONEX_CC_REPO_PATH/drift}"
 SINCE_DAYS="${SINCE_DAYS:-7}"
 ```

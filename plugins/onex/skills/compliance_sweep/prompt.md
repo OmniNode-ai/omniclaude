@@ -29,7 +29,7 @@ omniclaude, onex_change_control, omnibase_spi
 Before scanning, pull all bare clones to ensure findings reflect latest `main`:
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok: example command in documentation
 ```
 
 If `pull-all.sh` exits non-zero, **warn but continue** -- stale clones may produce
@@ -42,7 +42,7 @@ The node handles all scanning phases internally (discovery, AST-based compliance
 wire schema validation, infrastructure coupling detection, aggregation, and report saving).
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok: example command in documentation
 
 # Build argument list from parsed flags
 ARGS=""
@@ -119,5 +119,5 @@ Remaining untracked nodes: <N> (use --max-tickets to increase limit)
 ## Error handling
 
 - If `onex run` fails: report the error and exit
-- If a repo is not found at `$OMNI_HOME/<repo>`: skip, record in report  # local-path-ok documentation reference to canonical repo path
+- If a repo is not found at `$ONEX_REGISTRY_ROOT/<repo>`: skip, record in report  # local-path-ok documentation reference to canonical repo path
 - If Linear API fails during ticket creation: log error, continue with remaining tickets

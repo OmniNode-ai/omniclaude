@@ -115,7 +115,7 @@ if build_time:
         print(f"[dashboard-sweep] Consider running omnidash-restart before sweeping")
 
 # Check 2: Does the git SHA match the latest omnidash main?
-latest_sha = run(f"git -C {OMNI_HOME}/omnidash rev-parse --short HEAD", capture=True).stdout.strip()
+latest_sha = run(f"git -C {ONEX_REGISTRY_ROOT}/omnidash rev-parse --short HEAD", capture=True).stdout.strip()
 if latest_sha and git_sha != "unknown" and git_sha != latest_sha:
     print(f"[dashboard-sweep] WARNING: omnidash running {git_sha}, latest main is {latest_sha}")
     print(f"[dashboard-sweep] Fixes merged since last restart may not be reflected")
@@ -128,7 +128,7 @@ If freshness check detects stale code AND the `--deploy` flag is set:
 ```python
 if stale_detected and deploy_flag:
     print("[dashboard-sweep] Stale omnidash detected — auto-restarting before audit")
-    lifecycle_script = f"{OMNI_HOME}/omnibase_infra/scripts/omnidash-lifecycle.sh"
+    lifecycle_script = f"{ONEX_REGISTRY_ROOT}/omnibase_infra/scripts/omnidash-lifecycle.sh"
     if os.path.isfile(lifecycle_script):
         run(f"bash {lifecycle_script} restart")
         # Re-check build info after restart

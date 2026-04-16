@@ -6,8 +6,8 @@ Verifies the guard:
   * Allows everything when the flag file is absent (fast path).
   * Blocks Bash mutating commands (``gh pr merge``, ``git push``) when the
     flag is present.
-  * Blocks Edit/Write targeting paths under ``$OMNI_HOME``.
-  * Passes through Edit/Write targeting paths outside ``$OMNI_HOME``.
+  * Blocks Edit/Write targeting paths under ``$ONEX_REGISTRY_ROOT``.
+  * Passes through Edit/Write targeting paths outside ``$ONEX_REGISTRY_ROOT``.
   * Surfaces ``contract_path`` and ``active_phase`` from the flag in the
     block reason.
 """
@@ -44,7 +44,7 @@ def _run(payload: dict[str, Any]) -> tuple[str, int]:
 def omni_home(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
     root = tmp_path / "omni_home"
     root.mkdir()
-    monkeypatch.setenv("OMNI_HOME", str(root))
+    monkeypatch.setenv("ONEX_REGISTRY_ROOT", str(root))
     state_dir = tmp_path / "state"
     state_dir.mkdir()
     monkeypatch.setenv("ONEX_STATE_DIR", str(state_dir))

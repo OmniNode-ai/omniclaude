@@ -34,10 +34,10 @@ if "--scope" in args:
 Scan all ONEX contract YAMLs across repos for node descriptions.
 
 ```bash
-OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"  # local-path-ok shell variable for command examples
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}"  # local-path-ok shell variable for command examples
 
 # Find all contract.yaml files under node directories
-find "$OMNI_HOME"/*/src -name "contract.yaml" -path "*/nodes/*" 2>/dev/null  # local-path-ok command example using canonical repo path
+find "$ONEX_REGISTRY_ROOT"/*/src -name "contract.yaml" -path "*/nodes/*" 2>/dev/null  # local-path-ok command example using canonical repo path
 ```
 
 For each contract, extract the `description` field. A description is flagged as placeholder if it:
@@ -64,7 +64,7 @@ Classify each node:
 ### Step 2a: List All Projection Files
 
 ```bash
-OMNIDASH_PATH="${OMNIDASH_PATH:-${OMNI_HOME}/omnidash}"
+OMNIDASH_PATH="${OMNIDASH_PATH:-${ONEX_REGISTRY_ROOT}/omnidash}"
 ls "$OMNIDASH_PATH/server/projections/"*.ts 2>/dev/null | grep -v __tests__ | grep -v index
 ```
 
@@ -89,10 +89,10 @@ Classify:
 
 ### Step 2c: Cross-Repo Handler Check (if --scope all-repos)
 
-For each repo under `$OMNI_HOME/`, find contract YAMLs that declare `subscribe` or `publish` topics. Verify the handler referenced in the contract exists as an actual function.  # local-path-ok documentation reference to canonical repos root
+For each repo under `$ONEX_REGISTRY_ROOT/`, find contract YAMLs that declare `subscribe` or `publish` topics. Verify the handler referenced in the contract exists as an actual function.  # local-path-ok documentation reference to canonical repos root
 
 ```bash
-find "$OMNI_HOME"/*/src -name "contract.yaml" -exec grep -l "subscribe\|publish" {} \;  # local-path-ok command example using canonical repo path
+find "$ONEX_REGISTRY_ROOT"/*/src -name "contract.yaml" -exec grep -l "subscribe\|publish" {} \;  # local-path-ok command example using canonical repo path
 ```
 
 **Entry-point format rules — DO NOT flag these as malformed:**
@@ -117,7 +117,7 @@ Scan all contract YAMLs and topics.yaml files for topics listed under `publish` 
 
 ```bash
 # From contract YAMLs
-grep -rh "publish_topics:" "$OMNI_HOME"/*/src/*/nodes/*/contract.yaml 2>/dev/null  # local-path-ok command example using canonical repo path
+grep -rh "publish_topics:" "$ONEX_REGISTRY_ROOT"/*/src/*/nodes/*/contract.yaml 2>/dev/null  # local-path-ok command example using canonical repo path
 
 # From omnidash topics.yaml
 grep "topic:" "$OMNIDASH_PATH/topics.yaml" 2>/dev/null
@@ -126,7 +126,7 @@ grep "topic:" "$OMNIDASH_PATH/topics.yaml" 2>/dev/null
 ### Step 3b: Collect All Subscribed Topics
 
 ```bash
-grep -rh "subscribe_topics:" "$OMNI_HOME"/*/src/*/nodes/*/contract.yaml 2>/dev/null  # local-path-ok command example using canonical repo path
+grep -rh "subscribe_topics:" "$ONEX_REGISTRY_ROOT"/*/src/*/nodes/*/contract.yaml 2>/dev/null  # local-path-ok command example using canonical repo path
 grep "read_model_topics:" "$OMNIDASH_PATH/topics.yaml" 2>/dev/null
 ```
 

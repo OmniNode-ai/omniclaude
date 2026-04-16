@@ -160,7 +160,7 @@ def test_write_to_effect_file_under_src_is_warned() -> None:
 @pytest.mark.unit
 def test_write_to_compute_file_under_src_is_warned() -> None:
     hook_json = _write_hook(
-        "/worktrees/omn-1234/code/src/omniintelligence/node_score_compute.py",  # local-path-ok
+        "/worktrees/omn-1234/code/src/omniintelligence/node_score_compute.py",  # local-path-ok: test fixture path
         "class NodeScoreCompute:\n    pass",
     )
     exit_code, output = run_guard(hook_json)

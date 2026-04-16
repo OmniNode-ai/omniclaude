@@ -837,7 +837,7 @@ for wave_idx, wave in enumerate(waves):
         ticket = tickets_by_id.get(ticket_id, {})
         title = ticket.get("title", ticket_id)
         url = ticket.get("url", "")
-        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"  # local-path-ok
+        repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"  # local-path-ok: code example in documentation
 
         result = Task(
             subagent_type="onex:polymorphic-agent",

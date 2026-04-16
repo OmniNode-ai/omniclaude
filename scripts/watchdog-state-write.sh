@@ -20,8 +20,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
-export OMNI_HOME
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}"
+export ONEX_REGISTRY_ROOT
 
 # ---------------------------------------------------------------------------
 # Arguments
@@ -63,7 +63,7 @@ fi
 # Fallback: jq-based state mutation (degraded mode — no FSM, no intents)
 # ---------------------------------------------------------------------------
 
-STATE_DIR="${OMNI_HOME}/.onex_state/watchdog"
+STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/watchdog"
 STATE_FILE="${STATE_DIR}/loop-health.json"
 MAX_HISTORY=20
 

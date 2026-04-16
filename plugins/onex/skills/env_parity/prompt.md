@@ -37,7 +37,7 @@ Build the check list:
 ## Step 2: Locate Script <!-- ai-slop-ok: skill-step-heading -->
 
 ```bash
-SCRIPT="${OMNIBASE_INFRA_DIR:-/Volumes/PRO-G40/Code/omni_home/omnibase_infra}/scripts/compare_environments.py"  # local-path-ok
+SCRIPT="${OMNIBASE_INFRA_DIR:-/Volumes/PRO-G40/Code/omni_home/omnibase_infra}/scripts/compare_environments.py"  # local-path-ok: env var default fallback
 ```
 
 If the script does not exist at that path, emit:

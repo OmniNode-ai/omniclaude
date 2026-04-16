@@ -13,7 +13,7 @@ set -euo pipefail
 
 # Always write the stable launcher to $HOME/.onex_state/bin — the user-portable
 # path referenced by ~/.claude/settings.json. ONEX_STATE_DIR may point elsewhere
-# (e.g. $OMNI_HOME/.onex_state) in dev environments, but settings.json targets
+# (e.g. $ONEX_REGISTRY_ROOT/.onex_state) in dev environments, but settings.json targets
 # the user home path unconditionally.
 BIN_DIR="$HOME/.onex_state/bin"
 SHIM="$BIN_DIR/statusline.sh"

@@ -30,7 +30,7 @@
 # Priority:
 #   1. PLUGIN_PYTHON_BIN env var (explicit override / escape hatch)
 #   2. Repo main venv at PLUGIN_ROOT/../../.venv (OMN-7310: use repo venv, not plugin lib venv)
-#   2.5. OMNI_HOME/omniclaude/.venv (plugin cache path can't resolve repo venv)
+#   2.5. ONEX_REGISTRY_ROOT/omniclaude/.venv (plugin cache path can't resolve repo venv)
 #   3. OMNICLAUDE_PROJECT_ROOT/.venv (explicit dev mode, no heuristics)
 #   4. Hard failure with actionable error message
 
@@ -49,9 +49,9 @@ find_python() {
         return
     fi
 
-    # 2.5. OMNI_HOME-based resolution (plugin cache can't find repo venv)
-    if [[ -n "${OMNI_HOME:-}" && -f "${OMNI_HOME}/omniclaude/.venv/bin/python3" && -x "${OMNI_HOME}/omniclaude/.venv/bin/python3" ]]; then
-        echo "${OMNI_HOME}/omniclaude/.venv/bin/python3"
+    # 2.5. ONEX_REGISTRY_ROOT-based resolution (plugin cache can't find repo venv)
+    if [[ -n "${ONEX_REGISTRY_ROOT:-}" && -f "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3" && -x "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3" ]]; then
+        echo "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3"
         return
     fi
 
@@ -198,7 +198,7 @@ if [[ -z "${PYTHON_CMD}" ]]; then
     echo "  Expected one of:" 1>&2
     echo "    - PLUGIN_PYTHON_BIN=/path/to/python3 (explicit override)" 1>&2
     echo "    - Repo .venv at \$(cd PLUGIN_ROOT/../.. && pwd)/.venv (run: uv sync)" 1>&2
-    echo "    - OMNI_HOME/omniclaude/.venv (set OMNI_HOME in shell profile, run: uv sync)" 1>&2
+    echo "    - ONEX_REGISTRY_ROOT/omniclaude/.venv (set ONEX_REGISTRY_ROOT in shell profile, run: uv sync)" 1>&2
     echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
     echo "" 1>&2
     echo "  Auto-repair was attempted but failed. Check /tmp/omniclaude-venv-repair.log" 1>&2

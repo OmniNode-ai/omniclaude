@@ -17,7 +17,7 @@ Write, or Glob calls.** Report the exact error to the user and wait for directio
 ```python
 args = "$ARGUMENTS".split()
 checks = ["D1", "D2", "D3", "D4"]  # default: all checks
-omni_home = os.environ.get("OMNI_HOME", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok
+omni_home = os.environ.get("ONEX_REGISTRY_ROOT", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok: env var default fallback
 json_mode = "--json" in args
 
 for i, arg in enumerate(args):

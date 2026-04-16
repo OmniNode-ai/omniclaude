@@ -187,7 +187,7 @@ echo "${RESULT_JSON}" > "${ONEX_STATE_DIR}/skill-results/${CORRELATION_ID}/pr_re
 |----------|---------|----------|
 | `GITHUB_TOKEN` | GitHub API auth for diff fetch + thread posting | Yes |
 | `ONEX_STATE_DIR` | Where to write result artifacts | Yes |
-| `OMNI_HOME` | Root of omni_home workspace (defaults to `/Volumes/PRO-G40/Code/omni_home`) | No |  <!-- local-path-ok -->
+| `ONEX_REGISTRY_ROOT` | Root of omni_home workspace (defaults to `/Volumes/PRO-G40/Code/omni_home`) | No |  <!-- local-path-ok -->
 
 ## Pipeline Architecture
 

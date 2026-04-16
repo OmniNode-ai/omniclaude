@@ -37,7 +37,7 @@ args:
     description: "Show active and skipped worktrees in addition to stale ones (--prune mode)"
     required: false
   - name: --worktrees-root
-    description: "Override worktrees root path (default: /Volumes/PRO-G40/Code/omni_worktrees)" # local-path-ok
+    description: "Override worktrees root path (default: /Volumes/PRO-G40/Code/omni_worktrees)" # local-path-ok: example in YAML documentation
     required: false
 ---
 
@@ -122,7 +122,7 @@ else:
 execute = bool(args.execute)
 dry_run = not execute
 cron_interval = args.cron  # e.g. "7d", "2h", or None
-worktrees_root = args.worktrees_root or "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+worktrees_root = args.worktrees_root or "/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok: env var default fallback
 ```
 
 ---

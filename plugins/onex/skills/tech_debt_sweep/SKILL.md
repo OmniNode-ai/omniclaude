@@ -89,7 +89,7 @@ authoritative risk score.
 
 Determine the omni_home root from the current working directory context. If the current
 session is within the `omni_home` directory or a worktree derived from it, use
-that as the root. Otherwise, check `OMNI_HOME` environment variable. Walk up from
+that as the root. Otherwise, check `ONEX_REGISTRY_ROOT` environment variable. Walk up from
 the current directory looking for a parent that contains multiple repos with
 `pyproject.toml` files as a heuristic fallback.
 

@@ -114,7 +114,7 @@ This mode combines two detection sub-modes:
 For each repo, run the `check_contract_drift.py` script from `onex_change_control`:
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok
+cd /Volumes/PRO-G40/Code/omni_home/onex_change_control  # local-path-ok: example command in documentation
 python3 scripts/validation/check_contract_drift.py \
   --root <repo>/src \
   --check <snapshot-file>

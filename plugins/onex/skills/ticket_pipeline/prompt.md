@@ -1756,11 +1756,11 @@ def execute_phase(phase_name, state):
    # contract is missing.
    target_repo_names = state.get("target_repos") or [state.get("repo")]
    repo_roots = [
-       Path(f"/Volumes/PRO-G40/Code/omni_worktrees/{ticket_id}/{name}")  # local-path-ok
+       Path(f"/Volumes/PRO-G40/Code/omni_worktrees/{ticket_id}/{name}")  # local-path-ok: worktree path template
        for name in target_repo_names
        if name
    ]
-   # Fall back to canonical clones under $OMNI_HOME for repos that don't  # local-path-ok references canonical repo clones
+   # Fall back to canonical clones under $ONEX_REGISTRY_ROOT for repos that don't  # local-path-ok references canonical repo clones
    # have a worktree yet (preflight reads only, so this is safe).
    repo_roots += resolve_repo_roots(target_repo_names)
 
@@ -2098,8 +2098,8 @@ continues without a contract.
    ```bash
    if [ -z "$ONEX_CC_REPO_PATH" ]; then
      TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
-     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
-     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok: env var default fallback
+     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok: env var default fallback
      for candidate in \
        "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
        "$REGISTRY_BASE/onex_change_control"; do
@@ -2474,8 +2474,8 @@ local_review. Failure is non-fatal -- the pipeline continues with an unenriched 
    ```bash
    if [ -z "$ONEX_CC_REPO_PATH" ]; then
      TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
-     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok
-     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok: env var default fallback
+     REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok: env var default fallback
      for candidate in \
        "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
        "$REGISTRY_BASE/onex_change_control"; do

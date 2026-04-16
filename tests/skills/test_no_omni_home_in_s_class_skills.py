@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""OMN-8791: Assert zero $OMNI_HOME references remain in S-class skill files."""
+"""OMN-8791: Assert zero $ONEX_REGISTRY_ROOT references remain in S-class skill files."""
 
 import re
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 # S-class skills per docs/plans/2026-04-14-standalone-plugin-distribution.md
-# These are standalone-capable skills that must not reference $OMNI_HOME.
+# These are standalone-capable skills that must not reference $ONEX_REGISTRY_ROOT.
 S_CLASS_SKILLS = [
     "adversarial_pipeline",
     "agent_healthcheck",
@@ -57,7 +57,9 @@ S_CLASS_SKILLS = [
 ]
 
 SKILLS_ROOT = Path(__file__).parents[2] / "plugins" / "onex" / "skills"
-OMNI_HOME_PATTERN = re.compile(r"\$OMNI_HOME|\$\{OMNI_HOME[^}]*\}|omni_home/")
+ONEX_REGISTRY_ROOT_PATTERN = re.compile(
+    r"\$ONEX_REGISTRY_ROOT|\$\{ONEX_REGISTRY_ROOT[^}]*\}|omni_home/"
+)
 
 
 def _skill_files(skill_name: str) -> list[Path]:
@@ -74,7 +76,7 @@ def test_no_omni_home_refs_in_s_class_skills() -> None:
             lines = [
                 f"  line {i + 1}: {line.rstrip()}"
                 for i, line in enumerate(text.splitlines())
-                if OMNI_HOME_PATTERN.search(line)
+                if ONEX_REGISTRY_ROOT_PATTERN.search(line)
             ]
             if lines:
                 offenders.append(
@@ -82,6 +84,6 @@ def test_no_omni_home_refs_in_s_class_skills() -> None:
                     + "\n".join(lines)
                 )
     assert not offenders, (
-        f"$OMNI_HOME found in {len(offenders)} S-class skill file(s):\n\n"
+        f"$ONEX_REGISTRY_ROOT found in {len(offenders)} S-class skill file(s):\n\n"
         + "\n\n".join(offenders)
     )

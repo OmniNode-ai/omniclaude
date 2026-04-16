@@ -25,7 +25,7 @@ def _sample_row() -> ModelSessionRegistryRow:
         task_id="OMN-1234",
         status="active",
         current_phase="implementing",
-        worktree_path="/tmp/worktrees/OMN-1234/omnibase_core",  # local-path-ok
+        worktree_path="/tmp/worktrees/OMN-1234/omnibase_core",  # local-path-ok: test fixture path
         files_touched=["src/models/foo.py", "tests/test_foo.py"],
         depends_on=["OMN-1230"],
         session_ids=["session-abc", "session-def"],

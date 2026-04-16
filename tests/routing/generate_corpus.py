@@ -13,7 +13,7 @@ Approach: Hybrid (per OMN-1923 Q3 answer)
   - Auto-captured router output as expected values
 
 Usage:
-    cd /Volumes/PRO-G40/Code/omniclaude  # local-path-ok
+    cd /Volumes/PRO-G40/Code/omniclaude  # local-path-ok: example command in documentation
     python -m tests.routing.generate_corpus
 
     # Or with custom registry/output:

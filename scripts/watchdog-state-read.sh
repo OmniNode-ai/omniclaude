@@ -24,8 +24,8 @@
 
 set -euo pipefail
 
-OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
-STATE_FILE="${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}"
+STATE_FILE="${ONEX_REGISTRY_ROOT}/.onex_state/watchdog/loop-health.json"
 
 # ---------------------------------------------------------------------------
 # Arguments

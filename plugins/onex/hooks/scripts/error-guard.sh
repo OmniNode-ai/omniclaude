@@ -154,9 +154,9 @@ _omniclaude_error_guard_trap() {
 
         # Resolve Python if not already set by common.sh
         if [[ -z "$_eg_python" ]]; then
-            # Try OMNI_HOME-based venv first, then system python3
-            if [[ -n "${OMNI_HOME:-}" && -x "${OMNI_HOME}/omniclaude/.venv/bin/python3" ]]; then
-                _eg_python="${OMNI_HOME}/omniclaude/.venv/bin/python3"
+            # Try ONEX_REGISTRY_ROOT-based venv first, then system python3
+            if [[ -n "${ONEX_REGISTRY_ROOT:-}" && -x "${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3" ]]; then
+                _eg_python="${ONEX_REGISTRY_ROOT}/omniclaude/.venv/bin/python3"
             elif command -v python3 >/dev/null 2>&1; then
                 _eg_python="python3"
             fi

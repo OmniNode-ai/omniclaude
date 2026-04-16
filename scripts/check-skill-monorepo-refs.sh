@@ -15,7 +15,7 @@ SKILLS_ROOT="$REPO_ROOT/plugins/onex/skills"
 
 # Forbidden patterns (regex) and their replacement guidance.
 # The path literals below are the patterns we're enforcing, not violations.
-PAT_0='\$OMNI_HOME'
+PAT_0='\$ONEX_REGISTRY_ROOT'
 MSG_0='Use $ONEX_STATE_DIR or $ONEX_WORKTREES_ROOT instead'
 PAT_1='uv run python -m omni'
 MSG_1="Use 'onex run <node_name>' instead — see OMN-8770 standalone install"

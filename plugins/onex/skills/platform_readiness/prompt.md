@@ -28,7 +28,7 @@ chain health, data flow health, runtime wiring, dashboard data, cost measurement
 applies freshness overrides, and computes the overall status.
 
 ```bash
-cd $OMNI_HOME/omnimarket  # local-path-ok example command showing canonical repo path
+cd $ONEX_REGISTRY_ROOT/omnimarket  # local-path-ok example command showing canonical repo path
 
 # Build argument list from parsed flags
 ARGS=""

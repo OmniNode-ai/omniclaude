@@ -207,7 +207,7 @@ Architecture follows the headless decomposition pattern from
 ./scripts/cron-closeout.sh --dry-run
 
 # Via crontab (every 30 minutes)
-*/30 * * * * $OMNI_HOME/omniclaude/scripts/cron-closeout.sh >> /tmp/cron-closeout.log 2>&1  # local-path-ok crontab example
+*/30 * * * * $ONEX_REGISTRY_ROOT/omniclaude/scripts/cron-closeout.sh >> /tmp/cron-closeout.log 2>&1  # local-path-ok crontab example
 
 # Via launchd (macOS)
 # Create ~/Library/LaunchAgents/com.omninode.cron-closeout.plist

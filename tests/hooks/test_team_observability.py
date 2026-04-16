@@ -25,7 +25,9 @@ from pathlib import Path
 
 import pytest
 
-WORKTREE_ROOT = str(Path(__file__).resolve().parent.parent.parent)  # local-path-ok
+WORKTREE_ROOT = str(
+    Path(__file__).resolve().parent.parent.parent
+)  # local-path-ok: test constant derived from file location
 HOOK_SCRIPT = "plugins/onex/hooks/scripts/post_tool_use_team_observability.sh"
 
 

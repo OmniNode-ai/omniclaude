@@ -3,7 +3,7 @@
 """PreToolUse guard that blocks foreground drift while an overseer contract is active.
 
 OMN-8376 — when `.onex_state/overseer-active.flag` exists, foreground Bash/Edit/Write
-tools targeting repo paths under ``$OMNI_HOME`` are blocked so the lead agent cannot
+tools targeting repo paths under ``$ONEX_REGISTRY_ROOT`` are blocked so the lead agent cannot
 drift into manual fixes while an overseer (OMN-8375 HandlerOvernight) is driving.
 
 Secondary detection path (TaskList fallback): when the flag file is absent the guard
@@ -23,11 +23,11 @@ Flag schema (YAML)::
     started_at: 2026-04-11T07:00:00Z
 
 Flag location: ``$ONEX_STATE_DIR/overseer-active.flag`` (falls back to
-``$OMNI_HOME/.onex_state/overseer-active.flag`` for scratch/test sessions).
+``$ONEX_REGISTRY_ROOT/.onex_state/overseer-active.flag`` for scratch/test sessions).
 
 Exit codes:
     0 — allow (flag absent, tool not targeting repo path, or non-matching tool)
-    2 — block (flag present AND tool targets a path under $OMNI_HOME, OR TaskList
+    2 — block (flag present AND tool targets a path under $ONEX_REGISTRY_ROOT, OR TaskList
               fallback fires in block-mode enforcement)
 """
 
@@ -52,7 +52,7 @@ def _flag_path() -> Path:
     state_dir = os.environ.get("ONEX_STATE_DIR")
     if state_dir:
         return Path(state_dir) / "overseer-active.flag"
-    omni_home = os.environ.get("OMNI_HOME")
+    omni_home = os.environ.get("ONEX_REGISTRY_ROOT")
     if omni_home:
         return Path(omni_home) / ".onex_state" / "overseer-active.flag"
     return Path.home() / ".onex_state" / "overseer-active.flag"
@@ -60,7 +60,7 @@ def _flag_path() -> Path:
 
 def _omni_home_roots() -> list[Path]:
     roots: list[Path] = []
-    omni_home = os.environ.get("OMNI_HOME")
+    omni_home = os.environ.get("ONEX_REGISTRY_ROOT")
     if omni_home:
         roots.append(Path(omni_home).resolve())
     # Also cover the canonical worktrees root so foreground edits to active
@@ -103,7 +103,7 @@ def _parse_flag(flag: Path) -> tuple[str, str]:
 
 
 def _targets_repo_path(tool_name: str, tool_input: dict, roots: list[Path]) -> bool:
-    """Return True if the tool call touches anything under an OMNI_HOME root.
+    """Return True if the tool call touches anything under an ONEX_REGISTRY_ROOT root.
 
     Conservative: if we can't tell (no roots configured), return True so the
     guard fails closed when an overseer contract is active. The only way to
@@ -122,11 +122,11 @@ def _targets_repo_path(tool_name: str, tool_input: dict, roots: list[Path]) -> b
         command = tool_input.get("command", "")
         if not isinstance(command, str):
             return True
-        # Any absolute path token under an OMNI_HOME root trips the guard.
+        # Any absolute path token under an ONEX_REGISTRY_ROOT root trips the guard.
         # Also trips on common mutating git/gh commands regardless of cwd —
         # `gh pr merge`, `git push`, `git commit`, etc. — because those operate
         # on whatever repo the session cwd is in, which is almost always under
-        # OMNI_HOME during a drift incident.
+        # ONEX_REGISTRY_ROOT during a drift incident.
         cwd = tool_input.get("cwd") or os.getcwd()
         if isinstance(cwd, str) and cwd:
             candidates.append(cwd)
