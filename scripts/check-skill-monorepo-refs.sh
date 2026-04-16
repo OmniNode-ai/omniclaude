@@ -39,7 +39,7 @@ fi
 
 for file in "${SKILL_FILES[@]}"; do
   lineno=0
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
     if [[ "$line" == *"$ESCAPE_HATCH"* ]]; then
       # Require a reason after the marker (e.g. "# local-path-ok: <reason>")
