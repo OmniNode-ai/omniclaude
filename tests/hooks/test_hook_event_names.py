@@ -76,6 +76,7 @@ def test_guard_script_passes_on_current_tree() -> None:
         capture_output=True,
         text=True,
         check=False,
+        cwd=REPO_ROOT,
     )
     assert result.returncode == 0, (
         f"check_hook_event_names.sh should pass on clean tree; stderr={result.stderr}"
