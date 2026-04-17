@@ -5,14 +5,8 @@ name: Check Architecture Handshake
 on:
   push:
     branches: [main, develop]
-    paths:
-      - '.claude/architecture-handshake.md'
-      - '.github/workflows/check-handshake.yml'
   pull_request:
     branches: [main, develop]
-    paths:
-      - '.claude/architecture-handshake.md'
-      - '.github/workflows/check-handshake.yml'
   merge_group:
   workflow_dispatch:
 
