@@ -189,21 +189,55 @@ def is_claimed_from_dir(blocker_id: str, claims_dir: Path) -> dict[str, object] 
 
 
 def acquire_claim_from_dir(claim_data: dict[str, object], claims_dir: Path) -> bool:
-    """Atomically write claim to given directory (for testability)."""
+    """Atomically write claim to given directory (for testability).
+
+    Uses write-then-link pattern to guarantee readers never see a partial write:
+      1. Write full payload to a temp file (unique per thread).
+      2. Hard-link the temp file to the final path (atomic; fails if already exists).
+      3. Unlink the temp file.
+
+    This ensures the claim file is fully written before it is visible to other threads.
+    Using O_CREAT|O_EXCL directly on the final path and then writing into it would leave
+    a window where readers observe an empty or partial JSON file, causing json.JSONDecodeError
+    and returning None — which lets a second thread also attempt to acquire the claim.
+    """
     import os as _os
+    import threading
 
     blocker_id = str(claim_data["blocker_id"])
     p = claims_dir / f"{blocker_id}.json"
     payload = json.dumps(claim_data, default=str).encode()
+
+    # Write to a per-thread temp file so each racing thread has its own staging area.
+    tmp_name = f"{blocker_id}.tmp.{_os.getpid()}.{threading.get_ident()}"
+    tmp_p = claims_dir / tmp_name
     try:
-        fd = _os.open(str(p), _os.O_CREAT | _os.O_EXCL | _os.O_WRONLY, 0o600)
-    except FileExistsError:
-        return False
-    try:
-        _os.write(fd, payload)
+        fd = _os.open(str(tmp_p), _os.O_CREAT | _os.O_EXCL | _os.O_WRONLY, 0o600)
+        try:
+            written = 0
+            while written < len(payload):
+                written += _os.write(fd, payload[written:])
+        finally:
+            _os.close(fd)
+
+        # Atomic promotion: only EEXIST is a normal race-loss condition; all other
+        # OSError values (ENOENT, EPERM, EXDEV, ENOSPC, …) are hard I/O failures.
+        import errno as _errno
+
+        try:
+            _os.link(str(tmp_p), str(p))
+            return True
+        except OSError as exc:
+            if exc.errno == _errno.EEXIST:
+                return False
+            raise
     finally:
-        _os.close(fd)
-    return True
+        # Always clean up the temp file; suppress cleanup errors so they cannot
+        # mask a successful claim result or an already-raised exception.
+        try:
+            tmp_p.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
