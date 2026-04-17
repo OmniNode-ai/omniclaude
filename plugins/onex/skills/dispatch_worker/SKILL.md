@@ -95,7 +95,40 @@ model: sonnet                  # optional: default sonnet
 replace: false                 # optional: kill existing in_progress worker with same name
 ```
 
+## Dispatch record persistence (OMN-9084)
+
+Immediately after the node compiles the worker prompt and before `Agent()` is
+spawned, write a `ModelDispatchRecord` to
+`$ONEX_STATE_DIR/dispatches/<agent-id>.yaml` so downstream hooks
+(allowedTools audit, tool-call usage audit, consecutive-failure halt) can
+reason about the dispatch:
+
+```python
+from datetime import datetime, timezone
+from omniclaude.hooks.lib.dispatch_record_writer import write_dispatch_record
+from omniclaude.hooks.model_dispatch_record import ModelDispatchRecord
+
+write_dispatch_record(
+    ModelDispatchRecord(
+        agent_id=spec["name"],
+        dispatched_at=datetime.now(timezone.utc),
+        dispatcher="onex:dispatch_worker",
+        ticket=spec["targets"][0],
+        allowed_tools=spec.get("allowedTools", []),
+        prompt_digest=prompt_digest,
+        parent_session_id=parent_session_id,
+    )
+)
+```
+
+The PostToolUse `post_tool_use_subagent_tool_log.sh` hook appends a JSONL
+line per subagent tool call to
+`$ONEX_STATE_DIR/dispatches/<agent-id>/tool-calls.jsonl` when
+`ONEX_AGENT_ID` is set in the subagent environment.
+
 ## See Also
 
 - `node_dispatch_worker` (omnimarket) — compiles the prompt template
 - Design: `docs/design/dispatch-worker-skill-design.md`
+- `src/omniclaude/hooks/model_dispatch_record.py` — dispatch record schema
+- `src/omniclaude/hooks/lib/dispatch_record_writer.py` — writer/reader

@@ -10,6 +10,7 @@ on:
 
 jobs:
   pr-title:
+    # self-gating-ok: cross-repo reusable workflow; PR Title Check is not a required status check on main (tracked in OMN-9039)
     uses: OmniNode-ai/onex_change_control/.github/workflows/pr-title-check-reusable.yml@main
     permissions:
       pull-requests: read
