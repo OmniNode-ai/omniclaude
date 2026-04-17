@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.idle-watchdog.plist — launchd agent for idle-watchdog tick [OMN-9036]
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+
+  Note: idle classifier from plan Task 9 not yet shipped. Script stubs with friction-emit-only
+  behavior until the classifier is available.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.idle-watchdog</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-idle-watchdog.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>900</integer><!-- 15 minutes -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-idle-watchdog-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-idle-watchdog-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

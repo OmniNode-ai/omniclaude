@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.contract-verify.plist — launchd agent for periodic contract-verify tick [OMN-9036]
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.contract-verify</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-contract-verify.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>900</integer><!-- 15 minutes -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-contract-verify-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-contract-verify-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

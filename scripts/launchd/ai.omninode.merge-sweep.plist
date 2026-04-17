@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.merge-sweep.plist — launchd agent for periodic merge-sweep tick [OMN-9036]
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+
+  Install:
+    bash omniclaude/scripts/tick-bundle-install.sh
+
+  Uninstall:
+    bash omniclaude/scripts/tick-bundle-uninstall.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.merge-sweep</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-merge-sweep.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>300</integer><!-- 5 minutes -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-merge-sweep-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-merge-sweep-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
