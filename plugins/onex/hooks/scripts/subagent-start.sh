@@ -66,5 +66,5 @@ CONVENTIONS="## ONEX Conventions (injected by SubagentStart)
 
 # Emit JSON with additionalContext
 echo "$TOOL_INFO" | jq --arg ctx "$CONVENTIONS" \
-  '{hookSpecificOutput: {additionalContext: $ctx}}'
+  '{hookSpecificOutput: {hookEventName: "SubagentStart", additionalContext: $ctx}}'
 exit 0

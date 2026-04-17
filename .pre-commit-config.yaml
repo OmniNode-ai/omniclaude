@@ -97,6 +97,16 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-9072: regression guard — every hookSpecificOutput emission must
+      # include hookEventName, else Claude Code silently drops the payload.
+      - id: check-hook-event-names
+        name: check hook scripts include hookEventName in hookSpecificOutput
+        entry: bash scripts/check_hook_event_names.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'

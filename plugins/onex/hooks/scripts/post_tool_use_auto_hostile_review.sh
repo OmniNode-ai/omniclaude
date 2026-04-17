@@ -79,6 +79,7 @@ printf '{"timestamp":"%s","event":"pr_created","pr_url":"%s","command":"%s"}\n' 
 MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
     --arg advisory "$ADVISORY" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "PostToolUse" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $advisory)
        | ltrimstr("\n\n")

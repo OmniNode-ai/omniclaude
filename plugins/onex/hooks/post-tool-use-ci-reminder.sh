@@ -60,6 +60,7 @@ REMINDER="[CI Reminder] A commit was just created. Before pushing, verify that v
 MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
     --arg reminder "$REMINDER" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "PostToolUse" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $reminder)
        | ltrimstr("\n\n")

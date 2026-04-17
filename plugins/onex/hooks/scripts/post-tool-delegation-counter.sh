@@ -165,13 +165,13 @@ if [[ -S "$HOOK_RUNTIME_SOCKET" ]]; then
         case "$DAEMON_DECISION" in
             block)
                 jq -n --arg msg "${DAEMON_MESSAGE}" \
-                    '{ hookSpecificOutput: { additionalContext: $msg } }'
+                    '{ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: $msg } }'
                 exit 2
                 ;;
             warn)
                 if [[ -n "$DAEMON_MESSAGE" ]]; then
                     jq -n --arg msg "${DAEMON_MESSAGE}" \
-                        '{ hookSpecificOutput: { additionalContext: $msg } }'
+                        '{ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: $msg } }'
                 fi
                 printf '%s\n' "$TOOL_INFO"
                 exit 0
@@ -219,6 +219,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             --argjson threshold "$TOTAL_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
@@ -233,6 +234,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             --argjson threshold "$WRITE_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " write/modify tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
@@ -248,6 +250,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             --argjson block_threshold "$WRITE_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " write tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
                 }
             }'
@@ -288,6 +291,7 @@ else
             --argjson threshold "$TOTAL_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
@@ -302,6 +306,7 @@ else
             --argjson threshold "$READ_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
@@ -317,6 +322,7 @@ else
             --argjson block_threshold "$READ_BLOCK" \
             '{
                 hookSpecificOutput: {
+                    hookEventName: "PostToolUse",
                     additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
                 }
             }'

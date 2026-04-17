@@ -81,6 +81,7 @@ printf '{"timestamp":"%s","event":"large_changeset","file_count":%d,"threshold":
 MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
     --arg warning "$WARNING" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "PostToolUse" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $warning)
        | ltrimstr("\n\n")
