@@ -18,10 +18,21 @@ set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 
 # Resolve absolute script dir BEFORE any cd (relative dirname breaks after cd)
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+_resolve_self() {
+    local src="$1"
+    realpath "$src" 2>/dev/null && return 0
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$src" && return 0
+    fi
+    if command -v python >/dev/null 2>&1; then
+        python -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$src" && return 0
+    fi
+    return 1
+}
+_SELF="$(_resolve_self "${BASH_SOURCE[0]}")"
 _SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 unset _SELF
+unset -f _resolve_self
 
 source "${_SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
 
@@ -46,6 +57,13 @@ TOOL_NAME=$(echo "$EVENT_JSON" | jq -r '.tool_name // .toolName // "unknown"' 2>
 REASON=$(echo "$EVENT_JSON" | jq -r '.reason // ""' 2>/dev/null || echo "")
 AGENT_NAME=$(echo "$EVENT_JSON" | jq -r '.agent_name // .agentName // ""' 2>/dev/null || echo "")
 SESSION_ID=$(echo "$EVENT_JSON" | jq -r '.session_id // .sessionId // "unknown"' 2>/dev/null || echo "unknown")
+
+# Sanitize string fields: strip newlines and escape double-quotes to prevent YAML injection
+_sanitize() { printf '%s' "$1" | tr -d '\n\r' | sed 's/"/\\"/g'; }
+TOOL_NAME=$(_sanitize "$TOOL_NAME")
+REASON=$(_sanitize "$REASON")
+AGENT_NAME=$(_sanitize "$AGENT_NAME")
+SESSION_ID=$(_sanitize "$SESSION_ID")
 
 DATE_PREFIX=$(date -u +%Y-%m-%d)
 TS_NS=$(date -u +%s%N 2>/dev/null || date -u +%s)
