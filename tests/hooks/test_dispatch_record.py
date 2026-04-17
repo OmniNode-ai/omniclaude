@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.hooks.lib.dispatch_record_writer import (
     read_tool_call_jsonl,
@@ -90,6 +91,32 @@ def test_reader_parses_tool_call_jsonl(
     assert parsed[0]["tool_name"] == "Read"
     assert parsed[1]["tool_name"] == "Bash"
     assert parsed[1]["duration_ms"] == 300
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "..",
+        "a/b",
+        "agent.1",
+        "a" * 65,
+        "",
+        "has space",
+        "../etc",
+        "x\x00y",
+    ],
+)
+def test_model_rejects_non_slug_agent_id(bad_id: str) -> None:
+    """ModelDispatchRecord.agent_id must enforce ``^[a-zA-Z0-9_-]{1,64}$``."""
+    with pytest.raises(ValidationError):
+        ModelDispatchRecord(
+            agent_id=bad_id,
+            dispatched_at=datetime(2026, 4, 17, 20, 0, 0, tzinfo=UTC),
+            dispatcher="d",
+            ticket="T",
+            prompt_digest="p",
+            parent_session_id="s",
+        )
 
 
 def test_writer_creates_missing_dispatches_dir(

@@ -23,8 +23,8 @@ class ModelDispatchRecord(BaseModel):
     agent_id: str = Field(
         ...,
         min_length=1,
-        max_length=128,
-        pattern=r"^[A-Za-z0-9._-]+$",
+        max_length=64,
+        pattern=r"^[a-zA-Z0-9_-]{1,64}$",
     )
     dispatched_at: datetime
     dispatcher: str = Field(..., min_length=1)
