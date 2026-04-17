@@ -111,27 +111,48 @@ install_one() {
   printf '%s\n' "${rendered}" > "${dst}"
 
   # Load the new plist. bootstrap is the modern equivalent of `launchctl load`.
+  # If both paths fail we return 1 so the installer exits non-zero rather than
+  # silently marking a broken deployment as "installed".
   if launchctl bootstrap "gui/${UID_GUI}" "${dst}" 2>/dev/null; then
     echo "  [${label}] installed + loaded"
-  else
-    # Fallback for older launchctl or pre-existing service — try load.
-    if launchctl load "${dst}" 2>/dev/null; then
-      echo "  [${label}] installed + loaded (legacy)"
-    else
-      echo "  [${label}] installed (already loaded or load skipped)"
-    fi
+    CHANGED=$((CHANGED + 1))
+    return 0
   fi
-  CHANGED=$((CHANGED + 1))
+
+  # Fallback for older launchctl — try the legacy load command.
+  if launchctl load "${dst}" 2>/dev/null; then
+    echo "  [${label}] installed + loaded (legacy)"
+    CHANGED=$((CHANGED + 1))
+    return 0
+  fi
+
+  # If the agent is already loaded (bootstrap returns EEXIST-style failure),
+  # launchctl print will succeed. Treat that as OK; anything else is a hard error.
+  if launchctl print "gui/${UID_GUI}/${label}" >/dev/null 2>&1; then
+    echo "  [${label}] installed (already loaded)"
+    CHANGED=$((CHANGED + 1))
+    return 0
+  fi
+
+  echo "  [${label}] ERROR — plist written but failed to load" >&2
+  return 1
 }
 
+FAILED=0
+# `set -e` aborts the script on the first nonzero return from install_one, so we
+# disable it here to report every failure and still produce a full summary, then
+# exit non-zero at the end if any tick failed to load.
+set +e
 for label in "${TICKS[@]}"; do
-  install_one "${label}"
+  install_one "${label}" || FAILED=$((FAILED + 1))
 done
+set -e
 
 echo ""
 echo "--- summary ---"
 echo "  changed:   ${CHANGED}"
 echo "  unchanged: ${UNCHANGED}"
+echo "  failed:    ${FAILED}"
 echo ""
 
 if [[ "${DRY_RUN}" == "true" ]]; then
@@ -141,3 +162,9 @@ fi
 
 echo "--- launchctl list (ai.omninode.*) ---"
 launchctl list | grep ai.omninode || echo "  (none found)"
+
+if [[ ${FAILED} -gt 0 ]]; then
+  echo "" >&2
+  echo "ERROR: ${FAILED} tick(s) failed to load. Plists were written to ${LAUNCH_AGENTS} but are not running." >&2
+  exit 1
+fi

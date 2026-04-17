@@ -34,6 +34,7 @@ if [[ -f "${HOME}/.omnibase/.env" ]]; then
 fi
 
 export ONEX_RUN_ID="${RUN_ID}"
+export ONEX_UNSAFE_ALLOW_EDITS=1
 
 ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 
@@ -48,24 +49,27 @@ preflight
 
 mkdir -p "${STATE_DIR}" "${LOG_DIR}"
 
-LOCK_FILE="${STATE_DIR}/cron-idle-watchdog.lock"
+LOCK_DIR="${STATE_DIR}/cron-idle-watchdog.lock.d"
 LOCK_TIMEOUT=600
 
-if [[ -f "${LOCK_FILE}" ]]; then
-  lock_time=$(stat -f %m "${LOCK_FILE}" 2>/dev/null || stat -c %Y "${LOCK_FILE}" 2>/dev/null || echo 0)
+if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+  lock_time=$(stat -f %m "${LOCK_DIR}" 2>/dev/null || stat -c %Y "${LOCK_DIR}" 2>/dev/null || echo 0)
   now=$(date +%s)
   age=$(( now - lock_time ))
   if [[ ${age} -lt ${LOCK_TIMEOUT} ]]; then
     echo "SKIP: Previous invocation still running (lock age: ${age}s < ${LOCK_TIMEOUT}s)"
     exit 0
-  else
-    echo "WARN: Stale lock detected (age: ${age}s). Removing."
-    rm -f "${LOCK_FILE}"
+  fi
+  echo "WARN: Stale lock detected (age: ${age}s). Removing."
+  rm -rf "${LOCK_DIR}"
+  if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+    echo "SKIP: Lock re-acquired by another process after stale-cleanup"
+    exit 0
   fi
 fi
 
-echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_FILE}"
-trap 'rm -f "${LOCK_FILE}"' EXIT
+echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_DIR}/meta"
+trap 'rm -rf "${LOCK_DIR}"' EXIT
 
 log() {
   local msg
@@ -86,8 +90,15 @@ if [[ "${DRY_RUN}" == "true" ]]; then
   exit 0
 fi
 
+timeout_cmd=""
+if command -v timeout &>/dev/null; then
+  timeout_cmd="timeout ${PHASE_TIMEOUT}"
+elif command -v gtimeout &>/dev/null; then
+  timeout_cmd="gtimeout ${PHASE_TIMEOUT}"
+fi
+
 exit_code=0
-timeout "${PHASE_TIMEOUT}" claude -p "${PROMPT}" \
+${timeout_cmd} claude -p "${PROMPT}" \
   --print \
   --allowedTools "${ALLOWED_TOOLS}" \
   > "${OUTPUT_FILE}" 2>&1 || exit_code=$?

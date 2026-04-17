@@ -4,9 +4,13 @@
 
 # cron-overseer-verify.sh — Headless overseer-verify tick [OMN-9036]
 #
-# Thin wrapper that delegates to the /onex:session skill (overseer-verify phase)
-# via claude -p. No inline business logic. See setup-session-crons.sh for the
-# canonical overseer-verify prompt.
+# Thin wrapper that delegates to the canonical OVERSEER_VERIFY_PROMPT defined in
+# setup-session-crons.sh via claude -p. No inline business logic — the prompt
+# body instructs Claude to invoke node_overseer_verifier directly.
+#
+# The session skill currently has no --phase flag, so the overseer-verify tick
+# is triggered by passing the literal prompt body (same pattern used by the
+# session-bound CronCreate fallback in setup-session-crons.sh).
 
 set -euo pipefail
 
@@ -46,24 +50,27 @@ preflight
 
 mkdir -p "${STATE_DIR}" "${LOG_DIR}"
 
-LOCK_FILE="${STATE_DIR}/cron-overseer-verify.lock"
+LOCK_DIR="${STATE_DIR}/cron-overseer-verify.lock.d"
 LOCK_TIMEOUT=1800
 
-if [[ -f "${LOCK_FILE}" ]]; then
-  lock_time=$(stat -f %m "${LOCK_FILE}" 2>/dev/null || stat -c %Y "${LOCK_FILE}" 2>/dev/null || echo 0)
+if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+  lock_time=$(stat -f %m "${LOCK_DIR}" 2>/dev/null || stat -c %Y "${LOCK_DIR}" 2>/dev/null || echo 0)
   now=$(date +%s)
   age=$(( now - lock_time ))
   if [[ ${age} -lt ${LOCK_TIMEOUT} ]]; then
     echo "SKIP: Previous invocation still running (lock age: ${age}s < ${LOCK_TIMEOUT}s)"
     exit 0
-  else
-    echo "WARN: Stale lock detected (age: ${age}s). Removing."
-    rm -f "${LOCK_FILE}"
+  fi
+  echo "WARN: Stale lock detected (age: ${age}s). Removing."
+  rm -rf "${LOCK_DIR}"
+  if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
+    echo "SKIP: Lock re-acquired by another process after stale-cleanup"
+    exit 0
   fi
 fi
 
-echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_FILE}"
-trap 'rm -f "${LOCK_FILE}"' EXIT
+echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_DIR}/meta"
+trap 'rm -rf "${LOCK_DIR}"' EXIT
 
 log() {
   local msg
@@ -75,15 +82,40 @@ log() {
 log "=== overseer-verify tick ${RUN_ID} starting ==="
 
 OUTPUT_FILE="${STATE_DIR}/${RUN_ID}.txt"
-PROMPT='/onex:session --phase overseer-verify'
+
+# Canonical prompt body, mirrored from setup-session-crons.sh OVERSEER_VERIFY_PROMPT.
+# Keeping this literal instead of routing through a skill means there is exactly
+# one source of truth for the overseer-verify instructions: this script + the
+# session-cron bootstrap both paste the same text.
+read -r -d '' PROMPT <<'PROMPT_BODY' || true
+OVERSEER VERIFY + DISPATCH AUDIT — verify completed work AND check that the dispatch engine is working.
+
+**Part 1 — Verify recent completions**
+Check for PRs merged or tickets Done in the last hour. For each, run: uv run python -m omnimarket.nodes.node_overseer_verifier --ticket <id> or --pr <repo>#<num>. Report verdicts. ESCALATE → surface to user.
+
+**Part 2 — Dispatch audit (the anti-passivity check)**
+1. How many workers were spawned in the last hour? (Check TaskList for tasks created in last 60 min)
+2. How many Linear tickets are In Progress or Todo with no active worker?
+3. If gap > 0 (unworked tickets exist, no workers dispatched): THIS IS A FAILURE. Spawn workers for the gap NOW. Do not just report it.
+4. Did any dispatched work use the dogfood path (node_dispatch_worker + local model)? Or all Claude agents? Log which.
+
+This tick MUST end with: (a) all recent completions verified, (b) all unworked tickets either dispatched or explicitly blocked with reason.
+PROMPT_BODY
 
 if [[ "${DRY_RUN}" == "true" ]]; then
-  log "[DRY RUN] Would execute: claude -p '${PROMPT}' --allowedTools '${ALLOWED_TOOLS}'"
+  log "[DRY RUN] Would execute: claude -p <overseer-verify prompt> --allowedTools '${ALLOWED_TOOLS}'"
   exit 0
 fi
 
+timeout_cmd=""
+if command -v timeout &>/dev/null; then
+  timeout_cmd="timeout ${PHASE_TIMEOUT}"
+elif command -v gtimeout &>/dev/null; then
+  timeout_cmd="gtimeout ${PHASE_TIMEOUT}"
+fi
+
 exit_code=0
-timeout "${PHASE_TIMEOUT}" claude -p "${PROMPT}" \
+${timeout_cmd} claude -p "${PROMPT}" \
   --print \
   --allowedTools "${ALLOWED_TOOLS}" \
   > "${OUTPUT_FILE}" 2>&1 || exit_code=$?
