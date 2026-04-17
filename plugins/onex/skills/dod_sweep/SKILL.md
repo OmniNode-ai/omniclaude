@@ -18,7 +18,7 @@ args:
     description: "Use the last autopilot close-out cycle timestamp as the look-back boundary (overrides --since-days)"
     required: false
   - name: --per-ticket-verify
-    description: "Run dod-verify individually against each discovered ticket (default: false)"
+    description: "Run dod-verify individually against each discovered ticket. Default: true (OMN-9067 — on-by-default; pass --no-per-ticket-verify to disable)"
     required: false
   - name: --dry-run
     description: "Report only, no follow-up tickets"
