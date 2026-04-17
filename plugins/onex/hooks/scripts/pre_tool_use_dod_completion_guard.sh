@@ -87,8 +87,42 @@ if [[ -z "$TICKET_ID" ]]; then
     exit 0
 fi
 
-# Check for evidence receipt
-EVIDENCE_DIR=".evidence/$TICKET_ID"
+# Resolve evidence receipt location — configuration-driven, no hardcoded layout.
+#
+# REQUIRED env var: ONEX_EVIDENCE_ROOT — absolute path to the evidence root dir.
+# Receipts are written to: $ONEX_EVIDENCE_ROOT/<ticket>/dod_report.json
+#
+# Env var policy (fail-open vs fail-closed):
+#   UNSET    → fail-open (exit 0) + visible warning. Fresh dev environments may
+#              not have ~/.omnibase/.env sourced yet; blocking them entirely
+#              defeats hook adoption. Configure via: export ONEX_EVIDENCE_ROOT=<path>
+#   SET, non-absolute path → fail-closed (exit 2). Relative paths are a
+#              misconfiguration — the hook cannot reliably resolve them across
+#              shell contexts. Fix: use an absolute path starting with '/'.
+#   SET, absolute but non-existent/non-dir → fail-closed (exit 2). Env var is
+#              set but points at the wrong place — silent fallback would mask the
+#              misconfiguration.
+if [[ -z "${ONEX_EVIDENCE_ROOT:-}" ]]; then
+    echo "WARNING [dod-guard]: ONEX_EVIDENCE_ROOT is not set — DoD completion guard is INACTIVE." >&2
+    echo "         To activate: add 'export ONEX_EVIDENCE_ROOT=<absolute-path-to-evidence-dir>'" >&2
+    echo "         to ~/.omnibase/.env and re-source it. Allowing this tool call." >&2
+    exit 0
+fi
+
+if [[ "${ONEX_EVIDENCE_ROOT}" != /* ]]; then
+    echo "ERROR [dod-guard]: ONEX_EVIDENCE_ROOT='${ONEX_EVIDENCE_ROOT}' is not an absolute path." >&2
+    echo "       Relative paths cannot be safely resolved across shell contexts." >&2
+    echo "       Fix: set ONEX_EVIDENCE_ROOT to an absolute path starting with '/'." >&2
+    exit 2
+fi
+
+if [[ ! -d "$ONEX_EVIDENCE_ROOT" ]]; then
+    echo "ERROR [dod-guard]: ONEX_EVIDENCE_ROOT='${ONEX_EVIDENCE_ROOT}' is set but does not exist or is not a directory." >&2
+    echo "       Fix: create the directory or correct the path in ~/.omnibase/.env." >&2
+    exit 2
+fi
+
+EVIDENCE_DIR="$ONEX_EVIDENCE_ROOT/$TICKET_ID"
 RECEIPT_PATH="$EVIDENCE_DIR/dod_report.json"
 
 POLICY_MODE="${DOD_ENFORCEMENT_MODE:-hard}"

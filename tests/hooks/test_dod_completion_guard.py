@@ -84,12 +84,13 @@ class TestAllowsNonCompletionUpdates:
         assert result.returncode == 0
 
 
-class TestBlocksDoneWithoutReceipt:
-    """Completion without evidence should be handled per policy mode."""
+class TestEvidenceRootEnvVar:
+    """ONEX_EVIDENCE_ROOT env var policy: fail-open when unset, fail-closed when misconfigured."""
 
-    def test_blocks_done_without_evidence_receipt_hard_mode(
-        self, tmp_path: Path
-    ) -> None:
+    def test_fail_open_when_evidence_root_unset(self, tmp_path: Path) -> None:
+        # Use isolated HOME so common.sh can't source ~/.omnibase/.env
+        isolated_home = tmp_path / "home"
+        isolated_home.mkdir()
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
@@ -98,18 +99,86 @@ class TestBlocksDoneWithoutReceipt:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
+                "HOME": str(isolated_home),
+            },
+            cwd=str(tmp_path),
+        )
+        assert result.returncode == 0
+        assert "INACTIVE" in result.stderr or "not set" in result.stderr
+
+    def test_fail_closed_when_evidence_root_not_absolute(self, tmp_path: Path) -> None:
+        isolated_home = tmp_path / "home"
+        isolated_home.mkdir()
+        result = _run_hook(
+            {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {"id": "OMN-9999", "state": "Done"},
+            },
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+                "HOME": str(isolated_home),
+                "ONEX_EVIDENCE_ROOT": "relative/path",
+            },
+            cwd=str(tmp_path),
+        )
+        assert result.returncode == 2
+        assert "not an absolute path" in result.stderr
+
+    def test_fail_closed_when_evidence_root_nonexistent(self, tmp_path: Path) -> None:
+        isolated_home = tmp_path / "home"
+        isolated_home.mkdir()
+        result = _run_hook(
+            {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {"id": "OMN-9999", "state": "Done"},
+            },
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+                "HOME": str(isolated_home),
+                "ONEX_EVIDENCE_ROOT": str(tmp_path / "nonexistent"),
+            },
+            cwd=str(tmp_path),
+        )
+        assert result.returncode == 2
+        assert "does not exist" in result.stderr
+
+
+class TestBlocksDoneWithoutReceipt:
+    """Completion without evidence should be handled per policy mode."""
+
+    def test_blocks_done_without_evidence_receipt_hard_mode(
+        self, tmp_path: Path
+    ) -> None:
+        evidence_root = tmp_path / ".evidence"
+        evidence_root.mkdir()
+        result = _run_hook(
+            {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {"id": "OMN-9999", "state": "Done"},
+            },
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "OMNICLAUDE_MODE": "full",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
         assert result.returncode == 2
 
     def test_allows_done_without_receipt_advisory_mode(self, tmp_path: Path) -> None:
+        evidence_root = tmp_path / ".evidence"
+        evidence_root.mkdir()
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-9999", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "advisory"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "advisory",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 0
@@ -119,7 +188,8 @@ class TestAllowsDoneWithValidReceipt:
     """Completion with valid, fresh receipt should be allowed."""
 
     def test_allows_done_with_valid_receipt(self, tmp_path: Path) -> None:
-        evidence_dir = tmp_path / ".evidence" / "OMN-1234"
+        evidence_root = tmp_path / ".evidence"
+        evidence_dir = evidence_root / "OMN-1234"
         evidence_dir.mkdir(parents=True)
         receipt = {
             "ticket_id": "OMN-1234",
@@ -133,7 +203,10 @@ class TestAllowsDoneWithValidReceipt:
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-1234", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "hard"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "hard",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 0
@@ -143,7 +216,8 @@ class TestBlocksDoneWithStaleReceipt:
     """Stale receipts should trigger policy enforcement."""
 
     def test_blocks_done_with_stale_receipt_hard_mode(self, tmp_path: Path) -> None:
-        evidence_dir = tmp_path / ".evidence" / "OMN-1234"
+        evidence_root = tmp_path / ".evidence"
+        evidence_dir = evidence_root / "OMN-1234"
         evidence_dir.mkdir(parents=True)
         stale_time = datetime.now(tz=UTC) - timedelta(hours=1)
         receipt = {
@@ -161,6 +235,7 @@ class TestBlocksDoneWithStaleReceipt:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -171,7 +246,8 @@ class TestBlocksDoneWithFailedChecks:
     """Receipt with failures should trigger policy enforcement."""
 
     def test_blocks_done_with_failed_checks_hard_mode(self, tmp_path: Path) -> None:
-        evidence_dir = tmp_path / ".evidence" / "OMN-1234"
+        evidence_root = tmp_path / ".evidence"
+        evidence_dir = evidence_root / "OMN-1234"
         evidence_dir.mkdir(parents=True)
         receipt = {
             "ticket_id": "OMN-1234",
@@ -188,6 +264,7 @@ class TestBlocksDoneWithFailedChecks:
             env_overrides={
                 "DOD_ENFORCEMENT_MODE": "hard",
                 "OMNICLAUDE_MODE": "full",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
             },
             cwd=str(tmp_path),
         )
@@ -198,13 +275,17 @@ class TestAllowsDoneWhenNoContractExists:
     """Legacy tickets without contracts should be allowed through."""
 
     def test_allows_done_when_no_contract_exists(self, tmp_path: Path) -> None:
-        # No .evidence directory at all
+        evidence_root = tmp_path / ".evidence"
+        evidence_root.mkdir()
         result = _run_hook(
             {
                 "tool_name": "mcp__linear-server__save_issue",
                 "tool_input": {"id": "OMN-LEGACY", "state": "Done"},
             },
-            env_overrides={"DOD_ENFORCEMENT_MODE": "advisory"},
+            env_overrides={
+                "DOD_ENFORCEMENT_MODE": "advisory",
+                "ONEX_EVIDENCE_ROOT": str(evidence_root),
+            },
             cwd=str(tmp_path),
         )
         assert result.returncode == 0
