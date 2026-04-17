@@ -56,18 +56,18 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.env_sync_alert.v1"
-    consumer_group: "omniclaude.skill.env_sync_alert"
+    topic: "onex.cmd.omniclaude.env-sync-alert.v1"
+    consumer_group: "omniclaude.skill.env-sync-alert"
   publish:
-    success_topic: "onex.evt.omniclaude.env_sync_alert-completed.v1"
-    failure_topic: "onex.evt.omniclaude.env_sync_alert-failed.v1"
+    success_topic: "onex.evt.omniclaude.env-sync-alert-completed.v1"
+    failure_topic: "onex.evt.omniclaude.env-sync-alert-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.env_sync_alert.v1"
+    - "onex.cmd.omniclaude.env-sync-alert.v1"
   publish_topics:
-    - "onex.evt.omniclaude.env_sync_alert-completed.v1"
-    - "onex.evt.omniclaude.env_sync_alert-failed.v1"
+    - "onex.evt.omniclaude.env-sync-alert-completed.v1"
+    - "onex.evt.omniclaude.env-sync-alert-failed.v1"
 
 # Capabilities
 capabilities:
