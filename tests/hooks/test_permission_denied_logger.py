@@ -68,7 +68,7 @@ def test_permission_denied_writes_friction_yaml() -> None:
         assert result.returncode == 0, f"Hook failed: {result.stderr}"
 
         friction_files = list(
-            Path(tmpdir).glob("friction/*-permission-denied-bash.yaml")
+            Path(tmpdir).glob("friction/*-permission-denied-bash-*.yaml")
         )
         assert len(friction_files) == 1, (
             f"Expected 1 friction file, got {len(friction_files)}. "
@@ -94,7 +94,7 @@ def test_permission_denied_unknown_tool_name() -> None:
         )
         assert result.returncode == 0
         friction_files = list(
-            Path(tmpdir).glob("friction/*-permission-denied-unknown.yaml")
+            Path(tmpdir).glob("friction/*-permission-denied-unknown-*.yaml")
         )
         assert len(friction_files) == 1
         data = yaml.safe_load(friction_files[0].read_text())
