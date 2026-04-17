@@ -1,7 +1,8 @@
 name: CR Thread Gate
 # Reusable workflow — call via:
 #   uses: OmniNode-ai/omniclaude/.github/workflows/cr-thread-gate.yml@main
-# Required status check string: "cr-thread-gate / CodeRabbit Thread Check"
+# Required status check string: "gate / CodeRabbit Thread Check"
+# (produced by callers whose job key is named 'gate:' and uses this workflow)
 on:
   workflow_call:
     secrets:
@@ -18,26 +19,14 @@ on:
         type: string
         default: ""
       pr-number:
-        description: "Pull request number to check"
-        required: true
+        description: "Pull request number to check. Pass '0' or empty to skip (merge_group context)."
+        required: false
         type: string
-  # Direct triggers for omniclaude's own PRs (produces the required check context)
-  pull_request:
-    types: [opened, synchronize, reopened]
-  pull_request_review:
-    types: [submitted, dismissed]
-  pull_request_review_comment:
-    types: [created, edited, deleted]
-  issue_comment:
-    types: [created, edited, deleted]
+        default: ""
 
 jobs:
   gate:
     name: CodeRabbit Thread Check
-    if: >-
-      (github.event_name == 'workflow_call') ||
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
-      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout omniclaude scripts
@@ -73,7 +62,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
         run: |
           PR="${{ steps.resolve-pr.outputs.pr }}"
-          if [ -z "$PR" ]; then
+          if [ -z "$PR" ] || [ "$PR" = "0" ]; then
             echo "No PR number — skipping (merge_group context)."
             exit 0
           fi
