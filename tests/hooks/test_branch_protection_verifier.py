@@ -63,13 +63,29 @@ def _mk_bash_tool_info(command: str) -> dict[str, Any]:
 
 
 def _fake_gh(observed: list[str] | None, pr_number: int = 42):
-    """Build a subprocess.run stub returning (pr-list, pr-checks) based on observed."""
+    """Build a subprocess.run stub returning (pr-list, pr-checks) based on observed.
+
+    Every sampled PR returns the same `observed` list (simplest default). Use
+    `_fake_gh_per_pr` for tests that need different checks per PR.
+    """
 
     def _run(args, *_a, **_kw):
         if not args or args[0] != "gh":
             return subprocess.CompletedProcess(args, 0, "", "")
         if args[1:3] == ["pr", "list"]:
-            stdout = json.dumps([{"number": pr_number}]) if observed is not None else ""
+            # Return `--limit`-many PRs so `_get_observed_checks` aggregation
+            # works; all simply point at `pr_number` for checks lookup.
+            limit = 1
+            if "--limit" in args:
+                try:
+                    limit = int(args[args.index("--limit") + 1])
+                except (ValueError, IndexError):
+                    limit = 1
+            stdout = (
+                json.dumps([{"number": pr_number}] * limit)
+                if observed is not None
+                else ""
+            )
             return subprocess.CompletedProcess(args, 0, stdout, "")
         if args[1:3] == ["pr", "checks"]:
             if observed is None:
@@ -77,6 +93,27 @@ def _fake_gh(observed: list[str] | None, pr_number: int = 42):
             lines = [
                 f"{name}\tPASS\t1m\thttps://example/{i}"
                 for i, name in enumerate(observed)
+            ]
+            return subprocess.CompletedProcess(args, 0, "\n".join(lines), "")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    return _run
+
+
+def _fake_gh_per_pr(pr_checks_map: dict[int, list[str]]):
+    """Stub where each PR number returns a different set of check names."""
+
+    def _run(args, *_a, **_kw):
+        if not args or args[0] != "gh":
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if args[1:3] == ["pr", "list"]:
+            stdout = json.dumps([{"number": n} for n in pr_checks_map.keys()])
+            return subprocess.CompletedProcess(args, 0, stdout, "")
+        if args[1:3] == ["pr", "checks"]:
+            pr = int(args[3])
+            names = pr_checks_map.get(pr, [])
+            lines = [
+                f"{name}\tPASS\t1m\thttps://example/{i}" for i, name in enumerate(names)
             ]
             return subprocess.CompletedProcess(args, 0, "\n".join(lines), "")
         return subprocess.CompletedProcess(args, 0, "", "")
@@ -278,6 +315,93 @@ class TestExtractionPrimitives(unittest.TestCase):
         self.assertIn("ctx-raw-field", contexts)
         self.assertIn("ctx-big-F", contexts)
         self.assertIn("ctx-long-field", contexts)
+
+
+class TestShellWrapperUnwrap(unittest.TestCase):
+    """Regression for CR Major: `bash -lc 'gh api ...'` wrappers must not bypass the guard.
+
+    Before the fix, shlex.split on the outer command kept the entire inner
+    payload as a single token, so `_parse_contexts` returned [] and the guard
+    fell through to allow.
+    """
+
+    def test_bash_lc_unmatched_context_blocks(self):
+        cmd = (
+            "bash -lc 'gh api --method PUT "
+            "repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-F required_status_checks[contexts][]=never-emitted'"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertIn("never-emitted", payload["reason"])
+
+    def test_sh_c_matched_context_allows(self):
+        cmd = (
+            'sh -c "gh api --method PUT '
+            "repos/OmniNode-ai/omniclaude/branches/main/protection "
+            '-f required_status_checks[contexts][]=Quality-Gate"'
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 0, msg=out)
+
+    def test_unwrap_shell_wrapper_passthrough_for_non_wrapper(self):
+        cmd = "gh api --method PUT repos/x/y/branches/main/protection"
+        self.assertEqual(bpv._unwrap_shell_wrapper(cmd), cmd)
+
+    def test_unwrap_shell_wrapper_extracts_payload(self):
+        cmd = "bash -lc 'gh api ... -F foo=bar'"
+        self.assertEqual(bpv._unwrap_shell_wrapper(cmd), "gh api ... -F foo=bar")
+
+
+class TestMultiPRObservedChecksAggregation(unittest.TestCase):
+    """Regression for CR Major: single-PR sample caused false-block rollouts.
+
+    `_get_observed_checks` now samples up to `_PR_SAMPLE_SIZE` PRs and unions
+    their checks. A path-scoped workflow that only ran on one PR must not
+    cause a block when a mutation mentions its context.
+    """
+
+    def test_context_found_only_on_one_pr_allows(self):
+        # PR 42 has "Quality-Gate" only, PR 43 has "PathScoped-Workflow" only.
+        # A mutation adding "PathScoped-Workflow" should ALLOW because it is
+        # present in the aggregate observed set.
+        cmd = (
+            "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-f required_status_checks[contexts][]=PathScoped-Workflow"
+        )
+        with patch.object(
+            bpv.subprocess,
+            "run",
+            side_effect=_fake_gh_per_pr(
+                {42: ["Quality-Gate"], 43: ["PathScoped-Workflow"]}
+            ),
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 0, msg=out)
+
+    def test_context_absent_everywhere_still_blocks(self):
+        # Aggregation must not mask real typos — if none of the sampled PRs
+        # observe the context, still block.
+        cmd = (
+            "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-f required_status_checks[contexts][]=typo-check"
+        )
+        with patch.object(
+            bpv.subprocess,
+            "run",
+            side_effect=_fake_gh_per_pr({42: ["Quality-Gate"], 43: ["Tests-Gate"]}),
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertIn("typo-check", payload["reason"])
 
 
 class TestMutationVerificationWithCapitalF(unittest.TestCase):

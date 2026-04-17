@@ -42,7 +42,14 @@ _CONTEXT_F_RE = re.compile(
 
 _INPUT_FLAG_RE = re.compile(r"--input\s+\S+")
 
+# Common shell wrappers that hide a `gh api ...` call inside a quoted payload.
+# `bash -lc '<payload>'`, `sh -c "..."`, `zsh -c ...`, etc. When the outer
+# command matches one of these, we unwrap the inner payload before parsing so
+# a wrapper cannot be used to bypass the guard.
+_SHELL_WRAPPER_RE = re.compile(r"^\s*(?:/\S*/)?(?:ba|z|k)?sh\s+(?:-[a-z]*c|-c|-lc)\s+")
+
 _GH_TIMEOUT_S = 15
+_PR_SAMPLE_SIZE = 10
 
 
 def _load_input() -> dict:
@@ -96,18 +103,44 @@ def _extract_protection_mutation(command: str) -> tuple[str, str, str] | None:
     )
 
 
+def _unwrap_shell_wrapper(command: str) -> str:
+    """If `command` is a `bash -lc '<payload>'` style wrapper, return the inner payload.
+
+    Regression guard against CR finding on PR #1338: a rollout wrapped in
+    `bash -lc 'gh api ... -F required_status_checks[contexts][]=...'` would
+    otherwise evade tokenization because the outer `shlex.split` sees the
+    whole inner string as one token, making `_parse_contexts` return [] and
+    the guard fail open. Unwrap once here so the caller parses the real
+    payload.
+    """
+    if _SHELL_WRAPPER_RE.match(command) is None:
+        return command
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return command
+    # Wrapper form: [shell, -c|-lc|-..., "<payload>", ...maybe script args...]
+    # The payload is the first non-flag token after the `-c`-family flag.
+    for i, tok in enumerate(tokens[:-1]):
+        if tok.startswith("-") and "c" in tok.lstrip("-"):
+            return tokens[i + 1]
+    return command
+
+
 def _parse_contexts(command: str) -> list[str]:
     """Extract required_status_checks.contexts[] values from inline -f args.
 
     Tokenizes the command with shlex so quoted context names (e.g.,
-    'gate / CodeRabbit Thread Check') survive.
+    'gate / CodeRabbit Thread Check') survive. Unwraps `bash -lc '...'`
+    style wrappers first so they cannot be used to bypass the guard.
     """
+    inner = _unwrap_shell_wrapper(command)
     try:
-        tokens = shlex.split(command, posix=True)
+        tokens = shlex.split(inner, posix=True)
     except ValueError:
         # Unbalanced quotes — fall back to a regex on the raw string so we
         # don't silently miss contexts.
-        return [m.group("value").strip("'\"") for m in _CONTEXT_F_RE.finditer(command)]
+        return [m.group("value").strip("'\"") for m in _CONTEXT_F_RE.finditer(inner)]
 
     contexts: list[str] = []
     i = 0
@@ -124,15 +157,22 @@ def _parse_contexts(command: str) -> list[str]:
 
 
 def _has_input_flag(command: str) -> bool:
-    return _INPUT_FLAG_RE.search(command) is not None
+    return _INPUT_FLAG_RE.search(_unwrap_shell_wrapper(command)) is not None
 
 
 def _get_observed_checks(owner: str, repo: str) -> set[str] | None:
-    """Return the set of check-run names observed on a recent PR.
+    """Return the union of check-run names observed across recent PRs.
 
-    Mirrors the probe in
-    `omnibase_infra/scripts/audit-branch-protection.py:59-83`. Returns None on
-    failure so the caller can fail-open.
+    Samples `_PR_SAMPLE_SIZE` recent PRs (any state) and unions their check
+    names so path-scoped or infrequently-run workflows — absent from any
+    single PR — are not falsely treated as unknown.
+
+    Regression for CR on PR #1338: a one-PR sample produced false-block
+    rollouts when the sampled PR happened to exclude a legitimate
+    path-scoped workflow.
+
+    Returns None only when no checks are observed at all so the caller can
+    fail-open.
     """
     try:
         listing = subprocess.run(
@@ -145,7 +185,7 @@ def _get_observed_checks(owner: str, repo: str) -> set[str] | None:
                 "--state",
                 "all",
                 "--limit",
-                "1",
+                str(_PR_SAMPLE_SIZE),
                 "--json",
                 "number",
             ],
@@ -162,26 +202,32 @@ def _get_observed_checks(owner: str, repo: str) -> set[str] | None:
         prs = json.loads(listing.stdout)
     except json.JSONDecodeError:
         return None
-    if not prs or not isinstance(prs[0], dict) or "number" not in prs[0]:
+    if not prs or not isinstance(prs, list):
         return None
 
-    pr_number = str(prs[0]["number"])
-    try:
-        checks = subprocess.run(
-            ["gh", "pr", "checks", pr_number, "--repo", f"{owner}/{repo}"],
-            capture_output=True,
-            text=True,
-            timeout=_GH_TIMEOUT_S,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    pr_numbers = [
+        str(p["number"]) for p in prs if isinstance(p, dict) and "number" in p
+    ]
+    if not pr_numbers:
         return None
 
     observed: set[str] = set()
-    combined = (checks.stdout or "") + (checks.stderr or "")
-    for line in combined.strip().split("\n"):
-        if "\t" in line:
-            observed.add(line.split("\t")[0].strip())
+    for pr_number in pr_numbers:
+        try:
+            checks = subprocess.run(
+                ["gh", "pr", "checks", pr_number, "--repo", f"{owner}/{repo}"],
+                capture_output=True,
+                text=True,
+                timeout=_GH_TIMEOUT_S,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            # Transient failure on a single PR: skip, keep aggregating.
+            continue
+        combined = (checks.stdout or "") + (checks.stderr or "")
+        for line in combined.strip().split("\n"):
+            if "\t" in line:
+                observed.add(line.split("\t")[0].strip())
     return observed or None
 
 
