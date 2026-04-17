@@ -239,7 +239,7 @@
         ]
       },
       {
-        "matcher": "^(mcp__linear-server__save_issue|Bash|Edit|Write)$",
+        "matcher": "^(mcp__linear-server__save_issue|tracker\\.save_issue|Bash|Edit|Write)$",
         "hooks": [
           {
             "type": "command",

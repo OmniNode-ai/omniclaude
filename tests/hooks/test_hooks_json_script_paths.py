@@ -56,6 +56,47 @@ def test_hook_command_exists(event_name: str, command: str) -> None:
     )
 
 
+def _collect_pretooluse_matchers() -> list[tuple[str, str]]:
+    """Return (matcher, command) pairs for all PreToolUse hooks that have a matcher."""
+    data = json.loads(_HOOKS_JSON.read_text())
+    pairs: list[tuple[str, str]] = []
+    for group in data.get("hooks", {}).get("PreToolUse", []):
+        matcher = group.get("matcher")
+        if not matcher:
+            continue
+        for hook in group.get("hooks", []):
+            cmd = hook.get("command", "")
+            if cmd:
+                pairs.append((matcher, cmd))
+    return pairs
+
+
+def test_tracker_save_issue_covered_by_workflow_guard_matcher() -> None:
+    """tracker.save_issue must be covered by the workflow guard PreToolUse matcher.
+
+    The Python guard handles both mcp__linear-server__save_issue and tracker.save_issue,
+    but the shell entry-gate (hooks.json matcher) must also match tracker.save_issue
+    or the guard is never invoked for migrated tracker.* calls.
+    """
+    import re
+
+    guard_script = "pre_tool_use_workflow_guard.sh"
+    for matcher, command in _collect_pretooluse_matchers():
+        if command.endswith(guard_script):
+            assert re.match(matcher, "tracker.save_issue"), (
+                f"hooks.json PreToolUse matcher for {guard_script!r} does not match "
+                f"'tracker.save_issue'.\n"
+                f"  Current matcher: {matcher!r}\n"
+                "Extend the matcher to include tracker\\.save_issue so the shell "
+                "entry-gate forwards tracker.* epic creation calls to the guard."
+            )
+            return
+    pytest.fail(
+        f"No PreToolUse hook entry found for {guard_script!r} in hooks.json. "
+        "The workflow guard must be registered."
+    )
+
+
 @pytest.mark.parametrize(
     ("event_name", "command"),
     [(e, c) for e, c in _collect_hook_commands() if c.endswith(".sh")],
