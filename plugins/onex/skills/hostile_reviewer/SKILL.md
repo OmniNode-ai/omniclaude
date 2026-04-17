@@ -48,7 +48,7 @@ args:
     description: "Static-analysis-only mode. Runs 7 code quality checks (dead code, missing error handling, stubs shipped, missing Kafka wiring, schema mismatches, hardcoded values, missing tests) without adversarial multi-model review. Use --repos and --categories to scope the scan."
     required: false
   - name: repos
-description: "Comma-separated repo names to scan in --static mode (default: all Python repos discoverable via onex list-repos)"
+    description: "Comma-separated repo names to scan in --static mode (default: all Python repos discoverable via onex list-repos)"
     required: false
   - name: categories
     description: "Comma-separated finding categories for --static mode: dead-code,missing-error-handling,stubs-shipped,missing-kafka-wiring,schema-mismatches,hardcoded-values,missing-tests (default: all)"
