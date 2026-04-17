@@ -25,7 +25,7 @@ pipeline, positioned between merge-sweep (A1) and integration-sweep (B5).
 |-----|---------|-------------|
 | `--since-days` | 7 | Look-back window |
 | `--since-last-cycle` | false | Use last autopilot cycle timestamp as look-back boundary |
-| `--per-ticket-verify` | false | Run dod-verify individually per ticket |
+| `--per-ticket-verify` | **true** (OMN-9067) | Run dod-verify individually per ticket. On-by-default as of OMN-9067; pass `--no-per-ticket-verify` to disable. |
 | `--contracts-dir` | `$ONEX_CC_REPO_PATH/drift` | Contracts directory |
 | `--dry-run` | false | Skip event emission |
 
