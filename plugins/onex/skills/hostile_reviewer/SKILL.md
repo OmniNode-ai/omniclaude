@@ -104,7 +104,7 @@ Availability is determined by:
 **Missing sibling plugin**: If a requested model requires a sibling plugin (e.g., `gemini` requires
 `omnigemini`) and that plugin is unavailable, the model runner returns an empty findings list and
 logs a warning. The aggregate result reflects only the models that succeeded. Callers should
-verify `models_succeeded` in the output and escalate if critical models are absent.
+verify `models_run`, `models_clean`, and `models_failed` in the output and escalate if critical models are absent.
 
 ## Description
 
