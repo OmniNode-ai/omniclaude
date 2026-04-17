@@ -262,7 +262,7 @@ while consecutive_clean < 2 and pass_number < max_passes:
             "MINOR": count(MINOR),
             "NIT": count(NIT)
         },
-        "models_used": result.models_succeeded,
+        "models_used": result.models_clean,
         "action": "clean" if not above_nit else "fix_and_rerun"
     })
 
@@ -553,7 +553,7 @@ Write result to `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.jso
   ],
   "models_requested": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
   "models_run": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
-  "models_succeeded": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
+  "models_clean": ["gemini", "codex", "qwen3-coder", "deepseek-r1"],
   "models_failed": [],
   "per_model_severity_counts": {
     "codex": {"CRITICAL": 0, "MAJOR": 0, "MINOR": 0, "NIT": 0},
