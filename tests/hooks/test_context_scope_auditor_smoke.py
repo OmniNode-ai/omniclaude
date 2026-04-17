@@ -93,6 +93,13 @@ def test_context_scope_auditor_no_module_error_on_bare_python(tmp_path: Path) ->
     env["PLUGIN_PYTHON_BIN"] = str(shim)
     env["LOG_FILE"] = str(tmp_path / "hooks.log")
     env["ONEX_STATE_DIR"] = str(tmp_path / "onex_state")
+    # Scrub CLAUDE_PLUGIN_ROOT so the script's fallback resolution (via its own
+    # BASH_SOURCE path) runs. Developer shells can have a stale/bogus value set
+    # (e.g. "/omniclaude/plugins/onex" left over from a prior plugin install on
+    # a different machine), and os.environ.copy() would otherwise inherit it —
+    # making the script source common.sh from a path that doesn't exist. See
+    # feedback_no_pre_existing_excuse.md.
+    env.pop("CLAUDE_PLUGIN_ROOT", None)
     # Force full mode so the lite-mode guard (OMN-5398) does not exit 0 early.
     # In CI the cwd is not under omni_home/omni_worktrees, so mode.sh defaults
     # to "lite" which skips the entire hook — producing empty stdout.

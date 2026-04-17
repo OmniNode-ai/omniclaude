@@ -492,10 +492,15 @@ class TestPersistFrameToJsonl:
                     )
                 ]
 
-                # Patch home directory to tmp_path
-                with patch(
-                    "omniclaude.trace.frame_assembler.Path.home", return_value=tmp_path
-                ):
+                # Redirect ONEX_STATE_DIR to tmp_path — persist_frame_to_jsonl
+                # resolves via ensure_state_dir("trace") which reads that env
+                # var, not Path.home(). The legacy Path.home patch was a no-op
+                # once the helper switched to ONEX_STATE_DIR.
+                import os
+
+                old = os.environ.get("ONEX_STATE_DIR")
+                os.environ["ONEX_STATE_DIR"] = str(tmp_path)
+                try:
                     frame = assemble_change_frame(
                         tool_name="Write",
                         tool_input={},
@@ -504,12 +509,14 @@ class TestPersistFrameToJsonl:
                         timestamp_utc="2026-02-19T14:22:31Z",
                     )
 
-                assert frame is not None
+                    assert frame is not None
 
-                with patch(
-                    "omniclaude.trace.frame_assembler.Path.home", return_value=tmp_path
-                ):
                     jsonl_path = persist_frame_to_jsonl(frame, "test-session")
+                finally:
+                    if old is None:
+                        os.environ.pop("ONEX_STATE_DIR", None)
+                    else:
+                        os.environ["ONEX_STATE_DIR"] = old
 
                 assert jsonl_path.exists()
                 lines = jsonl_path.read_text().strip().split("\n")
@@ -557,9 +564,22 @@ class TestPersistFrameToJsonl:
                 evidence=ModelEvidence(),
             )
 
-        with patch("omniclaude.trace.frame_assembler.Path.home", return_value=tmp_path):
+        # persist_frame_to_jsonl resolves the trace dir via ensure_state_dir
+        # which reads $ONEX_STATE_DIR. Redirect to tmp_path so the two frames
+        # land in an isolated file instead of accumulating on the developer's
+        # real state directory (which also makes this test non-deterministic).
+        import os
+
+        old = os.environ.get("ONEX_STATE_DIR")
+        os.environ["ONEX_STATE_DIR"] = str(tmp_path)
+        try:
             p1 = persist_frame_to_jsonl(make_frame(), "sess-1")
             p2 = persist_frame_to_jsonl(make_frame(), "sess-1")
+        finally:
+            if old is None:
+                os.environ.pop("ONEX_STATE_DIR", None)
+            else:
+                os.environ["ONEX_STATE_DIR"] = old
 
         assert p1 == p2
         lines = p1.read_text().strip().split("\n")

@@ -584,7 +584,24 @@ class TestContextInjectionConfigAPIUrl:
         OMNICLAUDE_CONTEXT_API_URL is set, api_enabled is auto-disabled
         to avoid connection errors at runtime.
         """
-        cfg = ContextInjectionConfig()
+        import os
+
+        # Scrub any ambient *_URL env var that pydantic-settings would read
+        # from the developer's shell (e.g. ~/.omnibase/.env sourced into zsh).
+        # Without this, the assertion leaks on any host where the URL is
+        # exported — see feedback_no_pre_existing_excuse.md.
+        scrubbed = {
+            k: v
+            for k, v in os.environ.items()
+            if k
+            not in {
+                "INTELLIGENCE_SERVICE_URL",
+                "OMNICLAUDE_CONTEXT_API_URL",
+                "OMNICLAUDE_CONTEXT_API_ENABLED",
+            }
+        }
+        with patch.dict(os.environ, scrubbed, clear=True):
+            cfg = ContextInjectionConfig()
         assert cfg.api_enabled is False
 
     def test_api_enabled_inferred_true_with_url(self) -> None:
