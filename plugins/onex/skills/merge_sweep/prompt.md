@@ -47,7 +47,7 @@ Parse `$ARGUMENTS`:
 - `--enable-trivial-comment-resolution` — default: true
 - `--enable-admin-merge-fallback` — default: **true** (OMN-9065: flipped from opt-in to on-by-default; pass `--no-enable-admin-merge-fallback` to disable)
 - `--admin-fallback-threshold-minutes <n>` — default: 15 (OMN-9065: lowered from 30 for faster auto-unstick)
-- `--verify` — default: false (opt-in pre-merge verification gate, OMN-7742)
+- `--verify` — default: **true** (OMN-9066: flipped from opt-in to on-by-default; pass `--no-verify` to disable. Originally OMN-7742 pre-merge verification gate.)
 - `--verify-timeout-seconds <n>` — default: 30 (per-PR verification timeout)
 
 Generate `run_id` if `--run-id` not provided: `<YYYYMMDD-HHMMSS>-<random6>`.

@@ -67,7 +67,7 @@ args:
     description: "Minutes a PR must be stuck in merge queue before admin fallback fires (default: 30)"
     required: false
   - name: --verify
-    description: "Run verification_sweep on each PR after CI passes but before enabling auto-merge. Uses changed-file-to-verification-target mapping. Neutral-skip on tool/infra errors; does not block the batch."
+    description: "Run verification_sweep on each PR after CI passes but before enabling auto-merge. Uses changed-file-to-verification-target mapping. Neutral-skip on tool/infra errors; does not block the batch. Default: true (OMN-9066 — on-by-default; pass --no-verify to disable)."
     required: false
   - name: --verify-timeout-seconds
     description: "Per-PR verification timeout in seconds (default: 30). On timeout, PR is neutral-skipped as verification_timeout."
@@ -167,7 +167,7 @@ for orchestrator completion.
 | `--enable-trivial-comment-resolution` | `enable_trivial_comment_resolution: true` (default: true) |
 | `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: **true** — OMN-9065 on-by-default) |
 | `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 15 — OMN-9065 lowered from 30) |
-| `--verify` | `verify: true` (default: false — opt-in pre-merge verification gate) |
+| `--verify` | `verify: true` (default: **true** — OMN-9066 on-by-default pre-merge verification gate; pass `--no-verify` to disable) |
 | `--verify-timeout-seconds` | `verify_timeout_seconds` (default: 30) |
 
 ## New Flows (v5.0.0)
@@ -212,9 +212,11 @@ If `--enable-admin-merge-fallback` is on (default: **true** as of OMN-9065; pass
 
 ### 5. Pre-Merge Verification Gate (`--verify`, OMN-7742)
 
-When `--verify` is set, after CI passes but **before** enabling auto-merge, each PR is
-routed through `onex:verification_sweep` using a deterministic changed-file-to-target
-mapping. The gate is opt-in; the default sweep behaviour is unchanged.
+When `--verify` is on (default: **true** as of OMN-9066; pass `--no-verify` to disable),
+after CI passes but **before** enabling auto-merge, each PR is routed through
+`onex:verification_sweep` using a deterministic changed-file-to-target mapping. The gate
+runs by default; CI green plus structurally correct code is no longer sufficient to merge
+when a verification target exists for the PR's changed files.
 
 The per-PR check runs with a hard timeout (`--verify-timeout-seconds`, default 30s) and
 neutral-skips on any infra error. Failure on one PR does **not** block other PRs in the
@@ -250,7 +252,7 @@ to merge as usual or is a neutral skip.
 | `verification_timeout` | Did not complete within `--verify-timeout-seconds` | Neutral skip, WARN log |
 | `verification_tool_error` | `verification_sweep` itself errored (exception, missing binary) | Neutral skip, ERROR log |
 | `skipped_no_mapping` | No verification target pattern matched the diff | Normal skip, INFO log |
-| `skipped_by_policy` | `--verify` not set, or repo on the verify-exclude list | Normal skip |
+| `skipped_by_policy` | `--no-verify` passed, or repo on the verify-exclude list | Normal skip |
 
 The merge-sweep report is extended to split PRs across all seven categories. A failure
 in one PR never short-circuits the batch: other PRs continue to their own verification
@@ -365,7 +367,7 @@ Status values (unchanged from v3.x for backward compatibility):
 | `--enable-trivial-comment-resolution` | true | Auto-resolve trivial CodeRabbit/bot review threads (nit/style/minor) with no human reply before merge. |
 | `--enable-admin-merge-fallback` | **true** (OMN-9065) | **On-by-default**: Admin merge fallback for PRs stuck in merge queue beyond threshold. Logs "ADMIN MERGE TRIGGERED" before every action. Pass `--no-enable-admin-merge-fallback` to disable. |
 | `--admin-fallback-threshold-minutes` | 15 (OMN-9065, from 30) | Minutes a PR must be in merge queue before admin fallback fires. |
-| `--verify` | false | **Opt-in**: After CI passes, run `onex:verification_sweep` per-PR using the changed-file-to-target mapping before enabling auto-merge. Only `verification_failed` blocks that PR; unavailable/timeout/tool_error are neutral skips. Failure in one PR does not block others. |
+| `--verify` | **true** (OMN-9066) | **On-by-default**: After CI passes, run `onex:verification_sweep` per-PR using the changed-file-to-target mapping before enabling auto-merge. Only `verification_failed` blocks that PR; unavailable/timeout/tool_error are neutral skips. Failure in one PR does not block others. Pass `--no-verify` to disable. |
 | `--verify-timeout-seconds` | 30 | Hard per-PR verification timeout. On timeout the PR is neutral-skipped as `verification_timeout`. |
 
 ## Headless Mode
