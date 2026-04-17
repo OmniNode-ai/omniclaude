@@ -143,7 +143,7 @@ FRICTION_FILE="${FRICTION_DIR}/${DATE_PREFIX}-${PATTERN}-${TS_NS}.yaml"
 # not need escaping of quotes/colons.
 VERBATIM_EXCERPT=$(printf '%s' "$TOOL_OUTPUT" | head -40 | sed 's/^/    /')
 
-cat > "$FRICTION_FILE" <<YAML || true
+cat > "$FRICTION_FILE" <<___KAFKA_POISON_FRICTION_EOF___ || true
 id: kafka-poison-${PATTERN}-${SESSION_ID:0:8}-${TS_NS}
 date: ${DATE_PREFIX}
 severity: ${SEVERITY}
@@ -166,7 +166,7 @@ session_id: "${SESSION_ID}"
 linear_ticket: OMN-9085
 verbatim_output: |
 ${VERBATIM_EXCERPT}
-YAML
+___KAFKA_POISON_FRICTION_EOF___
 
 # Emit hookSpecificOutput per OMN-9072 so the model sees a short context note
 # on its next turn; the failing tool result still reaches it unchanged.
