@@ -41,6 +41,17 @@ def _make_cron_stdin(schedule: str, prompt: str) -> str:
     )
 
 
+def _make_cron_stdin_legacy_key(schedule: str, prompt: str) -> str:
+    """Build a CronCreate payload using the legacy .schedule key (backwards compat)."""
+    return json.dumps(
+        {
+            "tool_name": "CronCreate",
+            "tool_input": {"schedule": schedule, "prompt": prompt},
+            "tool_response": {"cronId": "fake-id"},
+        }
+    )
+
+
 class TestPostToolUseCronActionGuard:
     """Tests for post_tool_use_cron_action_guard.sh bootstrap flag writing."""
 
@@ -63,6 +74,36 @@ class TestPostToolUseCronActionGuard:
         )
         assert result.returncode == 0
         assert not flag_path.exists(), "Flag must not be written after only 1 cron"
+
+    def test_flag_written_with_legacy_schedule_key(self, tmp_path: Path) -> None:
+        """Flag MUST be written when payloads use legacy .schedule key (OMN-9003 compat)."""
+        flag_path = tmp_path / "session" / "cron_bootstrap.flag"
+        env = {
+            **os.environ,
+            "ONEX_STATE_DIR": str(tmp_path),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
+        }
+        # Use legacy .schedule key instead of .cron
+        crons = [
+            ("*/15 * * * *", OVERSEER_PROMPT),
+            ("23 * * * *", MERGE_SWEEP_PROMPT),
+            ("3 * * * *", HEALTH_CHECK_PROMPT),
+        ]
+        for schedule, prompt in crons:
+            stdin = _make_cron_stdin_legacy_key(schedule, prompt)
+            result = subprocess.run(
+                [str(SCRIPTS_DIR / "post_tool_use_cron_action_guard.sh")],
+                input=stdin,
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            assert result.returncode == 0
+
+        assert flag_path.exists(), (
+            "Flag must be written when legacy .schedule key is used"
+        )
 
     def test_flag_written_after_all_three_crons(self, tmp_path: Path) -> None:
         """Flag MUST be written after all 3 mandatory crons are seen."""
