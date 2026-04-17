@@ -36,6 +36,12 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Degrade reasons that indicate genuine verification (not fail-open). Used by
+# verify_stop() to decide whether an ALLOW verdict should carry a
+# "verified_fail_open" suffix propagating the degraded upstream reason.
+_CLEAN_GH_REASONS: frozenset[str] = frozenset({"state_match", "not_pr_ship"})
+_CLEAN_LINEAR_REASONS: frozenset[str] = frozenset({"state_match", "no_linear_claim"})
+
 
 class EnumWorkerReportKind(StrEnum):
     """Kinds of worker reports this verifier understands.
@@ -76,13 +82,14 @@ class ModelWorkerReport(BaseModel):
     linear: dict[str, Any] | None = None
 
 
-@dataclass(frozen=True)
-class ExtractionResult:
+class ModelExtractionResult(BaseModel):
     """Outcome of pulling a json-report block from a free-form message."""
 
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     found: bool
-    parsed: ModelWorkerReport | None
-    error: str | None
+    parsed: ModelWorkerReport | None = None
+    error: str | None = None
 
 
 class EnumVerdict(StrEnum):
@@ -100,7 +107,7 @@ class ModelSubagentStopReport(BaseModel):
     which ``ModelWorkerReport`` does not carry.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     decision: EnumVerdict
     reason: str
@@ -113,12 +120,14 @@ class ModelSubagentStopReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 _JSON_REPORT_FENCE_RE = re.compile(
-    r"```json-report\s*\n(?P<body>.*?)\n```",
+    # Accept both LF and CRLF around the fence. `[^\S\r\n]*` consumes trailing
+    # spaces/tabs on the opening line without eating the line terminator.
+    r"```json-report[^\S\r\n]*\r?\n(?P<body>.*?)\r?\n```",
     re.DOTALL,
 )
 
 
-def extract_report(message: str) -> ExtractionResult:
+def extract_report(message: str) -> ModelExtractionResult:
     """Pull a ``json-report`` fenced block from ``message`` and parse it.
 
     Handles all four shapes the plan enumerates:
@@ -136,20 +145,20 @@ def extract_report(message: str) -> ExtractionResult:
 
     matches = list(_JSON_REPORT_FENCE_RE.finditer(message))
     if not matches:
-        return ExtractionResult(found=False, parsed=None, error=None)
+        return ModelExtractionResult(found=False)
 
     body = matches[-1].group("body").strip()
     try:
         raw = json.loads(body)
     except json.JSONDecodeError as exc:
-        return ExtractionResult(found=True, parsed=None, error=f"json_decode: {exc}")
+        return ModelExtractionResult(found=True, error=f"json_decode: {exc}")
 
     try:
         parsed = ModelWorkerReport.model_validate(raw)
     except Exception as exc:  # pydantic.ValidationError or TypeError
-        return ExtractionResult(found=True, parsed=None, error=f"schema: {exc}")
+        return ModelExtractionResult(found=True, error=f"schema: {exc}")
 
-    return ExtractionResult(found=True, parsed=parsed, error=None)
+    return ModelExtractionResult(found=True, parsed=parsed)
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +349,7 @@ def _extract_claimed_linear_state(report: ModelWorkerReport) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def verify_schema_only(message: str) -> ExtractionResult:
+def verify_schema_only(message: str) -> ModelExtractionResult:
     """Schema-only validation entrypoint (shared with Task 7).
 
     Does 2a+2b — extraction and local-schema parse — without 2c/2d network
@@ -378,6 +387,7 @@ def verify_stop(
 
     report = extraction.parsed
     diff: dict[str, Any] = {}
+    degrade_reasons: list[str] = []
 
     # TODO(OMN-9055): delegate to node_evidence_bundle.resolve() once the
     # resolver lands so PR + Linear checks flow through the canonical pipeline.
@@ -394,6 +404,10 @@ def verify_stop(
             report=report,
             diff=diff,
         )
+    if gh_result.reason not in _CLEAN_GH_REASONS:
+        # fail-open (gh_not_installed, rate_limited, gh_error, …) — record so
+        # the caller surfaces it in additionalContext.
+        degrade_reasons.append(f"github:{gh_result.reason}")
 
     linear_result = verify_linear_claim(report, linear_runner=linear_runner)
     if not linear_result.ok:
@@ -408,10 +422,17 @@ def verify_stop(
             report=report,
             diff=diff,
         )
+    if linear_result.reason not in _CLEAN_LINEAR_REASONS:
+        degrade_reasons.append(f"linear:{linear_result.reason}")
 
+    reason = (
+        "verified"
+        if not degrade_reasons
+        else f"verified_fail_open: {'; '.join(degrade_reasons)}"
+    )
     return ModelSubagentStopReport(
         decision=EnumVerdict.ALLOW,
-        reason="verified",
+        reason=reason,
         report=report,
     )
 

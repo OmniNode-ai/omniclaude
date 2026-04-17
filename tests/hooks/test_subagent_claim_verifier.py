@@ -261,6 +261,46 @@ def test_verify_schema_only_matches_extract_report() -> None:
     assert verify_schema_only(msg) == extract_report(msg)
 
 
+def test_2b_extraction_accepts_crlf_line_endings() -> None:
+    """CR feedback: Windows/CRLF-serialized fences must parse identically to LF.
+
+    A real agent report pasted through a CRLF transport (e.g. Windows clipboard,
+    email relay) would previously be treated as ``found=False``; verifier must
+    accept both line-ending conventions.
+    """
+
+    crlf = '```json-report\r\n{"kind":"diagnosis","ticket":"OMN-C"}\r\n```'
+    result = extract_report(crlf)
+    assert result.found is True
+    assert result.parsed is not None
+    assert result.parsed.ticket == "OMN-C"
+
+
+def test_verify_stop_propagates_fail_open_reason() -> None:
+    """CR feedback: ALLOW verdict must surface fail-open reasons, not hide them.
+
+    A rate-limited gh probe or auth-failed Linear probe produces an allow
+    decision (fail-open) but the degraded state must reach
+    ``hookSpecificOutput.additionalContext`` via ``reason``.
+    """
+
+    body = (
+        "```json-report\n"
+        + json.dumps(
+            {
+                "kind": "pr_ship",
+                "ticket": "OMN-1",
+                "pr": {"number": 1, "state": "MERGED"},
+            }
+        )
+        + "\n```"
+    )
+    verdict = verify_stop(body, gh_runner=_gh_rate_limit())
+    assert verdict.decision == EnumVerdict.ALLOW
+    assert verdict.reason.startswith("verified_fail_open:")
+    assert "github:rate_limited" in verdict.reason
+
+
 # ---------------------------------------------------------------------------
 # Sub-phase 2c — GitHub verification edges
 # ---------------------------------------------------------------------------

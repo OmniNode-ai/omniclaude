@@ -21,7 +21,7 @@ if str(_LIB_DIR) not in sys.path:
 from subagent_claim_verifier import (  # type: ignore[import-not-found]  # noqa: E402
     EnumVerdict,
     EnumWorkerReportKind,
-    ExtractionResult,
+    ModelExtractionResult,
     ModelSubagentStopReport,
     ModelWorkerReport,
     ModelWorkerReportPR,
@@ -30,7 +30,7 @@ from subagent_claim_verifier import (  # type: ignore[import-not-found]  # noqa:
 __all__ = [
     "EnumVerdict",
     "EnumWorkerReportKind",
-    "ExtractionResult",
+    "ModelExtractionResult",
     "ModelSubagentStopReport",
     "ModelWorkerReport",
     "ModelWorkerReportPR",
