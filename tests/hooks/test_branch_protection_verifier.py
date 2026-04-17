@@ -219,12 +219,76 @@ class TestExtractionPrimitives(unittest.TestCase):
         )
         self.assertEqual(owner_repo_branch, ("OmniNode-ai", "omniclaude", "main"))
 
-    def test_has_input_flag_detects_input_and_F(self):
+    def test_has_input_flag_detects_input_only(self):
+        # `--input` is the only file-input flag for `gh api`. `-F/--field` and
+        # `-f/--raw-field` are inline typed/raw field flags, NOT file inputs.
+        # See CR on PR #1338 (OMN-9038) for the root-cause analysis.
         self.assertTrue(bpv._has_input_flag("gh api --input /tmp/payload.json"))
-        self.assertTrue(bpv._has_input_flag("gh api -F /tmp/payload.json"))
+        self.assertFalse(
+            bpv._has_input_flag("gh api -F required_status_checks[strict]=true")
+        )
         self.assertFalse(
             bpv._has_input_flag("gh api -f required_status_checks[strict]=true")
         )
+        self.assertFalse(
+            bpv._has_input_flag("gh api --field required_status_checks[strict]=true")
+        )
+        self.assertFalse(
+            bpv._has_input_flag(
+                "gh api --raw-field required_status_checks[strict]=true"
+            )
+        )
+
+    def test_parse_contexts_accepts_all_four_field_flags(self):
+        # `gh api` inline field flags: -f/--raw-field (string) and -F/--field
+        # (typed). All four must be parsed as context sources so a rollout that
+        # uses -F or --field does not bypass the guard.
+        cmd = (
+            "gh api --method PUT repos/x/y/branches/main/protection "
+            "-f required_status_checks[contexts][]=ctx-short-f "
+            "--raw-field required_status_checks[contexts][]=ctx-raw-field "
+            "-F required_status_checks[contexts][]=ctx-big-F "
+            "--field required_status_checks[contexts][]=ctx-long-field"
+        )
+        contexts = bpv._parse_contexts(cmd)
+        self.assertIn("ctx-short-f", contexts)
+        self.assertIn("ctx-raw-field", contexts)
+        self.assertIn("ctx-big-F", contexts)
+        self.assertIn("ctx-long-field", contexts)
+
+
+class TestMutationVerificationWithCapitalF(unittest.TestCase):
+    """End-to-end guard behavior when a rollout uses `-F` instead of `-f`.
+
+    Regression for CR on PR #1338 (OMN-9038): `-F` was misclassified as a
+    file-input flag, so `-F required_status_checks[contexts][]=...` rollouts
+    fail-opened instead of being verified. Must now block unmatched contexts.
+    """
+
+    def test_capital_F_unmatched_context_blocks(self):
+        cmd = (
+            "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-F required_status_checks[contexts][]=imaginary-check"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertEqual(payload["decision"], "block")
+        self.assertIn("imaginary-check", payload["reason"])
+
+    def test_long_field_form_matched_allows(self):
+        cmd = (
+            "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "--field required_status_checks[contexts][]=Quality-Gate"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 0, msg=out)
 
 
 if __name__ == "__main__":

@@ -37,10 +37,10 @@ _METHOD_RE = re.compile(
 )
 
 _CONTEXT_F_RE = re.compile(
-    r"(?:-f|--field)\s+required_status_checks\[contexts\]\[\]=(?P<value>\S+)"
+    r"(?:-f|--raw-field|-F|--field)\s+required_status_checks\[contexts\]\[\]=(?P<value>\S+)"
 )
 
-_INPUT_FLAG_RE = re.compile(r"(?:--input|-F)\s+\S+")
+_INPUT_FLAG_RE = re.compile(r"--input\s+\S+")
 
 _GH_TIMEOUT_S = 15
 
@@ -113,7 +113,7 @@ def _parse_contexts(command: str) -> list[str]:
     i = 0
     while i < len(tokens):
         tok = tokens[i]
-        if tok in ("-f", "--field") and i + 1 < len(tokens):
+        if tok in ("-f", "--raw-field", "-F", "--field") and i + 1 < len(tokens):
             kv = tokens[i + 1]
             if kv.startswith("required_status_checks[contexts][]="):
                 contexts.append(kv.split("=", 1)[1])
