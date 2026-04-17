@@ -86,6 +86,17 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-9039: block cross-repo @main refs in self-gating workflows to
+      # prevent the 2026-04-17 chicken-egg CI wedge (retro §4.8).
+      # Complement to OMN-9038 (PreToolUse API-time guard).
+      - id: check-self-gating-workflows
+        name: check for cross-repo @main refs in self-gating workflows
+        entry: python3 scripts/check_self_gating_workflows.py
+        language: system
+        files: '^\.github/workflows/.*\.ya?ml$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'

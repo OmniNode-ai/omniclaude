@@ -14,7 +14,16 @@ from omniclaude.publisher.publisher_config import PublisherConfig
 
 
 class TestPublisherConfig:
-    def test_minimal_valid_config(self) -> None:
+    def test_minimal_valid_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Scrub ambient env vars that pydantic-settings reads. PublisherConfig
+        # uses env_prefix="OMNICLAUDE_PUBLISHER_", so the `environment` field
+        # binds to OMNICLAUDE_PUBLISHER_ENVIRONMENT — which developer shells
+        # source from ~/.omnibase/.env as "local". Without clearing, the
+        # `environment == ""` default assertion leaks on any host with the var
+        # exported. Also clear the neighbouring KAFKA_ENVIRONMENT for safety.
+        # See feedback_no_pre_existing_excuse.md.
+        monkeypatch.delenv("OMNICLAUDE_PUBLISHER_ENVIRONMENT", raising=False)
+        monkeypatch.delenv("KAFKA_ENVIRONMENT", raising=False)
         config = PublisherConfig(kafka_bootstrap_servers="localhost:9092")
         assert config.kafka_bootstrap_servers == "localhost:9092"
         assert config.kafka_client_id == "omniclaude-publisher"
