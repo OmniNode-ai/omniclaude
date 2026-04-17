@@ -26,7 +26,7 @@ Also scans `hooks.log` and `pipeline-trace.log` for ERROR/CRITICAL patterns.
 
 ```bash
 # Run check directly
-cd $OMNI_HOME/omniclaude && uv run python -m plugins.onex.skills.env_sync_alert._lib.check
+onex skill env_sync_alert
 
 # Non-zero exit = alert fired
 ```
