@@ -68,12 +68,14 @@ def _run_hook(
     env["ONEX_STATE_DIR"] = state_dir
     env["HOME"] = state_dir
     env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    # Force full mode — lite-mode auto-detection depends on CWD, which
+    # differs between local dev (under omni_worktrees/) and CI runners.
+    # Callers may override via the `mode` kwarg.
+    env["OMNICLAUDE_MODE"] = mode if mode is not None else "full"
     if stop_guard_ack:
         env["STOP_GUARD_ACK"] = "1"
     else:
         env.pop("STOP_GUARD_ACK", None)
-    if mode is not None:
-        env["OMNICLAUDE_MODE"] = mode
 
     return subprocess.run(
         ["bash", _SCRIPT],
