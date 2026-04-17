@@ -3,8 +3,9 @@
 """Re-export from _lib.check for backwards-compatible import path."""
 
 from plugins.onex.skills.env_sync_alert._lib.check import (  # noqa: F401
-    AlertResult,
+    CheckResult,
     EnvSyncAlertConfig,
+    LogScanEnvResult,
     LogScanResult,
     check_critical_log_patterns,
     check_env_sync_log,
@@ -12,10 +13,12 @@ from plugins.onex.skills.env_sync_alert._lib.check import (  # noqa: F401
 )
 
 __all__ = [
-    "AlertResult",
+    "CheckResult",
     "EnvSyncAlertConfig",
+    "LogScanEnvResult",
     "LogScanResult",
     "check_critical_log_patterns",
     "check_env_sync_log",
     "run_alert_check",
 ]
+
