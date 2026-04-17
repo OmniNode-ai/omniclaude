@@ -50,8 +50,13 @@ trap 'rm -f "$tmp_candidates"' EXIT
 found_offender=0
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
+  # Skip the guard itself and any test fixture under tests/ or fixtures/ directories,
+  # where missing hookEventName may be intentional (e.g. fixture for negative tests).
   case "$file" in
     */check_hook_event_names.sh) continue ;;
+    */tests/*) continue ;;
+    */fixtures/*) continue ;;
+    */test-fixtures/*) continue ;;
   esac
   if ! grep -q 'hookEventName' "$file"; then
     if [[ "$found_offender" -eq 0 ]]; then

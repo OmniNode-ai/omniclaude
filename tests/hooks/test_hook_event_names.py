@@ -123,15 +123,20 @@ def test_guard_script_flags_missing_hook_event_name() -> None:
 
 def test_cron_action_guard_emits_hook_event_name() -> None:
     """cron_action_guard.py must emit hookEventName=PostToolUse when it fires."""
+    import importlib.util
     import io
-    import sys
     from unittest.mock import patch
 
-    lib_dir = HOOKS_DIR / "lib"
-    if str(lib_dir) not in sys.path:
-        sys.path.insert(0, str(lib_dir))
-
-    import cron_action_guard  # type: ignore[import-not-found]
+    module_path = HOOKS_DIR / "lib" / "cron_action_guard.py"
+    spec = importlib.util.spec_from_file_location(
+        "cron_action_guard_under_test",
+        module_path,
+    )
+    assert spec is not None and spec.loader is not None, (
+        f"unable to load module spec from {module_path}"
+    )
+    cron_action_guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cron_action_guard)
 
     payload = {
         "tool_name": "CronCreate",
