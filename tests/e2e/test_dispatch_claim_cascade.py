@@ -76,7 +76,9 @@ def test_cascade_simulation_40_agents_1_wins(tmp_path: Path) -> None:
     assert len(blocked) == 39, f"Expected 39 blocked, got {len(blocked)}"
     for b in blocked:
         assert "held_by" in b
-        assert float(str(b["ttl_remaining"])) >= 0  # >=0: sub-ms race on 40-thread acquire
+        assert (
+            float(str(b["ttl_remaining"])) >= 0
+        )  # >=0: sub-ms race on 40-thread acquire
 
 
 @pytest.mark.e2e
