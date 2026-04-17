@@ -45,8 +45,8 @@ Parse `$ARGUMENTS`:
 - `--enable-auto-rebase` — default: true
 - `--use-dag-ordering` — default: true
 - `--enable-trivial-comment-resolution` — default: true
-- `--enable-admin-merge-fallback` — default: false
-- `--admin-fallback-threshold-minutes <n>` — default: 30
+- `--enable-admin-merge-fallback` — default: **true** (OMN-9065: flipped from opt-in to on-by-default; pass `--no-enable-admin-merge-fallback` to disable)
+- `--admin-fallback-threshold-minutes <n>` — default: 15 (OMN-9065: lowered from 30 for faster auto-unstick)
 - `--verify` — default: false (opt-in pre-merge verification gate, OMN-7742)
 - `--verify-timeout-seconds <n>` — default: 30 (per-PR verification timeout)
 

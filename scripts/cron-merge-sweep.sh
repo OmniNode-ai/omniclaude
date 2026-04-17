@@ -48,7 +48,16 @@ AUTH_REFRESH_COUNT=0
 MAX_AUTH_REFRESHES=2
 
 # Pass-through args for merge-sweep skill
-SWEEP_ARGS=""
+#
+# OMN-9065: enable admin-merge-fallback by default so the tick auto-unsticks
+# queue stalls (PRs stuck AWAITING_CHECKS > threshold). Without this, a
+# hanging third-party check-run (e.g. CodeRabbit) can wedge the queue head
+# indefinitely — observed 2026-04-17 with omnibase_infra#1330 stalled 70+ min
+# across multiple tick cycles because the feature was off.
+#
+# Threshold 15 min = unstick within ~2 tick cycles at the 5-min tick interval.
+# CLI invocations can override via later flags (last-wins in argument parsing).
+SWEEP_ARGS="--enable-admin-merge-fallback --admin-fallback-threshold-minutes=15"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -185,7 +194,7 @@ try_auth_refresh() {
 run_merge_sweep() {
   local attempt="$1"
   local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.txt"
-  local prompt="/onex:merge_sweep --run-id ${RUN_ID}${SWEEP_ARGS}"
+  local prompt="/onex:merge_sweep --run-id ${RUN_ID} ${SWEEP_ARGS}"
 
   log "Starting merge-sweep (attempt ${attempt}): ${prompt}"
 

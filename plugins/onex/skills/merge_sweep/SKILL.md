@@ -61,7 +61,7 @@ args:
     description: "Resolve trivial CodeRabbit/bot review threads before merge (default: true)"
     required: false
   - name: --enable-admin-merge-fallback
-    description: "Admin merge fallback for PRs stuck in queue >30 min (default: false — opt-in only)"
+    description: "Admin merge fallback for PRs stuck in queue >threshold. Default: true (OMN-9065 — on-by-default; pass --no-enable-admin-merge-fallback to disable)"
     required: false
   - name: --admin-fallback-threshold-minutes
     description: "Minutes a PR must be stuck in merge queue before admin fallback fires (default: 30)"
@@ -165,8 +165,8 @@ for orchestrator completion.
 | `--enable-auto-rebase` | `enable_auto_rebase: true` (default: true) |
 | `--use-dag-ordering` | `use_dag_ordering: true` (default: true) |
 | `--enable-trivial-comment-resolution` | `enable_trivial_comment_resolution: true` (default: true) |
-| `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: false — opt-in) |
-| `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 30) |
+| `--enable-admin-merge-fallback` | `enable_admin_merge_fallback: true` (default: **true** — OMN-9065 on-by-default) |
+| `--admin-fallback-threshold-minutes` | `admin_fallback_threshold_minutes` (default: 15 — OMN-9065 lowered from 30) |
 | `--verify` | `verify: true` (default: false — opt-in pre-merge verification gate) |
 | `--verify-timeout-seconds` | `verify_timeout_seconds` (default: 30) |
 
@@ -208,7 +208,7 @@ Within each tier, GREEN PRs sort before non-green (stable sort preserves origina
 
 During the INVENTORYING phase, the inventory compute node checks all `QUEUED` PRs for queue age via `gh pr view --json mergeQueueEntry`. PRs queued longer than `--admin-fallback-threshold-minutes` (default: 30 min) are flagged as `stuck_queue_prs` and logged as WARN-level events.
 
-If `--enable-admin-merge-fallback` is set (default: **false**, explicit opt-in required), stuck PRs are admin-merged via `gh pr merge --admin --squash`. An explicit `ADMIN MERGE TRIGGERED pr={n} repo={r}` log line is emitted before each admin merge for audit traceability. Repos without merge queue support are skipped silently.
+If `--enable-admin-merge-fallback` is on (default: **true** as of OMN-9065; pass `--no-enable-admin-merge-fallback` to disable), stuck PRs are admin-merged via `gh pr merge --admin --squash`. An explicit `ADMIN MERGE TRIGGERED pr={n} repo={r}` log line is emitted before each admin merge for audit traceability. Repos without merge queue support are skipped silently.
 
 ### 5. Pre-Merge Verification Gate (`--verify`, OMN-7742)
 
@@ -363,8 +363,8 @@ Status values (unchanged from v3.x for backward compatibility):
 | `--enable-auto-rebase` | true | Auto-rebase stale (behind-base) PR branches before merging. Pass `--no-enable-auto-rebase` to skip. |
 | `--use-dag-ordering` | true | Order merge PRs by cross-repo dependency DAG (omnibase_compat first, omnidash last). Pass `--no-use-dag-ordering` to skip. |
 | `--enable-trivial-comment-resolution` | true | Auto-resolve trivial CodeRabbit/bot review threads (nit/style/minor) with no human reply before merge. |
-| `--enable-admin-merge-fallback` | false | **Opt-in**: Admin merge fallback for PRs stuck in merge queue beyond threshold. Logs "ADMIN MERGE TRIGGERED" before every action. |
-| `--admin-fallback-threshold-minutes` | 30 | Minutes a PR must be in merge queue before admin fallback fires (only when `--enable-admin-merge-fallback` is set). |
+| `--enable-admin-merge-fallback` | **true** (OMN-9065) | **On-by-default**: Admin merge fallback for PRs stuck in merge queue beyond threshold. Logs "ADMIN MERGE TRIGGERED" before every action. Pass `--no-enable-admin-merge-fallback` to disable. |
+| `--admin-fallback-threshold-minutes` | 15 (OMN-9065, from 30) | Minutes a PR must be in merge queue before admin fallback fires. |
 | `--verify` | false | **Opt-in**: After CI passes, run `onex:verification_sweep` per-PR using the changed-file-to-target mapping before enabling auto-merge. Only `verification_failed` blocks that PR; unavailable/timeout/tool_error are neutral skips. Failure in one PR does not block others. |
 | `--verify-timeout-seconds` | 30 | Hard per-PR verification timeout. On timeout the PR is neutral-skipped as `verification_timeout`. |
 
