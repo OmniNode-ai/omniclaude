@@ -20,10 +20,15 @@ class ModelDispatchRecord(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    agent_id: str = Field(..., min_length=1, max_length=128)
+    agent_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._-]+$",
+    )
     dispatched_at: datetime
     dispatcher: str = Field(..., min_length=1)
-    ticket: str = Field(..., pattern=r"^OMN-\d+$")
+    ticket: str = Field(..., min_length=1, max_length=128)
     allowed_tools: list[str] = Field(default_factory=list)
     prompt_digest: str = Field(..., min_length=1)
     parent_session_id: str = Field(..., min_length=1)

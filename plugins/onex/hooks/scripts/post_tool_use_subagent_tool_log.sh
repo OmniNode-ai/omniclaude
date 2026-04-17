@@ -11,6 +11,7 @@ printf '%s\n' "$HOOK_EVENT"
 command -v jq >/dev/null 2>&1 || exit 0
 AGENT_ID="${ONEX_AGENT_ID:-$(printf '%s' "$HOOK_EVENT" | jq -r '.agent_id // .agent_name // ""' 2>/dev/null)}"
 [[ -z "$AGENT_ID" || "$AGENT_ID" == "null" ]] && exit 0
+[[ ! "$AGENT_ID" =~ ^[A-Za-z0-9._-]+$ ]] && exit 0
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh"
 DISPATCH_DIR="${ONEX_STATE_DIR}/dispatches/${AGENT_ID}"
 mkdir -p "$DISPATCH_DIR" 2>/dev/null || exit 0
