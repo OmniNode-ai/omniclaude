@@ -42,11 +42,15 @@ _CONTEXT_F_RE = re.compile(
 
 _INPUT_FLAG_RE = re.compile(r"--input\s+\S+")
 
-# Common shell wrappers that hide a `gh api ...` call inside a quoted payload.
-# `bash -lc '<payload>'`, `sh -c "..."`, `zsh -c ...`, etc. When the outer
-# command matches one of these, we unwrap the inner payload before parsing so
-# a wrapper cannot be used to bypass the guard.
-_SHELL_WRAPPER_RE = re.compile(r"^\s*(?:/\S*/)?(?:ba|z|k)?sh\s+(?:-[a-z]*c|-c|-lc)\s+")
+# Common shell wrappers that hide a `gh api ...` call inside a quoted payload:
+# `bash -lc '<payload>'`, `sh -c "..."`, `zsh -c ...`, `bash -euo pipefail -c ...`,
+# `/usr/bin/env bash -c ...`, and nested combinations. `_unwrap_shell_wrapper`
+# walks tokens to find the shell-binary and `-*c*` flag rather than relying on
+# a fixed position, so interim flags (`-euo pipefail`) and env wrappers cannot
+# be used to bypass the guard.
+_SHELL_BIN_RE = re.compile(r"(?:^|/)(?:ba|z|k)?sh$")
+_ENV_BIN_RE = re.compile(r"(?:^|/)env$")
+_MAX_WRAPPER_DEPTH = 3
 
 _GH_TIMEOUT_S = 15
 _PR_SAMPLE_SIZE = 10
@@ -104,27 +108,66 @@ def _extract_protection_mutation(command: str) -> tuple[str, str, str] | None:
 
 
 def _unwrap_shell_wrapper(command: str) -> str:
-    """If `command` is a `bash -lc '<payload>'` style wrapper, return the inner payload.
+    """If `command` is a shell wrapper, return the inner payload; else the input.
 
-    Regression guard against CR finding on PR #1338: a rollout wrapped in
-    `bash -lc 'gh api ... -F required_status_checks[contexts][]=...'` would
-    otherwise evade tokenization because the outer `shlex.split` sees the
-    whole inner string as one token, making `_parse_contexts` return [] and
-    the guard fail open. Unwrap once here so the caller parses the real
-    payload.
+    Handles, in one pass:
+    - `bash -c '...'`, `sh -c "..."`, `zsh -c '...'`, `ksh -c ...`
+    - `bash -lc '...'` (login + command)
+    - `bash -euo pipefail -c '...'` (interim option flags between shell and `-c`)
+    - `/usr/bin/env bash -c '...'` (env wrapper)
+    - `/bin/bash -c '...'` (absolute shell path)
+    - Nested wrappers up to `_MAX_WRAPPER_DEPTH` levels.
+
+    Regression guard for CR findings on PR #1338: a rollout wrapped in any
+    of the above would otherwise evade tokenization because the outer
+    `shlex.split` sees the entire inner string as one token, making
+    `_parse_contexts` return [] and the guard fail open.
     """
-    if _SHELL_WRAPPER_RE.match(command) is None:
-        return command
-    try:
-        tokens = shlex.split(command, posix=True)
-    except ValueError:
-        return command
-    # Wrapper form: [shell, -c|-lc|-..., "<payload>", ...maybe script args...]
-    # The payload is the first non-flag token after the `-c`-family flag.
-    for i, tok in enumerate(tokens[:-1]):
-        if tok.startswith("-") and "c" in tok.lstrip("-"):
-            return tokens[i + 1]
-    return command
+    current = command
+    for _ in range(_MAX_WRAPPER_DEPTH):
+        try:
+            tokens = shlex.split(current, posix=True)
+        except ValueError:
+            return current
+        if not tokens:
+            return current
+
+        # Skip an optional env wrapper: `env bash -c ...` / `/usr/bin/env bash -c ...`.
+        # `env` may be followed by `-i`, `VAR=value`, etc. before the shell; walk
+        # forward until we hit what looks like a shell binary.
+        start = 0
+        if _ENV_BIN_RE.search(tokens[0]):
+            j = 1
+            while j < len(tokens) and not _SHELL_BIN_RE.search(tokens[j]):
+                # Stop if we run into what's clearly not an env-arg: pure `-c`
+                # would mean this isn't an env-for-shell chain.
+                if tokens[j] == "-c" or tokens[j].startswith("-c"):
+                    break
+                j += 1
+            start = j
+
+        if start >= len(tokens) or not _SHELL_BIN_RE.search(tokens[start]):
+            return current
+
+        # Find the first `-c`-family flag after the shell, skipping any interim
+        # option flags (`-e`, `-u`, `-o pipefail`, `-l`, etc.).
+        payload_idx = None
+        i = start + 1
+        while i < len(tokens) - 1:
+            tok = tokens[i]
+            if tok.startswith("-") and "c" in tok.lstrip("-"):
+                payload_idx = i + 1
+                break
+            if tok == "-o" and i + 1 < len(tokens):
+                # `-o pipefail` style — skip the option value.
+                i += 2
+                continue
+            i += 1
+        if payload_idx is None or payload_idx >= len(tokens):
+            return current
+
+        current = tokens[payload_idx]
+    return current
 
 
 def _parse_contexts(command: str) -> list[str]:
@@ -282,7 +325,7 @@ def verify(command: str, tool_info: dict) -> None:
     reason_lines.extend(
         [
             "",
-            "Observed check names (from the most recent PR):",
+            f"Observed check names (union across up to {_PR_SAMPLE_SIZE} recent PRs):",
             *(f"  - {name!r}" for name in sorted(observed)),
             "",
             "Fix the workflow job name or the protection context string before "

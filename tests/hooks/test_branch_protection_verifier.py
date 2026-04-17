@@ -359,6 +359,68 @@ class TestShellWrapperUnwrap(unittest.TestCase):
         cmd = "bash -lc 'gh api ... -F foo=bar'"
         self.assertEqual(bpv._unwrap_shell_wrapper(cmd), "gh api ... -F foo=bar")
 
+    def test_unwrap_shell_wrapper_handles_interim_option_flags(self):
+        # `bash -euo pipefail -c '...'` — option flags between shell and -c.
+        cmd = (
+            "bash -euo pipefail -c 'gh api --method PUT "
+            "repos/x/y/branches/main/protection -F foo=bar'"
+        )
+        self.assertEqual(
+            bpv._unwrap_shell_wrapper(cmd),
+            "gh api --method PUT repos/x/y/branches/main/protection -F foo=bar",
+        )
+
+    def test_unwrap_shell_wrapper_handles_env_prefix(self):
+        # `/usr/bin/env bash -c '...'` — env wrapper before the shell.
+        cmd = (
+            "/usr/bin/env bash -c 'gh api --method PUT "
+            "repos/x/y/branches/main/protection -F foo=bar'"
+        )
+        self.assertEqual(
+            bpv._unwrap_shell_wrapper(cmd),
+            "gh api --method PUT repos/x/y/branches/main/protection -F foo=bar",
+        )
+
+    def test_unwrap_shell_wrapper_handles_absolute_shell_path(self):
+        cmd = (
+            "/bin/bash -c 'gh api --method PUT "
+            "repos/x/y/branches/main/protection -F foo=bar'"
+        )
+        self.assertEqual(
+            bpv._unwrap_shell_wrapper(cmd),
+            "gh api --method PUT repos/x/y/branches/main/protection -F foo=bar",
+        )
+
+    def test_bash_with_interim_flags_unmatched_context_blocks(self):
+        # End-to-end: `bash -euo pipefail -c '...'` must not bypass the guard.
+        cmd = (
+            "bash -euo pipefail -c 'gh api --method PUT "
+            "repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-F required_status_checks[contexts][]=never-emitted'"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertIn("never-emitted", payload["reason"])
+
+    def test_env_prefix_unmatched_context_blocks(self):
+        # End-to-end: `/usr/bin/env bash -c '...'` must not bypass the guard.
+        cmd = (
+            "/usr/bin/env bash -c 'gh api --method PUT "
+            "repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-F required_status_checks[contexts][]=another-missing'"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertIn("another-missing", payload["reason"])
+
 
 class TestMultiPRObservedChecksAggregation(unittest.TestCase):
     """Regression for CR Major: single-PR sample caused false-block rollouts.
