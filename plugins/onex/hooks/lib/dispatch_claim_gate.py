@@ -214,19 +214,30 @@ def acquire_claim_from_dir(claim_data: dict[str, object], claims_dir: Path) -> b
     try:
         fd = _os.open(str(tmp_p), _os.O_CREAT | _os.O_EXCL | _os.O_WRONLY, 0o600)
         try:
-            _os.write(fd, payload)
+            written = 0
+            while written < len(payload):
+                written += _os.write(fd, payload[written:])
         finally:
             _os.close(fd)
 
-        # Atomic promotion: link fails with FileExistsError if another thread won the race.
+        # Atomic promotion: only EEXIST is a normal race-loss condition; all other
+        # OSError values (ENOENT, EPERM, EXDEV, ENOSPC, …) are hard I/O failures.
+        import errno as _errno
+
         try:
             _os.link(str(tmp_p), str(p))
-        except (FileExistsError, OSError):
-            return False
-        return True
+            return True
+        except OSError as exc:
+            if exc.errno == _errno.EEXIST:
+                return False
+            raise
     finally:
-        # Always clean up the temp file regardless of outcome.
-        tmp_p.unlink(missing_ok=True)
+        # Always clean up the temp file; suppress cleanup errors so they cannot
+        # mask a successful claim result or an already-raised exception.
+        try:
+            tmp_p.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
