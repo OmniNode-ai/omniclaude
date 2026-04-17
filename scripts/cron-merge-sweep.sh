@@ -194,7 +194,7 @@ try_auth_refresh() {
 run_merge_sweep() {
   local attempt="$1"
   local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.txt"
-  local prompt="/onex:merge_sweep --run-id ${RUN_ID}${SWEEP_ARGS}"
+  local prompt="/onex:merge_sweep --run-id ${RUN_ID} ${SWEEP_ARGS}"
 
   log "Starting merge-sweep (attempt ${attempt}): ${prompt}"
 
