@@ -161,7 +161,7 @@ Check for PRs merged or tickets Done in the last hour. For each, run: uv run pyt
 4. Did any dispatched work use the dogfood path (node_dispatch_worker + local model)? Or all Claude agents? Log which.
 
 **Part 3 — env-sync.log alert check (MANDATORY every tick)**
-Run: cd $OMNI_HOME/omniclaude && uv run python -m plugins.onex.skills.env_sync_alert.check
+Run: cd $OMNI_HOME/omniclaude && uv run python -m plugins.onex.skills.env_sync_alert._lib.check
 - Exit 0: clean, no action needed
 - Exit 1: alert fired — friction YAML written to $ONEX_STATE_DIR/friction/. SendMessage to team-lead: "[env-sync-alert] ALERT: <description from friction file>". Do NOT skip this step.
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from plugins.onex.skills.env_sync_alert.check import (
+from plugins.onex.skills.env_sync_alert._lib.check import (
     EnvSyncAlertConfig,
     check_critical_log_patterns,
     check_env_sync_log,
