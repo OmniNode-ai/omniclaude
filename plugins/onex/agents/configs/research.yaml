@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: research
+purpose: "Conduct technical research, evaluate libraries and frameworks, and produce structured findings reports."
 mode: full
 agent_type: "research"
 mode: "both"

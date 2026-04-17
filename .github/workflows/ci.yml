@@ -1161,6 +1161,19 @@ jobs:
         ports:
           - 6379:6379
 
+    env:
+      # Database environment variables must be available to all steps,
+      # not just the test step, to prevent psycopg2 OS-user fallback
+      # (which causes "FATAL: role root does not exist" on CI runners)
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+      REDIS_URL: redis://localhost:6379/0
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DATABASE: test_db
+      TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1190,15 +1203,6 @@ jobs:
         run: uv run python scripts/generate_skill_node.py --all
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379/0
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DATABASE: test_db
-          TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
           # Run all tests across both directories, split into 5 groups
           # Exit code 5 = no tests collected (expected for some splits)
@@ -1266,6 +1270,18 @@ jobs:
         ports:
           - 5432:5432
 
+    env:
+      # Database environment variables at job level to prevent psycopg2 OS-user fallback
+      DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+      OMNICLAUDE_DB_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: hooks_test
+      POSTGRES_PASSWORD: hooks_test
+      POSTGRES_DATABASE: hooks_test_db
+      PGPASSWORD: hooks_test
+      SEMANTIC_SEARCH_URL: http://localhost:8055
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1290,12 +1306,6 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Initialize hooks database
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_USER: hooks_test
-          POSTGRES_PASSWORD: hooks_test
-          POSTGRES_DB: hooks_test_db
-          PGPASSWORD: hooks_test
         run: |
           until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -1306,15 +1316,6 @@ jobs:
           fi
 
       - name: Run hooks tests
-        env:
-          DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
-          OMNICLAUDE_DB_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: hooks_test
-          POSTGRES_PASSWORD: hooks_test
-          POSTGRES_DATABASE: hooks_test_db
-          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
             uv run pytest tests/hooks/ -v \
@@ -1422,16 +1423,21 @@ jobs:
         ports:
           - 5432:5432
 
+    env:
+      # Database environment variables at job level to prevent psycopg2 OS-user fallback
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: schema_test
+      POSTGRES_PASSWORD: schema_test
+      POSTGRES_DATABASE: schema_test_db
+      POSTGRES_DB: schema_test_db
+      PGPASSWORD: schema_test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Validate database schema
-        env:
-          POSTGRES_HOST: localhost
-          PGPASSWORD: schema_test
-          POSTGRES_USER: schema_test
-          POSTGRES_DB: schema_test_db
         run: |
           until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -1864,6 +1870,47 @@ jobs:
       - name: Detect AI anti-patterns
         run: python scripts/ci/run_aislop_sweep.py
 
+  # Agent YAML contract validation (OMN-8914)
+  agent-contract-validation:
+    name: Agent Contract Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Validate all agent YAML contracts
+        id: validator
+        run: |
+          if bash plugins/onex/scripts/validate-all-agents.sh; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            echo "::warning::Agent YAML contract validation reported failures (warn-only during Wave B rollout)"
+          fi
+
+  # Skill monorepo-ref lint gate (OMN-8795 SD-08)
+  # NOTE: This gate will FAIL until SD-04/SD-05/SD-07 violations are cleared.
+  # Land this PR last in the SD wave so the gate goes green on merge.
+  skill-monorepo-ref-gate:
+    name: Skill Monorepo-Ref Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Detect monorepo refs in skill files
+        run: bash scripts/check-skill-monorepo-refs.sh
+
   # ============================================================================
   # GATE AGGREGATORS
   # Gate names are API-stable per CI/CD Standards (Invariant 1).
@@ -1923,6 +1970,10 @@ jobs:
       - golden-chain-integrity
       # AI anti-pattern detection (OMN-8622)
       - aislop-sweep
+      # Agent YAML contract validation (OMN-8914)
+      - agent-contract-validation
+      # Skill monorepo-ref lint gate (OMN-8795 SD-08)
+      - skill-monorepo-ref-gate
     if: always()
     steps:
       - name: Check quality results
@@ -1959,7 +2010,9 @@ jobs:
             "merge-sweep-contract=${{ needs.merge-sweep-contract.result }}" \
             "skill-contract-validation=${{ needs.skill-contract-validation.result }}" \
             "golden-chain-integrity=${{ needs.golden-chain-integrity.result }}" \
-            "aislop-sweep=${{ needs.aislop-sweep.result }}"; do
+            "aislop-sweep=${{ needs.aislop-sweep.result }}" \
+            "agent-contract-validation=${{ needs.agent-contract-validation.result }}" \
+            "skill-monorepo-ref-gate=${{ needs.skill-monorepo-ref-gate.result }}"; do
             NAME="${check%%=*}"
             RESULT="${check##*=}"
             if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then

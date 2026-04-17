@@ -260,6 +260,10 @@ def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
         ModelAgentDefinition.capabilities      -> capabilities
         ModelAgentDefinition.domain_context     -> domain_context
         ModelAgentDefinition.definition_path   -> definition_path
+        ModelAgentDefinition.model             -> model
+        ModelAgentDefinition.disallowed_tools  -> disallowed_tools
+        ModelAgentDefinition.domain            -> domain
+        ModelAgentDefinition.purpose           -> purpose
 
     Args:
         request: Routing request containing the agent registry.
@@ -276,6 +280,10 @@ def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
             "capabilities": list(agent_def.capabilities),
             "domain_context": agent_def.domain_context,
             "definition_path": agent_def.definition_path or "",
+            "model": agent_def.model or "",
+            "disallowed_tools": list(agent_def.disallowed_tools),
+            "domain": agent_def.domain or "",
+            "purpose": agent_def.purpose or "",
         }
     return {"agents": agents}
 

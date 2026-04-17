@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: pr_review
+purpose: "Conduct thorough pull request reviews assessing code quality, ONEX compliance, security, and merge readiness."
 mode: full
 agent_type: "pr_review"
 mode: "both"

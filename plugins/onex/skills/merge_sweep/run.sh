@@ -44,7 +44,7 @@ ALLOWED_TOOLS=(
   "TaskGet"
   "TaskList"
   "SendMessage"
-  "mcp__linear-server__save_comment"
+  "tracker.save_comment"
 )
 ALLOWED_TOOLS_CSV=$(IFS=','; echo "${ALLOWED_TOOLS[*]}")
 

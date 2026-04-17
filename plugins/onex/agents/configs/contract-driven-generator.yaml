@@ -6,6 +6,10 @@
 # Domain: Contract-driven development, ONEX four-node architecture, automated code generation
 
 schema_version: "2.0.0"
+model: sonnet
+disallowedTools: []
+domain: code_generation
+purpose: "Generate implementation code from ONEX contract YAML definitions, ensuring contract-first compliance."
 mode: full
 agent_type: "contract_driven_generator"
 mode: "full"

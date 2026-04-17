@@ -6,6 +6,13 @@
 # Spawned by epic-team team lead via Task(); not auto-triggered by routing
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
+domain: epic_execution
+purpose: "Claim and execute Linear tickets within a single repo for an epic run, with lease validation and worktree isolation."
 mode: full
 agent_type: "epic_worker"
 mode: "full"
@@ -218,3 +225,9 @@ performance_characteristics:
 
 onex_integration: {}
 intelligence_integration: {}
+
+# Tool restrictions: background workers must not create/manage cron schedules (OMN-8842)
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList

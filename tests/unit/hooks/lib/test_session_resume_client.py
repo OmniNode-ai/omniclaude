@@ -16,7 +16,7 @@ class TestFormatResumeContext:
             "agent_id": "CAIA",
             "current_ticket": "OMN-7241",
             "git_branch": "jonah/omn-7241-learning-models",
-            "working_directory": "/worktrees/OMN-7241/omnibase_infra",  # local-path-ok
+            "working_directory": "/worktrees/OMN-7241/omnibase_infra",  # local-path-ok: test fixture data
             "files_touched": ["src/models/agent_learning.py", "tests/test_agent.py"],
             "errors_hit": ["ImportError: cannot import 'foo'"],
             "last_tool_name": "Bash",

@@ -13,7 +13,7 @@
 #      without an OMN-\d+ pattern in the branch name or commit message.
 #
 #   3. Canonical clone write protection (OMN-7810): hard-blocks Edit/Write
-#      to files inside $OMNI_HOME/<repo>/. All changes must go through worktrees.
+#      to files inside $ONEX_REGISTRY_ROOT/<repo>/. All changes must go through worktrees.
 #
 # Checks 1-2 are WARN-only (exit 1 → pass-through).
 # Check 3 is a hard block (exit 2 → rejected).

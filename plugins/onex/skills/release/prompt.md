@@ -78,8 +78,8 @@ GITHUB_ORG = "OmniNode-ai"
 ```python
 import os
 
-OMNI_HOME = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
-WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"  # local-path-ok
+ONEX_REGISTRY_ROOT = "/Volumes/PRO-G40/Code/omni_home"  # local-path-ok: env var default fallback
+WORKTREE_ROOT = "/Volumes/PRO-G40/Code/omni_worktrees/release"  # local-path-ok: env var default fallback
 STATE_DIR = os.path.expanduser("$ONEX_STATE_DIR/state/release")
 ARCHIVE_DIR = os.path.join(STATE_DIR, "archive")
 ```
@@ -131,7 +131,7 @@ For each repo in the selected set (all repos or the positional `repos` list):
 
 ```bash
 # Find the canonical clone path
-REPO_PATH="${OMNI_HOME}/${repo}"
+REPO_PATH="${ONEX_REGISTRY_ROOT}/${repo}"
 
 # Pull latest main
 git -C "${REPO_PATH}" pull --ff-only
@@ -446,7 +446,7 @@ Each sub-step updates the state file atomically after completion.
 #### Sub-Step 1: WORKTREE
 
 ```bash
-REPO_PATH="${OMNI_HOME}/${repo}"
+REPO_PATH="${ONEX_REGISTRY_ROOT}/${repo}"
 WORKTREE_PATH="${WORKTREE_ROOT}/${run_id}/${repo}"
 BRANCH="release/${run_id}/${repo}"
 
@@ -1175,7 +1175,7 @@ fi
 FOR each repo in plan:
   WORKTREE_PATH="${WORKTREE_ROOT}/${run_id}/${repo}"
   if [ -d "$WORKTREE_PATH" ]; then
-    REPO_PATH="${OMNI_HOME}/${repo}"
+    REPO_PATH="${ONEX_REGISTRY_ROOT}/${repo}"
     git -C "$REPO_PATH" worktree remove "$WORKTREE_PATH" --force
     echo "Removed worktree: ${WORKTREE_PATH}"
   fi

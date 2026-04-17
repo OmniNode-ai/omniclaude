@@ -42,7 +42,7 @@ First, attempt to load golden_path definitions from onex_change_control contract
 ONEX_CC_PATH="${ONEX_CC_REPO_PATH:-}"
 if [ -z "$ONEX_CC_PATH" ]; then
   for candidate in \
-    "${OMNI_HOME:?OMNI_HOME required}/onex_change_control"; do
+    "${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}/onex_change_control"; do
     if [ -d "$candidate/contracts" ]; then
       ONEX_CC_PATH="$candidate"
       break
@@ -195,7 +195,7 @@ Write results to two locations:
 
 1. **State directory**:
 ```bash
-SWEEP_DIR="${ONEX_STATE_DIR:-$OMNI_HOME/.onex_state}/golden-chain-sweep/$(date -u +%Y-%m-%d)/$SWEEP_ID"
+SWEEP_DIR="$ONEX_STATE_DIR/golden-chain-sweep/$(date -u +%Y-%m-%d)/$SWEEP_ID"
 mkdir -p "$SWEEP_DIR"
 ```
 

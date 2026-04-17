@@ -83,7 +83,7 @@ fi
 ### Step 3 — Invoke WorkflowRunner
 
 ```bash
-OMNIMARKET_ROOT="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}/omnimarket"  # local-path-ok
+OMNIMARKET_ROOT="${OMNIMARKET_ROOT:-$(python3 -c 'import importlib.util; s=importlib.util.find_spec("omnimarket"); print(s.submodule_search_locations[0].split("/src/")[0]) if s else exit(1)' 2>/dev/null)}"
 
 cd "${OMNIMARKET_ROOT}" && uv run python - <<'PYEOF'
 import sys, os, json
@@ -187,7 +187,7 @@ echo "${RESULT_JSON}" > "${ONEX_STATE_DIR}/skill-results/${CORRELATION_ID}/pr_re
 |----------|---------|----------|
 | `GITHUB_TOKEN` | GitHub API auth for diff fetch + thread posting | Yes |
 | `ONEX_STATE_DIR` | Where to write result artifacts | Yes |
-| `OMNI_HOME` | Root of omni_home workspace (defaults to `/Volumes/PRO-G40/Code/omni_home`) | No |  <!-- local-path-ok -->
+| `ONEX_REGISTRY_ROOT` | Root of the local omni_home workspace | No |
 
 ## Pipeline Architecture
 

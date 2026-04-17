@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: intelligence_debug
+purpose: "Diagnose and resolve intelligence service failures including intent classification, routing, and context injection."
 mode: full
 agent_type: "debug_intelligence"
 mode: "full"

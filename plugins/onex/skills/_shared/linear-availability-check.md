@@ -3,11 +3,11 @@
 > Referenced by: executing_plans, design_to_plan. To use this pattern, read this file
 > and apply the check at the appropriate point in your skill's flow.
 
-## Quick Check (add to any skill that calls `mcp__linear-server__*`)
+## Quick Check (add to any skill that calls `tracker.*`)
 
-Before calling any `mcp__linear-server__*` tool, verify availability:
+Before calling any `tracker.*` tool, verify availability:
 
-1. Call `mcp__linear-server__list_teams` (fast, read-only, minimal data)
+1. Call `tracker.list_teams` (fast, read-only, minimal data)
 2. If it returns data: Linear is available — proceed normally
 3. If it fails or times out: Linear is unavailable — enter local mode or fail with a clear message
 
@@ -15,7 +15,7 @@ Before calling any `mcp__linear-server__*` tool, verify availability:
 
 When Linear is unavailable and the skill supports `--local` mode:
 
-1. Skip all `mcp__linear-server__*` calls
+1. Skip all `tracker.*` calls
 2. Create local ticket files in `docs/tickets/local/` using this YAML format:
 
    ```yaml

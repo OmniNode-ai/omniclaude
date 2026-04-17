@@ -438,7 +438,9 @@ class TestDeriveRepo:
 
     def test_returns_basename(self) -> None:
         assert (
-            eoe._derive_repo("/Volumes/PRO-G40/Code/omniclaude2")  # local-path-ok
+            eoe._derive_repo(
+                "/Volumes/PRO-G40/Code/omniclaude2"  # local-path-ok: test fixture path
+            )
             == "omniclaude2"
         )
 
@@ -1069,7 +1071,7 @@ class TestRepoAndAgentName:
                 correlation_id="c",
                 results=results,
                 kept_names={"summarization"},
-                project_path="/Volumes/PRO-G40/Code/omniclaude2",  # local-path-ok
+                project_path="/Volumes/PRO-G40/Code/omniclaude2",  # local-path-ok: test fixture data
             )
         assert payloads[0]["repo"] == "omniclaude2"
 

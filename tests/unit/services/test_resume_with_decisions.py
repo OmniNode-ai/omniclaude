@@ -25,7 +25,7 @@ def _sample_entry() -> ModelSessionRegistryRow:
         task_id="OMN-1234",
         status="active",
         current_phase="implementing",
-        worktree_path="/tmp/worktrees/OMN-1234/omniclaude",  # local-path-ok
+        worktree_path="/tmp/worktrees/OMN-1234/omniclaude",  # local-path-ok: test fixture path
         files_touched=["src/foo.py", "src/bar.py"],
         depends_on=["OMN-1230"],
         session_ids=["session-abc"],

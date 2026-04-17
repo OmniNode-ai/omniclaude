@@ -94,3 +94,37 @@ class TestSessionStartEnvSync:
         assert ") &" in content or ")&" in content, (
             "session-start.sh must background the sync using ') &' subshell pattern"
         )
+
+    def test_sync_uses_uv_project_flag(self) -> None:
+        """uv run must pass --project to pin the omnibase_infra venv.
+
+        Without --project, uv resolves the venv from the cwd at hook-fire
+        time (the Claude session root), not from omnibase_infra/. That venv
+        does not have omnibase-core installed, causing PackageNotFoundError
+        from importlib.metadata at import time (OMN-8865).
+
+        The fix: use `uv --project "${OMNIBASE_INFRA_DIR}" run python ...`
+        so the correct venv with omnibase-core>=0.39.0 is always selected.
+        """
+        content = _script()
+        assert "uv --project" in content and "OMNIBASE_INFRA_DIR" in content, (
+            "session-start.sh must invoke uv with --project pointing to "
+            "OMNIBASE_INFRA_DIR so the correct venv (with omnibase-core) is used. "
+            "Using bare 'uv run' resolves the venv from cwd and breaks when "
+            "Claude session root has no pyproject.toml (OMN-8865)."
+        )
+        # Confirm the project flag appears on the uv invocation line (uses $_sync_script var)
+        uv_line = next(
+            (
+                line
+                for line in content.splitlines()
+                if "uv" in line and "_sync_script" in line
+            ),
+            None,
+        )
+        assert uv_line is not None, (
+            "Could not find uv invocation line containing _sync_script"
+        )
+        assert "--project" in uv_line, (
+            f"uv invocation must include --project flag. Got: {uv_line!r}"
+        )

@@ -87,16 +87,12 @@ args:
 ### Step 2 — Initialize FSM
 
 ```bash
-cd $OMNI_HOME/omnimarket
-uv run python -m omnimarket.nodes.node_local_review \
-  [--uncommitted] \
-  [--since <ref>] \
-  [--max-iterations <n>] \
-  [--required-clean-runs <n>] \
-  [--no-fix] \
-  [--no-commit] \
-  [--dry-run]
+onex run-node node_local_review \
+  --input '{"uncommitted": false, "since": null, "max_iterations": 3, "required_clean_runs": 2, "no_fix": false, "no_commit": false, "dry_run": false}' \
+  --timeout 300
 ```
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 Outputs `ModelLocalReviewState` JSON with initial phase.
 

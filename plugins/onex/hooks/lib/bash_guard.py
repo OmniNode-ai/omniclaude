@@ -234,6 +234,14 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
         r"printf\b\s+['\"]?\\x[0-9a-f]+[^|]*\|\s*(?:ba)?sh\b",
         re.IGNORECASE | re.MULTILINE,
     ),
+    # gh pr merge --auto silently picks the wrong merge method (OMN-8838).
+    # Agents must use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH.
+    # Note: \b does not match before '--' (both '-' and space are \W), so we
+    # use '(?:^|\s)--auto\b' to anchor the flag at a word/space boundary.
+    re.compile(
+        r"\bgh\s+pr\s+merge\b.*(?:^|\s)--auto\b",
+        re.IGNORECASE | re.MULTILINE,
+    ),
     # Branch protection: block re-enabling required_pull_request_reviews.
     # Solo developer — reviews block all PRs.  Agents must never re-enable them.
     # Matches gh api / curl calls that set required_pull_request_reviews or
@@ -676,6 +684,16 @@ def main() -> int:
                     "If the hook itself is broken, create a ticket (see OMN-3201). "
                     "Human operators retain an emergency bypass via direct terminal access."
                 )
+        elif re.search(
+            r"\bgh\s+pr\s+merge\b.*(?:^|\s)--auto\b",
+            command,
+            re.IGNORECASE | re.MULTILINE,
+        ):
+            block_reason = (
+                "BLOCKED: gh pr merge --auto silently picks wrong method. "
+                "Use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH. "
+                "See OMN-8838."
+            )
         elif re.search(
             r"required_pull_request_reviews|required_approving_review_count",
             command,

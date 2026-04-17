@@ -209,7 +209,7 @@ def parse_plan_milestone(path: str, milestone_id: str) -> dict:
 Before creating, search for existing tickets with same title:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
     query="{ticket_title}",
     team="{team}",
     limit=10
@@ -246,7 +246,7 @@ How would you like to proceed?
 **Option 1: Update existing**
 - Fetch existing description
 - Merge with new description (append new sections)
-- Call `mcp__linear-server__update_issue(id="{existing_id}", description="{merged}")`
+- Call `tracker.update_issue(id="{existing_id}", description="{merged}")`
 
 **Option 2: Cancel and create new**
 - Update existing to "Canceled" state
@@ -474,7 +474,7 @@ def build_ticket_description(ticket_data: dict, args) -> str:
 ### Creating Ticket
 
 ```
-mcp__linear-server__create_issue(
+tracker.create_issue(
     title="{ticket_title}",
     team="{team}",  # Default: Omninode
     description="{generated_description}",
@@ -487,7 +487,7 @@ mcp__linear-server__create_issue(
 ### Updating Existing Ticket
 
 ```
-mcp__linear-server__update_issue(
+tracker.update_issue(
     id="{existing_ticket_id}",
     description="{merged_description}"
 )
@@ -496,7 +496,7 @@ mcp__linear-server__update_issue(
 ### Canceling Ticket
 
 ```
-mcp__linear-server__update_issue(
+tracker.update_issue(
     id="{existing_ticket_id}",
     state="Canceled"
 )
@@ -614,7 +614,7 @@ ticket_id: "OMN-XXXX"
 ```
 ````
 
-Then update the ticket description via `mcp__linear-server__save_issue`.
+Then update the ticket description via `tracker.save_issue`.
 
 **Validation step**: After generating the YAML block:
 1. Parse with `yaml.safe_load()`
@@ -708,7 +708,7 @@ if args.blocked_by:
         violations = validate_dependencies(
             ticket_repo=ticket_repo,
             blocked_by_ids=blocked_by_ids,
-            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+            fetch_ticket_fn=lambda id: tracker.get_issue(id=id)
         )
 
         # Filter using ValidationResult severity field
@@ -761,7 +761,7 @@ if args.parent:
 if args.blocked_by:
     params["blockedBy"] = [id.strip() for id in args.blocked_by.split(",") if id.strip()]
 
-result = mcp__linear-server__create_issue(**params)
+result = tracker.create_issue(**params)
 ```
 
 ### Step 5.5: Generate and Embed ModelTicketContract (MANDATORY) <!-- ai-slop-ok: new step -->
@@ -800,7 +800,7 @@ else:
 updated_description = description + "\n\n---\n\n" + f"```yaml\n# ModelTicketContract\n{contract_yaml}\n```"
 
 # 4. Update ticket with embedded contract
-mcp__linear-server__save_issue(
+tracker.save_issue(
     id=ticket_id,
     description=updated_description,
 )

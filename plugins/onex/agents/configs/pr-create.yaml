@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: pr_workflow
+purpose: "Create well-formed pull requests with proper titles, descriptions, labels, and auto-merge configuration."
 mode: full
 agent_type: "pr_create"
 mode: "both"

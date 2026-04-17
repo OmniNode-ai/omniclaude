@@ -72,7 +72,7 @@ Examples:
 
 Data Sources:
   - Deep dive files: $DEEP_DIVE_DIR/*_DEEP_DIVE.md
-  - Linear MCP: Current backlog counts (via mcp__linear-server__list_issues)
+  - Linear MCP: Current backlog counts (via tracker.list_issues)
 
 Velocity Formulas:
   Simple:   Average of tickets closed per day from deep dive history
@@ -629,7 +629,7 @@ md_echo "To get the current backlog and calculate ETA, query Linear:"
 md_echo ""
 md_echo '```'
 md_echo "# Get project backlog count"
-md_echo "mcp__linear-server__list_issues("
+md_echo "tracker.list_issues("
 md_echo "  project=\"$PROJECT\","
 md_echo "  limit=250"
 md_echo ")"

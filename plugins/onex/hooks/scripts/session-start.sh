@@ -129,8 +129,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR 
 
 # --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; ONEX_REGISTRY_ROOT may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
+    cat >/dev/null || true
     exit 0
 fi
 LOG_FILE="${ONEX_STATE_DIR}/hooks/logs/hook-session-start.log"
@@ -1098,7 +1099,7 @@ fi
 # R6: Timeout is configurable via OMNICLAUDE_TICKET_INJECTION_TIMEOUT_SEC (default 4).
 # R7: Stale /tmp marker cleanup runs here (files older than 24h).
 # R9: Markers are skipped entirely when SESSION_ID is empty (hooks produce different IDs).
-# R10: OMNI_WORKTREES_DIR env var controls worktree root (default: ONEX_WORKTREES_ROOT, then /Volumes/PRO-G40/Code/omni_worktrees).  # local-path-ok
+# R10: OMNI_WORKTREES_DIR env var controls worktree root (default: ONEX_WORKTREES_ROOT, then /Volumes/PRO-G40/Code/omni_worktrees).  # local-path-ok: env var default documentation
 
 TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
 TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
@@ -1527,7 +1528,7 @@ fi
 #   Phase 1 (sync, <10ms): Compare .deployed-commit vs repo HEAD.
 #     If stale, emit a warning to stderr so the operator sees it immediately.
 #   Phase 2 (async, background): Auto-refresh skills from the repo.
-_omniclaude_bare="${OMNI_HOME:-}/omniclaude"  # OMNI_HOME set by environment
+_omniclaude_bare="${ONEX_REGISTRY_ROOT:-}/omniclaude"  # ONEX_REGISTRY_ROOT set by environment
 _plugin_cache="${CLAUDE_PLUGIN_ROOT:-}"
 if [[ -n "${_plugin_cache}" && -d "${_omniclaude_bare}" ]]; then
   # Phase 1: Synchronous staleness warning (fast — only reads two values)
@@ -1576,7 +1577,7 @@ if [[ -n "${INFISICAL_ADDR:-}" ]]; then
   mkdir -p "$(dirname "${_sync_log}")" || true
   _sync_script="${OMNIBASE_INFRA_DIR:-}/scripts/sync-omnibase-env.py"
   if [[ -f "${_sync_script}" ]]; then
-    (uv run python "${_sync_script}" >> "${_sync_log}" 2>&1) &
+    (uv --project "${OMNIBASE_INFRA_DIR}" run python "${_sync_script}" >> "${_sync_log}" 2>&1) &
     disown || true
   else
     log "Opportunistic env sync skipped: sync script not found at ${_sync_script}"

@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: observability
+purpose: "Monitor agent health, detect stalls, and emit observability events for the ONEX agent system."
 mode: full
 agent_type: "observability"
 mode: "full"

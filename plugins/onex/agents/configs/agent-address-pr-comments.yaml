@@ -5,6 +5,10 @@
 # Pattern: Pre + During + Post (response quality)
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: pr_review
+purpose: "Address pull request review comments by implementing requested changes and responding to feedback."
 mode: full
 agent_type: "address_pr_comments"
 mode: "full"

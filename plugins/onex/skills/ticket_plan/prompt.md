@@ -22,7 +22,7 @@ When `/ticket-plan [team]` is invoked:
 ## Fetch All Active Tickets
 
 ```
-mcp__linear-server__list_issues({
+tracker.list_issues({
   team: "<team>",
   limit: 250,
   includeArchived: false
@@ -38,7 +38,7 @@ For each remaining ticket, check its `relations` field. If `includeRelations` da
 already present, fetch it:
 
 ```
-mcp__linear-server__get_issue({ id: "<ticket_id>", includeRelations: true })
+tracker.get_issue({ id: "<ticket_id>", includeRelations: true })
 ```
 
 A ticket is **blocked** if it has `blockedBy` relations whose referenced tickets are NOT in a

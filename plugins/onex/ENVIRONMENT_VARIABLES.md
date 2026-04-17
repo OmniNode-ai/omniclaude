@@ -125,8 +125,8 @@ The ONEX plugin has been updated to support deployment across all OmniNode repos
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omniclaude  # local-path-ok
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
+PROJECT_ROOT=/Users/jonah/Code/omniclaude  # local-path-ok: example path in documentation
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok: example path in documentation
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -135,8 +135,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omniintelligence  # local-path-ok
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
+PROJECT_ROOT=/Users/jonah/Code/omniintelligence  # local-path-ok: example path in documentation
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok: example path in documentation
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -145,8 +145,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omnibase_core  # local-path-ok
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
+PROJECT_ROOT=/Users/jonah/Code/omnibase_core  # local-path-ok: example path in documentation
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok: example path in documentation
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
@@ -155,8 +155,8 @@ KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 
 ```bash
 # .env
-PROJECT_ROOT=/Users/jonah/Code/omnidash  # local-path-ok
-OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok
+PROJECT_ROOT=/Users/jonah/Code/omnidash  # local-path-ok: example path in documentation
+OMNICLAUDE_PATH=/Users/jonah/Code/omniclaude  # local-path-ok: example path in documentation
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```

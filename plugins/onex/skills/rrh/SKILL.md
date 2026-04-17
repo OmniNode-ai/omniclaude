@@ -171,7 +171,7 @@ export ONEX_RUN_ID="rrh-$(date +%s)-OMN-1234"
 export ONEX_UNSAFE_ALLOW_EDITS=1
 
 claude -p "Invoke the rrh skill for OMN-1234" \
-  --allowedTools "Bash,Read,Write,mcp__linear-server__get_issue"
+  --allowedTools "Bash,Read,Write,tracker.get_issue"
 ```
 
 ### Authentication in headless mode

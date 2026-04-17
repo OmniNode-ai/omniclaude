@@ -62,7 +62,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 
 ## Decomposition Flow
 
-1. Fetch epic from Linear: `mcp__linear-server__get_issue({epic_id}, includeRelations=true)`
+1. Fetch epic from Linear: `tracker.get_issue({epic_id}, includeRelations=true)`
 2. Read `plugins/onex/skills/epic-team/repo_manifest.yaml` for keyword-to-repo mapping
 3. Analyze epic description + goals:
    - Identify distinct workstreams (one ticket per independent deliverable)
@@ -70,7 +70,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
    - Assign repo hint based on keywords in the work description
    - Generate title, description, requirements, and DoD for each ticket
 4. If `--dry-run`: print plan, exit with `status: dry_run`
-5. Create each ticket via `mcp__linear-server__create_issue`:
+5. Create each ticket via `tracker.create_issue`:
    - `parentId`: epic's Linear ID
    - `team`: same team as epic
    - `labels`: ["omniclaude"] (or appropriate repo label)
@@ -98,7 +98,7 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 ## Ticket Creation Contract
 
 ```python
-mcp__linear-server__create_issue(
+tracker.create_issue(
     title="{ticket_title}",
     team="{epic_team}",
     parentId="{epic_linear_id}",

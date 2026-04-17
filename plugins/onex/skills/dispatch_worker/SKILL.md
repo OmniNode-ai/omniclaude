@@ -31,6 +31,18 @@ Compile a worker dispatch spec through `node_dispatch_worker` and spawn a backgr
 
 > **Autonomous execution**: No human confirmation gate. `--dry-run` is the only preview mechanism.
 
+## Worker Behavior
+
+> **Required for all dispatched workers — enforced by `_COMMON_PREAMBLE` in
+> `omnimarket/src/omnimarket/nodes/node_dispatch_worker/handlers/handler_dispatch_worker.py`.**
+
+- **Ack after each deliverable.** After every discrete deliverable (design doc written, test
+  run complete, PR opened, finding logged), send a one-line `SendMessage` to `{reports_to}`.
+  Never batch acks across multiple deliverables.
+- **Stop after primary task.** When the primary task is complete, send exactly:
+  `"Primary task done — awaiting further instruction or shutdown."` then stop.
+  Ambient-idle looping after task completion is forbidden.
+
 ## Quick Start
 
 ```
@@ -44,7 +56,7 @@ targets: [omnimarket#202, OMN-8375]
 "
 
 # From file
-/dispatch_worker $OMNI_HOME/docs/plans/workers/pr-202-fix.yaml
+/dispatch_worker ~/docs/plans/workers/pr-202-fix.yaml
 
 # Dry run (print compiled prompt, no spawn)
 /dispatch_worker --dry-run "

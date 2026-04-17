@@ -54,7 +54,7 @@ CONVENTIONS="## ONEX Conventions (injected by SubagentStart)
 
 ### Workflow
 - All output written to disk (never chat-only)
-- Worktrees only in /Volumes/PRO-G40/Code/omni_worktrees/ # local-path-ok
+- Worktrees only in /Volumes/PRO-G40/Code/omni_worktrees/ # local-path-ok: worktree convention documentation
 - Evidence written to .onex_state/evidence/ for verification
 - Always create Linear tickets before starting work
 - Always push and create PRs — never leave work uncommitted

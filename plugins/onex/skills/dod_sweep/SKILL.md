@@ -34,7 +34,7 @@ two modes: **batch** (retroactive sweep of recently completed tickets) and
 ## Dual Mode
 
 - **Batch** (`/dod-sweep`): Query Linear for tickets completed in the lookback
-  window via `mcp__linear-server__list_issues`, filter by `completedAt`.
+  window via `tracker.list_issues`, filter by `completedAt`.
 - **Batch since-last-cycle** (`/dod-sweep --since-last-cycle`): Query Linear for
   tickets completed since the last autopilot close-out cycle. Reads the last cycle
   timestamp from `$ONEX_STATE_DIR/autopilot/cycle-state.yaml` field

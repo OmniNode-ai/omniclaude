@@ -5,6 +5,11 @@
 # Complete 6-phase LlamaIndex workflow orchestration for end-to-end ONEX tool generation
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: workflow_generation
+purpose: "Generate and configure ONEX workflow definitions from high-level task descriptions."
+is_orchestrator: true
 mode: full
 agent_type: "workflow_generator"
 mode: "full"

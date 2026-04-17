@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: database_debug
+purpose: "Diagnose and resolve database issues including query performance, schema drift, and connection failures."
 mode: full
 agent_type: "debug_database"
 mode: "full"

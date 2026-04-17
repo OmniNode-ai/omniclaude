@@ -39,7 +39,7 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 
 # --- Log path: ONEX_STATE_DIR/hooks/logs/ [OMN-8429] ---
 if [[ -z "${ONEX_STATE_DIR:-}" ]]; then
-    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; OMNI_HOME may be unset. Hook cannot write log." \
+    echo "[$(date -u +%FT%TZ)] ERROR: ONEX_STATE_DIR unset; ONEX_REGISTRY_ROOT may be unset. Hook cannot write log." \
         >> /tmp/onex-hook-error.log
     cat
     exit 0

@@ -68,7 +68,7 @@ Read `orphaned_tickets` list from the TriageReport YAML.
 Fetch orphans directly from Linear:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   state="not done",
   limit=250
 )
@@ -221,7 +221,7 @@ children: []
 #### Step 5b: Create epic in Linear
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   title="[{repo}] {PREFIX} — {description}",
   team="Omninode",
   state="In Progress",
@@ -235,7 +235,7 @@ mcp__linear-server__save_issue(
 For each child ticket:
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   id=ticket_id,
   parentId=new_epic_id
 )
@@ -244,7 +244,7 @@ mcp__linear-server__save_issue(
 #### Step 5d: Add creation comment
 
 ```
-mcp__linear-server__create_comment(
+tracker.create_comment(
   issueId=new_epic_id,
   body="🤖 Epic created by linear-epic-org\n\nGrouped {N} tickets from {PREFIX} work stream:\n{ticket_list}"
 )
@@ -267,7 +267,7 @@ Skipped (human): {K}
 Before creating a new epic, check if a suitable existing epic already exists:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   query="{PREFIX}",
   state="not done"
 )
@@ -289,4 +289,4 @@ When `--dry-run`:
 - `@_lib/contracts/helpers.md` — EpicContract schema
 - `linear-triage` skill — produces orphaned_tickets list this skill consumes
 - `linear-housekeeping` skill — parent orchestrator
-- Linear MCP tools (`mcp__linear-server__*`)
+- Linear MCP tools (`tracker.*`)

@@ -492,7 +492,7 @@ class TestShellScripts:
             capture_output=True,
             text=True,
             env={
-                "OMNI_HOME": str(omni_home),
+                "ONEX_REGISTRY_ROOT": str(omni_home),
                 "PATH": f"{venv_bin}:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin",
             },
             timeout=10,

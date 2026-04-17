@@ -65,14 +65,12 @@ outputs:
 ### Step 2 — Dispatch to node
 
 ```bash
-cd /Users/jonah/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_coverage_sweep \
-  [--repos <comma-list>] \
-  [--target-pct <N>] \
-  [--dry-run]
+onex run-node node_coverage_sweep \
+  --input '{"repos": "<comma-list>", "target_pct": 50, "dry_run": false}' \
+  --timeout 300
 ```
 
-Capture stdout (JSON: `CoverageSweepResult`). Exit 0 = clean, exit 1 = gaps found.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = gaps found.
 
 ### Step 3 — Render report
 
@@ -82,7 +80,7 @@ repo average coverage %. List gaps grouped by priority (ZERO → RECENTLY_CHANGE
 ### Step 4 — Ticket creation (only if not `--dry-run`)
 
 Fetch existing Linear tickets with `test-coverage` label to dedup. For each gap not already
-tracked (up to `--max-tickets`), create via `mcp__linear-server__save_issue`:
+tracked (up to `--max-tickets`), create via `tracker.save_issue`:
 
 ```
 Title: test(coverage): add tests for <module> (<repo>)

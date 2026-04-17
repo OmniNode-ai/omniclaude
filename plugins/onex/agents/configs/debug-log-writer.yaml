@@ -6,6 +6,13 @@
 # Purpose: Direct-to-database debug log writer with intelligence integration
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
+domain: debugging
+purpose: "Write structured debug log entries capturing diagnostic information during debugging sessions."
 mode: full
 agent_type: "debug_log_writer"
 mode: "full"

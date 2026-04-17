@@ -6,6 +6,10 @@
 # Comprehensive UI testing specialist with Playwright automation and visual regression
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: ui_testing
+purpose: "Design and execute UI test suites using browser automation, visual regression, and accessibility validation."
 mode: full
 agent_type: "ui_testing"
 mode: "full"

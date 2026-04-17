@@ -85,7 +85,7 @@ curl http://localhost:8080/metrics
 
 ### Start Consumer
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude/consumers  # local-path-ok
+cd /Volumes/PRO-G40/Code/omniclaude/consumers  # local-path-ok: example command in documentation
 ./start_agent_actions_consumer.sh
 ```
 

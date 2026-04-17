@@ -6,6 +6,10 @@
 # Schema Version: 2.0.0
 
 schema_version: "2.0.0"
+model: haiku
+disallowedTools: []
+domain: documentation
+purpose: "Generate and maintain README files for ONEX repositories with accurate installation, usage, and API documentation."
 mode: full
 agent_type: "onex_readme"
 mode: "full"

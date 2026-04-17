@@ -6,6 +6,10 @@
 # Specializes in AST-based code generation and ONEX tool directory structures
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: code_generation
+purpose: "Generate and transform abstract syntax trees for code analysis, refactoring, and automated code generation."
 mode: full
 agent_type: "ast_generator"
 mode: "full"

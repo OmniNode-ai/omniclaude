@@ -13,9 +13,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OMNI_HOME="${OMNI_HOME:?OMNI_HOME required}"
-export OMNI_HOME
-STATE_FILE="${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:?ONEX_REGISTRY_ROOT required}"
+export ONEX_REGISTRY_ROOT
+STATE_FILE="${ONEX_REGISTRY_ROOT}/.onex_state/watchdog/loop-health.json"
 
 LOOP_NAME="${1:?Usage: watchdog-record-action.sh <loop_name> <action> <detail>}"
 ACTION="${2:?Usage: watchdog-record-action.sh <loop_name> <action> <detail>}"

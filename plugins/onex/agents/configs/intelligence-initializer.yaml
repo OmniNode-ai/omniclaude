@@ -7,6 +7,10 @@
 # Schema Version: 1.0.0
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: intelligence
+purpose: "Initialize intelligence service components including intent classification, context injection, and routing setup."
 mode: full
 agent_type: "intelligence_initializer"
 mode: "full"

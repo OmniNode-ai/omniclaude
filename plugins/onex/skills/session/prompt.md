@@ -131,7 +131,7 @@ Skip Phase 2 RSD scoring.
 
 ### Step 4a: Query work items
 
-1. Run `/onex:linear_triage --output-only` or `mcp__linear-server__list_issues` to get
+1. Run `/onex:linear_triage --output-only` or `tracker.list_issues` to get
    active tickets (Todo, In Progress) ordered by priority.
 2. Run `gh pr list --json number,title,headRefName,mergeable,statusCheckRollup --limit 100`
    across all repos for PR merge ordering.

@@ -81,7 +81,7 @@ CronCreate("*/15 * * * *", "/pipeline-fill", recurring=true)
 
 # Headless (publishes to node event bus)
 claude -p "/pipeline-fill" \
-  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,Agent,mcp__linear-server__*"
+  --allowedTools "Bash,Read,Write,Edit,Glob,Grep,Agent,tracker.*"
 ```
 
 **Announce at start:** "I'm using the pipeline-fill skill to select and dispatch the highest-acceleration ticket."
@@ -93,7 +93,7 @@ using the same logic as `HandlerPipelineFill`:
 
 ### Phase 1: Query Linear
 
-Query for unstarted tickets in the Active Sprint using `mcp__linear-server__list_issues`.
+Query for unstarted tickets in the Active Sprint using `tracker.list_issues`.
 
 **Filters:**
 - State: `Backlog` or `Todo` (not `In Progress`, `In Review`, `Done`, `Canceled`)
@@ -179,7 +179,7 @@ All state written to `.onex_state/pipeline-fill/`:
 ## Verification
 
 After each cycle (including no-op cycles), the backing node writes three observable
-artifacts to `.onex_state/pipeline-fill/` relative to `$OMNI_HOME`:
+artifacts to `$ONEX_STATE_DIR/pipeline-fill/`:
 
 | File | Written when | Contents |
 |------|-------------|----------|
@@ -191,13 +191,13 @@ artifacts to `.onex_state/pipeline-fill/` relative to `$OMNI_HOME`:
 
 ```bash
 # Check last-run timestamp
-cat $OMNI_HOME/.onex_state/pipeline-fill/last-run.yaml
+cat $ONEX_STATE_DIR/pipeline-fill/last-run.yaml
 
 # Confirm in-flight tracking is populated
-cat $OMNI_HOME/.onex_state/pipeline-fill/dispatched.yaml
+cat $ONEX_STATE_DIR/pipeline-fill/dispatched.yaml
 
 # Inspect score ranking from last cycle
-cat $OMNI_HOME/.onex_state/pipeline-fill/scores.yaml
+cat $ONEX_STATE_DIR/pipeline-fill/scores.yaml
 ```
 
 If `last-run.yaml` is absent or stale, the node has not executed. A cycle that

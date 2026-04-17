@@ -76,7 +76,7 @@ Classify container log health:
 
 For each finding with type PLACEHOLDER_DESCRIPTION, MISSING_DESCRIPTION,
 UNWIRED_HANDLER, ORPHAN_TOPIC, PRODUCER_ONLY, or CONSUMER_ONLY, create a
-Linear ticket via `mcp__linear-server__save_issue`:
+Linear ticket via `tracker.save_issue`:
 
 ```
 Title: fix(wiring): <finding_type> — <subject>

@@ -5,6 +5,10 @@
 # ONEX contract validation specialist for standards compliance and quality assurance
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: contract_validation
+purpose: "Validate ONEX contract YAML files for schema compliance, required fields, and consistency constraints."
 mode: full
 agent_type: "contract_validator"
 mode: "full"

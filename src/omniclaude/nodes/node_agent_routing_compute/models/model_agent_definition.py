@@ -28,6 +28,10 @@ class ModelAgentDefinition(BaseModel):
         context_triggers: Context phrases that increase match confidence.
         capabilities: List of capability strings this agent provides.
         definition_path: Filesystem path to the agent's YAML file.
+        model: Recommended Claude model (e.g., 'haiku', 'sonnet', 'opus').
+        disallowed_tools: Tools this agent must not use.
+        domain: Agent's primary domain classification.
+        purpose: Extended description of agent's purpose.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -70,6 +74,25 @@ class ModelAgentDefinition(BaseModel):
         default=None,
         max_length=500,
         description="Filesystem path to agent YAML file",
+    )
+    model: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Recommended Claude model for this agent (e.g., 'haiku', 'sonnet', 'opus')",
+    )
+    disallowed_tools: tuple[str, ...] = Field(
+        default=(),
+        description="Tools this agent must not use (e.g., ['CronCreate', 'CronDelete'])",
+    )
+    domain: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Agent's primary domain classification",
+    )
+    purpose: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Extended description of agent's purpose and responsibilities",
     )
 
 

@@ -58,12 +58,12 @@ Generate a `run_id` = first 12 chars of a UUID4.
 
 If `--epic` provided:
 ```
-mcp__linear-server__get_issue(id=epic_id, includeRelations=true)
+tracker.get_issue(id=epic_id, includeRelations=true)
 ```
 
 If `--epic` not provided:
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
     state="Done",
     updatedAt="-P{since_days}D",
     parentId=null   # top-level only
@@ -493,7 +493,7 @@ After suppressions:
 For each finding, search Linear for existing tickets matching the fingerprint:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
     query="[gap:{fingerprint[:8]}]",
     team=team_id
 )
@@ -567,7 +567,7 @@ If NOT `--dry-run`:
 
 **Create new ticket**:
 ```
-mcp__linear-server__create_issue(
+tracker.create_issue(
     title="[gap:{fp[:8]}] {category}: {seam_id_suffix}",
     team=team_id,
     description=ticket_description,
@@ -578,7 +578,7 @@ mcp__linear-server__create_issue(
 
 **Comment on existing ticket**:
 ```
-mcp__linear-server__create_comment(
+tracker.create_comment(
     issueId=existing_ticket_id,
     body="## Re-detected on {run_date}\n\n{marker_block}\n\nThis gap was re-detected in run `{run_id}`."
 )
@@ -676,7 +676,7 @@ Report: $ONEX_STATE_DIR/gap-analysis/{epic_id}/{run_id}.md
 
 After writing the report files, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths -- including early exits such as zero findings:
 
-ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json} <!-- local-path-ok -->
+ARTIFACT: {full absolute path to the .json report, e.g. /Users/jonah/.claude/gap-analysis/{epic_id}/{run_id}.json} # local-path-ok: example path in documentation
 
 If the skill exits early (zero findings, dry-run short-circuit, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.
 
@@ -835,7 +835,7 @@ For each AUTO finding:
 
 1. **Check if Linear ticket already exists** (`finding.linear_ticket_id` non-null):
    - If yes, use existing ticket ID
-   - If no, create a new ticket via `mcp__linear-server__create_issue`:
+   - If no, create a new ticket via `tracker.create_issue`:
      ```
      title: "[gap-fix:<finding_id[:8]>] <boundary_kind>: <rule_name>"
      team: "Omninode"
@@ -1158,7 +1158,7 @@ The skill:
 
 After writing gap-fix-output.json, emit this exact line to stdout as the FINAL LINE on ALL normal exit paths -- including early exits such as all findings gated or zero auto-dispatchable findings:
 
-GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json} <!-- local-path-ok -->
+GAP_FIX_OUTPUT: {full absolute path to gap-fix-output.json, e.g. /Users/jonah/.claude/gap-analysis/{source_run_id}/gap-fix-output.json} # local-path-ok: example path in documentation
 
 In `--dry-run` mode: still emit the path (no actual file written, but path is computed from source_run_id). If the skill exits early (all gated, zero eligible findings, dry-run, or any other normal completion), it must still emit this marker before exiting. Abnormal exits (exceptions) are excluded.
 

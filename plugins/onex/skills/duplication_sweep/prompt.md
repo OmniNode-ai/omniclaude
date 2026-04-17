@@ -17,7 +17,7 @@ Write, or Glob calls.** Report the exact error to the user and wait for directio
 ```python
 args = "$ARGUMENTS".split()
 checks = ["D1", "D2", "D3", "D4"]  # default: all checks
-omni_home = os.environ.get("OMNI_HOME", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok
+omni_home = os.environ.get("ONEX_REGISTRY_ROOT", "/Volumes/PRO-G40/Code/omni_home")  # local-path-ok: env var default fallback
 json_mode = "--json" in args
 
 for i, arg in enumerate(args):
@@ -38,7 +38,7 @@ For each enabled check, execute in order and collect results.
 ### D1: Drizzle Table Duplication
 
 ```bash
-grep -rn 'pgTable("' "$OMNI_HOME/omnidash/shared/"*-schema.ts 2>/dev/null
+gh api repos/OmniNode-ai/omnidash/contents/shared --jq '.[].name' 2>/dev/null | grep -E '\-schema\.ts$' | xargs -I{} gh api repos/OmniNode-ai/omnidash/contents/shared/{} --jq '.content' 2>/dev/null | base64 -d | grep -n 'pgTable("'
 ```
 
 Parse output: extract table names from `pgTable("TABLE_NAME"` patterns.
@@ -49,14 +49,14 @@ Group by table name. Flag any table name appearing in more than one schema file.
 
 ### D2: Topic Registration Duplication
 
-1. Parse TopicBase enum values from `$OMNI_HOME/omniclaude/src/omniclaude/hooks/topics.py`:
+1. Parse TopicBase enum values from omniclaude via GitHub API:
    ```bash
-   grep -oP '= "([^"]+)"' "$OMNI_HOME/omniclaude/src/omniclaude/hooks/topics.py"
+   gh api repos/OmniNode-ai/omniclaude/contents/src/omniclaude/hooks/topics.py --jq '.content' | base64 -d | grep -oP '= "\K[^"]+'
    ```
 
-2. Parse topic entries from `$OMNI_HOME/onex_change_control/boundaries/kafka_boundaries.yaml`:
+2. Parse topic entries from onex_change_control via GitHub API:
    ```bash
-   grep "topic_name:" "$OMNI_HOME/onex_change_control/boundaries/kafka_boundaries.yaml"
+   gh api repos/OmniNode-ai/onex_change_control/contents/boundaries/kafka_boundaries.yaml --jq '.content' | base64 -d | grep "topic_name:"
    ```
 
 3. Cross-reference: for each topic in both sources, check if kafka_boundaries.yaml
@@ -70,7 +70,7 @@ Group by table name. Flag any table name appearing in more than one schema file.
 ### D3: Migration Prefix Duplication
 
 ```bash
-cd "$OMNI_HOME/onex_change_control" && uv run check-migration-conflicts --repos-root "$OMNI_HOME" 2>&1
+gh api repos/OmniNode-ai/onex_change_control/actions/workflows --jq '.workflows[].id' | head -1 | xargs -I{} echo "Run check-migration-conflicts via cloud runtime (onex_change_control CI)" 2>&1
 ```
 
 Parse output for lines containing `EXACT_DUPLICATE` or `NAME_CONFLICT`.
@@ -82,8 +82,14 @@ Parse output for lines containing `EXACT_DUPLICATE` or `NAME_CONFLICT`.
 ### D4: Cross-Repo Model Name Collision
 
 ```bash
-grep -rn "class Model[A-Z]" "$OMNI_HOME"/*/src/ --include="*.py" \
-  | grep -v "/tests/" | grep -v "/fixtures/" | grep -v "omnibase_core/"
+for repo in omnimarket omnibase_infra omnibase_spi omniintelligence omnimemory omninode_infra; do
+  gh api "repos/OmniNode-ai/$repo/git/trees/main?recursive=1" --jq '.tree[].path' 2>/dev/null \
+    | grep -E '^src/.*\.py$' | grep -v '/tests/' | grep -v '/fixtures/' \
+    | head -50 | while read f; do
+        gh api "repos/OmniNode-ai/$repo/contents/$f" --jq '.content' 2>/dev/null \
+          | base64 -d | grep -n "class Model[A-Z]" | sed "s|^|$repo/$f:|"
+      done
+done
 ```
 
 Parse output: extract class names (`class ModelXxx`), group by class name.

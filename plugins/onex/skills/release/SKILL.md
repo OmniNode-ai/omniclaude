@@ -87,16 +87,12 @@ outputs:
 ### Step 2 — Initialize node (contract verification)
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
-uv run python -m omnimarket.nodes.node_release \
-  [<repos>...] \
-  [--bump <level>] \
-  [--dry-run] \
-  [--autonomous]
+onex run-node node_release \
+  --input '{"repos": [], "bump": null, "dry_run": false, "autonomous": false}' \
+  --timeout 300
 ```
 
-Outputs `ModelReleaseStartCommand` JSON. Note: handler is a structural placeholder;
-full migration tracked in OMN-8004.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Note: handler is a structural placeholder; full migration tracked in OMN-8004.
 
 ### Step 3 — Execute release phases
 
@@ -182,7 +178,7 @@ All mutations are deduplicated on resume:
 |-----------|----------------|
 | PR dedupe | Check `gh pr list --head <branch>` before creating |
 | Tag dedupe | Check `git tag -l <version>` before tagging |
-| Worktree reuse | Reuse existing worktree at `$OMNI_HOME/worktrees/<run_id>/<repo>` |
+| Worktree reuse | Reuse existing worktree at `$ONEX_WORKTREES_ROOT/<run_id>/<repo>` |
 
 ## Cross References
 

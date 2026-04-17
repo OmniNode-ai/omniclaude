@@ -59,7 +59,7 @@ step verifications, and renders a markdown progress report.
 Parse args, then run the node handler directly:
 
 ```bash
-cd /Users/jonah/Code/omni_home/omnimarket && uv run python -c "  # local-path-ok
+cd /Users/jonah/Code/omni_home/omnimarket && uv run python -c "  # local-path-ok: example command in documentation
 import json
 from omnimarket.nodes.node_onboarding.handlers.handler_onboarding import HandlerOnboarding
 from omnimarket.nodes.node_onboarding.models.model_onboarding_start_command import ModelOnboardingStartCommand

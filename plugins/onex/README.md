@@ -361,24 +361,24 @@ INTELLIGENCE_SERVICE_URL=http://localhost:8053  # Intelligence coordinator
 
 **omniclaude**:
 ```bash
-PROJECT_ROOT=/path/to/omniclaude  # local-path-ok
-OMNICLAUDE_PATH=/path/to/omniclaude  # local-path-ok
+PROJECT_ROOT=/path/to/omniclaude  # local-path-ok: example path placeholder
+OMNICLAUDE_PATH=/path/to/omniclaude  # local-path-ok: example path placeholder
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omniintelligence**:
 ```bash
-PROJECT_ROOT=/path/to/omniintelligence  # local-path-ok
-OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok
+PROJECT_ROOT=/path/to/omniintelligence  # local-path-ok: example path placeholder
+OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok: example path placeholder
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```
 
 **omnibase_core**:
 ```bash
-PROJECT_ROOT=/path/to/omnibase_core  # local-path-ok
-OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok
+PROJECT_ROOT=/path/to/omnibase_core  # local-path-ok: example path placeholder
+OMNICLAUDE_PATH=/path/to/omniclaude  # For shared config  # local-path-ok: example path placeholder
 POSTGRES_HOST=<postgres-host>
 KAFKA_BOOTSTRAP_SERVERS=<kafka-bootstrap-servers>:9092
 ```

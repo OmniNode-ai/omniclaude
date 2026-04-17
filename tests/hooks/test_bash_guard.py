@@ -1015,5 +1015,120 @@ class TestWorktreeAddAdvisoryUnit(TestWorktreeAddAdvisory):
     """Re-expose TestWorktreeAddAdvisory under the @pytest.mark.unit marker."""
 
 
+# =============================================================================
+# OMN-8838 — gh pr merge --auto block tests
+# =============================================================================
+
+
+class TestGhPrMergeAutoBlock(unittest.TestCase):
+    """gh pr merge --auto silently picks wrong merge method. Must be hard-blocked.
+
+    Use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH instead.
+    See OMN-8838 and memory reference_github_merge_queue_api.md.
+    """
+
+    def _assert_blocked(self, command: str) -> None:
+        self.assertTrue(
+            bash_guard.matches_any(command, bash_guard.HARD_BLOCK_PATTERNS),
+            msg=f"Expected HARD_BLOCK match for: {command!r}",
+        )
+
+    def _assert_not_blocked(self, command: str) -> None:
+        hard = bash_guard.matches_any(command, bash_guard.HARD_BLOCK_PATTERNS)
+        self.assertFalse(hard, msg=f"Expected NO HARD_BLOCK match for: {command!r}")
+
+    def test_gh_pr_merge_auto_squash(self) -> None:
+        self._assert_blocked("gh pr merge 123 --auto --squash")
+
+    def test_gh_pr_merge_auto_squash_swapped(self) -> None:
+        self._assert_blocked("gh pr merge 123 --squash --auto")
+
+    def test_gh_pr_merge_auto_no_method(self) -> None:
+        self._assert_blocked("gh pr merge 123 --auto")
+
+    def test_gh_pr_merge_auto_with_repo_flag(self) -> None:
+        self._assert_blocked(
+            "gh pr merge 123 --auto --squash --repo OmniNode-ai/omniclaude"
+        )
+
+    def test_gh_pr_merge_auto_with_url(self) -> None:
+        self._assert_blocked(
+            "gh pr merge https://github.com/org/repo/pull/42 --auto --squash"
+        )
+
+    def test_gh_pr_merge_auto_uppercase(self) -> None:
+        self._assert_blocked("GH PR MERGE 99 --AUTO --SQUASH")
+
+    def test_gh_pr_merge_without_auto_not_blocked(self) -> None:
+        """gh pr merge without --auto must NOT be hard-blocked."""
+        self._assert_not_blocked("gh pr merge 123 --squash")
+
+    def test_gh_pr_list_not_blocked(self) -> None:
+        self._assert_not_blocked("gh pr list --state open")
+
+    def test_gh_pr_view_not_blocked(self) -> None:
+        self._assert_not_blocked("gh pr view 123")
+
+    def test_graphql_enable_auto_merge_not_blocked(self) -> None:
+        """The correct GraphQL replacement must never be blocked."""
+        self._assert_not_blocked(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\", mergeMethod: SQUASH}) { pullRequest { id } } }'"
+        )
+
+
+class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
+    """Integration tests: full main() pipeline for gh pr merge --auto."""
+
+    def _run(self, command: str) -> tuple[str, int]:
+        hook_input = {"tool_name": "Bash", "tool_input": {"command": command}}
+        captured = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO(json.dumps(hook_input))),
+            patch("sys.stdout", captured),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            code = bash_guard.main()
+        return captured.getvalue().strip(), code
+
+    def test_main_blocks_gh_pr_merge_auto_squash(self) -> None:
+        stdout, code = self._run("gh pr merge 123 --auto --squash")
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+
+    def test_main_block_reason_mentions_graphql(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto --squash")
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("GraphQL", reason)
+
+    def test_main_block_reason_mentions_omn_8838(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto --squash")
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("OMN-8838", reason)
+
+    def test_main_block_reason_mentions_squash(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto")
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("SQUASH", reason)
+
+    def test_main_allows_gh_pr_merge_without_auto(self) -> None:
+        stdout, code = self._run("gh pr merge 123 --squash")
+        self.assertEqual(code, 0)
+
+    def test_main_allows_gh_pr_list(self) -> None:
+        stdout, code = self._run("gh pr list --state open")
+        self.assertEqual(code, 0)
+
+
+@pytest.mark.unit
+class TestGhPrMergeAutoBlockUnit(TestGhPrMergeAutoBlock):
+    """Re-expose TestGhPrMergeAutoBlock under the @pytest.mark.unit marker."""
+
+
+@pytest.mark.unit
+class TestGhPrMergeAutoBlockIntegrationUnit(TestGhPrMergeAutoBlockIntegration):
+    """Re-expose TestGhPrMergeAutoBlockIntegration under the @pytest.mark.unit marker."""
+
+
 if __name__ == "__main__":
     unittest.main()
