@@ -11,7 +11,8 @@ Coverage:
     * Non-protection commands pass through.
     * Protection mutation with all contexts matched → allow.
     * Protection mutation with one unmatched context → block (exit 2).
-    * --input / -F file form → pass-through with warning (MVP).
+    * --input (file) form → pass-through with warning (MVP).
+    * -f / --raw-field / -F / --field inline flags → all parsed as context sources.
     * gh probe failure → fail-open.
     * OMN_9038_BP_GUARD_DISABLED env var → fail-open.
     * shlex handles quoted context names with embedded spaces.
