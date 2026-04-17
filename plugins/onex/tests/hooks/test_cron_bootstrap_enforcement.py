@@ -35,7 +35,7 @@ def _make_cron_stdin(schedule: str, prompt: str) -> str:
     return json.dumps(
         {
             "tool_name": "CronCreate",
-            "tool_input": {"schedule": schedule, "prompt": prompt},
+            "tool_input": {"cron": schedule, "prompt": prompt},
             "tool_response": {"cronId": "fake-id"},
         }
     )

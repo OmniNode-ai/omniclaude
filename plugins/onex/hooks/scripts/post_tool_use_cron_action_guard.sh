@@ -56,7 +56,7 @@ if [[ -n "${_BOOTSTRAP_STATE_DIR:-}" ]] && command -v jq >/dev/null 2>&1; then
     mkdir -p "$SEEN_DIR"
 
     PROMPT="$(echo "$STDIN_DATA" | jq -r '.tool_input.prompt // empty' 2>/dev/null || true)"
-    SCHEDULE="$(echo "$STDIN_DATA" | jq -r '.tool_input.schedule // empty' 2>/dev/null || true)"
+    SCHEDULE="$(echo "$STDIN_DATA" | jq -r '.tool_input.cron // empty' 2>/dev/null || true)"
 
     if [[ -n "$PROMPT" ]]; then
         # Validate both schedule (cron expression) and prompt content to prevent
