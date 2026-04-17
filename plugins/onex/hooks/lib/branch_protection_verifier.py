@@ -162,7 +162,7 @@ def _get_observed_checks(owner: str, repo: str) -> set[str] | None:
         prs = json.loads(listing.stdout)
     except json.JSONDecodeError:
         return None
-    if not prs:
+    if not prs or not isinstance(prs[0], dict) or "number" not in prs[0]:
         return None
 
     pr_number = str(prs[0]["number"])
@@ -198,7 +198,7 @@ def verify(command: str, tool_info: dict) -> None:
         # MVP: payload body lives in a file we can't safely parse here.
         _fail_open(
             tool_info,
-            f"--input/-F form on {owner}/{repo}:{branch} — MVP pass-through "
+            f"--input form on {owner}/{repo}:{branch} — MVP pass-through "
             "(follow-up: parse payload file to enforce contexts).",
         )
         return

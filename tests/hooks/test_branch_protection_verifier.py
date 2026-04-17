@@ -196,6 +196,28 @@ class TestDegradedMode(unittest.TestCase):
             out, code = _run_main(_mk_bash_tool_info(cmd))
         self.assertEqual(code, 0, msg=out)
 
+    def test_gh_pr_list_malformed_shape_fails_open(self):
+        # Regression for CR on PR #1338: `prs[0]["number"]` previously raised
+        # KeyError when `gh pr list` returned an unexpected shape (e.g., items
+        # without a "number" key). The guard must fail open in that case, not
+        # crash.
+        cmd = (
+            "gh api --method PUT repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-f required_status_checks[contexts][]=anything"
+        )
+
+        def _run(args, *_a, **_kw):
+            if args[1:3] == ["pr", "list"]:
+                # Shape the tool should tolerate: non-dict OR dict without "number".
+                return subprocess.CompletedProcess(
+                    args, 0, json.dumps([{"unexpected_field": "yes"}]), ""
+                )
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        with patch.object(bpv.subprocess, "run", side_effect=_run):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 0, msg=out)
+
 
 class TestExtractionPrimitives(unittest.TestCase):
     def test_parse_contexts_respects_quotes(self):
