@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.buildloop.plist — launchd agent for periodic dispatch/build-loop tick [OMN-9056]
+
+  Invokes cron-closeout.sh --build-only (phases F1-F3), which is the canonical
+  build-loop entrypoint per OMN-6935. The standalone cron-buildloop.sh was
+  deprecated when its logic was folded into cron-closeout.sh.
+
+  Label retained as "ai.omninode.buildloop" for continuity with OMN-9036 tick
+  bundle documentation.
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+
+  Install:
+    bash omniclaude/scripts/tick-bundle-install.sh
+
+  Uninstall:
+    bash omniclaude/scripts/tick-bundle-uninstall.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.buildloop</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-closeout.sh</string>
+    <string>--build-only</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>7200</integer><!-- 2 hours -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-buildloop-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-buildloop-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

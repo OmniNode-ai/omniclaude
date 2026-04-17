@@ -4,12 +4,13 @@
 
 # tick-bundle-install.sh — idempotent launchd installer for the OMN-9036 tick bundle.
 #
-# Installs 5 plists under ~/Library/LaunchAgents:
+# Installs 6 plists under ~/Library/LaunchAgents:
 #   ai.omninode.merge-sweep       (5m)
 #   ai.omninode.dispatch-engine   (10m)
 #   ai.omninode.overseer-verify   (15m)
 #   ai.omninode.contract-verify   (15m)
 #   ai.omninode.idle-watchdog     (15m)
+#   ai.omninode.buildloop         (2h)  [OMN-9056]
 #
 # Source templates under scripts/launchd/ contain __OMNI_HOME__ / __HOME__ placeholders;
 # this script expands them at install time so the deployed plists are absolute-path correct
@@ -48,6 +49,7 @@ TICKS=(
   "ai.omninode.overseer-verify"
   "ai.omninode.contract-verify"
   "ai.omninode.idle-watchdog"
+  "ai.omninode.buildloop"
 )
 
 echo "=== tick-bundle-install [OMN-9036] ==="
@@ -78,6 +80,30 @@ render_plist() {
     "${src}"
 }
 
+verify_program_args() {
+  # [OMN-9056] Post-render, pre-install verifier. Extracts ProgramArguments[0]
+  # from a rendered plist and confirms the binary it points at exists and is
+  # executable. Exits the installer non-zero if not — prevents shipping a plist
+  # that will fail with EX_CONFIG at launchd load time (the exact bug that left
+  # ai.omninode.buildloop dark for hours after OMN-9036).
+  local label="$1"
+  local rendered="$2"
+  local prog
+  prog="$(
+    echo "${rendered}" \
+      | awk '/<key>ProgramArguments<\/key>/{flag=1; next} flag && /<string>/{gsub(/.*<string>|<\/string>.*/, ""); print; exit}'
+  )"
+  if [[ -z "${prog}" ]]; then
+    echo "  [${label}] ERROR — ProgramArguments[0] not found in rendered plist" >&2
+    return 1
+  fi
+  if [[ ! -x "${prog}" ]]; then
+    echo "  [${label}] ERROR — ProgramArguments[0] not executable: ${prog}" >&2
+    return 1
+  fi
+  return 0
+}
+
 install_one() {
   local label="$1"
   local src="${LAUNCHD_SRC}/${label}.plist"
@@ -90,6 +116,8 @@ install_one() {
 
   local rendered
   rendered="$(render_plist "${src}")"
+
+  verify_program_args "${label}" "${rendered}" || return 1
 
   if [[ -f "${dst}" ]]; then
     if diff -q <(echo "${rendered}") "${dst}" >/dev/null 2>&1; then
@@ -156,6 +184,10 @@ echo "  failed:    ${FAILED}"
 echo ""
 
 if [[ "${DRY_RUN}" == "true" ]]; then
+  if [[ ${FAILED} -gt 0 ]]; then
+    echo "[DRY RUN] FAILED — ${FAILED} tick(s) would fail pre-install verification." >&2
+    exit 1
+  fi
   echo "[DRY RUN] complete."
   exit 0
 fi
@@ -165,6 +197,6 @@ launchctl list | grep ai.omninode || echo "  (none found)"
 
 if [[ ${FAILED} -gt 0 ]]; then
   echo "" >&2
-  echo "ERROR: ${FAILED} tick(s) failed to load. Plists were written to ${LAUNCH_AGENTS} but are not running." >&2
+  echo "ERROR: ${FAILED} tick(s) failed to load or verify. Plists were written to ${LAUNCH_AGENTS} but are not running." >&2
   exit 1
 fi
