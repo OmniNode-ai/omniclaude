@@ -113,6 +113,7 @@ if [[ "$IS_ADJACENT" == "true" ]]; then
     MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
         --arg warning "$WARNING" \
         '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+         .hookSpecificOutput.hookEventName = "PreToolUse" |
          .hookSpecificOutput.additionalContext = (
            ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $warning)
            | ltrimstr("\n\n")

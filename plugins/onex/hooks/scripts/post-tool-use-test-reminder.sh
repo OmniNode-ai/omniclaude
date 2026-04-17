@@ -99,6 +99,7 @@ REMINDER="[Test Reminder] You just edited ${FILENAME} which matches a handler/pr
 MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
     --arg reminder "$REMINDER" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "PostToolUse" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $reminder)
        | ltrimstr("\n\n")

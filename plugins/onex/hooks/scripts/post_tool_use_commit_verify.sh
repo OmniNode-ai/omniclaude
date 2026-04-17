@@ -40,6 +40,7 @@ fi
 # Inject the verification reminder into hookSpecificOutput so Claude sees it.
 echo "$INPUT" | jq --arg msg "$MSG" '
   .hookSpecificOutput = (.hookSpecificOutput // {}) |
+  .hookSpecificOutput.hookEventName = "PostToolUse" |
   .hookSpecificOutput.message = (
     [(.hookSpecificOutput.message // ""), $msg]
     | map(select(length > 0))

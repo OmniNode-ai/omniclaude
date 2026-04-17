@@ -70,6 +70,7 @@ printf '{"timestamp":"%s","event":"broad_staging","command":"%s"}\n' \
 MODIFIED=$(printf '%s' "$TOOL_INFO" | jq \
     --arg warning "$WARNING" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "PreToolUse" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $warning)
        | ltrimstr("\n\n")

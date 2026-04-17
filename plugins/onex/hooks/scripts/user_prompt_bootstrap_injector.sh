@@ -43,10 +43,10 @@ INJECTION="[MANDATORY] Session cron bootstrap not complete. Create the 3 require
 # Output JSON with hookSpecificOutput.additionalContext per Claude Code hook protocol
 if command -v jq >/dev/null 2>&1; then
     jq -n --arg ctx "$INJECTION" \
-        '{"hookSpecificOutput": {"additionalContext": $ctx}}'
+        '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": $ctx}}'
 else
     # Fallback: minimal JSON without jq
-    printf '{"hookSpecificOutput": {"additionalContext": "%s"}}\n' \
+    printf '{"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "%s"}}\n' \
         "$(echo "$INJECTION" | sed 's/"/\\"/g')"
 fi
 

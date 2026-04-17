@@ -93,6 +93,7 @@ This is a one-time suggestion for this session."
 MODIFIED=$(printf '%s' "$PROMPT_INFO" | jq \
     --arg nudge "$NUDGE" \
     '.hookSpecificOutput = (.hookSpecificOutput // {}) |
+     .hookSpecificOutput.hookEventName = "UserPromptSubmit" |
      .hookSpecificOutput.additionalContext = (
        ((.hookSpecificOutput.additionalContext // "") + "\n\n" + $nudge)
        | ltrimstr("\n\n")

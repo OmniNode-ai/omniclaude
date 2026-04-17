@@ -119,7 +119,16 @@ def main(stdin: object = None) -> None:
     prompt: str = tool_input.get("prompt", "") or ""
 
     if is_passive_cron(prompt):
-        print(json.dumps({"hookSpecificOutput": WARNING_MESSAGE}))
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": WARNING_MESSAGE,
+                    }
+                }
+            )
+        )
     else:
         print("{}")
 
