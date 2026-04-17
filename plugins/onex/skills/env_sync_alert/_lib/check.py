@@ -278,7 +278,10 @@ if __name__ == "__main__":
     import sys
 
     logging.basicConfig(level=logging.INFO)
-    state_dir = Path(os.environ.get("ONEX_STATE_DIR", Path.home() / ".onex_state"))
+    raw_state_dir = os.environ.get("ONEX_STATE_DIR")
+    if not raw_state_dir:
+        raise SystemExit("ONEX_STATE_DIR env var is required — set it in ~/.omnibase/.env")
+    state_dir = Path(raw_state_dir)
     config = EnvSyncAlertConfig(state_dir=state_dir)
     result = run_alert_check(config)
     if result.alert_fired:
