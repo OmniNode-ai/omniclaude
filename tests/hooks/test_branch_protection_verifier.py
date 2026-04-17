@@ -299,6 +299,34 @@ class TestExtractionPrimitives(unittest.TestCase):
             )
         )
 
+    def test_parse_contexts_accepts_attached_and_equals_forms(self):
+        # gh api / cobra CLI accepts attached (`-Fkey=val`) and equals-separated
+        # (`--field=key=val`, `-X=PATCH`) forms in addition to space-separated.
+        # All must extract the context so attached-form rollouts cannot bypass.
+        cmd = (
+            "gh api --method=PUT repos/x/y/branches/main/protection "
+            "-Frequired_status_checks[contexts][]=ctx-attached-F "
+            "-frequired_status_checks[contexts][]=ctx-attached-f "
+            "--field=required_status_checks[contexts][]=ctx-equals-field "
+            "--raw-field=required_status_checks[contexts][]=ctx-equals-raw"
+        )
+        contexts = bpv._parse_contexts(cmd)
+        self.assertIn("ctx-attached-F", contexts)
+        self.assertIn("ctx-attached-f", contexts)
+        self.assertIn("ctx-equals-field", contexts)
+        self.assertIn("ctx-equals-raw", contexts)
+
+    def test_method_re_matches_equals_and_attached_forms(self):
+        self.assertIsNotNone(bpv._METHOD_RE.search("gh api --method=PATCH"))
+        self.assertIsNotNone(bpv._METHOD_RE.search("gh api --method PATCH"))
+        self.assertIsNotNone(bpv._METHOD_RE.search("gh api -X PATCH"))
+        self.assertIsNotNone(bpv._METHOD_RE.search("gh api -XPATCH"))
+        self.assertIsNone(bpv._METHOD_RE.search("gh api -X GET"))
+
+    def test_has_input_flag_matches_equals_form(self):
+        self.assertTrue(bpv._has_input_flag("gh api --input=/tmp/payload.json"))
+        self.assertTrue(bpv._has_input_flag("gh api --input /tmp/payload.json"))
+
     def test_parse_contexts_accepts_all_four_field_flags(self):
         # `gh api` inline field flags: -f/--raw-field (string) and -F/--field
         # (typed). All four must be parsed as context sources so a rollout that
@@ -405,6 +433,40 @@ class TestShellWrapperUnwrap(unittest.TestCase):
         self.assertEqual(code, 2, msg=out)
         payload = json.loads(out)
         self.assertIn("never-emitted", payload["reason"])
+
+    def test_norc_long_option_is_not_unwrap_target(self):
+        # `--norc` contains 'c' but is NOT the command flag. Before the fix,
+        # the token-scanner matched any `-…c…` token and would incorrectly
+        # take the NEXT token as the payload.
+        cmd = (
+            "bash --norc -c 'gh api --method PUT "
+            "repos/x/y/branches/main/protection -F "
+            "required_status_checks[contexts][]=hello'"
+        )
+        # After fix: `--norc` is a long option (starts with `--`), skipped.
+        # The next token `-c` IS the command flag, so the payload is the
+        # single-quoted inner command.
+        inner = bpv._unwrap_shell_wrapper(cmd)
+        self.assertIn("gh api", inner)
+        self.assertIn("hello", inner)
+        # The payload must NOT be `-c` itself (which would be the case if
+        # `--norc` had been mistaken for the command flag).
+        self.assertNotEqual(inner.strip(), "-c")
+
+    def test_attached_F_rollout_blocks_via_wrapper(self):
+        # Attached `-Fkey=val` + `bash -c` wrapper — both attack vectors at once.
+        cmd = (
+            "bash -c 'gh api -XPUT "
+            "repos/OmniNode-ai/omniclaude/branches/main/protection "
+            "-Frequired_status_checks[contexts][]=stealth-check'"
+        )
+        with patch.object(
+            bpv.subprocess, "run", side_effect=_fake_gh(["Quality-Gate"])
+        ):
+            out, code = _run_main(_mk_bash_tool_info(cmd))
+        self.assertEqual(code, 2, msg=out)
+        payload = json.loads(out)
+        self.assertIn("stealth-check", payload["reason"])
 
     def test_env_prefix_unmatched_context_blocks(self):
         # End-to-end: `/usr/bin/env bash -c '...'` must not bypass the guard.

@@ -31,16 +31,22 @@ _PROTECTION_URL_RE = re.compile(
     r"repos/(?P<owner>[^/\s]+)/(?P<repo>[^/\s]+)/branches/(?P<branch>[^/\s]+)/protection"
 )
 
+# `gh api` (and most Go/cobra CLIs) accepts all of:
+#   `--method PATCH`, `--method=PATCH`, `-X PATCH`, `-XPATCH`
+# for the method flag, and analogous forms for -f/-F/--field/--raw-field and
+# --input. The regexes below recognize all three separators (space, `=`, and
+# attached) so attached-form rollouts cannot bypass the guard.
 _METHOD_RE = re.compile(
-    r"(?:--method|-X)\s+(?P<method>PUT|PATCH)\b",
+    r"(?:--method(?:\s+|=)|-X\s*)(?P<method>PUT|PATCH)\b",
     re.IGNORECASE,
 )
 
 _CONTEXT_F_RE = re.compile(
-    r"(?:-f|--raw-field|-F|--field)\s+required_status_checks\[contexts\]\[\]=(?P<value>\S+)"
+    r"(?:-f|--raw-field|-F|--field)(?:\s+|=)"
+    r"required_status_checks\[contexts\]\[\]=(?P<value>\S+)"
 )
 
-_INPUT_FLAG_RE = re.compile(r"--input\s+\S+")
+_INPUT_FLAG_RE = re.compile(r"(?:--input(?:\s+|=))\S+")
 
 # Common shell wrappers that hide a `gh api ...` call inside a quoted payload:
 # `bash -lc '<payload>'`, `sh -c "..."`, `zsh -c ...`, `bash -euo pipefail -c ...`,
@@ -150,12 +156,14 @@ def _unwrap_shell_wrapper(command: str) -> str:
             return current
 
         # Find the first `-c`-family flag after the shell, skipping any interim
-        # option flags (`-e`, `-u`, `-o pipefail`, `-l`, etc.).
+        # option flags (`-e`, `-u`, `-o pipefail`, `-l`, etc.). Restricted to
+        # short-option clusters (`-c`, `-lc`, `-euc`) so long options like
+        # `--norc` / `--rcfile` / `--noprofile` are not misread as command flags.
         payload_idx = None
         i = start + 1
         while i < len(tokens) - 1:
             tok = tokens[i]
-            if tok.startswith("-") and "c" in tok.lstrip("-"):
+            if tok.startswith("-") and not tok.startswith("--") and "c" in tok[1:]:
                 payload_idx = i + 1
                 break
             if tok == "-o" and i + 1 < len(tokens):
@@ -189,13 +197,28 @@ def _parse_contexts(command: str) -> list[str]:
     i = 0
     while i < len(tokens):
         tok = tokens[i]
+        kv: str | None = None
+        # Space-separated: `-f key=value`, `--field key=value`, etc.
         if tok in ("-f", "--raw-field", "-F", "--field") and i + 1 < len(tokens):
             kv = tokens[i + 1]
-            if kv.startswith("required_status_checks[contexts][]="):
-                contexts.append(kv.split("=", 1)[1])
             i += 2
+        # Equals-separated long forms: `--field=key=value`, `--raw-field=key=value`.
+        elif tok.startswith("--field=") or tok.startswith("--raw-field="):
+            kv = tok.split("=", 1)[1]
+            i += 1
+        # Attached short forms: `-Fkey=value`, `-fkey=value`. `-F` / `-f`
+        # alone are space-separated and handled above, so only treat
+        # strictly-longer tokens here.
+        elif (tok.startswith("-F") and tok != "-F") or (
+            tok.startswith("-f") and tok != "-f"
+        ):
+            kv = tok[2:]
+            i += 1
+        else:
+            i += 1
             continue
-        i += 1
+        if kv is not None and kv.startswith("required_status_checks[contexts][]="):
+            contexts.append(kv.split("=", 1)[1])
     return contexts
 
 
