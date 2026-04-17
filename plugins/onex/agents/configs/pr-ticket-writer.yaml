@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 ---
+model: sonnet
+disallowedTools: []
+domain: pr_workflow
+purpose: "Write detailed pull request descriptions synthesizing commit history, ticket context, and change rationale."
 schema_version: "1.0.0"
 mode: full
 agent_type: "pr_ticket_writer"

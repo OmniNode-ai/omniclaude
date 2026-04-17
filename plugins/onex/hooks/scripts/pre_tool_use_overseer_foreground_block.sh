@@ -5,7 +5,7 @@
 # PreToolUse Overseer Foreground Block (OMN-8376)
 #
 # When .onex_state/overseer-active.flag exists, foreground Bash/Edit/Write
-# tools targeting repo paths under $OMNI_HOME are BLOCKED so the lead agent
+# tools targeting repo paths under $ONEX_REGISTRY_ROOT are BLOCKED so the lead agent
 # cannot drift into manual fixes while an overseer contract is driving.
 #
 # Pattern mirrors pre_tool_use_bash_guard.sh (OMN-7018 worktree enforcement).

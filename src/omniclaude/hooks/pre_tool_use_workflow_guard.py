@@ -72,10 +72,15 @@ _TICKET_PATTERN = re.compile(r"OMN-\d+", re.IGNORECASE)
 _GIT_COMMIT_PATTERN = re.compile(r"\bgit\s+commit\b")
 
 # ---------------------------------------------------------------------------
-# Epic creation detection — mcp__linear-server__save_issue without parentId
+# Epic creation detection — covers both legacy MCP tool and migrated tracker API
 # ---------------------------------------------------------------------------
 
-_EPIC_CREATION_TOOL = "mcp__linear-server__save_issue"
+_EPIC_CREATION_TOOLS: frozenset[str] = frozenset(
+    {
+        "mcp__linear-server__save_issue",  # legacy direct MCP call
+        "tracker.save_issue",  # migrated tracker.* API
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Canonical clone write protection (OMN-7810)
@@ -206,10 +211,13 @@ def _check_ticket_id_in_context(
 
 
 def _resolve_omni_home() -> Path | None:
-    """Return the OMNI_HOME path, or None if not set."""
-    omni_home = os.environ.get("OMNI_HOME")
-    if omni_home:
-        return Path(omni_home).resolve()
+    """Return the registry root path, or None if not set.
+
+    Reads ONEX_REGISTRY_ROOT (canonical name) with OMNI_HOME as fallback.
+    """
+    registry_root = os.environ.get("ONEX_REGISTRY_ROOT") or os.environ.get("OMNI_HOME")
+    if registry_root:
+        return Path(registry_root).resolve()
     return None
 
 
@@ -300,8 +308,8 @@ def run_guard(stdin_json: str) -> tuple[int, str]:
             if not allowed:
                 return 2, json.dumps({"decision": "block", "reason": block_reason})
 
-    # --- Check 1: Triage-first (epic creation via Linear MCP) ---
-    if tool_name == _EPIC_CREATION_TOOL:
+    # --- Check 1: Triage-first (epic creation via Linear MCP or tracker.*) ---
+    if tool_name in _EPIC_CREATION_TOOLS:
         # Heuristic: if parentId is absent or None, treat as potential epic creation
         parent_id = tool_input.get("parentId") or tool_input.get("parent_id")
         if not parent_id:

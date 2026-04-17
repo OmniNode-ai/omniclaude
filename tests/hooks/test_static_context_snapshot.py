@@ -414,7 +414,7 @@ class TestEmitChangeEvent:
 
     def test_emit_called_with_correct_payload(self) -> None:
         snap = FileSnapshot(
-            file_path="/home/user/.claude/CLAUDE.md",  # local-path-ok
+            file_path="/home/user/.claude/CLAUDE.md",  # local-path-ok: test fixture path
             content_hash="abc",
             session_id="session-1",
             is_versioned=False,

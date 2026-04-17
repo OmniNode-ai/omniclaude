@@ -9,10 +9,12 @@ from pathlib import Path
 import yaml
 
 SKILLS_ROOT = Path(__file__).parent.parent / "plugins" / "onex" / "skills"
-OMNI_HOME = Path(
-    __import__("os").environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home"))
+ONEX_REGISTRY_ROOT = Path(
+    __import__("os").environ.get(
+        "ONEX_REGISTRY_ROOT", str(Path.home() / "Code" / "omni_home")
+    )
 )
-OUTPUT_PATH = OMNI_HOME / ".onex_state" / "skill_shim_audit.yaml"
+OUTPUT_PATH = ONEX_REGISTRY_ROOT / ".onex_state" / "skill_shim_audit.yaml"
 
 SKIP_DIRS = {"_bin", "_golden_path_validate", "_lib", "_shared"}
 

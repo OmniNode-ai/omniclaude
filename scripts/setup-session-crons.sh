@@ -35,8 +35,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OMNI_HOME="${OMNI_HOME:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-DEFAULT_OUTPUT="${OMNI_HOME}/.onex_state/session-cron-bootstrap.json"
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+DEFAULT_OUTPUT="${ONEX_REGISTRY_ROOT}/.onex_state/session-cron-bootstrap.json"
 OUTPUT_FILE="${DEFAULT_OUTPUT}"
 DRY_RUN=false
 

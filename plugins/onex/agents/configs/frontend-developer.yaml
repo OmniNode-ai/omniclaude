@@ -6,6 +6,10 @@
 # Distinguished from ui-testing agent: builds UIs (not tests)
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: frontend
+purpose: "Build and debug Next.js, React, and TypeScript frontend applications with accessibility and performance focus."
 mode: full
 agent_type: "frontend_developer"
 mode: "both"

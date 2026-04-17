@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: MIT
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: rag
+purpose: "Ingest and index new documents into the ONEX RAG knowledge base for semantic retrieval."
 mode: full
 agent_type: "rag_update"
 mode: "full"

@@ -267,7 +267,7 @@ def write_recovery_checkpoint(
     """Write a recovery checkpoint for a stalled agent.
 
     Checkpoint is written to:
-    $OMNI_HOME/.onex_state/pipeline_checkpoints/{ticket_id}/recovery-{timestamp}.yaml
+    $ONEX_STATE_DIR/pipeline_checkpoints/{ticket_id}/recovery-{timestamp}.yaml
 
     Returns:
         {"path": str, "timestamp": str}
@@ -358,7 +358,7 @@ def escalate_to_blocked(
     4. Log escalation event to dispatch log
     """
     # Move to Blocked in Linear
-    mcp__linear_server__save_issue(
+    tracker.save_issue(
         identifier=ticket_id,
         status="Blocked",
         comment=f"Auto-blocked: agent stalled {attempt_count} times. "

@@ -416,12 +416,12 @@ def write_diagnosis(
 
 
 def resolve_repo_roots(repos: list[str] | None = None) -> list[Path]:
-    """Resolve a list of repo names under ``$OMNI_HOME`` to absolute paths.
+    """Resolve a list of repo names under ``$ONEX_REGISTRY_ROOT`` to absolute paths.
 
     If ``repos`` is None, returns an empty list — callers must pass the repos
     explicitly (no implicit workspace scan).
     """
-    omni_home = Path(os.environ.get("OMNI_HOME", ""))
+    omni_home = Path(os.environ.get("ONEX_REGISTRY_ROOT", ""))
     if not omni_home or not repos:
         return []
     return [omni_home / name for name in repos]

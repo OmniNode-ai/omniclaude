@@ -147,7 +147,7 @@ def _derive_repo(project_path: str) -> str | None:
     """Extract repository name from project_path.
 
     Returns the basename of the path (e.g. "omniclaude2" from
-    "/Volumes/PRO-G40/Code/omniclaude2"), or None when project_path is empty.  # local-path-ok
+    "/Volumes/PRO-G40/Code/omniclaude2"), or None when project_path is empty.  # local-path-ok: example path in docstring
     """
     if not project_path:
         return None

@@ -97,7 +97,7 @@ model_args = " ".join(f"--model {m}" for m in models)
 #### PR Mode
 
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --pr {pr_number} --repo {repo} --persona analytical-strict {model_args}
 ```
 
@@ -131,7 +131,7 @@ If the script exits non-zero, **stop immediately**. Do NOT proceed. Do NOT subst
 The `target` field in the result JSON MUST equal `TARGET_FILE` (the resolved absolute path).
 
 ```bash
-uv run python -m omniintelligence.review_pairing.cli_review \
+uv run python -m omniintelligence.review_pairing.cli_review \  # local-path-ok: omniintelligence direct CLI invocation until OMN-8770 onex run migration
   --file {TARGET_FILE} --persona analytical-strict {model_args}
 ```
 
@@ -446,7 +446,6 @@ If hash matches `state.file_hashes[repo:relative_path]`, skip file. After scanni
 Module-level (single-file scope only): identify functions/classes not referenced within same file.
 Cross-file (vulture subprocess):
 ```bash
-cd $OMNI_HOME/<repo>  # local-path-ok
 uv run vulture src/ --min-confidence 80 --exclude .venv,__pycache__,docs 2>/dev/null || true
 ```
 Parse lines: `<file>:<line>: unused <kind> '<name>' (confidence: <N>%)`

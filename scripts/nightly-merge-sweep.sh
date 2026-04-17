@@ -14,7 +14,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------
-OMNI_HOME="${OMNI_HOME:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
 DEFAULT_REPOS="omniclaude,omnibase_core,omnibase_infra,omnibase_spi,omniintelligence,omnimemory,omnidash,omninode_infra,omniweb,onex_change_control"
 TIMEOUT_MINUTES="${NIGHTLY_SWEEP_TIMEOUT_MINUTES:-15}"
 LOG_DIR="${HOME}/.claude/nightly-sweep"
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --repos CSV   Comma-separated list of repos (default: all)"
             echo ""
             echo "Environment:"
-            echo "  OMNI_HOME                     Path to omni_home (default: /Volumes/PRO-G40/Code/omni_home)"  # local-path-ok
+            echo "  ONEX_REGISTRY_ROOT                     Path to omni_home (default: /Volumes/PRO-G40/Code/omni_home)"  # local-path-ok
             echo "  NIGHTLY_SWEEP_TIMEOUT_MINUTES  Per-repo timeout (default: 15)"
             exit 0
             ;;
@@ -98,7 +98,7 @@ TOTAL=${#REPOS[@]}
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Starting nightly merge sweep: ${TOTAL} repos, ${TIMEOUT_MINUTES}m timeout each"
 
 for repo in "${REPOS[@]}"; do
-    REPO_PATH="${OMNI_HOME}/${repo}"
+    REPO_PATH="${ONEX_REGISTRY_ROOT}/${repo}"
     REPO_LOG="${OUTPUT_DIR}/${repo}.json"
     REPO_START=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 

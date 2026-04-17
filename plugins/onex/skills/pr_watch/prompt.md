@@ -234,7 +234,7 @@ def _handle_merged(
 
         # 2. Update Linear to Done
         try:
-            mcp__linear-server__save_issue(id=ticket_id, state="Done")
+            tracker.save_issue(id=ticket_id, state="Done")
         except Exception as _le:
             print(f"pr-watch: Warning: Failed to update Linear to Done for {ticket_id}: {_le}")
 

@@ -33,7 +33,7 @@ Resolve `SWEEP_DATE`:
 
 Resolve `ONEX_CC_REPO_PATH`:
 - Check env var `ONEX_CC_REPO_PATH`
-- Fallback: `/Volumes/PRO-G40/Code/omni_home/onex_change_control`  <!-- local-path-ok -->
+- Fallback: `/Volumes/PRO-G40/Code/omni_home/onex_change_control`  # local-path-ok: env var default fallback in documentation
 - If path does not exist: emit `INTEGRATION_SWEEP ERROR: ONEX_CC_REPO_PATH not found at <path>` and stop.
 
 ---
@@ -45,7 +45,7 @@ Resolve `ONEX_CC_REPO_PATH`:
 **Otherwise** — discover recently completed tickets:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   state="Done",
   updatedAfter="{SWEEP_DATE}T00:00:00Z",
   team="Omninode"
@@ -72,7 +72,7 @@ Proceed directly to Step 5b (Unconditional Surface Probes).
 For each discovered ticket ID, fetch the **full** description (not the truncated list_issues
 version) and extract the contract block:
 
-1. Call `mcp__linear-server__get_issue(id=<ticket_id>)` -- this returns the untruncated description
+1. Call `tracker.get_issue(id=<ticket_id>)` -- this returns the untruncated description
 2. Search the ticket description for a fenced YAML block:
    ````
    ```yaml
@@ -286,7 +286,7 @@ may not have all infra running.
 
 1. Locate the omnidash repo:
    ```bash
-   OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+   OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok: env var default fallback
    ```
    - If directory does not exist: record `status=UNKNOWN`, `reason=PROBE_UNAVAILABLE`,
      `evidence="omnidash directory not found at $OMNIDASH_DIR"`. Skip remaining sub-steps.
@@ -332,7 +332,7 @@ Verify Drizzle schema definitions match migration DDL.
 
 **Check 1 -- Run omnidash parity script:**
 ```bash
-OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok
+OMNIDASH_DIR="${OMNIDASH_DIR:-/Volumes/PRO-G40/Code/omni_home/omnidash}"  # local-path-ok: env var default fallback
 cd $OMNIDASH_DIR && npm run db:check-drizzle-parity
 ```
 Exit 0 = PASS. Exit 1 = FAIL with specific table mismatches.
@@ -534,7 +534,7 @@ For each probe result where `status == FAIL`:
 
 4. **Create ticket**:
    ```
-   mcp__linear-server__save_issue(
+   tracker.save_issue(
      title="[autopilot-triage] {surface} {signature_hash} -- {SWEEP_DATE}",
      description="## Context\n- Surface: {surface}\n- Sweep date: {SWEEP_DATE}\n- Failure signature: {signature}\n- Active profile: {profile}\n\n## Evidence\n{detail}\n\n## Resolution\nInvestigate and fix. Re-run /integration-sweep to verify.",
      team="Omninode",

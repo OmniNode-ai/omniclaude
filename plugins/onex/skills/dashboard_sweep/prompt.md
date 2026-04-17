@@ -67,7 +67,7 @@ If `--fix-only`:
 If `--dry-run`:
 - Set `DRY_RUN=true`; all write operations below are annotated `[DRY_RUN — skipped]`
 - No `Task()` dispatches
-- No `mcp__linear-server__*` calls
+- No `tracker.*` calls
 - No `gh pr create` or `gh pr merge` calls
 - No deploy actions (Phase 4b fully skipped)
 - Screenshots and JSON artifacts ARE written (read-only observation is always safe)
@@ -115,7 +115,7 @@ if build_time:
         print(f"[dashboard-sweep] Consider running omnidash-restart before sweeping")
 
 # Check 2: Does the git SHA match the latest omnidash main?
-latest_sha = run(f"git -C {OMNI_HOME}/omnidash rev-parse --short HEAD", capture=True).stdout.strip()
+latest_sha = run(f"git -C {ONEX_REGISTRY_ROOT}/omnidash rev-parse --short HEAD", capture=True).stdout.strip()  # local-path-ok: omnidash build freshness check requires registry path
 if latest_sha and git_sha != "unknown" and git_sha != latest_sha:
     print(f"[dashboard-sweep] WARNING: omnidash running {git_sha}, latest main is {latest_sha}")
     print(f"[dashboard-sweep] Fixes merged since last restart may not be reflected")
@@ -128,7 +128,7 @@ If freshness check detects stale code AND the `--deploy` flag is set:
 ```python
 if stale_detected and deploy_flag:
     print("[dashboard-sweep] Stale omnidash detected — auto-restarting before audit")
-    lifecycle_script = f"{OMNI_HOME}/omnibase_infra/scripts/omnidash-lifecycle.sh"
+    lifecycle_script = f"{ONEX_REGISTRY_ROOT}/omnibase_infra/scripts/omnidash-lifecycle.sh"  # local-path-ok: lifecycle script path requires registry root
     if os.path.isfile(lifecycle_script):
         run(f"bash {lifecycle_script} restart")
         # Re-check build info after restart
@@ -438,7 +438,7 @@ If `--triage-only`: stop here. Print triage.json path.
 For each `feature_gaps` entry in triage.json, create a Linear ticket immediately:
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   title="feat: {domain_id} — upstream data producer needed for {pages}",
   teamId="{omniclaude_team_id}",
   parentId="OMN-5057",
@@ -609,7 +609,7 @@ EOF
 ### 4.2 Create Linear Ticket
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   title="fix(dashboard): {domain_id} — {root_cause}",
   teamId="{omniclaude_team_id}",
   parentId="OMN-5057",
@@ -958,4 +958,4 @@ When `DRY_RUN=true`:
 ```
 
 Screenshots and JSON artifacts are written even in dry run (observation is always safe).
-No `Task()` dispatches, no `mcp__linear-server__*` writes, no `gh pr` commands, no Docker/kubectl commands.
+No `Task()` dispatches, no `tracker.*` writes, no `gh pr` commands, no Docker/kubectl commands.

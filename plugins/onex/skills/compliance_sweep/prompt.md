@@ -29,7 +29,7 @@ omniclaude, onex_change_control, omnibase_spi
 Before scanning, pull all bare clones to ensure findings reflect latest `main`:
 
 ```bash
-bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok
+bash /Volumes/PRO-G40/Code/omni_home/omnibase_infra/scripts/pull-all.sh  # local-path-ok: example command in documentation
 ```
 
 If `pull-all.sh` exits non-zero, **warn but continue** -- stale clones may produce
@@ -42,7 +42,7 @@ The node handles all scanning phases internally (discovery, AST-based compliance
 wire schema validation, infrastructure coupling detection, aggregation, and report saving).
 
 ```bash
-cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok: example command in documentation
 
 # Build argument list from parsed flags
 ARGS=""
@@ -102,7 +102,7 @@ Otherwise, use the node output violations to create Linear tickets:
 
 1. Group violations by node directory (one ticket per node, not per handler)
 2. Dedup against existing Linear tickets with "compliance" in the title
-3. Create tickets (up to `--max-tickets`, default 10) via `mcp__linear-server__save_issue`
+3. Create tickets (up to `--max-tickets`, default 10) via `tracker.save_issue`
 4. Title format: `fix(compliance): migrate <node_name> to declarative pattern`
 5. Project: Active Sprint, label: `contract-compliance`
 
@@ -119,5 +119,5 @@ Remaining untracked nodes: <N> (use --max-tickets to increase limit)
 ## Error handling
 
 - If `onex run` fails: report the error and exit
-- If a repo is not found at `$OMNI_HOME/<repo>`: skip, record in report
+- If a repo is not found at `$ONEX_REGISTRY_ROOT/<repo>`: skip, record in report  # local-path-ok documentation reference to canonical repo path
 - If Linear API fails during ticket creation: log error, continue with remaining tickets

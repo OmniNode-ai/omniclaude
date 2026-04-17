@@ -37,7 +37,7 @@ Build the check list:
 ## Step 2: Locate Script <!-- ai-slop-ok: skill-step-heading -->
 
 ```bash
-SCRIPT="${OMNIBASE_INFRA_DIR:-/Volumes/PRO-G40/Code/omni_home/omnibase_infra}/scripts/compare_environments.py"  # local-path-ok
+SCRIPT="${OMNIBASE_INFRA_DIR:-/Volumes/PRO-G40/Code/omni_home/omnibase_infra}/scripts/compare_environments.py"  # local-path-ok: env var default fallback
 ```
 
 If the script does not exist at that path, emit:
@@ -121,12 +121,12 @@ For each CRITICAL finding:
 
 1. Search for existing tickets with exact prefix match:
    ```
-   mcp__linear-server__list_issues(query="[env-parity:<check_id>]", team="Omninode")
+   tracker.list_issues(query="[env-parity:<check_id>]", team="Omninode")
    ```
 2. If any ticket exists (any state), skip creation for this finding.
 3. If no match, create ticket:
    ```
-   mcp__linear-server__save_issue(
+   tracker.save_issue(
      title="[env-parity:<check_id>] <finding.title verbatim>",
      team="Omninode",
      priority=1,

@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: testing
+purpose: "Design and implement comprehensive test suites including unit, integration, and end-to-end tests with high coverage."
 mode: full
 agent_type: "testing"
 mode: "both"

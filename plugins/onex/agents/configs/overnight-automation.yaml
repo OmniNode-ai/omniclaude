@@ -5,6 +5,11 @@
 # Converted from agent-overnight-automation.md to YAML format for dynamic role system
 
 schema_version: "2.0.0"
+model: sonnet
+disallowedTools: []
+domain: orchestration
+purpose: "Orchestrate overnight automation pipelines: pipeline fill, merge sweep, and backlog dispatch."
+is_orchestrator: true
 mode: full
 agent_type: "overnight_automation"
 mode: "full"

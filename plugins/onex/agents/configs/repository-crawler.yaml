@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 ---
+model: haiku
+disallowedTools: []
+domain: repository_analysis
+purpose: "Crawl repository structure, enumerate files, and build context maps for large codebase navigation."
 # Agent Definition: Repository Crawler
 # Dynamic role system configuration for intelligent repository analysis and indexing
 

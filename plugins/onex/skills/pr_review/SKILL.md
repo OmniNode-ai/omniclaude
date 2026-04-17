@@ -34,7 +34,6 @@ This skill delegates to `node_pr_review_bot` in omnimarket.
 ### Invocation
 
 ```python
-# cd $OMNI_HOME/omnimarket
 from omnimarket.nodes.node_pr_review_bot.workflow_runner import run_review
 
 result = run_review(
@@ -79,7 +78,7 @@ If no ticket_id found: skip contract check, log "no ticket ID in PR" and proceed
 
 ```
 Primary:  $ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml   (if ONEX_CC_REPO_PATH is set)
-Fallback: $OMNI_HOME/onex_change_control/contracts/{ticket_id}.yaml
+Fallback: $ONEX_STATE_DIR/contracts/{ticket_id}.yaml
 ```
 
 **If contract not found:**

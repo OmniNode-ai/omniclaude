@@ -410,7 +410,7 @@ generate_execution_prompt() {
     cat << PROMPT_EOF
 Query Linear for the top $COUNT unblocked backlog issues in project $PROJECT (ID: $PROJECT_ID).
 
-Use: mcp__linear-server__list_issues(project="$PROJECT_ID", state="Backlog", limit=$QUERY_LIMIT$label_param)
+Use: tracker.list_issues(project="$PROJECT_ID", state="Backlog", limit=$QUERY_LIMIT$label_param)
 
 Then filter out issues with labels: $blocked_list
 
@@ -502,7 +502,7 @@ done)
         "description": "Issues with '$REPO_CONTEXT' label first, then by priority" if "$REPO_CONTEXT" else "By priority, then by age"
     },
     "mcp_query": {
-        "tool": "mcp__linear-server__list_issues",
+        "tool": "tracker.list_issues",
         "parameters": {
             "project": "$PROJECT_ID",
             "state": "Backlog",
@@ -578,7 +578,7 @@ else
     md_echo "To get unblocked backlog issues, execute:"
     md_echo ""
     md_echo '```python'
-    md_echo "mcp__linear-server__list_issues("
+    md_echo "tracker.list_issues("
     md_echo "    project=\"$PROJECT_ID\","
     md_echo "    state=\"Backlog\","
     if [[ -n "$LABEL" ]]; then

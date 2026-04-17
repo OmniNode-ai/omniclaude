@@ -178,7 +178,7 @@ All mutations are deduplicated on resume:
 |-----------|----------------|
 | PR dedupe | Check `gh pr list --head <branch>` before creating |
 | Tag dedupe | Check `git tag -l <version>` before tagging |
-| Worktree reuse | Reuse existing worktree at `$OMNI_HOME/worktrees/<run_id>/<repo>` |
+| Worktree reuse | Reuse existing worktree at `$ONEX_WORKTREES_ROOT/<run_id>/<repo>` |
 
 ## Cross References
 

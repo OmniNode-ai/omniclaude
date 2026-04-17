@@ -94,7 +94,6 @@ Probe failures are non-fatal; the capture proceeds with available data.
 ### capture invocation
 
 ```python
-# cd $OMNI_HOME/omnimarket
 import asyncio
 from omnimarket.nodes.node_baseline_capture.handlers.handler_baseline_capture import (
     HandlerBaselineCapture, ModelBaselineCaptureRequest,
@@ -113,7 +112,6 @@ result = asyncio.run(HandlerBaselineCapture().handle(
 ### compare invocation
 
 ```python
-# cd $OMNI_HOME/omnimarket
 import asyncio
 from omnimarket.nodes.node_baseline_compare.handlers.handler_baseline_compare import (
     HandlerBaselineCompare, ModelBaselineCompareRequest,

@@ -4,6 +4,10 @@
 # Repository Crawler Claude Code Agent - Dynamic Role Definition
 # Specialized agent for intelligent repository discovery, analysis, and indexing with Claude Code integration
 schema_version: "2.0.0"
+model: haiku
+disallowedTools: []
+domain: repository_analysis
+purpose: "Crawl Claude Code plugin repositories to map hooks, agents, skills, and commands for context building."
 mode: full
 agent_type: "repository_crawler_claude_code"
 mode: "full"

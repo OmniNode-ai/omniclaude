@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 ---
+model: haiku
+disallowedTools: []
+domain: documentation
+purpose: "Index and catalog documentation files for semantic search and cross-reference retrieval."
 # Documentation Indexer Agent - Dynamic Role Definition
 # Converted from agents/agent-documentation-indexer.md
 schema_version: "1.0.0"

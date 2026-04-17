@@ -41,8 +41,10 @@ def _run(
     repo_name = repo_slug.rsplit("/", maxsplit=1)[-1] if "/" in repo_slug else repo_slug
 
     # Try to find local clone in known locations.
-    # OMNI_HOME env var takes priority; fallback to ~/Code/omni_home.
-    omni_home = os.environ.get("OMNI_HOME", "")  # local-path-ok
+    # ONEX_REGISTRY_ROOT env var takes priority; fallback to ~/Code/omni_home.
+    omni_home = os.environ.get(
+        "ONEX_REGISTRY_ROOT", ""
+    )  # local-path-ok: env var default fallback
     candidates: list[Path] = []
     if omni_home:
         candidates.append(Path(omni_home) / repo_name)

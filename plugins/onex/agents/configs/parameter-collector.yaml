@@ -6,6 +6,10 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: parameter_collection
+purpose: "Collect and validate required parameters from users before delegating to specialized agents."
 mode: full
 agent_type: "parameter_collector"
 mode: "full"

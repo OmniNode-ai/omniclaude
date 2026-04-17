@@ -33,11 +33,11 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Resolve OMNI_HOME: prefer env var, fall back to resolving relative to script location
+# Resolve ONEX_REGISTRY_ROOT: prefer env var, fall back to resolving relative to script location
 # Script lives at omni_home/omniclaude/scripts/cron-merge-sweep.sh → two levels up
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OMNI_HOME="${OMNI_HOME:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-STATE_DIR="${OMNI_HOME}/.onex_state/merge-sweep-results"
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/merge-sweep-results"
 LOG_DIR="/tmp/merge-sweep-logs"
 PHASE_TIMEOUT=900  # 15 minutes — merge-sweep can be slow with polish
 RUN_ID="merge-sweep-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
@@ -185,7 +185,7 @@ try_auth_refresh() {
 run_merge_sweep() {
   local attempt="$1"
   local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.txt"
-  local prompt="/merge-sweep --run-id ${RUN_ID}${SWEEP_ARGS}"
+  local prompt="/onex:merge_sweep --run-id ${RUN_ID}${SWEEP_ARGS}"
 
   log "Starting merge-sweep (attempt ${attempt}): ${prompt}"
 
@@ -259,7 +259,7 @@ EOF
 # ===========================================================================
 
 log "=== Merge-sweep run ${RUN_ID} starting ==="
-log "OMNI_HOME: ${OMNI_HOME}"
+log "ONEX_REGISTRY_ROOT: ${ONEX_REGISTRY_ROOT}"
 log "State dir: ${STATE_DIR}"
 log "Sweep args:${SWEEP_ARGS:- (none)}"
 

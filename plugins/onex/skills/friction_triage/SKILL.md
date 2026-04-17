@@ -66,12 +66,12 @@ print(f"{len(crossed)} crossed threshold (count>={THRESHOLD_COUNT} OR score>={TH
 **Step 2: Deduplicate against existing Linear tickets**
 
 For each crossed aggregate, check if an open ticket already exists using
-`mcp__linear-server__list_issues` with the stable dedup marker
+`tracker.list_issues` with the stable dedup marker
 `friction_surface_key: {surface_key}` in the description.
 
 ```python
 # Search for existing open ticket with this surface key
-existing = mcp__linear-server__list_issues(
+existing = tracker.list_issues(
     query=f"[Friction] {agg.surface_key}",
     state="Todo,In Progress,Backlog",
     team="Omninode",
@@ -87,7 +87,7 @@ for issue in existing.issues:
 
 **Step 3: Create Linear ticket for new surfaces**
 
-Use `mcp__linear-server__save_issue` for each untracked crossing:
+Use `tracker.save_issue` for each untracked crossing:
 
 ```python
 # Determine crossing reason
@@ -105,7 +105,7 @@ sample_descriptions = "\n".join(
 
 ticket_context = f"Related ticket: {agg.most_recent_ticket}" if agg.most_recent_ticket else ""
 
-mcp__linear-server__save_issue(
+tracker.save_issue(
     title=f"[Friction] {agg.surface_key} — {agg.count} occurrences / score {agg.severity_score} ({window_days}d)",
     team="Omninode",
     project="Active Sprint",

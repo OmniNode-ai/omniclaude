@@ -100,7 +100,7 @@ def _stale_task(owner: str) -> dict[str, Any]:
 def omni_home(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
     root = tmp_path / "omni_home"
     root.mkdir()
-    monkeypatch.setenv("OMNI_HOME", str(root))
+    monkeypatch.setenv("ONEX_REGISTRY_ROOT", str(root))
     state_dir = tmp_path / "state"
     state_dir.mkdir()
     monkeypatch.setenv("ONEX_STATE_DIR", str(state_dir))
@@ -246,7 +246,7 @@ class TestTaskListFallback:
     def test_tool_outside_omni_home_not_blocked(
         self, omni_home: pathlib.Path, tmp_path: pathlib.Path
     ) -> None:
-        """Foreign task present but tool targets path outside OMNI_HOME → no block."""
+        """Foreign task present but tool targets path outside ONEX_REGISTRY_ROOT → no block."""
         other = tmp_path / "elsewhere" / "f.py"
         other.parent.mkdir(parents=True)
         out, code = _run(

@@ -145,7 +145,7 @@ Runs every mode sequentially and produces a combined report. Useful for comprehe
 ## Deep Dive Report
 
 Generates a comprehensive analysis of work completed in a specified time period.
-Format matches the established deep dive pattern (see `${HOME}/Code/omni_home/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`).
+Format matches the established deep dive pattern (see `$ONEX_STATE_DIR/deep-dives/` for archive).
 
 ### Usage
 
@@ -180,7 +180,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --repos omnibase_core,omn
 |--------|---------|----------|
 | `--output-dir` flag | `--output-dir ~/reports` | Highest |
 | `LINEAR_INSIGHTS_OUTPUT_DIR` env | `export LINEAR_INSIGHTS_OUTPUT_DIR=~/reports` | Medium |
-| Default | `${HOME}/Code/omni_home/omni_save` | Lowest |
+| Default | `$ONEX_STATE_DIR/deep-dives` | Lowest |
 
 **Filename Pattern**: `{MONTH}_{DAY}_{YEAR}_DEEP_DIVE.md`
 - Example: `DECEMBER_13_2025_DEEP_DIVE.md`
@@ -377,7 +377,7 @@ Three-layer factory telemetry that parses the deep dive archive for historical v
 
 ### Three Data Layers
 
-**Layer 1 (Deep Dive Archive):** Parsed at script time from `$OMNI_HOME/docs/deep-dives/`. Handles three format eras (Dec 2025, Feb 2026, Mar 2026) with null-not-zero for missing data. This is the primary data source.
+**Layer 1 (Deep Dive Archive):** Parsed at script time from `$ONEX_STATE_DIR/deep-dives/`. Handles three format eras (Dec 2025, Feb 2026, Mar 2026) with null-not-zero for missing data. This is the primary data source.
 
 **Layer 2 (GitHub PRs):** The script outputs `gh pr list` commands with date-window filtering. The agent executes these to collect merged PR data for reconciliation.
 
@@ -412,7 +412,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy --generate
 | `--week` | -- | Shorthand for `--days 7` |
 | `--json` | off | Output structured JSON (graphable) |
 | `--generate` | off | Output step-by-step agent instructions |
-| `--deep-dive-dir DIR` | `$OMNI_HOME/docs/deep-dives` | Deep dive archive path |
+| `--deep-dive-dir DIR` | `$ONEX_STATE_DIR/deep-dives` | Deep dive archive path |
 
 ### Fix-vs-Feature Tracking
 
@@ -436,11 +436,11 @@ The reconciliation view computes a three-way set comparison using ticket identif
 
 ## Data Sources
 
-- **Deep dive archive**: `$OMNI_HOME/docs/deep-dives/*_DEEP_DIVE.md` (Layer 1, parsed by script)
+- **Deep dive archive**: `$ONEX_STATE_DIR/deep-dives/*_DEEP_DIVE.md` (Layer 1, parsed by script)
 - **GitHub CLI**: `gh pr list` commands (Layer 2, agent-executed)
-- **Linear MCP**: `mcp__linear-server__list_issues` (Layer 3, agent-executed)
-- `mcp__linear-server__list_projects` - Project metadata
-- `mcp__linear-server__get_project` - Project details
+- **Linear MCP**: `tracker.list_issues` (Layer 3, agent-executed)
+- `tracker.list_projects` - Project metadata
+- `tracker.get_project` - Project details
 
 No external databases or caches are used - all calculations are done on fresh Linear data.
 
@@ -459,7 +459,7 @@ Task(
   prompt="Generate a daily work report for the last 24 hours.
 
     Use Linear MCP tools:
-    1. mcp__linear-server__list_issues with assignee='me' and updatedAt='-P1D'
+    1. tracker.list_issues with assignee='me' and updatedAt='-P1D'
     2. Categorize by status (Done, In Progress, Backlog)
     3. Extract PR links from attachments
     4. Group by repository from labels
@@ -566,8 +566,8 @@ It must never be called from production code or skills. Use `--emit` (which call
 
 ## See Also
 
-- Linear MCP tools: `mcp__linear-server__*`
+- Linear MCP tools: `tracker.*`
 - Linear ticket skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 - PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
-- Deep dive reference: `${HOME}/Code/omni_home/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`
+- Deep dive archive: `$ONEX_STATE_DIR/deep-dives/`
 - `onex-linear-relay` CLI — `omnibase_infra` package (OMN-2656)

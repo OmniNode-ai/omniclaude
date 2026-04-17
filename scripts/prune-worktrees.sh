@@ -26,7 +26,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-WORKTREES_ROOT="/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok
+WORKTREES_ROOT="/Volumes/PRO-G40/Code/omni_worktrees"  # local-path-ok: script constant default
 EXECUTE=false
 VERBOSE=false
 
@@ -323,8 +323,8 @@ fi
 # Run git worktree prune on all canonical repos to clean up dangling refs
 log ""
 log "Pruning dangling worktree references from canonical clones..."
-OMNI_HOME="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
-for repo_dir in "$OMNI_HOME"/*/; do
+ONEX_REGISTRY_ROOT="/Volumes/PRO-G40/Code/omni_home"  # local-path-ok
+for repo_dir in "$ONEX_REGISTRY_ROOT"/*/; do
   [[ -d "$repo_dir/.git" ]] || continue
   if git -C "$repo_dir" worktree prune 2>/dev/null; then
     verbose "Pruned: $repo_dir"

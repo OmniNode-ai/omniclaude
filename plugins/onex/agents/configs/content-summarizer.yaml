@@ -6,6 +6,10 @@
 # Integration: polymorphic-agent identity assumption
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools: []
+domain: documentation
+purpose: "Summarize long-form content, meeting notes, and documentation into concise structured summaries."
 mode: full
 agent_type: "content_summarizer"
 mode: "both"

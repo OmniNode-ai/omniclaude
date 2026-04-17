@@ -128,7 +128,7 @@ cd "$path"
 After every worktree creation, install pre-commit hooks before writing any code:
 
 ```bash
-cd $OMNI_HOME/worktrees/$TICKET/$REPO
+cd ${ONEX_WORKTREES_ROOT:-~/omni_worktrees}/$TICKET/$REPO
 pre-commit install --install-hooks
 ```
 

@@ -96,7 +96,7 @@ Report path convention: `docs/registry/compliance-scan-<date>.json`
 ### Phase 4 — Ticket creation (only if `--create-tickets` and not `--dry-run`)
 
 Group violations by node directory (one ticket per node). For each node with
-violations not already tracked in Linear, create via `mcp__linear-server__save_issue`.
+violations not already tracked in Linear, create via `tracker.save_issue`.
 Ticket creation is idempotent — search for existing open tickets before creating.
 
 ```

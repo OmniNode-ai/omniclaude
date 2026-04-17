@@ -84,7 +84,7 @@ From the JSON output display:
 ### Step 4 — Ticket creation (only if `--ticket`)
 
 For each finding where `ticketable=true` (confidence=HIGH, severity≥threshold),
-create a Linear ticket via `mcp__linear-server__save_issue`. Deduplicate by
+create a Linear ticket via `tracker.save_issue`. Deduplicate by
 searching for existing open tickets with the same title before creating.
 
 ```

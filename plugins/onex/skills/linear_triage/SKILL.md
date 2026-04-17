@@ -58,7 +58,7 @@ and produce a `TriageReport` for downstream skills (`linear-epic-org`, `ticket-p
 Fetch all non-done tickets from Linear:
 
 ```
-mcp__linear-server__list_issues(
+tracker.list_issues(
   state="not done",  # excludes: Done, Cancelled
   limit=250
 )
@@ -192,13 +192,13 @@ If no merged sibling found:
 #### Step 3d: Apply mark_done (unless --dry-run)
 
 ```
-mcp__linear-server__save_issue(
+tracker.save_issue(
   id=ticket_id,
   state="Done"
 )
 
 # Add comment with evidence
-mcp__linear-server__create_comment(
+tracker.create_comment(
   issueId=ticket_id,
   body="✅ Auto-closed by linear-triage: PR #{number} merged {merge_date}\n{pr_url}"
 )
@@ -272,7 +272,7 @@ If `check_epic_complete` returns True:
 
 **Note:** Fetch children via:
 ```
-mcp__linear-server__list_issues(parentId=epic_ticket.id, includeArchived=true, limit=50)
+tracker.list_issues(parentId=epic_ticket.id, includeArchived=true, limit=50)
 ```
 
 ### Phase 6: Write TriageReport
@@ -329,4 +329,4 @@ The `orphaned_tickets` list from the TriageReport is the input to `linear-epic-o
 - `linear-epic-org` skill — consumes orphaned_tickets from this report
 - `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync
 - `ticket-plan --sync` — uses triage output for MASTER_TICKET_PLAN.md sync
-- Linear MCP tools (`mcp__linear-server__*`)
+- Linear MCP tools (`tracker.*`)

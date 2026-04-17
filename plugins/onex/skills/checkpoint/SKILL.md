@@ -257,8 +257,8 @@ pipeline checkpoints above.
 ### Storage
 
 ```
-$OMNI_HOME/.onex_state/pipeline_checkpoints/cron-closeout-state.yaml
-$OMNI_HOME/.onex_state/pipeline_checkpoints/cron-closeout.lock
+$ONEX_STATE_DIR/pipeline_checkpoints/cron-closeout-state.yaml
+$ONEX_STATE_DIR/pipeline_checkpoints/cron-closeout.lock
 ```
 
 ### Checkpoint Schema
@@ -295,7 +295,7 @@ checkpoint file entirely.
 | Aspect | Pipeline Checkpoints | Cron-Closeout Checkpoint |
 |--------|---------------------|--------------------------|
 | Scope | Per-ticket, per-phase | Per-cron-loop, aggregate |
-| Storage | `$ONEX_STATE_DIR/checkpoints/{ticket_id}/` | `$OMNI_HOME/.onex_state/pipeline_checkpoints/` |
+| Storage | `$ONEX_STATE_DIR/checkpoints/{ticket_id}/` | `$ONEX_STATE_DIR/pipeline_checkpoints/` |
 | Schema | Full phase payloads | Simple pass/fail counter |
 | Writer | `checkpoint_manager.py` | `cron-closeout.sh` |
 | Purpose | Resume mid-pipeline | Track cron loop health |

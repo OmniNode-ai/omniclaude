@@ -23,9 +23,10 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-STATE_DIR="${OMNI_HOME}/.onex_state/autopilot"
+STATE_DIR="${ONEX_STATE_DIR}/autopilot"
 LOG_DIR="/tmp/buildloop-logs"
 MAX_CYCLES=3
 PHASE_TIMEOUT=1800  # 30 minutes per build-loop invocation
@@ -148,7 +149,7 @@ check_delegation_health
 mkdir -p "${STATE_DIR}" "${RUN_DIR}" "${LOG_DIR}"
 
 # Ensure friction directory exists for build loop friction events
-FRICTION_DIR="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}/friction"
+FRICTION_DIR="${ONEX_STATE_DIR}/friction"
 mkdir -p "${FRICTION_DIR}"
 
 # ---------------------------------------------------------------------------
@@ -265,7 +266,7 @@ if [[ -x "${WATCHDOG_CHECK}" ]]; then
   if [[ "${WATCHDOG_ACTION}" == "alert_user" ]]; then
     echo "WATCHDOG BLOCK: Escalation level ${WATCHDOG_LEVEL}. Not restarting."
     echo "Run: $(dirname "$0")/watchdog-state-read.sh buildloop"
-    echo "To reset after fixing: rm ${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+    echo "To reset after fixing: rm ${ONEX_STATE_DIR}/watchdog/loop-health.json"
     WATCHDOG_PHASE="watchdog_block"; WATCHDOG_EXIT_CODE=5; exit 5
   fi
 

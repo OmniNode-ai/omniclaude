@@ -78,10 +78,10 @@ plugins/onex/skills/epic_team/run.sh OMN-2000 --mode build --resume
 
 **Minimum tool allowlist for headless epic-team:**
 ```
-mcp__linear-server__get_issue, mcp__linear-server__list_issues,
-mcp__linear-server__save_issue, mcp__linear-server__save_comment,
-mcp__linear-server__list_projects, mcp__linear-server__get_project,
-mcp__linear-server__list_teams, Bash, Read, Write, Edit, Glob, Grep,
+tracker.get_issue, tracker.list_issues,
+tracker.save_issue, tracker.save_comment,
+tracker.list_projects, tracker.get_project,
+tracker.list_teams, Bash, Read, Write, Edit, Glob, Grep,
 TeamCreate, TeamDelete, Agent, TaskCreate, TaskUpdate, TaskGet, TaskList, SendMessage
 ```
 
@@ -390,7 +390,7 @@ Escalate to user if more than 2 tickets in a wave are blocked by the pattern gat
 1. **ONEX pattern gate**: Run `hostile_reviewer --static` on task description (see above). Block
    on violations before performing any further checks.
 
-2. **Ticket readiness check**: Fetch ticket via `mcp__linear-server__get_issue` and verify:
+2. **Ticket readiness check**: Fetch ticket via `tracker.get_issue` and verify:
    - Description is non-empty and contains actionable content
    - Repo target is identifiable (from title, description, or labels)
    - No blocking dependencies are in non-Done state
@@ -843,7 +843,7 @@ never imply all tickets passed when exemptions are present.
 - `slack-gate` skill (OMN-2521) — LOW_RISK notification gate
 - `verification-sweep` skill (OMN-7254) — post-orchestration endpoint/DB/DoD verification
 - `plugins/onex/skills/epic-team/repo_manifest.yaml` — repo keyword mapping
-- Linear MCP tools (`mcp__linear-server__*`) — epic and ticket access
+- Linear MCP tools (`tracker.*`) — epic and ticket access
 
 ## Container / Degraded Environment
 

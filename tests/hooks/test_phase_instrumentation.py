@@ -1345,7 +1345,7 @@ class TestSanitization:
         """/Users/ in URI is rejected."""
         assert (
             _validate_artifact_uri(
-                "/Users/jonah/artifacts/report.html"  # local-path-ok
+                "/Users/jonah/artifacts/report.html"  # local-path-ok: test fixture path
             )
             is False
         )
@@ -1354,7 +1354,7 @@ class TestSanitization:
         """/home/ in URI is rejected."""
         assert (
             _validate_artifact_uri(
-                "/home/deploy/artifacts/report.html"  # local-path-ok
+                "/home/deploy/artifacts/report.html"  # local-path-ok: test fixture path
             )
             is False
         )
@@ -1418,7 +1418,9 @@ class TestSanitization:
     def test_rejects_volumes_path(self):
         """/Volumes/ in URI is rejected (macOS external drives)."""
         assert (
-            _validate_artifact_uri("/Volumes/PRO-G40/Code/report.html")  # local-path-ok
+            _validate_artifact_uri(
+                "/Volumes/PRO-G40/Code/report.html"  # local-path-ok: test fixture path
+            )
             is False
         )
 
@@ -1448,7 +1450,7 @@ class TestSanitization:
         assert _validate_artifact_uri("s3://bucket/HOME/deploy/file.txt") is True
         assert (
             _validate_artifact_uri(
-                "https://cdn.example.com/home/assets/img.png"  # local-path-ok
+                "https://cdn.example.com/home/assets/img.png"  # local-path-ok: test fixture URL
             )
             is True
         )

@@ -54,7 +54,7 @@ can invoke before marking a ticket as Done.
 
 2. **Dispatch to node_dod_verify via onex run:**
    ```bash
-   cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok
+   cd /Volumes/PRO-G40/Code/omni_home/omnimarket  # local-path-ok: example command in documentation
    uv run onex run node_dod_verify -- \
      --ticket-id <ticket_id> \
      --contract-path <path>  # if provided

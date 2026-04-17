@@ -5,6 +5,13 @@
 # Direct-to-database velocity tracking writer for instant productivity metrics
 
 schema_version: "1.0.0"
+model: haiku
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
+domain: velocity_tracking
+purpose: "Write velocity log entries recording task completion events for sprint analytics."
 mode: full
 agent_type: "velocity_log_writer"
 mode: "full"

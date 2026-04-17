@@ -933,6 +933,7 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
                 continue
 
             # Build registry entry
+            disallowed_raw = agent_data.get("disallowedTools", [])
             registry["agents"][agent_name] = {
                 "title": agent_data.get("agent_identity", {}).get("name", agent_name),
                 "description": agent_data.get("agent_identity", {}).get(
@@ -944,6 +945,9 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
                     agent_data.get("capabilities", [])
                 ),
                 "domain_context": agent_data.get("domain_context", "general"),
+                "disallowed_tools": list(disallowed_raw)
+                if isinstance(disallowed_raw, list)
+                else [],
             }
 
         except yaml.YAMLError as e:

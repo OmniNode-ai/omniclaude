@@ -34,9 +34,10 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 
-OMNI_HOME="${OMNI_HOME:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-/Users/jonah/Code/omni_home}"  # local-path-ok: script runs on local machine only
+ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
-STATE_DIR="${OMNI_HOME}/.onex_state/autopilot"
+STATE_DIR="${ONEX_STATE_DIR}/autopilot"
 CYCLE_STATE="${STATE_DIR}/cycle-state.yaml"
 LOG_DIR="/tmp/closeout-logs"
 PHASE_TIMEOUT=600  # 10 minutes per phase
@@ -262,7 +263,7 @@ emit_friction() {
   local error_msg="${3:-}"
   local ts
   ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  local friction_dir="${ONEX_STATE_DIR:-${OMNI_HOME}/.onex_state}/friction"
+  local friction_dir="${ONEX_STATE_DIR}/friction"
   mkdir -p "${friction_dir}"
   local record
   record=$(cat <<EOJSON
@@ -341,7 +342,7 @@ check_pending_redeploy() {
       continue
     fi
 
-    local repo_path="${OMNI_HOME}/${repo}"
+    local repo_path="${ONEX_REGISTRY_ROOT}/${repo}"
     if [[ ! -d "${repo_path}/.git" && ! -f "${repo_path}/.git" ]]; then
       continue
     fi
@@ -431,7 +432,7 @@ if [[ -x "${WATCHDOG_CHECK}" ]]; then
   if [[ "${WATCHDOG_ACTION}" == "alert_user" ]]; then
     echo "WATCHDOG BLOCK: Escalation level ${WATCHDOG_LEVEL}. Not restarting."
     echo "Run: $(dirname "$0")/watchdog-state-read.sh closeout"
-    echo "To reset after fixing: rm ${OMNI_HOME}/.onex_state/watchdog/loop-health.json"
+    echo "To reset after fixing: rm ${ONEX_STATE_DIR}/watchdog/loop-health.json"
     WATCHDOG_PHASE="watchdog_block"; WATCHDOG_EXIT_CODE=5; exit 5
   fi
 
@@ -459,7 +460,7 @@ fi
 
 # A2: Deploy plugin
 if ! run_phase "A2_deploy_plugin" \
-  "Deploy the omniclaude plugin to the Claude Code plugin cache. The deploy skill copies plugin files from the repository source to the cache at ~/.claude/plugins/cache/. Run: bash -c 'PLUGIN_SRC=${OMNI_HOME}/omniclaude/plugins/onex; CACHE_DIR=\${HOME}/.claude/plugins/cache/onex; mkdir -p \${CACHE_DIR}; rsync -a --delete \${PLUGIN_SRC}/ \${CACHE_DIR}/; echo DEPLOY_COMPLETE'" \
+  "Deploy the omniclaude plugin to the Claude Code plugin cache. The deploy skill copies plugin files from the repository source to the cache at ~/.claude/plugins/cache/. Run: bash -c 'PLUGIN_SRC=${ONEX_REGISTRY_ROOT}/omniclaude/plugins/onex; CACHE_DIR=\${HOME}/.claude/plugins/cache/onex; mkdir -p \${CACHE_DIR}; rsync -a --delete \${PLUGIN_SRC}/ \${CACHE_DIR}/; echo DEPLOY_COMPLETE'" \
   "Bash,Read,Glob,Grep"; then
   record_strike "A2_deploy_plugin"
 fi
@@ -675,9 +676,9 @@ fi
 
 # C1: Release repos with unreleased commits [OMN-7401: execute, not report]
 if ! run_phase "C1_release" \
-  "Check OmniNode-ai Python repos for unreleased commits on main since the last git tag. For each repo in ${OMNI_HOME}/ (omnibase_core, omnibase_infra, omnibase_spi, omniclaude, omniintelligence, omnimemory), run:
-  LAST_TAG=\$(git -C ${OMNI_HOME}/<repo> describe --tags --abbrev=0 2>/dev/null)
-  git -C ${OMNI_HOME}/<repo> log \${LAST_TAG}..HEAD --oneline
+  "Check OmniNode-ai Python repos for unreleased commits on main since the last git tag. For each repo in ${ONEX_REGISTRY_ROOT}/ (omnibase_core, omnibase_infra, omnibase_spi, omniclaude, omniintelligence, omnimemory), run:
+  LAST_TAG=\$(git -C ${ONEX_REGISTRY_ROOT}/<repo> describe --tags --abbrev=0 2>/dev/null)
+  git -C ${ONEX_REGISTRY_ROOT}/<repo> log \${LAST_TAG}..HEAD --oneline
 
 If ANY repo has unreleased commits, execute the release skill:
   /release --autonomous
@@ -772,7 +773,7 @@ If ALL hard gates pass, print: INTEGRATION: PASS" \
   # Critical — blocks close-out on failure
   if ! run_phase "E2_pipeline_tests" \
     "Run Phase 2 pipeline integration tests in omnidash. Execute:
-cd ${OMNI_HOME}/omnidash
+cd ${ONEX_REGISTRY_ROOT}/omnidash
 npx vitest run tests/integration/pattern-pipeline.test.ts tests/integration/injection-pipeline.test.ts tests/integration/intent-pipeline.test.ts
 
 Report PASS count and FAIL count.
@@ -821,7 +822,7 @@ If ALL tests pass, print: INTEGRATION: PASS" \
   # Non-blocking — produces WARN, does not halt close-out
   if ! run_phase "E3_dashboard_tests" \
     "Run Playwright P0 data verification against running omnidash (if available). Execute:
-cd ${OMNI_HOME}/omnidash
+cd ${ONEX_REGISTRY_ROOT}/omnidash
 npx playwright test --config playwright.dataflow.config.ts p0-data-verification.spec.ts 2>&1 || true
 
 Report test results. This is non-blocking — dashboard rendering failures do not affect runtime correctness.

@@ -6,6 +6,13 @@
 # Integration: agent-workflow-coordinator identity assumption
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList
+domain: batch_processing
+purpose: "Process batches of items autonomously in a background worker context without scheduling new cron jobs."
 mode: full
 agent_type: "omnibatch_processor"
 mode: "full"
@@ -291,3 +298,9 @@ transformation_context:
     - "Apply cost optimization strategies to all batch operations"
     - "Ensure comprehensive analysis quality across all tasks"
     - "Optimize for scalability and parallel execution performance"
+
+# Tool restrictions: batch processors must not create/manage cron schedules (OMN-8842)
+disallowedTools:
+  - CronCreate
+  - CronDelete
+  - CronList

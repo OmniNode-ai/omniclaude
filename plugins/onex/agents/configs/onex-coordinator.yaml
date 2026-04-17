@@ -6,6 +6,11 @@
 # Focus: ONEX system coordination, four-node architecture orchestration, operational excellence
 
 schema_version: "1.0.0"
+model: sonnet
+disallowedTools: []
+domain: orchestration
+purpose: "Coordinate ONEX workflow execution, routing tasks to appropriate agents and managing pipeline state."
+is_orchestrator: true
 mode: full
 agent_type: "onex_coordinator"
 mode: "full"

@@ -12,8 +12,10 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_SCRIPT = REPO_ROOT / "scripts" / "audit_skill_shims.py"
-OMNI_HOME = Path(os.environ.get("OMNI_HOME", str(Path.home() / "Code" / "omni_home")))
-AUDIT_PATH = OMNI_HOME / ".onex_state" / "skill_shim_audit.yaml"
+ONEX_REGISTRY_ROOT = Path(
+    os.environ.get("ONEX_REGISTRY_ROOT", str(Path.home() / "Code" / "omni_home"))
+)
+AUDIT_PATH = ONEX_REGISTRY_ROOT / ".onex_state" / "skill_shim_audit.yaml"
 
 REQUIRED_TOP_KEYS = {
     "audit_date",
@@ -37,13 +39,13 @@ VALID_CLASSIFICATIONS = {"deterministic", "prose-heavy"}
 @pytest.fixture(scope="module")
 def audit(tmp_path_factory: pytest.TempPathFactory) -> dict:
     # Prefer pre-generated audit artifact (local dev flow). In CI, generate
-    # on-demand into a tmp OMNI_HOME so the test is self-contained.
+    # on-demand into a tmp ONEX_REGISTRY_ROOT so the test is self-contained.
     if AUDIT_PATH.exists():
         audit_file = AUDIT_PATH
     else:
         tmp_home = tmp_path_factory.mktemp("omni_home_audit")
         env = os.environ.copy()
-        env["OMNI_HOME"] = str(tmp_home)
+        env["ONEX_REGISTRY_ROOT"] = str(tmp_home)
         result = subprocess.run(
             [sys.executable, str(AUDIT_SCRIPT)],
             env=env,

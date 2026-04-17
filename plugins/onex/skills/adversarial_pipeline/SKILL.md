@@ -26,7 +26,7 @@ args:
 
 Three-stage autonomous pipeline that catches wrong-approach patterns before tickets are created. Chains `design_to_plan`, `hostile_reviewer`, and `plan_to_tickets` as background agents. The adversarial gate blocks ticket creation until the plan has been stress-tested.
 
-**Anti-patterns caught**: ONEX not Docker, typed Pydantic not strings, contracts not hardcoding, OAuth not SSO, topics from `contract.yaml` not `topics.py`. See `omni_home/docs/plans/adversarial-rubric.md` for the full rubric.
+**Anti-patterns caught**: ONEX not Docker, typed Pydantic not strings, contracts not hardcoding, OAuth not SSO, topics from `contract.yaml` not `topics.py`. See `plugins/onex/prompts/adversarial-rubric.md` for the full rubric.
 
 ---
 
@@ -54,7 +54,8 @@ Dispatch a background agent to run `hostile_reviewer --static` on the plan outpu
 ```
 /onex:dispatch_worker role=adversarial-reviewer
   Read plan path from checkpoint key: adversarial_pipeline.plan_path
-  Invoke /hostile_reviewer --static --file <plan_path> --rubric $OMNI_HOME/docs/plans/adversarial-rubric.md
+  Invoke /hostile_reviewer --pr <PR_number> --repo <owner/repo>
+  # Note: --static mode does not accept --file or --rubric; use PR mode for plan review.
   Count findings in reviewer output.
   IF findings < 3:
     ESCALATE to user: "Adversarial gate: fewer than 3 issues found — plan may be under-scrutinized. Attach reviewer output and pause pipeline."
@@ -107,4 +108,4 @@ Only dispatched after Stage 2 gate passes.
 - End-to-end run produces a Linear epic.
 - Adversarial stage catches ≥1 ONEX pattern violation in a test run.
 - All stages run as background agents.
-- Rubric file exists at `omni_home/docs/plans/adversarial-rubric.md`.
+- Rubric file exists at `plugins/onex/prompts/adversarial-rubric.md`.

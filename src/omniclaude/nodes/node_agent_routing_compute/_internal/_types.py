@@ -35,6 +35,10 @@ class AgentData(TypedDict, total=False):
         capabilities: Capability strings the agent provides.
         domain_context: Domain classification for context scoring.
         definition_path: Filesystem path to the agent YAML file.
+        model: Recommended Claude model (e.g., 'haiku', 'sonnet', 'opus').
+        disallowed_tools: Tools this agent must not use.
+        domain: Agent's primary domain classification.
+        purpose: Extended description of agent's purpose.
     """
 
     activation_triggers: list[str]
@@ -43,6 +47,10 @@ class AgentData(TypedDict, total=False):
     capabilities: list[str]
     domain_context: str
     definition_path: str
+    model: str
+    disallowed_tools: list[str]
+    domain: str
+    purpose: str
 
 
 class RoutingContext(TypedDict, total=False):
