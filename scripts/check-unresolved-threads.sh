@@ -8,6 +8,8 @@
 # Threads where a human rebuttal exists AND CR's last reply is a concession
 # (you're right / apologize / correct behavior / retract) are excluded from
 # the count and logged to stderr as cr_concession_ack lines.
+# Threads with more comments than fetched (totalCount > fetched) are skipped
+# and counted as blocking (conservative: never wrongly exclude on partial data).
 set -euo pipefail
 
 OWNER="${1:?owner required}"
@@ -21,10 +23,12 @@ QUERY='query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
         nodes {
           isResolved
           comments(first: 50) {
+            totalCount
             nodes {
               body
               author {
                 login
+                __typename
               }
             }
           }
@@ -38,7 +42,15 @@ QUERY='query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
   }
 }'
 
+# A comment counts as a human rebuttal only if __typename != "Bot" (excludes
+# Renovate, Dependabot, and other bots) and login != "coderabbitai".
+HUMAN_REBUTTAL_FILTER='select(
+  ((.author.__typename // "") != "Bot") and
+  ((.author.login // "") | test("coderabbitai"; "i") | not)
+)'
+
 # Threads to exclude (CR conceded after human rebuttal). Emits audit lines to stderr.
+# Skips threads where fetched comment count < totalCount (incomplete slice — treat as blocking).
 CONCESSION_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
@@ -48,15 +60,17 @@ CONCESSION_JQ='[
         ((.comments.nodes[0].body // "") | test("_\\*\\*coderabbit|<!--\\s*coderabbit|coderabbit\\.ai|\\*\\*coderabbit"; "i"))
       )
     )
+  | select(.comments.totalCount <= (.comments.nodes | length))
   | select(
-      ([.comments.nodes[1:][] | select((.author.login // "") | test("coderabbitai"; "i") | not)] | length > 0)
+      ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
       and
       ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
     )
   | "cr_concession_ack path=\(.comments.nodes[0].body[:40] // "unknown" | gsub("\\n";" ")) line=\([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | .[:80] | gsub("\\n";" "))"
 ][]'
 
-# Threads still blocking (CR thread without a concession-after-rebuttal pattern).
+# Threads still blocking: CR thread without a concession-after-human-rebuttal pattern,
+# OR threads where we could not fetch all comments (totalCount > fetched).
 BLOCKING_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
@@ -67,11 +81,15 @@ BLOCKING_JQ='[
       )
     )
   | select(
+      (.comments.totalCount > (.comments.nodes | length))
+      or
       (
-        ([.comments.nodes[1:][] | select((.author.login // "") | test("coderabbitai"; "i") | not)] | length > 0)
-        and
-        ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
-      ) | not
+        (
+          ([.comments.nodes[1:][] | '"$HUMAN_REBUTTAL_FILTER"'] | length > 0)
+          and
+          ([.comments.nodes[] | select((.author.login // "") | test("coderabbitai"; "i"))] | last // {} | .body // "" | test("you.?re right|apolog(y|ize|ise)|correct behavior|i.?ll retract|you.?re correct"; "i"))
+        ) | not
+      )
     )
 ] | length'
 
