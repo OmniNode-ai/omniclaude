@@ -246,30 +246,65 @@ def _create_or_update_linear_ticket(
     env_result: LogScanEnvResult,
 ) -> str | None:
     """Create a Linear ticket for the env-sync failure. Returns ticket ID or None."""
-    try:
-        import subprocess
+    import json as _json
+    import urllib.error
+    import urllib.request
 
-        title = f"env-sync.log: {env_result.error_count} failures, last success {env_result.last_success_ts or 'NEVER'}"
-        body = friction_data.get("description", "")
-        result = subprocess.run(
-            ["gh", "api", "graphql", "--silent"],
-            input=f'mutation {{ createIssue(input: {{ title: "{title}", description: "{body}", teamId: "OMN" }}) {{ issue {{ identifier }} }} }}',
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
+    linear_api_key = os.environ.get("LINEAR_API_KEY", "")
+    if not linear_api_key:
+        logger.warning(
+            "env_sync_alert: LINEAR_API_KEY not set; skipping ticket creation"
         )
-        if result.returncode == 0:
-            import json as _json
+        return None
 
-            data = _json.loads(result.stdout)
-            return (
-                data.get("data", {})
-                .get("createIssue", {})
-                .get("issue", {})
-                .get("identifier")
-            )
-    except Exception as exc:
+    team_id = os.environ.get("LINEAR_TEAM_ID", "9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6")
+    title = f"env-sync.log: {env_result.error_count} failures, last success {env_result.last_success_ts or 'NEVER'}"
+    description = str(friction_data.get("description", ""))
+
+    query = """
+mutation CreateIssue($title: String!, $description: String!, $teamId: String!) {
+  issueCreate(input: {title: $title, description: $description, teamId: $teamId}) {
+    success
+    issue {
+      identifier
+    }
+  }
+}
+"""
+    payload = _json.dumps(
+        {
+            "query": query,
+            "variables": {
+                "title": title,
+                "description": description,
+                "teamId": team_id,
+            },
+        }
+    ).encode()
+
+    try:
+        req = urllib.request.Request(
+            "https://api.linear.app/graphql",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": linear_api_key,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+        if data.get("errors"):
+            logger.warning("env_sync_alert: linear GraphQL errors: %s", data["errors"])
+            return None
+        identifier = (
+            data.get("data", {})
+            .get("issueCreate", {})
+            .get("issue", {})
+            .get("identifier")
+        )
+        return identifier if isinstance(identifier, str) else None
+    except (urllib.error.URLError, OSError, _json.JSONDecodeError) as exc:
         logger.warning("env_sync_alert: linear ticket creation failed: %s", exc)
     return None
 

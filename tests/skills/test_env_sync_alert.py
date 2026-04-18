@@ -6,9 +6,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 from plugins.onex.skills.env_sync_alert._lib.check import (
     EnvSyncAlertConfig,
+    LogScanEnvResult,
+    _create_or_update_linear_ticket,
     check_critical_log_patterns,
     check_env_sync_log,
     run_alert_check,
@@ -160,3 +166,57 @@ class TestRunAlertCheck:
 
         assert not result.alert_fired
         assert not list(friction_dir.glob("*.yaml")) if friction_dir.exists() else True
+
+
+class TestCreateLinearTicket:
+    def test_graphql_errors_logged_and_returns_none(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """When Linear returns HTTP 200 with a GraphQL `errors` field, the
+        helper must log the errors and return None (per OMN-9033 CR thread)."""
+        import json as _json
+        import logging
+        import urllib.request
+
+        monkeypatch.setenv("LINEAR_API_KEY", "test-key")
+
+        class _FakeResp:
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def read(self) -> bytes:
+                return self._body
+
+            def __enter__(self) -> _FakeResp:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+        error_body = _json.dumps(
+            {
+                "errors": [{"message": "Argument Validation Failed"}],
+                "data": None,
+            }
+        ).encode()
+
+        def _fake_urlopen(*args: object, **kwargs: object) -> _FakeResp:
+            return _FakeResp(error_body)
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+
+        env_result = LogScanEnvResult(
+            error_count=3,
+            last_success_age_seconds=7200,
+            last_success_ts="2026-04-18T00:00:00+00:00",
+            last_run_line="FAILURE",
+        )
+        friction_data: dict[str, object] = {"description": "test"}
+
+        with caplog.at_level(logging.WARNING):
+            result = _create_or_update_linear_ticket(friction_data, env_result)
+
+        assert result is None
+        assert any("linear GraphQL errors" in rec.message for rec in caplog.records)
