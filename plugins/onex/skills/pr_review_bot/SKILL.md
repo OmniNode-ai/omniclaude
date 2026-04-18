@@ -52,11 +52,15 @@ Runs the full PR review bot FSM pipeline:
 ## Quick Start
 
 ```
-/pr_review_bot 42
-/pr_review_bot 42 OmniNode-ai/omnimarket
-/pr_review_bot 42 --dry-run
-/pr_review_bot 42 --severity-threshold CRITICAL
+/pr_review_bot 42 --reviewer-models qwen3-coder
+/pr_review_bot 42 OmniNode-ai/omnimarket --reviewer-models qwen3-coder
+/pr_review_bot 42 --dry-run --reviewer-models qwen3-coder
+/pr_review_bot 42 --severity-threshold CRITICAL --reviewer-models qwen3-coder
 ```
+
+(`qwen3-coder` above is illustrative; substitute any key registered in
+`ModelInferenceBridgeConfig.model_configs` for your deployment. Unknown keys
+now raise `ValueError` per OMN-9112 fail-loud policy.)
 
 ## Execution
 
@@ -210,7 +214,7 @@ WorkflowRunner.run_review(pr_number, repo, ...)
   v
   HandlerDiffFetcher     → fetch PR diff hunks from GitHub
   HandlerFsmPrReviewBot  → drive FSM pipeline:
-    → HandlerReviewer        (qwen3-coder-30b + qwen3-14b)
+    → HandlerReviewer        (caller-supplied --reviewer-models; keys resolved via ModelInferenceBridgeConfig.model_configs)
     → HandlerThreadPoster    (post GitHub review threads)
     → HandlerThreadWatcher   (watch for developer responses)
     → HandlerJudgeVerifier   (deepseek-r1 judge)
