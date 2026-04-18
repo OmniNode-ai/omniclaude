@@ -28,6 +28,25 @@ set -euo pipefail
 
 TOOL_INFO=$(cat)
 
+# --- Sub-agent session marker [OMN-9140] ---
+# Task()-spawned sub-agents get a distinct session_id. Record it so the
+# delegation counter (post-tool-delegation-counter.sh) can short-circuit pass —
+# sub-agents cannot call Agent() to satisfy the delegation rule and would
+# otherwise recursive-block after a handful of tool calls.
+if command -v jq >/dev/null 2>&1; then
+    _SA_SESSION_ID=$(printf '%s' "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null || echo "")
+    _SA_PARENT_ID=$(printf '%s' "$TOOL_INFO" | jq -r '.parent_session_id // .parentSessionId // ""' 2>/dev/null || echo "")
+    if [[ -n "$_SA_SESSION_ID" ]]; then
+        _SA_MARKER_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/hooks/subagent-sessions"
+        mkdir -p "$_SA_MARKER_DIR" 2>/dev/null || true
+        printf '{"session_id":"%s","parent_session_id":"%s","timestamp":"%s"}\n' \
+            "$_SA_SESSION_ID" "$_SA_PARENT_ID" "$(date -u +%FT%TZ)" \
+            > "${_SA_MARKER_DIR}/${_SA_SESSION_ID}.marker" 2>/dev/null || true
+        unset _SA_MARKER_DIR
+    fi
+    unset _SA_SESSION_ID _SA_PARENT_ID
+fi
+
 # Build compact conventions bundle (~50 lines, high-signal)
 # Phase 1: hardcoded in hook script. Future: move to versioned artifact
 # (plugins/onex/conventions/onex-conventions.md) so SubagentStart does not

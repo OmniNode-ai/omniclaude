@@ -39,16 +39,22 @@ _READ_TOOLS: frozenset[str] = frozenset(
 
 @dataclass
 class DelegationConfig:
-    """Configuration for delegation enforcement thresholds and patterns."""
+    """Configuration for delegation enforcement thresholds and patterns.
 
-    write_warn_threshold: int = 3
-    write_block_threshold: int = 5
-    read_warn_threshold: int = 8
-    read_block_threshold: int = 12
-    total_block_threshold: int = 15
-    skill_loaded_write_block: int = 2
-    skill_loaded_read_block: int = 3
-    skill_loaded_total_block: int = 4
+    Defaults raised [OMN-9140]: prior tight values (write_block=5, total=15,
+    skill_loaded write=2/read=3/total=4) recursively trapped sessions. Generous
+    defaults keep enforcement advisory while the sub-agent exemption and
+    OMNICLAUDE_HOOKS_DISABLE kill-switch provide safe escape hatches.
+    """
+
+    write_warn_threshold: int = 100
+    write_block_threshold: int = 500
+    read_warn_threshold: int = 200
+    read_block_threshold: int = 1000
+    total_block_threshold: int = 1500
+    skill_loaded_write_block: int = 300
+    skill_loaded_read_block: int = 500
+    skill_loaded_total_block: int = 1000
     delegation_rule_tool_threshold: int = 2
     bash_readonly_patterns: list[str] = field(default_factory=list)
     bash_compound_deny_patterns: list[str] = field(default_factory=list)

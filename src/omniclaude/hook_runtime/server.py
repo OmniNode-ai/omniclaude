@@ -39,6 +39,23 @@ _DEFAULT_SOCKET_PATH = "/tmp/omniclaude-hook-runtime.sock"  # noqa: S108  # nose
 _DEFAULT_PID_PATH = "/tmp/omniclaude-hook-runtime.pid"  # noqa: S108  # nosec B108
 
 
+def _hooks_disabled() -> bool:
+    """Check the omniclaude hook kill-switch. [OMN-9140]
+
+    Returns True if either:
+    - env var OMNICLAUDE_HOOKS_DISABLE=1, or
+    - file ~/.claude/omniclaude-hooks-disabled exists.
+
+    Kept a plain module function (not a classmethod) so shell hooks and the
+    daemon apply identical semantics and the check stays cheap.
+    """
+    if os.environ.get("OMNICLAUDE_HOOKS_DISABLE") == "1":
+        return True
+    if (Path.home() / ".claude" / "omniclaude-hooks-disabled").exists():
+        return True
+    return False
+
+
 @dataclass
 class HookRuntimeConfig:
     """Configuration for the hook runtime daemon server."""
@@ -253,6 +270,17 @@ class HookRuntimeServer:
 
         if req.action == "ping":
             return HookRuntimeResponse(decision="ack").model_dump_json()
+
+        # Kill-switch [OMN-9140]: short-circuit pass for all enforcement actions
+        # before threshold logic runs. Matches the shell-hook kill-switch so the
+        # daemon-first and fallback paths behave identically.
+        if _hooks_disabled() and req.action in {
+            "classify_tool",
+            "mark_delegated",
+            "set_skill_loaded",
+            "check_delegation_rule",
+        }:
+            return HookRuntimeResponse(decision="pass").model_dump_json()
 
         if req.action == "classify_tool":
             tool_name = str(req.payload.get("tool_name", ""))
