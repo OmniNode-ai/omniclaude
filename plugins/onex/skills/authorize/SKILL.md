@@ -1,7 +1,7 @@
 ---
 description: Grant work authorization for Edit/Write operations in this session
 mode: full
-version: "1.0.0"
+version: "2.0.0"
 level: basic
 debug: false
 category: security
@@ -11,76 +11,97 @@ tags:
   - workflow
 author: omninode
 args:
-  - name: reason
-    description: "Reason for requesting authorization (optional)"
+  - name: scope
+    description: "Comma-separated glob patterns the grant covers (e.g. 'src/**,tests/**'). Defaults to 'src/**,tests/**,docs/**'."
+    required: false
+  - name: tools
+    description: "Comma-separated tool names (e.g. 'Edit,Write'). Defaults to 'Edit,Write'."
+    required: false
+  - name: ttl_seconds
+    description: "Grant lifetime in seconds. Omit for the default 4 hour TTL; pass '0' for a non-expiring grant."
     required: false
 ---
 
 # Authorize
 
-**Usage:** `/authorize [reason]`
+**Usage:** `/authorize [scope] [tools] [ttl_seconds]`
 
-Grant authorization for Edit/Write operations in the current session. Authorization lasts 4 hours.
+Grant authorization for Edit/Write operations in the current session. Backed
+by `node_authorize` in omnimarket per `feedback_skills_are_wrappers.md` —
+logic lives in the node handler, this skill is a thin UX wrapper.
 
 ## What This Does
 
-Creates an authorization file at `/tmp/omniclaude-auth/{session_id}.json` that the PreToolUse auth gate checks before allowing Edit/Write operations.
+Invokes `node_authorize`, which writes a `ModelAgentAuthorizationGrant` to
+`$ONEX_STATE_DIR/session/authorization.json` via a tempfile + `os.replace`
+atomic swap. The PermissionRequest authorization gate hook (OMN-9087) reads
+this file to auto-approve in-scope Edit/Write requests.
 
-## Implementation
+**Grant schema (on-disk contract):**
 
-When invoked:
+```json
+{
+  "scope": ["src/**", "tests/**"],
+  "granted_at": "2026-04-17T16:00:00+00:00",
+  "expires_at": "2026-04-17T20:00:00+00:00",
+  "tools": ["Edit", "Write"]
+}
+```
 
-1. Get the current session ID from the environment or generate one
-2. Create directory `/tmp/omniclaude-auth/` if it doesn't exist
-3. Write the authorization file:
+- `expires_at: null` — non-expiring grant (explicit opt-in via `ttl_seconds=0`).
+- Missing file OR `expires_at < now()` both collapse to "no grant"; the hook
+  falls through to the default PermissionRequest flow.
+
+## Invocation
+
+Run the node directly via the ONEX node runner:
 
 ```bash
-SESSION_ID="${CLAUDE_SESSION_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]')}"
-REASON="${1:-no reason provided}"
-GRANTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-EXPIRES_AT=$(date -u -v+4H +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "+4 hours" +"%Y-%m-%dT%H:%M:%SZ")
-
-mkdir -p /tmp/omniclaude-auth
-cat > "/tmp/omniclaude-auth/${SESSION_ID}.json" << EOF
-{
-    "session_id": "${SESSION_ID}",
-    "granted_at": "${GRANTED_AT}",
-    "expires_at": "${EXPIRES_AT}",
-    "reason": "${REASON}",
-    "source": "explicit",
-    "allowed_tools": ["Edit", "Write"],
-    "allow_propagation": true
-}
-EOF
+uv run onex run node_authorize -- \
+  --scope 'src/**' --scope 'tests/**' \
+  --tools Edit --tools Write \
+  --ttl-seconds 14400
 ```
 
-4. Confirm: "Authorization granted for Edit/Write operations. Expires in 4 hours. Reason: {reason}"
+Under a full Kafka runtime, the skill wrapper publishes a command envelope to
+`onex.cmd.omnimarket.authorize-start.v1`; the node consumes it, writes the
+file, and emits `onex.evt.omnimarket.authorize-completed.v1`. Under
+`RuntimeLocal` (no infra), the handler runs in-process via
+`EventBusInmemory` — the file is written either way.
 
-## Propagation to Subagents
+## File Location
 
-When `allow_propagation` is true (default), the authorization token is readable by
-subagent sessions that share the same filesystem. Subagents should check
-`/tmp/omniclaude-auth/` for valid tokens before refusing autonomous operations.
+`$ONEX_STATE_DIR/session/authorization.json`. The canonical relative path
+constant is exported as `AUTHORIZATION_FILE_RELATIVE_PATH` from
+`omnimarket.nodes.node_authorize.models.model_agent_authorization_grant`.
 
-Token validation for subagents:
-1. List files in `/tmp/omniclaude-auth/`
-2. Read each token JSON
-3. If ANY token has `allow_propagation: true` and `expires_at` is in the future, the
-   subagent is authorized for the operations listed in `allowed_tools`
+## Reader Contract
 
-**Subagent prompt injection:** When the polymorphic agent dispatches a `Task()`, it
-should include this text in the prompt:
+Downstream consumers (Task 3 PermissionRequest hook, audit tooling) should
+import `load_grant_if_valid(path)` from the same module. It returns `None`
+for missing, malformed, or expired grants — callers make exactly one
+decision.
 
-```
-An authorization token exists at /tmp/omniclaude-auth/. This token was granted by
-the parent session and includes allow_propagation: true. Before refusing autonomous
-operations (release, deploy, merge), check this token directory. If any token exists,
-is not expired, and has allow_propagation: true, proceed autonomously.
-```
+## Failure Modes
 
-## Notes
+- `ONEX_STATE_DIR` unset — handler raises `RuntimeError`. Caller must export
+  the env var before invocation (set at plugin install time).
+- Disk write failure — handler removes the tempfile and re-raises; no
+  partial `authorization.json` is ever observable.
+- Second invocation — atomically replaces the prior grant.
 
-- Authorization is scoped to the current session but propagates to subagents via filesystem
-- Expires after 4 hours (non-renewable -- run `/authorize` again to refresh)
-- Use the `deauthorize` skill to revoke early
-- Subagents inherit authorization from any valid parent token on the same filesystem
+## Migration Note
+
+The prior `/tmp/omniclaude-auth/{session_id}.json` scheme read by
+`plugins/onex/hooks/lib/auth_gate_adapter.py` remains in place for the
+PreToolUse gate until the Task 3 PermissionRequest hook (OMN-9087) ships.
+This skill writes the OMN-9087-shaped file; the PreToolUse adapter migration
+is tracked under the OMN-9083 unused-hooks epic.
+
+## Related
+
+- Ticket: [OMN-9104](https://linear.app/omninode/issue/OMN-9104)
+- Reader ticket: [OMN-9087](https://linear.app/omninode/issue/OMN-9087) (PermissionRequest authorization gate)
+- Epic: [OMN-9083](https://linear.app/omninode/issue/OMN-9083) (unused-hooks)
+- Node: `omnimarket/src/omnimarket/nodes/node_authorize/`
+- Reference: `feedback_skills_are_wrappers.md`, `feedback_no_informational_gates.md`
