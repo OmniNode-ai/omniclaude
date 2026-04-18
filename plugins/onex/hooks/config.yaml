@@ -61,23 +61,27 @@ hook_policies:
 # the skill-loaded flag exists and no delegation has occurred, even if the
 # corresponding normal threshold is disabled (-1).
 delegation_enforcement:
+  # Thresholds raised [OMN-9140] — prior tight values (write_block=5, total=15,
+  # skill_loaded write=2/read=3/total=4) recursively trapped sessions. Generous
+  # defaults keep enforcement advisory while the sub-agent exemption and
+  # kill-switch (OMNICLAUDE_HOOKS_DISABLE=1) provide safe escape hatches.
   # Write/modify tools (Write, Edit, MultiEdit, Bash-that-mutates)
-  write_warn_threshold: 3       # advisory warning (fires once per turn)
-  write_block_threshold: 5      # hard block (exit 2)
+  write_warn_threshold: 100     # advisory warning (fires once per turn)
+  write_block_threshold: 500    # hard block (exit 2)
 
   # Read-only tools (Read, Glob, Grep, WebFetch, WebSearch, Bash-that-reads)
-  read_warn_threshold: 8        # advisory warning
-  read_block_threshold: 12      # hard block — closes the "unlimited reads" gap
+  read_warn_threshold: 200      # advisory warning
+  read_block_threshold: 1000    # hard block — closes the "unlimited reads" gap
 
   # Combined (read + write)
-  total_block_threshold: 15     # hard block on total tool calls
+  total_block_threshold: 1500   # hard block on total tool calls
 
   # Stricter thresholds when a Skill was loaded but no delegation happened.
   # Overrides normal thresholds unconditionally when the skill-loaded flag exists.
   skill_loaded:
-    write_block_threshold: 2
-    read_block_threshold: 3
-    total_block_threshold: 4
+    write_block_threshold: 300
+    read_block_threshold: 500
+    total_block_threshold: 1000
 
   # Minimum tool calls referenced in the delegation rule text (UserPromptSubmit)
   delegation_rule_tool_threshold: 2

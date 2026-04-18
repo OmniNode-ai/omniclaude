@@ -30,6 +30,27 @@ def default_config() -> DelegationConfig:
     )
 
 
+def tight_config() -> DelegationConfig:
+    """Tight thresholds used to exercise warn/block transitions. [OMN-9140]
+
+    Production defaults were raised in OMN-9140 to avoid recursive-block
+    sessions, so threshold-behaviour tests pin explicit low values instead
+    of depending on dataclass defaults.
+    """
+    return DelegationConfig(
+        write_warn_threshold=3,
+        write_block_threshold=5,
+        read_warn_threshold=8,
+        read_block_threshold=12,
+        total_block_threshold=15,
+        skill_loaded_write_block=2,
+        skill_loaded_read_block=3,
+        skill_loaded_total_block=4,
+        bash_readonly_patterns=[r"^git\s+"],
+        bash_compound_deny_patterns=[r"&&"],
+    )
+
+
 @pytest.mark.unit
 def test_classify_bash_readonly() -> None:
     state = DelegationState(config=default_config())
@@ -61,7 +82,7 @@ def test_classify_write_tools() -> None:
 
 @pytest.mark.unit
 def test_read_block_at_threshold() -> None:
-    state = DelegationState(config=default_config())
+    state = DelegationState(config=tight_config())
     for _ in range(13):
         state.record_tool("session-1", "read")
     decision = state.check_thresholds("session-1")
@@ -70,7 +91,7 @@ def test_read_block_at_threshold() -> None:
 
 @pytest.mark.unit
 def test_skill_loaded_tightens_thresholds() -> None:
-    state = DelegationState(config=default_config())
+    state = DelegationState(config=tight_config())
     state.set_skill_loaded("session-1")
     for _ in range(4):
         state.record_tool("session-1", "read")
@@ -101,7 +122,7 @@ def test_reset_session() -> None:
 
 @pytest.mark.unit
 def test_warn_before_block() -> None:
-    state = DelegationState(config=default_config())
+    state = DelegationState(config=tight_config())
     for _ in range(4):
         state.record_tool("session-1", "write")
     decision = state.check_thresholds("session-1")

@@ -12,6 +12,15 @@
 
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
+
+# --- Kill-switch [OMN-9140] ---
+# OMNICLAUDE_HOOKS_DISABLE=1 or ~/.claude/omniclaude-hooks-disabled short-circuits
+# BEFORE any enforcement. Emergency unblock without plugin uninstall.
+if [[ "${OMNICLAUDE_HOOKS_DISABLE:-0}" == "1" ]] || [[ -f "${HOME}/.claude/omniclaude-hooks-disabled" ]]; then
+    cat >/dev/null || true
+    exit 0
+fi
+
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 # shellcheck source=hook-runtime-client.sh
 source "$(dirname "${BASH_SOURCE[0]}")/hook-runtime-client.sh" 2>/dev/null || true

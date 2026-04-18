@@ -14,6 +14,33 @@ Then paste the printed one-liner into the Claude Code session. The automated pat
 
 ---
 
+## Emergency: disable omniclaude hooks (kill-switch) [OMN-9140]
+
+If the DELEGATION ENFORCER (or any omniclaude hook) recursively blocks a
+session, disable it immediately — no plugin uninstall, no restart required:
+
+```bash
+# Option 1 — export for the current shell / Claude Code session:
+export OMNICLAUDE_HOOKS_DISABLE=1
+
+# Option 2 — persistent file marker (clears on delete):
+touch ~/.claude/omniclaude-hooks-disabled
+
+# To re-enable:
+unset OMNICLAUDE_HOOKS_DISABLE
+rm -f ~/.claude/omniclaude-hooks-disabled
+```
+
+Both the shell hook scripts (`post-tool-delegation-counter.sh`,
+`post-skill-delegation-enforcer.sh`) and the hook runtime daemon
+(`src/omniclaude/hook_runtime/server.py`) short-circuit `pass` on either
+signal BEFORE any threshold logic runs. The sub-agent exemption
+(`subagent-start.sh` writes a per-session marker under
+`$ONEX_STATE_DIR/hooks/subagent-sessions/`) protects Task()-spawned sub-agents
+independently — they never hit thresholds.
+
+---
+
 ## Skill Usage Policy
 
 - Before any task, check if a matching skill exists. If it does, use it.
