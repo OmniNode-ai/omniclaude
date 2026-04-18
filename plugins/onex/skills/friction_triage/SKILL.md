@@ -9,8 +9,9 @@ tags: [friction, triage, linear]
 author: omninode
 args:
   - name: dry_run
-    description: "If true, report what would be created without creating tickets (default: false)"
+    description: "If true, preview what would be created without creating tickets. Default: false (tickets are created automatically)."
     required: false
+    default: false
   - name: window_days
     description: "Rolling window in days (default: 30)"
     required: false
@@ -25,8 +26,8 @@ where `count >= 3` OR `severity_score >= 9`.
 ## Usage
 
 ```
-/friction-triage
-/friction-triage --dry_run true
+/friction-triage                    # creates tickets automatically (default)
+/friction-triage --dry_run true     # preview only — no tickets created
 /friction-triage --window_days 7
 ```
 
