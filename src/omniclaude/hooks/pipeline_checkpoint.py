@@ -93,7 +93,7 @@ class ModelPipelineCheckpoint(BaseModel):
 
     model_config = ConfigDict(frozen=False, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: str = Field(  # string-version-ok: serialization-boundary model; persisted to .onex_state/checkpoint-*.yaml via model_dump(mode="json")
         default="1.0.0", description="Checkpoint schema version"
     )
     run_id: str = Field(description="Pipeline run ID")

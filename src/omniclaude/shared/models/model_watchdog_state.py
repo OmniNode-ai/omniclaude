@@ -241,7 +241,7 @@ class ModelWatchdogState(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = "1.0"
+    schema_version: str = "1.0"  # string-version-ok: serialization-boundary model; round-trips through loop-health.json on disk via json.dumps/loads
     loops: dict[str, ModelWatchdogLoopState] = Field(default_factory=dict)
 
 
@@ -268,7 +268,7 @@ class ModelEscalationPolicy(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = "1.0"
+    schema_version: str = "1.0"  # string-version-ok: serialization-boundary model; loaded from watchdog-escalation-policy.yaml via yaml.safe_load
     escalation_levels: list[ModelEscalationLevel] = Field(default_factory=list)
     fsm_transitions: dict[str, dict[str, str]] = Field(default_factory=dict)
     max_history: int = 20

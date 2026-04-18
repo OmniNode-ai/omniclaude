@@ -32,7 +32,7 @@ class ModelRoutingDecision(BaseModel):
 
     task_id: str
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
-    schema_version: str = _SCHEMA_VERSION
+    schema_version: str = _SCHEMA_VERSION  # string-version-ok: serialization-boundary model; appended to decisions.ndjson as JSON, must remain string
     intended_surface: str
     executed_surface: str
     agent_model: str

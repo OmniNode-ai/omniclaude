@@ -55,7 +55,7 @@ class AgentInboxMessage(BaseModel):
     """
 
     # Phase 3 envelope fields
-    schema_version: str = Field(
+    schema_version: str = Field(  # string-version-ok: wire envelope field; published to Kafka bus, must remain string for cross-version compatibility
         default="1.0.0", description="Schema version for inbox messages"
     )
     message_id: str = Field(

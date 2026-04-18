@@ -57,7 +57,9 @@ class ModelTaskContract(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
-    schema_version: str = Field(default="1.0.0", description="Contract schema version")
+    schema_version: str = Field(
+        default="1.0.0", description="Contract schema version"
+    )  # string-version-ok: serialization-boundary model; round-trips through YAML files via to_yaml/from_yaml
     task_id: str = Field(..., description="Task identifier (e.g., task-1)")
     parent_ticket: str | None = Field(
         default=None, description="Parent Linear ticket ID"

@@ -83,7 +83,7 @@ class ModelFeatureDashboardResult(BaseModel, frozen=True):
     Skills are sorted alphabetically by name (deterministic ordering).
     """
 
-    schema_version: str = "1.0.0"
+    schema_version: str = "1.0.0"  # string-version-ok: serialization-boundary model; dumped to JSON for CLI output, must remain string
     generated_at: str  # ISO-8601; EXCLUDED from stable JSON
     total: int
     wired: int

@@ -56,7 +56,7 @@ class ModelInboxMessage(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: str = Field(  # string-version-ok: wire envelope field; deserialized from Kafka and local JSONL, must remain string for forward-compat
         default="1",
         description="Envelope schema version for forward compatibility",
     )

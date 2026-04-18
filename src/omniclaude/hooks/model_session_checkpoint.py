@@ -69,7 +69,7 @@ class ModelSessionCheckpoint(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: str = Field(
+    schema_version: str = Field(  # string-version-ok: serialization-boundary model; persisted to .onex_state/orchestrator/checkpoint.yaml via model_dump
         default="1.0.0",
         description="Checkpoint schema version for forward compatibility",
     )

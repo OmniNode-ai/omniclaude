@@ -57,7 +57,7 @@ class ModelAgentChatMessage(BaseModel):
     # haven't been upgraded yet.  See schema_version field below.
     model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
-    schema_version: str = Field(
+    schema_version: str = Field(  # string-version-ok: wire envelope field; deserialized from Kafka and JSONL store, must remain string for forward-compat
         default="1",
         description="Wire format version for forward compatibility",
     )
