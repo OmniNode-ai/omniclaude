@@ -192,19 +192,153 @@ Correlate:
 
 ---
 
-## Phase 5 — Report + Ticket Creation
+## Phase 5 — Live Container Crash-Loop Detection [OMN-9122]
+
+Check `omninode-runtime*` containers for restart counts exceeding the threshold.
+
+### Step 5a: Enumerate Runtime Containers
+
+```bash
+ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
+ssh "jonah@${ONEX_INFRA_HOST}" "docker ps -a --format '{{.Names}}'" 2>/dev/null | grep '^omninode-runtime'
+```
+
+If SSH is unavailable, fall back to local Docker socket:
+
+```bash
+docker ps -a --format '{{.Names}}' 2>/dev/null | grep '^omninode-runtime'
+```
+
+### Step 5b: Check RestartCount for Each Container
+
+For each `omninode-runtime*` container:
+
+```bash
+ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
+ssh "jonah@${ONEX_INFRA_HOST}" "docker inspect --format='{{.RestartCount}}' $CONTAINER_NAME" 2>/dev/null
+```
+
+**Threshold:** `RestartCount > 5` → CRASH_LOOP_CRITICAL finding.
+
+### Step 5c: Emit Friction and Fail if Threshold Exceeded
+
+If any container has `RestartCount > 5`:
+
+1. Collect all violating containers into a findings list.
+2. Write a friction YAML file (see Phase 7 — Friction Output below).
+3. **Exit non-zero** after completing all remaining phases and report output.
+
+**Output table:**
+
+| Container | RestartCount | Status |
+|-----------|-------------|--------|
+| omninode-runtime-foo | 0 | OK |
+| omninode-runtime-bar | 7 | CRASH_LOOP_CRITICAL |
+
+---
+
+## Phase 6 — Orchestrator Consumer Group Health [OMN-9122]
+
+Verify all orchestrator-owned Kafka consumer groups have at least one active member. A group in `Empty` state means handlers are not attached and events are silently dropped.
+
+### Step 6a: Derive Orchestrator Consumer Groups from Contracts
+
+Collect all `event_bus.subscribe_topics` entries from contract YAMLs for nodes whose names start with `omninode-runtime` or whose `owner` field matches the orchestrator service:
+
+```bash
+grep -rh "subscribe_topics\|consumer_group" \
+  "$ONEX_REGISTRY_ROOT"/*/src/*/nodes/*/contract.yaml 2>/dev/null  # local-path-ok command example using canonical repo path
+```
+
+Extract the `consumer_group` value from each contract that declares `subscribe_topics`. If no explicit `consumer_group` is set, derive it as `onex-{node_name}`.
+
+### Step 6b: Describe Each Consumer Group
+
+For each consumer group derived in Step 6a:
+
+```bash
+ONEX_INFRA_HOST="${ONEX_INFRA_HOST:-$(grep ONEX_INFRA_HOST ~/.omnibase/.env 2>/dev/null | cut -d= -f2)}"
+ssh "jonah@${ONEX_INFRA_HOST}" \
+  "docker exec omnibase-infra-redpanda rpk group describe $GROUP_NAME --brokers localhost:9092" \
+  2>/dev/null
+```
+
+Parse the output for `STATE` field:
+- `STATE: Empty` → group has no active members → CONSUMER_GROUP_EMPTY finding
+- `STATE: Stable` → healthy
+- Command failure / group not found → CONSUMER_GROUP_MISSING finding
+
+**Time-fence:** Only flag `Empty` state if the group was also `Empty` on the previous sweep run. To implement this, compare against the prior friction file if one exists under `$ONEX_STATE_DIR/friction/runtime_sweep_*.yaml`.
+
+**Practical shorthand when previous sweep data is unavailable:** Flag any group currently in `Empty` state as CONSUMER_GROUP_EMPTY (conservative; safer than missing a stranded group).
+
+### Step 6c: Emit Friction and Fail if Any Group is Empty
+
+If any consumer group is in `Empty` or `Missing` state:
+
+1. Collect all violating groups into a findings list.
+2. Write a friction YAML file (see Phase 7 — Friction Output below).
+3. **Exit non-zero** after completing all remaining phases and report output.
+
+**Output table:**
+
+| Consumer Group | State | Status |
+|---------------|-------|--------|
+| onex-node-orchestrator | Stable | OK |
+| onex-node-effects | Empty | CONSUMER_GROUP_EMPTY |
+
+---
+
+## Phase 7 — Friction Output
+
+If Phase 5 or Phase 6 found any violations, write a structured friction YAML to disk **before** exiting non-zero.
+
+```bash
+TIMESTAMP=$(date -u +%Y-%m-%dT%H-%M-%SZ)
+FRICTION_DIR="${ONEX_STATE_DIR}/friction"
+FRICTION_FILE="${FRICTION_DIR}/runtime_sweep_${TIMESTAMP}.yaml"
+mkdir -p "$FRICTION_DIR"
+```
+
+Write the following structure (adapt fields to actual findings):
+
+```yaml
+skill: runtime_sweep
+run_at: "<ISO8601 UTC timestamp>"
+exit_code: 1
+findings:
+  crash_loop:
+    - container: omninode-runtime-bar
+      restart_count: 7
+      threshold: 5
+      status: CRASH_LOOP_CRITICAL
+  consumer_group_empty:
+    - group: onex-node-effects
+      state: Empty
+      status: CONSUMER_GROUP_EMPTY
+```
+
+Write atomically: write to `${FRICTION_FILE}.tmp`, then rename to `${FRICTION_FILE}`.
+
+If no violations are found, do NOT write a friction file. Exit 0.
+
+---
+
+## Phase 8 — Report + Ticket Creation
 
 ### Summary Output
 
-Print four summary tables:
+Print six summary tables:
 1. **Node Descriptions** — per-contract description audit
 2. **Handler Wiring** — per-handler wiring status
 3. **Topic Symmetry** — per-topic producer/consumer symmetry
 4. **Docker Log Health** — per-container log analysis
+5. **Container Crash-Loop Health** — RestartCount per `omninode-runtime*` container
+6. **Consumer Group Health** — state per orchestrator consumer group
 
 ### Ticket Creation
 
-For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`, `CONSUMER_ONLY`, `ERROR_HEAVY`, or `CRASH_LOOP`:
+For each finding with status `PLACEHOLDER`, `UNWIRED`, `PRODUCER_ONLY`, `CONSUMER_ONLY`, `ERROR_HEAVY`, `CRASH_LOOP`, `CRASH_LOOP_CRITICAL`, or `CONSUMER_GROUP_EMPTY`:
 
 **Only if `--dry-run` is NOT set:**
 
