@@ -294,12 +294,16 @@ mutation CreateIssue($title: String!, $description: String!, $teamId: String!) {
         )
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             data = _json.loads(resp.read())
-        return (
+        if data.get("errors"):
+            logger.warning("env_sync_alert: linear GraphQL errors: %s", data["errors"])
+            return None
+        identifier = (
             data.get("data", {})
             .get("issueCreate", {})
             .get("issue", {})
             .get("identifier")
         )
+        return identifier if isinstance(identifier, str) else None
     except (urllib.error.URLError, OSError, _json.JSONDecodeError) as exc:
         logger.warning("env_sync_alert: linear ticket creation failed: %s", exc)
     return None
