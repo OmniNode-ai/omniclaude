@@ -58,7 +58,8 @@ CONCESSION_JQ='[
 
 # gh api graphql --paginate outputs one JSON object per page (not an array).
 # jq -s collects them into [obj1, obj2, ...]. Mocks replicate that: one object per echo.
-# All mock nodes include totalCount equal to the number of fetched nodes (no truncation).
+# Most mock nodes include totalCount equal to the number of fetched nodes; Case E below
+# intentionally tests the truncation path (totalCount > fetched) and is the sole exception.
 
 # Case 1: one unresolved CR thread, one resolved CR thread, one unresolved human thread -> expect 1
 COUNT=$(echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
