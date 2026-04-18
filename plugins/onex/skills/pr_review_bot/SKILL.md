@@ -25,8 +25,8 @@ args:
     description: "Minimum severity to post a thread: CRITICAL, MAJOR, MINOR (default: MAJOR)"
     required: false
   - name: --reviewer-models
-    description: "Comma-separated reviewer model list (default: qwen3-coder-30b,qwen3-14b)"
-    required: false
+    description: "Comma-separated reviewer model list. Required — caller must pass model keys registered in ModelInferenceBridgeConfig.model_configs (e.g. LLM_CODER_URL-backed key). Prior hardcoded defaults produced a silent-clean verdict when the keys weren't in the registry (OMN-9112)."
+    required: true
   - name: --judge-model
     description: "Judge model identifier (default: deepseek-r1)"
     required: false
@@ -41,7 +41,7 @@ Thin skill wrapper over `node_pr_review_bot.workflow_runner.run_review()` in omn
 
 Runs the full PR review bot FSM pipeline:
 1. Fetch PR diff hunks via HandlerDiffFetcher
-2. Run multi-model adversarial review (qwen3-coder-30b + qwen3-14b by default)
+2. Run multi-model adversarial review (models must be registered in ModelInferenceBridgeConfig; caller passes keys)
 3. Post findings as GitHub PR review threads via HandlerThreadPoster
 4. Watch threads for developer responses via HandlerThreadWatcher
 5. Verify resolutions via HandlerJudgeVerifier (deepseek-r1 by default)
@@ -67,7 +67,7 @@ Parse args:
 - `repo` (optional): `owner/repo` string. If omitted, resolve from `gh repo view --json nameWithOwner -q .nameWithOwner` in the current working directory.
 - `--dry-run`: boolean flag, default false
 - `--severity-threshold`: one of `CRITICAL`, `MAJOR`, `MINOR` (default `MAJOR`)
-- `--reviewer-models`: comma-separated string (default `qwen3-coder-30b,qwen3-14b`)
+- `--reviewer-models`: comma-separated string (REQUIRED — must be keys registered in `ModelInferenceBridgeConfig.model_configs`; unknown keys now raise ValueError instead of returning a silent clean verdict, per OMN-9112)
 - `--judge-model`: string (default `deepseek-r1`)
 - `--max-findings`: integer (default `20`)
 
@@ -92,7 +92,14 @@ pr_number    = int(os.environ["_PR_NUMBER"])
 repo         = os.environ["_REPO"]
 dry_run      = os.environ.get("_DRY_RUN", "false").lower() == "true"
 sev_thresh   = os.environ.get("_SEVERITY_THRESHOLD", "MAJOR")
-rev_models_s = os.environ.get("_REVIEWER_MODELS", "qwen3-coder-30b,qwen3-14b")
+rev_models_s = os.environ.get("_REVIEWER_MODELS", "")
+if not rev_models_s.strip():
+    sys.stderr.write(
+        "ERROR: --reviewer-models is required. Pass model keys registered in "
+        "ModelInferenceBridgeConfig.model_configs (unknown keys raise ValueError "
+        "per OMN-9112 fail-loud policy).\n"
+    )
+    sys.exit(1)
 judge_model  = os.environ.get("_JUDGE_MODEL", "deepseek-r1")
 max_findings = int(os.environ.get("_MAX_FINDINGS", "20"))
 
