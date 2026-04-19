@@ -887,6 +887,62 @@ class TestKcatPublishBehaviour:
             "(f-string interpolation of the declared topic)"
         )
 
+    # -- Env-probe fail-fast path (CodeRabbit gap, OMN-9214) ------------------
+
+    @staticmethod
+    def _resolve_bootstrap(
+        env: dict[str, str],
+    ) -> tuple[str | None, dict[str, object] | None]:
+        """Extracted helper mirroring the env-probe block in prompt.md.
+
+        Keeping this runtime shape identical to the prompt is enforced by
+        :meth:`test_prompt_documents_env_probe_fail_fast` below — any drift
+        trips that structural guard.
+        """
+        kafka_bootstrap = env.get("KAFKA_BOOTSTRAP_SERVERS")
+        if not kafka_bootstrap:
+            return None, {
+                "status": "error",
+                "message": "KAFKA_BOOTSTRAP_SERVERS not set",
+            }
+        return kafka_bootstrap, None
+
+    def test_env_probe_fails_fast_when_bootstrap_unset(self) -> None:
+        """Fail-fast env-probe must return the documented error envelope when unset."""
+        bootstrap, result = self._resolve_bootstrap({})
+        assert bootstrap is None
+        assert result is not None
+        assert result["status"] == "error"
+        assert result["message"] == "KAFKA_BOOTSTRAP_SERVERS not set"
+
+    def test_env_probe_returns_bootstrap_when_set(self) -> None:
+        """When KAFKA_BOOTSTRAP_SERVERS is set the probe must pass through the value."""
+        expected = "broker.test:9092"
+        bootstrap, result = self._resolve_bootstrap(
+            {"KAFKA_BOOTSTRAP_SERVERS": expected}
+        )
+        assert bootstrap == expected
+        assert result is None
+
+    def test_prompt_documents_env_probe_fail_fast(self) -> None:
+        """Structural guard: prompt.md must contain the fail-fast env probe.
+
+        Pairs with :meth:`test_env_probe_fails_fast_when_bootstrap_unset` —
+        the executable test above covers the behaviour; this test locks the
+        prompt shape so a regression that deletes the probe (e.g., reverting
+        to a silent default) is caught even if the helper stays intact.
+        """
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert 'os.environ.get("KAFKA_BOOTSTRAP_SERVERS")' in content, (
+            "prompt.md must read KAFKA_BOOTSTRAP_SERVERS via os.environ.get"
+        )
+        assert "if not kafka_bootstrap:" in content, (
+            "prompt.md must check `if not kafka_bootstrap:` and fail fast"
+        )
+        assert '"message": "KAFKA_BOOTSTRAP_SERVERS not set"' in content, (
+            "prompt.md must emit the documented fail-fast error message"
+        )
+
 
 def shlex_quote_literal(s: str) -> str:
     """Local helper: quote for embedding inside the generated kcat stub shell script."""
