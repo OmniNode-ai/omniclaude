@@ -103,21 +103,73 @@ Dry run complete. No mutations performed.
 
 ## Publish Command Event
 
-Publish the command event via the emit daemon:
+Publish the command event directly to the Kafka cmd topic via `kcat -P`. The emit daemon
+is scoped to `onex.evt.*` observability events — cmd-topic command publishing uses a
+direct broker produce, mirroring the pattern already proven in `skills/redeploy/prompt.md`
+(DEPLOY phase).
+
+Prior art (reference): `plugins/onex/skills/redeploy/prompt.md` — Phase 5: DEPLOY publishes
+`onex.cmd.deploy.rebuild-requested.v1` via the same `echo ... | kcat -P` shell-out.
 
 ```python
-from plugins.onex.hooks.lib.emit_client_wrapper import emit_via_daemon
+import json
+import os
+import shlex
+import subprocess
 
-emit_via_daemon(
-    topic="onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1",
-    payload=command_event,
+COMMAND_TOPIC = "onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1"
+
+# Env-var probe (fail-fast — no silent defaults)
+kafka_bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+if not kafka_bootstrap:
+    print(
+        "[merge-sweep] PUBLISH FAILED: KAFKA_BOOTSTRAP_SERVERS not set. "
+        "Source ~/.omnibase/.env before invoking the skill."
+    )
+    # Write error ModelSkillResult and exit — see "Write ModelSkillResult and Report" below.
+    result = {
+        "status": "error",
+        "message": "KAFKA_BOOTSTRAP_SERVERS not set",
+        "run_id": run_id,
+    }
+    # EXIT 1
+
+# Produce command event to Kafka via kcat -P
+msg = json.dumps(command_event)
+proc = subprocess.run(
+    f"echo {shlex.quote(msg)} | kcat -P -b {shlex.quote(kafka_bootstrap)} -t {COMMAND_TOPIC}",
+    shell=True,
+    capture_output=True,
+    text=True,
 )
+if proc.returncode != 0:
+    print(
+        f"[merge-sweep] PUBLISH FAILED: kcat -P to {COMMAND_TOPIC} exited "
+        f"{proc.returncode}. stderr: {proc.stderr.strip()}"
+    )
+    result = {
+        "status": "error",
+        "message": f"kafka produce failed: {proc.stderr.strip()}",
+        "run_id": run_id,
+    }
+    # EXIT 1
 ```
 
 Log:
 ```
 [merge-sweep] Published command event to pr_lifecycle_orchestrator | run_id: <run_id>
 ```
+
+### Why kcat, not the emit daemon
+
+The emit daemon (observability event client in `plugins/onex/hooks/lib/`) fans out observability
+events declared in `SUPPORTED_EVENT_TYPES` — a semantic event-type registry, not an
+arbitrary topic passthrough. `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+is a command topic routed directly by the broker to the orchestrator's consumer group;
+it is not in the emit daemon's registry and cannot be. This skill therefore uses the
+same direct-produce pattern as `skills/redeploy` for its cmd-topic publish. Fixes
+OMN-9214 (112 consecutive no-op refusals on 2026-04-19 from a missing daemon
+symbol — see ticket for historical context).
 
 ---
 
@@ -183,7 +235,8 @@ The result passes through unchanged from the orchestrator. Expected status value
 
 | Failure | Behavior |
 |---------|----------|
-| Emit daemon unavailable | Log warning, exit with `status: error` |
+| `KAFKA_BOOTSTRAP_SERVERS` not set | Log error, exit with `status: error, message: KAFKA_BOOTSTRAP_SERVERS not set` |
+| `kcat -P` exits non-zero | Log stderr, exit with `status: error, message: kafka produce failed: <stderr>` |
 | Orchestrator timeout (>3600s) | Log warning, emit `status: error, message: orchestrator timeout` |
 | `result.json` parse error | Log error, emit `status: error, message: malformed result` |
 | `$ONEX_STATE_DIR` not set | Log error, exit immediately |
