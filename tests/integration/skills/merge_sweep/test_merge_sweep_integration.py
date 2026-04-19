@@ -261,6 +261,10 @@ class TestPromptPublishMonitorSteps:
         import with a direct `kcat -P` shell-out, mirroring the same pattern
         used by `skills/redeploy/prompt.md` (DEPLOY phase). This test locks in
         the replacement and prevents the broken symbol from reappearing.
+
+        OMN-9215: additionally asserts the payload is wrapped in
+        ``ModelEventEnvelope`` before produce — bare-payload sends fail the
+        consumer's auto-wiring validation and every tick times out.
         """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         assert "kcat -P" in content, (
@@ -277,6 +281,16 @@ class TestPromptPublishMonitorSteps:
         assert "emit_client_wrapper" not in content, (
             "prompt.md must not import from emit_client_wrapper — cmd-topic publish "
             "uses kcat, not the emit daemon (OMN-9214)"
+        )
+        # OMN-9215: envelope wrapping is mandatory — bare payloads fail the
+        # consumer-side ModelEventEnvelope[object] validation.
+        assert "ModelEventEnvelope" in content, (
+            "prompt.md must wrap the command event in ModelEventEnvelope before "
+            "produce (OMN-9215) — consumer auto-wiring validates this shape"
+        )
+        assert "envelope.model_dump_json()" in content, (
+            "prompt.md must serialize the ModelEventEnvelope, not the raw "
+            "command_event dict (OMN-9215)"
         )
 
 
@@ -756,12 +770,29 @@ class TestKcatPublishBehaviour:
         "## Publish Command Event". Any drift will be caught by
         :meth:`test_prompt_command_shape_matches_runtime`, which greps the
         prompt for the literal command pattern.
+
+        OMN-9215: command_event is wrapped in ``ModelEventEnvelope`` so the
+        consumer-side auto-wiring callback (which validates
+        ``ModelEventEnvelope[object]`` before dispatch) accepts the message.
         """
-        import json
         import shlex
         import subprocess
+        from uuid import UUID
 
-        msg = json.dumps(command_event)
+        from omnibase_core.models.events.model_event_envelope import (
+            ModelEventEnvelope,
+        )
+
+        correlation_raw = command_event.get("correlation_id")
+        correlation_id = UUID(str(correlation_raw)) if correlation_raw else None
+        envelope = ModelEventEnvelope[dict](
+            payload=command_event,
+            correlation_id=correlation_id,
+            event_type="omnimarket.pr-lifecycle-orchestrator-start",
+            source_tool="merge-sweep-skill",
+        )
+        msg = envelope.model_dump_json()
+
         proc = subprocess.run(
             (
                 f"echo {shlex.quote(msg)} | "
@@ -839,14 +870,29 @@ class TestKcatPublishBehaviour:
         assert "-P " in invocation or "-P\n" in invocation, (
             f"kcat must be called in produce mode (-P); got:\n{invocation}"
         )
-        # Envelope must arrive as a single JSON line on stdin.
+        # Envelope must arrive as a single JSON line on stdin and parse as
+        # ModelEventEnvelope (OMN-9215 — consumer side validates this shape
+        # before dispatching to HandlerPrLifecycleOrchestrator).
+        from omnibase_core.models.events.model_event_envelope import (
+            ModelEventEnvelope,
+        )
+
         stdin_marker = "stdin="
         stdin_idx = invocation.index(stdin_marker)
         stdin_body = invocation[stdin_idx + len(stdin_marker) :].strip()
         parsed = json.loads(stdin_body)
-        assert parsed["run_id"] == envelope["run_id"]
-        assert parsed["correlation_id"] == envelope["correlation_id"]
-        assert parsed["merge_method"] == "squash"
+        # Envelope shape: payload dict carries the command_event.
+        assert "payload" in parsed, (
+            "kcat stdin must be envelope-shaped with a top-level 'payload' "
+            "field (OMN-9215). Got: " + stdin_body[:200]
+        )
+        # Round-trip through ModelEventEnvelope to prove the consumer-side
+        # auto-wiring callback would accept this message.
+        ModelEventEnvelope[object].model_validate(parsed)
+        payload = parsed["payload"]
+        assert payload["run_id"] == envelope["run_id"]
+        assert payload["correlation_id"] == envelope["correlation_id"]
+        assert payload["merge_method"] == "squash"
 
     def test_publish_surfaces_nonzero_exit_from_kcat(
         self,
@@ -870,8 +916,13 @@ class TestKcatPublishBehaviour:
         """Guard: prompt.md's publish command must still match the shape this suite exercises.
 
         If the prompt's command string drifts away from
-        ``echo <json> | kcat -P -b <bootstrap> -t <topic>``, this test and the
-        runtime invocation diverge silently. Pin both sides together.
+        ``echo <envelope_json> | kcat -P -b <bootstrap> -t <topic>``, this
+        test and the runtime invocation diverge silently. Pin both sides
+        together.
+
+        OMN-9215: the ``msg`` variable is now the serialized envelope, not the
+        raw command_event. The shell-out template remains identical — the
+        change is upstream (envelope construction).
         """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         assert "echo {shlex.quote(msg)} | kcat -P -b" in content, (
@@ -885,6 +936,12 @@ class TestKcatPublishBehaviour:
         assert "-t {COMMAND_TOPIC}" in content, (
             "prompt.md kcat command must pass '-t {COMMAND_TOPIC}' "
             "(f-string interpolation of the declared topic)"
+        )
+        # OMN-9215: msg must come from the envelope, not a bare command_event.
+        assert "msg = envelope.model_dump_json()" in content, (
+            "prompt.md must set `msg = envelope.model_dump_json()` so the "
+            "serialized bytes on the wire carry the ModelEventEnvelope shape "
+            "(OMN-9215)"
         )
 
     # -- Env-probe fail-fast path (CodeRabbit gap, OMN-9214) ------------------

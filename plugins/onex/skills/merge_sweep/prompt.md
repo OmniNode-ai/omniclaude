@@ -111,11 +111,24 @@ direct broker produce, mirroring the pattern already proven in `skills/redeploy/
 Prior art (reference): `plugins/onex/skills/redeploy/prompt.md` — Phase 5: DEPLOY publishes
 `onex.cmd.deploy.rebuild-requested.v1` via the same `echo ... | kcat -P` shell-out.
 
+### Envelope wrapping (OMN-9215)
+
+The consumer runtime (`omnibase_infra.runtime.auto_wiring.handler_wiring._make_event_bus_callback`)
+validates every inbound message against `ModelEventEnvelope[object]` before dispatch. A
+bare-payload JSON — the shape published before OMN-9215 — fails validation with
+`payload: Field required` and the handler never runs (see
+`docs/diagnosis-omn-9215-pr-lifecycle-orchestrator-envelope-mismatch.md`). The publish
+step therefore wraps the command_event dict inside a `ModelEventEnvelope` and serializes
+the envelope, not the raw payload.
+
 ```python
 import json
 import os
 import shlex
 import subprocess
+from uuid import UUID
+
+from omnibase_core.models.events.model_event_envelope import ModelEventEnvelope
 
 COMMAND_TOPIC = "onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1"
 
@@ -134,8 +147,19 @@ if not kafka_bootstrap:
     }
     # EXIT 1
 
+# Wrap the command event dict in ModelEventEnvelope so the runtime auto-wiring
+# callback (which validates ModelEventEnvelope[object] before dispatch) accepts
+# the message and routes it to HandlerPrLifecycleOrchestrator. Preserve the
+# caller's correlation_id (command_event["correlation_id"] is a UUID string).
+envelope = ModelEventEnvelope[dict](
+    payload=command_event,
+    correlation_id=UUID(command_event["correlation_id"]),
+    event_type="omnimarket.pr-lifecycle-orchestrator-start",
+    source_tool="merge-sweep-skill",
+)
+msg = envelope.model_dump_json()
+
 # Produce command event to Kafka via kcat -P
-msg = json.dumps(command_event)
 proc = subprocess.run(
     f"echo {shlex.quote(msg)} | kcat -P -b {shlex.quote(kafka_bootstrap)} -t {COMMAND_TOPIC}",
     shell=True,
@@ -170,6 +194,16 @@ it is not in the emit daemon's registry and cannot be. This skill therefore uses
 same direct-produce pattern as `skills/redeploy` for its cmd-topic publish. Fixes
 OMN-9214 (112 consecutive no-op refusals on 2026-04-19 from a missing daemon
 symbol — see ticket for historical context).
+
+### Why wrap in ModelEventEnvelope
+
+The bare-payload publish that shipped with OMN-9214 produced every command on this
+topic, but the runtime auto-wiring layer validates against `ModelEventEnvelope[object]`
+before dispatching to the orchestrator handler. Bare payloads fail with
+`payload: Field required` and the handler never runs — every merge_sweep tick timed
+out at 15m. The envelope wrap makes the message round-trip through the auto-wiring
+callback and reach `HandlerPrLifecycleOrchestrator.handle`, which in turn writes
+`result.json` and unblocks the monitor loop. Fixes OMN-9215.
 
 ---
 
