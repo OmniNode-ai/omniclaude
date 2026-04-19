@@ -252,11 +252,31 @@ class TestPromptPublishMonitorSteps:
             "prompt.md must document the result.json poll target path"
         )
 
-    def test_prompt_documents_emit_daemon_publish(self) -> None:
-        """prompt.md must reference emit_via_daemon for publishing."""
+    def test_prompt_documents_kcat_publish(self) -> None:
+        """prompt.md must publish the command event via `kcat -P`.
+
+        OMN-9214: the skill previously imported the non-existent
+        `emit_via_daemon` symbol from `emit_client_wrapper.py`, causing 112
+        consecutive merge-sweep refusals on 2026-04-19. The fix replaces that
+        import with a direct `kcat -P` shell-out, mirroring the same pattern
+        used by `skills/redeploy/prompt.md` (DEPLOY phase). This test locks in
+        the replacement and prevents the broken symbol from reappearing.
+        """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
-        assert "emit_via_daemon" in content or "emit daemon" in content.lower(), (
-            "prompt.md must use emit_via_daemon to publish the command event"
+        assert "kcat -P" in content, (
+            "prompt.md must publish via `kcat -P` (mirroring redeploy/prompt.md)"
+        )
+        assert "KAFKA_BOOTSTRAP_SERVERS" in content, (
+            "prompt.md must reference KAFKA_BOOTSTRAP_SERVERS env var for the broker"
+        )
+        # Structural guard: the broken symbol and its import must not return.
+        assert "emit_via_daemon" not in content, (
+            "prompt.md must not reference `emit_via_daemon` — the symbol does not "
+            "exist in emit_client_wrapper.py (OMN-9214)"
+        )
+        assert "emit_client_wrapper" not in content, (
+            "prompt.md must not import from emit_client_wrapper — cmd-topic publish "
+            "uses kcat, not the emit daemon (OMN-9214)"
         )
 
 
@@ -704,3 +724,172 @@ class TestVerifyPreMergeGate:
             assert pattern in content, (
                 f"verification_sweep must document target mapping pattern: {pattern}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Test class: kcat publish end-to-end behaviour (OMN-9214)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestKcatPublishBehaviour:
+    """OMN-9214: prove the documented kcat publish step actually fires.
+
+    The prompt documents a `kcat -P` shell-out; a previous regression
+    (OMN-9214 root cause) shipped a non-existent `emit_via_daemon` import
+    that no test ever exercised. These tests stub `kcat` on ``PATH`` and
+    verify the real command executes with the correct topic + envelope.
+    """
+
+    COMMAND_TOPIC: str = "onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1"
+
+    def _publish(
+        self,
+        command_event: dict[str, object],
+        *,
+        kafka_bootstrap: str,
+    ) -> tuple[int, str, str]:
+        """Execute the documented publish shell-out.
+
+        Kept in sync with the shell command in
+        ``plugins/onex/skills/merge_sweep/prompt.md`` under
+        "## Publish Command Event". Any drift will be caught by
+        :meth:`test_prompt_command_shape_matches_runtime`, which greps the
+        prompt for the literal command pattern.
+        """
+        import json
+        import shlex
+        import subprocess
+
+        msg = json.dumps(command_event)
+        proc = subprocess.run(
+            (
+                f"echo {shlex.quote(msg)} | "
+                f"kcat -P -b {shlex.quote(kafka_bootstrap)} "
+                f"-t {self.COMMAND_TOPIC}"
+            ),
+            shell=True,
+            capture_output=True,
+            text=True,
+            check=False,  # the test asserts on returncode directly
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+
+    def _make_kcat_stub(self, tmp_path: Path, exit_code: int = 0) -> Path:
+        """Create a stub `kcat` binary that records argv + stdin and exits."""
+        stub_dir = tmp_path / "bin"
+        stub_dir.mkdir(parents=True, exist_ok=True)
+        stub = stub_dir / "kcat"
+        log = tmp_path / "kcat-invocation.log"
+        stub.write_text(
+            (
+                "#!/usr/bin/env bash\n"
+                f"exec > {shlex_quote_literal(str(log))} 2>&1\n"
+                'printf "argv="\n'
+                'printf "%s " "$@"\n'
+                'printf "\\n"\n'
+                'printf "stdin="\n'
+                "cat\n"
+                'printf "\\n"\n'
+                f"exit {exit_code}\n"
+            ),
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        return stub_dir
+
+    def test_publish_fires_kcat_with_correct_topic_and_envelope(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The documented shell-out must call ``kcat`` with our topic and envelope."""
+        import json
+
+        stub_dir = self._make_kcat_stub(tmp_path, exit_code=0)
+        log = tmp_path / "kcat-invocation.log"
+
+        monkeypatch.setenv("PATH", f"{stub_dir}:{(monkeypatch.undo and '') or ''}")
+        # Re-set PATH explicitly because prev line may be a no-op on some pytest versions.
+        monkeypatch.setenv("PATH", f"{stub_dir}:/usr/bin:/bin")
+
+        envelope: dict[str, object] = {
+            "run_id": "20260419-170000-abc123",
+            "dry_run": False,
+            "merge_method": "squash",
+            "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
+        }
+
+        returncode, _stdout, _stderr = self._publish(
+            envelope, kafka_bootstrap="localhost:19092"
+        )
+        assert returncode == 0, "stubbed kcat should exit 0"
+        assert log.exists(), "kcat stub must have been invoked"
+
+        invocation = log.read_text(encoding="utf-8")
+        # Topic must land as a `-t` positional.
+        assert f"-t {self.COMMAND_TOPIC}" in invocation, (
+            f"kcat must be called with '-t {self.COMMAND_TOPIC}'; got:\n{invocation}"
+        )
+        # Broker must land as a `-b` positional.
+        assert "-b localhost:19092" in invocation, (
+            f"kcat must be called with '-b localhost:19092'; got:\n{invocation}"
+        )
+        # Produce mode must be `-P`.
+        assert "-P " in invocation or "-P\n" in invocation, (
+            f"kcat must be called in produce mode (-P); got:\n{invocation}"
+        )
+        # Envelope must arrive as a single JSON line on stdin.
+        stdin_marker = "stdin="
+        stdin_idx = invocation.index(stdin_marker)
+        stdin_body = invocation[stdin_idx + len(stdin_marker) :].strip()
+        parsed = json.loads(stdin_body)
+        assert parsed["run_id"] == envelope["run_id"]
+        assert parsed["correlation_id"] == envelope["correlation_id"]
+        assert parsed["merge_method"] == "squash"
+
+    def test_publish_surfaces_nonzero_exit_from_kcat(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When kcat exits non-zero the publish helper must propagate the failure."""
+        stub_dir = self._make_kcat_stub(tmp_path, exit_code=2)
+        monkeypatch.setenv("PATH", f"{stub_dir}:/usr/bin:/bin")
+
+        returncode, _stdout, _stderr = self._publish(
+            {"run_id": "x", "dry_run": True},
+            kafka_bootstrap="localhost:19092",
+        )
+        assert returncode != 0, (
+            "publish shell-out must surface kcat's non-zero exit "
+            "(prompt documents status='error' on this path)"
+        )
+
+    def test_prompt_command_shape_matches_runtime(self) -> None:
+        """Guard: prompt.md's publish command must still match the shape this suite exercises.
+
+        If the prompt's command string drifts away from
+        ``echo <json> | kcat -P -b <bootstrap> -t <topic>``, this test and the
+        runtime invocation diverge silently. Pin both sides together.
+        """
+        content = _read_skill_file(_MERGE_SWEEP_PROMPT)
+        assert "echo {shlex.quote(msg)} | kcat -P -b" in content, (
+            "prompt.md publish command shape must match the runtime under test"
+        )
+        # The -t argument is passed as an f-string interpolation of COMMAND_TOPIC.
+        # Assert both the literal topic is declared AND the kcat line references it.
+        assert f'COMMAND_TOPIC = "{self.COMMAND_TOPIC}"' in content, (
+            f"prompt.md must declare COMMAND_TOPIC = {self.COMMAND_TOPIC!r}"
+        )
+        assert "-t {COMMAND_TOPIC}" in content, (
+            "prompt.md kcat command must pass '-t {COMMAND_TOPIC}' "
+            "(f-string interpolation of the declared topic)"
+        )
+
+
+def shlex_quote_literal(s: str) -> str:
+    """Local helper: quote for embedding inside the generated kcat stub shell script."""
+    import shlex
+
+    return shlex.quote(s)
