@@ -6,9 +6,16 @@
 # After gh pr create, automatically dispatches /onex:hostile_reviewer
 # against the newly created PR. Fire-and-forget, non-blocking.
 #
+# Sub-agent awareness [OMN-9268]: Task()-spawned sub-agents cannot call
+# Agent()/Task() to spawn the fix-apply worker that --gate mode relies on.
+# When the current session has a sub-agent marker at
+# $ONEX_STATE_DIR/hooks/subagent-sessions/<session_id>.marker (written by
+# subagent-start.sh per OMN-9140), the advisory switches to point at the
+# review-only path (--gate-only) which runs fully inline.
+#
 # Event:   PostToolUse
 # Matcher: Bash
-# Ticket:  OMN-6536
+# Ticket:  OMN-6536, OMN-9268
 
 set -euo pipefail
 
@@ -58,9 +65,33 @@ if echo "$TOOL_RESPONSE" | grep -qoE 'https://github\.com/[^[:space:]]+/pull/[0-
 fi
 
 # -----------------------------------------------------------------------
+# Sub-agent detection [OMN-9268]
+# -----------------------------------------------------------------------
+# subagent-start.sh writes a per-session marker for every Task()-spawned
+# worker. When that marker is present for the current session, emit a
+# sub-agent-friendly advisory that points at --gate-only (review only,
+# no Agent()/Task() spawn). Lead sessions fall through to the default
+# --gate advisory which invokes the full review + fix-apply pipeline.
+SESSION_ID=$(printf '%s' "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
+IS_SUBAGENT=0
+if [[ -n "$SESSION_ID" ]]; then
+    _SA_MARKER_DIR="${ONEX_STATE_DIR:-${HOME}/.onex_state}/hooks/subagent-sessions"
+    if [[ -f "${_SA_MARKER_DIR}/${SESSION_ID}.marker" ]]; then
+        IS_SUBAGENT=1
+    fi
+    unset _SA_MARKER_DIR
+fi
+
+# -----------------------------------------------------------------------
 # Inject advisory to dispatch hostile reviewer
 # -----------------------------------------------------------------------
-if [[ -n "$PR_URL" ]]; then
+if [[ "$IS_SUBAGENT" -eq 1 ]]; then
+    if [[ -n "$PR_URL" ]]; then
+        ADVISORY="[Auto Review — REQUIRED] A PR was just created at ${PR_URL}. hostile_reviewer is a hard pre-merge gate [OMN-8702]. Sub-agents cannot spawn fix-apply workers; invoke the review-only path inline: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate-only (or run uv run python plugins/onex/skills/hostile_reviewer/_lib/aggregate_reviews.py --pr <N> --repo <owner/repo>). Do not attempt sub-agent dispatch from this context."
+    else
+        ADVISORY="[Auto Review — REQUIRED] A PR was just created. hostile_reviewer is a hard pre-merge gate [OMN-8702]. Sub-agents cannot spawn fix-apply workers; invoke the review-only path inline: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate-only (or run uv run python plugins/onex/skills/hostile_reviewer/_lib/aggregate_reviews.py --pr <N> --repo <owner/repo>). Do not attempt sub-agent dispatch from this context."
+    fi
+elif [[ -n "$PR_URL" ]]; then
     ADVISORY="[Auto Review — REQUIRED] A PR was just created at ${PR_URL}. hostile_reviewer is a hard pre-merge gate [OMN-8702]: gh pr merge will be blocked until hostile_reviewer passes. Dispatch now: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate"
 else
     ADVISORY="[Auto Review — REQUIRED] A PR was just created. hostile_reviewer is a hard pre-merge gate [OMN-8702]: gh pr merge will be blocked until hostile_reviewer passes. Dispatch: /onex:hostile_reviewer --pr <N> --repo <owner/repo> --gate"
