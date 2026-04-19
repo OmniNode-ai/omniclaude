@@ -10,9 +10,12 @@ synthesize. A single pass catches ~60% of issues -- you must iterate.
 Check arguments:
 - `--plan-path <path>` is an alias for `--file <path>` — normalize it first: if `--plan-path` is provided and `--file` is not, treat it as `--file <path>`.
 - If `--static`: static analysis mode (see Static Mode section below). Mutually exclusive with `--pr` and `--file`.
+- If `--gate-only` is set AND `--pr <N> --repo <owner/repo>`: **gate-only mode** (see Gate-Only Mode section below). Runs review+verdict inline; does NOT dispatch any sub-agent for fix-apply. Safe to invoke from headless / sub-agent contexts.
+- If `--gate-only` is set AND `--file`: error -- `--gate-only` requires `--pr`, not `--file`
+- If `--gate` AND `--gate-only` are both set: error -- they are mutually exclusive; choose one
 - If `--gate` is set AND `--pr <N> --repo <owner/repo>`: **gate mode** (see Gate Mode section below)
 - If `--gate` is set AND `--file`: error -- `--gate` requires `--pr`, not `--file`
-- If `--pr <N> --repo <owner/repo>` (no `--gate`): PR mode
+- If `--pr <N> --repo <owner/repo>` (no `--gate`/`--gate-only`): PR mode
 - If `--pr <N>` without `--repo`: error -- `--repo` is required with `--pr`
 - If `--file <path>` (or `--plan-path <path>`): file mode
 - If both `--pr` and `--file`/`--plan-path` are provided: error -- they are mutually exclusive
@@ -224,12 +227,71 @@ If file validation (STEP 0 above) was skipped and a different file was reviewed,
 - `consecutive_clean_at_end` count
 - Final pass `findings`, `per_model_severity_counts`, `disagreements`
 
+## Gate-Only Mode (`--gate-only`) [OMN-9268]
+
+When `--gate-only` is set, skip BOTH the iterative convergence loop AND the
+3-agent parallel dispatch. Run the multi-model review fully inline via direct
+HTTP so that sub-agents / headless callers (which cannot spawn `Agent()` /
+`Task()`) can still gate a PR.
+
+**This mode requires `--pr` and `--repo`. `--file` and `--gate` are incompatible with `--gate-only`.**
+
+### Single inline review pass
+
+1. Announce: "I'm using the hostile-reviewer skill in --gate-only mode."
+2. Invoke the aggregator CLI directly:
+
+    ```bash
+    uv run python plugins/onex/skills/hostile_reviewer/_lib/aggregate_reviews.py \
+      --pr {pr_number} --repo {repo} 2>/dev/null
+    ```
+
+    The aggregator reads `LLM_CODER_URL` / `LLM_DEEPSEEK_R1_URL` from the
+    environment, invokes `gh pr diff` for the diff, fans out to all
+    available models (Codex CLI, Gemini CLI, Qwen3-Coder HTTP, DeepSeek-R1
+    HTTP), aggregates findings, and writes the `ModelAggregateResult` JSON
+    to stdout. No Agent() / Task() dispatch occurs anywhere in this path.
+
+3. Parse the JSON from stdout:
+    - `verdict == "blocking_issue"` → gate FAIL
+    - `verdict in ("clean", "risks_noted")` → gate PASS
+    - `success == false` AND `models_run == [] AND models_clean == []` → `degraded` (no models ran; treat as PASS for gate-only since the sub-agent cannot escalate further)
+
+4. Post a summary comment on the PR:
+
+    ```bash
+    gh pr review {pr_number} --repo {repo} --comment --body "{verdict_summary}"
+    ```
+
+    Use `--request-changes` instead of `--comment` when `verdict == "blocking_issue"`.
+
+5. Write the gate sentinel when the gate passes:
+
+    ```bash
+    mkdir -p "$ONEX_STATE_DIR/hostile-review-pass"
+    printf '{"pr":"%s","repo":"%s","verdict":"pass","mode":"gate-only","ts":"%s"}\n' \
+      "{pr_number}" "{repo}" "$(date -u +%FT%TZ)" \
+      > "$ONEX_STATE_DIR/hostile-review-pass/{pr_number}.json"
+    ```
+
+6. Write the standard skill result artifact to
+   `$ONEX_STATE_DIR/skill-results/{context_id}/hostile-reviewer.json` with
+   `mode="gate-only"`, `target={pr_number}`, and `gate_verdict` set from
+   the aggregator output.
+
+### Do not dispatch sub-agents from this mode
+
+`--gate-only` is the mode used by workers that cannot call `Agent()` /
+`Task()`. If findings require code changes, stop after posting the verdict
+comment. The lead session that relaunches the worker (or the next human
+loop) can invoke the full `--gate` path for fix-apply.
+
 ## Gate Mode (`--gate`)
 
 When `--gate` is set, skip the iterative convergence loop entirely and instead run 3 parallel
 review agents (scope, correctness, conventions) to produce a structured merge gate verdict.
 
-**This mode requires `--pr` and `--repo`. `--file` is incompatible with `--gate`.**
+**This mode requires `--pr` and `--repo`. `--file` is incompatible with `--gate`. `--gate-only` (review-only, no sub-agent dispatch) is distinct from `--gate` and mutually exclusive with it.**
 
 ### Dispatch 3 Parallel Review Agents
 
