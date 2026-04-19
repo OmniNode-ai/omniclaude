@@ -98,9 +98,20 @@ Wait for user response before proceeding to Step 3.
 
 - **"acknowledged"**: Log acknowledgement to `.onex_state/session/diagnosis_escalations.jsonl`
   and continue to Step 3.
-- **"resolved \<ticket\>"**: Append `Resolved: {timestamp} — marked resolved at session start`
-  to the relevant `docs/diagnosis-{slug}.md`. Delete `.onex_state/diagnosis-required.flag`
-  if its `ticket` field matches. Continue to Step 3.
+- **"resolved \<ticket\>"**: Use the following deterministic target-doc selection rule;
+  do NOT guess the slug:
+  1. **Prefer the flag:** if `.onex_state/diagnosis-required.flag` exists and its
+     `ticket:` field equals `<ticket>`, use the path in that flag's `diagnosis_doc:`
+     field as the only write target.
+  2. **Fallback:** if no matching flag exists, scan `docs/diagnosis-*.md` for entries
+     whose header or front-matter declares `Ticket: <ticket>`. Accept exactly one
+     match. If zero or multiple matches, prompt the user to disambiguate with the
+     full path — do not pick arbitrarily.
+  3. Append `Resolved: {timestamp} — marked resolved at session start` to the
+     selected doc.
+  4. Delete `.onex_state/diagnosis-required.flag` only if its `ticket:` field
+     exactly equals `<ticket>`.
+  5. Continue to Step 3.
 - **"skip"**: Log friction event to `.onex_state/friction/` with category
   `diagnosis_escalation_bypassed`. Continue to Step 3.
 

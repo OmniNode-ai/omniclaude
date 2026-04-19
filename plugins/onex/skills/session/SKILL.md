@@ -83,21 +83,42 @@ This skill replaces 5 legacy skills. They are kept for backward compatibility bu
 
 ## Architecture
 
-Three-phase control loop. Every phase is backed by `node_session_orchestrator` in `omnimarket/`.
+Three-phase control loop with a mandatory escalation step between Steps 2 and 3.
+Every phase is backed by `node_session_orchestrator` in `omnimarket/`.
 
 ```
-Phase 1: System Health Gate (8 dimensions)
+Phase 1 (Step 2):   System Health Gate (8 dimensions)
     └─ ANY RED → fix-dispatch only, no new work
-    └─ ALL GREEN or YELLOW → Phase 2
+    └─ ALL GREEN or YELLOW → Step 2.5
 
-Phase 2: RSD Priority Scoring
+Step 2.5:           Diagnosis-Flag Escalation  ← NOT skipped by --skip-health
+    └─ scan docs/diagnosis-*.md + .onex_state/diagnosis-required.flag
+    └─ any unresolved flag older than 24h blocks dispatch until the user
+       types "acknowledged", "resolved <ticket>", or "skip"
+
+Phase 2 (Step 3):   RSD Priority Scoring
     └─ interactive: present report, await user approval
     └─ autonomous: read standing orders, auto-proceed
 
-Phase 3: Dispatch
+Phase 3 (Step 4):   Dispatch
     └─ TeamCreate with correlation chain propagation
     └─ Graceful Kafka degradation to local execution
 ```
+
+### Step 2.5 artifacts (diagnosis escalation)
+
+The escalation step reads and writes the following paths (OMN-9123):
+
+| Path | Purpose |
+|---|---|
+| `docs/diagnosis-*.md` | Diagnosis docs scanned for `Resolved:` marker + mtime |
+| `.onex_state/diagnosis-required.flag` | Two-Strike flag with `ticket:` + `diagnosis_doc:` fields |
+| `.onex_state/session/diagnosis_escalations.jsonl` | Append-only log of "acknowledged" responses |
+| `.onex_state/friction/F<N>-diagnosis-bypass.yaml` | Friction entry when user types "skip" |
+
+Step 2.5 is invoked unconditionally — the `--skip-health` flag only skips Phase 1
+health probes; it does NOT bypass diagnosis-flag escalation, since stale flags
+represent Two-Strike protocol violations that must be surfaced every session.
 
 ### Health Gate Dimensions (Phase 1)
 
