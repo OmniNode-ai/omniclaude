@@ -100,7 +100,6 @@ ASSIGNMENTS: dict[str, tuple[str, bool]] = {
     "checkpoint": ("advanced", True),
     "gather-github-stats": ("advanced", True),
     "integration-gate": ("advanced", True),
-    "deploy-local-plugin": ("advanced", True),
     "setup-statusline": ("advanced", True),
     "intelligence": ("advanced", True),
     "ultimate-validate": ("advanced", True),

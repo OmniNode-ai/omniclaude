@@ -339,8 +339,8 @@ except Exception as e:
         log "ERROR: omnibase_infra==${_stale_ver} in plugin venv is too old (need >=0.14.0). (OMN-3251)"
         log "ERROR: The emit daemon will crash with: AIOKafkaProducer.__init__() got an unexpected keyword argument 'reconnect_backoff_ms'"
         log "ERROR: All extraction events (context.utilization, agent.match, latency.breakdown) will be silently dropped."
-        log "FIX: Rebuild the plugin venv to install omnibase_infra>=0.14.0:"
-        log "FIX:   ${CLAUDE_PLUGIN_ROOT}/skills/deploy-local-plugin/deploy.sh --repair-venv"
+        log "FIX: Rebuild the plugin venv by reinstalling the plugin:"
+        log "FIX:   claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools"
         write_daemon_status "stale_dependency"
         return 0  # Non-fatal: continue without publisher; hook still provides ticket context
     else

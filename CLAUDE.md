@@ -748,15 +748,20 @@ uv sync --group dev  # Include dev tools
 The onex plugin is installed via Claude Code's marketplace system:
 
 ```bash
-# Install (or reinstall after cache wipe)
+# 1. Pull latest in the canonical clone (marketplace reads from it)
+git -C "$OMNI_HOME/omniclaude" pull --ff-only
+
+# 2. Refresh the marketplace index
+claude plugin marketplace update omninode-tools
+
+# 3. Force a fresh copy: uninstall then reinstall
+claude plugin uninstall onex@omninode-tools
 claude plugin install onex@omninode-tools
 
-# Uninstall
-claude plugin uninstall onex@omninode-tools
+# 4. Restart the Claude Code session to pick up hooks/skills
 ```
 
 The marketplace config lives at `plugins/.claude-plugin/marketplace.json`.
-`deploy_local_plugin` is retired — use the marketplace install command.
 
 ---
 

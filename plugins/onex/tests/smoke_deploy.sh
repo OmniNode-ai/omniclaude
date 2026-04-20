@@ -184,8 +184,7 @@ echo -e "${CYAN}======================================${RESET}"
 echo
 
 # We only smoke-test PreToolUse and PostToolUse hooks (the ticket spec).
-# SessionStart/SessionEnd/UserPromptSubmit are tested by the existing
-# smoke-test-hooks.sh (deploy_local_plugin skill).
+# SessionStart/SessionEnd/UserPromptSubmit are covered by smoke-test-hooks.sh.
 EVENTS_TO_TEST="PreToolUse PostToolUse"
 
 for event in $EVENTS_TO_TEST; do
