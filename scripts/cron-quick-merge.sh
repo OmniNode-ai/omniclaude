@@ -50,10 +50,27 @@ LOCK_FILE="/tmp/cron-quick-merge.lock"
 LOCK_TIMEOUT=1200  # 20 minutes — upper bound on a full scan
 PHASE_TIMEOUT=600  # 10 minutes per tick run
 
+# State dir for first-seen timestamps (queue-entry time tracking).
+# Uses ONEX_STATE_DIR if set, otherwise falls back to /tmp.
+STATE_DIR="${ONEX_STATE_DIR:-/tmp}/cron-quick-merge"
+
 DRY_RUN="${DRY_RUN:-false}"
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=true
-fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --help|-h)
+      echo "Usage: $0 [--dry-run]"
+      exit 0
+      ;;
+    *)
+      echo "ERROR: Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 # Repos to scan. Keep in sync with canonical registry in omni_home/CLAUDE.md.
 REPOS=(
@@ -141,6 +158,8 @@ trap 'rm -f "${LOCK_FILE}"' EXIT
 WATCHDOG_PID=$!
 trap 'rm -f "${LOCK_FILE}"; kill "${WATCHDOG_PID}" 2>/dev/null || true' EXIT
 
+mkdir -p "${STATE_DIR}"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -188,6 +207,60 @@ count_merge_group_runs() {
   local sha="$2"
   gh api "repos/${repo}/actions/runs?head_sha=${sha}&event=merge_group" \
     --jq '.total_count' 2>/dev/null || echo "0"
+}
+
+# Return the epoch time when a PR entered the merge queue, derived from
+# AddedToMergeQueueEvent in the PR timeline. Falls back to persisting the
+# first observation per repo#number/sha in STATE_DIR so stall age is
+# measured from actual queue-entry, not PR creation.
+get_queue_entry_epoch() {
+  local repo="$1"
+  local number="$2"
+  local head_sha="$3"
+  local state_key
+  state_key="${STATE_DIR}/queue-entry-$(echo "${repo}" | tr '/' '-')-${number}-${head_sha}"
+
+  # Use cached value if available (same head SHA = same queue entry).
+  if [[ -f "${state_key}" ]]; then
+    cat "${state_key}"
+    return 0
+  fi
+
+  # Try to read AddedToMergeQueueEvent from GitHub timeline.
+  local entry_ts
+  entry_ts="$(
+    gh api graphql \
+      -f query='query($owner:String!, $name:String!, $num:Int!){
+        repository(owner:$owner, name:$name){
+          pullRequest(number:$num){
+            timelineItems(itemTypes:[ADDED_TO_MERGE_QUEUE_EVENT], last:10){
+              nodes { ... on AddedToMergeQueueEvent { createdAt } }
+            }
+          }
+        }
+      }' \
+      -F owner="${repo%%/*}" \
+      -F name="${repo##*/}" \
+      -F num="${number}" \
+      --jq '.data.repository.pullRequest.timelineItems.nodes | last | .createdAt // empty' \
+      2>/dev/null || true
+  )"
+
+  local now_epoch
+  now_epoch=$(date -u +%s)
+
+  if [[ -n "${entry_ts}" ]]; then
+    local entry_epoch
+    entry_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${entry_ts}" +%s 2>/dev/null || echo "${now_epoch}")
+    echo "${entry_epoch}" > "${state_key}"
+    echo "${entry_epoch}"
+  else
+    # No timeline event found; record now as first observation so stall
+    # age is measured from when we first saw this PR in the queue, not
+    # from PR creation.
+    echo "${now_epoch}" > "${state_key}"
+    echo "${now_epoch}"
+  fi
 }
 
 # Dequeue + re-arm via GraphQL (pattern from feedback_merge_queue_stall_remediation.md).
@@ -333,10 +406,10 @@ scan_repo() {
       run_count="$(count_merge_group_runs "${repo}" "${head_sha}")"
 
       if [[ "${run_count}" == "0" ]]; then
-        local now_epoch updated_epoch age_min
+        local now_epoch queue_entry_epoch age_min
         now_epoch=$(date -u +%s)
-        updated_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${created_at}" +%s 2>/dev/null || echo "${now_epoch}")
-        age_min=$(( (now_epoch - updated_epoch) / 60 ))
+        queue_entry_epoch=$(get_queue_entry_epoch "${repo}" "${number}" "${head_sha}")
+        age_min=$(( (now_epoch - queue_entry_epoch) / 60 ))
 
         if [[ ${age_min} -ge ${STALL_MINUTES} ]]; then
           log "  ${key}: queue-stalled (0 merge_group runs, age=${age_min}m)"
