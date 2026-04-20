@@ -239,21 +239,24 @@ emergency_bypass:
 > planning docs from existing there — such a check is structurally unsatisfiable and will break
 > Contract Compliance Check CI on every contract that contains it. All other ticket-specific
 > acceptance criteria extracted by dod_parser are retained normally.
-
+>
 > **Fail-open check_value prohibition (OMN-9350):** Never emit a `check_value` containing
 > fail-open shell patterns. The `lint-contract-check-values` pre-commit hook in
 > `onex_change_control` will block the commit. Forbidden patterns:
+>
 > - `[ -z "$<var>" ] ||` — empty-permissive short-circuit; TRUE when the variable is absent
 > - `|| true` — always-true tail
 > - `|| exit 0` — explicit pass-on-error
 > - `2>/dev/null` at the end of the fragment (silenced errors without explicit exit check)
 >
 > **Correct fail-closed form for CI status checks:**
+>
 > ```bash
 > result=$(gh pr view {pr} --repo {repo} --json statusCheckRollup \
 >   -q '[.statusCheckRollup[] | select(.name == "<check-name>") | .conclusion] | first // empty')
 > [ "$result" = "SUCCESS" ]
 > ```
+>
 > Empty result → expression FALSE → DoD correctly fails. Do NOT add `[ -z "$result" ] ||` before it.
 
 ### Write ModelSkillResult
@@ -444,7 +447,7 @@ emergency_bypass:
 
 > **Plan-file check prohibition:** Same rule as Mode A — never emit `dod_evidence` checks
 > containing `test -f docs/plans/`. See Mode A note above for rationale.
-
+>
 > **Fail-open check_value prohibition (OMN-9350):** Same rule as Mode A — never emit
 > fail-open patterns (`[ -z "$<var>" ] ||`, `|| true`, `|| exit 0`, trailing `2>/dev/null`).
 > See Mode A note above for the correct fail-closed form.
