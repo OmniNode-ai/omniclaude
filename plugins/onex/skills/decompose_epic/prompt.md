@@ -222,10 +222,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""\
 """
-        # IMPORTANT: Do NOT add dod_evidence items referencing plan files
-        # (e.g., `test -f docs/plans/...`). The onex_change_control repo has a
-        # no-planning-docs pre-commit hook that forbids planning docs from existing
-        # there — any such check would be structurally unsatisfiable. [OMN-9349]
         updated_desc = description.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
         tracker.save_issue(id=result.id, description=updated_desc)
         print(f"  Contract embedded: {ticket_id} (completeness={completeness})")
@@ -236,6 +232,13 @@ emergency_bypass:
         failed.append({"repo": repo, "title": title, "error": str(e)})
         print(f"  FAILED:  {title} — {e}")
 ```
+
+> **Plan-file check prohibition:** When generating `dod_evidence` items from ticket descriptions,
+> never emit a check whose `check_value` contains `test -f docs/plans/` or any path under
+> `docs/plans/`. The `onex_change_control` repo's `no-planning-docs` pre-commit hook forbids
+> planning docs from existing there — such a check is structurally unsatisfiable and will break
+> Contract Compliance Check CI on every contract that contains it. All other ticket-specific
+> acceptance criteria extracted by dod_parser are retained normally.
 
 ### Write ModelSkillResult
 
@@ -412,10 +415,6 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""\
 """
-        # IMPORTANT: Do NOT add dod_evidence items referencing plan files
-        # (e.g., `test -f docs/plans/...`). The onex_change_control repo has a
-        # no-planning-docs pre-commit hook that forbids planning docs from existing
-        # there — any such check would be structurally unsatisfiable. [OMN-9349]
         updated_desc = description.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
         tracker.save_issue(id=result.id, description=updated_desc)
         print(f"  Contract embedded: {ticket_id} (completeness={completeness})")
@@ -426,6 +425,9 @@ emergency_bypass:
         failed.append({"repo": repo, "title": title, "error": str(e)})
         print(f"  FAILED:  {title} — {e}")
 ```
+
+> **Plan-file check prohibition:** Same rule as Mode A — never emit `dod_evidence` checks
+> containing `test -f docs/plans/`. See Mode A note above for rationale.
 
 ### Write ModelSkillResult
 

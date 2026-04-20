@@ -77,12 +77,12 @@ from the repo manifest, and returns `ModelSkillResult` with created ticket detai
 6. **Post-decomposition: generate contracts for ALL child tickets.**
    For each created ticket:
    a. Fetch ticket details from Linear
-   b. Generate contract YAML with only structural dod_evidence items: PR state, contract artifact
-      presence, and CI pass. Do NOT extract plan-file-exists checks from the description — the
-      plan lives in `omni_home/docs/plans/` and cannot exist in `onex_change_control` (the
-      `no-planning-docs` pre-commit hook forbids it). Any `test -f docs/plans/` check would be
-      structurally unsatisfiable. The plan reference in the epic ticket description is sufficient
-      provenance; a dod check adds no verification value.
+   b. Extract DoD/acceptance criteria from description via dod_parser for ticket-specific checks.
+      **Exception — never emit `test -f docs/plans/` checks:** the `no-planning-docs` pre-commit
+      hook in `onex_change_control` forbids planning docs from existing in that repo (they live
+      in `omni_home/docs/plans/`). Any `check_value` containing `test -f docs/plans/` or
+      `test -f docs/plans/` variants would be structurally unsatisfiable and must be omitted.
+      Other ticket-specific acceptance criteria extracted by dod_parser are retained normally.
    c. Generate contract YAML (stub for non-seam, full for seam tickets)
    d. Validate each contract (YAML lint + schema check) before writing
    e. Write to `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
