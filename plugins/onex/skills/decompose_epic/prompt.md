@@ -222,6 +222,10 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""\
 """
+        # IMPORTANT: Do NOT add dod_evidence items referencing plan files
+        # (e.g., `test -f docs/plans/...`). The onex_change_control repo has a
+        # no-planning-docs pre-commit hook that forbids planning docs from existing
+        # there — any such check would be structurally unsatisfiable. [OMN-9349]
         updated_desc = description.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
         tracker.save_issue(id=result.id, description=updated_desc)
         print(f"  Contract embedded: {ticket_id} (completeness={completeness})")
@@ -408,6 +412,10 @@ emergency_bypass:
   justification: ""
   follow_up_ticket_id: ""\
 """
+        # IMPORTANT: Do NOT add dod_evidence items referencing plan files
+        # (e.g., `test -f docs/plans/...`). The onex_change_control repo has a
+        # no-planning-docs pre-commit hook that forbids planning docs from existing
+        # there — any such check would be structurally unsatisfiable. [OMN-9349]
         updated_desc = description.rstrip() + f"\n\n---\n\n## Contract\n\n```yaml\n# ModelTicketContract\n{contract_yaml}\n```\n"
         tracker.save_issue(id=result.id, description=updated_desc)
         print(f"  Contract embedded: {ticket_id} (completeness={completeness})")
