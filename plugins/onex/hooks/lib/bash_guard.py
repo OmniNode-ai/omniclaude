@@ -234,12 +234,13 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
         r"printf\b\s+['\"]?\\x[0-9a-f]+[^|]*\|\s*(?:ba)?sh\b",
         re.IGNORECASE | re.MULTILINE,
     ),
-    # gh pr merge --auto silently picks the wrong merge method (OMN-8838).
-    # Agents must use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH.
-    # Note: \b does not match before '--' (both '-' and space are \W), so we
-    # use '(?:^|\s)--auto\b' to anchor the flag at a word/space boundary.
+    # gh pr merge --auto COMBINED WITH a method flag (--merge/--squash/--rebase)
+    # silently picks the wrong merge method (OMN-8838).  The correct form for
+    # merge-queue repos is `gh pr merge <N> --repo <org>/<repo> --auto` with NO
+    # method flag — the queue owns the merge method (OMN-9354).
+    # Block only when --auto appears alongside a method flag in the same command.
     re.compile(
-        r"\bgh\s+pr\s+merge\b.*(?:^|\s)--auto\b",
+        r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|squash|rebase)\b)",
         re.IGNORECASE | re.MULTILINE,
     ),
     # Branch protection: block re-enabling required_pull_request_reviews.
@@ -685,14 +686,16 @@ def main() -> int:
                     "Human operators retain an emergency bypass via direct terminal access."
                 )
         elif re.search(
-            r"\bgh\s+pr\s+merge\b.*(?:^|\s)--auto\b",
+            r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|squash|rebase)\b)",
             command,
             re.IGNORECASE | re.MULTILINE,
         ):
             block_reason = (
-                "BLOCKED: gh pr merge --auto silently picks wrong method. "
-                "Use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH. "
-                "See OMN-8838."
+                "BLOCKED: gh pr merge --auto with a method flag silently picks the wrong method. "
+                "For merge-queue repos (OMN-9354): use `gh pr merge <N> --repo <org>/<repo> --auto` "
+                "with NO method flag — the queue controls the method. "
+                "For non-queue repos: use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH. "
+                "See OMN-8838, OMN-9354."
             )
         elif re.search(
             r"required_pull_request_reviews|required_approving_review_count",

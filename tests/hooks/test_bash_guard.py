@@ -1021,10 +1021,12 @@ class TestWorktreeAddAdvisoryUnit(TestWorktreeAddAdvisory):
 
 
 class TestGhPrMergeAutoBlock(unittest.TestCase):
-    """gh pr merge --auto silently picks wrong merge method. Must be hard-blocked.
+    """gh pr merge --auto combined with a method flag picks the wrong merge method.
 
-    Use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH instead.
-    See OMN-8838 and memory reference_github_merge_queue_api.md.
+    OMN-8838: block `gh pr merge ... --auto --squash/--merge/--rebase` — the CLI
+    does not reliably pass the method flag to the merge queue API.
+    OMN-9354: allow `gh pr merge <N> --repo <org>/<repo> --auto` (no method flag)
+    — the correct form for merge-queue repos where the queue owns the method.
     """
 
     def _assert_blocked(self, command: str) -> None:
@@ -1038,25 +1040,41 @@ class TestGhPrMergeAutoBlock(unittest.TestCase):
         self.assertFalse(hard, msg=f"Expected NO HARD_BLOCK match for: {command!r}")
 
     def test_gh_pr_merge_auto_squash(self) -> None:
+        """--auto --squash is blocked: method flag conflicts with queue method."""
         self._assert_blocked("gh pr merge 123 --auto --squash")
 
     def test_gh_pr_merge_auto_squash_swapped(self) -> None:
+        """Flag order swapped — still blocked."""
         self._assert_blocked("gh pr merge 123 --squash --auto")
 
-    def test_gh_pr_merge_auto_no_method(self) -> None:
-        self._assert_blocked("gh pr merge 123 --auto")
+    def test_gh_pr_merge_auto_merge_flag(self) -> None:
+        """--auto --merge is blocked."""
+        self._assert_blocked("gh pr merge 123 --auto --merge")
 
-    def test_gh_pr_merge_auto_with_repo_flag(self) -> None:
+    def test_gh_pr_merge_auto_rebase_flag(self) -> None:
+        """--auto --rebase is blocked."""
+        self._assert_blocked("gh pr merge 123 --auto --rebase")
+
+    def test_gh_pr_merge_auto_no_method_allowed(self) -> None:
+        """OMN-9354: --auto with no method flag is the correct merge-queue form."""
+        self._assert_not_blocked("gh pr merge 123 --auto")
+
+    def test_gh_pr_merge_auto_with_repo_flag_no_method_allowed(self) -> None:
+        """OMN-9354 canonical form: --repo flag present, no method flag — allowed."""
+        self._assert_not_blocked("gh pr merge 123 --repo OmniNode-ai/omniclaude --auto")
+
+    def test_gh_pr_merge_auto_with_repo_flag_and_squash_blocked(self) -> None:
+        """--repo + --squash + --auto is still blocked (method flag present)."""
         self._assert_blocked(
             "gh pr merge 123 --auto --squash --repo OmniNode-ai/omniclaude"
         )
 
-    def test_gh_pr_merge_auto_with_url(self) -> None:
+    def test_gh_pr_merge_auto_with_url_and_squash(self) -> None:
         self._assert_blocked(
             "gh pr merge https://github.com/org/repo/pull/42 --auto --squash"
         )
 
-    def test_gh_pr_merge_auto_uppercase(self) -> None:
+    def test_gh_pr_merge_auto_uppercase_with_squash(self) -> None:
         self._assert_blocked("GH PR MERGE 99 --AUTO --SQUASH")
 
     def test_gh_pr_merge_without_auto_not_blocked(self) -> None:
@@ -1106,10 +1124,20 @@ class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
         reason = json.loads(stdout)["reason"]
         self.assertIn("OMN-8838", reason)
 
-    def test_main_block_reason_mentions_squash(self) -> None:
-        stdout, _ = self._run("gh pr merge 123 --auto")
+    def test_main_block_reason_mentions_omn_9354(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto --squash")
         reason = json.loads(stdout)["reason"]
-        self.assertIn("SQUASH", reason)
+        self.assertIn("OMN-9354", reason)
+
+    def test_main_allows_gh_pr_merge_auto_no_method(self) -> None:
+        """OMN-9354: --auto with no method flag must be allowed (merge-queue form)."""
+        stdout, code = self._run("gh pr merge 123 --auto")
+        self.assertEqual(code, 0)
+
+    def test_main_allows_gh_pr_merge_auto_with_repo_no_method(self) -> None:
+        """OMN-9354 canonical form with --repo must be allowed."""
+        stdout, code = self._run("gh pr merge 123 --repo OmniNode-ai/omniclaude --auto")
+        self.assertEqual(code, 0)
 
     def test_main_allows_gh_pr_merge_without_auto(self) -> None:
         stdout, code = self._run("gh pr merge 123 --squash")
