@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.quick-merge.plist — stop-gap direct-gh merge tick [OMN-9347]
+
+  Runs in parallel to ai.omninode.merge-sweep while Track C is RED. Delete
+  this plist + cron-quick-merge.sh when either (a) bypass-loop-builder's
+  proper replacement ships, or (b) Track C returns green for 6+ consecutive
+  merge-sweep runs.
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by
+  tick-bundle-install.sh.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.quick-merge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-quick-merge.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>300</integer><!-- 5 minutes -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-quick-merge-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-quick-merge-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

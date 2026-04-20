@@ -50,6 +50,7 @@ TICKS=(
   "ai.omninode.contract-verify"
   "ai.omninode.idle-watchdog"
   "ai.omninode.buildloop"
+  "ai.omninode.quick-merge"
 )
 
 echo "=== tick-bundle-install [OMN-9036] ==="
