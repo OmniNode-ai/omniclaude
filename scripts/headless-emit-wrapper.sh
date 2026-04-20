@@ -86,12 +86,27 @@ emit_task_event() {
     emit_err="kcat not installed (brew install kcat)"
     rc=1
   else
+    # Detect a timeout binary. macOS lacks `timeout` by default; Homebrew
+    # coreutils ships it as `gtimeout`. Fall through to no-wrapper if
+    # neither is present so emits still work on bare macOS.
+    local timeout_cmd=""
+    if command -v timeout >/dev/null 2>&1; then
+      timeout_cmd="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+      timeout_cmd="gtimeout"
+    fi
+
     # Produce via kcat against the configured broker. -P producer mode,
     # -c 1 exits after one message so kcat never blocks. Capture stderr
     # so the degraded log preserves the root cause.
-    emit_err="$(printf '%s' "${payload}" \
-      | timeout "${HEADLESS_EMIT_KCAT_TIMEOUT_SEC}" \
-          kcat -P -b "${HEADLESS_EMIT_BROKERS}" -t "${topic}" -c 1 2>&1)"
+    if [[ -n "${timeout_cmd}" ]]; then
+      emit_err="$(printf '%s' "${payload}" \
+        | "${timeout_cmd}" "${HEADLESS_EMIT_KCAT_TIMEOUT_SEC}" \
+            kcat -P -b "${HEADLESS_EMIT_BROKERS}" -t "${topic}" -c 1 2>&1)"
+    else
+      emit_err="$(printf '%s' "${payload}" \
+        | kcat -P -b "${HEADLESS_EMIT_BROKERS}" -t "${topic}" -c 1 2>&1)"
+    fi
     rc=$?
   fi
 
