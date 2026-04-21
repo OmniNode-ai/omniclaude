@@ -1110,6 +1110,17 @@ class TestGhPrMergeAutoBlock(unittest.TestCase):
             'gh api graphql -f query=\'{ repository(owner:"OWNER", name:"REPO"){ mergeQueue { entries(first:50){ nodes { number } } } } }\''
         )
 
+    def test_graphql_merge_method_flag_before_mutation_name_blocked(self) -> None:
+        """OMN-9433: mergeMethod appearing BEFORE mutation name (e.g. -F flag) is also blocked.
+
+        Gemini finding: the original forward-only lookahead missed this ordering.
+        Two complementary patterns now cover both directions.
+        """
+        self._assert_blocked(
+            "gh api graphql -F mergeMethod=SQUASH "
+            "-f query='mutation($m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: $m}) { clientMutationId } }'"
+        )
+
 
 class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
     """Integration tests: full main() pipeline for gh pr merge --auto."""
@@ -1260,6 +1271,19 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         """Querying autoMergeRequest status must not be blocked."""
         stdout, code = self._run("gh pr view 123 --json autoMergeRequest")
         self.assertEqual(code, 0)
+
+    def test_blocks_merge_method_flag_before_mutation(self) -> None:
+        """OMN-9433 fix: mergeMethod appearing BEFORE mutation name is also blocked.
+
+        Covers the -F flag ordering: gh api graphql -F mergeMethod=SQUASH -f query='...enablePullRequestAutoMerge...'
+        The original forward-only lookahead missed this; two complementary patterns now cover both directions.
+        """
+        stdout, code = self._run(
+            "gh api graphql -F mergeMethod=SQUASH "
+            "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\"}) { clientMutationId } }'"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout)["decision"], "block")
 
 
 @pytest.mark.unit
