@@ -433,7 +433,9 @@ _queue_heal() {
     fi
 
     # Fetch current merge queue entries for this repo.
-    # GitHub's merge queue capacity is bounded (typically <25 entries); 100 is a safe ceiling.
+    # GitHub's merge queue API hard-caps at 100 entries per queue (enforced server-side).
+    # PRs beyond 100 cannot be in the queue regardless of the 'first' value we pass.
+    # Using first:100 therefore covers the entire possible queue membership set.
     local queue_entries
     queue_entries=$(gh api graphql \
       -f query="{ repository(owner: \"${org}\", name: \"${repo_name}\") {
