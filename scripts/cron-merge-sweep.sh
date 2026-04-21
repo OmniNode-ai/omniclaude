@@ -464,9 +464,10 @@ _queue_heal() {
       # PR is armed + CLEAN but NOT in queue: silent method-mismatch drop
       log "[queue-heal] HEALING ${full_repo}#${pr_num}: armed+CLEAN but not in mergeQueue — dequeue+requeue"
 
-      # Dequeue (no-op if not queued; safe to call regardless)
+      # Dequeue (no-op if not queued; safe to call regardless).
+      # DequeuePullRequestInput uses 'id' (not 'pullRequestId') per GitHub schema.
       gh api graphql \
-        -f query="mutation(\$pr: ID!) { dequeuePullRequest(input: {pullRequestId: \$pr}) { clientMutationId } }" \
+        -f query="mutation(\$pr: ID!) { dequeuePullRequest(input: {id: \$pr}) { clientMutationId } }" \
         -f pr="${pr_node_id}" \
         >>"${LOG_DIR}/${RUN_ID}.log" 2>&1 || {
         log "[queue-heal] WARN: dequeuePullRequest failed for ${full_repo}#${pr_num} — attempting requeue anyway"
@@ -475,7 +476,8 @@ _queue_heal() {
       # Brief pause so GitHub processes the dequeue before re-entry
       sleep "${heal_sleep}"
 
-      # Re-enqueue: enqueuePullRequest uses the queue's configured method (no mergeMethod arg)
+      # Re-enqueue: enqueuePullRequest uses the queue's configured method (no mergeMethod arg).
+      # EnqueuePullRequestInput uses 'pullRequestId' per GitHub schema.
       local requeue_result
       requeue_result=$(gh api graphql \
         -f query="mutation(\$pr: ID!) { enqueuePullRequest(input: {pullRequestId: \$pr}) { mergeQueueEntry { position state } } }" \
@@ -484,6 +486,14 @@ _queue_heal() {
         log "[queue-heal] WARN: enqueuePullRequest failed for ${full_repo}#${pr_num} — heal incomplete"
         continue
       }
+
+      # Validate GraphQL response for semantic errors (gh exits 0 even on schema errors)
+      if echo "${requeue_result}" | jq -e '.errors | if . then length > 0 else false end' >/dev/null 2>&1; then
+        local gql_err
+        gql_err=$(echo "${requeue_result}" | jq -r '.errors[0].message // "unknown"' 2>/dev/null)
+        log "[queue-heal] WARN: enqueuePullRequest GraphQL error for ${full_repo}#${pr_num}: ${gql_err} — heal incomplete"
+        continue
+      fi
 
       local position
       position=$(echo "${requeue_result}" | jq -r '.data.enqueuePullRequest.mergeQueueEntry.position // "unknown"' 2>/dev/null)
