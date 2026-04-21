@@ -1,5 +1,4 @@
 ---
-version: 1.0.0
 description: Run DoD evidence checks against a ticket contract and generate a verification receipt
 mode: full
 level: intermediate
