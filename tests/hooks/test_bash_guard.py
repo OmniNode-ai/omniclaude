@@ -1272,18 +1272,22 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         stdout, code = self._run("gh pr view 123 --json autoMergeRequest")
         self.assertEqual(code, 0)
 
-    def test_blocks_merge_method_flag_before_mutation(self) -> None:
-        """OMN-9433 fix: mergeMethod appearing BEFORE mutation name is also blocked.
+    def test_blocks_merge_method_in_mutation_input(self) -> None:
+        """OMN-9433: mergeMethod inside the enablePullRequestAutoMerge input block is blocked."""
+        stdout, code = self._run(
+            "gh api graphql "
+            "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: SQUASH}) { clientMutationId } }'"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout)["decision"], "block")
 
-        Covers the -F flag ordering: gh api graphql -F mergeMethod=SQUASH -f query='...enablePullRequestAutoMerge...'
-        The original forward-only lookahead missed this; two complementary patterns now cover both directions.
-        """
+    def test_allows_merge_method_flag_without_mutation_arg(self) -> None:
+        """`-F mergeMethod=...` alone should not block when mutation input omits mergeMethod."""
         stdout, code = self._run(
             "gh api graphql -F mergeMethod=SQUASH "
             "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\"}) { clientMutationId } }'"
         )
-        self.assertEqual(code, 2)
-        self.assertEqual(json.loads(stdout)["decision"], "block")
+        self.assertEqual(code, 0)
 
 
 @pytest.mark.unit

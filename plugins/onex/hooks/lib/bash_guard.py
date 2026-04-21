@@ -250,19 +250,11 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
     # The correct form is enablePullRequestAutoMerge WITHOUT mergeMethod — the
     # queue automatically applies its configured method.
     #
-    # Two complementary patterns cover both field orderings within the command:
-    #   (A) mutation name appears before mergeMethod  (normal inline order)
-    #   (B) mergeMethod appears before mutation name  (variable-flag or multi-part)
-    # Both anchor to GraphQL context by requiring `mergeMethod` to follow a word
-    # boundary — this avoids false positives on "# uses mergeMethod" style comments
-    # because the word still matches, but the mutation name must also be present,
-    # making pure-comment matches require the full mutation name too (acceptable risk).
+    # Pattern anchors mergeMethod inside the enablePullRequestAutoMerge(...)
+    # input block so CLI flags like -F mergeMethod=SQUASH that are not part of
+    # the mutation input don't trigger a false-positive block.
     re.compile(
-        r"enablePullRequestAutoMerge\b[\s\S]*\bmergeMethod\b",
-        re.IGNORECASE | re.MULTILINE,
-    ),
-    re.compile(
-        r"\bmergeMethod\b[\s\S]*\benablePullRequestAutoMerge\b",
+        r"enablePullRequestAutoMerge\s*\([\s\S]*\bmergeMethod\s*:",
         re.IGNORECASE | re.MULTILINE,
     ),
     # Branch protection: block re-enabling required_pull_request_reviews.
@@ -720,8 +712,7 @@ def main() -> int:
                 "See OMN-8838, OMN-9354."
             )
         elif re.search(
-            r"enablePullRequestAutoMerge\b[\s\S]*\bmergeMethod\b"
-            r"|\bmergeMethod\b[\s\S]*\benablePullRequestAutoMerge\b",
+            r"enablePullRequestAutoMerge\s*\([\s\S]*\bmergeMethod\s*:",
             command,
             re.IGNORECASE | re.MULTILINE,
         ):
