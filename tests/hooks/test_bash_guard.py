@@ -1087,10 +1087,27 @@ class TestGhPrMergeAutoBlock(unittest.TestCase):
     def test_gh_pr_view_not_blocked(self) -> None:
         self._assert_not_blocked("gh pr view 123")
 
-    def test_graphql_enable_auto_merge_not_blocked(self) -> None:
-        """The correct GraphQL replacement must never be blocked."""
-        self._assert_not_blocked(
+    def test_graphql_enable_auto_merge_with_merge_method_blocked(self) -> None:
+        """OMN-9433: enablePullRequestAutoMerge with mergeMethod silently drops queue entry.
+
+        When mergeMethod doesn't match the repo's queue ruleset, GitHub discards
+        the queue entry. Use enablePullRequestAutoMerge WITHOUT mergeMethod — the
+        queue applies its configured method automatically.
+        """
+        self._assert_blocked(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\", mergeMethod: SQUASH}) { pullRequest { id } } }'"
+        )
+
+    def test_graphql_enable_auto_merge_without_merge_method_allowed(self) -> None:
+        """OMN-9433: enablePullRequestAutoMerge WITHOUT mergeMethod is the correct form."""
+        self._assert_not_blocked(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\"}) { pullRequest { id } } }'"
+        )
+
+    def test_graphql_unrelated_query_not_blocked(self) -> None:
+        """An unrelated GraphQL query (not the mutation + mergeMethod combo) must be allowed."""
+        self._assert_not_blocked(
+            'gh api graphql -f query=\'{ repository(owner:"OWNER", name:"REPO"){ mergeQueue { entries(first:50){ nodes { number } } } } }\''
         )
 
 
@@ -1146,6 +1163,110 @@ class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
     def test_main_allows_gh_pr_list(self) -> None:
         stdout, code = self._run("gh pr list --state open")
         self.assertEqual(code, 0)
+
+
+# =============================================================================
+# OMN-9433 — enablePullRequestAutoMerge + mergeMethod block tests
+# =============================================================================
+
+
+class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
+    """enablePullRequestAutoMerge with explicit mergeMethod silently drops queue entry.
+
+    OMN-9433: When mergeMethod in the mutation doesn't match the repo's queue
+    ruleset, GitHub silently discards the queue entry. Block calls that include
+    mergeMethod; allow calls without it (queue applies its configured method).
+    """
+
+    def _run(self, command: str) -> tuple[str, int]:
+        hook_input = {"tool_name": "Bash", "tool_input": {"command": command}}
+        captured = io.StringIO()
+        with (
+            patch("sys.stdin", io.StringIO(json.dumps(hook_input))),
+            patch("sys.stdout", captured),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            code = bash_guard.main()
+        return captured.getvalue().strip(), code
+
+    def test_blocks_gql_mutation_with_merge_method_squash(self) -> None:
+        """Mutation with mergeMethod: SQUASH must be hard-blocked."""
+        stdout, code = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
+        )
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+
+    def test_blocks_gql_mutation_with_merge_method_merge(self) -> None:
+        """Mutation with mergeMethod: MERGE must be hard-blocked."""
+        stdout, code = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz", mergeMethod: MERGE}) { pullRequest { id } } }\''
+        )
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+
+    def test_blocks_gql_mutation_with_merge_method_rebase(self) -> None:
+        """Mutation with mergeMethod: REBASE must be hard-blocked."""
+        stdout, code = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz", mergeMethod: REBASE}) { pullRequest { id } } }\''
+        )
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
+
+    def test_block_reason_mentions_omn_9433(self) -> None:
+        """Block reason must cite OMN-9433 for traceability."""
+        stdout, _ = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
+        )
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("OMN-9433", reason)
+
+    def test_block_reason_mentions_correct_forms(self) -> None:
+        """Block reason must describe the two correct alternatives."""
+        stdout, _ = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
+        )
+        reason = json.loads(stdout)["reason"]
+        # Must mention the bare gh pr merge form
+        self.assertIn("gh pr merge", reason)
+        # Must mention enablePullRequestAutoMerge WITHOUT mergeMethod as the other option
+        self.assertIn("enablePullRequestAutoMerge", reason)
+
+    def test_allows_gql_mutation_without_merge_method(self) -> None:
+        """Mutation WITHOUT mergeMethod is the correct form — must be allowed."""
+        stdout, code = self._run(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
+            'input: {pullRequestId: "PR_xyz"}) { pullRequest { id } } }\''
+        )
+        self.assertEqual(code, 0)
+
+    def test_allows_unrelated_gql_query(self) -> None:
+        """Unrelated GraphQL queries (no mutation + mergeMethod combo) must pass."""
+        stdout, code = self._run(
+            'gh api graphql -f query=\'{ repository(owner:"OWNER", name:"REPO"){'
+            " mergeQueue { entries(first:50){ nodes { number } } } } }'"
+        )
+        self.assertEqual(code, 0)
+
+    def test_allows_gh_pr_view_automerge_json(self) -> None:
+        """Querying autoMergeRequest status must not be blocked."""
+        stdout, code = self._run("gh pr view 123 --json autoMergeRequest")
+        self.assertEqual(code, 0)
+
+
+@pytest.mark.unit
+class TestGqlEnablePrAutoMergeWithMethodBlockUnit(
+    TestGqlEnablePrAutoMergeWithMethodBlock
+):
+    """Re-expose under @pytest.mark.unit marker."""
 
 
 @pytest.mark.unit

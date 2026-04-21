@@ -243,6 +243,18 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
         r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|squash|rebase)\b)",
         re.IGNORECASE | re.MULTILINE,
     ),
+    # GraphQL enablePullRequestAutoMerge WITH an explicit mergeMethod argument.
+    # When mergeMethod in the mutation doesn't match the repo's queue ruleset,
+    # GitHub silently discards the queue entry — the PR shows CLEAN + armed but
+    # NEVER enters the queue (OMN-9433, observed omnimarket #370, 2026-04-21).
+    # The correct form is enablePullRequestAutoMerge WITHOUT mergeMethod — the
+    # queue automatically applies its configured method.
+    # Pattern matches the mutation name AND mergeMethod anywhere in the same command
+    # (fields can appear in any order within the GraphQL input object).
+    re.compile(
+        r"enablePullRequestAutoMerge\b(?=[\s\S]*\bmergeMethod\b)",
+        re.IGNORECASE | re.MULTILINE,
+    ),
     # Branch protection: block re-enabling required_pull_request_reviews.
     # Solo developer — reviews block all PRs.  Agents must never re-enable them.
     # Matches gh api / curl calls that set required_pull_request_reviews or
@@ -696,6 +708,22 @@ def main() -> int:
                 "with NO method flag — the queue controls the method. "
                 "For non-queue repos: use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH. "
                 "See OMN-8838, OMN-9354."
+            )
+        elif re.search(
+            r"enablePullRequestAutoMerge\b(?=[\s\S]*\bmergeMethod\b)",
+            command,
+            re.IGNORECASE | re.MULTILINE,
+        ):
+            block_reason = (
+                "BLOCKED: enablePullRequestAutoMerge with explicit mergeMethod silently "
+                "drops the queue entry when the method doesn't match the repo's ruleset "
+                "(OMN-9433). "
+                "Correct options: "
+                "(1) Use bare `gh pr merge <N> --repo <org>/<repo> --auto` — the queue "
+                "inherits its configured method automatically. "
+                "(2) Use `enablePullRequestAutoMerge` WITHOUT the mergeMethod argument — "
+                "GitHub applies the queue's configured method. "
+                "See memory/feedback_merge_queue_method_mismatch.md, OMN-8838, OMN-9354."
             )
         elif re.search(
             r"required_pull_request_reviews|required_approving_review_count",
