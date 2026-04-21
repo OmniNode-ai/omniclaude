@@ -121,7 +121,7 @@ MOCK_CURL
 
   local output exit_code
   output="$(echo "${one_event}" | \
-    env LINEAR_API_KEY="test-key" PATH="${mock_dir}:${PATH}" \
+    env LINEAR_API_KEY="test-key" PATH="${mock_dir}:${PATH}" \  # pragma: allowlist secret
     bash "${FILER}" 2>&1)" && exit_code=0 || exit_code=$?
 
   rm -rf "${mock_dir}"
@@ -169,7 +169,7 @@ MOCK_CURL
 
   local output exit_code
   output="$(echo "${one_event}" | \
-    env LINEAR_API_KEY="test-key" PATH="${mock_dir}:${PATH}" \
+    env LINEAR_API_KEY="test-key" PATH="${mock_dir}:${PATH}" \  # pragma: allowlist secret
     bash "${FILER}" 2>&1)" && exit_code=0 || exit_code=$?
 
   rm -rf "${mock_dir}"
