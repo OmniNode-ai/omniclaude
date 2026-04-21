@@ -2,6 +2,8 @@
 
 This prompt executes the PR Review Bot skill by dispatching to the `node_pr_review_bot` ONEX node.
 
+> **Node distinction**: `node_pr_review_bot` is the external omnimarket service node (registered in `plugin-compat.yaml`). It is distinct from the internal `node_skill_pr_review_bot_orchestrator` that lives in this repo. All `onex run-node` invocations below target the external node and must be run from the omnimarket worktree.
+
 ## When to use
 
 Use this skill when you need to run automated multi-model adversarial review on a GitHub PR:
@@ -32,7 +34,11 @@ cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr
 
 ## Example
 
+All examples must be run from the omnimarket worktree (same working directory as the Execution section above).
+
 ```bash
+cd "$ONEX_WORKTREES_ROOT/omnimarket"  # local-path-ok: worktree convention documentation
+
 # Full review with defaults
 uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["qwen3-coder"]}'
 
