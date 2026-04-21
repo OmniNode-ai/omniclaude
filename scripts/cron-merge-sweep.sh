@@ -406,21 +406,23 @@ _queue_heal() {
     local full_repo="${org}/${repo_name}"
 
     # Fetch open PRs that have auto-merge armed and are in CLEAN state.
-    # --json fields: number, autoMergeRequest, mergeStateStatus
+    # --limit 300: gh pr list defaults to 30; raise to cover repos with many open PRs.
+    # --json fields: number, id (node_id for GraphQL), autoMergeRequest, mergeStateStatus
     local pr_json
     pr_json=$(gh pr list \
       --repo "${full_repo}" \
       --state open \
-      --json number,autoMergeRequest,mergeStateStatus \
+      --limit 300 \
+      --json number,id,autoMergeRequest,mergeStateStatus \
       2>>"${LOG_DIR}/${RUN_ID}.log") || {
       log "[queue-heal] WARN: gh pr list failed for ${full_repo} — skipping"
       continue
     }
 
-    # Filter: armed (autoMergeRequest != null) + CLEAN state
+    # Filter: armed (autoMergeRequest != null) + CLEAN state; emit "number:id" pairs
     local armed_prs
     armed_prs=$(echo "${pr_json}" | \
-      jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "CLEAN") | .number' \
+      jq -r '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "CLEAN") | "\(.number):\(.id)"' \
       2>>"${LOG_DIR}/${RUN_ID}.log") || {
       log "[queue-heal] WARN: jq filter failed for ${full_repo} — skipping"
       continue
@@ -430,7 +432,8 @@ _queue_heal() {
       continue
     fi
 
-    # Fetch current merge queue entries for this repo
+    # Fetch current merge queue entries for this repo.
+    # GitHub's merge queue capacity is bounded (typically <25 entries); 100 is a safe ceiling.
     local queue_entries
     queue_entries=$(gh api graphql \
       -f query="{ repository(owner: \"${org}\", name: \"${repo_name}\") {
@@ -442,9 +445,13 @@ _queue_heal() {
       continue
     }
 
-    # For each armed+CLEAN PR, check if it is in the queue
-    while IFS= read -r pr_num; do
-      [[ -z "${pr_num}" ]] && continue
+    # For each armed+CLEAN PR, check if it is in the queue.
+    # Each line is "number:node_id" — split on ':' to avoid an extra REST call per PR.
+    while IFS= read -r pr_entry; do
+      [[ -z "${pr_entry}" ]] && continue
+      local pr_num pr_node_id
+      pr_num="${pr_entry%%:*}"
+      pr_node_id="${pr_entry#*:}"
       check_count=$((check_count + 1))
 
       if echo "${queue_entries}" | grep -qx "${pr_num}"; then
@@ -454,15 +461,6 @@ _queue_heal() {
 
       # PR is armed + CLEAN but NOT in queue: silent method-mismatch drop
       log "[queue-heal] HEALING ${full_repo}#${pr_num}: armed+CLEAN but not in mergeQueue — dequeue+requeue"
-
-      # Get the PR node ID needed for GraphQL mutations
-      local pr_node_id
-      pr_node_id=$(gh api "repos/${full_repo}/pulls/${pr_num}" \
-        --jq '.node_id' \
-        2>>"${LOG_DIR}/${RUN_ID}.log") || {
-        log "[queue-heal] WARN: could not get node_id for ${full_repo}#${pr_num} — skipping heal"
-        continue
-      }
 
       # Dequeue (no-op if not queued; safe to call regardless)
       gh api graphql \

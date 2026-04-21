@@ -109,7 +109,7 @@ _make_mock_gh() {
 # the mutation queries contain "mergeQueueEntry" which would match a mergeQueue grep.
 subcmd="${1:-}"; shift || true
 if [[ "${subcmd}" == "pr" && "${1:-}" == "list" ]]; then
-  echo '[{"number":42,"autoMergeRequest":{"mergeMethod":"MERGE"},"mergeStateStatus":"CLEAN"}]'
+  echo '[{"number":42,"id":"PR_abc123","autoMergeRequest":{"mergeMethod":"MERGE"},"mergeStateStatus":"CLEAN"}]'
 elif [[ "${subcmd}" == "api" && "${1:-}" == "graphql" ]]; then
   full_args="$*"
   if echo "${full_args}" | grep -q "dequeuePullRequest"; then
@@ -121,8 +121,6 @@ elif [[ "${subcmd}" == "api" && "${1:-}" == "graphql" ]]; then
   elif echo "${full_args}" | grep -q "mergeQueue"; then
     echo "9999"  # queue contains PR 9999 only — 42 absent
   fi
-elif [[ "${subcmd}" == "api" ]]; then
-  echo '{"node_id":"PR_abc123"}'
 fi
 MOCK_EOF
       # Inject actual calls_file path
@@ -135,7 +133,7 @@ MOCK_EOF
 # NOTE: check mutations before mergeQueue — mutation queries contain "mergeQueueEntry"
 subcmd="${1:-}"; shift || true
 if [[ "${subcmd}" == "pr" && "${1:-}" == "list" ]]; then
-  echo '[{"number":42,"autoMergeRequest":{"mergeMethod":"SQUASH"},"mergeStateStatus":"CLEAN"}]'
+  echo '[{"number":42,"id":"PR_abc123","autoMergeRequest":{"mergeMethod":"SQUASH"},"mergeStateStatus":"CLEAN"}]'
 elif [[ "${subcmd}" == "api" && "${1:-}" == "graphql" ]]; then
   full_args="$*"
   if echo "${full_args}" | grep -q "dequeuePullRequest"; then
@@ -168,7 +166,7 @@ MOCK_EOF
 # NOTE: check mutations before mergeQueue to avoid false match on mergeQueueEntry
 subcmd="${1:-}"; shift || true
 if [[ "${subcmd}" == "pr" && "${1:-}" == "list" ]]; then
-  echo '[{"number":42,"autoMergeRequest":{"mergeMethod":"MERGE"},"mergeStateStatus":"CLEAN"}]'
+  echo '[{"number":42,"id":"PR_abc123","autoMergeRequest":{"mergeMethod":"MERGE"},"mergeStateStatus":"CLEAN"}]'
 elif [[ "${subcmd}" == "api" && "${1:-}" == "graphql" ]]; then
   full_args="$*"
   if echo "${full_args}" | grep -q "dequeuePullRequest"; then
