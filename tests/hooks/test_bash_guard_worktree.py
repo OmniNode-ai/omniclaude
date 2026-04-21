@@ -170,3 +170,98 @@ class TestWorktreeFalsePositives:
         assert bash_guard._is_real_worktree_add(
             "git -C /some/repo worktree add /tmp/foo"
         )
+
+    def test_compound_commit_with_worktree_add_in_message_not_detected(self) -> None:
+        """git add && git commit -m 'feat: ... worktree add' must not be detected."""
+        assert not bash_guard._is_real_worktree_add(
+            "git add file.py && git commit -m feat: block duplicate git worktree add"
+        )
+
+
+@pytest.mark.unit
+class TestWorktreeDuplicateGuard:
+    """Duplicate worktree detection in bash_guard._check_worktree_path."""
+
+    def _existing(self, path: str, branch: str = "") -> list[tuple[str, str]]:
+        return [(path, branch)]
+
+    def test_blocks_duplicate_path(self) -> None:
+        """git worktree add blocked when destination path is already registered."""
+        target = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1/repo"
+        with patch.object(
+            bash_guard, "_list_existing_worktrees", return_value=self._existing(target)
+        ):
+            result = bash_guard._check_worktree_path(
+                f"git worktree add {target} -b new-branch"
+            )
+        assert result is not None
+        assert "already exists" in result
+        assert target in result
+
+    def test_blocks_duplicate_branch(self) -> None:
+        """git worktree add blocked when branch is already checked out elsewhere."""
+        other_path = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-2/repo"
+        target = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1/repo"
+        with patch.object(
+            bash_guard,
+            "_list_existing_worktrees",
+            return_value=self._existing(other_path, "feat/duplicate"),
+        ):
+            result = bash_guard._check_worktree_path(
+                f"git worktree add {target} -b feat/duplicate"
+            )
+        assert result is not None
+        assert "already checked out" in result
+        assert "feat/duplicate" in result
+        assert other_path in result
+
+    def test_allows_new_path_and_branch(self) -> None:
+        """git worktree add allowed when path and branch are both new."""
+        existing_path = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-99/repo"
+        target = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1/repo"
+        with patch.object(
+            bash_guard,
+            "_list_existing_worktrees",
+            return_value=self._existing(existing_path, "other-branch"),
+        ):
+            result = bash_guard._check_worktree_path(
+                f"git worktree add {target} -b new-branch"
+            )
+        assert result is None
+
+    def test_duplicate_check_skipped_when_no_branch_flag(self) -> None:
+        """Branch dedup skipped when command has no -b flag; path still checked."""
+        other_path = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-2/repo"
+        target = f"{bash_guard.CANONICAL_WORKTREE_ROOT}/OMN-1/repo"
+        with patch.object(
+            bash_guard,
+            "_list_existing_worktrees",
+            return_value=self._existing(other_path, "feat/duplicate"),
+        ):
+            result = bash_guard._check_worktree_path(
+                f"git worktree add {target} feat/duplicate"
+            )
+        # No -b flag → branch not extracted → branch-dup check skipped → allowed
+        assert result is None
+
+    def test_list_existing_worktrees_returns_empty_on_git_failure(self) -> None:
+        """_list_existing_worktrees returns [] when git subprocess fails."""
+        with patch("bash_guard.subprocess.run", side_effect=OSError("no git")):
+            result = bash_guard._list_existing_worktrees(None)
+        assert result == []
+
+    def test_parse_worktree_add_args_extracts_path_and_branch(self) -> None:
+        """_parse_worktree_add_args extracts path and branch correctly."""
+        path, branch = bash_guard._parse_worktree_add_args(
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/T/repo -b my-branch"
+        )
+        assert path == f"{bash_guard.CANONICAL_WORKTREE_ROOT}/T/repo"
+        assert branch == "my-branch"
+
+    def test_parse_worktree_add_args_no_branch(self) -> None:
+        """_parse_worktree_add_args returns empty branch when -b absent."""
+        path, branch = bash_guard._parse_worktree_add_args(
+            f"git worktree add {bash_guard.CANONICAL_WORKTREE_ROOT}/T/repo"
+        )
+        assert path == f"{bash_guard.CANONICAL_WORKTREE_ROOT}/T/repo"
+        assert branch == ""
