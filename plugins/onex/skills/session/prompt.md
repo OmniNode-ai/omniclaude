@@ -307,37 +307,53 @@ exists for a needed action, the agent must file a ticket via `/onex:create_ticke
 At the end of each dispatch loop iteration, compute:
 
 ```
-backlog_count  = count of items in dispatch_queue that are still TODO or IN_PROGRESS
-                 (PRs that are BLOCKED/DIRTY/UNKNOWN/CHANGES_REQUESTED +
-                  tickets that are In Progress or Todo with no active worker)
+unowned_count  = count of items in dispatch_queue that meet ALL of:
+                 (a) state is BLOCKED, DIRTY, UNKNOWN, or CHANGES_REQUESTED (for PRs)
+                     OR In Progress / Todo with no active worker assigned (for tickets)
+                 (b) NOT currently assigned to a worker that is still running
+                 Items with an active in-progress worker do NOT count — they are already
+                 being worked. Only unowned stuck items trigger the invariant.
+
 dispatch_count = count of NEW workers spawned OR items verified-complete THIS iteration
 ```
 
 **The invariant:**
 
-> Every iteration MUST either ADD to the dispatch queue (`dispatch_count > 0`, i.e., a
-> worker was spawned for a stuck item) OR SUBTRACT from it (`dispatch_count > 0`, i.e.,
-> an item was verified complete and removed). Ending an iteration with `backlog_count > 0`
-> AND `dispatch_count == 0` is a **hard failure — passive observation**.
+> Every iteration MUST either ADD to the queue (`dispatch_count > 0`, a new worker was
+> spawned for an unowned stuck item) OR SUBTRACT from it (`dispatch_count > 0`, an item
+> was verified complete and removed). Ending an iteration with `unowned_count > 0` AND
+> `dispatch_count == 0` is a **hard failure — passive observation**.
+>
+> If `unowned_count == 0` (all stuck items have active workers), the invariant is satisfied
+> and the iteration is clean — poll again after the next worker completion event.
+>
+> Circuit breaker: if 3 consecutive iterations write a passive-observation friction event
+> (i.e., unowned_count > 0 and dispatch_count == 0 three times in a row), stop dispatching
+> and escalate — do not loop indefinitely.
 
-**On passive-observation failure (backlog_count > 0 AND dispatch_count == 0):**
+**On passive-observation failure (unowned_count > 0 AND dispatch_count == 0):**
 
 1. Write a friction event immediately — do NOT continue to the next iteration:
    ```bash
    TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-   cat > "$ONEX_STATE_DIR/friction/session-passive-${TIMESTAMP}.json" <<EOF
+   STUCK_PR_NUMS="<space-separated PR numbers>"   # substitute before running
+   STUCK_TICKET_IDS="<space-separated ticket IDs>" # substitute before running
+   UNOWNED_COUNT=<N>                               # substitute before running
+   cat > "$ONEX_STATE_DIR/friction/session-passive-${TIMESTAMP}.json" <<FRICTION_EOF
    {
      "timestamp": "${TIMESTAMP}",
-     "session_id": "sess-{id}",
+     "session_id": "sess-<id>",
      "category": "passive_observation",
-     "backlog_count": {backlog_count},
+     "unowned_count": ${UNOWNED_COUNT},
      "dispatch_count": 0,
-     "stuck_items": [{list of BLOCKED/DIRTY/UNKNOWN PR numbers and stalled ticket IDs}]
+     "stuck_prs": "${STUCK_PR_NUMS}",
+     "stuck_tickets": "${STUCK_TICKET_IDS}"
    }
-   EOF
+   FRICTION_EOF
    ```
-2. Emit to stderr: `ESCALATION [session-passive]: Phase 3 ended with {backlog_count} backlog items and 0 dispatches. Friction written. Reviewing queue and dispatching now.`
-3. Re-examine each backlog item immediately using the dispatch taxonomy below and dispatch at least one worker before the next iteration.
+   Note: substitute all `<...>` placeholders with actual values before executing this snippet.
+2. Emit to stderr: `ESCALATION [session-passive]: Phase 3 ended with N unowned stuck items and 0 dispatches. Friction written. Reviewing queue and dispatching now.`
+3. Re-examine each unowned backlog item using the dispatch taxonomy below and dispatch at least one worker before the next iteration.
 
 **Prohibited behaviors — these are NOT valid substitutes for dispatching:**
 
@@ -354,7 +370,7 @@ dispatch_count = count of NEW workers spawned OR items verified-complete THIS it
 | PR has unresolved CodeRabbit threads (`CHANGES_REQUESTED` or thread gate blocking merge) | `/onex:coderabbit_triage` wet-mode + pr_review_bot as sole resolver | `TeamCreate` → agent with `/onex:coderabbit_triage --wet --pr {N} --repo {repo}` |
 | PR is DIRTY (merge conflict) | conflict-resolver worker | `TeamCreate` → agent: rebase branch, resolve conflicts, push, re-arm auto-merge |
 | PR CI is RED (failing checks) | systematic-debug worker with two-strike rule | `TeamCreate` → agent with `/onex:systematic_debugging --pr {N} --repo {repo}`; if agent hits two-strike, diagnosis doc required before continuing |
-| PR is CLEAN, CI green, not armed for auto-merge | arm auto-merge bare | `gh pr merge {N} --auto` — NO `--squash`, `--merge`, or `--rebase` flags |
+| PR is CLEAN, CI green, not armed for auto-merge | arm auto-merge bare | `gh pr merge {N} --auto` — NO `--squash`, `--merge`, or `--rebase` flags. Bare `--auto` is intentional per OMN-9354: the merge queue controls method. If the repo is not merge-queue-enabled, verify repo settings before arming. |
 | Ticket In Progress with no active worker (unworked >15min) | ticket-pipeline worker | `TeamCreate` → agent with `/onex:ticket_pipeline --ticket {OMN-XXXX}` |
 | Worker silent >15min (stall) | relaunch with narrower scope | Spawn fresh agent, narrower task; file friction; do NOT wait for user approval |
 
