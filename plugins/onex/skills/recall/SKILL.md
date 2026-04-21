@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 description: Query the Cross-Agent Memory Fabric for relevant learnings from previous agent sessions. Use when hitting an error, choosing a fix strategy, or working in an unfamiliar area.
 mode: full
 level: basic

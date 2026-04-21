@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 description: Query what a named agent was doing at a specific time. Conversational rewind — search the event stream by agent identity and timestamp.
 mode: full
 level: basic

@@ -12,8 +12,6 @@ tags:
   - slack
 node_dispatch: node_platform_diagnostics
 node_dispatch_dimensions: HOOK_HEALTH
-migration_status: thin_shell
-migration_target: node_platform_diagnostics
 migration_epic: OMN-8197
 args:
   - name: --dry-run

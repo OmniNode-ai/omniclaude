@@ -1,4 +1,5 @@
 ---
+user_invocable: false
 description: Bootstrap the entire overnight autonomous operation — reads standing orders, creates agent team, dispatches merge-sweep and monitoring workers, starts build loop with frontier model routing, and sets up priority check cron
 mode: full
 version: 1.0.0

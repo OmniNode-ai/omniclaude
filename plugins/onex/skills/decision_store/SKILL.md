@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 description: Record, query, and conflict-check architectural and design decisions across the OmniNode platform
 mode: full
 level: intermediate

@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 description: Bind this terminal to a named persistent agent. Establishes agent identity for the session, injects resumed context, and tags all events with the agent ID.
 mode: full
 level: basic

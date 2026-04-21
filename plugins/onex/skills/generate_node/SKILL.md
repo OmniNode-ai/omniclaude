@@ -1,4 +1,5 @@
 ---
+version: 1.0.0
 description: Generate ONEX nodes via automated code generation with ContractInferencer and LLM-powered business logic
 mode: full
 level: advanced

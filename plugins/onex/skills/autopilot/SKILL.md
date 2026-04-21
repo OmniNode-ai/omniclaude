@@ -1,4 +1,5 @@
 ---
+user_invocable: false
 description: Autonomous close-out orchestrator — 4-phase pipeline with worktree health sweep, full merge-sweep with DIRTY PR triage and queue stall detection, infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
 version: 3.0.0
 mode: full

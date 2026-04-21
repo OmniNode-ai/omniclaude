@@ -7,8 +7,6 @@ debug: true
 index: true
 node_dispatch: node_platform_diagnostics
 node_dispatch_dimensions: RUNTIME_NODES,HOOK_HEALTH
-migration_status: thin_shell
-migration_target: node_platform_diagnostics
 migration_epic: OMN-8197
 ---
 
