@@ -383,13 +383,26 @@ _queue_heal() {
   # Repos that use merge queues — must match the org's queue-enabled repos.
   # Sourced from ONEX_QUEUE_REPOS env var (CSV) or falls back to the known set.
   local repos_csv="${ONEX_QUEUE_REPOS:-omniclaude,omnibase_core,omnibase_spi,omnibase_infra,omnibase_compat,omniintelligence,omnimemory,omninode_infra,onex_change_control}"
+  # Configurable dequeue→requeue pause (seconds). Default 2. Override for tests.
+  local heal_sleep="${ONEX_QUEUE_HEAL_SLEEP:-2}"
   local heal_count=0
   local check_count=0
 
   log "[queue-heal] Starting method-mismatch scan across ${repos_csv}"
 
-  IFS=',' read -ra repo_list <<< "${repos_csv}"
-  for repo_name in "${repo_list[@]}"; do
+  # Use tr+while for bash 3.2 compatibility (read -a/-ra requires bash 4+).
+  # Each token is trimmed of leading/trailing whitespace before use.
+  while IFS= read -r repo_name; do
+    # Trim whitespace and skip empty/whitespace-only tokens
+    repo_name="${repo_name#"${repo_name%%[! ]*}"}"
+    repo_name="${repo_name%"${repo_name##*[! ]}"}"
+    [[ -z "${repo_name}" ]] && continue
+    # Reject tokens containing slashes or shell-special chars (already org-qualified entries)
+    if echo "${repo_name}" | grep -qE '[^a-zA-Z0-9_.-]'; then
+      log "[queue-heal] WARN: skipping invalid repo token '${repo_name}'"
+      continue
+    fi
+
     local full_repo="${org}/${repo_name}"
 
     # Fetch open PRs that have auto-merge armed and are in CLEAN state.
@@ -460,7 +473,7 @@ _queue_heal() {
       }
 
       # Brief pause so GitHub processes the dequeue before re-entry
-      sleep 2
+      sleep "${heal_sleep}"
 
       # Re-enqueue: enqueuePullRequest uses the queue's configured method (no mergeMethod arg)
       local requeue_result
@@ -478,7 +491,7 @@ _queue_heal() {
       heal_count=$((heal_count + 1))
 
     done <<< "${armed_prs}"
-  done
+  done <<< "$(echo "${repos_csv}" | tr ',' '\n')"
 
   log "[queue-heal] Complete: checked ${check_count} armed+CLEAN PRs, healed ${heal_count} method-mismatch drops"
 }
