@@ -278,6 +278,7 @@ dispatch_queue: [ticket-ids/pr-numbers in order]
 in_progress: []
 completed: []
 waiting_for: {}
+consecutive_passive_failures: 0
 last_checkpoint: {timestamp}
 resumable: true
 ```
@@ -367,11 +368,11 @@ dispatch_count = count of NEW workers spawned OR items verified-complete THIS it
 
 | State | Canonical fixer | How to dispatch |
 |---|---|---|
-| PR has unresolved CodeRabbit threads (`CHANGES_REQUESTED` or thread gate blocking merge) | `/onex:coderabbit_triage` wet-mode + pr_review_bot as sole resolver | `TeamCreate` → agent with `/onex:coderabbit_triage --wet --pr {N} --repo {repo}` |
+| PR has unresolved CodeRabbit threads (`CHANGES_REQUESTED` or thread gate blocking merge) | `/onex:coderabbit_triage` + pr_review_bot as sole resolver | `TeamCreate` → agent with `/onex:coderabbit_triage --repo {repo} --pr {N}` |
 | PR is DIRTY (merge conflict) | conflict-resolver worker | `TeamCreate` → agent: rebase branch, resolve conflicts, push, re-arm auto-merge |
 | PR CI is RED (failing checks) | systematic-debug worker with two-strike rule | `TeamCreate` → agent with `/onex:systematic_debugging --pr {N} --repo {repo}`; if agent hits two-strike, diagnosis doc required before continuing |
 | PR is CLEAN, CI green, not armed for auto-merge | arm auto-merge bare | `gh pr merge {N} --auto` — NO `--squash`, `--merge`, or `--rebase` flags. Bare `--auto` is intentional per OMN-9354: the merge queue controls method. If the repo is not merge-queue-enabled, verify repo settings before arming. |
-| Ticket In Progress with no active worker (unworked >15min) | ticket-pipeline worker | `TeamCreate` → agent with `/onex:ticket_pipeline --ticket {OMN-XXXX}` |
+| Ticket In Progress with no active worker (unworked >15min) | ticket-pipeline worker | `TeamCreate` → agent with `/onex:ticket_pipeline {OMN-XXXX}` |
 | Worker silent >15min (stall) | relaunch with narrower scope | Spawn fresh agent, narrower task; file friction; do NOT wait for user approval |
 
 **When in doubt about what needs dispatching:** read `.onex_state/dispatch-queue/` for pending
