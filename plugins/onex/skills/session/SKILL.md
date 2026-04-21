@@ -1,5 +1,5 @@
 ---
-description: "Unified Session Orchestrator — single entry point replacing overnight/autopilot/begin_day/handoff/crash_recovery. Three-phase control loop: health gate → RSD scoring → dispatch. Supports interactive (daytime) and autonomous (overnight) modes. Backed by node_session_orchestrator in omnimarket."
+description: "Unified Session Orchestrator — single entry point replacing overnight/autopilot/begin_day/handoff/crash_recovery. Three-phase control loop: health gate → RSD scoring → dispatch. Supports interactive (daytime) and autonomous (overnight) modes. Interactive invocation executes prompt.md directly in Claude; omnimarket handler reachable only via CLI or Kafka (Wave 3: OMN-8367)."
 version: 1.0.0
 mode: full
 level: advanced
@@ -241,13 +241,61 @@ before executing the raw action.
 
 ---
 
+## Execution Path
+
+**Interactive invocation (`/onex:session`):** Claude loads `prompt.md` from this skill directory
+and executes it directly in the Claude session context. No Kafka event is published, no omnimarket
+handler is called. Claude IS the orchestrator — it follows the 6-step `prompt.md` spec.
+
+**Omnimarket handler (`HandlerSessionOrchestrator`):** Fully implemented (1403 LOC, all three phases)
+in `omnimarket/src/omnimarket/nodes/node_session_orchestrator/`. Reachable only via:
+- `uv run onex node node_session_orchestrator` CLI
+- Kafka topic `onex.cmd.omnimarket.session.v1`
+
+The interactive skill path is **not wired** to the omnimarket handler. Wiring this connection
+is Wave 3 work tracked in OMN-8367.
+
+---
+
+## Known Blockers (as of 2026-04-21)
+
+### Step 2.5: Diagnosis-flag halt
+
+Step 2.5 (OMN-9123) is **unconditional** — it runs even with `--skip-health`. If
+`.onex_state/diagnosis-required.flag` exists and is older than 24h, every session invocation
+blocks until the user types `acknowledged`, `resolved <ticket>`, or `skip`.
+
+**To unblock:** Add a `Resolved:` line to the referenced diagnosis doc
+(`docs/diagnosis-<slug>.md`) so Step 2.5b auto-clears the flag — or type `acknowledged`
+at the prompt when it appears. Do NOT delete the flag file directly; Step 2.5 will recreate it
+on the next unfixed incident.
+
+### Dimension 6 (Deploy Agent) RED — OMN-9393
+
+Phase 1 Dimension 6 (`blocks_dispatch: true`) has been RED since 2026-04-16 due to OMN-9393.
+With Dimension 6 RED, Phase 1 always emits a FIX_ONLY gate decision, preventing Phase 2/3
+dispatch in normal mode.
+
+**Operational workaround until OMN-9393 is resolved:**
+
+```
+/onex:session --mode autonomous --skip-health
+```
+
+`--skip-health` bypasses Phase 1 probes (Dimension 6 RED is not evaluated). Step 2.5
+still runs — acknowledge any stale flags first (see above).
+
+---
+
 ## Implementation Status
 
-**Phase 2 (in progress)**: Skill files created (OMN-8340). Backing node
-`node_session_orchestrator` implementation tracked in the 2026-04-11 implementation plan
-(`docs/plans/2026-04-11-unified-session-orchestrator-plan.md`).
+**omnimarket handler:** Complete. `HandlerSessionOrchestrator` implements all three phases
+(Phase 1: 8 health dimension probes via SSH + subprocess; Phase 2: Linear GraphQL RSD scoring
++ standing orders; Phase 3: `claude -p /onex:ticket_pipeline` subprocess dispatch). Confirmed
+running standalone with `result=completed` in the 2026-04-18 skill functional audit.
 
-Key dependencies before full functionality:
-- `ModelSessionHealthContract` in `omnibase_compat/` (Wave 1: OMN-8368)
-- `node_session_orchestrator` in `omnimarket/` (Wave 3: OMN-8367)
-- Standing orders store + session artifact writer (Wave 4: OMN-8371)
+**Interactive wiring:** Not yet connected. The skill executes `prompt.md` directly in Claude.
+Connecting the interactive path through `HandlerSessionOrchestrator` is Wave 3 (OMN-8367).
+
+**Skill files (OMN-8340):** Created. `prompt.md` is a 349-line 6-step spec that Claude
+executes directly. It is the functional implementation for interactive use.
