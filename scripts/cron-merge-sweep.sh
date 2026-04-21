@@ -333,6 +333,34 @@ emit_task_event "task-completed" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\"
 
 write_result_yaml "${FINAL_STATUS}" "${ATTEMPT}" "${AUTH_REFRESH_COUNT}"
 
+# ---------------------------------------------------------------------------
+# PR stall detection — runs after sweep, fail-open [OMN-9406]
+# ---------------------------------------------------------------------------
+# Calls HandlerPrSnapshot via run-stall-detector.py, which persists a rolling
+# two-snapshot diff to $ONEX_STATE_DIR/pr-snapshots/. On the second identical
+# snapshot for a blocked PR it emits a stall event. file-stall-tickets.sh
+# converts each event into a Linear ticket (tagged auto-stall-detected).
+# Non-zero exit from either step is logged but does NOT abort the tick.
+
+STALL_DETECTOR="${SCRIPT_DIR}/lib/run-stall-detector.py"
+STALL_FILER="${SCRIPT_DIR}/lib/file-stall-tickets.sh"
+
+if [[ -f "${STALL_DETECTOR}" ]] && [[ -f "${STALL_FILER}" ]]; then
+  log "Running PR stall detector..."
+  stall_output=""
+  stall_exit=0
+  stall_output="$(uv run python "${STALL_DETECTOR}" 2>>"${LOG_DIR}/${RUN_ID}.log")" || stall_exit=$?
+
+  if [[ ${stall_exit} -ne 0 ]]; then
+    log "WARN: stall detector exited ${stall_exit} — skipping ticket filing"
+  else
+    echo "${stall_output}" | bash "${STALL_FILER}" 2>>"${LOG_DIR}/${RUN_ID}.log" || \
+      log "WARN: stall ticket filer failed (non-fatal)"
+  fi
+else
+  log "WARN: stall detector scripts not found — skipping (${STALL_DETECTOR})"
+fi
+
 log "Merge-sweep run ${RUN_ID} finished: status=${FINAL_STATUS}, attempts=${ATTEMPT}, auth_refreshes=${AUTH_REFRESH_COUNT}"
 log "Full log: ${LOG_DIR}/${RUN_ID}.log"
 

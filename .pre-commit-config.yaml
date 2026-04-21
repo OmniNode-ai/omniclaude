@@ -506,8 +506,6 @@ repos:
         types: [python]
         exclude: ^tests/|^examples/|^scripts/
 
-  - repo: local
-    hooks:
       - id: normalization-symmetry
         name: normalization-symmetry
         entry: uv run python -m omnibase_core.validation.checker_normalization_symmetry
