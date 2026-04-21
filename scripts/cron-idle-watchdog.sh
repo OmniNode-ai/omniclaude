@@ -42,6 +42,10 @@ export ONEX_UNSAFE_ALLOW_EDITS=1
 
 ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 
+# Source canonical-clone preflight — pulls omniclaude before running the skill [OMN-9405]
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/canonical-clone-preflight.sh"
+
 # Tool-call log. Override via TOOL_CALL_LOG for tests. Default is the standard
 # hook tool-call JSONL location under $ONEX_STATE_DIR.
 STATE_ROOT="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
@@ -98,6 +102,12 @@ log() {
 
 log "=== idle-watchdog tick ${RUN_ID} starting ==="
 log "tool_call_log=${TOOL_CALL_LOG} backlog_count=${BACKLOG_COUNT}"
+
+# Pull canonical clone before running the skill [OMN-9405]
+canonical_clone_preflight "preflight" || {
+  log "ABORT: canonical-clone preflight failed — refusing to run stale code"
+  exit 1
+}
 
 CLASSIFY_PY_SCRIPT="$(cat <<'PYEOF'
 import json, sys, pathlib

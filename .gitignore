@@ -18,6 +18,8 @@ eggs/
 lib/
 !agents/lib/
 !agents/lib/**
+!scripts/lib/
+!scripts/lib/**
 !src/omniclaude/lib/
 !src/omniclaude/lib/**
 !src/omniclaude/hooks/lib/

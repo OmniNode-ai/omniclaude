@@ -87,6 +87,10 @@ export ONEX_UNSAFE_ALLOW_EDITS=1
 # shellcheck disable=SC1091
 source "$(dirname "$0")/headless-emit-wrapper.sh"
 
+# Source canonical-clone preflight — pulls omniclaude before running the skill [OMN-9405]
+# shellcheck disable=SC1091
+source "$(dirname "$0")/lib/canonical-clone-preflight.sh"
+
 # ---------------------------------------------------------------------------
 # Tool allowlist (from SKILL.md minimum headless allowlist)
 # ---------------------------------------------------------------------------
@@ -154,7 +158,8 @@ trap 'rm -f "${LOCK_FILE}"' EXIT
 # ---------------------------------------------------------------------------
 
 log() {
-  local msg="[cron-merge-sweep $(date -u +"%H:%M:%S")] $1"
+  local msg
+  msg="[cron-merge-sweep $(date -u +"%H:%M:%S")] $1"
   echo "${msg}"
   echo "${msg}" >> "${LOG_DIR}/${RUN_ID}.log"
 }
@@ -271,6 +276,12 @@ log "=== Merge-sweep run ${RUN_ID} starting ==="
 log "ONEX_REGISTRY_ROOT: ${ONEX_REGISTRY_ROOT}"
 log "State dir: ${STATE_DIR}"
 log "Sweep args:${SWEEP_ARGS:- (none)}"
+
+# Pull canonical clone before running the skill so the latest code is always executed [OMN-9405]
+canonical_clone_preflight "preflight" || {
+  log "ABORT: canonical-clone preflight failed — refusing to run stale code"
+  exit 1
+}
 
 emit_task_event "task-assigned" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"merge-sweep-start\""
 

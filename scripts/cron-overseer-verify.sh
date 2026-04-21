@@ -39,6 +39,10 @@ export ONEX_UNSAFE_ALLOW_EDITS=1
 
 ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep,mcp__linear-server__*"
 
+# Source canonical-clone preflight — pulls omniclaude before running the skill [OMN-9405]
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib/canonical-clone-preflight.sh"
+
 preflight() {
   if ! command -v claude &>/dev/null; then
     echo "ERROR: claude CLI not found on PATH" >&2
@@ -80,6 +84,12 @@ log() {
 }
 
 log "=== overseer-verify tick ${RUN_ID} starting ==="
+
+# Pull canonical clone before running the skill [OMN-9405]
+canonical_clone_preflight "preflight" || {
+  log "ABORT: canonical-clone preflight failed — refusing to run stale code"
+  exit 1
+}
 
 OUTPUT_FILE="${STATE_DIR}/${RUN_ID}.txt"
 

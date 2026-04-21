@@ -506,6 +506,14 @@ repos:
         types: [python]
         exclude: ^tests/|^examples/|^scripts/
 
+  - repo: local
+    hooks:
+      - id: normalization-symmetry
+        name: normalization-symmetry
+        entry: uv run python -m omnibase_core.validation.checker_normalization_symmetry
+        language: system
+        pass_filenames: false
+
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
@@ -522,11 +530,3 @@ ci:
   autoupdate_schedule: weekly
   skip: [no-cloud-bus]  # Pre-existing 29092 violations — cleanup tracked separately  # cloud-bus-ok OMN-3777
   submodules: false
-
-  - repo: local
-    hooks:
-      - id: normalization-symmetry
-        name: normalization-symmetry
-        entry: uv run python -m omnibase_core.validators.normalization-symmetry
-        language: system
-        pass_filenames: false
