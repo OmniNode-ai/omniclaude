@@ -11,6 +11,7 @@ tags:
   - contracts
   - quality
 author: OmniClaude Team
+version: 1.0.0
 args:
   - name: ticket_id
     description: Linear ticket ID (e.g., OMN-1234)

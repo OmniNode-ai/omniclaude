@@ -278,6 +278,7 @@ dispatch_queue: [ticket-ids/pr-numbers in order]
 in_progress: []
 completed: []
 waiting_for: {}
+consecutive_passive_failures: 0
 last_checkpoint: {timestamp}
 resumable: true
 ```
@@ -299,6 +300,84 @@ ONEX_CORRELATION_PREFIX=sess-{id}.disp-{sequence}
 **Skill-first enforcement**: Every background agent must use skills for any action that has one.
 Do not run raw `gh`, `git`, `ssh`, or `curl` when a skill covers the operation. If no skill
 exists for a needed action, the agent must file a ticket via `/onex:create_ticket` first.
+
+### Step 5b.1: Phase 3 Dispatch Invariant Guard <!-- ai-slop-ok: skill-step-heading -->
+
+**This check runs after every Phase 3 iteration — including the first. It is not optional.**
+
+At the end of each dispatch loop iteration, compute:
+
+```
+unowned_count  = count of items in dispatch_queue that meet ALL of:
+                 (a) state is BLOCKED, DIRTY, UNKNOWN, or CHANGES_REQUESTED (for PRs)
+                     OR In Progress / Todo with no active worker assigned (for tickets)
+                 (b) NOT currently assigned to a worker that is still running
+                 Items with an active in-progress worker do NOT count — they are already
+                 being worked. Only unowned stuck items trigger the invariant.
+
+dispatch_count = count of NEW workers spawned OR items verified-complete THIS iteration
+```
+
+**The invariant:**
+
+> Every iteration MUST either ADD to the queue (`dispatch_count > 0`, a new worker was
+> spawned for an unowned stuck item) OR SUBTRACT from it (`dispatch_count > 0`, an item
+> was verified complete and removed). Ending an iteration with `unowned_count > 0` AND
+> `dispatch_count == 0` is a **hard failure — passive observation**.
+>
+> If `unowned_count == 0` (all stuck items have active workers), the invariant is satisfied
+> and the iteration is clean — poll again after the next worker completion event.
+>
+> Circuit breaker: if 3 consecutive iterations write a passive-observation friction event
+> (i.e., unowned_count > 0 and dispatch_count == 0 three times in a row), stop dispatching
+> and escalate — do not loop indefinitely.
+
+**On passive-observation failure (unowned_count > 0 AND dispatch_count == 0):**
+
+1. Write a friction event immediately — do NOT continue to the next iteration:
+   ```bash
+   TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+   STUCK_PR_NUMS="<space-separated PR numbers>"   # substitute before running
+   STUCK_TICKET_IDS="<space-separated ticket IDs>" # substitute before running
+   UNOWNED_COUNT=<N>                               # substitute before running
+   cat > "$ONEX_STATE_DIR/friction/session-passive-${TIMESTAMP}.json" <<FRICTION_EOF
+   {
+     "timestamp": "${TIMESTAMP}",
+     "session_id": "sess-<id>",
+     "category": "passive_observation",
+     "unowned_count": ${UNOWNED_COUNT},
+     "dispatch_count": 0,
+     "stuck_prs": "${STUCK_PR_NUMS}",
+     "stuck_tickets": "${STUCK_TICKET_IDS}"
+   }
+   FRICTION_EOF
+   ```
+   Note: substitute all `<...>` placeholders with actual values before executing this snippet.
+2. Emit to stderr: `ESCALATION [session-passive]: Phase 3 ended with N unowned stuck items and 0 dispatches. Friction written. Reviewing queue and dispatching now.`
+3. Re-examine each unowned backlog item using the dispatch taxonomy below and dispatch at least one worker before the next iteration.
+
+**Prohibited behaviors — these are NOT valid substitutes for dispatching:**
+
+- Writing a sweep report and exiting without spawning a worker
+- Logging "no action needed," "state unchanged," or "monitoring" when PRs are BLOCKED/DIRTY/UNKNOWN/CHANGES_REQUESTED with an identifiable fix class
+- Asking "would you like me to fix X?" mid-loop — workers are pre-authorized for all fix classes listed in the taxonomy below
+- Queuing a dispatch spec to `.onex_state/dispatch-queue/` and treating that as equivalent to dispatching (a queued spec with no consumer is passive observation with extra steps)
+- Reporting "silent — state unchanged" on any tick where backlog_count > 0
+
+**Dispatch taxonomy — match the PR/ticket state to the canonical fixer:**
+
+| State | Canonical fixer | How to dispatch |
+|---|---|---|
+| PR has unresolved CodeRabbit threads (`CHANGES_REQUESTED` or thread gate blocking merge) | `/onex:coderabbit_triage` + pr_review_bot as sole resolver | `TeamCreate` → agent with `/onex:coderabbit_triage --repo {repo} --pr {N}` |
+| PR is DIRTY (merge conflict) | conflict-resolver worker | `TeamCreate` → agent: rebase branch, resolve conflicts, push, re-arm auto-merge |
+| PR CI is RED (failing checks) | systematic-debug worker with two-strike rule | `TeamCreate` → agent with `/onex:systematic_debugging --pr {N} --repo {repo}`; if agent hits two-strike, diagnosis doc required before continuing |
+| PR is CLEAN, CI green, not armed for auto-merge | arm auto-merge bare | `gh pr merge {N} --auto` — NO `--squash`, `--merge`, or `--rebase` flags. Bare `--auto` is intentional per OMN-9354: the merge queue controls method. If the repo is not merge-queue-enabled, verify repo settings before arming. |
+| Ticket In Progress with no active worker (unworked >15min) | ticket-pipeline worker | `TeamCreate` → agent with `/onex:ticket_pipeline {OMN-XXXX}` |
+| Worker silent >15min (stall) | relaunch with narrower scope | Spawn fresh agent, narrower task; file friction; do NOT wait for user approval |
+
+**When in doubt about what needs dispatching:** read `.onex_state/dispatch-queue/` for pending
+stall events written by the PR snapshot detector (OMN-9404). Each file there is an unactioned
+dispatch signal — consume it by spawning the appropriate worker type from the taxonomy above.
 
 ### Step 5c: Monitor and update state
 
