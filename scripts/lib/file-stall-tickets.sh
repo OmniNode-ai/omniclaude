@@ -75,6 +75,18 @@ _linear_api() {
     "https://api.linear.app/graphql"
 }
 
+# Accepts a pre-built JSON body (query + variables) — used where shell vars must not
+# be interpolated directly into the GraphQL string.
+_linear_api_json() {
+  local body="$1"
+  curl -fsS \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -H "Authorization: ${LINEAR_API_KEY}" \
+    --data "${body}" \
+    "https://api.linear.app/graphql"
+}
+
 TEAM_ID="${LINEAR_TEAM_ID:-}"
 if [[ -z "${TEAM_ID}" ]]; then
   team_resp="$(_linear_api '{ teams { nodes { id name } } }' 2>/dev/null || true)"
@@ -117,17 +129,18 @@ file_one_ticket() {
   search_resp="$(_linear_api "{ issueSearch(query: \"auto-stall-detected ${pr_key}\", filter: {state: {type: {nin: [\"completed\", \"cancelled\"]}}}) { nodes { id title } } }" 2>/dev/null || true)"
 
   local existing_count
-  existing_count="$(echo "${search_resp}" | python3 -c "
-import json, sys
+  # shellcheck disable=SC2030
+  existing_count="$(PR_KEY="${pr_key}" python3 -c "
+import json, sys, os
+pr_key = os.environ.get('PR_KEY', '')
 try:
     d = json.load(sys.stdin)
     nodes = d.get('data', {}).get('issueSearch', {}).get('nodes', [])
-    # Check title contains our pr_key
-    matches = [n for n in nodes if '${pr_key}' in n.get('title', '')]
+    matches = [n for n in nodes if pr_key in n.get('title', '')]
     print(len(matches))
 except Exception:
     print(0)
-" 2>/dev/null || echo 0)"
+" <<< "${search_resp}" 2>/dev/null || echo 0)"
 
   if [[ "${existing_count}" -gt 0 ]]; then
     log "SKIP ${pr_key} — open auto-stall-detected ticket already exists"
@@ -155,20 +168,24 @@ was identical across ${stall_count} consecutive 5-minute snapshots while in a bl
 - Check for CodeRabbit unresolved threads
 - Rebase if conflicted: \`gh pr view ${pr_number} --repo ${repo} --json mergeable\`"
 
-  local mutation
-  mutation="mutation {
-    issueCreate(input: {
-      teamId: \"${TEAM_ID}\"
-      title: \"${title}\"
-      description: \"${description}\"
-      labelNames: [\"auto-stall-detected\"]
-    }) {
-      issue { id identifier url }
-    }
-  }"
+  # Build request body via Python so title/description are properly JSON-escaped,
+  # then pass the serialized body to _linear_api_json (curl-based) for dispatch.
+  local create_body
+  # shellcheck disable=SC2031
+  create_body="$(TEAM_ID="${TEAM_ID}" ISSUE_TITLE="${title}" ISSUE_DESC="${description}" python3 -c "
+import json, os, sys
+team_id = os.environ.get('TEAM_ID', '')
+issue_title = os.environ.get('ISSUE_TITLE', '')
+desc    = os.environ.get('ISSUE_DESC', '')
+body = {
+    'query': 'mutation CreateIssue(\$input: IssueCreateInput!) { issueCreate(input: \$input) { issue { id identifier url } } }',
+    'variables': {'input': {'teamId': team_id, 'title': issue_title, 'description': desc, 'labelNames': ['auto-stall-detected']}},
+}
+print(json.dumps(body))
+" 2>/dev/null || echo "")"
 
   local create_resp
-  create_resp="$(_linear_api "${mutation}" 2>/dev/null || true)"
+  create_resp="$(_linear_api_json "${create_body}" 2>/dev/null || true)"
 
   local issue_id
   issue_id="$(echo "${create_resp}" | python3 -c "
