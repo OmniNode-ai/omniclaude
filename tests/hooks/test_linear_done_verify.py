@@ -376,6 +376,7 @@ class TestFetchLinearIssue:
         ).encode()
 
         mock_resp = MagicMock()
+        mock_resp.status = 200
         mock_resp.read.return_value = response_body
         mock_resp.__enter__ = lambda s: s
         mock_resp.__exit__ = MagicMock(return_value=False)

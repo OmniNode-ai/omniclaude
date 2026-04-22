@@ -323,8 +323,11 @@ def _fetch_linear_issue(ticket_id: str) -> dict[str, Any] | None:
     )
     try:
         with urllib.request.urlopen(req, timeout=10.0) as resp:  # noqa: S310
+            if resp.status != 200:
+                return None
             body = resp.read()
     except (urllib.error.URLError, OSError):
+        # HTTPError (non-2xx) is a subclass of URLError and caught here too.
         return None
 
     try:
