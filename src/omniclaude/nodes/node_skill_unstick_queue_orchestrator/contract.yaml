@@ -56,18 +56,18 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.unstick_queue.v1"
-    consumer_group: "omniclaude.skill.unstick_queue"
+    topic: "onex.cmd.omniclaude.unstick-queue.v1"
+    consumer_group: "omniclaude.skill.unstick-queue"
   publish:
-    success_topic: "onex.evt.omniclaude.unstick_queue-completed.v1"
-    failure_topic: "onex.evt.omniclaude.unstick_queue-failed.v1"
+    success_topic: "onex.evt.omniclaude.unstick-queue-completed.v1"
+    failure_topic: "onex.evt.omniclaude.unstick-queue-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.unstick_queue.v1"
+    - "onex.cmd.omniclaude.unstick-queue.v1"
   publish_topics:
-    - "onex.evt.omniclaude.unstick_queue-completed.v1"
-    - "onex.evt.omniclaude.unstick_queue-failed.v1"
+    - "onex.evt.omniclaude.unstick-queue-completed.v1"
+    - "onex.evt.omniclaude.unstick-queue-failed.v1"
 
 # Capabilities
 capabilities:

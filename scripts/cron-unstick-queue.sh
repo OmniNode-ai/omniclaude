@@ -25,9 +25,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ONEX_REGISTRY_ROOT="${OMNI_HOME:-${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}}"
-STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/queue-unstick-results"
-LOG_DIR="/tmp/unstick-queue-logs"
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 PHASE_TIMEOUT=300
 RUN_ID="unstick-queue-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 
@@ -52,6 +50,11 @@ fi
 
 export ONEX_RUN_ID="${RUN_ID}"
 export ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
+# Derive STATE_DIR and LOG_DIR after ONEX_STATE_DIR is finalised so a
+# configured state root (from env or .omnibase/.env) is honoured for
+# lock files, result ndjson, and diagnostic logs.
+STATE_DIR="${ONEX_STATE_DIR}/queue-unstick-results"
+LOG_DIR="${ONEX_STATE_DIR}/queue-unstick-logs"
 
 preflight() {
   if ! command -v gh &>/dev/null; then

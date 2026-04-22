@@ -48,6 +48,8 @@ tests/unit/hooks/lib/__pycache__/
 tests/unit/hooks/lib/**/__pycache__/
 tests/unit/lib/__pycache__/
 tests/unit/lib/**/__pycache__/
+scripts/lib/__pycache__/
+scripts/lib/**/__pycache__/
 plugins/onex/hooks/lib/**/__pycache__/
 lib64/
 parts/

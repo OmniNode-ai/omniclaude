@@ -220,6 +220,28 @@ def test_has_orphaned_check_missing_started_at_is_not_orphaned() -> None:
     assert has_orphaned_check([ambiguous], NOW) is False
 
 
+def test_has_orphaned_check_queued_status_not_orphaned() -> None:
+    # QUEUED checks have not yet started running — not an orphan candidate.
+    # Accepting QUEUED would trigger unstick on legitimately-pending checks.
+    queued = {
+        "status": "QUEUED",
+        "conclusion": None,
+        "startedAt": (NOW - timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
+    }
+    assert has_orphaned_check([queued], NOW) is False
+
+
+def test_has_orphaned_check_null_status_not_orphaned() -> None:
+    # status=None is how StatusContext nodes are normalised in run-unstick-queue.py
+    # for PENDING/EXPECTED states.  They are not in-progress check-runs.
+    null_status = {
+        "status": None,
+        "conclusion": None,
+        "startedAt": (NOW - timedelta(minutes=30)).isoformat().replace("+00:00", "Z"),
+    }
+    assert has_orphaned_check([null_status], NOW) is False
+
+
 def test_has_failed_required_check_ignores_non_required() -> None:
     rollup = [_failing_required("CodeRabbit")]
     assert has_failed_required_check(rollup, {"Quality Gate"}) is False

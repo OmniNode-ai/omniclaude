@@ -85,12 +85,22 @@ def resolve_repos(cli_value: str | None) -> list[str]:
     return [r.strip() for r in raw.split(",") if r.strip()]
 
 
+class _QueueError(Exception):
+    """Raised when the gh/GraphQL call fails so callers can distinguish
+    an API failure from a genuinely empty queue."""
+
+
 def fetch_queue_head(repo: str) -> dict[str, Any] | None:
     """Fetch the position-1 entry from the repo's merge queue.
 
-    Returns ``None`` when the queue is empty, the repo has no merge queue
-    configured, or the query fails. Errors are surfaced via stderr so the
-    cron wrapper can capture them, but do not abort the runner.
+    Returns ``None`` when the queue is empty or the repo has no merge queue
+    configured.
+
+    Raises:
+        _QueueError: when the gh CLI is missing or the GraphQL call fails.
+            This allows ``process_repo`` to distinguish an API failure from
+            an empty queue and record it in the error count rather than
+            silently treating the repo as healthy.
     """
     query = (
         "query($owner: String!, $name: String!) { "
@@ -116,22 +126,20 @@ def fetch_queue_head(repo: str) -> dict[str, Any] | None:
             ],
             check=False,
         )
-    except FileNotFoundError:
-        print(json.dumps({"repo": repo, "error": "gh CLI missing"}), file=sys.stderr)
-        return None
-    if proc.returncode != 0 or not proc.stdout.strip():
-        # Empty queue or query error — either way, nothing to act on.
-        if proc.stderr.strip():
-            print(
-                json.dumps({"repo": repo, "stderr": proc.stderr.strip()[:500]}),
-                file=sys.stderr,
-            )
+    except FileNotFoundError as exc:
+        raise _QueueError("gh CLI missing") from exc
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip()[:500]
+        raise _QueueError(f"gh api failed (rc={proc.returncode}): {stderr}")
+    if not proc.stdout.strip():
+        # Empty queue — nothing to act on; not an error.
         return None
     try:
         node = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
+    except json.JSONDecodeError as exc:
+        raise _QueueError(f"JSON decode failed: {exc}") from exc
     if not isinstance(node, dict):
+        # jq returned null — queue is empty.
         return None
     # The classifier expects a "position" field; we queried first:1 so it's always 1.
     node["position"] = 1
@@ -197,12 +205,22 @@ def fetch_status_check_rollup(repo: str, pr_number: int) -> list[dict[str, Any]]
     return normalised
 
 
+class _RequiredContextsError(Exception):
+    """Raised when branch-protection required checks cannot be fetched.
+
+    Callers should treat this as a signal to skip BROKEN classification
+    (fail closed) rather than silently disabling it by returning set().
+    """
+
+
 def fetch_required_contexts(repo: str) -> set[str]:
     """Fetch branch-protection required status checks for ``main``.
 
-    Returns an empty set when the query fails or protection is absent — the
-    classifier tolerates an empty required-context set (it just cannot
-    upgrade any failures to BROKEN). Safer than aborting.
+    Raises:
+        _RequiredContextsError: when the gh API call fails so that callers can
+            fail closed rather than silently disabling the BROKEN guard.
+            An empty set is returned only when protection exists but no
+            contexts are configured (a legitimate configuration).
     """
     proc = _gh(
         [
@@ -214,7 +232,10 @@ def fetch_required_contexts(repo: str) -> set[str]:
         check=False,
     )
     if proc.returncode != 0:
-        return set()
+        raise _RequiredContextsError(
+            f"branch-protection lookup failed for {repo} (rc={proc.returncode}): "
+            f"{proc.stderr.strip()[:300]}"
+        )
     return {line.strip() for line in proc.stdout.splitlines() if line.strip()}
 
 
@@ -291,7 +312,11 @@ def process_repo(
         "action": "none",
         "error": None,
     }
-    head = fetch_queue_head(repo)
+    try:
+        head = fetch_queue_head(repo)
+    except _QueueError as exc:
+        summary["error"] = str(exc)
+        return summary
     if head is None:
         summary["verdict"] = EnumQueueStallVerdict.HEALTHY.value
         return summary
@@ -305,7 +330,13 @@ def process_repo(
     summary["head_pr"] = pr_number
 
     rollup = fetch_status_check_rollup(repo, pr_number)
-    required = fetch_required_contexts(repo)
+    try:
+        required = fetch_required_contexts(repo)
+    except _RequiredContextsError as exc:
+        # Fail closed: without required contexts we cannot classify BROKEN
+        # failures and might incorrectly requeue a genuinely broken PR.
+        summary["error"] = f"required-contexts lookup failed — skipping: {exc}"
+        return summary
 
     prior = load_unstick_history(f"{ORG}/{repo}", pr_number)
     verdict = classify_queue_entry(

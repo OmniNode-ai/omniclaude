@@ -10,7 +10,7 @@ Run the unstick-queue recovery loop. Mechanical task; no user interaction requir
 2. Invoke the runner:
 
    ```bash
-   uv run python "$OMNI_HOME/omniclaude/scripts/lib/run-unstick-queue.py" \
+   uv run python "scripts/lib/run-unstick-queue.py" \
      --repos "<csv>" \
      ${DRY_RUN:+--dry-run} \
      --awaiting-minutes "${AWAITING:-30}" \

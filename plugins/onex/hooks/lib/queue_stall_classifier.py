@@ -114,15 +114,19 @@ def has_orphaned_check(
     now: datetime,
     orphan_minutes: int = ORPHANED_CHECK_MINUTES,
 ) -> bool:
-    """True when at least one check has been IN_PROGRESS/null-status >= orphan_minutes.
+    """True when at least one check has been IN_PROGRESS >= orphan_minutes.
 
-    Matches the DoD: ``status=null`` and ``conclusion=null`` for > 20 min
-    → orphaned check-run (classic CodeRabbit-style stall).
+    Only ``status=IN_PROGRESS`` with ``conclusion=null`` counts as an orphan
+    candidate. ``status=None`` (freshly-queued or StatusContext-normalised) and
+    ``status=QUEUED`` are excluded: they represent checks that have not yet
+    started, not checks that are hung mid-run.  Accepting null/QUEUED would
+    trigger an unstick on a legitimately-pending check before it has had a
+    chance to run.
     """
     for check in status_check_rollup:
         status = check.get("status")
         conclusion = check.get("conclusion")
-        if status in (None, "QUEUED", "IN_PROGRESS") and conclusion is None:
+        if status == "IN_PROGRESS" and conclusion is None:
             started_at = _parse_iso8601(check.get("startedAt"))
             if started_at is None:
                 # No start time → can't prove it's orphaned; err on the side
