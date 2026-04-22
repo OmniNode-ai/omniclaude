@@ -27,6 +27,8 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -277,28 +279,71 @@ def _load_stdin_tool_call() -> dict[str, Any]:
     return {}
 
 
-def _fetch_linear_issue(ticket_id: str) -> dict[str, Any] | None:
-    """Fetch a Linear issue via the gh-linear shim if available.
+_LINEAR_GRAPHQL_QUERY = """
+query($id: String!) {
+  issue(id: $id) {
+    id
+    title
+    description
+    state { name }
+    labels { nodes { name } }
+  }
+}
+""".strip()
 
-    Returns None if the shim isn't available. The shim is wired only in
-    integration/dogfood environments; unit tests inject descriptions directly.
+_LINEAR_API_URL = "https://api.linear.app/graphql"
+
+
+def _fetch_linear_issue(ticket_id: str) -> dict[str, Any] | None:
+    """Fetch a Linear issue via the GraphQL API.
+
+    Returns None on network/auth failure so the caller can decide whether to
+    fail-open or fail-closed.  Missing LINEAR_API_KEY → fail-open (returns {}
+    so the hook does not block the user when credentials aren't configured).
     """
-    cmd = ["linear-cli", "get-issue", ticket_id]
-    try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=10.0, check=False
+    api_key = os.environ.get("LINEAR_API_KEY", "")
+    if not api_key:
+        sys.stderr.write(
+            "[linear_done_verify] LINEAR_API_KEY not set — skipping Live fetch, "
+            "failing open.\n"
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
+        return {}
+
+    payload = json.dumps(
+        {"query": _LINEAR_GRAPHQL_QUERY, "variables": {"id": ticket_id}}
+    ).encode()
+    req = urllib.request.Request(  # noqa: S310
+        _LINEAR_API_URL,
+        data=payload,
+        headers={
+            "Authorization": api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
-        parsed = json.loads(proc.stdout)
+        with urllib.request.urlopen(req, timeout=10.0) as resp:  # noqa: S310
+            body = resp.read()
+    except (urllib.error.URLError, OSError):
+        return None
+
+    try:
+        data = json.loads(body)
     except json.JSONDecodeError:
         return None
-    if isinstance(parsed, dict):
-        return parsed
-    return None
+
+    issue = (data.get("data") or {}).get("issue")
+    if not isinstance(issue, dict):
+        return None
+
+    label_nodes = (issue.get("labels") or {}).get("nodes") or []
+    return {
+        "id": issue.get("id"),
+        "title": issue.get("title"),
+        "description": issue.get("description") or "",
+        "state": (issue.get("state") or {}).get("name") or "",
+        "labels": [n.get("name") for n in label_nodes if n.get("name")],
+    }
 
 
 def main() -> int:
@@ -320,12 +365,14 @@ def main() -> int:
     labels: list[str] = list(params.get("labels") or [])
 
     # If the description wasn't passed on this update (common: status-only
-    # updates), fetch the live ticket to read DoD references. Fail-closed: if
-    # the fetch fails we cannot tell whether a PR is referenced, so reject
-    # rather than let the Done transition through blind.
+    # updates), fetch the live ticket to read DoD references.
+    # Semantics of _fetch_linear_issue return values:
+    #   None  → network/API failure → fail-closed (block transition)
+    #   {}    → LINEAR_API_KEY missing → fail-open (skip PR check)
+    #   {...} → real issue data → use description + labels from response
     if not description and ticket_id:
         issue = _fetch_linear_issue(ticket_id)
-        if not issue:
+        if issue is None:
             decision = {
                 "decision": "block",
                 "reason": (

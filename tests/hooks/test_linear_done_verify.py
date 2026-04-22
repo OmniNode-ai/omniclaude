@@ -17,8 +17,10 @@ import importlib.util
 import json
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -345,3 +347,72 @@ def test_open_with_blocking_merge_state_rejected(merge_state: str) -> None:
         merge_state=merge_state,
     )
     assert linear_done_verify.classify_blocking(status) is True
+
+
+class TestFetchLinearIssue:
+    def test_returns_empty_dict_when_api_key_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+        result = linear_done_verify._fetch_linear_issue("OMN-9454")
+        assert result == {}
+
+    def test_returns_issue_dict_on_success(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LINEAR_API_KEY", "lin_api_test")
+        response_body = json.dumps(
+            {
+                "data": {
+                    "issue": {
+                        "id": "OMN-9454",
+                        "title": "Fix linear-cli",
+                        "description": "Fixed in #202",
+                        "state": {"name": "Done"},
+                        "labels": {"nodes": [{"name": "close-if-done"}]},
+                    }
+                }
+            }
+        ).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_body
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = linear_done_verify._fetch_linear_issue("OMN-9454")
+
+        assert result is not None
+        assert result["id"] == "OMN-9454"
+        assert result["description"] == "Fixed in #202"
+        assert result["labels"] == ["close-if-done"]
+
+    def test_returns_none_on_network_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("LINEAR_API_KEY", "lin_api_test")
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            result = linear_done_verify._fetch_linear_issue("OMN-9454")
+        assert result is None
+
+
+class TestMainFailOpenOnMissingKey:
+    def test_main_allows_when_api_key_missing_and_no_description(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing LINEAR_API_KEY → fail-open; hook must not block the user."""
+        monkeypatch.delenv("LINEAR_API_KEY", raising=False)
+        monkeypatch.setattr(
+            linear_done_verify,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {"id": "OMN-9999", "state": "Done"},
+            },
+        )
+        rc = linear_done_verify.main()
+        assert rc == 0
