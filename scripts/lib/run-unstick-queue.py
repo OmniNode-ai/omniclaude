@@ -146,8 +146,22 @@ def fetch_queue_head(repo: str) -> dict[str, Any] | None:
     return node
 
 
+class _StatusCheckRollupError(Exception):
+    """Raised when PR status-check rollup cannot be fetched.
+
+    Gives process_repo the same fail-closed treatment as _QueueError and
+    _RequiredContextsError — a lookup failure increments the error count
+    rather than silently treating the PR as HEALTHY.
+    """
+
+
 def fetch_status_check_rollup(repo: str, pr_number: int) -> list[dict[str, Any]]:
-    """Fetch statusCheckRollup for a PR — list of check-runs with status + startedAt."""
+    """Fetch statusCheckRollup for a PR — list of check-runs with status + startedAt.
+
+    Raises:
+        _StatusCheckRollupError: when the gh API call fails or returns
+            unparseable output so callers can fail closed.
+    """
     query = (
         "query($owner: String!, $name: String!, $pr: Int!) { "
         "repository(owner: $owner, name: $name) { "
@@ -174,13 +188,22 @@ def fetch_status_check_rollup(repo: str, pr_number: int) -> list[dict[str, Any]]
         ],
         check=False,
     )
-    if proc.returncode != 0 or not proc.stdout.strip():
+    if proc.returncode != 0:
+        raise _StatusCheckRollupError(
+            f"gh api failed for PR #{pr_number} in {repo} (rc={proc.returncode}): "
+            f"{proc.stderr.strip()[:300]}"
+        )
+    if not proc.stdout.strip():
+        # No statusCheckRollup — PR has no checks yet; treat as empty list (not an error).
         return []
     try:
         raw = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return []
+    except json.JSONDecodeError as exc:
+        raise _StatusCheckRollupError(
+            f"JSON decode failed for PR #{pr_number} in {repo}: {exc}"
+        ) from exc
     if not isinstance(raw, list):
+        # jq returned null — no checks configured; treat as empty.
         return []
     normalised: list[dict[str, Any]] = []
     for node in raw:
@@ -329,7 +352,11 @@ def process_repo(
         return summary
     summary["head_pr"] = pr_number
 
-    rollup = fetch_status_check_rollup(repo, pr_number)
+    try:
+        rollup = fetch_status_check_rollup(repo, pr_number)
+    except _StatusCheckRollupError as exc:
+        summary["error"] = f"status-check-rollup lookup failed — skipping: {exc}"
+        return summary
     try:
         required = fetch_required_contexts(repo)
     except _RequiredContextsError as exc:
@@ -403,10 +430,12 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: no repos resolved", file=sys.stderr)
         return 2
 
-    if (
-        subprocess.run(["gh", "--version"], capture_output=True, check=False).returncode
-        != 0
-    ):
+    try:
+        gh_check = subprocess.run(["gh", "--version"], capture_output=True, check=False)
+        gh_missing = gh_check.returncode != 0
+    except FileNotFoundError:
+        gh_missing = True
+    if gh_missing:
         print("ERROR: gh CLI not available", file=sys.stderr)
         return 2
 
@@ -433,7 +462,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         except Exception as exc:  # noqa: BLE001 — per-repo isolation
             summary = {"repo": repo, "error": str(exc)}
-            totals["errors"] += 1
 
         print(json.dumps(summary, sort_keys=True))
 

@@ -26,6 +26,7 @@ Refs:
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import pathlib
@@ -255,22 +256,31 @@ def record_unstick(repo: str, pr_number: int, when: datetime) -> pathlib.Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"pr-{pr_number}.json"
 
-    existing: dict[str, Any] = {"repo": repo, "pr": pr_number, "unsticks": []}
-    if path.is_file():
+    # Use an exclusive lock file to serialise concurrent read-modify-write so
+    # that two overlapping tick/manual invocations cannot drop timestamps or
+    # leave a truncated JSON file behind.
+    lock_path = path.with_suffix(".lock")
+    with lock_path.open("a") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
         try:
-            loaded = json.loads(path.read_text())
-            if isinstance(loaded, dict):
-                existing = loaded
-                if not isinstance(existing.get("unsticks"), list):
-                    existing["unsticks"] = []
-        except (json.JSONDecodeError, OSError):
-            pass
+            existing: dict[str, Any] = {"repo": repo, "pr": pr_number, "unsticks": []}
+            if path.is_file():
+                try:
+                    loaded = json.loads(path.read_text())
+                    if isinstance(loaded, dict):
+                        existing = loaded
+                        if not isinstance(existing.get("unsticks"), list):
+                            existing["unsticks"] = []
+                except (json.JSONDecodeError, OSError):
+                    pass
 
-    existing["repo"] = repo
-    existing["pr"] = pr_number
-    existing["unsticks"].append(when.astimezone(UTC).isoformat())
+            existing["repo"] = repo
+            existing["pr"] = pr_number
+            existing["unsticks"].append(when.astimezone(UTC).isoformat())
 
-    path.write_text(json.dumps(existing, indent=2, sort_keys=True))
+            path.write_text(json.dumps(existing, indent=2, sort_keys=True))
+        finally:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
     return path
 
 
