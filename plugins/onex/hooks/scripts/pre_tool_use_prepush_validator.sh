@@ -6,6 +6,28 @@ set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
+# Capture caller CWD before stabilizing to $HOME so the repo-guard can
+# inspect the right tree.
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+
+# -----------------------------------------------------------------------
+# Repo-guard: prepush validator assumes OmniNode python venv + ONEX_STATE_DIR.
+# Sourcing onex-paths.sh or common.sh in a non-OmniNode repo blows up with
+# hard failures. Run the guard BEFORE any ONEX-specific setup so external
+# users of the plugin get a clean no-op on `git push`.
+# -----------------------------------------------------------------------
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        _OMNICLAUDE_PASSTHROUGH=$(cat)
+        echo "$_OMNICLAUDE_PASSTHROUGH"
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
+
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
 _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \

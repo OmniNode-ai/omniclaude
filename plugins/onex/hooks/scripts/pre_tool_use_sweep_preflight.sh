@@ -9,6 +9,11 @@ set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 
+# Capture the caller's CWD BEFORE we stabilize to $HOME. The repo-guard
+# needs to know which project the tool call was launched from, not where
+# the hook script happens to chdir for I/O safety.
+_OMNICLAUDE_CALLER_CWD="${CLAUDE_PROJECT_DIR:-$PWD}"
+
 # Stable CWD (same pattern as bash_guard)
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
@@ -22,6 +27,30 @@ HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 LOG_FILE="${LOG_FILE:-$HOME/.claude/hooks.log}"
 
 mkdir -p "$(dirname "$LOG_FILE")"
+
+# -----------------------------------------------------------------------
+# Repo-guard: sweep preflight is ONEX-specific infrastructure validation.
+# Must never block `git push` / `gh` usage in repositories that are not
+# part of the OmniNode platform. Runs BEFORE any blocking checks so an
+# external user does not see a {"decision":"block"} JSON on gh/git push.
+# Export CLAUDE_PROJECT_DIR to the caller's CWD (captured above) so
+# repo_guard.sh inspects the right tree — we already chdir'd to $HOME.
+# See plugins/onex/hooks/lib/repo_guard.sh.
+# -----------------------------------------------------------------------
+# shellcheck source=../lib/repo_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/repo_guard.sh" 2>/dev/null || true
+if declare -F is_omninode_repo >/dev/null 2>&1; then
+    CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$_OMNICLAUDE_CALLER_CWD}" \
+        is_omninode_repo || {
+        # Drain stdin and pass through unmodified. Emit the tool info on
+        # stdout so downstream hooks in the same event chain see the same
+        # payload. No stderr output — this path must be invisible.
+        _OMNICLAUDE_PASSTHROUGH=$(cat)
+        echo "$_OMNICLAUDE_PASSTHROUGH"
+        trap - EXIT 2>/dev/null || true
+        exit 0
+    }
+fi
 
 # Cache configuration
 CACHE_DIR="${HOME}/.claude/hooks/.cache"
