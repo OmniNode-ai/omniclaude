@@ -4,9 +4,10 @@
 
 # tick-bundle-install.sh — idempotent launchd installer for the OMN-9036 tick bundle.
 #
-# Installs 6 plists under ~/Library/LaunchAgents:
+# Installs 7 plists under ~/Library/LaunchAgents:
 #   ai.omninode.merge-sweep       (5m)
 #   ai.omninode.dispatch-engine   (10m)
+#   ai.omninode.unstick-queue     (10m) [OMN-9065]
 #   ai.omninode.overseer-verify   (15m)
 #   ai.omninode.contract-verify   (15m)
 #   ai.omninode.idle-watchdog     (15m)
@@ -46,6 +47,7 @@ done
 TICKS=(
   "ai.omninode.merge-sweep"
   "ai.omninode.dispatch-engine"
+  "ai.omninode.unstick-queue"
   "ai.omninode.overseer-verify"
   "ai.omninode.contract-verify"
   "ai.omninode.idle-watchdog"
