@@ -278,7 +278,7 @@ class TestHandlerRoutingLlm:
 
         mock_llm.assert_not_called()
         assert result.routing_policy == "fallback_default"
-        assert result.selected_agent == "polymorphic-agent"
+        assert result.selected_agent == "general-purpose"
 
     @pytest.mark.unit
     @pytest.mark.asyncio
@@ -293,7 +293,7 @@ class TestHandlerRoutingLlm:
 
         mock_llm.assert_not_called()
         assert result.routing_policy == "fallback_default"
-        assert result.selected_agent == "polymorphic-agent"
+        assert result.selected_agent == "general-purpose"
         assert result.confidence == 0.0
         assert len(result.candidates) == 0
 

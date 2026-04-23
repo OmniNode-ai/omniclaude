@@ -35,7 +35,6 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
     TriggerMatcher,
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
-    FALLBACK_AGENT,
     build_registry_dict,
     create_explicit_result,
     extract_explicit_agent,
@@ -492,7 +491,7 @@ class HandlerRoutingLlm:
             ModelRoutingResult with routing_policy="fallback_default".
         """
         return ModelRoutingResult(
-            selected_agent=FALLBACK_AGENT,
+            selected_agent="general-purpose",
             confidence=0.0,
             confidence_breakdown=ModelConfidenceBreakdown(
                 total=0.0,

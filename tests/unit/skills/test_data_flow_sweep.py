@@ -55,7 +55,7 @@ class TestDataFlowSweepSkill:
         """SKILL.md must contain dispatch rules section."""
         content = (SKILL_DIR / "SKILL.md").read_text()
         assert "Dispatch Rules" in content
-        assert "polymorphic-agent" in content
+        assert "general-purpose" in content
 
     def test_topics_yaml_exists(self) -> None:
         """topics.yaml must exist."""
