@@ -235,27 +235,38 @@ HARD_BLOCK_PATTERNS: list[re.Pattern[str]] = [
         r"printf\b\s+['\"]?\\x[0-9a-f]+[^|]*\|\s*(?:ba)?sh\b",
         re.IGNORECASE | re.MULTILINE,
     ),
-    # gh pr merge --auto COMBINED WITH a method flag (--merge/--squash/--rebase)
-    # silently picks the wrong merge method (OMN-8838).  The correct form for
-    # merge-queue repos is `gh pr merge <N> --repo <org>/<repo> --auto` with NO
-    # method flag — the queue owns the merge method (OMN-9354).
-    # Block only when --auto appears alongside a method flag in the same command.
+    # gh pr merge --auto COMBINED WITH --merge or --rebase (OMN-9548).
+    #
+    # Empirical evidence (2026-04-23, omnibase_core#884): GitHub's GraphQL API
+    # has a hardcoded default of MERGE for enablePullRequestAutoMerge — it does
+    # NOT inherit from the queue ruleset or repo allow-settings. The only way
+    # to arm SQUASH on a queue-SQUASH repo is to pass SQUASH explicitly.
+    #
+    # Since OMN-9547 set `allow_squash_merge: true` as the ONLY permitted
+    # method on all 12 OmniNode-ai repos, MERGE and REBASE are the mismatch
+    # cases that silently drop the queue entry. SQUASH is now the correct,
+    # required method and must be allowed.
+    #
+    # Supersedes OMN-8838 (which blocked --squash along with --merge/--rebase).
     re.compile(
-        r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|squash|rebase)\b)",
+        r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|rebase)\b)",
         re.IGNORECASE | re.MULTILINE,
     ),
-    # GraphQL enablePullRequestAutoMerge WITH an explicit mergeMethod argument.
-    # When mergeMethod in the mutation doesn't match the repo's queue ruleset,
-    # GitHub silently discards the queue entry — the PR shows CLEAN + armed but
-    # NEVER enters the queue (OMN-9433, observed omnimarket #370, 2026-04-21).
-    # The correct form is enablePullRequestAutoMerge WITHOUT mergeMethod — the
-    # queue automatically applies its configured method.
+    # GraphQL enablePullRequestAutoMerge with mergeMethod: MERGE or REBASE
+    # (OMN-9548). Blocks the actual mismatch cases on OmniNode-ai queue-SQUASH
+    # repos. `mergeMethod: SQUASH` is the correct form and must be allowed —
+    # it is the ONLY method that arms auto-merge correctly now that repo
+    # allow-settings restrict to squash (OMN-9547).
+    #
+    # Supersedes OMN-9433 (which blocked any mergeMethod argument on the
+    # mistaken premise that omitting it let the queue pick — empirically false;
+    # the API defaults to MERGE).
     #
     # Pattern anchors mergeMethod inside the enablePullRequestAutoMerge(...)
-    # input block so CLI flags like -F mergeMethod=SQUASH that are not part of
+    # input block so CLI flags like -F mergeMethod=MERGE that are not part of
     # the mutation input don't trigger a false-positive block.
     re.compile(
-        r"enablePullRequestAutoMerge\s*\([\s\S]*\bmergeMethod\s*:",
+        r"enablePullRequestAutoMerge\s*\([\s\S]*?\bmergeMethod\s*:\s*(?:MERGE|REBASE)\b",
         re.IGNORECASE | re.MULTILINE,
     ),
     # Branch protection: block re-enabling required_pull_request_reviews.
@@ -829,32 +840,30 @@ def main() -> int:
                     "Human operators retain an emergency bypass via direct terminal access."
                 )
         elif re.search(
-            r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|squash|rebase)\b)",
+            r"\bgh\s+pr\s+merge\b(?=.*(?:^|\s)--auto\b)(?=.*(?:^|\s)--(?:merge|rebase)\b)",
             command,
             re.IGNORECASE | re.MULTILINE,
         ):
             block_reason = (
-                "BLOCKED: gh pr merge --auto with a method flag silently picks the wrong method. "
-                "For merge-queue repos (OMN-9354): use `gh pr merge <N> --repo <org>/<repo> --auto` "
-                "with NO method flag — the queue controls the method. "
-                "For non-queue repos: use GraphQL enablePullRequestAutoMerge with mergeMethod: SQUASH. "
-                "See OMN-8838, OMN-9354."
+                "BLOCKED: gh pr merge --auto --merge / --auto --rebase mismatches the "
+                "SQUASH queue ruleset on OmniNode-ai repos and silently drops the queue "
+                "entry. Only `mergeMethod: SQUASH` / `--squash --auto` is permitted on "
+                "OmniNode-ai queue repos. Use `gh pr merge <N> --repo <org>/<repo> "
+                "--squash --auto`. See OMN-9547 / OMN-9548 for evidence."
             )
         elif re.search(
-            r"enablePullRequestAutoMerge\s*\([\s\S]*\bmergeMethod\s*:",
+            r"enablePullRequestAutoMerge\s*\([\s\S]*?\bmergeMethod\s*:\s*(?:MERGE|REBASE)\b",
             command,
             re.IGNORECASE | re.MULTILINE,
         ):
             block_reason = (
-                "BLOCKED: enablePullRequestAutoMerge with explicit mergeMethod silently "
-                "drops the queue entry when the method doesn't match the repo's ruleset "
-                "(OMN-9433). "
-                "Correct options: "
-                "(1) Use bare `gh pr merge <N> --repo <org>/<repo> --auto` — the queue "
-                "inherits its configured method automatically. "
-                "(2) Use `enablePullRequestAutoMerge` WITHOUT the mergeMethod argument — "
-                "GitHub applies the queue's configured method. "
-                "See memory/feedback_merge_queue_method_mismatch.md, OMN-8838, OMN-9354."
+                "BLOCKED: enablePullRequestAutoMerge with mergeMethod: MERGE or REBASE "
+                "mismatches the SQUASH queue ruleset on OmniNode-ai repos and silently "
+                "drops the queue entry. Only `mergeMethod: SQUASH` / `--squash --auto` "
+                "is permitted on OmniNode-ai queue repos. "
+                "Empirical evidence: omitting mergeMethod defaults to MERGE at the API "
+                "level (probed 2026-04-23); it does NOT inherit from the queue ruleset. "
+                "See OMN-9547 / OMN-9548."
             )
         elif re.search(
             r"required_pull_request_reviews|required_approving_review_count",

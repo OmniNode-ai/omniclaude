@@ -1016,17 +1016,25 @@ class TestWorktreeAddAdvisoryUnit(TestWorktreeAddAdvisory):
 
 
 # =============================================================================
-# OMN-8838 — gh pr merge --auto block tests
+# OMN-9548 — inverse guard: block --merge/--rebase, ALLOW --squash
 # =============================================================================
+#
+# Supersedes OMN-8838 (which blocked any method flag with --auto) and OMN-9433
+# (which blocked any mergeMethod argument).
+#
+# Empirical evidence (2026-04-23, omnibase_core#884): GitHub's GraphQL
+# enablePullRequestAutoMerge API defaults mergeMethod to MERGE. It does NOT
+# inherit from the queue ruleset or repo allow-settings. After OMN-9547 set
+# `allow_squash_merge: true` as the only allowed method on all 12 OmniNode-ai
+# repos, SQUASH is the correct and required method. MERGE / REBASE are the
+# mismatch cases.
 
 
 class TestGhPrMergeAutoBlock(unittest.TestCase):
-    """gh pr merge --auto combined with a method flag picks the wrong merge method.
+    """gh pr merge --auto with --merge or --rebase is blocked; --squash is allowed.
 
-    OMN-8838: block `gh pr merge ... --auto --squash/--merge/--rebase` — the CLI
-    does not reliably pass the method flag to the merge queue API.
-    OMN-9354: allow `gh pr merge <N> --repo <org>/<repo> --auto` (no method flag)
-    — the correct form for merge-queue repos where the queue owns the method.
+    OMN-9548: OmniNode-ai queue-SQUASH repos accept only SQUASH. Explicit
+    --squash --auto is the CORRECT path, not a bug.
     """
 
     def _assert_blocked(self, command: str) -> None:
@@ -1039,47 +1047,64 @@ class TestGhPrMergeAutoBlock(unittest.TestCase):
         hard = bash_guard.matches_any(command, bash_guard.HARD_BLOCK_PATTERNS)
         self.assertFalse(hard, msg=f"Expected NO HARD_BLOCK match for: {command!r}")
 
-    def test_gh_pr_merge_auto_squash(self) -> None:
-        """--auto --squash is blocked: method flag conflicts with queue method."""
-        self._assert_blocked("gh pr merge 123 --auto --squash")
+    # -- SQUASH is now ALLOWED (the correct method on OmniNode-ai repos) --
 
-    def test_gh_pr_merge_auto_squash_swapped(self) -> None:
-        """Flag order swapped — still blocked."""
-        self._assert_blocked("gh pr merge 123 --squash --auto")
+    def test_gh_pr_merge_auto_squash_allowed(self) -> None:
+        """OMN-9548: --auto --squash is the CORRECT form on queue-SQUASH repos."""
+        self._assert_not_blocked("gh pr merge 123 --auto --squash")
 
-    def test_gh_pr_merge_auto_merge_flag(self) -> None:
-        """--auto --merge is blocked."""
-        self._assert_blocked("gh pr merge 123 --auto --merge")
+    def test_gh_pr_merge_auto_squash_swapped_allowed(self) -> None:
+        """Flag order swapped — still allowed."""
+        self._assert_not_blocked("gh pr merge 123 --squash --auto")
 
-    def test_gh_pr_merge_auto_rebase_flag(self) -> None:
-        """--auto --rebase is blocked."""
-        self._assert_blocked("gh pr merge 123 --auto --rebase")
-
-    def test_gh_pr_merge_auto_no_method_allowed(self) -> None:
-        """OMN-9354: --auto with no method flag is the correct merge-queue form."""
-        self._assert_not_blocked("gh pr merge 123 --auto")
-
-    def test_gh_pr_merge_auto_with_repo_flag_no_method_allowed(self) -> None:
-        """OMN-9354 canonical form: --repo flag present, no method flag — allowed."""
-        self._assert_not_blocked("gh pr merge 123 --repo OmniNode-ai/omniclaude --auto")
-
-    def test_gh_pr_merge_auto_with_repo_flag_and_squash_blocked(self) -> None:
-        """--repo + --squash + --auto is still blocked (method flag present)."""
-        self._assert_blocked(
+    def test_gh_pr_merge_auto_squash_with_repo_allowed(self) -> None:
+        """--repo + --squash + --auto is the canonical form now — allowed."""
+        self._assert_not_blocked(
             "gh pr merge 123 --auto --squash --repo OmniNode-ai/omniclaude"
         )
 
-    def test_gh_pr_merge_auto_with_url_and_squash(self) -> None:
-        self._assert_blocked(
+    def test_gh_pr_merge_auto_squash_with_url_allowed(self) -> None:
+        self._assert_not_blocked(
             "gh pr merge https://github.com/org/repo/pull/42 --auto --squash"
         )
 
-    def test_gh_pr_merge_auto_uppercase_with_squash(self) -> None:
-        self._assert_blocked("GH PR MERGE 99 --AUTO --SQUASH")
+    def test_gh_pr_merge_auto_squash_uppercase_allowed(self) -> None:
+        self._assert_not_blocked("GH PR MERGE 99 --AUTO --SQUASH")
+
+    # -- MERGE and REBASE remain BLOCKED (mismatch SQUASH queue ruleset) --
+
+    def test_gh_pr_merge_auto_merge_flag_blocked(self) -> None:
+        """--auto --merge mismatches the SQUASH queue ruleset."""
+        self._assert_blocked("gh pr merge 123 --auto --merge")
+
+    def test_gh_pr_merge_auto_rebase_flag_blocked(self) -> None:
+        """--auto --rebase mismatches the SQUASH queue ruleset."""
+        self._assert_blocked("gh pr merge 123 --auto --rebase")
+
+    def test_gh_pr_merge_auto_merge_swapped_blocked(self) -> None:
+        self._assert_blocked("gh pr merge 123 --merge --auto")
+
+    def test_gh_pr_merge_auto_merge_uppercase_blocked(self) -> None:
+        self._assert_blocked("GH PR MERGE 99 --AUTO --MERGE")
+
+    # -- other gh pr subcommands --
+
+    def test_gh_pr_merge_auto_no_method_allowed(self) -> None:
+        """--auto with no method flag is allowed (though now empirically known to
+        default the API to MERGE; mismatch responsibility belongs to the caller)."""
+        self._assert_not_blocked("gh pr merge 123 --auto")
+
+    def test_gh_pr_merge_auto_with_repo_flag_no_method_allowed(self) -> None:
+        """--repo flag present, no method flag — allowed."""
+        self._assert_not_blocked("gh pr merge 123 --repo OmniNode-ai/omniclaude --auto")
 
     def test_gh_pr_merge_without_auto_not_blocked(self) -> None:
         """gh pr merge without --auto must NOT be hard-blocked."""
         self._assert_not_blocked("gh pr merge 123 --squash")
+
+    def test_gh_pr_merge_without_auto_merge_not_blocked(self) -> None:
+        """Non-auto --merge is not blocked — user is in interactive merge."""
+        self._assert_not_blocked("gh pr merge 123 --merge")
 
     def test_gh_pr_list_not_blocked(self) -> None:
         self._assert_not_blocked("gh pr list --state open")
@@ -1087,36 +1112,47 @@ class TestGhPrMergeAutoBlock(unittest.TestCase):
     def test_gh_pr_view_not_blocked(self) -> None:
         self._assert_not_blocked("gh pr view 123")
 
-    def test_graphql_enable_auto_merge_with_merge_method_blocked(self) -> None:
-        """OMN-9433: enablePullRequestAutoMerge with mergeMethod silently drops queue entry.
+    # -- GraphQL enablePullRequestAutoMerge with explicit mergeMethod --
 
-        When mergeMethod doesn't match the repo's queue ruleset, GitHub discards
-        the queue entry. Use enablePullRequestAutoMerge WITHOUT mergeMethod — the
-        queue applies its configured method automatically.
-        """
-        self._assert_blocked(
+    def test_graphql_enable_auto_merge_squash_allowed(self) -> None:
+        """OMN-9548: mergeMethod: SQUASH is the CORRECT form — must be allowed."""
+        self._assert_not_blocked(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\", mergeMethod: SQUASH}) { pullRequest { id } } }'"
         )
 
+    def test_graphql_enable_auto_merge_merge_blocked(self) -> None:
+        """mergeMethod: MERGE mismatches SQUASH queue ruleset — blocked."""
+        self._assert_blocked(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\", mergeMethod: MERGE}) { pullRequest { id } } }'"
+        )
+
+    def test_graphql_enable_auto_merge_rebase_blocked(self) -> None:
+        """mergeMethod: REBASE mismatches SQUASH queue ruleset — blocked."""
+        self._assert_blocked(
+            "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\", mergeMethod: REBASE}) { pullRequest { id } } }'"
+        )
+
     def test_graphql_enable_auto_merge_without_merge_method_allowed(self) -> None:
-        """OMN-9433: enablePullRequestAutoMerge WITHOUT mergeMethod is the correct form."""
+        """enablePullRequestAutoMerge WITHOUT mergeMethod — allowed (API defaults MERGE)."""
         self._assert_not_blocked(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"PR_xyz\"}) { pullRequest { id } } }'"
         )
 
     def test_graphql_unrelated_query_not_blocked(self) -> None:
-        """An unrelated GraphQL query (not the mutation + mergeMethod combo) must be allowed."""
+        """An unrelated GraphQL query must be allowed."""
         self._assert_not_blocked(
             'gh api graphql -f query=\'{ repository(owner:"OWNER", name:"REPO"){ mergeQueue { entries(first:50){ nodes { number } } } } }\''
         )
 
-    def test_graphql_merge_method_flag_before_mutation_name_blocked(self) -> None:
-        """OMN-9433: mergeMethod appearing BEFORE mutation name (e.g. -F flag) is also blocked.
+    def test_graphql_merge_method_flag_before_mutation_squash_allowed(self) -> None:
+        """`-F mergeMethod=SQUASH` with mutation-input mergeMethod: $m where $m=SQUASH.
 
-        Gemini finding: the original forward-only lookahead missed this ordering.
-        Two complementary patterns now cover both directions.
+        The pattern anchors on literal MERGE/REBASE tokens inside the mutation input
+        block. A variable-substituted SQUASH is allowed — and the variable binding
+        `-F mergeMethod=SQUASH` is not inside the mutation input block so it doesn't
+        false-positive.
         """
-        self._assert_blocked(
+        self._assert_not_blocked(
             "gh api graphql -F mergeMethod=SQUASH "
             "-f query='mutation($m: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: $m}) { clientMutationId } }'"
         )
@@ -1136,34 +1172,45 @@ class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
             code = bash_guard.main()
         return captured.getvalue().strip(), code
 
-    def test_main_blocks_gh_pr_merge_auto_squash(self) -> None:
+    def test_main_allows_gh_pr_merge_auto_squash(self) -> None:
+        """OMN-9548: --auto --squash is the CORRECT form and must pass main()."""
         stdout, code = self._run("gh pr merge 123 --auto --squash")
+        self.assertEqual(code, 0)
+
+    def test_main_blocks_gh_pr_merge_auto_merge(self) -> None:
+        stdout, code = self._run("gh pr merge 123 --auto --merge")
         self.assertEqual(code, 2)
         response = json.loads(stdout)
         self.assertEqual(response["decision"], "block")
 
-    def test_main_block_reason_mentions_graphql(self) -> None:
-        stdout, _ = self._run("gh pr merge 123 --auto --squash")
-        reason = json.loads(stdout)["reason"]
-        self.assertIn("GraphQL", reason)
+    def test_main_blocks_gh_pr_merge_auto_rebase(self) -> None:
+        stdout, code = self._run("gh pr merge 123 --auto --rebase")
+        self.assertEqual(code, 2)
+        response = json.loads(stdout)
+        self.assertEqual(response["decision"], "block")
 
-    def test_main_block_reason_mentions_omn_8838(self) -> None:
-        stdout, _ = self._run("gh pr merge 123 --auto --squash")
+    def test_main_block_reason_mentions_squash_requirement(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto --merge")
         reason = json.loads(stdout)["reason"]
-        self.assertIn("OMN-8838", reason)
+        self.assertIn("SQUASH", reason)
 
-    def test_main_block_reason_mentions_omn_9354(self) -> None:
-        stdout, _ = self._run("gh pr merge 123 --auto --squash")
+    def test_main_block_reason_mentions_omn_9548(self) -> None:
+        stdout, _ = self._run("gh pr merge 123 --auto --merge")
         reason = json.loads(stdout)["reason"]
-        self.assertIn("OMN-9354", reason)
+        self.assertIn("OMN-9548", reason)
+
+    def test_main_block_reason_mentions_omn_9547(self) -> None:
+        """Block reason cites parent epic OMN-9547 that set repo allow-settings."""
+        stdout, _ = self._run("gh pr merge 123 --auto --merge")
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("OMN-9547", reason)
 
     def test_main_allows_gh_pr_merge_auto_no_method(self) -> None:
-        """OMN-9354: --auto with no method flag must be allowed (merge-queue form)."""
+        """--auto with no method flag remains allowed."""
         stdout, code = self._run("gh pr merge 123 --auto")
         self.assertEqual(code, 0)
 
     def test_main_allows_gh_pr_merge_auto_with_repo_no_method(self) -> None:
-        """OMN-9354 canonical form with --repo must be allowed."""
         stdout, code = self._run("gh pr merge 123 --repo OmniNode-ai/omniclaude --auto")
         self.assertEqual(code, 0)
 
@@ -1177,16 +1224,16 @@ class TestGhPrMergeAutoBlockIntegration(unittest.TestCase):
 
 
 # =============================================================================
-# OMN-9433 — enablePullRequestAutoMerge + mergeMethod block tests
+# OMN-9548 — enablePullRequestAutoMerge inverse block tests
 # =============================================================================
 
 
 class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
-    """enablePullRequestAutoMerge with explicit mergeMethod silently drops queue entry.
+    """OMN-9548 inverse guard: block mergeMethod: MERGE / REBASE, allow SQUASH.
 
-    OMN-9433: When mergeMethod in the mutation doesn't match the repo's queue
-    ruleset, GitHub silently discards the queue entry. Block calls that include
-    mergeMethod; allow calls without it (queue applies its configured method).
+    After OMN-9547 restricted OmniNode-ai repos to allow_squash_merge only,
+    SQUASH is the correct and required form. MERGE / REBASE silently drop
+    the queue entry and must be blocked.
     """
 
     def _run(self, command: str) -> tuple[str, int]:
@@ -1200,15 +1247,13 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
             code = bash_guard.main()
         return captured.getvalue().strip(), code
 
-    def test_blocks_gql_mutation_with_merge_method_squash(self) -> None:
-        """Mutation with mergeMethod: SQUASH must be hard-blocked."""
+    def test_allows_gql_mutation_with_merge_method_squash(self) -> None:
+        """mergeMethod: SQUASH is the CORRECT form and must be allowed."""
         stdout, code = self._run(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
             'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
         )
-        self.assertEqual(code, 2)
-        response = json.loads(stdout)
-        self.assertEqual(response["decision"], "block")
+        self.assertEqual(code, 0)
 
     def test_blocks_gql_mutation_with_merge_method_merge(self) -> None:
         """Mutation with mergeMethod: MERGE must be hard-blocked."""
@@ -1230,29 +1275,26 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         response = json.loads(stdout)
         self.assertEqual(response["decision"], "block")
 
-    def test_block_reason_mentions_omn_9433(self) -> None:
-        """Block reason must cite OMN-9433 for traceability."""
+    def test_block_reason_mentions_omn_9548(self) -> None:
+        """Block reason must cite OMN-9548 for traceability."""
         stdout, _ = self._run(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
-            'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
+            'input: {pullRequestId: "PR_xyz", mergeMethod: MERGE}) { pullRequest { id } } }\''
         )
         reason = json.loads(stdout)["reason"]
-        self.assertIn("OMN-9433", reason)
+        self.assertIn("OMN-9548", reason)
 
-    def test_block_reason_mentions_correct_forms(self) -> None:
-        """Block reason must describe the two correct alternatives."""
+    def test_block_reason_mentions_squash_requirement(self) -> None:
+        """Block reason must state SQUASH is the only permitted method."""
         stdout, _ = self._run(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
-            'input: {pullRequestId: "PR_xyz", mergeMethod: SQUASH}) { pullRequest { id } } }\''
+            'input: {pullRequestId: "PR_xyz", mergeMethod: MERGE}) { pullRequest { id } } }\''
         )
         reason = json.loads(stdout)["reason"]
-        # Must mention the bare gh pr merge form
-        self.assertIn("gh pr merge", reason)
-        # Must mention enablePullRequestAutoMerge WITHOUT mergeMethod as the other option
-        self.assertIn("enablePullRequestAutoMerge", reason)
+        self.assertIn("SQUASH", reason)
 
     def test_allows_gql_mutation_without_merge_method(self) -> None:
-        """Mutation WITHOUT mergeMethod is the correct form — must be allowed."""
+        """Mutation WITHOUT mergeMethod — allowed (though API defaults to MERGE)."""
         stdout, code = self._run(
             "gh api graphql -f query='mutation { enablePullRequestAutoMerge("
             'input: {pullRequestId: "PR_xyz"}) { pullRequest { id } } }\''
@@ -1260,7 +1302,7 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_allows_unrelated_gql_query(self) -> None:
-        """Unrelated GraphQL queries (no mutation + mergeMethod combo) must pass."""
+        """Unrelated GraphQL queries must pass."""
         stdout, code = self._run(
             'gh api graphql -f query=\'{ repository(owner:"OWNER", name:"REPO"){'
             " mergeQueue { entries(first:50){ nodes { number } } } } }'"
@@ -1272,19 +1314,27 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         stdout, code = self._run("gh pr view 123 --json autoMergeRequest")
         self.assertEqual(code, 0)
 
-    def test_blocks_merge_method_in_mutation_input(self) -> None:
-        """OMN-9433: mergeMethod inside the enablePullRequestAutoMerge input block is blocked."""
+    def test_blocks_merge_method_merge_in_mutation_input(self) -> None:
+        """mergeMethod: MERGE inside the enablePullRequestAutoMerge input is blocked."""
         stdout, code = self._run(
             "gh api graphql "
-            "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: SQUASH}) { clientMutationId } }'"
+            "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: MERGE}) { clientMutationId } }'"
         )
         self.assertEqual(code, 2)
         self.assertEqual(json.loads(stdout)["decision"], "block")
 
+    def test_allows_squash_in_mutation_input(self) -> None:
+        """mergeMethod: SQUASH inside the enablePullRequestAutoMerge input is allowed."""
+        stdout, code = self._run(
+            "gh api graphql "
+            "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\", mergeMethod: SQUASH}) { clientMutationId } }'"
+        )
+        self.assertEqual(code, 0)
+
     def test_allows_merge_method_flag_without_mutation_arg(self) -> None:
         """`-F mergeMethod=...` alone should not block when mutation input omits mergeMethod."""
         stdout, code = self._run(
-            "gh api graphql -F mergeMethod=SQUASH "
+            "gh api graphql -F mergeMethod=MERGE "
             "-f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: \"X\"}) { clientMutationId } }'"
         )
         self.assertEqual(code, 0)
