@@ -299,3 +299,11 @@ Connecting the interactive path through `HandlerSessionOrchestrator` is Wave 3 (
 
 **Skill files (OMN-8340):** Created. `prompt.md` is a 349-line 6-step spec that Claude
 executes directly. It is the functional implementation for interactive use.
+
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Interactive path**: Claude is the orchestrator — executes `prompt.md` directly in session context. No Kafka event, no omnimarket handler. Prose is the correct output format for interactive mode.
+- **Non-interactive path**: Dispatches to `node_session_orchestrator` (omnimarket) via Kafka topic `onex.cmd.omnimarket.session.v1` or `uv run onex node node_session_orchestrator` CLI.
+
+On non-interactive routing failure, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.

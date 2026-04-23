@@ -58,13 +58,15 @@ Classify each flow: `FLOWING` | `STALE` | `LAGGING` | `EMPTY_TABLE` | `MISSING_T
 ### Phase 3 — Run node
 
 ```bash
-onex run node_data_flow_sweep -- \
+onex node node_data_flow_sweep -- \
   [--flows '<json-array>'] \
   [--topic <topic>] \
   [--dry-run]
 ```
 
 Capture stdout (JSON: `DataFlowSweepResult`). Exit 0 = healthy, exit 1 = issues found.
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 ### Phase 4 — Dashboard verification (unless `--skip-playwright`)
 
@@ -109,3 +111,5 @@ SKILL.md   -> thin shell (this file)
 node       -> omnimarket/src/omnimarket/nodes/node_data_flow_sweep/ (flow verification logic)
 contract   -> node_data_flow_sweep/contract.yaml
 ```
+
+**Routing contract:** dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.

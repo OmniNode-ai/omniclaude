@@ -29,13 +29,15 @@ debug: false
 ### Step 2 — Run node
 
 ```bash
-onex run node_golden_chain_sweep -- \
+onex node node_golden_chain_sweep -- \
   [--chains <comma-list>] \
   [--timeout-ms <ms>] \
   [--projected-rows '<json>']
 ```
 
 Capture stdout (JSON: `GoldenChainSweepResult`). Exit 0 = all chains pass, exit 1 = partial/fail.
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 ### Step 3 — Render report
 
@@ -70,3 +72,5 @@ SKILL.md   -> thin shell (this file)
 node       -> omnimarket/src/omnimarket/nodes/node_golden_chain_sweep/ (business logic)
 contract   -> node_golden_chain_sweep/contract.yaml
 ```
+
+**Routing contract:** dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.

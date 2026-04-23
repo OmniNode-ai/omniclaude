@@ -24,7 +24,7 @@ args:
 ## Purpose
 
 Thin skill surface that dispatches to the `node_platform_readiness` node in
-omnimarket via `onex run`. The node collects verification results from multiple
+omnimarket via `onex node`. The node collects verification results from multiple
 subsystems and presents a single go/no-go readiness assessment. The gate is only
 as honest as the maturity and freshness of each underlying signal.
 
@@ -145,7 +145,7 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
 
 1. Run the platform readiness node:
    ```bash
-   onex run node_platform_readiness --output-format json
+   onex node node_platform_readiness --output-format json
    ```
 2. Read the generated artifact:
    ```bash
@@ -155,18 +155,22 @@ FAIL -- 1 critical blocker must be resolved before go/no-go.
 4. If any dimension is FAIL: surface actionable_items for that dimension.
 5. If overall status is PASS: confirm platform is ready for overnight autonomy.
 
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+
 ## Architecture
 
 ```
 SKILL.md   -> descriptive documentation (this file)
-prompt.md  -> execution instructions (parse args -> onex run dispatch -> render results)
+prompt.md  -> execution instructions (parse args -> onex node dispatch -> render results)
 node       -> omnimarket/src/omnimarket/nodes/node_platform_readiness/ (business logic)
 contract   -> node_platform_readiness/contract.yaml (inputs/outputs/topics)
 ```
 
 This skill is a **thin wrapper** — it parses arguments, dispatches to the omnimarket
-node via `onex run node_platform_readiness`, and renders results. All verification
+node via `onex node node_platform_readiness`, and renders results. All verification
 logic lives in the node handler.
+
+**Routing contract:** dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
 
 ## Integration Points
 

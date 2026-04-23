@@ -410,6 +410,15 @@ Test coverage:
 - `--dry-run` maps to `dry_run: true` in command event
 - No orchestration logic in SKILL.md (no direct `gh pr merge`, no claim registry)
 
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Backing node**: `node_merge_sweep` (omnimarket)
+- **Dispatch**: Kafka publish to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+- **Result path**: `$ONEX_STATE_DIR/merge-sweep/{run_id}/result.json`
+
+On routing failure or timeout, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+
 ## See Also
 
 - `pr_lifecycle_orchestrator` node (omnimarket) — owns all orchestration logic (OMN-8087)

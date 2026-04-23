@@ -401,3 +401,13 @@ Each headless `claude -p` phase inherits authorization from `cron-closeout.sh`:
 - **close-day**: D4 — day audit artifact
 - **insights-to-plan**: D5 — opportunistic insights-to-plan auto-trigger (non-halting)
 - **ModelIntegrationRecord**: written by integration-sweep; read by autopilot to determine halt
+
+---
+
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Backing node**: `node_autopilot_orchestrator`
+- **Dispatch**: `onex run-node node_autopilot_orchestrator`
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.

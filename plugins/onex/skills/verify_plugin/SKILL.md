@@ -98,3 +98,13 @@ Run a complete post-deployment verification suite. Report PASS or FAIL for each 
    | Skill count | in_session | ✓/✗ | rough floor check |
 
 5. **Final verdict:** Output `✓ PLUGIN VERIFIED` or `✗ VERIFICATION FAILED (N checks failed)`.
+
+---
+
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Backing node**: `node_verify_effect`
+- **Dispatch**: `onex node node_verify_effect`
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.

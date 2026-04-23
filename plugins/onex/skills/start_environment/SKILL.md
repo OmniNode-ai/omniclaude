@@ -265,6 +265,16 @@ docker network inspect omnibase-infra-network  # Check network state
 /start-environment runtime --wait-timeout 180
 ```
 
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Backing node**: `node_environment_health_scanner`
+- **Dispatch**: `onex node node_environment_health_scanner`
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+
+---
+
 ## See Also
 
 - `system-status` — comprehensive platform health (post-startup verification)

@@ -176,6 +176,16 @@ All state written to `.onex_state/pipeline-fill/`:
 /loop 30m /pipeline-fill --wave-cap 3  # Conservative fill
 ```
 
+## Routing Contract
+
+- **Classification**: Deterministic
+- **Backing node**: `node_pipeline_fill`
+- **Dispatch**: `onex run-node node_pipeline_fill`
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+
+---
+
 ## Verification
 
 After each cycle (including no-op cycles), the backing node writes three observable

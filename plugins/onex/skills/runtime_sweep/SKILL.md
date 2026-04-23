@@ -39,12 +39,14 @@ args:
 ### Phase 2 — Run node
 
 ```bash
-onex run node_runtime_sweep -- \
+onex node node_runtime_sweep -- \
   --scope <all-repos|omnidash-only> \
   [--dry-run]
 ```
 
 Capture stdout (JSON: `RuntimeSweepResult`). Exit 0 = clean, exit 1 = findings.
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 ### Phase 3 — Render report
 
@@ -133,5 +135,7 @@ SKILL.md  → thin shell: parse args → node dispatch → render results
 node      → omnimarket/src/omnimarket/nodes/node_runtime_sweep/
 contract  → node_runtime_sweep/contract.yaml
 ```
+
+**Routing contract:** dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
 
 All wiring verification logic lives in the node handler. This skill does no analysis.

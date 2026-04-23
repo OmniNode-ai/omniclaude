@@ -63,5 +63,11 @@ args:
 Dispatch to the deterministic node — do NOT inline any logic:
 
 ```bash
-onex run node_ci_watch -- --repo "${repo}" --pr "${pr_number}" "${@}"
+onex node node_ci_watch -- --repo "${repo}" --pr "${pr_number}" "${@}"
 ```
+
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
+
+## Routing Contract
+
+Dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
