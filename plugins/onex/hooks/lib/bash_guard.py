@@ -580,6 +580,43 @@ def _check_worktree_path(command: str) -> str | None:
     return None
 
 
+def _graphql_merge_method_var_mismatch(command: str) -> bool:
+    """Detect enablePullRequestAutoMerge(input.mergeMethod: $var) bound to MERGE/REBASE.
+
+    CodeRabbit OMN-9548-PR1393: the literal-value patterns in HARD_BLOCK_PATTERNS
+    miss variable-bound GraphQL mutations. A command such as
+
+        gh api graphql -F m=MERGE -f query='mutation($m: PullRequestMergeMethod!) {
+            enablePullRequestAutoMerge(input: {pullRequestId: "X", mergeMethod: $m}) {
+                clientMutationId
+            }
+        }'
+
+    would bypass the literal pattern even though the effective method is MERGE.
+    This helper ties the `mergeMethod: $var` placeholder back to its `-F var=VAL`
+    binding and returns True only when the bound value is MERGE or REBASE.
+
+    Limitations (acknowledged, out of guard scope):
+      - Nested substitution (e.g. `-F m=$OTHER`) is not resolved.
+      - `--field` long-form is not recognized (`gh` supports `-f` / `-F` only).
+    """
+    var_match = re.search(
+        r"enablePullRequestAutoMerge\s*\([\s\S]*?\bmergeMethod\s*:\s*\$(\w+)\b",
+        command,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if not var_match:
+        return False
+    var_name = re.escape(var_match.group(1))
+    return bool(
+        re.search(
+            rf"(?:^|\s)-[fF]\s+{var_name}\s*=\s*(?:MERGE|REBASE)\b",
+            command,
+            re.IGNORECASE | re.MULTILINE,
+        )
+    )
+
+
 def matches_any(command: str, patterns: list[re.Pattern[str]]) -> bool:
     """Return ``True`` if *command* matches at least one compiled pattern.
 
@@ -754,7 +791,10 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Tier 1 — HARD_BLOCK
     # ------------------------------------------------------------------
-    if matches_any(command, HARD_BLOCK_PATTERNS) and not _is_claude_transient_rm_only:
+    _var_bound_mismatch = _graphql_merge_method_var_mismatch(command)
+    if (
+        matches_any(command, HARD_BLOCK_PATTERNS) or _var_bound_mismatch
+    ) and not _is_claude_transient_rm_only:
         _no_verify_re = re.compile(
             r"\bgit\b[^;|&\n]*--no-verify\b", re.IGNORECASE | re.MULTILINE
         )
@@ -864,6 +904,14 @@ def main() -> int:
                 "Empirical evidence: omitting mergeMethod defaults to MERGE at the API "
                 "level (probed 2026-04-23); it does NOT inherit from the queue ruleset. "
                 "See OMN-9547 / OMN-9548."
+            )
+        elif _var_bound_mismatch:
+            block_reason = (
+                "BLOCKED: enablePullRequestAutoMerge with a variable-bound mergeMethod "
+                "($var) whose -F binding resolves to MERGE or REBASE mismatches the "
+                "SQUASH queue ruleset on OmniNode-ai repos and silently drops the queue "
+                "entry. Only `mergeMethod: SQUASH` / `--squash --auto` is permitted on "
+                "OmniNode-ai queue repos. See OMN-9547 / OMN-9548."
             )
         elif re.search(
             r"required_pull_request_reviews|required_approving_review_count",

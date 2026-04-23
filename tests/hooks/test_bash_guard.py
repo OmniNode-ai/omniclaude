@@ -1339,6 +1339,51 @@ class TestGqlEnablePrAutoMergeWithMethodBlock(unittest.TestCase):
         )
         self.assertEqual(code, 0)
 
+    # -- Variable-bound mergeMethod (CodeRabbit OMN-9548-PR1393) --
+
+    def test_blocks_var_bound_merge_method_merge(self) -> None:
+        """`mergeMethod: $m` bound to `-F m=MERGE` must be blocked."""
+        stdout, code = self._run(
+            "gh api graphql -F m=MERGE "
+            "-f query='mutation($m: PullRequestMergeMethod!) "
+            '{ enablePullRequestAutoMerge(input: {pullRequestId: "X", mergeMethod: $m}) '
+            "{ clientMutationId } }'"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout)["decision"], "block")
+
+    def test_blocks_var_bound_merge_method_rebase(self) -> None:
+        """`mergeMethod: $m` bound to `-F m=REBASE` must be blocked."""
+        stdout, code = self._run(
+            "gh api graphql -F m=REBASE "
+            "-f query='mutation($m: PullRequestMergeMethod!) "
+            '{ enablePullRequestAutoMerge(input: {pullRequestId: "X", mergeMethod: $m}) '
+            "{ clientMutationId } }'"
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stdout)["decision"], "block")
+
+    def test_allows_var_bound_merge_method_squash(self) -> None:
+        """`mergeMethod: $m` bound to `-F m=SQUASH` must be ALLOWED (correct form)."""
+        stdout, code = self._run(
+            "gh api graphql -F m=SQUASH "
+            "-f query='mutation($m: PullRequestMergeMethod!) "
+            '{ enablePullRequestAutoMerge(input: {pullRequestId: "X", mergeMethod: $m}) '
+            "{ clientMutationId } }'"
+        )
+        self.assertEqual(code, 0)
+
+    def test_var_bound_merge_block_reason_cites_omn_9548(self) -> None:
+        """Block reason for variable-bound mismatch must cite OMN-9548."""
+        stdout, _ = self._run(
+            "gh api graphql -F m=MERGE "
+            "-f query='mutation($m: PullRequestMergeMethod!) "
+            '{ enablePullRequestAutoMerge(input: {pullRequestId: "X", mergeMethod: $m}) '
+            "{ clientMutationId } }'"
+        )
+        reason = json.loads(stdout)["reason"]
+        self.assertIn("OMN-9548", reason)
+
 
 @pytest.mark.unit
 class TestGqlEnablePrAutoMergeWithMethodBlockUnit(
