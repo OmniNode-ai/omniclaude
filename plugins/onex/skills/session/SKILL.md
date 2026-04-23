@@ -214,10 +214,12 @@ Phase 3 TeamCreate dispatch. Background agents extend the chain with their own s
 
 | Infrastructure State | Dispatch Mode |
 |---------------------|---------------|
-| Kafka + Runtime healthy | Full event-driven (pub/sub topics) |
-| Kafka down, Runtime up | RuntimeLocal in-memory bus (`onex run <node>`) |
-| Kafka down, Runtime down | Direct handler invocation |
-| Everything down | Skill-level fallback (raw skill execution) |
+| Kafka + Runtime healthy | Full event-driven (pub/sub topics on `onex.cmd.omnimarket.session.v1`) |
+| Kafka down, Runtime up | Direct CLI invocation (`uv run onex node node_session_orchestrator`) |
+| Kafka down, Runtime down | Direct handler invocation (imports `HandlerSessionOrchestrator` in-process) |
+| Everything down | Interactive-only: the session skill executes `prompt.md` directly in-process |
+
+The deprecated `onex run <node>` form MUST NOT be used. The supported non-interactive routes are the Kafka topic above or the `uv run onex node node_session_orchestrator` CLI invocation, in keeping with the Routing Contract below.
 
 ---
 

@@ -76,7 +76,15 @@ CHECK_PROSE_FALLBACK = "PROSE_FALLBACK"
 SEVERITY_ERROR = "ERROR"
 
 _DISPATCH_RE = re.compile(
-    r"(?:onex\s+(run-node|node)\s+\w+|onex\.cmd\.\w+|Kafka publish)",
+    r"(?:"
+    r"onex\s+(?:run-node|node)\s+\w+"
+    r"|"
+    r"(?:publish(?:es)?|send(?:s)?)(?:\s+\w+){0,6}?\s+(?:to\s+)?`?onex\.cmd\.\w+"
+    r"|"
+    r"`?onex\.cmd\.\w+[`\s]+(?:\w+\s+){0,6}?(?:publish(?:ed)?|sent)"
+    r"|"
+    r"Kafka\s+publish"
+    r")",
     re.IGNORECASE,
 )
 _ROUTING_ERROR_RE = re.compile(r"SkillRoutingError", re.IGNORECASE)

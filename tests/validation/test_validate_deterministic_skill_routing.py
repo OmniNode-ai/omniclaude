@@ -87,6 +87,68 @@ class TestMissingDispatch:
 
 
 @pytest.mark.unit
+class TestPassiveTopicMentionIsNotDispatch:
+    """Regression for CodeRabbit finding: `onex.cmd.*` alone must not satisfy CHECK_DISPATCH.
+
+    A skill that only documents a command topic without stating that something
+    publishes or sends to it does not contain an executable route. Before the fix,
+    _DISPATCH_RE accepted any substring match on `onex.cmd.\\w+`, which let a
+    passive mention like "Command topic: onex.cmd.x.v1" pass validation.
+    """
+
+    def test_bare_topic_mention_flags_missing_dispatch(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / "test_skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\ndescription: test\n---\n\n# Test\n\n"
+            "Command topic: `onex.cmd.omnimarket.session.v1`\n\n"
+            "On routing failure, a `SkillRoutingError` JSON envelope is returned "
+            "-- surface it directly, do not produce prose.\n"
+        )
+        violations = scan_skill(skill_file)
+        checks = {v.check for v in violations}
+        assert CHECK_DISPATCH in checks, (
+            "Passive topic mention must NOT satisfy CHECK_DISPATCH; "
+            f"violations were: {[v.format_line() for v in violations]}"
+        )
+
+    def test_publish_to_topic_satisfies_dispatch(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / "test_skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\ndescription: test\n---\n\n# Test\n\n"
+            "Dispatch: Kafka publish to `onex.cmd.omnimarket.pr-lifecycle.v1`\n\n"
+            "On routing failure, a `SkillRoutingError` JSON envelope is returned "
+            "-- surface it directly, do not produce prose.\n"
+        )
+        violations = scan_skill(skill_file)
+        checks = {v.check for v in violations}
+        assert CHECK_DISPATCH not in checks, (
+            "'Kafka publish to <topic>' must satisfy CHECK_DISPATCH; "
+            f"violations were: {[v.format_line() for v in violations]}"
+        )
+
+    def test_publishes_to_topic_satisfies_dispatch(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / "test_skill"
+        skill_dir.mkdir()
+        skill_file = skill_dir / "SKILL.md"
+        skill_file.write_text(
+            "---\ndescription: test\n---\n\n# Test\n\n"
+            "The orchestrator publishes to onex.cmd.omnimarket.session.v1 on start.\n\n"
+            "On routing failure, a `SkillRoutingError` JSON envelope is returned "
+            "-- surface it directly, do not produce prose.\n"
+        )
+        violations = scan_skill(skill_file)
+        checks = {v.check for v in violations}
+        assert CHECK_DISPATCH not in checks, (
+            "'publishes to <topic>' must satisfy CHECK_DISPATCH; "
+            f"violations were: {[v.format_line() for v in violations]}"
+        )
+
+
+@pytest.mark.unit
 class TestMissingRoutingError:
     def test_no_routing_error_flagged(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / "test_skill"
