@@ -190,7 +190,7 @@ STACKED BRANCH: This ticket depends on a prior ticket's branch.
 """
     try:
         result = Task(
-            subagent_type="onex:polymorphic-agent",
+            subagent_type="general-purpose",
             description=f"epic-team: run ticket-pipeline for {ticket_id} [{repo}]",
             timeout_minutes=DISPATCH_TIMEOUT_MINUTES,
             prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
@@ -511,7 +511,7 @@ if len(tickets) == 0:
     if dry_run:
         # Dry-run: invoke decompose-epic with --dry-run flag (plan only, no tickets created)
         Task(
-            subagent_type="onex:polymorphic-agent",
+            subagent_type="general-purpose",
             description=f"epic-team: dry-run decompose empty epic {epic_id}",
             prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic in dry-run mode.
     Run ID: {run_id}
@@ -526,7 +526,7 @@ if len(tickets) == 0:
 
     # Normal run: auto-decompose and post Slack gate
     decompose_result = Task(
-        subagent_type="onex:polymorphic-agent",
+        subagent_type="general-purpose",
         description=f"epic-team: auto-decompose empty epic {epic_id}",
         prompt=f"""The epic {epic_id} has no child tickets. Invoke decompose-epic to create them.
     Run ID: {run_id}
@@ -840,7 +840,7 @@ for wave_idx, wave in enumerate(waves):
         repo_path = f"/Volumes/PRO-G40/Code/omni_home/{repo}"  # local-path-ok: code example in documentation
 
         result = Task(
-            subagent_type="onex:polymorphic-agent",
+            subagent_type="general-purpose",
             description=f"epic-team: ticket-pipeline for {ticket_id} [{repo}]",
             prompt=f"""You are executing ticket {ticket_id} for epic {epic_id}.
 

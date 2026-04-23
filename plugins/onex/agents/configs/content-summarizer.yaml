@@ -3,7 +3,7 @@
 
 # Content Summarizer Specialist Agent Definition
 # Dynamic Role System - YAML Agent Architecture
-# Integration: polymorphic-agent identity assumption
+# Integration: general-purpose identity assumption
 
 schema_version: "1.0.0"
 model: haiku

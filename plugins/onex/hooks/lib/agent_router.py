@@ -1274,13 +1274,13 @@ class AgentRouter:
         - "use agent-X" - Specific agent request
         - "@agent-X" - Specific agent request
         - "agent-X" at start of text - Specific agent request
-        - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
+        - Generic requests like "use an agent" return None (no fallback)
 
         Args:
             text: User's input text
 
         Returns:
-            Agent name if found and valid, None otherwise
+            Agent name if found and valid, None otherwise (no fallback)
         """
         try:
             text_lower = text.lower()
@@ -1300,31 +1300,7 @@ class AgentRouter:
                         logger.debug(f"Extracted explicit agent: {agent_name}")
                         return agent_name
 
-            # Generic agent requests -> polymorphic-agent
-            generic_patterns = [
-                r"\buse\s+an?\s+agent\b",
-                r"\bspawn\s+an?\s+agent\b",
-                r"\bspawn\s+an?\s+poly\b",
-                r"\bdispatch\s+to\s+an?\s+agent\b",
-                r"\bcall\s+an?\s+agent\b",
-                r"\binvoke\s+an?\s+agent\b",
-            ]
-
-            for pattern in generic_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    # Try multiple naming conventions
-                    for default_agent in [
-                        "polymorphic-agent",
-                        "agent-polymorphic-agent",
-                        "agent-polymorphic",
-                    ]:
-                        if default_agent in self.registry["agents"]:
-                            logger.debug(
-                                f"Generic agent request, using: {default_agent}"
-                            )
-                            return default_agent
-
+            # No match — fail-fast, no fallback
             return None
 
         except Exception as e:

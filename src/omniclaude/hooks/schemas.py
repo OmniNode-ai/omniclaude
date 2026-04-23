@@ -2945,7 +2945,7 @@ class ModelHookDecisionRecordedPayload(BaseModel):
         >>> payload = ModelHookDecisionRecordedPayload(
         ...     decision_id="dec-abc123",
         ...     decision_type="agent_routing",
-        ...     selected_candidate="polymorphic-agent",
+        ...     selected_candidate="general-purpose",
         ...     candidates_count=5,
         ...     has_rationale=True,
         ...     emitted_at=datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC),

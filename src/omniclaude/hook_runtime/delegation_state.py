@@ -156,7 +156,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: skill loaded, "
                         f"{s.write_count} write tool calls exceed threshold "
                         f"{self._config.skill_loaded_write_block}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="write",
                 )
@@ -167,7 +167,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: skill loaded, "
                         f"{s.read_count} read tool calls exceed threshold "
                         f"{self._config.skill_loaded_read_block}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="read",
                 )
@@ -178,7 +178,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: skill loaded, "
                         f"{total} total tool calls exceed threshold "
                         f"{self._config.skill_loaded_total_block}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="total",
                 )
@@ -191,7 +191,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: "
                         f"{s.write_count} write tool calls exceed threshold "
                         f"{self._config.write_block_threshold}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="write",
                 )
@@ -202,7 +202,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: "
                         f"{s.read_count} read-only tool calls exceed threshold "
                         f"{self._config.read_block_threshold}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="read",
                 )
@@ -213,7 +213,7 @@ class DelegationState:
                         f"DELEGATION ENFORCER [HARD BLOCK]: "
                         f"{total} total tool calls exceed threshold "
                         f"{self._config.total_block_threshold}. "
-                        "Dispatch via onex:polymorphic-agent."
+                        "Dispatch via general-purpose."
                     ),
                     counter_type="total",
                 )

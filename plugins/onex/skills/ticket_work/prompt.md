@@ -349,7 +349,7 @@ emergency_bypass:
 
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="Implement {ticket_id}: {title}",
      prompt="Implement the following requirements for {ticket_id}: {title}.
 
@@ -446,7 +446,7 @@ except AutomationError as e:
 3. **Dispatch implementation to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="Implement {ticket_id}: {title}",
      prompt="Implement the following requirements for {ticket_id}: {title}.
 

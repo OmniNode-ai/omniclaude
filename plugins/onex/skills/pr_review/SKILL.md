@@ -120,11 +120,11 @@ EOF
 
 ## ~~LEGACY: Polymorphic-agent dispatch~~ (deprecated — use Node Dispatch above)
 
-> **Removed:** The polymorphic-agent/bash flow described in previous versions of
+> **Removed:** The general-purpose/bash flow described in previous versions of
 > this skill has been superseded by the `node_pr_review_bot` node-dispatch contract
 > (see **Node Dispatch** section above). The authoritative runtime is
 > `omnimarket.nodes.node_pr_review_bot` via `run_review`. Do not use the
-> polymorphic-agent or bash-script paths for new invocations.
+> general-purpose or bash-script paths for new invocations.
 
 ## Skills Available
 

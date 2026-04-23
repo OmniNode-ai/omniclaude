@@ -10,9 +10,9 @@ debug: false
 
 Fully automated ONEX node generation using the omniclaude codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
 
-## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+## 🚨 CRITICAL: ALWAYS DISPATCH TO GENERAL-PURPOSE AGENT
 
-**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
+**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a general-purpose.
 
 ### ❌ WRONG - Running scripts directly:
 ```
@@ -20,10 +20,10 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate_node/generate "Create PostgreSQL CRUD
 Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate_node/regenerate src/nodes/my_node)
 ```
 
-### ✅ CORRECT - Dispatch to polymorphic-agent:
+### ✅ CORRECT - Dispatch to general-purpose:
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Generate PostgreSQL CRUD Effect node",
   prompt="Generate an ONEX node with the following requirements:
     Description: Create a PostgreSQL CRUD Effect node for user management

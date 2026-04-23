@@ -1,5 +1,5 @@
 <!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
-<!-- persona-scope: this-skill-only — do not re-apply if polymorphic agent wraps this skill -->
+<!-- persona-scope: this-skill-only — do not re-apply if general-purpose agent wraps this skill -->
 Apply the persona profile above when generating outputs.
 
 # Local Review Orchestration
@@ -334,15 +334,15 @@ fi
 
 ### Step 2.2: Run Code Review
 
-Dispatch a `polymorphic-agent` with strict keyword-based classification (matching onex pr-review standards):
+Dispatch a `general-purpose` with strict keyword-based classification (matching onex pr-review standards):
 
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` — with the `onex:` prefix. Using `"polymorphic-agent"` without it immediately fails: `Error: Agent type 'polymorphic-agent' not found`. Do NOT use `feature-dev:code-reviewer` or other specialized review agents.
+**CRITICAL**: `subagent_type` MUST be `"general-purpose"`. Do NOT use `feature-dev:code-reviewer` or other specialized review agents.
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Review iteration {iteration+1} changes",
-  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
+  prompt="**AGENT REQUIREMENT**: You MUST be a general-purpose. Do NOT delegate to feature-dev:code-reviewer.
 
 You are reviewing local code changes for production readiness.
 
@@ -612,15 +612,15 @@ for severity in ["critical", "major", "minor"]:
     ]
 ```
 
-For each severity level (critical first, then major, then minor), dispatch a `polymorphic-agent`:
+For each severity level (critical first, then major, then minor), dispatch a `general-purpose`:
 
-**CRITICAL**: `subagent_type` MUST be `"onex:polymorphic-agent"` — with the `onex:` prefix. Using `"polymorphic-agent"` without it immediately fails: `Error: Agent type 'polymorphic-agent' not found`.
+**CRITICAL**: `subagent_type` MUST be `"general-purpose"`.
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Fix {severity} issues from review",
-  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+  prompt="**AGENT REQUIREMENT**: You MUST be a general-purpose.
 
 Fix the following {severity} issues:
 
@@ -815,7 +815,7 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             "last_clean_sha": _head_sha,
             "quality_gate": quality_gate,
         })
-        # Direct subprocess to checkpoint_manager (not polymorphic-agent dispatch)
+        # Direct subprocess to checkpoint_manager (not general-purpose dispatch)
         # because checkpoint writes are non-blocking side-effects that don't need
         # agent orchestration overhead.
         _cp_cmd = [

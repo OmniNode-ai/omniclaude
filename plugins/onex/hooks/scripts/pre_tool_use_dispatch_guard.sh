@@ -5,7 +5,7 @@
 # PreToolUse Dispatch Guard Hook (OMN-6230)
 # Blocks hardcoded connection URLs / credentials before any file is written,
 # and surfaces advisory warnings for direct ONEX node implementation writes
-# that bypass polymorphic-agent dispatch.
+# that bypass subagent dispatch.
 #
 # Enforcement tiers:
 #   Hard block (exit 2): hardcoded PostgreSQL/Redis URLs, private-IP LLM

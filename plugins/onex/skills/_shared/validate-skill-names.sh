@@ -5,13 +5,13 @@
 #   1. FAIL if any SKILL.md `name:` field starts with a namespace prefix (e.g., "onex:")
 #      (name: fields use bare slugs — the plugin system auto-prefixes from the directory)
 #   2. FAIL if any Skill() call uses a bare slug instead of "onex:<slug>"
-#      (lines containing "subagent_type" are excluded — onex:polymorphic-agent is allowed as-is)
+#      (lines containing "subagent_type" are excluded — general-purpose is allowed as-is)
 #   3. FAIL if any shell script contains `exec claude --skill <bare-slug>` instead of `exec claude --skill onex:<slug>`
 #   4. WARN if any SKILL.md/prompt.md contains /skill-name cross-references outside fenced blocks
 #      (should use onex: prefix or Skill() calls instead of slash-prefix dispatch)
 #
 # Exemptions:
-#   - subagent_type="onex:polymorphic-agent" is ALLOWED (agent namespace, not skill)
+#   - subagent_type="general-purpose" is ALLOWED (agent namespace, not skill)
 #   - SKILL.md name: fields use bare slugs (Rule 1 enforces this)
 #   - This file itself and other validation scripts are excluded
 #
@@ -163,6 +163,6 @@ else
     echo "Fix: Add onex: prefix to Skill() calls and exec claude --skill invocations." >&2
     echo "     Examples: Skill(skill=\"onex:ticket_work\"), exec claude --skill onex:ci_watch" >&2
     echo "     Note: SKILL.md name: fields use bare slugs (plugin auto-prefixes)." >&2
-    echo "     Note: subagent_type=\"onex:polymorphic-agent\" is ALLOWED (agent, not skill)." >&2
+    echo "     Note: subagent_type=\"general-purpose\" is ALLOWED (agent, not skill)." >&2
     exit 1
 fi

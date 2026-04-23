@@ -4081,7 +4081,7 @@ class ManifestInjector:
                 "version": "2.0.0",
                 "generated_at": datetime.now(UTC).isoformat(),
                 "purpose": "Dynamic system context via event bus",
-                "target_agents": ["polymorphic-agent", "all-specialized-agents"],
+                "target_agents": ["general-purpose", "all-specialized-agents"],
                 "update_frequency": "on_demand",
                 "source": "onex-intelligence-adapter",
             }
@@ -4471,7 +4471,7 @@ class ManifestInjector:
                 "version": "2.0.0-minimal",
                 "generated_at": datetime.now(UTC).isoformat(),
                 "purpose": "Fallback manifest (intelligence queries unavailable)",
-                "target_agents": ["polymorphic-agent", "all-specialized-agents"],
+                "target_agents": ["general-purpose", "all-specialized-agents"],
                 "update_frequency": "on_demand",
                 "source": "fallback",
             },

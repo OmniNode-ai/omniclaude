@@ -3,7 +3,7 @@
 """Transformation Validator -- Fail Closed.
 
 Validates agent transformations to prevent invalid self-transformations
-(polymorphic-agent -> polymorphic-agent) that indicate routing failures.
+(polymorphic-agent -> general-purpose) that indicate routing failures.
 
 Problem:
 - 45.5% of transformations are self-transformations (15/33 cases)
@@ -63,8 +63,8 @@ class TransformationValidator:
 
         validator = TransformationValidator()
         result = validator.validate(
-            from_agent="polymorphic-agent",
-            to_agent="polymorphic-agent",
+            from_agent="general-purpose",
+            to_agent="general-purpose",
             reason="Multi-agent orchestration for complex workflow",
             confidence=0.85,
             user_request="orchestrate parallel execution"
@@ -199,8 +199,8 @@ class TransformationValidator:
         Returns:
             TransformationValidationResult with validation outcome.
         """
-        # Only validate self-transformations
-        if from_agent != "polymorphic-agent" or to_agent != "polymorphic-agent":
+        # Only validate self-transformations (same agent → same agent)
+        if from_agent != to_agent:
             return TransformationValidationResult(
                 is_valid=True,
                 metrics={

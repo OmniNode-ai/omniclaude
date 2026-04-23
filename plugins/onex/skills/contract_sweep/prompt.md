@@ -387,7 +387,7 @@ Route to `auto_ticket_from_findings` with structured findings:
 
 ```
 Agent(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Create tickets from contract-verify failures",
   prompt="Run auto_ticket_from_findings with the following findings: <findings_json>.
     Source: contract-verify. Dedup on contract_name:check_type.

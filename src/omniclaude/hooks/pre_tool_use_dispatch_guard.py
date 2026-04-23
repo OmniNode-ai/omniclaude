@@ -10,7 +10,7 @@ Enforces three-tier architectural constraints at tool boundaries:
    wrong regardless of context.
 
 2. Warn (medium-confidence): implementation file creation that bypasses
-   polymorphic-agent dispatch — surfaces a message but does not block,
+   subagent dispatch — surfaces a message but does not block,
    because the pattern is ambiguous (worktree setup, tests, etc. are
    legitimate direct writes).
 
@@ -85,7 +85,7 @@ _HARDCODED_URL_PATTERNS: list[tuple[str, str]] = [
 # Warn patterns: direct implementation writes that may bypass poly-agent
 # ---------------------------------------------------------------------------
 # File path suffixes that indicate an ONEX node implementation file.
-# Writing these directly (without a polymorphic-agent dispatch) is a
+# Writing these directly (without a subagent dispatch) is a
 # medium-confidence wrong-approach signal.
 
 _IMPLEMENTATION_FILE_SUFFIXES: tuple[str, ...] = (
@@ -161,7 +161,7 @@ def _check_implementation_bypass(tool_name: str, file_path: str) -> tuple[bool, 
         return (
             True,
             f"Direct write to ONEX node implementation file detected: {file_path}\n"
-            "Consider dispatching through onex:polymorphic-agent for ONEX node "
+            "Consider dispatching through a subagent for ONEX node "
             "creation to ensure intelligence integration and observability.",
         )
     return False, ""

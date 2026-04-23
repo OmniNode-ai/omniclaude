@@ -243,7 +243,7 @@ class RoutingEventClient:
             "event_type": "AGENT_ROUTING_REQUESTED",
             "correlation_id": correlation_id,
             "timestamp": datetime.now(UTC).isoformat(),
-            "service": "polymorphic-agent",
+            "service": "general-purpose",
             "payload": {
                 "user_request": user_request,
                 "context": context or {},

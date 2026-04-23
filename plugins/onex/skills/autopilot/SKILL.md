@@ -76,7 +76,7 @@ fires within a single session, causing context accumulation that exhausts the co
 after 2-3 passes (9 recorded friction events). Headless `claude -p` eliminates this by design.
 
 **No poly dispatch.** Autopilot phases execute directly via `claude -p` with scoped tool
-allowlists. The polymorphic-agent indirection is unnecessary for headless invocations where
+allowlists. The general-purpose indirection is unnecessary for headless invocations where
 each phase has a fixed prompt and tool set.
 
 **Checkpoint-resume**: Each phase writes its result to `{run_dir}/{phase_name}.txt`. If a

@@ -468,7 +468,7 @@ ls -la plugins/onex/hooks/scripts/*.sh                              # Check scri
 |---------|-------------|-----|
 | Events not emitting | Daemon not started | SessionStart hook must run first to start the daemon |
 | Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `PLUGIN_PYTHON_BIN` |
-| Routing returns `polymorphic-agent` for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
+| Routing returns no match | Routing service timeout | Check network connectivity to routing service (5s timeout) |
 | Context injection empty | Database unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env`; injection has 1s timeout |
 
 ---

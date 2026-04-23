@@ -39,7 +39,7 @@ Usage::
         kept_names={"summarization", "code_analysis"},
         original_prompt_token_count=500,
         project_path="/path/to/repo",
-        agent_name="polymorphic-agent",
+        agent_name="general-purpose",
     )
 
 Design notes:

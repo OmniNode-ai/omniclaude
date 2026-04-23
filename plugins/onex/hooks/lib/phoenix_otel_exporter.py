@@ -40,7 +40,7 @@ Usage::
         manifest_injected=True,
         injected_pattern_count=3,
         agent_matched=True,
-        selected_agent="polymorphic-agent",
+        selected_agent="general-purpose",
         injection_latency_ms=42.5,
         cohort="treatment",
     )

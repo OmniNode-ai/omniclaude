@@ -32,7 +32,7 @@ Enforcement levels (from ``AUDIT_ENFORCEMENT_LEVEL`` env var):
 CLI usage (invoked by pre_tool_use_poly_enforcer.sh):
 
     python3 -m omniclaude.hooks.handlers.audit_dispatch_validator \\
-        --subagent-type onex:polymorphic-agent \\
+        --subagent-type general-purpose \\
         [--enforcement-level STRICT]
 
 Exit codes:
@@ -123,7 +123,7 @@ def _load_agent_yaml(
     or the full ``subagent_type`` value.
 
     Args:
-        subagent_type: The agent type string, e.g. ``onex:polymorphic-agent``.
+        subagent_type: The agent type string, e.g. ``general-purpose``.
 
     Returns:
         Parsed YAML dict, or None if not loadable (missing file, parse error).
@@ -544,7 +544,7 @@ def validate_dispatch(
     by unit tests.
 
     Args:
-        subagent_type: The agent type being dispatched (e.g. ``onex:polymorphic-agent``).
+        subagent_type: The agent type being dispatched (e.g. ``general-purpose``).
         enforcement_level: Override the enforcement level. Defaults to
             ``AUDIT_ENFORCEMENT_LEVEL`` env var, then ``PERMISSIVE``.
         quiet_emit: If True, suppress all Kafka/event emission (for tests).
@@ -798,7 +798,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--subagent-type",
         required=True,
-        help="The subagent_type being dispatched (e.g. onex:polymorphic-agent).",
+        help="The subagent_type being dispatched (e.g. general-purpose).",
     )
     parser.add_argument(
         "--enforcement-level",

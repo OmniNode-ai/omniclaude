@@ -311,7 +311,7 @@ class HookRuntimeServer:
 
         if req.action == "check_delegation_rule":
             rule = (
-                "All tasks must be dispatched via onex:polymorphic-agent. "
+                "All tasks must be dispatched via a subagent. "
                 "Direct tool usage beyond thresholds triggers enforcement."
             )
             return HookRuntimeResponse(

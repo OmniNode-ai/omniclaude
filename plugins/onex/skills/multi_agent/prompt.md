@@ -35,11 +35,11 @@ Analyze the **current conversation context** to determine what needs to be done:
 
 ## Phase 2: Requirements Gathering (Dispatch)
 
-Before any execution, dispatch a polymorphic agent to analyze scope:
+Before any execution, dispatch a general-purpose agent to analyze scope:
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Requirements gathering: analyze task scope",
   prompt="Analyze the task and produce a structured breakdown.
 
@@ -107,22 +107,22 @@ Create a plan to execute tasks in parallel:
 
 ## Phase 5: Execute Plan
 
-**CRITICAL REQUIREMENT: ALWAYS DISPATCH POLYMORPHIC AGENTS**
+**CRITICAL REQUIREMENT: ALWAYS DISPATCH GENERAL-PURPOSE AGENTS**
 
-**DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a **polymorphic-agent** using the Task tool.
+**DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a **general-purpose** using the Task tool.
 
-### MANDATORY: subagent_type="onex:polymorphic-agent"
+### MANDATORY: subagent_type="general-purpose"
 
 **EVERY Task tool call MUST use:**
 ```
-subagent_type="onex:polymorphic-agent"
+subagent_type="general-purpose"
 ```
 
 **NEVER use these subagent_types:**
-- `general-purpose` - NO, use polymorphic-agent
-- `Explore` - NO, use polymorphic-agent
-- `Plan` - NO, use polymorphic-agent
-- Any other type - NO, ALWAYS use polymorphic-agent
+- `general-purpose` - NO, use general-purpose
+- `Explore` - NO, use general-purpose
+- `Plan` - NO, use general-purpose
+- Any other type - NO, ALWAYS use general-purpose
 
 ### WRONG (Running commands directly):
 ```
@@ -137,14 +137,14 @@ DO NOT DO THIS IN SPAWNED AGENTS:
 - Any git operations (add, commit, push, stash, rebase, etc.)
 ```
 
-### CORRECT (Dispatching to polymorphic-agent):
+### CORRECT (Dispatching to general-purpose):
 
 **For EACH task, you MUST call Task tool like this:**
 
 ```
 Task(
   description="Fix import errors in reducer node",
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   prompt="**Task**: Fix import errors in node_user_reducer.py
 
   **Context**: [Detailed problem description]
@@ -173,7 +173,7 @@ Task(
 
 ## Phase 6: Validation and Quality Gates
 
-After **each polymorphic agent cycle** completes:
+After **each general-purpose agent cycle** completes:
 
 1. **Run tests** if code was modified and validation was required
 2. **Check code quality** (linting, type checking, security scan)
@@ -195,7 +195,7 @@ After **each polymorphic agent cycle** completes:
 
 ## Phase 7: Final Reporting
 
-Generate final summary across **all polymorphic agent cycles**:
+Generate final summary across **all general-purpose agent cycles**:
 
 1. **Overall Statistics**:
    - Total tasks completed
@@ -232,7 +232,7 @@ a Playwright dashboard verification step:
 2. **If dashboard-impacting changes detected**, dispatch a verification agent:
    ```
    Agent(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="Dashboard verification for epic completion",
      prompt="Run /dashboard-sweep --triage-only to verify all omnidash pages render correctly after the changes from this epic. Report any pages that show errors, missing data, or regressions. This is a mandatory DoD criterion -- the epic is not complete until dashboard pages are verified."
    )
@@ -274,7 +274,7 @@ After all fixes are complete, **ASK the user** if they want to:
 2. Dispatch requirements gathering agent to break down into sub-tasks
 3. Classify tasks by type and priority
 4. Create parallel execution plan
-5. **USE TASK TOOL TO DISPATCH TO POLYMORPHIC AGENTS**
+5. **USE TASK TOOL TO DISPATCH TO GENERAL-PURPOSE AGENTS**
 6. Wait for agent results
 7. Validate results (dispatch validation agent)
 8. Refactor if needed (max 3 attempts per task)

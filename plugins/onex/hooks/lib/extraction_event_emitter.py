@@ -23,7 +23,7 @@ CLI Usage::
     echo '{
         "session_id": "uuid",
         "correlation_id": "uuid",
-        "agent_name": "polymorphic-agent",
+        "agent_name": "general-purpose",
         "agent_match_score": 0.95,
         "cohort": "treatment",
         "injection_occurred": true,

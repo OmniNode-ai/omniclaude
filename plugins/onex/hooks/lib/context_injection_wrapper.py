@@ -15,7 +15,7 @@ Usage:
 
 Input JSON:
     {
-        "agent_name": "polymorphic-agent",
+        "agent_name": "general-purpose",
         "domain": "general",
         "session_id": "abc-123",
         "project": "/path/to/project",

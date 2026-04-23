@@ -234,7 +234,7 @@ class AgentTransformer:
     async def transform_with_logging(
         self,
         agent_name: str,
-        source_agent: str = "polymorphic-agent",
+        source_agent: str = "general-purpose",
         transformation_reason: str | None = None,
         correlation_id: str | UUID | None = None,
         user_request: str | None = None,
@@ -254,7 +254,7 @@ class AgentTransformer:
 
         Args:
             agent_name: Agent to transform into.
-            source_agent: Original agent identity (default: "polymorphic-agent").
+            source_agent: Original agent identity (default: "general-purpose").
             transformation_reason: Why this transformation occurred.
             correlation_id: Request correlation ID for tracing.
             user_request: Original user request.
@@ -369,7 +369,7 @@ class AgentTransformer:
     def transform_sync_with_logging(
         self,
         agent_name: str,
-        source_agent: str = "polymorphic-agent",
+        source_agent: str = "general-purpose",
         transformation_reason: str | None = None,
         correlation_id: str | UUID | None = None,
         user_request: str | None = None,
@@ -414,7 +414,7 @@ def main() -> None:
     import argparse
     import sys
 
-    parser = argparse.ArgumentParser(description="Agent polymorphic transformer")
+    parser = argparse.ArgumentParser(description="Agent transformer")
     parser.add_argument("agent_name", nargs="?", help="Agent to transform into")
     parser.add_argument("--list", action="store_true", help="List available agents")
 

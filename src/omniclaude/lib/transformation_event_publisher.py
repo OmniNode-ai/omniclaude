@@ -12,7 +12,7 @@ Usage:
     from omniclaude.lib.transformation_event_publisher import publish_transformation_event
 
     await publish_transformation_event(
-        source_agent="polymorphic-agent",
+        source_agent="general-purpose",
         target_agent="agent-api-architect",
         transformation_reason="API design task detected",
         correlation_id=correlation_id,
@@ -128,7 +128,7 @@ async def publish_transformation_event(
     via the _EVENT_TYPE_TO_TOPIC mapping.
 
     Args:
-        source_agent: Original agent identity (e.g., "polymorphic-agent")
+        source_agent: Original agent identity (e.g., "general-purpose")
         target_agent: Transformed agent identity (e.g., "agent-api-architect")
         transformation_reason: Why this transformation occurred
         correlation_id: Request correlation ID for distributed tracing
@@ -377,7 +377,7 @@ if __name__ == "__main__":
         # Test transformation start
         print("Testing transformation start event...")
         success_start = await publish_transformation_start(
-            source_agent="polymorphic-agent",
+            source_agent="general-purpose",
             target_agent="agent-api-architect",
             transformation_reason="API design task detected",
             correlation_id=correlation_id,
@@ -390,7 +390,7 @@ if __name__ == "__main__":
         # Test transformation complete
         print("\nTesting transformation complete event...")
         success_complete = await publish_transformation_complete(
-            source_agent="polymorphic-agent",
+            source_agent="general-purpose",
             target_agent="agent-api-architect",
             transformation_reason="API design task detected",
             correlation_id=correlation_id,
@@ -405,7 +405,7 @@ if __name__ == "__main__":
         print("\nTesting transformation failed event...")
         correlation_id_failed = str(uuid4())
         success_failed = await publish_transformation_failed(
-            source_agent="polymorphic-agent",
+            source_agent="general-purpose",
             target_agent="agent-api-architect",
             transformation_reason="API design task detected",
             error_message="Agent initialization failed",

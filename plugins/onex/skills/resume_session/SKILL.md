@@ -152,5 +152,5 @@ elif isinstance(result, ModelRegistryUnavailable):
 - **D7 (Semantic Recall is Enrichment)**: Qdrant decision recall is optional -- failures are caught and silently skipped; resume works without Qdrant
 - **D8 (Integration Proof)**: Phase 3 proof: decision recorded -> embedded -> semantically recalled on resume
 
-> **Note**: This skill executes directly (not via polymorphic-agent) because it is a
+> **Note**: This skill executes directly (not via general-purpose) because it is a
 > synchronous, user-invoked operation with no need for agent routing.

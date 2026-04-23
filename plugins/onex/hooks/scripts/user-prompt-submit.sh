@@ -180,10 +180,10 @@ WORKFLOW_DETECTED="false"
 if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
     log "Slash command detected: ${SLASH_CMD} — skipping agent routing (slash commands manage their own dispatch)"
-    # Route slash commands through polymorphic-agent so the Skill() loader
+    # Route slash commands through a subagent so the Skill() loader
     # runs inside the correct agent context. method="slash_command" lets
     # session-end.sh distinguish this from a real router decision.
-    ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.85,"reasoning":"slash_command_delegation","method":"slash_command","domain":"workflow","purpose":"Coordinate skill execution — delegate complex skills to Task tool via Task(subagent_type=onex:polymorphic-agent)","candidates":[{"name":"polymorphic-agent","score":0.85,"description":"Multi-agent workflow coordinator for skills and complex tasks"}]}'
+    ROUTING_RESULT='{"selected_agent":"","confidence":0.85,"reasoning":"slash_command_delegation","method":"slash_command","domain":"workflow","purpose":"Coordinate skill execution — delegate complex skills to Task tool via Task(subagent_type=general-purpose)","candidates":[{"name":"general-purpose","score":0.85,"description":"Multi-agent workflow coordinator for skills and complex tasks"}]}'
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
 else
@@ -875,7 +875,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emit
     _EXTRACTION_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg correlation_id "$CORRELATION_ID" \
-        --arg agent_name "${AGENT_NAME:-polymorphic-agent}" \
+        --arg agent_name "${AGENT_NAME:-}" \
         --arg cohort "${COHORT:-treatment}" \
         --argjson injection_occurred "$_INJECTION_OCCURRED" \
         --argjson patterns_count "${PATTERN_COUNT:-0}" \

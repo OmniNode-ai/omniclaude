@@ -94,7 +94,7 @@ This skill is invoked autonomously by:
 - `dashboard-sweep` (after deploy)
 - `integration-sweep` (post-merge verification)
 
-Use `polymorphic-agent` routing for parallel topic checks.
+Use `general-purpose` routing for parallel topic checks.
 
 ## Critical Chains (always checked)
 

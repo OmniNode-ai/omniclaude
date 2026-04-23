@@ -250,7 +250,7 @@ This is an offer only — user must approve before dispatch.
 
 When running without the full omniclaude plugin (e.g., container-based Claude Code sessions):
 
-- **`onex:polymorphic-agent`** silently falls back to `general-purpose`. ONEX intelligence
+- **`general-purpose`** silently falls back to `general-purpose`. ONEX intelligence
   integration, action logging, and observability will be inactive. Skill instructions still
   execute correctly — only metadata and telemetry are affected.
 - **Cross-skill dispatch** (`Skill(skill="onex:...")`) requires the plugin's skill registry.

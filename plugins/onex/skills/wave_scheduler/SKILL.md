@@ -313,7 +313,7 @@ def dispatch_parallel_tickets(
     for tid in ticket_ids:
         ticket = tickets[tid]
         tasks[tid] = Task(
-            subagent_type="onex:polymorphic-agent",
+            subagent_type="general-purpose",
             description=f"wave-scheduler: ticket-pipeline for {tid}",
             prompt=f"""Execute ticket-pipeline for {tid}: {ticket['title']}
 

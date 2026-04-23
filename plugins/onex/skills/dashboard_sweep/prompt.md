@@ -1,5 +1,5 @@
 <!-- persona: plugins/onex/skills/_lib/assistant-profile/persona.md -->
-<!-- persona-scope: this-skill-only -- do not re-apply if polymorphic agent wraps this skill -->
+<!-- persona-scope: this-skill-only -- do not re-apply if general-purpose agent wraps this skill -->
 Apply the persona profile above when generating outputs.
 
 # Dashboard Sweep Orchestration
@@ -471,7 +471,7 @@ Record ticket ID in `$ONEX_STATE_DIR/dashboard-sweep/{run_id}/feature_gap_ticket
 ### 3.2 Agent Prompt Template
 
 For each domain with `fix_tier` in `[CODE_BUG, DATA_PIPELINE, SCHEMA_MISMATCH]`,
-use this prompt template when dispatching the polymorphic-agent:
+use this prompt template when dispatching the general-purpose:
 
 ---
 
@@ -555,7 +555,7 @@ Dispatch ALL agent Task() calls in a SINGLE message:
 # All dispatches in one message — TRUE PARALLELISM
 for domain in fixable_domains:
     Task(
-        subagent_type="onex:polymorphic-agent",
+        subagent_type="general-purpose",
         description=f"Debug and fix dashboard domain: {domain.domain_id} ({domain.fix_tier})",
         prompt=render_agent_prompt(domain, run_id, url)
     )
@@ -724,11 +724,11 @@ This cannot be undone without a rollback. Type YES to proceed, anything else to 
 
 ```
 Step 1 (if --release flag set):
-  - Dispatch polymorphic agent: run /release skill for each affected repo
+  - Dispatch general-purpose agent: run /release skill for each affected repo
   - Wait for release tags to publish and release PRs to merge
   - Emit "[dashboard-sweep] Release complete for: {repos}"
 
-Step 2: Dispatch polymorphic agent to run /redeploy skill:
+Step 2: Dispatch general-purpose agent to run /redeploy skill:
   - Syncs bare clones in omni_home/ to latest main
   - Updates image pins in k8s manifests (dev namespace)
   - Rebuilds runtime containers

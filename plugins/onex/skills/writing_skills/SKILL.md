@@ -697,7 +697,7 @@ Use one of these skills for dispatch:
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="implement skill: {skill_name}",
   prompt="Edit {skill_files} per the spec below. Commit changes.
     Spec: {spec}"

@@ -1,8 +1,8 @@
 #!/bin/bash
-# PreToolUse Polymorphic Agent Enforcer Hook
+# PreToolUse Agent Dispatch Enforcer Hook
 # Intercepts Task and Agent tool calls and blocks any that don't use
 # an onex:-prefixed subagent_type. This ensures all automated workflows
-# go through the polymorphic agent layer for ONEX capabilities,
+# go through the proper agent layer for ONEX capabilities,
 # intelligence integration, and observability.
 #
 # After prefix validation passes, the script invokes the Python audit
@@ -65,7 +65,7 @@ if [[ ! "$SUBAGENT_TYPE" == onex:* ]]; then
         BLOCK_DETAIL="subagent_type=\"$SUBAGENT_TYPE\" does not have the required onex: prefix"
     fi
 
-    BLOCK_REASON="$TOOL_NAME call blocked: $BLOCK_DETAIL. All Task/Agent calls must use subagent_type=\"onex:polymorphic-agent\" (or another onex:-prefixed type) to ensure ONEX capabilities, intelligence integration, and observability are active. Fix: set subagent_type=\"onex:polymorphic-agent\" in your $TOOL_NAME call."
+    BLOCK_REASON="$TOOL_NAME call blocked: $BLOCK_DETAIL. All Task/Agent calls must use subagent_type=\"general-purpose\" (or another onex:-prefixed type) to ensure ONEX capabilities, intelligence integration, and observability are active. Fix: set subagent_type=\"general-purpose\" in your $TOOL_NAME call."
 
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] BLOCKED: $TOOL_NAME ($BLOCK_DETAIL)" >> "$LOG_FILE"
 

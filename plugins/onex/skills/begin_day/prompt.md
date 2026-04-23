@@ -127,7 +127,7 @@ is captured. Detect staleness by comparing baseline file mtime against latest mi
 
 ### Dispatch rules
 
-**ALL 7 probes MUST be dispatched in a SINGLE message as parallel polymorphic agents.**
+**ALL 7 probes MUST be dispatched in a SINGLE message as parallel general-purpose agents.**
 
 If `--probes` is set, only dispatch the named probes. Others are skipped.
 
@@ -171,13 +171,13 @@ If the skill is not available, write: {"probe_name": "{PROBE_NAME}", "status": "
 ```
 
 Each agent MUST use:
-- `subagent_type`: `onex:polymorphic-agent`
+- `subagent_type`: `general-purpose`
 
 ### Degraded dispatch fallback
 
 If the bundled fan-out fails structurally (orchestration error, not individual probe failure):
 
-1. Retry each failed probe individually as a solo polymorphic agent
+1. Retry each failed probe individually as a solo general-purpose agent
 2. If solo dispatch also fails → mark probe `FAILED` with error "dispatch failure"
 3. **Never fail the entire morning pipeline on orchestration mechanics alone**
 

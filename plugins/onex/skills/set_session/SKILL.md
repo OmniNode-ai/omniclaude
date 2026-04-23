@@ -67,5 +67,5 @@ On session start, if `.onex_state/active_session.yaml` exists in the working dir
 suggest: "Previous session was bound to OMN-1234. Resume? (/onex:set_session OMN-1234)"
 Do NOT auto-inject -- user must explicitly opt in.
 
-> **Note**: This skill executes directly (not via polymorphic-agent) because it is a
+> **Note**: This skill executes directly (not via general-purpose) because it is a
 > synchronous, user-invoked operation with no need for agent routing.

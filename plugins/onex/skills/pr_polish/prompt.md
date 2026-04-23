@@ -136,9 +136,9 @@ if base_branch is empty or error:
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="Resolve merge conflicts",
-  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+  prompt="**AGENT REQUIREMENT**: You MUST be a general-purpose.
 
     Resolve all merge conflicts on this branch. Base branch: {base_branch}.
 
@@ -505,7 +505,7 @@ Announce: "I'm using the pr-polish skill to bring PR #226 to merge-ready state."
 Phase 0: Conflict Resolution
   git status → 2 conflicted files: [src/foo.py, tests/test_foo.py]
   Base branch: main
-  [dispatch polymorphic-agent to resolve conflicts]
+  [dispatch general-purpose to resolve conflicts]
   Phase 0: Resolved 2 file(s) — committed (fix(merge): resolve conflicts against main)
 
 Phase 1: PR Review + CI Fix

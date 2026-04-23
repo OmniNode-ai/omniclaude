@@ -152,7 +152,7 @@ When a pass produces findings above NIT severity:
 3. Stage all changes (do not commit -- the caller controls commits).
 4. Log the fix application for the iteration history.
 
-**CRITICAL**: Fix application MUST be dispatched through a polymorphic-agent.
+**CRITICAL**: Fix application MUST be dispatched through a general-purpose.
 Do not apply fixes directly with Edit/Write.
 
 ## Load TCB Context (if ticket_id provided)
@@ -299,7 +299,7 @@ All 3 agents are dispatched in a single message (true parallelism):
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="hostile-reviewer gate: scope review PR #{pr_number}",
   prompt="You are a scope review agent for PR #{pr_number} in {repo}.
 
@@ -322,7 +322,7 @@ Task(
 )
 
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="hostile-reviewer gate: correctness review PR #{pr_number}",
   prompt="You are a correctness review agent for PR #{pr_number} in {repo}.
 
@@ -345,7 +345,7 @@ Task(
 )
 
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="hostile-reviewer gate: conventions review PR #{pr_number}",
   prompt="You are a conventions review agent for PR #{pr_number} in {repo}.
 

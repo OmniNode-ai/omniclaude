@@ -255,7 +255,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a subagent. This tool call is BLOCKED. You MUST dispatch to a subagent before continuing. Pattern: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
         exit 2
@@ -270,7 +270,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " write/modify tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " write/modify tool calls (" + $tool + " just now) without dispatching to a subagent. This tool call is BLOCKED. You MUST dispatch to a subagent before continuing. Pattern: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
         exit 2
@@ -286,7 +286,7 @@ if [[ "$IS_WRITE_TOOL" -eq 1 ]]; then
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " write tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
+                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " write tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
                 }
             }'
     fi
@@ -327,7 +327,7 @@ else
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " total tool calls (" + $tool + " just now) without dispatching to a subagent. This tool call is BLOCKED. You MUST dispatch to a subagent before continuing. Pattern: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
         exit 2
@@ -342,7 +342,7 @@ else
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without dispatching to a polymorphic agent. This tool call is BLOCKED. You MUST dispatch to onex:polymorphic-agent before continuing. Pattern: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
+                    additionalContext: ("DELEGATION ENFORCER [HARD BLOCK]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without dispatching to a subagent. This tool call is BLOCKED. You MUST dispatch to a subagent before continuing. Pattern: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Inline work above the threshold is not permitted.")
                 }
             }'
         exit 2
@@ -358,7 +358,7 @@ else
             '{
                 hookSpecificOutput: {
                     hookEventName: "PostToolUse",
-                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"onex:polymorphic-agent\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
+                    additionalContext: ("DELEGATION ENFORCER [WARNING]: " + ($count | tostring) + " read-only tool calls (" + $tool + " just now) without delegating. Hard block fires at " + ($block_threshold | tostring) + ". STOP and dispatch: Agent(subagent_type=\"general-purpose\", description=\"...\", prompt=\"...\"). Continuing inline fills the context window.")
                 }
             }'
     fi

@@ -357,7 +357,7 @@ Skip ticket creation for:
 
 ## Dispatch Rules
 
-- ALL work dispatched through `onex:polymorphic-agent`
+- ALL work dispatched through `general-purpose`
 - NEVER edit files directly from orchestrator context
 - `--dry-run` produces zero side effects (no tickets)
 

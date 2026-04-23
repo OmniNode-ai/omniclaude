@@ -2386,7 +2386,7 @@ onex_change_control repo not found), emit a friction event with the error detail
 2. **Dispatch ticket-work to a separate agent (only after Step 0 artifacts exist):**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
      prompt="You are executing ticket-work for {ticket_id}.
        Invoke: Skill(skill=\"onex:ticket_work\", args=\"{ticket_id}\")
@@ -2568,7 +2568,7 @@ local_review. Failure is non-fatal -- the pipeline continues with an unenriched 
 1. **Dispatch local-review to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
        Invoke: Skill(skill=\"onex:local_review\", args=\"--max-iterations {max_review_iterations} --required-clean-runs 1 --checkpoint {ticket_id}:{run_id}\")
@@ -3279,7 +3279,7 @@ EOF
 1. **Dispatch ci-watch to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 4 ci_watch for {ticket_id} on PR #{pr_number}",
      prompt="Invoke: Skill(skill=\"onex:ci_watch\",
        args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-minutes {ci_watch_timeout_minutes} --max-fix-cycles {max_ci_fix_cycles}\")
@@ -3316,7 +3316,7 @@ EOF
 1. **Dispatch pr-watch to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
      prompt="Invoke: Skill(skill=\"onex:pr_watch\",
        args=\"--pr {pr_number} --ticket-id {ticket_id} --timeout-hours {pr_review_timeout_hours} --max-review-cycles {max_pr_review_cycles}\")
@@ -3425,7 +3425,7 @@ implementation including NEEDS_GATE predicate, one-shot merge check, and excepti
 1. **Dispatch pre-flight checks to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 0 pre_flight for {ticket_id}",
      prompt="You are executing pre-flight checks for {ticket_id}.
        Run pre-commit hooks and mypy on a clean checkout.
@@ -3644,7 +3644,7 @@ and auto-merge asynchronously.
    Dispatch ci-watch as a **non-blocking background agent** to fix CI failures:
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      run_in_background=True,
      description="ci-watch: fix CI failures for {ticket_id} PR #{pr_number}",
      prompt="CI is failing for PR #{pr_number} in {repo} ({ticket_id}).
@@ -3680,7 +3680,7 @@ and auto-merge asynchronously.
 1. **Dispatch pr-watch to a separate agent:**
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 5 pr_review_loop for {ticket_id} on PR #{pr_number}",
      prompt="You are executing pr-watch for {ticket_id}.
        Invoke: Skill(skill=\"onex:pr_watch\",
@@ -3926,7 +3926,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 
    # Dispatch auto-merge to a separate agent — proceeds automatically, no gate
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="ticket-pipeline: Phase 6 auto_merge (NEEDS_GATE) for {ticket_id} on PR #{pr_number}",
      prompt="You are executing auto-merge (NEEDS_GATE path) for {ticket_id}.
        Invoke: Skill(skill=\"onex:auto_merge\",

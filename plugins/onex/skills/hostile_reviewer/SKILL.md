@@ -305,7 +305,7 @@ while consecutive_clean < 2 and pass_number < max_passes:
 
     # 5. If not converged, apply fixes and loop
     if consecutive_clean < 2 and above_nit:
-        apply_fixes(above_nit)  # dispatch to polymorphic-agent for code changes
+        apply_fixes(above_nit)  # dispatch to general-purpose for code changes
 
     # If --passes N was specified and we hit it, stop regardless
     if args.passes and pass_number >= args.passes:
@@ -352,7 +352,7 @@ onex run node_hostile_reviewer \
 When a pass produces findings above NIT:
 
 1. Report findings to the caller.
-2. Dispatch a polymorphic-agent to apply fixes for all CRITICAL, MAJOR, and MINOR findings.
+2. Dispatch a general-purpose to apply fixes for all CRITICAL, MAJOR, and MINOR findings.
 3. Stage the fixes (but do not commit -- the caller controls commits).
 4. Re-run the review on the updated code.
 

@@ -847,7 +847,7 @@ For each AUTO finding:
 2. **Dispatch ticket-pipeline** per finding:
    ```
    Task(
-     subagent_type="onex:polymorphic-agent",
+     subagent_type="general-purpose",
      description="gap fix: Phase 3 fix for finding <finding_id> via ticket-pipeline",
      prompt="You are executing ticket-pipeline for <ticket_id>.
        Invoke: Skill(skill=\"onex:ticket_pipeline\", args=\"<ticket_id>\")
@@ -875,7 +875,7 @@ For each AUTO finding:
 Same as ticket-pipeline but dispatch `ticket-work` instead:
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="gap fix: Phase 3 fix for finding <finding_id> via ticket-work",
   prompt="You are executing ticket-work for <ticket_id>.
     Invoke: Skill(skill=\"onex:ticket_work\", args=\"<ticket_id>\")
@@ -895,7 +895,7 @@ $ONEX_STATE_DIR/gap-analysis/<source_run_id>/gap-fix-output.json
 Invoke merge-sweep scoped to repos with created PRs:
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="gap fix: Phase 3 merge-sweep for created PRs",
   prompt="Invoke: Skill(skill=\"onex:merge_sweep\",
     args=\"--repos <repos_with_created_prs>\")
@@ -914,7 +914,7 @@ No ticket creation, no ticket-pipeline or ticket-work dispatch. Implement fixes 
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="general-purpose",
   description="gap fix: Phase 3 implement-only for finding <finding_id>",
   prompt="Implement the fix for gap-analysis finding <finding_id> directly.
     Finding: <full finding details>

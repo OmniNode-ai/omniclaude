@@ -707,13 +707,13 @@ class AgentRouter:
         - "use agent-X" - Specific agent request
         - "@agent-X" - Specific agent request
         - "agent-X" at start of text - Specific agent request
-        - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
+        - Generic requests like "use an agent" return None (no fallback)
 
         Args:
             text: User's input text
 
         Returns:
-            Agent name if found and valid, None otherwise.
+            Agent name if found and valid, None otherwise (no fallback).
 
         Raises:
             None: Exceptions are caught and logged; returns None on error.
@@ -725,7 +725,7 @@ class AgentRouter:
             >>> router._extract_explicit_agent("@agent-debug analyze error")
             'agent-debug'
             >>> router._extract_explicit_agent("use an agent to help")
-            'polymorphic-agent'
+            None
             >>> router._extract_explicit_agent("just a normal query")
             None
         """
@@ -752,38 +752,7 @@ class AgentRouter:
                         )
                         return agent_name
 
-            # Patterns for generic agent requests (no specific agent name)
-            # These should default to polymorphic-agent
-            # Word boundaries (\b) prevent false positives like "misuse an agent"
-            generic_patterns = [
-                r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
-                r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
-                r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
-                r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
-                r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
-                r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
-            ]
-
-            # Check generic patterns
-            for pattern in generic_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    # Default to polymorphic-agent
-                    default_agent = "polymorphic-agent"
-                    # Verify polymorphic-agent exists in registry
-                    if default_agent in self.registry["agents"]:
-                        logger.debug(
-                            f"Generic agent request matched, using default: {default_agent}",
-                            extra={"pattern": pattern, "text_sample": text[:50]},
-                        )
-                        return default_agent
-                    else:
-                        logger.warning(
-                            f"Generic agent request matched but "
-                            f"{default_agent} not found in registry",
-                            extra={"pattern": pattern},
-                        )
-
+            # No match — fail-fast, no fallback
             return None
 
         except Exception as e:

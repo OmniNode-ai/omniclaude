@@ -296,7 +296,7 @@ def _dispatch_pr_review(
 ) -> None:
     nit_instruction = " Also fix Nit-level comments." if fix_nits else ""
     Task(
-        subagent_type="onex:polymorphic-agent",
+        subagent_type="general-purpose",
         description=f"pr-watch: fix review comments for PR #{pr_number} (cycle {cycle})",
         prompt=f"""Invoke: Skill(skill="onex:pr_review", args="{pr_number}")
 
