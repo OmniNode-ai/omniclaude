@@ -156,7 +156,7 @@ What happens when infrastructure is unavailable:
 | **Emit daemon down** | Events dropped, hook continues | 0 | Yes (events) |
 | **Kafka unavailable** | Daemon buffers briefly, then drops | 0 | Yes (events) |
 | **PostgreSQL down** | Logging skipped if `ENABLE_POSTGRES=true` | 0 | Yes (logs) |
-| **Routing timeout (5s)** | Fallback to default agent | 0 | No |
+| **Routing timeout (5s)** | Returns no match (fail-fast, no fallback) | 0 | No |
 | **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
 | **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
 | **Context injection fails** | Proceeds without patterns | 0 | No |

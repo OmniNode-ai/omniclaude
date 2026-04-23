@@ -152,7 +152,7 @@ When a pass produces findings above NIT severity:
 3. Stage all changes (do not commit -- the caller controls commits).
 4. Log the fix application for the iteration history.
 
-**CRITICAL**: Fix application MUST be dispatched through a general-purpose.
+**CRITICAL**: Fix application MUST be dispatched through a general-purpose agent.
 Do not apply fixes directly with Edit/Write.
 
 ## Load TCB Context (if ticket_id provided)

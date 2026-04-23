@@ -119,7 +119,6 @@ subagent_type="general-purpose"
 ```
 
 **NEVER use these subagent_types:**
-- `general-purpose` - NO, use general-purpose
 - `Explore` - NO, use general-purpose
 - `Plan` - NO, use general-purpose
 - Any other type - NO, ALWAYS use general-purpose

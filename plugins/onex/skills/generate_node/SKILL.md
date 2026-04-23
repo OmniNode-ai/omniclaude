@@ -12,7 +12,7 @@ Fully automated ONEX node generation using the omniclaude codegen system. Genera
 
 ## 🚨 CRITICAL: ALWAYS DISPATCH TO GENERAL-PURPOSE AGENT
 
-**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a general-purpose.
+**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a general-purpose agent.
 
 ### ❌ WRONG - Running scripts directly:
 ```

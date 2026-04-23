@@ -17,7 +17,7 @@ Run the node via `onex run-node`:
 
 ```bash
 OMNIMARKET_ROOT="${OMNIMARKET_ROOT:-$(python3 -c 'import importlib.util; s=importlib.util.find_spec("omnimarket"); print(s.submodule_search_locations[0].split("/src/")[0]) if s else exit(1)' 2>/dev/null)}"
-cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["qwen3-coder"], "judge_model": "deepseek-r1"}'
+cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'
 ```
 
 ## Arguments
@@ -40,11 +40,11 @@ All examples must be run from the omnimarket worktree (same working directory as
 cd "$ONEX_WORKTREES_ROOT/omnimarket"  # local-path-ok: worktree convention documentation
 
 # Full review with defaults
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["qwen3-coder"]}'
+uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"]}'
 
 # Dry run to test
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["qwen3-coder"], "dry_run": true}'
+uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "dry_run": true}'
 
 # Custom models
-uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["claude-sonnet"], "judge_model": "deepseek-r1"}'
+uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["Corianas/DeepSeek-R1-Distill-Qwen-14B-AWQ"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'
 ```

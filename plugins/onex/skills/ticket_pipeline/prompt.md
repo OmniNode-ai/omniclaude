@@ -2405,7 +2405,7 @@ onex_change_control repo not found), emit a friction event with the error detail
    Where `{branch_name}` is resolved from `state["phases"]["implement"]["artifacts"]["branch_name"]`
    set in Step 0.
 
-   This spawns a polymorphic agent with its own context window to run the full ticket-work
+   This spawns a general-purpose agent with its own context window to run the full ticket-work
    workflow including human gates (questions, spec, approval). The pipeline waits for the
    agent to complete and reads its result.
 

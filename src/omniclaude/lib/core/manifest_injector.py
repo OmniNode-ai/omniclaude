@@ -61,6 +61,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
@@ -91,6 +92,14 @@ from omniclaude.lib.task_classifier import TaskClassifier, TaskContext
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
+
+
+class EnumTargetAgent(StrEnum):
+    """Valid target agent values for manifest metadata."""
+
+    GENERAL_PURPOSE = "general-purpose"
+    ALL_SPECIALIZED_AGENTS = "all-specialized-agents"
+
 
 # Import ActionLogger type under TYPE_CHECKING for proper type hints
 if TYPE_CHECKING:
@@ -4081,7 +4090,7 @@ class ManifestInjector:
                 "version": "2.0.0",
                 "generated_at": datetime.now(UTC).isoformat(),
                 "purpose": "Dynamic system context via event bus",
-                "target_agents": ["general-purpose", "all-specialized-agents"],
+                "target_agents": [EnumTargetAgent.GENERAL_PURPOSE, EnumTargetAgent.ALL_SPECIALIZED_AGENTS],
                 "update_frequency": "on_demand",
                 "source": "onex-intelligence-adapter",
             }
@@ -4471,7 +4480,7 @@ class ManifestInjector:
                 "version": "2.0.0-minimal",
                 "generated_at": datetime.now(UTC).isoformat(),
                 "purpose": "Fallback manifest (intelligence queries unavailable)",
-                "target_agents": ["general-purpose", "all-specialized-agents"],
+                "target_agents": [EnumTargetAgent.GENERAL_PURPOSE, EnumTargetAgent.ALL_SPECIALIZED_AGENTS],
                 "update_frequency": "on_demand",
                 "source": "fallback",
             },
