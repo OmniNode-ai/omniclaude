@@ -3,7 +3,7 @@
 """Transformation Validator -- Fail Closed.
 
 Validates agent transformations to prevent invalid self-transformations
-(polymorphic-agent -> general-purpose) that indicate routing failures.
+(e.g., general-purpose → general-purpose) that indicate routing failures.
 
 Problem:
 - 45.5% of transformations are self-transformations (15/33 cases)
