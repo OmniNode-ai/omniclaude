@@ -1037,7 +1037,7 @@
             "id": 31,
             "prompt": "Orchestrate a multi-agent workflow for this task",
             "category": "fallback",
-            "notes": "polymorphic-agent via 'multi-agent'/'workflow orchestration' [polymorphic-agent removed per OMN-7115]",
+            "notes": "general-purpose via 'multi-agent'/'workflow orchestration' [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1221,7 +1221,7 @@
             "id": 37,
             "prompt": "use an agent to help me with this task",
             "category": "fallback",
-            "notes": "Generic agent request -> polymorphic-agent [polymorphic-agent removed per OMN-7115]",
+            "notes": "Generic agent request -> general-purpose [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1245,7 +1245,7 @@
             "id": 38,
             "prompt": "spawn an agent to coordinate this workflow",
             "category": "fallback",
-            "notes": "Generic agent request -> polymorphic-agent [polymorphic-agent removed per OMN-7115]",
+            "notes": "Generic agent request -> general-purpose [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1922,7 +1922,7 @@
             "id": 60,
             "prompt": "We need a polymorphic architecture design",
             "category": "context_filter",
-            "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+            "notes": "Should NOT trigger general-purpose (technical usage)",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1946,7 +1946,7 @@
             "id": 61,
             "prompt": "The code uses polymorphism for the strategy pattern",
             "category": "context_filter",
-            "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+            "notes": "Should NOT trigger general-purpose (technical usage)",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1970,7 +1970,7 @@
             "id": 62,
             "prompt": "Use poly to coordinate the agents",
             "category": "fallback",
-            "notes": "SHOULD trigger polymorphic-agent (action context: 'use poly') [polymorphic-agent removed per OMN-7115]",
+            "notes": "SHOULD trigger general-purpose (action context: 'use poly') [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -1994,7 +1994,7 @@
             "id": 63,
             "prompt": "Spawn polly to run multiple tasks",
             "category": "fallback",
-            "notes": "SHOULD trigger polymorphic-agent (action context: 'spawn polly') [polymorphic-agent removed per OMN-7115]",
+            "notes": "SHOULD trigger general-purpose (action context: 'spawn polly') [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -2018,7 +2018,7 @@
             "id": 64,
             "prompt": "Polly suggested we use a different approach",
             "category": "context_filter",
-            "notes": "Should NOT trigger polymorphic-agent (casual reference)",
+            "notes": "Should NOT trigger general-purpose (casual reference)",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -2042,7 +2042,7 @@
             "id": 65,
             "prompt": "Dispatch 4 pollys for parallel execution",
             "category": "fallback",
-            "notes": "SHOULD trigger polymorphic-agent via 'dispatch 4 pollys' [polymorphic-agent removed per OMN-7115]",
+            "notes": "SHOULD trigger general-purpose via 'dispatch 4 pollys' [general-purpose removed per OMN-7115]",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -2066,7 +2066,7 @@
             "id": 66,
             "prompt": "The pollyanna approach won't work here",
             "category": "context_filter",
-            "notes": "Should NOT trigger polymorphic-agent (pollyanna rejection)",
+            "notes": "Should NOT trigger general-purpose (pollyanna rejection)",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,
@@ -2100,13 +2100,13 @@
             },
             "candidates": [
                 {
-                    "name": "polymorphic-agent",
+                    "name": "general-purpose",
                     "score": 0.452,
                     "reason": "Keyword overlap (60%)"
                 }
             ],
             "router_layer": {
-                "top_agent": "polymorphic-agent",
+                "top_agent": "general-purpose",
                 "top_confidence": 0.452,
                 "top_trigger_score": 0.48,
                 "top_context_score": 0.7,
@@ -2140,9 +2140,9 @@
                     "reason": "Exact match: 'issue'"
                 },
                 {
-                    "name": "polymorphic-agent",
+                    "name": "general-purpose",
                     "score": 0.542857,
-                    "reason": "Fuzzy match: 'polymorphic agent' (79%)"
+                    "reason": "Fuzzy match: 'general-purpose agent' (79%)"
                 }
             ],
             "router_layer": {
@@ -2160,7 +2160,7 @@
             "id": 69,
             "prompt": "Using polymorphism in the router design",
             "category": "context_filter",
-            "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+            "notes": "Should NOT trigger general-purpose (technical usage)",
             "expected": {
                 "selected_agent": "",
                 "confidence": 0.5,

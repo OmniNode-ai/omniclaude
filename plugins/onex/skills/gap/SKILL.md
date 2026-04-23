@@ -104,13 +104,13 @@ onex.cmd.omniclaude.gap.v1  (Kafka)
 NodeSkillGapOrchestrator
   src/omniclaude/nodes/node_skill_gap_orchestrator/
   → handle_skill_requested (omniclaude.shared)
-  → claude -p (polymorphic agent executes skill)
+  → claude -p (general-purpose agent executes skill)
         |
         v
 onex.evt.omniclaude.gap-completed.v1
 ```
 
-All audit, fix, and cycle logic executes inside the polymorphic agent. This skill is a thin shell: parse subcommand + args, dispatch to node, render results.
+All audit, fix, and cycle logic executes inside the general-purpose agent. This skill is a thin shell: parse subcommand + args, dispatch to node, render results.
 
 Cross-repo integration health audit. Consolidated from gap-analysis, gap-fix, and gap-cycle.
 

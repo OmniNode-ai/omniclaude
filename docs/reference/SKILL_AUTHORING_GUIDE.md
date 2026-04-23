@@ -62,7 +62,7 @@ Minimal invocation example:
 
 Or via Task tool:
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="onex:general-purpose",
   description="Short task description",
   prompt="Full prompt referencing this skill's methodology"
 )
@@ -78,7 +78,7 @@ The actual methodology. Structure varies by skill type:
 
 For skills that orchestrate agents, define execution-critical rules:
 
-Rule: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent"
+Rule: ALL Task() calls MUST use subagent_type="onex:general-purpose"
 Rule: NEVER modify files directly from the orchestrator
 
 ## See Also
@@ -93,12 +93,12 @@ Rule: NEVER modify files directly from the orchestrator
 
 ### pr-review (review skill)
 
-`plugins/onex/skills/pr-review/SKILL.md` — dispatches to polymorphic-agent with specific
+`plugins/onex/skills/pr-review/SKILL.md` — dispatches to general-purpose with specific
 instructions for fetching and categorizing PR feedback. Defines a 4-tier priority system
 (CRITICAL / MAJOR / MINOR / NIT) and explicit merge readiness rules.
 
 Key patterns:
-- Always dispatches to `polymorphic-agent` — never runs bash directly
+- Always dispatches to `general-purpose` — never runs bash directly
 - Documents available supporting scripts in the skill directory
 - Defines exit criteria (when a PR can and cannot merge)
 
@@ -109,7 +109,7 @@ Defines strict dispatch contracts and a 5-phase workflow (requirements → plann
 execution → validation → reporting).
 
 Key patterns:
-- Separates orchestrator (this skill) from implementors (spawned polymorphic-agents)
+- Separates orchestrator (this skill) from implementors (spawned general-purposes)
 - Phase-gated with explicit JSON contracts between phases
 - Declares what the orchestrator must never do (no direct file writes)
 
@@ -128,7 +128,7 @@ Skills can also be invoked programmatically via Task tool:
 
 ```python
 Task(
-    subagent_type="onex:polymorphic-agent",
+    subagent_type="onex:general-purpose",
     description="Apply my-skill methodology",
     prompt="Use the my-skill methodology from plugins/onex/skills/my-skill/SKILL.md. ..."
 )
@@ -145,7 +145,7 @@ Standard rules for orchestrator skills:
 
 ```
 Rule: NEVER call Edit(), Write(), or Bash(code-modifying) directly from orchestrator.
-Rule: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent". No exceptions.
+Rule: ALL Task() calls MUST use subagent_type="onex:general-purpose". No exceptions.
 Rule: NO git operations in spawned agents. Git is coordinator-only, user-approved only.
 Rule: Always dispatch all agents in a SINGLE message for true parallelism.
 ```
@@ -198,7 +198,7 @@ See `plugins/onex/skills/` for the complete list. Notable skills:
 
 | Skill | Purpose |
 |-------|---------|
-| `parallel-solve` | Execute any task in parallel via polymorphic agents |
+| `parallel-solve` | Execute any task in parallel via general-purpose agents |
 | `pr-review` | Comprehensive PR review with priority organization |
 | `pr-review-dev` | Development-mode PR review (less strict) |
 | `ticket-work` | Work a Linear ticket from start to completion |

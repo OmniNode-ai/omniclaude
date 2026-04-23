@@ -7,7 +7,7 @@
 **Status**: PROPOSAL (NOT YET IMPLEMENTED)
 **Created**: 2025-10-30
 **Last Updated**: 2025-10-30
-**Author**: Polymorphic Agent (Architecture Review)
+**Author**: General-Purpose Agent (Architecture Review)
 **Priority**: HIGH - Addresses critical architectural inconsistency
 
 ---
@@ -127,7 +127,7 @@ Return recommendations synchronously
 Python process exits (cache lost)
 ```
 
-**Code Example** (from polymorphic agent instructions):
+**Code Example** (from general-purpose agent instructions):
 ```python
 cd /Volumes/PRO-G40/Code/omniclaude/agents && python3 << 'EOF'
 import sys
@@ -403,7 +403,7 @@ Proposed (Service-Level Persistent):
   "event_type": "AGENT_ROUTING_REQUESTED",
   "correlation_id": "uuid",
   "timestamp": "2025-10-30T14:30:00Z",
-  "service": "polymorphic-agent",
+  "service": "general-purpose",
   "payload": {
     "user_request": "optimize my database queries",
     "context": {
@@ -467,8 +467,8 @@ Proposed (Service-Level Persistent):
     "error_code": "REGISTRY_LOAD_FAILED",
     "error_message": "Failed to load agent registry: file not found",
     "fallback_recommendation": {
-      "agent_name": "polymorphic-agent",
-      "reason": "Fallback to polymorphic agent due to routing failure"
+      "agent_name": "general-purpose",
+      "reason": "Fallback to general-purpose agent due to routing failure"
     }
   }
 }
@@ -659,7 +659,7 @@ class RoutingEventClient:
             "event_type": "AGENT_ROUTING_REQUESTED",
             "correlation_id": correlation_id,
             "timestamp": datetime.now(UTC).isoformat(),
-            "service": "polymorphic-agent",
+            "service": "general-purpose",
             "payload": {
                 "user_request": user_request,
                 "context": context or {},
@@ -685,7 +685,7 @@ class RoutingEventClient:
         ]
 ```
 
-**Usage in Polymorphic Agent**:
+**Usage in General-Purpose Agent**:
 ```python
 from routing_event_client import RoutingEventClient
 
@@ -803,7 +803,7 @@ async with RoutingEventClient() as client:
        return asyncio.run(_route())
    ```
 
-3. ⬜ Update polymorphic agent instructions
+3. ⬜ Update general-purpose agent instructions
    ```python
    # OLD (synchronous Python exec)
    cd agents && python3 << 'EOF'
@@ -922,7 +922,7 @@ async with RoutingEventClient() as client:
    ```
 
 2. ⬜ Update all call sites to use event routing
-   - Polymorphic agent instructions
+   - General-purpose agent instructions
    - Hook scripts
    - Test files
 
@@ -940,7 +940,7 @@ async with RoutingEventClient() as client:
            )
    ```
 
-4. ⬜ Remove synchronous routing from polymorphic agent
+4. ⬜ Remove synchronous routing from general-purpose agent
    - Keep as fallback only
    - Primary path: event-driven
 
@@ -1208,7 +1208,7 @@ def route(
 
 **Week 2-3**: Phase 2 (Client Integration)
 - ⬜ Create RoutingEventClient
-- ⬜ Add to polymorphic agent (with feature flag)
+- ⬜ Add to general-purpose agent (with feature flag)
 - ⬜ Validate end-to-end flow
 - **Status**: ⏳ NOT STARTED
 
@@ -1252,7 +1252,7 @@ def route(
 
 3. **Full Rollback** (< 30 minutes):
    ```bash
-   # Revert polymorphic agent instructions
+   # Revert general-purpose agent instructions
    git revert <commit>
 
    # Remove event routing flag
@@ -1314,6 +1314,6 @@ This proposal addresses a critical architectural inconsistency and brings routin
 5. ⬜ Begin Phase 1 (service development)
 
 **Questions or Concerns?**:
-- Contact: Polymorphic Agent
+- Contact: General-Purpose Agent
 - Reference: This document
 - Related: `docs/observability/AGENT_TRACEABILITY.md`

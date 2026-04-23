@@ -86,7 +86,7 @@ class TestHandlerRoutingDefault:
     async def test_explicit_agent_request(self, handler: HandlerRoutingDefault) -> None:
         agents = (
             _make_agent("agent-api-architect", triggers=("api design",)),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         request = _make_request("use agent-api-architect", agents)
         result = await handler.compute_routing(request)
@@ -97,15 +97,15 @@ class TestHandlerRoutingDefault:
 
     @pytest.mark.asyncio
     async def test_generic_agent_request(self, handler: HandlerRoutingDefault) -> None:
-        """'use an agent' should resolve to polymorphic-agent."""
+        """'use an agent' should resolve to general-purpose."""
         agents = (
             _make_agent("agent-api-architect", triggers=("api design",)),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         request = _make_request("use an agent to help me", agents)
         result = await handler.compute_routing(request)
 
-        assert result.selected_agent == "polymorphic-agent"
+        assert result.selected_agent == "general-purpose"
         assert result.confidence == 1.0
         assert result.routing_policy == "explicit_request"
 
@@ -113,12 +113,12 @@ class TestHandlerRoutingDefault:
     async def test_generic_agent_request_missing_fallback(
         self, handler: HandlerRoutingDefault
     ) -> None:
-        """Generic request when polymorphic-agent is NOT in registry should not match."""
+        """Generic request when general-purpose is NOT in registry should not match."""
         agents = (_make_agent("agent-api-architect", triggers=("api design",)),)
         request = _make_request("use an agent to help me", agents)
         result = await handler.compute_routing(request)
 
-        # polymorphic-agent not in registry, so generic pattern doesn't match
+        # general-purpose not in registry, so generic pattern doesn't match
         assert result.routing_policy != "explicit_request"
 
     @pytest.mark.asyncio
@@ -126,7 +126,7 @@ class TestHandlerRoutingDefault:
         agents = (
             _make_agent("agent-debugger", triggers=("debug", "troubleshoot")),
             _make_agent("agent-api-architect", triggers=("api design", "openapi")),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         request = _make_request("I need to debug this error", agents)
         result = await handler.compute_routing(request)
@@ -139,14 +139,14 @@ class TestHandlerRoutingDefault:
     async def test_fallback_when_no_match(self, handler: HandlerRoutingDefault) -> None:
         agents = (
             _make_agent("agent-api-architect", triggers=("api design",)),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         request = _make_request(
             "tell me about the weather forecast for tomorrow", agents, threshold=0.9
         )
         result = await handler.compute_routing(request)
 
-        assert result.selected_agent == "polymorphic-agent"
+        assert result.selected_agent == "general-purpose"
         assert result.routing_policy == "fallback_default"
         assert result.fallback_reason is not None
 
@@ -175,7 +175,7 @@ class TestHandlerRoutingDefault:
         """Low-confidence fuzzy matches should be filtered by HARD_FLOOR."""
         agents = (
             _make_agent("agent-xyz", triggers=("xylophone",)),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         # "xyz" is too short/different from "xylophone" to reach HARD_FLOOR
         request = _make_request("xyz something unrelated", agents, threshold=0.1)
@@ -209,7 +209,7 @@ class TestHandlerRoutingDefault:
                 triggers=("security audit",),
                 context_triggers=("vulnerability", "penetration testing"),
             ),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         # Request matches context_trigger "vulnerability" but not explicit_trigger
         request = _make_request("check for vulnerability in auth module", agents)
@@ -224,7 +224,7 @@ class TestHandlerRoutingDefault:
     ) -> None:
         agents = (
             _make_agent("agent-debugger", triggers=("debug",)),
-            _make_agent("polymorphic-agent", triggers=("poly",)),
+            _make_agent("general-purpose", triggers=("poly",)),
         )
         request = _make_request("debug this error", agents)
         result = await handler.compute_routing(request)

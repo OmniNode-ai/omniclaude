@@ -225,7 +225,7 @@ async def handle_skill_requested(
     """Dispatch a skill request to Polly and return a structured result.
 
     Constructs a prompt that includes the skill path and serialized args,
-    dispatches it to the polymorphic agent (Polly) via ``task_dispatcher``,
+    dispatches it to the general-purpose agent (Polly) via ``task_dispatcher``,
     and parses the required RESULT: block from the output.
 
     On any exception from ``task_dispatcher`` the handler returns a FAILED

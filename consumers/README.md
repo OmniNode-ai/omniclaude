@@ -378,7 +378,7 @@ Events consumed from Kafka must match this structure:
 ```json
 {
   "correlation_id": "7415f61f-ab2f-4961-97f5-a5f5c6499a4d",
-  "agent_name": "agent-polymorphic-agent",
+  "agent_name": "agent-general-purpose",
   "action_type": "tool_call",
   "action_name": "Read",
   "action_details": {

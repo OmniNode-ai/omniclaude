@@ -114,7 +114,7 @@ class TestHandlerRoutingLlmTokens:
         completion_tokens, total_tokens) extracted from the ``usage`` dict.
         """
         candidates = [_make_candidate("agent-debugger")]
-        agent_names = {"agent-debugger", "polymorphic-agent"}
+        agent_names = {"agent-debugger", "general-purpose"}
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -166,7 +166,7 @@ class TestHandlerRoutingLlmTokens:
         must return (selected_agent, 0, 0, 0) — no KeyError or exception.
         """
         candidates = [_make_candidate("agent-debugger")]
-        agent_names = {"agent-debugger", "polymorphic-agent"}
+        agent_names = {"agent-debugger", "general-purpose"}
 
         # Response has no ``usage`` key at all
         mock_response = MagicMock()

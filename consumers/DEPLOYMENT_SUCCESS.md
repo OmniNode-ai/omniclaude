@@ -64,7 +64,7 @@ Health: ✅ Healthy
 SELECT * FROM agent_actions;
 -- Results:
 --   Total Records: 3
---   Unique Agents: 3 (polymorphic-agent, testing, frontend-developer)
+--   Unique Agents: 3 (general-purpose, testing, frontend-developer)
 --   Action Types: 1 (decision)
 --   First Record: 2025-11-06 20:46:40
 --   Latest Record: 2025-11-06 20:47:17

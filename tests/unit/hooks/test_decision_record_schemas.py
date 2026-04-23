@@ -35,7 +35,7 @@ def make_valid_payload(**overrides) -> ModelHookDecisionRecordedPayload:
     defaults = {
         "decision_id": "dec-abc123",
         "decision_type": "agent_routing",
-        "selected_candidate": "polymorphic-agent",
+        "selected_candidate": "general-purpose",
         "candidates_count": 5,
         "has_rationale": True,
         "emitted_at": datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC),
@@ -115,7 +115,7 @@ class TestDecisionRecordedPayloadSchema:
         payload = make_valid_payload()
         assert payload.decision_id == "dec-abc123"
         assert payload.decision_type == "agent_routing"
-        assert payload.selected_candidate == "polymorphic-agent"
+        assert payload.selected_candidate == "general-purpose"
         assert payload.candidates_count == 5
         assert payload.has_rationale is True
         assert payload.session_id == "session-xyz"
@@ -126,7 +126,7 @@ class TestDecisionRecordedPayloadSchema:
             ModelHookDecisionRecordedPayload(  # type: ignore[call-arg]
                 decision_id="dec-abc123",
                 decision_type="agent_routing",
-                selected_candidate="polymorphic-agent",
+                selected_candidate="general-purpose",
                 candidates_count=3,
                 has_rationale=False,
                 # emitted_at intentionally omitted
@@ -191,7 +191,7 @@ class TestDecisionRecordedPayloadSchema:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookDecisionRecordedPayload(  # type: ignore[call-arg]
                 decision_type="agent_routing",
-                selected_candidate="polymorphic-agent",
+                selected_candidate="general-purpose",
                 candidates_count=1,
                 has_rationale=False,
                 emitted_at=datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC),
@@ -210,7 +210,7 @@ class TestDecisionRecordedPayloadSchema:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookDecisionRecordedPayload(  # type: ignore[call-arg]
                 decision_id="dec-001",
-                selected_candidate="polymorphic-agent",
+                selected_candidate="general-purpose",
                 candidates_count=1,
                 has_rationale=False,
                 emitted_at=datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC),

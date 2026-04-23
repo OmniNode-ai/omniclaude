@@ -152,11 +152,11 @@ check_self_transformation_rate() {
         WITH transformation_stats AS (
             SELECT
                 COUNT(*) FILTER (
-                    WHERE source_agent = 'polymorphic-agent'
-                    AND target_agent = 'polymorphic-agent'
+                    WHERE source_agent = 'general-purpose'
+                    AND target_agent = 'general-purpose'
                 ) as self_transformations,
                 COUNT(*) FILTER (
-                    WHERE source_agent = 'polymorphic-agent'
+                    WHERE source_agent = 'general-purpose'
                 ) as total_transformations
             FROM agent_transformation_events
             WHERE created_at > NOW() - INTERVAL '7 days'

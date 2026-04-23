@@ -130,7 +130,7 @@ If your agent does not appear, check:
 The routing system returns a ranked candidate list that Claude uses to select
 the active agent. Confirm your agent:
 
-- Scores higher than `polymorphic-agent` for its domain prompts.
+- Scores higher than `general-purpose` for its domain prompts.
 - Does not appear as top candidate for unrelated prompts (false positives
   reduce routing accuracy).
 

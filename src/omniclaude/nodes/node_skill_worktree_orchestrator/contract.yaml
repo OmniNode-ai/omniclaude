@@ -37,7 +37,7 @@ description: >
   Consolidates worktree_sweep (--audit), worktree_triage (--triage), and
   worktree_lifecycle (--prune) into a single node with mode-flag dispatch.
   Supports --cron for scheduled execution.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -75,13 +75,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.worktree
-    description: Dispatch worktree skill to polymorphic agent (audit/triage/prune/cron modes)
+    description: Dispatch worktree skill to general-purpose agent (audit/triage/prune/cron modes)
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch worktree skill invocation to polymorphic agent
+    description: Dispatch worktree skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

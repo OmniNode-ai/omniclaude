@@ -324,7 +324,7 @@ These OmniNode platform services are not required for standalone use:
 ```
 plugins/onex/
 ├── skills/          # ~94 skill methodologies (SKILL.md per skill)
-├── agents/configs/  # 53 polymorphic agent YAML definitions
+├── agents/configs/  # 53 general-purpose agent YAML definitions
 ├── hooks/
 │   ├── scripts/     # Shell hook scripts
 │   └── lib/         # Python hook libraries

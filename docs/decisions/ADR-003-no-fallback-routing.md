@@ -1,4 +1,4 @@
-# ADR-003: Fail-Fast Routing — No Silent Fallback to polymorphic-agent
+# ADR-003: Fail-Fast Routing — No Silent Fallback to general-purpose
 
 **Date**: 2026-02-19
 **Status**: Accepted
@@ -6,18 +6,18 @@
 
 ## Context
 
-The original routing logic always fell back to `polymorphic-agent` when no candidate matched the
+The original routing logic always fell back to `general-purpose` when no candidate matched the
 prompt above the confidence threshold. The behavior was:
 
 ```
-Route prompt → no match above threshold → silently return polymorphic-agent
+Route prompt → no match above threshold → silently return general-purpose
 ```
 
 This created an observability blind spot. From the outside, two situations looked identical:
 
-1. The prompt was correctly routed to `polymorphic-agent` because it was a general-purpose task.
+1. The prompt was correctly routed to `general-purpose` because it was a general-purpose task.
 2. The routing service failed (timeout, empty candidates, all below threshold), so it fell back to
-   `polymorphic-agent`.
+   `general-purpose`.
 
 There was no way to distinguish a successful routing decision from a silent failure. This made
 routing quality metrics unreliable — the denominator included both genuine polly selections and
@@ -37,21 +37,21 @@ masked failures.
 ## Decision
 
 When the routing service finds no candidate above the confidence threshold, the hook now returns
-an explicit no-match signal rather than silently substituting `polymorphic-agent`. The no-match
+an explicit no-match signal rather than silently substituting `general-purpose`. The no-match
 result includes:
 
 - `matched: false`
 - `reason: "no_candidate_above_threshold"` (or `"routing_timeout"`, `"empty_candidates"`, etc.)
 - No agent selection
 
-Claude interprets a no-match result and defaults to `polymorphic-agent` as a consequence of no
+Claude interprets a no-match result and defaults to `general-purpose` as a consequence of no
 match, not as a routing decision. The distinction is preserved in observability events.
 
 ## Consequences
 
 **Positive**:
 - Routing failures are visible. Operators can monitor the no-match rate separately from
-  genuine polymorphic-agent selections.
+  genuine general-purpose selections.
 - Routing quality metrics become trustworthy — the denominator excludes masked failures.
 - The reason for a no-match is recorded (`routing_timeout` vs `no_candidate` vs
   `empty_candidates`), enabling targeted diagnosis.

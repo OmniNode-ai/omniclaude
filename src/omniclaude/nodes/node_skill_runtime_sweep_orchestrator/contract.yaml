@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the runtime_sweep skill.
   Runtime registration and wiring verification — checks node descriptions are real (not compute+hash), all contract-declared handlers are wired in dispatch, all topics have both producer and consumer. Auto-creates Linear tickets for unwired handlers.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.runtime_sweep
-    description: Dispatch runtime_sweep skill to polymorphic agent
+    description: Dispatch runtime_sweep skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch runtime_sweep skill invocation to polymorphic agent
+    description: Dispatch runtime_sweep skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

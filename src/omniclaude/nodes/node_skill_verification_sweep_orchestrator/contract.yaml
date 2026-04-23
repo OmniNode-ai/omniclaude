@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the verification_sweep skill.
   Post-orchestration verification sweep — runs after epic-team or ticket-pipeline completes to verify dashboard endpoints return HTTP 200 with real data, database tables contain expected rows, and dod_evidence rendered_output items have passing receipts. Non-blocking (flags only, does not halt orchestration).
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.verification_sweep
-    description: Dispatch verification_sweep skill to polymorphic agent
+    description: Dispatch verification_sweep skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch verification_sweep skill invocation to polymorphic agent
+    description: Dispatch verification_sweep skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

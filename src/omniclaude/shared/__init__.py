@@ -4,7 +4,7 @@
 
 All skill-dispatch nodes import from this package. It provides the canonical
 request/result models and the single shared handler that dispatches any skill
-to the polymorphic agent (Polly).
+to the general-purpose agent (Polly).
 
 Exported Components:
     Models:

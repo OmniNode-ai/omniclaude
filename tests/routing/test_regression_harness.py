@@ -453,7 +453,7 @@ class TestRouteViaEventsIntegration:
         )
 
     def test_generic_agent_request_falls_back(self) -> None:
-        """Generic 'agent' keyword prompt falls back after polymorphic-agent removal (OMN-7115)."""
+        """Generic 'agent' keyword prompt falls back after general-purpose removal (OMN-7115)."""
         route_via_events = self._get_route_via_events()
         result = route_via_events("use an agent to help me with this task", "corr-123")
         assert result["selected_agent"] == DEFAULT_AGENT

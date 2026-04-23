@@ -38,7 +38,7 @@ installed_by: jonah
 - Slash commands and skills (`plugins/onex/commands/`, `plugins/onex/skills/`)
 - Event emission via Unix socket daemon
 - Context injection and pattern learning system
-- Polymorphic agent coordination (Polly)
+- General-purpose agent coordination (Polly)
 
 ## Rules the Agent Must Obey
 
@@ -80,7 +80,7 @@ installed_by: jonah
 | PostToolUse | <100ms | stdin read, quality check | Kafka, content capture |
 | SessionEnd | <50ms | stdin read | Kafka, Postgres |
 
-## Parallel Execution Rules (Polymorphic Agents)
+## Parallel Execution Rules (General-Purpose Agents)
 
 - **File Separation**: Each Polly creates own file (zero conflicts)
 - **Single Branch**: All work on same branch (no merge overhead)
@@ -101,7 +101,7 @@ installed_by: jonah
 | Emit daemon down | Events dropped, hook continues | 0 |
 | Kafka unavailable | Daemon buffers, then drops | 0 |
 | PostgreSQL down | Logging skipped | 0 |
-| Routing timeout | Fallback to `polymorphic-agent` | 0 |
+| Routing timeout | Fallback to `general-purpose` | 0 |
 | Agent YAML missing | Use default agent, log warning | 0 |
 | Context injection fails | Proceed without patterns | 0 |
 | Malformed stdin | Log error, pass through empty | 0 |

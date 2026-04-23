@@ -60,7 +60,7 @@ Which would you prefer?
 
 ### 4. Agent-Created Worktrees
 
-When agents (subagents, polymorphic agents, automated workflows) create worktrees, they MUST use the canonical location:
+When agents (subagents, general-purpose agents, automated workflows) create worktrees, they MUST use the canonical location:
 
 ```
 $ONEX_STATE_DIR/worktrees/{repo}/{branch}

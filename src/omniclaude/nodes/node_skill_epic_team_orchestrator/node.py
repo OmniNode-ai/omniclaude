@@ -6,7 +6,7 @@ Capability: skill.epic_team
 All dispatch logic lives in the shared handle_skill_requested handler.
 
 Wave 2 Observability (OMN-2922):
-    Callers of this node (polymorphic agent running the epic-team skill) are
+    Callers of this node (general-purpose agent running the epic-team skill) are
     responsible for emitting epic.run.updated events at each phase transition
     and at terminal outcomes (completed, failed, partial, cancelled) by calling:
 

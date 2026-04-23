@@ -676,7 +676,7 @@ If you follow TDD for code, follow it for skills. It's the same discipline appli
 
 ## Polly-Dispatch Policy for Skill Implementation
 
-**MANDATORY**: All skill implementation work MUST be dispatched through polymorphic agents (pollys). The main agent acts as orchestrator only.
+**MANDATORY**: All skill implementation work MUST be dispatched through general-purpose agents (pollys). The main agent acts as orchestrator only.
 
 ### Why
 

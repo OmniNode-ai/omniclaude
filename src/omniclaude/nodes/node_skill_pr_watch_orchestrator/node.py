@@ -6,7 +6,7 @@ Capability: skill.pr_watch
 All dispatch logic lives in the shared handle_skill_requested handler.
 
 Wave 2 Observability (OMN-2922):
-    Callers of this node (polymorphic agent running the pr-watch skill) are
+    Callers of this node (general-purpose agent running the pr-watch skill) are
     responsible for emitting pr.watch.updated events at each terminal outcome
     (approved, capped, timeout, failed) by calling:
 

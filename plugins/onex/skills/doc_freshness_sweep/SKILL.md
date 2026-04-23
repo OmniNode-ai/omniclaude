@@ -58,13 +58,13 @@ onex.cmd.omniclaude.doc_freshness_sweep.v1  (Kafka)
 NodeSkillDocFreshnessSweepOrchestrator
   src/omniclaude/nodes/node_skill_doc_freshness_sweep_orchestrator/
   → handle_skill_requested (omniclaude.shared)
-  → claude -p (polymorphic agent executes skill)
+  → claude -p (general-purpose agent executes skill)
         |
         v
 onex.evt.omniclaude.doc_freshness_sweep-completed.v1
 ```
 
-All scanning logic executes inside the polymorphic agent. This skill is a thin shell: parse args, dispatch to node, render results.
+All scanning logic executes inside the general-purpose agent. This skill is a thin shell: parse args, dispatch to node, render results.
 
 ## What This Skill Does
 

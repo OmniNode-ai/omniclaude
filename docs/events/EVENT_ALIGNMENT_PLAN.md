@@ -170,7 +170,7 @@ MVP Event Catalog requires **10 agent events**. We have **3**. Need **7 more**.
     "context": {}
   }
   ```
-- **Integration Points**: Agent workflow coordinator, polymorphic agent launcher
+- **Integration Points**: Agent workflow coordinator, general-purpose agent launcher
 - **Estimated Effort**: 2-3 hours
 
 ### Task 1.2: Add `omninode.agent.execution.completed.v1` ⏳

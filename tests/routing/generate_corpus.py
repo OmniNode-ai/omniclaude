@@ -204,7 +204,7 @@ CURATED_PROMPTS: list[tuple[str, str, str]] = [
     (
         "Orchestrate a multi-agent workflow for this task",
         "multi_word_trigger",
-        "polymorphic-agent via 'multi-agent'/'workflow orchestration'",
+        "general-purpose via 'multi-agent'/'workflow orchestration'",
     ),
     # ── Category 3: Explicit agent requests ───────────────────────────
     (
@@ -235,12 +235,12 @@ CURATED_PROMPTS: list[tuple[str, str, str]] = [
     (
         "use an agent to help me with this task",
         "explicit_request",
-        "Generic agent request -> polymorphic-agent",
+        "Generic agent request -> general-purpose",
     ),
     (
         "spawn an agent to coordinate this workflow",
         "explicit_request",
-        "Generic agent request -> polymorphic-agent",
+        "Generic agent request -> general-purpose",
     ),
     (
         "@agent-security-audit check for vulnerabilities",
@@ -341,37 +341,37 @@ CURATED_PROMPTS: list[tuple[str, str, str]] = [
     (
         "We need a polymorphic architecture design",
         "context_filter",
-        "Should NOT trigger polymorphic-agent (technical usage)",
+        "Should NOT trigger general-purpose (technical usage)",
     ),
     (
         "The code uses polymorphism for the strategy pattern",
         "context_filter",
-        "Should NOT trigger polymorphic-agent (technical usage)",
+        "Should NOT trigger general-purpose (technical usage)",
     ),
     (
         "Use poly to coordinate the agents",
         "context_filter",
-        "SHOULD trigger polymorphic-agent (action context: 'use poly')",
+        "SHOULD trigger general-purpose (action context: 'use poly')",
     ),
     (
         "Spawn polly to run multiple tasks",
         "context_filter",
-        "SHOULD trigger polymorphic-agent (action context: 'spawn polly')",
+        "SHOULD trigger general-purpose (action context: 'spawn polly')",
     ),
     (
         "Polly suggested we use a different approach",
         "context_filter",
-        "Should NOT trigger polymorphic-agent (casual reference)",
+        "Should NOT trigger general-purpose (casual reference)",
     ),
     (
         "Dispatch 4 pollys for parallel execution",
         "context_filter",
-        "SHOULD trigger polymorphic-agent via 'dispatch 4 pollys'",
+        "SHOULD trigger general-purpose via 'dispatch 4 pollys'",
     ),
     (
         "The pollyanna approach won't work here",
         "context_filter",
-        "Should NOT trigger polymorphic-agent (pollyanna rejection)",
+        "Should NOT trigger general-purpose (pollyanna rejection)",
     ),
     (
         "Coordinate the workflow using polymorphic patterns",
@@ -386,7 +386,7 @@ CURATED_PROMPTS: list[tuple[str, str, str]] = [
     (
         "Using polymorphism in the router design",
         "context_filter",
-        "Should NOT trigger polymorphic-agent (technical usage)",
+        "Should NOT trigger general-purpose (technical usage)",
     ),
     # ── Category 7: Fuzzy match cases ─────────────────────────────────
     ("Write some tests for the new feature", "fuzzy_match", "Fuzzy 'tests' -> testing"),

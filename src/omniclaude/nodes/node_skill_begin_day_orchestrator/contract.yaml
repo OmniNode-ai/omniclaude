@@ -36,7 +36,7 @@ description: >
   Runs a morning investigation pipeline: syncs repos, checks infra health,
   loads yesterday close-day corrections, runs diagnostic probes, and produces
   a ModelDayOpen YAML artifact with prioritized findings and focus areas.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -73,13 +73,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.begin_day
-    description: Dispatch begin-day skill to polymorphic agent
+    description: Dispatch begin-day skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch begin-day skill invocation to polymorphic agent
+    description: Dispatch begin-day skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

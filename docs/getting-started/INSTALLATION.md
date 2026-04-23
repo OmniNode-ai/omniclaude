@@ -140,7 +140,7 @@ print('Routing wrapper OK')
 
 If `USE_EVENT_ROUTING=true` is set and `KAFKA_BOOTSTRAP_SERVERS` is reachable,
 routing requests will be sent to Kafka during `UserPromptSubmit`. Without those,
-routing falls back to the `polymorphic-agent` (exit 0, no blocking).
+routing falls back to the `general-purpose` (exit 0, no blocking).
 
 ## Environment Variables
 
@@ -170,7 +170,7 @@ routing falls back to the `polymorphic-agent` (exit 0, no blocking).
 | Hook fails with exit 1 | Python interpreter not found | Set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
 | `daemon_running: false` | SessionStart hook did not run | Open/restart Claude Code session in project directory |
 | Events not arriving in Kafka | Daemon started but Kafka unreachable | Check `KAFKA_BOOTSTRAP_SERVERS`; verify port 29092 is accessible |
-| Routing always returns `polymorphic-agent` | Routing service timeout (5 s) | Check network to Kafka; set `USE_EVENT_ROUTING=false` to disable |
+| Routing always returns `general-purpose` | Routing service timeout (5 s) | Check network to Kafka; set `USE_EVENT_ROUTING=false` to disable |
 | Context injection empty | PostgreSQL unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env` |
 
 See [CLAUDE.md](../../CLAUDE.md) for the complete failure mode table.

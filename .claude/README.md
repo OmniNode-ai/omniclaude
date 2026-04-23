@@ -45,7 +45,7 @@ ln -sf "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
 ## What's Included
 
 ### Agent Definitions (`agents/definitions/`)
-- 40+ polymorphic agent YAML definitions
+- 40+ general-purpose agent YAML definitions
 - Agent registry with capabilities and activation patterns
 - Specialized agents for testing, debugging, API design, etc.
 

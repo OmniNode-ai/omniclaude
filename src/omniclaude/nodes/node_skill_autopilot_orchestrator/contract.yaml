@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the autopilot skill.
   Autonomous close-out orchestrator — runs integration-sweep as a hard gate, then executes merge-sweep, release, redeploy, and close-day in sequence. Halts immediately on any integration-sweep FAIL or UNKNOWN/contract failure.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.autopilot
-    description: Dispatch autopilot skill to polymorphic agent
+    description: Dispatch autopilot skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch autopilot skill invocation to polymorphic agent
+    description: Dispatch autopilot skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

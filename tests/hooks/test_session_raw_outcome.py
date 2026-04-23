@@ -210,7 +210,7 @@ class TestBuildSessionEndEvent:
         mock_session_state = {
             "injection_occurred": True,
             "patterns_injected_count": 3,
-            "agent_selected": "polymorphic-agent",
+            "agent_selected": "general-purpose",
             "routing_confidence": 0.91,
         }
         event = build_session_raw_outcome_event(
@@ -302,7 +302,7 @@ class TestSessionAccumulatorFileFormat:
         accumulator = {
             "injection_occurred": True,
             "patterns_injected_count": 3,
-            "agent_selected": "polymorphic-agent",
+            "agent_selected": "general-purpose",
             "routing_confidence": 0.91,
         }
         raw_json = json.dumps(accumulator)
@@ -310,7 +310,7 @@ class TestSessionAccumulatorFileFormat:
 
         assert parsed["injection_occurred"] is True
         assert parsed["patterns_injected_count"] == 3
-        assert parsed["agent_selected"] == "polymorphic-agent"
+        assert parsed["agent_selected"] == "general-purpose"
         assert abs(parsed["routing_confidence"] - 0.91) < 1e-9
 
     def test_accumulator_with_no_injection(self) -> None:

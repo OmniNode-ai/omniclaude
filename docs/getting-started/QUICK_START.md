@@ -176,7 +176,7 @@ To see the routing decision in the hook log:
 tail -f ~/.claude/hooks.log 2>/dev/null || echo "LOG_FILE not set — routing decisions go to routing service"
 ```
 
-If routing times out (5 s), the hook falls back to `polymorphic-agent` and exits
+If routing times out (5 s), the hook falls back to `general-purpose` and exits
 0. The session is never blocked.
 
 ---

@@ -1348,7 +1348,7 @@ release logic. This is intentional:
 
 **Rule**: The release orchestrator runs all 12 sub-steps (plus lettered sub-steps
 2b, 9b, and 10b) inline using Bash commands.
-It does NOT dispatch to polymorphic agents for individual steps.
+It does NOT dispatch to general-purpose agents for individual steps.
 
 **Exception**: The Slack gate (Phase 2) may invoke the `slack-gate` skill's poll script.
 

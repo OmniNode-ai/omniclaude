@@ -160,7 +160,7 @@ class TestTaskIdFieldPresent:
     def test_manifest_injected_task_id(self) -> None:
         payload = ModelHookManifestInjectedPayload(
             **_base_tracing(),
-            agent_name="polymorphic-agent",
+            agent_name="general-purpose",
             agent_domain="general",
             injection_success=True,
             injection_duration_ms=25,
@@ -197,7 +197,7 @@ class TestTaskIdFieldPresent:
         payload = ModelHookDecisionRecordedPayload(
             decision_id="dec-abc",
             decision_type="agent_routing",
-            selected_candidate="polymorphic-agent",
+            selected_candidate="general-purpose",
             candidates_count=5,
             has_rationale=True,
             emitted_at=_NOW,

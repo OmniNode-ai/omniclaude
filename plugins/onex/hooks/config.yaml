@@ -52,7 +52,7 @@ hook_policies:
     channel: terminal # terminal | chat | slack_poll (see maturity notes above)
 
 # Delegation enforcement
-# Controls when inline work is warned/blocked to force polymorphic agent delegation.
+# Controls when inline work is warned/blocked to force general-purpose agent delegation.
 # All thresholds count tool calls since last delegation (Task/Agent with onex: prefix).
 # A new user prompt resets all counters and flags.
 # Set any threshold to -1 to disable that check.

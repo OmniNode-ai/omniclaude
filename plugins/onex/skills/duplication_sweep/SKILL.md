@@ -27,13 +27,13 @@ onex.cmd.omniclaude.duplication_sweep.v1  (Kafka)
 NodeSkillDuplicationSweepOrchestrator
   src/omniclaude/nodes/node_skill_duplication_sweep_orchestrator/
   → handle_skill_requested (omniclaude.shared)
-  → claude -p (polymorphic agent executes skill)
+  → claude -p (general-purpose agent executes skill)
         |
         v
 onex.evt.omniclaude.duplication_sweep-completed.v1
 ```
 
-All scanning logic executes inside the polymorphic agent. This skill is a thin shell: parse args, dispatch to node, render results.
+All scanning logic executes inside the general-purpose agent. This skill is a thin shell: parse args, dispatch to node, render results.
 
 Lightweight structural scan designed to catch obvious collision classes quickly.
 It is intentionally text- and pattern-driven, not a full semantic analyzer.

@@ -134,7 +134,7 @@ class TestPhoenixOtelExport:
                     manifest_injected=True,
                     injected_pattern_count=3,
                     agent_matched=True,
-                    selected_agent="polymorphic-agent",
+                    selected_agent="general-purpose",
                     injection_latency_ms=42.5,
                     cohort="treatment",
                 )
@@ -231,7 +231,7 @@ class TestPhoenixOtelExport:
             input_json: dict[str, Any] = {
                 "session_id": "wrapper-session",
                 "correlation_id": "wrapper-corr",
-                "agent_name": "polymorphic-agent",
+                "agent_name": "general-purpose",
             }
 
             # Call the OTEL emission block directly (mirrors wrapper logic)
@@ -253,7 +253,7 @@ class TestPhoenixOtelExport:
         assert call["manifest_injected"] is True
         assert call["injected_pattern_count"] == 2
         assert call["cohort"] == "treatment"
-        assert call["selected_agent"] == "polymorphic-agent"
+        assert call["selected_agent"] == "general-purpose"
 
     def test_wrapper_main_passes_start_time_to_exporter(self) -> None:
         """context_injection_wrapper captures time_ns before injection and

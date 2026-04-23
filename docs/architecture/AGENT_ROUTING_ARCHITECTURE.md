@@ -108,7 +108,7 @@ Matching works through compiled regex patterns derived from the trigger strings.
 
 **CONFIDENCE_THRESHOLD = 0.5**
 
-Agents with a top score below 0.5 are not selected — `selected_agent` is returned as `""`. This is the "no-fallback" mode introduced to replace the old behavior of defaulting to `polymorphic-agent` on every miss. When `selected_agent=""`, Claude receives the candidates list but no pre-selected agent; it uses the candidates as hints to make its own semantic selection.
+Agents with a top score below 0.5 are not selected — `selected_agent` is returned as `""`. This is the "no-fallback" mode introduced to replace the old behavior of defaulting to `general-purpose` on every miss. When `selected_agent=""`, Claude receives the candidates list but no pre-selected agent; it uses the candidates as hints to make its own semantic selection.
 
 See `docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md` for detailed threshold tuning notes and the rationale for 0.5 as the cutoff.
 
@@ -151,7 +151,7 @@ These three fields feed downstream analytics and the observability dashboard wit
 
 ## No-Fallback Mode
 
-Prior to the no-fallback design, every routing miss fell back to `polymorphic-agent`. This had two problems: (1) `polymorphic-agent` was selected even when irrelevant, polluting routing metrics, and (2) it suppressed the signal that no good match existed.
+Prior to the no-fallback design, every routing miss fell back to `general-purpose`. This had two problems: (1) `general-purpose` was selected even when irrelevant, polluting routing metrics, and (2) it suppressed the signal that no good match existed.
 
 Current behavior: `DEFAULT_AGENT = ""` (empty string). When confidence is below 0.5 or no triggers match, `selected_agent` is `""`. The shell script detects this and omits the agent selection banner from `additionalContext`. Claude receives the candidates list and falls back to its own judgment.
 

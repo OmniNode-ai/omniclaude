@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the executing-plans skill.
   Use when partner provides a complete implementation plan to execute in controlled batches with review checkpoints - loads plan, reviews critically, executes tasks in batches, reports for review between batches
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -71,13 +71,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.executing_plans
-    description: Dispatch executing-plans skill to polymorphic agent
+    description: Dispatch executing-plans skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch executing-plans skill invocation to polymorphic agent
+    description: Dispatch executing-plans skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

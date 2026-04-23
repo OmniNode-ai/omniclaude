@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the set_session skill.
   Bind the current Claude Code session to a Linear ticket for cross-session correlation
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.set_session
-    description: Dispatch set_session skill to polymorphic agent
+    description: Dispatch set_session skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch set_session skill invocation to polymorphic agent
+    description: Dispatch set_session skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

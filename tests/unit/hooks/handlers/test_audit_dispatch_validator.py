@@ -625,7 +625,7 @@ class TestLoadAgentYamlPathSafety:
     @pytest.mark.parametrize(
         "subagent_type",
         [
-            "onex:polymorphic-agent",
+            "onex:general-purpose",
             "onex:my-agent",
             "onex:agent_name",
             "onex:AgentName123",

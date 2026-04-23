@@ -98,7 +98,7 @@ def make_change_frame(**overrides: object) -> ChangeFrame:
         "parent_frame_id": None,
         "trace_id": "session-abc123",
         "timestamp_utc": "2026-02-19T14:22:31Z",
-        "agent_id": "polymorphic-agent",
+        "agent_id": "general-purpose",
         "model_id": "claude-opus-4-6",
         "frame_config": make_frame_config(),
         "intent_ref": make_intent_ref(),

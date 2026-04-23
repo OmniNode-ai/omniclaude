@@ -56,7 +56,7 @@ These services are **owned, maintained, and deployed** by the omniclaude reposit
 
 ### 2. omniclaude Agent System
 
-**Purpose**: Polymorphic agent framework with ONEX compliance
+**Purpose**: General-purpose agent framework with ONEX compliance
 
 **Key Responsibilities**:
 - Dynamic agent transformation and routing
@@ -295,7 +295,7 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092
 - `agent_routing_decisions` - Agent selection and confidence scores
 - `agent_manifest_injections` - Complete manifest snapshots
 - `agent_execution_logs` - Execution lifecycle tracking
-- `agent_transformation_events` - Polymorphic agent transformations
+- `agent_transformation_events` - General-purpose agent transformations
 - `router_performance_metrics` - Routing performance analytics
 - `workflow_events` - Debug intelligence data
 
@@ -561,7 +561,7 @@ from agents.lib.agent_execution_logger import log_agent_execution
 
 # Non-blocking database logging with retry
 logger = await log_agent_execution(
-    agent_name="polymorphic-agent",
+    agent_name="general-purpose",
     user_prompt="Implement ONEX pattern",
     correlation_id="8b57ec39-45b5-467b-939c-dd1439219f69"
 )

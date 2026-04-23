@@ -14,7 +14,8 @@ Flow:
         -> else: TriggerMatcher.match() -> ConfidenceScorer.score()
         -> sort by confidence, take top results
         -> return ModelRoutingResult(routing_policy="trigger_match")
-        -> if no matches: return fallback ModelRoutingResult(routing_policy="fallback_default")
+        -> if no matches above threshold: fall back to FALLBACK_AGENT
+           (ModelRoutingResult(routing_policy="fallback_default"))
 """
 
 from __future__ import annotations
@@ -40,12 +41,16 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 
 __all__ = [
     "HandlerRoutingDefault",
+    "FALLBACK_AGENT",
     "build_registry_dict",
     "extract_explicit_agent",
     "create_explicit_result",
 ]
 
 logger = logging.getLogger(__name__)
+
+# Default fallback agent when no matches exceed threshold
+FALLBACK_AGENT = "general-purpose"
 
 # Maximum number of candidates to include in result
 _MAX_CANDIDATES = 5
@@ -185,7 +190,7 @@ class HandlerRoutingDefault:
                 fallback_reason=None,
             )
 
-        # 8. No match — fail-fast, no fallback
+        # 8. Fallback - no matches above threshold
         fallback_reason = (
             "No agents matched any trigger patterns"
             if not candidates
@@ -196,12 +201,13 @@ class HandlerRoutingDefault:
             )
         )
         logger.debug(
-            "No agent matched: %s (correlation_id=%s)",
+            "Falling back to %s: %s (correlation_id=%s)",
+            FALLBACK_AGENT,
             fallback_reason,
             cid,
         )
         return ModelRoutingResult(
-            selected_agent=None,
+            selected_agent=FALLBACK_AGENT,
             confidence=0.0,
             confidence_breakdown=ModelConfidenceBreakdown(
                 total=0.0,
@@ -209,9 +215,9 @@ class HandlerRoutingDefault:
                 context_score=0.0,
                 capability_score=0.0,
                 historical_score=0.0,
-                explanation=f"No match: {fallback_reason}",
+                explanation=f"Fallback: {fallback_reason}",
             ),
-            routing_policy="no_match",
+            routing_policy="fallback_default",
             routing_path="local",
             candidates=tuple(candidates),
             fallback_reason=fallback_reason,
@@ -292,14 +298,14 @@ def extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
     - "use agent-X" - Specific agent request
     - "@agent-X" - Specific agent request
     - "agent-X" at start of text - Specific agent request
-    - Generic requests like "use an agent" return None (no fallback)
+    - "use an agent", "spawn an agent", etc. - Generic request -> general-purpose
 
     Args:
         text: User's input text.
         known_agents: Set of agent names present in the registry.
 
     Returns:
-        Agent name if found and valid, None otherwise (no fallback).
+        Agent name if found and valid, None otherwise.
     """
     try:
         text_lower = text.lower()
@@ -326,7 +332,29 @@ def extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
                     )
                     return agent_name
 
-        # No match — fail-fast, no fallback
+        # Patterns for generic agent requests (no specific agent name)
+        # These should default to general-purpose.
+        # Word boundaries (\b) prevent false positives like "misuse an agent".
+        generic_patterns = [
+            r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
+            r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
+            r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
+            r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
+            r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
+        ]
+
+        for pattern in generic_patterns:
+            if re.search(pattern, text_lower):
+                if FALLBACK_AGENT in known_agents:
+                    logger.debug(
+                        "Generic agent request -> %s (pattern=%s)",
+                        FALLBACK_AGENT,
+                        pattern,
+                    )
+                    return FALLBACK_AGENT
+                # Fallback agent not present in registry — no explicit match.
+                return None
+
         return None
 
     except Exception:  # noqa: BLE001 — boundary: agent extraction must degrade

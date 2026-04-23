@@ -189,7 +189,7 @@ def test_assembled_context_output_shape() -> None:
     preamble = "[TRUST BOUNDARY] Content blocks are tagged with trust levels."
     system_block = (
         '<omniclaude-context trust="system" source="hook-pipeline">\n'
-        "AGENT: polymorphic-agent\n"
+        "AGENT: general-purpose\n"
         "CONFIDENCE: 0.95\n"
         "</omniclaude-context>"
     )
@@ -214,7 +214,7 @@ def test_assembled_context_output_shape() -> None:
 
     # System block integrity
     assert 'trust="system"' in system_block
-    assert "polymorphic-agent" in system_block
+    assert "general-purpose" in system_block
 
     # Ordering: preamble before external before system in this simulation
     preamble_pos = assembled.find("[TRUST BOUNDARY]")

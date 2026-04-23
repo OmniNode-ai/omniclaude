@@ -27,7 +27,7 @@ cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr
 | `pr_number` | int | Yes | — | PR number to review |
 | `repo` | string | Yes | — | GitHub repo in `owner/repo` format |
 | `reviewer_models` | list | Yes | — | Models to use for review (must be registered in ModelInferenceBridgeConfig) |
-| `judge_model` | string | No | `deepseek-r1` | Judge model for thread verification |
+| `judge_model` | string | No | `mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16` | Judge model for thread verification; must be a fully qualified identifier registered in `ModelInferenceBridgeConfig`. |
 | `severity_threshold` | string | No | `MAJOR` | Minimum severity to post (MAJOR, CRITICAL) |
 | `dry_run` | bool | No | `false` | Run without posting to GitHub |
 | `max_findings_per_pr` | int | No | 20 | Cap on threads to post |

@@ -49,13 +49,13 @@ onex.cmd.omniclaude.plan-audit.v1  (Kafka)
 NodeSkillPlanAuditOrchestrator
   src/omniclaude/nodes/node_skill_plan_audit_orchestrator/
   → handle_skill_requested (omniclaude.shared)
-  → claude -p (polymorphic agent executes skill)
+  → claude -p (general-purpose agent executes skill)
         |
         v
 onex.evt.omniclaude.plan-audit-completed.v1
 ```
 
-All audit logic executes inside the polymorphic agent. This skill is a thin shell:
+All audit logic executes inside the general-purpose agent. This skill is a thin shell:
 parse args, dispatch to node, render results.
 
 ## Announce at start

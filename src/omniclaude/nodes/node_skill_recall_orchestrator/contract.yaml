@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the recall skill.
   Query the Cross-Agent Memory Fabric for relevant learnings from previous agent sessions. Use when hitting an error, choosing a fix strategy, or working in an unfamiliar area.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.recall
-    description: Dispatch recall skill to polymorphic agent
+    description: Dispatch recall skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch recall skill invocation to polymorphic agent
+    description: Dispatch recall skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

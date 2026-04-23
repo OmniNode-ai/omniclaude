@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the ticket-plan skill.
   Generate a prioritized master ticket plan from Linear — fetches all active tickets, resolves blocking relationships, and outputs an actionable backlog sorted by priority
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -71,13 +71,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.ticket_plan
-    description: Dispatch ticket-plan skill to polymorphic agent
+    description: Dispatch ticket-plan skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch ticket-plan skill invocation to polymorphic agent
+    description: Dispatch ticket-plan skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

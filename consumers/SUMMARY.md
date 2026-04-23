@@ -2,7 +2,7 @@
 
 **Correlation ID**: 7415f61f-ab2f-4961-97f5-a5f5c6499a4d
 **Completed**: 2025-10-20
-**Agent**: agent-polymorphic-agent (Polly)
+**Agent**: agent-general-purpose (Polly)
 
 ## 📋 Task Completion
 
@@ -456,6 +456,6 @@ All requirements met:
 
 ---
 
-**Agent**: agent-polymorphic-agent (Polly)
+**Agent**: agent-general-purpose (Polly)
 **Correlation ID**: 7415f61f-ab2f-4961-97f5-a5f5c6499a4d
 **Completed**: 2025-10-20T18:50:00Z

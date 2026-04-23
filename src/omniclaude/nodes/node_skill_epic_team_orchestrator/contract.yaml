@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the epic-team skill.
   Orchestrate a Claude Code agent team to autonomously work a Linear epic across multiple repos
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -71,13 +71,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.epic_team
-    description: Dispatch epic-team skill to polymorphic agent
+    description: Dispatch epic-team skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch epic-team skill invocation to polymorphic agent
+    description: Dispatch epic-team skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

@@ -52,7 +52,7 @@ independently — they never hit thresholds.
 ## Workflow Dispatch Rules
 
 - When executing plans or tasks, ALWAYS use the correct skill/workflow (hostile-reviewer, design-to-plan, epic-team, merge-sweep, ticket-pipeline) rather than ad-hoc implementation. Never replicate a skill's logic inline — dispatch to the skill.
-- When dispatching work to sub-agents or polymorphic agents, verify: (1) correct handoff file is referenced, (2) parent epic is set on tickets, (3) agent uses polymorphic dispatch. Do not blindly dispatch without understanding the situation first.
+- When dispatching work to sub-agents or general-purpose agents, verify: (1) correct handoff file is referenced, (2) parent epic is set on tickets, (3) agent uses polymorphic dispatch. Do not blindly dispatch without understanding the situation first.
 - When working with Linear tickets in bulk, use rate-limit-aware batching (max 5-10 per batch with delays). Always set parent epic when creating tickets in bulk.
 
 ---

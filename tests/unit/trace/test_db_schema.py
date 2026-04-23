@@ -204,7 +204,7 @@ class TestRowChangeFrame:
         row = RowChangeFrame(
             frame_id=uuid4(),
             timestamp_utc=datetime.now(),  # noqa: DTZ005
-            agent_id="polymorphic-agent",
+            agent_id="general-purpose",
             model_id="claude-opus-4-6",
             base_commit="abc123",
             repo="org/repo",

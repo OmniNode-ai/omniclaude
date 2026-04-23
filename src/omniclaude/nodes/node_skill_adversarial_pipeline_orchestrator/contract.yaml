@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the adversarial_pipeline skill.
   Autonomous 3-stage adversarial plan-to-ticket pipeline — design_to_plan → hostile_reviewer gate (≥3 issues required) → plan_to_tickets. All stages run as background agents. Zero foreground work.
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -72,13 +72,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.adversarial_pipeline
-    description: Dispatch adversarial_pipeline skill to polymorphic agent
+    description: Dispatch adversarial_pipeline skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch adversarial_pipeline skill invocation to polymorphic agent
+    description: Dispatch adversarial_pipeline skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

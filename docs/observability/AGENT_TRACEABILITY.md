@@ -4,7 +4,7 @@
 
 # Agent Traceability System
 
-Complete observability and traceability for polymorphic agent executions with Kafka-based event logging and PostgreSQL persistence.
+Complete observability and traceability for general-purpose agent executions with Kafka-based event logging and PostgreSQL persistence.
 
 ## Table of Contents
 

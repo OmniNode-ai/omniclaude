@@ -34,7 +34,7 @@ node_type: ORCHESTRATOR_GENERIC
 description: >
   Orchestrator node for the pipeline-audit skill.
   Systematically audit an end-to-end multi-repo pipeline for integration correctness by proving every join between services with file-level evidence, dispatching parallel agents per repo and per proof category, and compiling a severity-ordered gap register with actionable tickets
-  Dispatches skill invocations to the polymorphic agent via the shared
+  Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
 
@@ -71,13 +71,13 @@ event_bus:
 # Capabilities
 capabilities:
   - name: skill.pipeline_audit
-    description: Dispatch pipeline-audit skill to polymorphic agent
+    description: Dispatch pipeline-audit skill to general-purpose agent
     version: 1.0.0
 
 # IO operations
 io_operations:
   - operation: skill_requested
-    description: Dispatch pipeline-audit skill invocation to polymorphic agent
+    description: Dispatch pipeline-audit skill invocation to general-purpose agent
     handler_method: handle_skill_requested
     input_fields:
       - skill_name: str

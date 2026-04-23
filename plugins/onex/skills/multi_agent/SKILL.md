@@ -199,19 +199,19 @@ Return: Summary of what you found and what you fixed.
 
 <!-- Absorbed from parallel-solve -->
 
-Smart context-aware task executor. Gathers requirements, plans sub-tasks, executes them in parallel via polymorphic agents, validates results, and reports.
+Smart context-aware task executor. Gathers requirements, plans sub-tasks, executes them in parallel via general-purpose agents, validates results, and reports.
 
 ### Dispatch Contracts (Execution-Critical)
 
 **This section governs execution. Follow it exactly.**
 
-You are an orchestrator. You coordinate polymorphic agents. You do NOT implement code yourself.
+You are an orchestrator. You coordinate general-purpose agents. You do NOT implement code yourself.
 
 **Rule: NEVER call Edit(), Write(), or Bash(code-modifying) directly.**
 **Rule: ALL Task() calls MUST use subagent_type="general-purpose". No exceptions.**
 **Rule: NO git operations in spawned agents. Git is coordinator-only, user-approved only.**
 
-#### Phase 1: Requirements Gathering -- dispatch to polymorphic agent
+#### Phase 1: Requirements Gathering -- dispatch to general-purpose agent
 
 Before execution, analyze scope:
 
@@ -240,7 +240,7 @@ Task(
 )
 ```
 
-#### Phase 2: Parallel Execution -- dispatch N polymorphic agents
+#### Phase 2: Parallel Execution -- dispatch N general-purpose agents
 
 For each independent task from requirements:
 
@@ -258,7 +258,7 @@ Task(
 
 Dispatch ALL independent tasks in a single message. Wait before dispatching dependents.
 
-#### Phase 3: Quality Validation -- dispatch to polymorphic agent
+#### Phase 3: Quality Validation -- dispatch to general-purpose agent
 
 ```
 Task(
@@ -340,7 +340,7 @@ echo "PR #$PR_NUMBER: $PR_URL"
 echo "Automerge armed. GitHub merges when all branch protection requirements are satisfied."
 ```
 
-**Rule**: Phase 6 is git-only coordinator work. Do NOT dispatch to polymorphic agents.
+**Rule**: Phase 6 is git-only coordinator work. Do NOT dispatch to general-purpose agents.
 
 ### Task Classification
 
