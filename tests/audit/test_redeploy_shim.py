@@ -28,6 +28,8 @@ LLM_SDK_FORBIDDEN = [
     r"import openai",
     r"anthropic\.Anthropic",
     r"openai\.OpenAI",
+    r"mcp__anthropic",
+    r"mcp__openai",
 ]
 
 ORCHESTRATION_FORBIDDEN = [
@@ -72,9 +74,12 @@ def test_exactly_one_onex_run_dispatch() -> None:
 
 
 def test_dispatches_to_node_redeploy() -> None:
+    """The single dispatch must target node_redeploy, not some other node."""
     text = _skill_text()
-    assert "node_redeploy" in text, (
-        "SKILL.md must name the backing node (`node_redeploy`)"
+    dispatch_matches = re.findall(r"onex run-node\s+(\S+)", text)
+    assert dispatch_matches == ["node_redeploy"], (
+        f"SKILL.md must dispatch to `node_redeploy` exactly once; "
+        f"found dispatch targets: {dispatch_matches}"
     )
 
 
