@@ -125,6 +125,15 @@
         ]
       },
       {
+        "matcher": "^(Read|Edit|Write|Bash|Glob|Grep)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_team_lead_guard.sh"
+          }
+        ]
+      },
+      {
         "matcher": "^(Edit|Write)$",
         "hooks": [
           {
