@@ -22,7 +22,7 @@ author: OmniClaude Team
 
 ## Overview
 
-Parent skill that chains `linear-triage` → human review checkpoint → `linear-epic-org`
+Parent skill that chains `ticketing-triage` → human review checkpoint → `ticketing-epic-org`
 → `ticket-plan --sync` into a single coherent workflow.
 
 **Announce at start:** "I'm using the linear-housekeeping skill for a full ticket audit."
@@ -131,7 +131,7 @@ a session with many changes to ensure a clean state.
 | Flag | Effect |
 |------|--------|
 | `--dry-run` | Pass through to all three sub-skills. No Linear writes, no file writes. |
-| `--threshold N` | Set staleness threshold in days (default 14). Passed to linear-triage. |
+| `--threshold N` | Set staleness threshold in days (default 14). Passed to ticketing-triage. |
 | `--skip-triage` | Skip Phase 1. Jump to Phase 2 (epic-org) and Phase 3 (sync). |
 | `--sync-only` | Skip Phases 1 and 2. Only run ticket-plan --sync. |
 | `--no-epic-org` | Skip Phase 2. Run triage → sync without epic organization. |
