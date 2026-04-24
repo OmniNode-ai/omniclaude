@@ -38,18 +38,25 @@ FORBIDDEN = "mcp__linear-server__"
 SKILLS_ROOT = Path("plugins/onex/skills")
 
 
-def _scan_file(path: Path) -> list[tuple[int, str]]:
-    """Return ``[(line_number, raw_line), ...]`` for every offending line."""
+def _scan_file(path: Path) -> tuple[list[tuple[int, str]], str | None]:
+    """Scan a file and return ``(hits, read_error)``.
+
+    Fails closed: if the file is unreadable or not valid UTF-8, returns
+    ``read_error`` so the caller treats it as a violation. Silently
+    skipping would create a bypass path past this blocking gate.
+    """
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return []
+    except UnicodeDecodeError as exc:
+        return [], f"{path}: decode error: {exc}"
+    except OSError as exc:
+        return [], f"{path}: read error: {exc}"
 
     hits: list[tuple[int, str]] = []
     for idx, raw in enumerate(lines, start=1):
         if FORBIDDEN in raw:
             hits.append((idx, raw.rstrip()))
-    return hits
+    return hits, None
 
 
 def _iter_skill_markdown(root: Path) -> list[Path]:
@@ -81,7 +88,12 @@ def main(argv: list[str]) -> int:
     for path in targets:
         if not path.exists():
             continue
-        hits = _scan_file(path)
+        hits, read_error = _scan_file(path)
+        if read_error is not None:
+            sys.stderr.write(f"{read_error}\n")
+            violating_files.append(path)
+            total_violations += 1
+            continue
         if not hits:
             continue
         violating_files.append(path)

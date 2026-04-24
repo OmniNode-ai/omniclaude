@@ -192,3 +192,14 @@ def test_empty_argv_with_missing_tree_passes(tmp_path: pathlib.Path) -> None:
         assert code == 0, stderr
     finally:
         os.chdir(prev)
+
+
+def test_non_utf8_file_fails_closed(run_in: pathlib.Path) -> None:
+    skill_dir = run_in / "plugins" / "onex" / "skills" / "ticket_pipeline"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    path = skill_dir / "prompt.md"
+    path.write_bytes(b"\xff\xfe\x00\x00 not valid utf-8 \xc3\x28\n")
+    code, stderr = _run([str(path)])
+    assert code == 1, stderr
+    assert "decode error" in stderr
+    assert "ticket_pipeline" in stderr
