@@ -45,6 +45,6 @@ outputs:
 - **Classification**: Deterministic
 - **Dispatch**: see `prompt.md` — single invocation against `node_session_orchestrator` from the omnimarket worktree
 - **No inline orchestration**: phases 1/2/3 live in the handler, not this skill
-- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — never substitute prose
+- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
 
 See `prompt.md` for the exact dispatch invocation.
