@@ -318,7 +318,7 @@ Linear API has per-minute rate limits. If you have >100 tickets:
 
 ## Composable Output
 
-When invoked as a sub-skill (e.g., from `linear-housekeeping`/`ticketing-housekeeping`), write `TriageReport`
+When invoked as a sub-skill (e.g., from `linear-housekeeping`), write `TriageReport`
 to `$ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml` and return the path in output.
 
 The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epic-org`.
@@ -327,6 +327,6 @@ The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epi
 
 - `@_lib/contracts/helpers.md` — TicketContract, TriageReport schemas
 - `ticketing-epic-org` skill — consumes orphaned_tickets from this report
-- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync (ticketing-housekeeping)
+- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync
 - `ticket-plan --sync` — uses triage output for MASTER_TICKET_PLAN.md sync
 - Linear MCP tools (`tracker.*`)
