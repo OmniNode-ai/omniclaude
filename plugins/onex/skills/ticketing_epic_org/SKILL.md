@@ -28,7 +28,7 @@ outputs:
     description: List of created epic IDs (OMN-XXXX)
 ---
 
-# Linear Epic Organization
+# Ticketing Epic Organization
 
 ## Dispatch Surface
 

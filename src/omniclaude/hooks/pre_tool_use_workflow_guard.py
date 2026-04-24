@@ -8,7 +8,7 @@ Enforces three workflow preconditions via proxy signals:
 1. Triage-first: Before any Linear epic creation (mcp__linear-server__save_issue
    with a parent-less issue that resembles an epic), check that
    .onex_state/triage_complete marker file exists. The marker is written by
-   the linear_triage skill when a triage session completes.
+   the ticketing_triage skill when a triage session completes.
 
 2. Ticket-first: Before any git commit via the Bash tool, check that the
    current branch name contains an OMN-\\d+ pattern OR the commit message
@@ -162,7 +162,7 @@ def _check_triage_complete(project_root: Path) -> tuple[bool, str]:
         f"[workflow-guard] ADVISORY — Epic creation attempted without a completed "
         f"triage pass.\n"
         f"Expected marker: {marker_path}\n"
-        f"Run /linear_triage (or the triage skill) first. The skill writes "
+        f"Run /ticketing_triage (or the triage skill) first. The skill writes "
         f"'{_TRIAGE_COMPLETE_MARKER}' when triage is complete.\n"
         f"If triage was completed in a different session, touch the marker manually: "
         f"`mkdir -p {_ONEX_STATE_DIR} && touch {_TRIAGE_COMPLETE_MARKER}`"

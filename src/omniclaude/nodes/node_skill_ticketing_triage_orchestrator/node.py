@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""NodeSkillLinearEpicOrgOrchestrator — thin orchestrator shell for the linear-epic-org skill.
+"""NodeSkillTicketingTriageOrchestrator — thin orchestrator shell for the ticketing-triage skill.
 
-Capability: skill.linear_epic_org
+Capability: skill.ticketing_triage
 All dispatch logic lives in the shared handle_skill_requested handler.
 """
 
@@ -16,17 +16,17 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeSkillLinearEpicOrgOrchestrator(NodeOrchestrator):
-    """Orchestrator node for the linear-epic-org skill.
+class NodeSkillTicketingTriageOrchestrator(NodeOrchestrator):
+    """Orchestrator node for the ticketing-triage skill.
 
-    Capability: skill.linear_epic_org
+    Capability: skill.ticketing_triage
 
     All behavior defined in contract.yaml.
     Dispatches to the shared handle_skill_requested handler via ServiceRegistry.
     """
 
     def __init__(self, container: ModelONEXContainer) -> None:
-        """Initialize the NodeSkillLinearEpicOrgOrchestrator.
+        """Initialize the NodeSkillTicketingTriageOrchestrator.
 
         Args:
             container: ONEX container for dependency injection.
@@ -34,4 +34,4 @@ class NodeSkillLinearEpicOrgOrchestrator(NodeOrchestrator):
         super().__init__(container)
 
 
-__all__ = ["NodeSkillLinearEpicOrgOrchestrator"]
+__all__ = ["NodeSkillTicketingTriageOrchestrator"]

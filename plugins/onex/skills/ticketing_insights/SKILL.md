@@ -10,7 +10,7 @@ args:
     required: false
 ---
 
-# Linear Insights
+# Ticketing Insights
 
 ## Mode Declaration
 
@@ -151,25 +151,25 @@ Format matches the established deep dive pattern (see `$ONEX_STATE_DIR/deep-dive
 
 ```bash
 # Today's deep dive (display only) — auto-discovers all active repos
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive
 
 # Specific date (auto-discovers repos with activity on that date)
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --date 2025-12-09
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --date 2025-12-09
 
 # Last N days (for weekly summary)
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --days 7
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --days 7
 
 # Save to default directory (omni_save)
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --save
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --save
 
 # Save to custom directory
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --save --output-dir ~/reports
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --save --output-dir ~/reports
 
 # JSON output for processing
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --json
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --json
 
 # Analyze specific repos only (overrides auto-discovery)
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive --repos omnibase_core,omniclaude
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive --repos omnibase_core,omniclaude
 ```
 
 ### Configuration
@@ -303,16 +303,16 @@ Calculates project velocity and estimates time to completion for milestones.
 
 ```bash
 # Estimate for MVP project
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/velocity-estimate --project "MVP"
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/velocity-estimate --project "MVP"
 
 # All milestones overview
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/velocity-estimate --all
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/velocity-estimate --all
 
 # Include confidence intervals
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/velocity-estimate --project "MVP" --confidence
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/velocity-estimate --project "MVP" --confidence
 
 # JSON output
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/velocity-estimate --project "Beta" --json
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/velocity-estimate --project "Beta" --json
 ```
 
 ### Metrics Calculated
@@ -387,19 +387,19 @@ Three-layer factory telemetry that parses the deep dive archive for historical v
 
 ```bash
 # All data + agent instructions
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy
 
 # Last 7 days
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy --week
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy --week
 
 # Date range
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy --from 2026-03-01 --to 2026-03-05
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy --from 2026-03-01 --to 2026-03-05
 
 # Graphable JSON output
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy --json
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy --json
 
 # Step-by-step agent instructions
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy --generate
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy --generate
 ```
 
 ### CLI Flags
@@ -514,13 +514,13 @@ Linear workstream data into the ONEX event bus.
 
 ```bash
 # Show dashboard for MVP project + emit snapshot to Kafka
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/project-status MVP --emit
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/project-status MVP --emit
 
 # All projects overview + emit
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/project-status --all --emit
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/project-status --all --emit
 
 # JSON output + emit (useful for scripting)
-${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/project-status MVP --json --emit
+${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/project-status MVP --json --emit
 ```
 
 ### How Emission Works
@@ -554,13 +554,13 @@ It must never be called from production code or skills. Use `--emit` (which call
 
 ## Skills Location
 
-**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/`
 
 **Executables**:
-- `${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/deep-dive` - Daily deep dive generator
-- `${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/velocity-estimate` - Velocity and ETA calculator
-- `${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/estimation-accuracy` - Three-layer factory telemetry (requires python3)
-- `${CLAUDE_PLUGIN_ROOT}/skills/linear_insights/project-status` - Quick health dashboard with Kafka emission support
+- `${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/deep-dive` - Daily deep dive generator
+- `${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/velocity-estimate` - Velocity and ETA calculator
+- `${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/estimation-accuracy` - Three-layer factory telemetry (requires python3)
+- `${CLAUDE_PLUGIN_ROOT}/skills/ticketing_insights/project-status` - Quick health dashboard with Kafka emission support
 
 ---
 

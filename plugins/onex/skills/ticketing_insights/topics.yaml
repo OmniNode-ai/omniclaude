@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# Topic manifest for omniclaude skill: linear-insights
+# Topic manifest for omniclaude skill: ticketing-insights (topic names retain legacy linear-* slug for wire compatibility)
 # Source of truth for this skill's Kafka topics.
 # After initial generation, edit intentionally when skill topic requirements change.
 

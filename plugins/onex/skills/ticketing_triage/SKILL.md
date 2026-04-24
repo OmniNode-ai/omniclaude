@@ -28,7 +28,7 @@ outputs:
     description: "Written to $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml"
 ---
 
-# Linear Triage
+# Ticketing Triage
 
 ## Dispatch Surface
 
