@@ -288,5 +288,5 @@ When `--dry-run`:
 
 - `@_lib/contracts/helpers.md` — EpicContract schema
 - `ticketing-triage` skill — produces orphaned_tickets list this skill consumes
-- `linear-housekeeping` skill — parent orchestrator (ticketing-housekeeping)
+- `linear-housekeeping` skill — parent orchestrator
 - Linear MCP tools (`tracker.*`)
