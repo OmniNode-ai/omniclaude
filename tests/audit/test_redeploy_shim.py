@@ -4,7 +4,7 @@
 
 Locks in the A4 amendment invariants from OMN-8737:
   - zero LLM SDK imports
-  - exactly one ``onex run`` dispatch call
+  - exactly one ``onex run-node`` dispatch call
   - no subprocess orchestration wrappers
   - no hidden conditional fallback prose paths (no prompt.md)
   - prose_fallback_lines <= 50 (deterministic classification)
