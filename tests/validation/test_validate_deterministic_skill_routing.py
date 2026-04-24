@@ -200,8 +200,10 @@ class TestEnforcedSkillsSet:
     def test_session_in_enforced(self) -> None:
         assert "session" in ENFORCED_SKILLS
 
-    def test_overnight_not_in_enforced(self) -> None:
-        assert "overnight" not in ENFORCED_SKILLS
+    def test_overnight_in_enforced(self) -> None:
+        # OMN-8751: overnight is now a thin dispatch-only shim and must
+        # satisfy the deterministic routing enforcement gate.
+        assert "overnight" in ENFORCED_SKILLS
 
     def test_missing_node_skills_not_in_enforced(self) -> None:
         for s in (
