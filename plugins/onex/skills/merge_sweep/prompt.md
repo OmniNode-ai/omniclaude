@@ -77,7 +77,9 @@ envelope is returned — surface it directly, do not produce prose.
 - If `onex run-node` fails to start (binary missing, contract not found):
   report the error and exit.
 - If the node returns `status == "error"`: surface the `message` field
-  and exit with the node's exit code.
+  from `ModelSkillResult` and stop. The shim does not manufacture a
+  synthetic exit code — callers consume `status`, `run_id`, and
+  `message` from stdout.
 - Never re-implement merge sweep orchestration inline. If the node is
   unavailable, stop — do not fall back to `gh pr merge`, direct Kafka
   publish, or prose orchestration.

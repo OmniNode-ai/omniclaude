@@ -8,7 +8,10 @@ Tests verify:
 - branch_protection probe (2.12) is documented in prompt.md
 - branch_protection failure class is in FAILURE_TAXONOMY.md
 - branch_protection auto-dispatch entry exists in fix phase
-- merge-sweep documents the BLOCKED+green pre-scan diagnostic
+- The merge-sweep thin shim (OMN-8752) does NOT embed the BLOCKED+green
+  diagnostic — that logic is owned by node_merge_sweep in omnimarket.
+  Assertions that the node owns the diagnostic belong next to the node,
+  not in this skill-facing test module.
 
 All tests are static analysis / structural tests that run without external
 credentials, live GitHub access, or live PRs. Safe for CI.

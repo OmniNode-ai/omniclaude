@@ -191,9 +191,12 @@ The terminal Kafka event is
 ## Headless / cron invocation
 
 `scripts/cron-merge-sweep.sh` is the durable launchd trigger for this
-skill. The cron wrapper is responsible for queue-heal, stall detection,
-and the operator control surface — it is **not** part of this shim and
-is invoked independently by the launchd tick bundle.
+skill. It schedules invocations and provides the operator control
+surface (PID locks, circuit-breaker timeouts, log rotation) — it is
+**not** part of this shim and does **not** perform queue-heal or stall
+detection itself. Queue stall detection and queue-heal logic live in
+`node_merge_sweep`; the cron wrapper simply triggers the node and
+surfaces exit status.
 
 ## Relation to autonomous closeout
 
