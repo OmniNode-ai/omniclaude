@@ -49,6 +49,12 @@ where `N = len(EnumHookBit)` — i.e. all bits on, width-matched to the
 enum, current behavior preserved. The bit positions are defined by
 `EnumHookBit` in `omnibase_core/src/omnibase_core/enums/enum_hook_bit.py`.
 
+**Important:** when `ONEX_HOOKS_MASK` is absent or unset, the default is
+recomputed from the current enum width — all new hooks are on by default.
+However, once a hex literal is saved to `~/.omnibase/.env`, it is fixed.
+If you add new hooks after saving a mask, run `onex hooks enable <NEW_NAME>`
+or delete the `ONEX_HOOKS_MASK` line from `.env` to restore all-on default.
+
 Set the mask in `~/.omnibase/.env` or export it for the current shell:
 
 ```bash
@@ -117,6 +123,11 @@ OMN-9617's behavioral cutover (Task 5 of the hook-bitmask plan). Any
 reference to those names in shells or scripts after that cutover is a
 **no-op** — the bitmask supersedes them. Do not add new per-hook env vars
 of that form; use `onex hooks disable <NAME>` instead.
+
+**If you have existing scripts that set `OMNICLAUDE_HOOK_<NAME>=0` to
+suppress a hook:** those scripts must be updated to use
+`onex hooks disable <NAME>` (or `export ONEX_HOOKS_MASK=<hex>`) after
+OMN-9617 lands. Until then, the legacy variables still take effect.
 
 ---
 
