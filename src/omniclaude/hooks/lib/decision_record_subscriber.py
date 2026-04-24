@@ -51,7 +51,9 @@ logger = logging.getLogger(__name__)
 # Topic constant (mirrors TopicBase.DECISION_RECORDED_CMD)
 # ---------------------------------------------------------------------------
 
-DECISION_RECORDED_CMD_TOPIC = TopicBase.DECISION_RECORDED_CMD
+DECISION_RECORDED_CMD_TOPIC = (
+    TopicBase.DECISION_RECORDED_CMD
+)  # onex-topic-allow: pending contract auto-wiring
 
 # ---------------------------------------------------------------------------
 # Default audit log path

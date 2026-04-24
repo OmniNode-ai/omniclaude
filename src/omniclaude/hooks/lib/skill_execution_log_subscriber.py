@@ -49,7 +49,9 @@ logger = logging.getLogger(__name__)
 # Topic constant (mirrors TopicBase.SKILL_COMPLETED)
 # ---------------------------------------------------------------------------
 
-SKILL_COMPLETED_TOPIC = TopicBase.SKILL_COMPLETED
+SKILL_COMPLETED_TOPIC = (
+    TopicBase.SKILL_COMPLETED
+)  # onex-topic-allow: pending contract auto-wiring
 
 # Consumer group ID — version suffix required by F5 rules (OMN-2593)
 DEFAULT_GROUP_ID = "omniclaude-skill-execution-log-subscriber.v1"

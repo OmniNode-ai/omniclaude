@@ -37,11 +37,11 @@ output_model:
 
 event_bus:
   publish_topics:
-    - "onex.evt.omniclaude.routing-decision.v1"
-    - "onex.evt.omniintelligence.pattern-stored.v1"
-    - "onex.evt.omniclaude.task-delegated.v1"
-    - "onex.evt.omniclaude.llm-routing-decision.v1"
-    - "onex.evt.omniintelligence.run-evaluated.v1"
+    - "onex.evt.omniclaude.routing-decision.v1"  # onex-topic-sot
+    - "onex.evt.omniintelligence.pattern-stored.v1"  # onex-topic-sot
+    - "onex.evt.omniclaude.task-delegated.v1"  # onex-topic-sot
+    - "onex.evt.omniclaude.llm-routing-decision.v1"  # onex-topic-sot
+    - "onex.evt.omniintelligence.run-evaluated.v1"  # onex-topic-sot
 
 runtime:
   supports_direct_call: true

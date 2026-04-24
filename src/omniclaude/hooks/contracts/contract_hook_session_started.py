@@ -17,7 +17,7 @@ Usage:
     >>> print(contract.node_type)
     'EFFECT'
     >>> print(contract.event_bus.topic_base)
-    'onex.evt.omniclaude.session-started.v1'
+    'onex.evt.omniclaude.session-started.v1'  # onex-topic-sot
 
 See Also:
     - contract_hook_session_started.yaml for the source YAML contract
@@ -77,7 +77,7 @@ class HookSessionStartedContract(BaseModel):
         >>> contract.node_type
         'EFFECT'
         >>> contract.event_bus.topic_base
-        'onex.evt.omniclaude.session-started.v1'
+        'onex.evt.omniclaude.session-started.v1'  # onex-topic-sot
         >>> contract.runtime.timeout_ms
         500
     """
@@ -186,7 +186,7 @@ class HookSessionStartedContract(BaseModel):
         Example:
             >>> contract = HookSessionStartedContract.load()
             >>> contract.event_bus.topic_base
-            'onex.evt.omniclaude.session-started.v1'
+            'onex.evt.omniclaude.session-started.v1'  # onex-topic-sot
         """
         if path is None:
             path = Path(__file__).parent / "contract_hook_session_started.yaml"

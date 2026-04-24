@@ -19,7 +19,7 @@ Usage:
     ... )
     >>> contract = HookSessionEndedContract.load()
     >>> print(contract.event_bus.topic_base)
-    'onex.evt.omniclaude.session-ended.v1'
+    'onex.evt.omniclaude.session-ended.v1'  # onex-topic-sot
     >>> print(contract.runtime.timeout_ms)
     500
 
@@ -85,7 +85,7 @@ class HookSessionEndedContract(BaseModel):
     Example:
         >>> contract = HookSessionEndedContract.load()
         >>> contract.event_bus.topic_base
-        'onex.evt.omniclaude.session-ended.v1'
+        'onex.evt.omniclaude.session-ended.v1'  # onex-topic-sot
         >>> contract.event_bus.partition_key_field
         'entity_id'
         >>> contract.runtime.timeout_ms
@@ -205,7 +205,7 @@ class HookSessionEndedContract(BaseModel):
         Example:
             >>> contract = HookSessionEndedContract.load()
             >>> contract.event_bus.topic_base
-            'onex.evt.omniclaude.session-ended.v1'
+            'onex.evt.omniclaude.session-ended.v1'  # onex-topic-sot
         """
         if path is None:
             path = Path(__file__).parent / "contract_hook_session_ended.yaml"

@@ -18,7 +18,7 @@ Usage:
     ... )
     >>> contract = HookPromptSubmittedContract.load()
     >>> print(contract.event_bus.topic_base)
-    'onex.evt.omniclaude.prompt-submitted.v1'
+    'onex.evt.omniclaude.prompt-submitted.v1'  # onex-topic-sot
     >>> print(contract.privacy.preview_max_length)
     100
 
@@ -117,7 +117,7 @@ class HookPromptSubmittedContract(BaseModel):
     Example:
         >>> contract = HookPromptSubmittedContract.load()
         >>> contract.event_bus.topic_base
-        'onex.evt.omniclaude.prompt-submitted.v1'
+        'onex.evt.omniclaude.prompt-submitted.v1'  # onex-topic-sot
         >>> contract.privacy.preview_max_length
         100
         >>> contract.runtime.timeout_ms
@@ -232,7 +232,7 @@ class HookPromptSubmittedContract(BaseModel):
         Example:
             >>> contract = HookPromptSubmittedContract.load()
             >>> contract.event_bus.topic_base
-            'onex.evt.omniclaude.prompt-submitted.v1'
+            'onex.evt.omniclaude.prompt-submitted.v1'  # onex-topic-sot
         """
         if path is None:
             path = Path(__file__).parent / "contract_hook_prompt_submitted.yaml"

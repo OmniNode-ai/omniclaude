@@ -3,7 +3,7 @@
 # Ticket: OMN-7360
 #
 # Wire schema contract for tool executed event
-topic: "onex.evt.omniclaude.tool-executed.v1"
+topic: "onex.evt.omniclaude.tool-executed.v1"  # onex-topic-sot
 schema_version: "1.0.0"
 ticket: "OMN-7360"
 description: >

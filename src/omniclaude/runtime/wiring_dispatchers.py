@@ -70,9 +70,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_TOPIC_PATTERN = (
-    "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore  # noqa: arch-topic-naming
-)
+_TOPIC_PATTERN = "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore  # noqa: arch-topic-naming  # onex-topic-allow: pending contract auto-wiring
 _DISPATCHER_ID = "dispatcher.skill.command"
 _ROUTE_ID = "skill-command-router"
 _COMPLETION_TOPIC = TopicBase.SKILL_COMPLETED

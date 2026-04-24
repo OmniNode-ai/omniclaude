@@ -37,7 +37,7 @@ output_model:
 
 event_bus:
   subscribe_topics:
-    - "onex.cmd.omniclaude.golden-chain-sweep.v1"
+    - "onex.cmd.omniclaude.golden-chain-sweep.v1"  # onex-topic-sot
 
 runtime:
   supports_direct_call: true

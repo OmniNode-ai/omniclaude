@@ -48,7 +48,9 @@ logger = logging.getLogger(__name__)
 # Topic constant (mirrors TopicBase.COMPLIANCE_EVALUATED)
 # ---------------------------------------------------------------------------
 
-COMPLIANCE_EVALUATED_TOPIC = TopicBase.COMPLIANCE_EVALUATED
+COMPLIANCE_EVALUATED_TOPIC = (
+    TopicBase.COMPLIANCE_EVALUATED
+)  # onex-topic-allow: pending contract auto-wiring
 
 # ---------------------------------------------------------------------------
 # Lazy import helpers for kafka-python

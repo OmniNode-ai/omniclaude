@@ -50,7 +50,7 @@ output_model:
 
 # Event bus configuration
 event_bus:
-  topic_base: "onex.cmd.omniintelligence.session-outcome.v1"
+  topic_base: "onex.cmd.omniintelligence.session-outcome.v1"  # onex-topic-sot
   partition_key_field: "session_id"
   partition_strategy: "hash"
   # Events use session_id for ordering guarantees within a session

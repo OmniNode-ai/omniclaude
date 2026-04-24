@@ -83,7 +83,7 @@ class EventBus(BaseModel):
 
     Attributes:
         topic_base: Base topic name without environment prefix
-            (e.g., 'onex.evt.omniclaude.tool-executed.v1').
+            (e.g., 'onex.evt.omniclaude.tool-executed.v1').  # onex-topic-sot
         partition_key_field: Field name used as partition key for ordering
             (typically 'entity_id' for session-based ordering).
         partition_strategy: Partitioning strategy (e.g., 'hash').
@@ -328,7 +328,7 @@ class HookToolExecutedContract(BaseModel):
         >>> contract.runtime.timeout_ms
         100
         >>> contract.event_bus.topic_base
-        'onex.evt.omniclaude.tool-executed.v1'
+        'onex.evt.omniclaude.tool-executed.v1'  # onex-topic-sot
     """
 
     model_config = ConfigDict(

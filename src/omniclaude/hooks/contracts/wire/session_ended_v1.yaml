@@ -3,7 +3,7 @@
 # Ticket: OMN-7360
 #
 # Wire schema contract for session ended event
-topic: "onex.evt.omniclaude.session-ended.v1"
+topic: "onex.evt.omniclaude.session-ended.v1"  # onex-topic-sot
 schema_version: "1.0.0"
 ticket: "OMN-7360"
 description: >
