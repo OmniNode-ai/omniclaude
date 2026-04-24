@@ -105,10 +105,11 @@ Dry run complete. No mutations performed.
 
 Publish the command event directly to the Kafka cmd topic via `kcat -P`. The emit daemon
 is scoped to `onex.evt.*` observability events — cmd-topic command publishing uses a
-direct broker produce, mirroring the pattern already proven in `skills/redeploy/prompt.md`
-(DEPLOY phase).
+direct broker produce, mirroring the pattern already proven in
+`omnimarket/src/omnimarket/nodes/node_redeploy/handlers/handler_redeploy_kafka.py`
+(REBUILD phase).
 
-Prior art (reference): `plugins/onex/skills/redeploy/prompt.md` — Phase 5: DEPLOY publishes
+Prior art (reference): `node_redeploy`'s `HandlerRedeployKafka` publishes
 `onex.cmd.deploy.rebuild-requested.v1` via the same `echo ... | kcat -P` shell-out.
 
 ### Envelope wrapping (OMN-9215)

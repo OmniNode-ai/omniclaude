@@ -259,8 +259,9 @@ class TestPromptPublishMonitorSteps:
         `emit_via_daemon` symbol from `emit_client_wrapper.py`, causing 112
         consecutive merge-sweep refusals on 2026-04-19. The fix replaces that
         import with a direct `kcat -P` shell-out, mirroring the same pattern
-        used by `skills/redeploy/prompt.md` (DEPLOY phase). This test locks in
-        the replacement and prevents the broken symbol from reappearing.
+        used by `node_redeploy`'s `HandlerRedeployKafka` (REBUILD phase).
+        This test locks in the replacement and prevents the broken symbol
+        from reappearing.
 
         OMN-9215: additionally asserts the payload is wrapped in
         ``ModelEventEnvelope`` before produce — bare-payload sends fail the
@@ -268,7 +269,7 @@ class TestPromptPublishMonitorSteps:
         """
         content = _read_skill_file(_MERGE_SWEEP_PROMPT)
         assert "kcat -P" in content, (
-            "prompt.md must publish via `kcat -P` (mirroring redeploy/prompt.md)"
+            "prompt.md must publish via `kcat -P` (mirroring node_redeploy's HandlerRedeployKafka)"
         )
         assert "KAFKA_BOOTSTRAP_SERVERS" in content, (
             "prompt.md must reference KAFKA_BOOTSTRAP_SERVERS env var for the broker"
