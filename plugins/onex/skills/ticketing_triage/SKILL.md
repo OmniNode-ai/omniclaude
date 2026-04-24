@@ -25,7 +25,7 @@ inputs:
 outputs:
   - name: skill_result
     type: TriageReport
-    description: "Written to $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml"
+    description: "Written to $ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml"
 ---
 
 # Ticketing Triage
@@ -37,18 +37,18 @@ outputs:
 ## Overview
 
 Scan all non-completed tickets in Linear, determine their true status, apply updates,
-and produce a `TriageReport` for downstream skills (`linear-epic-org`, `ticket-plan --sync`).
+and produce a `TriageReport` for downstream skills (`ticketing-epic-org`, `ticket-plan --sync`).
 
-**Announce at start:** "I'm using the linear-triage skill to assess ticket health."
+**Announce at start:** "I'm using the ticketing-triage skill to assess ticket health."
 
 **Imports:** `@_lib/contracts/helpers.md`
 
 ## Quick Start
 
 ```
-/linear-triage
-/linear-triage --dry-run
-/linear-triage --threshold-days 7
+/ticketing-triage
+/ticketing-triage --dry-run
+/ticketing-triage --threshold-days 7
 ```
 
 ## Algorithm
@@ -184,7 +184,7 @@ ticket but the title references only the merging ticket.
 
 If any result is returned:
 - Action: `mark_done_superseded`
-- Comment: "Auto-closed by linear-triage: work delivered via sibling PR #{number} in {repo} merged {mergedAt}\n{url}\n(Original PR #{closed_pr_number} was closed as superseded)"
+- Comment: "Auto-closed by ticketing-triage: work delivered via sibling PR #{number} in {repo} merged {mergedAt}\n{url}\n(Original PR #{closed_pr_number} was closed as superseded)"
 
 If no merged sibling found:
 - Action: flag stale + add note (existing behavior)
@@ -200,7 +200,7 @@ tracker.save_issue(
 # Add comment with evidence
 tracker.create_comment(
   issueId=ticket_id,
-  body="✅ Auto-closed by linear-triage: PR #{number} merged {merge_date}\n{pr_url}"
+  body="✅ Auto-closed by ticketing-triage: PR #{number} merged {merge_date}\n{pr_url}"
 )
 ```
 
@@ -266,7 +266,7 @@ If `check_epic_complete` returns True:
 - Action: `mark_done_epic` (applied immediately unless `--dry-run`)
 - Comment:
   ```
-  Auto-closed by linear-triage: all {N} child tickets are Done.
+  Auto-closed by ticketing-triage: all {N} child tickets are Done.
   Children: {comma-separated OMN-XXXX list}
   ```
 
@@ -277,7 +277,7 @@ tracker.list_issues(parentId=epic_ticket.id, includeArchived=true, limit=50)
 
 ### Phase 6: Write TriageReport
 
-Write report to `$ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml` (see `TriageReport` in
+Write report to `$ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml` (see `TriageReport` in
 `@_lib/contracts/helpers.md` for schema).
 
 Print summary to stdout:
@@ -295,7 +295,7 @@ Stale (>{N}d):   {stale} tickets
 🔗 Orphans:           {orphaned} (no parent epic)
 📦 Proposed new epics: {proposed_epics}
 
-Report: $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml
+Report: $ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -318,15 +318,15 @@ Linear API has per-minute rate limits. If you have >100 tickets:
 
 ## Composable Output
 
-When invoked as a sub-skill (e.g., from `linear-housekeeping`), write `TriageReport`
-to `$ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml` and return the path in output.
+When invoked as a sub-skill (e.g., from `linear-housekeeping`/`ticketing-housekeeping`), write `TriageReport`
+to `$ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml` and return the path in output.
 
-The `orphaned_tickets` list from the TriageReport is the input to `linear-epic-org`.
+The `orphaned_tickets` list from the TriageReport is the input to `ticketing-epic-org`.
 
 ## See Also
 
 - `@_lib/contracts/helpers.md` — TicketContract, TriageReport schemas
-- `linear-epic-org` skill — consumes orphaned_tickets from this report
-- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync
+- `ticketing-epic-org` skill — consumes orphaned_tickets from this report
+- `linear-housekeeping` skill — orchestrates triage → epic-org → ticket-plan --sync (ticketing-housekeeping)
 - `ticket-plan --sync` — uses triage output for MASTER_TICKET_PLAN.md sync
 - Linear MCP tools (`tracker.*`)

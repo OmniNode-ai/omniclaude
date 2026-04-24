@@ -57,7 +57,7 @@ execution:
 event_bus:
   subscribe:
     topic: "onex.cmd.omniclaude.linear-insights.v1"
-    consumer_group: "omniclaude.skill.ticketing_insights"
+    consumer_group: "omniclaude.skill.ticketing-insights"
   publish:
     success_topic: "onex.evt.omniclaude.linear-insights-completed.v1"
     failure_topic: "onex.evt.omniclaude.linear-insights-failed.v1"

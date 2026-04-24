@@ -57,7 +57,7 @@ execution:
 event_bus:
   subscribe:
     topic: "onex.cmd.omniclaude.linear-epic-org.v1"
-    consumer_group: "omniclaude.skill.ticketing_epic_org"
+    consumer_group: "omniclaude.skill.ticketing-epic-org"
   publish:
     success_topic: "onex.evt.omniclaude.linear-epic-org-completed.v1"
     failure_topic: "onex.evt.omniclaude.linear-epic-org-failed.v1"

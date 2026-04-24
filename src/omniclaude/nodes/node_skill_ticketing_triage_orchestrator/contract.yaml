@@ -57,7 +57,7 @@ execution:
 event_bus:
   subscribe:
     topic: "onex.cmd.omniclaude.linear-triage.v1"
-    consumer_group: "omniclaude.skill.ticketing_triage"
+    consumer_group: "omniclaude.skill.ticketing-triage"
   publish:
     success_topic: "onex.evt.omniclaude.linear-triage-completed.v1"
     failure_topic: "onex.evt.omniclaude.linear-triage-failed.v1"

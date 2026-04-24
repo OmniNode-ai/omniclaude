@@ -16,7 +16,7 @@ composable: true
 inputs:
   - name: triage_report
     type: str
-    description: Path to TriageReport YAML from linear-triage (or fetch orphans fresh if omitted)
+    description: Path to TriageReport YAML from ticketing-triage (or fetch orphans fresh if omitted)
     required: false
   - name: dry_run
     type: bool
@@ -40,21 +40,21 @@ Group orphaned tickets (tickets with no parent epic) into sensible epics. Auto-c
 epics when the grouping is obvious (consistent naming prefix, single repo). Gates on
 human approval when groupings are ambiguous.
 
-**Announce at start:** "I'm using the linear-epic-org skill to organize orphaned tickets."
+**Announce at start:** "I'm using the ticketing-epic-org skill to organize orphaned tickets."
 
 **Imports:** `@_lib/contracts/helpers.md`
 
 ## Quick Start
 
 ```
-# Run after linear-triage (uses its TriageReport)
-/linear-epic-org --triage-report $ONEX_STATE_DIR/state/linear-triage/{run_id}.yaml
+# Run after ticketing-triage (uses its TriageReport)
+/ticketing-epic-org --triage-report $ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml
 
 # Run standalone (fetches orphans fresh from Linear)
-/linear-epic-org
+/ticketing-epic-org
 
 # Preview without creating
-/linear-epic-org --dry-run
+/ticketing-epic-org --dry-run
 ```
 
 ## Algorithm
@@ -246,7 +246,7 @@ tracker.save_issue(
 ```
 tracker.create_comment(
   issueId=new_epic_id,
-  body="🤖 Epic created by linear-epic-org\n\nGrouped {N} tickets from {PREFIX} work stream:\n{ticket_list}"
+  body="🤖 Epic created by ticketing-epic-org\n\nGrouped {N} tickets from {PREFIX} work stream:\n{ticket_list}"
 )
 ```
 
@@ -287,6 +287,6 @@ When `--dry-run`:
 ## See Also
 
 - `@_lib/contracts/helpers.md` — EpicContract schema
-- `linear-triage` skill — produces orphaned_tickets list this skill consumes
-- `linear-housekeeping` skill — parent orchestrator
+- `ticketing-triage` skill — produces orphaned_tickets list this skill consumes
+- `linear-housekeeping` skill — parent orchestrator (ticketing-housekeeping)
 - Linear MCP tools (`tracker.*`)

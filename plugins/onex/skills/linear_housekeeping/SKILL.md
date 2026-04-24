@@ -42,11 +42,11 @@ Parent skill that chains `linear-triage` → human review checkpoint → `linear
 ## Workflow Phases
 
 ```
-Phase 1: linear-triage      (assess + mark done tickets)
+Phase 1: ticketing-triage   (assess + mark done tickets)
           ↓
           Human checkpoint  (review TriageReport, confirm stale flags)
           ↓
-Phase 2: linear-epic-org    (group orphans into epics, human gate for ambiguous)
+Phase 2: ticketing-epic-org (group orphans into epics, human gate for ambiguous)
           ↓
 Phase 3: ticket-plan --sync (regenerate or patch MASTER_TICKET_PLAN.md)
           ↓
@@ -57,7 +57,7 @@ Phase 3: ticket-plan --sync (regenerate or patch MASTER_TICKET_PLAN.md)
 
 ## Phase 1: Triage
 
-Dispatch linear-triage:
+Dispatch ticketing-triage:
 
 ```
 Skill("onex:ticketing_triage", args="--threshold-days {threshold}")
@@ -65,7 +65,7 @@ Skill("onex:ticketing_triage", args="--threshold-days {threshold}")
 
 On completion, display the TriageReport summary.
 
-**If `--dry-run`:** pass `--dry-run` to linear-triage. Continue to Phase 2 without pause.
+**If `--dry-run`:** pass `--dry-run` to ticketing-triage. Continue to Phase 2 without pause.
 **Otherwise:** pause for human review.
 
 ### Human Checkpoint (after triage)
@@ -102,7 +102,7 @@ If triage found orphaned tickets (or `--skip-triage` was used with known orphans
 Skill("onex:ticketing_epic_org", args="--triage-report {report_path}")
 ```
 
-`linear-epic-org` handles its own human gate for ambiguous groupings. See that skill
+`ticketing-epic-org` handles its own human gate for ambiguous groupings. See that skill
 for the full interaction flow.
 
 If no orphans found, skip Phase 2 with a note:
@@ -163,7 +163,7 @@ Running weekly limits zombie ticket accumulation to at most one week of drift.
 
 I'm using the linear-housekeeping skill for a full ticket audit.
 
-Phase 1: Running linear-triage (threshold: 14 days)...
+Phase 1: Running ticketing-triage (threshold: 14 days)...
 [triage runs, marks OMN-2068 done, flags 4 stale tickets, finds 7 orphans]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -182,7 +182,7 @@ Continue to Phase 2?
 
 > y
 
-Phase 2: Running linear-epic-org (7 orphans)...
+Phase 2: Running ticketing-epic-org (7 orphans)...
 [epic-org presents groupings, user approves, 2 epics created]
 
 Phase 3: Running ticket-plan --sync (patch mode)...
@@ -208,8 +208,8 @@ Stale tickets (need your review): 4
 
 | Failure | Behavior |
 |---------|----------|
-| linear-triage fails | Report error, stop. Do not proceed to Phase 2. |
-| linear-epic-org fails | Report error. Skip to Phase 3 (sync still safe). |
+| ticketing-triage fails | Report error, stop. Do not proceed to Phase 2. |
+| ticketing-epic-org fails | Report error. Skip to Phase 3 (sync still safe). |
 | ticket-plan --sync fails | Report error. Triage and epic changes already applied in Linear — just retry `--sync-only`. |
 | Linear API rate limit | Pause 60s, retry once. If still failing, save state and exit with resume instructions. |
 
@@ -217,8 +217,8 @@ Stale tickets (need your review): 4
 
 ## See Also
 
-- `linear-triage` skill — Phase 1: status assessment
-- `linear-epic-org` skill — Phase 2: epic organization
+- `ticketing-triage` skill — Phase 1: status assessment
+- `ticketing-epic-org` skill — Phase 2: epic organization
 - `ticket-plan --sync` — Phase 3: doc sync
 - `@_lib/contracts/helpers.md` — TicketContract, EpicContract schemas
 - `docs/tracking/MASTER_TICKET_PLAN.md` — the output document

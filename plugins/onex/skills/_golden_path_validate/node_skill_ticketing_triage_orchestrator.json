@@ -5,7 +5,7 @@
     "topic": "onex.cmd.omniclaude.linear-triage.v1",
     "fixture": {
       "event_type": "skill_requested",
-      "skill_name": "linear-triage",
+      "skill_name": "ticketing-triage",
       "args": {}
     }
   },

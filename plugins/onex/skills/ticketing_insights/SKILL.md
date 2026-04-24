@@ -16,7 +16,7 @@ args:
 
 **This skill operates in REPORTING mode only.**
 
-Linear-insights is not a build skill and not a close-out skill. It reads data — from Linear,
+Ticketing-insights is not a build skill and not a close-out skill. It reads data — from Linear,
 GitHub, and git history — and produces reports. It does not implement features, merge PRs,
 or modify worktrees.
 
@@ -32,7 +32,7 @@ Valid `--mode` values:
 
 **First output line** must always be:
 ```
-[linear-insights] MODE: reporting | submode: <mode-value>
+[ticketing-insights] MODE: reporting | submode: <mode-value>
 ```
 
 No tool calls, file reads, or bash commands may precede this output.
@@ -49,14 +49,14 @@ Unified analytics and reporting for the OmniNode platform. All reporting modes a
 ## Quick Start
 
 ```
-/linear-insights                           # Default: deep-dive mode
-/linear-insights --mode close-day          # End-of-day reconciliation (ModelDayClose YAML)
-/linear-insights --mode project MVP        # Quick health dashboard
-/linear-insights --mode velocity MVP       # Milestone ETA calculations
-/linear-insights --mode suggest            # Priority backlog recommendations
-/linear-insights --mode pipeline           # Rework ratio, cycle time, CI stability
-/linear-insights --mode github             # PR counts, commit velocity, LOC metrics
-/linear-insights --mode all                # Run every mode, produce combined report
+/ticketing-insights                           # Default: deep-dive mode
+/ticketing-insights --mode close-day          # End-of-day reconciliation (ModelDayClose YAML)
+/ticketing-insights --mode project MVP        # Quick health dashboard
+/ticketing-insights --mode velocity MVP       # Milestone ETA calculations
+/ticketing-insights --mode suggest            # Priority backlog recommendations
+/ticketing-insights --mode pipeline           # Rework ratio, cycle time, CI stability
+/ticketing-insights --mode github             # PR counts, commit velocity, LOC metrics
+/ticketing-insights --mode all                # Run every mode, produce combined report
 ```
 
 ## Modes
