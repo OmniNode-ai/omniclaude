@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: Skill MCP Reference Lint
+
+# OMN-8776: hard-block regression of hardcoded `mcp__linear-server__*` tool
+# names in skill prompts. Skills must route ticketing operations through
+# ProtocolProjectTracker (`uv run onex run node_*`), not a vendor-specific
+# MCP handle. Parent epic OMN-8771.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/onex/skills/**/*.md'
+      - 'scripts/lint_skill_mcp_refs.py'
+      - '.github/workflows/skill-mcp-ref-lint.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/onex/skills/**/*.md'
+      - 'scripts/lint_skill_mcp_refs.py'
+      - '.github/workflows/skill-mcp-ref-lint.yml'
+  merge_group:
+
+jobs:
+  skill-mcp-ref-lint:
+    name: Skill MCP Reference Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Scan plugins/onex/skills/ for mcp__linear-server__ references
+        run: python3 scripts/lint_skill_mcp_refs.py

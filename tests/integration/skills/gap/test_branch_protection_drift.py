@@ -8,7 +8,10 @@ Tests verify:
 - branch_protection probe (2.12) is documented in prompt.md
 - branch_protection failure class is in FAILURE_TAXONOMY.md
 - branch_protection auto-dispatch entry exists in fix phase
-- merge-sweep documents the BLOCKED+green pre-scan diagnostic
+- The merge-sweep thin shim (OMN-8752) does NOT embed the BLOCKED+green
+  diagnostic — that logic is owned by node_merge_sweep in omnimarket.
+  Assertions that the node owns the diagnostic belong next to the node,
+  not in this skill-facing test module.
 
 All tests are static analysis / structural tests that run without external
 credentials, live GitHub access, or live PRs. Safe for CI.
@@ -250,34 +253,30 @@ class TestAutoDispatchEntry:
 
 # ---------------------------------------------------------------------------
 # Test case 6: Merge-sweep BLOCKED+green pre-scan diagnostic
+#
+# OMN-8752 thinned /onex:merge_sweep into a dispatch-only shim. The
+# BLOCKED+green branch-protection diagnostic — previously inline prose
+# in SKILL.md / prompt.md — is now owned by node_merge_sweep in
+# omnimarket. Shim files no longer reference the diagnostic; assertions
+# that the node owns the diagnostic belong next to the node, not here.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestMergeSweepBranchProtectionDiagnostic:
-    """Merge-sweep must detect BLOCKED+green PRs as potential branch protection drift."""
+    """The shim must not re-embed the diagnostic that moved into the node."""
 
-    def test_merge_sweep_prompt_has_branch_protection_diagnostic(self) -> None:
-        content = _read(_MERGE_SWEEP_PROMPT)
-        assert (
-            "branch_protection" in content.lower() or "BRANCH_PROTECTION" in content
-        ), "merge-sweep prompt.md must reference branch protection drift diagnostic"
-
-    def test_merge_sweep_prompt_detects_blocked_green(self) -> None:
-        content = _read(_MERGE_SWEEP_PROMPT)
-        assert "BLOCKED" in content and "green" in content.lower(), (
-            "merge-sweep prompt.md must document BLOCKED + green detection"
+    def test_merge_sweep_shim_does_not_embed_diagnostic(self) -> None:
+        """Thin shim must not re-inline branch-protection diagnostic prose."""
+        prompt = _read(_MERGE_SWEEP_PROMPT)
+        skill = _read(_MERGE_SWEEP_SKILL)
+        # audit-branch-protection is the only phrase specific enough to be a
+        # regression smell — check neither surface documents running it.
+        assert "audit-branch-protection" not in prompt, (
+            "branch-protection diagnostic must live in node_merge_sweep, "
+            "not in the thin shim's prompt.md"
         )
-
-    def test_merge_sweep_skill_mentions_branch_protection(self) -> None:
-        content = _read(_MERGE_SWEEP_SKILL)
-        assert (
-            "branch protection" in content.lower() or "BRANCH_PROTECTION" in content
-        ), "merge-sweep SKILL.md must mention branch protection drift"
-
-    def test_merge_sweep_prompt_references_audit_script(self) -> None:
-        content = _read(_MERGE_SWEEP_PROMPT)
-        assert "audit-branch-protection" in content, (
-            "merge-sweep prompt.md must reference audit-branch-protection.py as "
-            "the diagnostic tool for BLOCKED+green PRs"
+        assert "audit-branch-protection" not in skill, (
+            "branch-protection diagnostic must live in node_merge_sweep, "
+            "not in the thin shim's SKILL.md"
         )

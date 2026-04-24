@@ -97,6 +97,17 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      # OMN-8776: regression guard — skill prompts must not hardcode
+      # `mcp__linear-server__*` tool names. Ticketing operations route
+      # through ProtocolProjectTracker (`uv run onex run node_*`).
+      - id: lint-skill-mcp-refs
+        name: reject mcp__linear-server__ refs in skill prompts
+        entry: python3 scripts/lint_skill_mcp_refs.py
+        language: system
+        files: '^plugins/onex/skills/.*\.md$'
+        pass_filenames: true
+        stages: [pre-commit]
+
       # OMN-9072: regression guard — every hookSpecificOutput emission must
       # include hookEventName, else Claude Code silently drops the payload.
       - id: check-hook-event-names
