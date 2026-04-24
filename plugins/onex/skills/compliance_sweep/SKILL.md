@@ -39,6 +39,6 @@ outputs:
 - **Classification**: Deterministic
 - **Dispatch**: see `prompt.md` — single invocation against `node_compliance_sweep` from the omnimarket worktree
 - **No inline scanning**: all compliance checks live in the handler, not this skill
-- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — never substitute prose
+- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — do not produce prose
 
 See `prompt.md` for the exact dispatch invocation.
