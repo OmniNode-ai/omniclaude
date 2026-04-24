@@ -55,12 +55,12 @@ class TestOvernightSkillMd:
     def test_skill_md_not_deprecated(self) -> None:
         """OMN-8751: overnight is no longer deprecated — it is the thin shim."""
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "DEPRECATED" not in content.upper().split("\n", 1)[0] or True
+        # No "DEPRECATED" banner anywhere in the document.
+        assert "DEPRECATED" not in content.upper()
         assert "will be removed" not in content.lower()
-        assert (
-            "superseded" not in content.lower()
-            or "direct entry point" in content.lower()
-        )
+        # "superseded" may appear only when framed as direct-entry-point context.
+        if "superseded" in content.lower():
+            assert "direct entry point" in content.lower()
 
     def test_skill_md_references_backing_node(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()

@@ -49,8 +49,8 @@ uv run onex run-node node_overnight -- $ARGS
 ```
 
 Capture the JSON output from stdout. The node produces a
-`ModelOvernightResult` with `session_status`, `phases_run`, and
-`phases_failed`.
+`ModelOvernightResult` with `session_status`, `phases_run`,
+`phases_failed`, and `correlation_id`.
 
 ## Post-dispatch: Render results
 
