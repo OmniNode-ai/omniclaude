@@ -431,6 +431,23 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
         files: ^plugins/onex/skills/
+      # Instructional-skill enforcement (OMN-8766, S19)
+      # Rejects partial-port of the deterministic dispatch contract into
+      # Tier 3 instructional (pure-prose) skills. Forbids:
+      #   - `onex run` / `onex run-node` dispatch commands
+      #   - `rendered_output` receipt assertions
+      # Dispatch belongs in Tier 1 (OMN-8749 / OMN-8765); rendered_output
+      # belongs in deterministic-skill DoD evidence contracts.
+      # Initial land: --report (non-blocking) because 3 pre-existing
+      # violations live in authorize (1) + onboarding (2). Flip to blocking
+      # once follow-up ticket clears them so "all 15 skills pass green".
+      - id: validate-instructional-skill-routing
+        name: ONEX Instructional Skill Enforcement (OMN-8766)
+        language: system
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_instructional_skill_routing.py --report
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^plugins/onex/skills/
       # Topic naming lint — validate onex.{kind}.{producer}.{event}.v{n} convention
       # (OMN-3259) Triggers on any *.py change; always scans full source tree.
       # Pre-existing violations suppressed by scripts/validation/topic_naming_baseline.txt

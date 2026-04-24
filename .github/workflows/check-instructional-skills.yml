@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# Instructional-Skill Enforcement Gate (OMN-8766, S19)
+#
+# Rejects partial-port of the deterministic dispatch contract into Tier 3
+# instructional (pure-prose) skills. Forbids ``onex run`` / ``onex run-node``
+# dispatch commands and ``rendered_output`` receipt assertions inside the 15
+# instructional SKILL.md files. Dispatch belongs in Tier 1 (guarded by
+# OMN-8749 / OMN-8765); rendered_output belongs in DoD evidence contracts.
+#
+# Required status check: "check-instructional-skills"
+
+name: check-instructional-skills
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "plugins/onex/skills/**/SKILL.md"
+      - "scripts/validation/validate_instructional_skill_routing.py"
+      - ".github/workflows/check-instructional-skills.yml"
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: check-instructional-skills-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-instructional-skills:
+    name: check-instructional-skills
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Run instructional-skill enforcement validator (OMN-8766)
+        # Report-only on initial land: 3 pre-existing violations in
+        # authorize (1) and onboarding (2) remain. Flip to blocking once the
+        # follow-up ticket clears those so "all 15 skills pass gate green".
+        # Pre-commit hook is blocking for new/edited SKILL.md files, so the
+        # gate prevents NEW partial-ports immediately.
+        run: |
+          python scripts/validation/validate_instructional_skill_routing.py \
+            --skills-root plugins/onex/skills \
+            --report
+
+      - name: Gate summary
+        if: always()
+        run: |
+          echo "## Instructional Skill Enforcement (OMN-8766)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Rejects partial-port of the deterministic dispatch contract into" >> $GITHUB_STEP_SUMMARY
+          echo "Tier 3 instructional (pure-prose) skills. Forbids:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`onex run\` / \`onex run-node\` dispatch commands" >> $GITHUB_STEP_SUMMARY
+          echo "- \`rendered_output\` receipt assertions" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dispatch belongs in Tier 1 (OMN-8749 / OMN-8765); rendered_output" >> $GITHUB_STEP_SUMMARY
+          echo "belongs in DoD evidence contracts of deterministic skills." >> $GITHUB_STEP_SUMMARY
