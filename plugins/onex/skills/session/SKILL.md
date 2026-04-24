@@ -43,8 +43,20 @@ outputs:
 ## Routing Contract
 
 - **Classification**: Deterministic
-- **Dispatch**: see `prompt.md` — single invocation against `node_session_orchestrator` from the omnimarket worktree
+- **Dispatch**: single invocation of `node_session_orchestrator` via `onex run node_session_orchestrator`
 - **No inline orchestration**: phases 1/2/3 live in the handler, not this skill
 - **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
 
-See `prompt.md` for the exact dispatch invocation.
+## Dispatch
+
+```bash
+uv run onex run node_session_orchestrator -- \
+  --mode "${MODE:-interactive}" \
+  --phase "${PHASE:-0}" \
+  --state-dir "${STATE_DIR:-.onex_state/session}" \
+  ${DRY_RUN:+--dry-run} \
+  ${SKIP_HEALTH:+--skip-health} \
+  --output-json
+```
+
+On non-zero exit, surface `SkillRoutingError` with the failing component — do not produce prose or inline substitutions.
