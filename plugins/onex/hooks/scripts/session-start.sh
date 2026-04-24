@@ -36,11 +36,16 @@ set -euo pipefail
 # --guard-check-only: run environment guards and exit without starting daemon.
 # Used by tests to verify guard behavior in isolation.
 # Must run BEFORE error-guard.sh is sourced (error-guard converts exit 1 → exit 0).
+# --credential-check-only: run only the credential freshness check (OMN-8798)
+# and exit. Emits warnings to stderr for expired/missing credentials in Mode B
+# (kafka configured); no-op for Mode A (no kafka). Used by tests.
 _GUARD_CHECK_ONLY=0
+_CREDENTIAL_CHECK_ONLY=0
 for _arg in "$@"; do
   if [ "$_arg" = "--guard-check-only" ]; then
     _GUARD_CHECK_ONLY=1
-    break
+  elif [ "$_arg" = "--credential-check-only" ]; then
+    _CREDENTIAL_CHECK_ONLY=1
   fi
 done
 
@@ -60,6 +65,58 @@ elif [[ -n "${CLAUDE_PROJECT_DIR:-}" && -f "${CLAUDE_PROJECT_DIR}/.env" ]]; then
     set +a
 fi
 unset _EARLY_PLUGIN_ROOT _EARLY_PROJECT_ROOT
+
+# --- Credential freshness check [OMN-8798] ---
+# Non-blocking warning to stderr when cloud credentials (Mode B) are absent
+# or expired. No-op for Mode A users (no kafka section in ~/.onex/config.yaml).
+# Exact output on failure: "ONEX WARNING: credentials expired, run: onex refresh-credentials"
+# Reads ~/.onex/config.yaml produced by `onex bootstrap apply` (SD-03).
+_onex_credential_check() {
+    local config_file="${ONEX_USER_CONFIG:-${HOME}/.onex/config.yaml}"
+    # Mode A implicit: no config file at all → skip (no warning).
+    [[ -f "${config_file}" ]] || return 0
+    # Mode A explicit: config exists but has no kafka section → skip.
+    # grep for a top-level "kafka:" key (allow leading whitespace for nested form,
+    # but reject commented lines).
+    if ! grep -qE '^[[:space:]]*kafka:[[:space:]]*$' "${config_file}" 2>/dev/null \
+        && ! grep -qE '^[[:space:]]*kafka:[[:space:]]' "${config_file}" 2>/dev/null; then
+        return 0
+    fi
+    # Mode B: kafka configured. Check credential freshness.
+    local kafka_pw_present=0
+    if grep -qE '^[[:space:]]*(KAFKA_SASL_PASSWORD|sasl_password):[[:space:]]*[^[:space:]#]' \
+        "${config_file}" 2>/dev/null; then
+        kafka_pw_present=1
+    fi
+    local token_expired=0
+    local expires_at
+    # grep exits 1 when no match — absorb with `|| true` so pipefail doesn't kill the script.
+    expires_at=$( { grep -E '^[[:space:]]*infisical_token_expires_at:' "${config_file}" 2>/dev/null || true; } \
+        | head -1 \
+        | sed -E 's/^[[:space:]]*infisical_token_expires_at:[[:space:]]*//; s/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/; s/[[:space:]]*$//')
+    if [[ -n "${expires_at}" ]]; then
+        local now_epoch expires_epoch
+        now_epoch=$(date -u +%s)
+        # Try BSD date first (macOS), then GNU date (Linux).
+        expires_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "${expires_at}" +%s 2>/dev/null \
+            || date -u -d "${expires_at}" +%s 2>/dev/null \
+            || echo 0)
+        if [[ "${expires_epoch}" -gt 0 && "${expires_epoch}" -le "${now_epoch}" ]]; then
+            token_expired=1
+        fi
+    fi
+    if [[ "${kafka_pw_present}" -eq 0 || "${token_expired}" -eq 1 ]]; then
+        echo "ONEX WARNING: credentials expired, run: onex refresh-credentials" >&2
+    fi
+    return 0
+}
+
+# --credential-check-only short-circuit: run the check and exit.
+# Used by tests to verify credential UX without booting the full session stack.
+if [ "$_CREDENTIAL_CHECK_ONLY" = "1" ]; then
+    _onex_credential_check
+    exit 0
+fi
 
 # --- Mode Resolution (runs before all guards) ---
 # Resolve omniclaude operating mode (full vs lite) before heavy initialization.
@@ -1584,5 +1641,12 @@ if [[ -n "${INFISICAL_ADDR:-}" ]]; then
   fi
 fi
 # === End env sync ===
+
+# === Credential freshness check [OMN-8798] ===
+# Warns on expired/missing Mode B credentials. No-op for Mode A.
+# Function defined near the top of this file; runs here so normal sessions
+# surface the warning alongside any other session-start diagnostics.
+_onex_credential_check
+# === End credential freshness check ===
 
 exit 0
