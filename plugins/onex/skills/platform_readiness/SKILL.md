@@ -32,6 +32,9 @@ outputs:
   - name: blockers
     type: list
     description: "FAIL dimensions with actionable items"
+  - name: degraded
+    type: list
+    description: "WARN dimensions with actionable recommendations"
 args:
   - name: --json
     description: "Output raw JSON instead of markdown table (default: false)"
