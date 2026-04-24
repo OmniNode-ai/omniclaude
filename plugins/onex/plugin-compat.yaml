@@ -25,6 +25,22 @@ plugin_version: "0.23.0"
 min_runtime_version: "0.2.0"
 max_runtime_version: "1.0.0"
 
+# `onex` CLI pin (OMN-8799, SD-12).
+#
+# The `onex` CLI ships as a console_script in the `omnibase-core` package.
+# `plugins/onex/.claude-plugin/plugin.json` (requires.onex_cli) and
+# `plugins/.claude-plugin/marketplace.json` (plugins[0].requires.onex_cli)
+# reference this block as their source of truth. CI
+# (`test_marketplace_cli_pin.py`) fails if any of the three surfaces drift.
+#
+# Bumping the pin: update `min_version` here, then run
+# `uv run pytest plugins/onex/tests/test_marketplace_cli_pin.py` and update
+# the two JSON manifests until it passes.
+onex_cli:
+  package: "omnibase-core"
+  min_version: "0.39.0"
+  install_hint: "pipx install 'omnibase-core>=0.39.0'"
+
 # Per-node topic and schema_version declarations for all R-class nodes.
 # schema_version tracks the Kafka message schema version for each topic.
 # "v1" → first published schema; increment with .v2 topic on breaking change.

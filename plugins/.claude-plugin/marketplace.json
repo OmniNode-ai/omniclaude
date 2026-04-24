@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "omninode-tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OmniNode platform tools — ONEX skills, hooks, agents",
   "owner": {
     "name": "OmniNode",
@@ -12,7 +12,17 @@
       "name": "onex",
       "description": "ONEX architecture plugin with skills, hooks, and agents",
       "source": "./onex",
-      "category": "development"
+      "category": "development",
+      "homepage": "https://github.com/OmniNode-ai/omniclaude",
+      "requires": {
+        "onex_cli": {
+          "package": "omnibase-core",
+          "min_version": "0.39.0",
+          "install_hint": "pipx install 'omnibase-core>=0.39.0'",
+          "source_of_truth": "./onex/plugin-compat.yaml#min_runtime_version",
+          "notes": "The `onex` console_script ships with omnibase-core (>=0.39.0). Python 3.12+ required. MVP install path is pipx; a self-contained Homebrew tap binary is planned (see plan § 4.4 / BF-2)."
+        }
+      }
     }
   ]
 }

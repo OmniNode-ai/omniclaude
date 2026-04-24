@@ -24,15 +24,36 @@ Optional (enables observability features):
 
 ## Installation
 
-### Marketplace install (recommended)
+### Step 1 — Install the `onex` CLI
+
+Runtime-class skills (`ticket-pipeline`, `ci-watch`, `dispatch`, etc.) dispatch
+through the `onex` CLI. The plugin pins a minimum compatible version in
+`plugin-compat.yaml` and `plugin.json` (`requires.onex_cli.min_version`). The MVP
+install path is `pipx`:
+
+```bash
+pipx install 'omnibase-core>=0.39.0'
+onex --version   # must print >= 0.39.0
+```
+
+> **Why pinned?** The plugin and the cloud runtime must agree on Kafka topic names
+> and command schemas. See plan `docs/plans/2026-04-14-standalone-plugin-distribution.md`
+> § 7 (Plugin Update and Versioning). `onex health` fails fast on version drift.
+>
+> A self-contained Homebrew tap (`brew install omninode-ai/tap/onex`) is planned
+> for non-Python users — tracked as a follow-up (BF-2 mitigation in the plan).
+
+### Step 2 — Marketplace install (recommended)
 
 ```bash
 claude plugin install onex@omninode-tools
 ```
 
-That's it. Hooks, agents, and skills load automatically on the next Claude Code session.
+On the next Claude Code session, a `SessionStart` advisory warns (non-blocking) if
+the installed `onex` CLI is missing or below the pin declared in
+`plugin-compat.yaml`.
 
-### Manual install (for contributors / development)
+### Alternative — Manual install (for contributors / development)
 
 ```bash
 git clone https://github.com/OmniNode-ai/omniclaude.git ~/Code/omniclaude
