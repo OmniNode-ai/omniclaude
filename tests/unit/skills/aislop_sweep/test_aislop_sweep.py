@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: MIT
 """Integration tests for the aislop-sweep skill.
 
-Tests verify skill spec completeness via static analysis.
+Verifies the thin dispatch-only shim structure (OMN-8753 / A4 amendment):
+SKILL.md + prompt.md must not contain script fallback, inline grep patterns,
+or subprocess wrappers — all scan logic lives in node_aislop_sweep.
+
 All tests are @pytest.mark.unit (no live grep, ruff, mypy, or network calls).
 """
 
@@ -14,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 _SKILLS_ROOT = _REPO_ROOT / "plugins" / "onex" / "skills"
 _AISLOP_SWEEP_DIR = _SKILLS_ROOT / "aislop_sweep"
 _SKILL_MD = _AISLOP_SWEEP_DIR / "SKILL.md"
@@ -50,99 +53,96 @@ class TestSkillMd:
         ):
             assert check in content, f"SKILL.md missing check: {check}"
 
-    def test_model_skill_result_by_check_and_by_severity(self) -> None:
-        content = _read(_SKILL_MD)
-        assert "by_check" in content
-        assert "by_severity" in content
-
     def test_status_values_include_clean_and_findings(self) -> None:
         content = _read(_SKILL_MD)
         assert "clean" in content
         assert "findings" in content
-
-    def test_prohibited_patterns_is_critical(self) -> None:
-        content = _read(_SKILL_MD)
-        assert "CRITICAL" in content
-        assert "prohibited-patterns" in content
-
-    def test_todo_fixme_and_compat_shims_are_warning_or_info(self) -> None:
-        content = _read(_SKILL_MD)
-        # Conservative triage: these should not be auto-ticketed by default
-        assert "WARNING" in content or "INFO" in content
-        assert "todo-fixme" in content
-        assert "compat-shims" in content
 
     def test_ticket_flag_documented_with_aislop_label(self) -> None:
         content = _read(_SKILL_MD)
         assert "--ticket" in content
         assert "aislop-sweep" in content.lower() or "aislop" in content
 
-    def test_modelsweepconfigfinding_schema_fields(self) -> None:
-        content = _read(_SKILL_MD)
-        for field in ("confidence", "ticketable", "autofixable"):
-            assert field in content, f"SKILL.md missing finding schema field: {field}"
-
     def test_path_exclusions_listed(self) -> None:
         content = _read(_SKILL_MD)
         for exclusion in (".git/", ".venv/", "docs/", "fixtures/"):
             assert exclusion in content, f"SKILL.md missing path exclusion: {exclusion}"
 
-    def test_repo_list_is_hardcoded_constant(self) -> None:
+    def test_dispatch_target_is_omnimarket_node(self) -> None:
+        """SKILL.md must dispatch to the omnimarket node, not embed scan logic."""
         content = _read(_SKILL_MD)
-        assert "AISLOP_REPOS" in content or (
-            "omniclaude" in content and "omnibase_core" in content
-        ), "SKILL.md must list default repos"
+        assert "node_aislop_sweep" in content
+        assert "omnimarket" in content
+
+    def test_uses_local_runtime_dispatch(self) -> None:
+        """SKILL.md must use `onex node` (local RuntimeLocal), not `onex run-node` (Kafka)."""
+        content = _read(_SKILL_MD)
+        assert "onex node" in content
+        # run-node is the Kafka path — not allowed for a dispatch-only shim
+        assert "onex run-node" not in content, (
+            "thin shim must not use `onex run-node` (Kafka dispatch)"
+        )
 
 
 @pytest.mark.unit
 class TestPromptMd:
-    def test_all_phases_present(self) -> None:
-        content = _read(_PROMPT_MD)
-        phase_count = len(re.findall(r"^## Phase", content, re.MULTILINE))
-        assert phase_count >= 5, f"Expected >= 5 phases, found {phase_count}"
+    """Enforce dispatch-only shim invariants on prompt.md (OMN-8753 / A4).
 
-    def test_dry_run_exits_before_ticket_creation(self) -> None:
+    prompt.md must be a thin shim: announce + parse args + dispatch + render.
+    It must not contain grep patterns, script fallbacks, or inline scan logic.
+    """
+
+    def test_has_announce(self) -> None:
         content = _read(_PROMPT_MD)
-        dry_run_pos = content.find("--dry-run")
-        ticket_pos = content.find("--ticket")
-        assert dry_run_pos != -1
-        # dry-run exit logic should appear before ticket creation
-        exit_pos = content.find("EXIT", dry_run_pos)
-        if exit_pos == -1:
-            exit_pos = content.find("exit", dry_run_pos)
-        assert exit_pos != -1 or ticket_pos > dry_run_pos, (
-            "prompt.md must show --dry-run exits before ticket creation"
+        assert "Announce" in content or "announce" in content.lower()
+
+    def test_dispatches_to_node(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "node_aislop_sweep" in content
+
+    def test_uses_local_runtime_not_kafka(self) -> None:
+        """Must use `uv run onex node` (RuntimeLocal), not `onex run-node` (Kafka)."""
+        content = _read(_PROMPT_MD)
+        assert "uv run onex node" in content or "onex node " in content
+        assert "onex run-node" not in content, (
+            "thin shim must not use `onex run-node` (Kafka dispatch path)"
         )
 
-    def test_all_grep_patterns_present(self) -> None:
+    def test_no_script_fallback(self) -> None:
+        """prompt.md must not include any script fallback or inline grep patterns."""
         content = _read(_PROMPT_MD)
-        for check in (
-            "prohibited-patterns",
-            "hardcoded-topics",
-            "hardcoded-paths",
-            "phantom-callables",
-            "compat-shims",
-            "empty-impls",
-            "todo-fixme",
-        ):
-            assert check in content, f"prompt.md missing check pattern: {check}"
-
-    def test_aislop_repo_list_hardcoded(self) -> None:
-        content = _read(_PROMPT_MD)
-        assert "AISLOP_REPOS" in content
-        assert "omniclaude" in content
-        assert "omnibase_core" in content
-
-    def test_ticket_section_uses_aislop_sweep_label(self) -> None:
-        content = _read(_PROMPT_MD)
-        assert "aislop-sweep" in content or "aislop" in content
-
-    def test_path_exclusions_present(self) -> None:
-        content = _read(_PROMPT_MD)
-        for exclusion in (".git/", ".venv/", "docs/", "fixtures/"):
-            assert exclusion in content, (
-                f"prompt.md missing path exclusion: {exclusion}"
+        forbidden = (
+            "grep -r",
+            "grep -rn",
+            "rg --type",
+            "run_aislop_sweep.py",
+            "run_aislop_precommit.py",
+        )
+        for pattern in forbidden:
+            assert pattern not in content, (
+                f"prompt.md must be dispatch-only — forbidden fallback pattern: {pattern!r}"
             )
+
+    def test_no_inline_phase_logic(self) -> None:
+        """Thin shim has no multi-phase scan/triage/ticket logic embedded in prompt."""
+        content = _read(_PROMPT_MD)
+        # Count `## Phase` headings (fat-prompt style) — thin shim has 0
+        phase_count = len(re.findall(r"^## Phase \d", content, re.MULTILINE))
+        assert phase_count == 0, (
+            f"thin shim must not enumerate scan phases inline; found {phase_count}"
+        )
+
+    def test_dry_run_documented(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "--dry-run" in content
+
+    def test_ticket_flag_documented(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "--ticket" in content
+
+    def test_error_handling_surfaces_skill_routing_error(self) -> None:
+        content = _read(_PROMPT_MD)
+        assert "SkillRoutingError" in content
 
 
 @pytest.mark.unit

@@ -1,238 +1,107 @@
-# AI Slop Sweep Orchestration
+# aislop_sweep prompt
 
-You are the aislop-sweep orchestrator. This prompt defines the complete execution logic.
+You are executing the **aislop-sweep** skill. This skill is a thin dispatch-only
+shim that routes to the `node_aislop_sweep` node in omnimarket. All scanning,
+triage, ticket-creation, and reporting logic lives in the node handler — the
+shim does not implement any scan logic itself.
 
-**Execution mode: FULLY AUTONOMOUS.**
-- Without `--dry-run`: execute all phases after triage (no questions).
-- `--dry-run` is the only preview mechanism.
+## Announce
 
-## Initialization
+Say: "I'm using the aislop-sweep skill to detect AI-generated quality anti-patterns."
 
-When `/aislop-sweep [args]` is invoked:
+## Parse arguments
 
-1. **Announce**: "I'm using the aislop-sweep skill."
+Extract from `$ARGUMENTS`:
 
-2. **Parse arguments** from `$ARGUMENTS`:
-   - `--repos <list>` — default: AISLOP_REPOS constant
-   - `--checks <list>` — default: all 7 check categories
-   - `--dry-run` — default: false
-   - `--ticket` — default: false
-   - `--auto-fix` — default: false
-   - `--severity-threshold <level>` — default: WARNING
-   - `--max-parallel-repos <n>` — default: 4
+- `--repos <comma-list>` — Repos to scan (default: all supported repos; node resolves the default list)
+- `--checks <comma-list>` — Check categories: phantom-callables, compat-shims, prohibited-patterns, hardcoded-topics, hardcoded-paths, todo-fixme, empty-impls (default: all)
+- `--dry-run` — Report only, no tickets
+- `--ticket` — Create Linear tickets for findings above severity threshold
+- `--severity-threshold <level>` — Minimum severity: WARNING | ERROR | CRITICAL (default: WARNING)
 
-3. **Repo list** (hardcoded constant — do not discover at runtime):
-   ```
-   AISLOP_REPOS = [
-     "omniclaude", "omnibase_core", "omnibase_infra",
-     "omnibase_spi", "omniintelligence", "omnimemory",
-     "onex_change_control", "omnibase_compat"
-   ]
-   ```
+The node owns the default repo list (`AISLOP_REPOS`: omniclaude, omnibase_core,
+omnibase_infra, omnibase_spi, omniintelligence, omnimemory, onex_change_control,
+omnibase_compat). Do not re-declare it here.
 
-4. **Generate run_id**: `<YYYYMMDD-HHMMSS>-<random6>`
+## Execution: Dispatch to node_aislop_sweep
 
-5. **Resolve repo list**: Use `--repos` subset or full AISLOP_REPOS.
+Build the argument list from parsed flags and dispatch to the omnimarket node
+via local RuntimeLocal (`onex node`, the in-process runtime — never the Kafka
+remote dispatch path). No script fallback, no inline grep, no subprocess wrappers.
 
-## Phase 1: Scan
-
-Run grep patterns in parallel (up to `--max-parallel-repos` repos).
-
-**Path exclusions** — apply to every grep:
-```
-.git/  .venv/  node_modules/  __pycache__/  *.pyc  dist/  build/
-docs/  examples/  fixtures/  _golden_path_validate/  migrations/  *.generated.*  vendored/
-```
-
-**prohibited-patterns** (CRITICAL):
 ```bash
-grep -r "ONEX_EVENT_BUS_TYPE=inmemory\|OLLAMA_BASE_URL" \
-  --include="*.py" --include="*.sh" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
-  --exclude-dir=docs --exclude-dir=fixtures \
-  src/ 2>/dev/null || true
+ARGS=""
+if [ -n "$REPOS" ]; then
+  ARGS="$ARGS --repos $REPOS"
+fi
+if [ -n "$CHECKS" ]; then
+  ARGS="$ARGS --checks $CHECKS"
+fi
+if [ "$DRY_RUN" = "true" ]; then
+  ARGS="$ARGS --dry-run"
+fi
+if [ -n "$SEVERITY_THRESHOLD" ]; then
+  ARGS="$ARGS --severity-threshold $SEVERITY_THRESHOLD"
+fi
+
+uv run onex node node_aislop_sweep -- $ARGS
 ```
 
-**hardcoded-topics** (ERROR in src/, WARNING in tests/):
-```bash
-grep -r '"onex\.' \
-  --include="*.py" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
-  --exclude-dir=docs --exclude-dir=fixtures \
-  src/ tests/ 2>/dev/null || true
+Capture the JSON output from stdout. The node produces a `ModelSkillResult`
+(aislop-specific) containing per-check and per-severity counts, plus per-finding
+details (repo, path, line, check, message, severity, confidence, ticketable,
+autofixable).
+
+Exit codes: `0` = clean (no findings), `1` = findings present or node error.
+On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it
+directly, do not produce prose.
+
+## Post-dispatch: Render results
+
+Parse the node output and render a human-readable summary:
+
 ```
-Exclude lines that import from contract.yaml or are inside enum definitions.
+AI Slop Sweep
+=============
+Run: <run_id>
+Repos scanned: <N>
+Total findings: <N>
 
-**phantom-callables** (ERROR — requires multi-location verification):
-Grep for lines in SKILL.md / prompt.md files matching `\w+\(\)` or `call \w+` in imperative context (not in code blocks, not in prose descriptions, not in example sections).
-For each candidate identifier, verify presence in:
-1. `plugins/onex/skills/_lib/`
-2. `plugins/onex/skills/_bin/`
-3. Any `.py` file under `plugins/`
-If absent from all 3: HIGH confidence phantom-callable.
-If found in 1+: skip (not a phantom).
+By severity:
+  CRITICAL: <N>
+  ERROR:    <N>
+  WARNING:  <N>
+  INFO:     <N>
 
-**compat-shims** (WARNING — src/ only):
-```bash
-grep -r "# removed\|# backwards.compat\|_unused_" \
-  --include="*.py" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
-  --exclude-dir=tests --exclude-dir=docs --exclude-dir=fixtures \
-  src/ 2>/dev/null || true
-```
+By check:
+  phantom-callables:   <N>
+  compat-shims:        <N>
+  prohibited-patterns: <N>
+  hardcoded-topics:    <N>
+  hardcoded-paths:     <N>
+  todo-fixme:          <N>
+  empty-impls:         <N>
 
-**empty-impls** (WARNING — src/ only, skip Abstract/Protocol/stub/__init__):
-```bash
-grep -rn "^\s*pass$" \
-  --include="*.py" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
-  --exclude-dir=tests --exclude-dir=docs \
-  src/ 2>/dev/null || true
-```
-Post-filter: skip files matching `*Abstract*`, `*Protocol*`, `*stub*`, `*__init__*`.
-
-**todo-fixme** (INFO — src/ only):
-```bash
-grep -rn "TODO\|FIXME\|HACK" \
-  --include="*.py" \
-  --exclude-dir=.git --exclude-dir=.venv --exclude-dir=__pycache__ \
-  --exclude-dir=tests --exclude-dir=docs \
-  src/ 2>/dev/null || true
-```
-
-**hardcoded-paths** (ERROR in src/scripts/ — no env var override; WARNING if env var fallback present):
-
-Scan all source and script files for machine-specific absolute paths hardcoded as runtime defaults.
-```bash
-# Pattern 1: /Volumes/<name>/ string literals (macOS external volumes)
-rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
-  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
-  -n '"/Volumes/[A-Za-z]' src/ scripts/ 2>/dev/null || true
-
-# Pattern 2: /Users/<name>/ string literals (macOS home dirs)
-rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
-  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
-  -n '"/Users/[a-z]' src/ scripts/ 2>/dev/null || true
-
-# Pattern 3: LAN IP defaults (192.168.86.x) not preceded by os.environ / process.env / getenv  # onex-allow-internal-ip
-rg --type-add 'code:*.{py,sh,ts,js,tsx,yaml,yml,toml}' --type code \
-  --glob '!tests/**' --glob '!docs/**' --glob '!.venv/**' --glob '!.git/**' --glob '!node_modules/**' \
-  -n '192\.168\.86\.' src/ scripts/ 2>/dev/null || true
-```
-
-**Allowlist** — skip lines containing any of:
-- `# local-path-ok: <reason>` — explicitly annotated as machine-local
-- `# onex-allow-internal-ip` — explicitly approved LAN IP usage
-- `# kafka-fallback-ok` — Kafka broker fallback, tracked separately
-- Lines inside `tests/`, `docs/`, `*.md`, `.env.example`, lock files
-
-**Post-filter** (hardcoded-paths severity):
-- Line contains `os.environ.get(` or `os.getenv(` or `process.env.` before the literal → WARNING (has env var fallback but wrong default)
-- Otherwise → ERROR (no env var escape hatch at all)
-
-## Phase 2: Triage
-
-For each finding, create a `ModelSweepFinding`:
-```python
-{
-  "repo": str,
-  "path": str,
-  "line": int,
-  "check": str,
-  "message": str,
-  "severity": str,   # CRITICAL | ERROR | WARNING | INFO
-  "confidence": str, # HIGH | MEDIUM | LOW
-  "autofixable": bool,
-  "ticketable": bool,
-}
-```
-
-Apply triage rules:
-- `prohibited-patterns`: CRITICAL, HIGH, autofixable=false, ticketable=true
-- `hardcoded-topics` in src/: ERROR, HIGH, ticketable=true
-- `hardcoded-topics` in tests/: WARNING, MEDIUM, ticketable=false
-- `phantom-callables` confirmed missing (3 locations checked): ERROR, HIGH, ticketable=true
-- `phantom-callables` ambiguous (1 location checked): ERROR, MEDIUM, ticketable=false
-- `compat-shims`: WARNING, MEDIUM, ticketable=false
-- `empty-impls`: WARNING, MEDIUM, ticketable=false
-- `todo-fixme`: INFO, LOW, ticketable=false
-- `hardcoded-paths` ERROR (no env var): ERROR, HIGH, autofixable=false, ticketable=true
-- `hardcoded-paths` WARNING (env var fallback with bad default): WARNING, MEDIUM, autofixable=false, ticketable=true
-
-**Fingerprint**: `f"{repo}:{path}:{check}:{str(line // 10 * 10)}"`
-
-**Dedup**: Load `$ONEX_STATE_DIR/aislop-sweep/latest/findings.json` if exists.
-Mark `finding.new = fingerprint not in prior_fingerprints`.
-Save to `$ONEX_STATE_DIR/aislop-sweep/<run_id>/findings.json`.
-
-If no findings → emit `ModelSkillResult(status=clean)` and exit.
-
-## Phase 3: Ticket Creation
-
-IF `--dry-run`:
-  Print findings table grouped by check category and confidence tier:
-  ```
-  CHECK                REPO              PATH                 SEVERITY   CONFIDENCE
-  prohibited-patterns  omniclaude        src/foo.py           CRITICAL   HIGH
-  hardcoded-topics     omnibase_core     src/bar.py           ERROR      HIGH
+Findings (CRITICAL → ERROR → WARNING → INFO):
+  <repo>:<path>:<line>  <check>  <severity>/<confidence>  <message>
   ...
-  ```
-  Print: "Dry run complete. <N> findings across <M> repos. No tickets created."
-  **EXIT** — do not proceed to ticket creation or auto-fix.
 
-IF `--ticket`:
-  For each finding group where `ticketable=true AND new=true AND severity>=threshold`:
-    Create Linear ticket:
-    - Title: `aislop: <check_family> in <repo>:<path>`
-    - Description: list all findings in the group
-    - Label: `aislop-sweep`
-    - Project: Active Sprint
-    At most 1 ticket per group key `(repo, check_family, path)`.
-    CRITICAL findings always get their own ticket.
-
-## Phase 4: Auto-Fix
-
-IF `--auto-fix`:
-  Narrow allowlist only:
-  - Missing SPDX headers → `onex spdx fix src tests scripts examples`
-  - `# removed` on blank line → safe to remove
-
-  NOT auto-fixed:
-  - compat-shims with non-trivial content
-  - `_unused_` variables (may be interface placeholders)
-  - Empty `pass` statements (may be abstract stubs)
-
-  After fix: re-grep to confirm removal. Commit + PR per repo.
-
-## Phase 5: Summary
-
-Post to Slack (best-effort):
-```
-aislop-sweep complete. Run: <run_id>
-Repos: <N> scanned
-Total findings: <N> | CRITICAL: <N> | ERROR: <N> | WARNING: <N> | INFO: <N>
-Tickets created: <N> | Auto-fixed: <N>
+Tickets created: <N>
+Auto-fixed: <N>
 ```
 
-Emit ModelSkillResult:
-```json
-{
-  "skill": "aislop-sweep",
-  "status": "clean | findings | partial | error",
-  "run_id": "<run_id>",
-  "repos_scanned": <N>,
-  "total_findings": <N>,
-  "by_severity": {"CRITICAL": 0, "ERROR": 0, "WARNING": 0, "INFO": 0},
-  "by_check": {
-    "phantom-callables": 0,
-    "compat-shims": 0,
-    "prohibited-patterns": 0,
-    "hardcoded-topics": 0,
-    "hardcoded-paths": 0,
-    "todo-fixme": 0,
-    "empty-impls": 0
-  },
-  "tickets_created": <N>,
-  "auto_fixed": <N>
-}
-```
+## Post-dispatch: Ticket creation (`--ticket`)
+
+Ticket creation is handled by the node itself when `--ticket` is passed through.
+The node deduplicates against existing open tickets, applies the severity
+threshold, and creates at most one ticket per `(repo, check_family, path)`
+group with label `aislop-sweep` in Active Sprint.
+
+If `--dry-run` is set, no tickets are created regardless of `--ticket`.
+
+## Error handling
+
+- If `uv run onex node node_aislop_sweep` fails: surface the `SkillRoutingError`
+  JSON envelope from stdout/stderr and exit non-zero.
+- Do not fall back to inline grep, scripts, or subprocess wrappers. The node is
+  the single source of truth for aislop scan logic (A4 amendment).

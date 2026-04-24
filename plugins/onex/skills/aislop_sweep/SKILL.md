@@ -1,6 +1,6 @@
 ---
 description: Detect AI-generated quality anti-patterns across all repos — phantom callables in skill markdown, backwards compat shims, prohibited env var patterns, hardcoded topic strings, hardcoded absolute paths and LAN IPs, agent-left TODO/FIXME markers, and empty implementations.
-version: 3.0.0
+version: 3.1.0
 mode: full
 level: advanced
 debug: false
@@ -66,13 +66,22 @@ outputs:
 
 Path exclusions: `.git/`, `.venv/`, `docs/`, `fixtures/` are always excluded from scanning.
 
+Dispatch to the omnimarket node via local RuntimeLocal (`onex node`). This is a
+dispatch-only shim — no script fallback, no inline grep, no subprocess wrappers.
+
 ```bash
-onex run-node node_aislop_sweep \
-  --input '{"repos": "<comma-list>", "checks": "<comma-list>", "severity_threshold": "WARNING", "dry_run": false}' \
-  --timeout 300
+uv run onex node node_aislop_sweep -- \
+  --repos "<comma-list>" \
+  --checks "<comma-list>" \
+  --severity-threshold WARNING \
+  [--dry-run] [--ticket]
 ```
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = clean, exit 1 = findings found.
+
+The node owns the default `AISLOP_REPOS` list (omniclaude, omnibase_core,
+omnibase_infra, omnibase_spi, omniintelligence, omnimemory, onex_change_control,
+omnibase_compat).
 
 ### Step 3 — Render report
 
