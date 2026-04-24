@@ -257,6 +257,17 @@ Gate names are API-stable. Do not rename without following the Branch Protection
 - When modifying branch protection rules, never remove them after adding them.
   If temporary rules were needed, flag them to the user rather than auto-removing.
 
+### Standalone Lint Gates
+
+Required status checks outside `ci.yml`:
+
+| Workflow | Gate | What it rejects |
+|----------|------|-----------------|
+| `hook-log-path-lint.yml` | Hook Log Path Lint | Hook scripts deriving state paths from `PLUGIN_ROOT`/`HOOKS_DIR`/`SCRIPT_DIR` (OMN-8429). |
+| `skill-mcp-ref-lint.yml` | Skill MCP Reference Lint | Hardcoded `mcp__linear-server__*` tool names in `plugins/onex/skills/**/*.md` (OMN-8776). Skills must route ticketing through `ProtocolProjectTracker` / `uv run onex run node_*`. |
+
+Both gates also run as pre-commit hooks and must exit non-zero on violation.
+
 ---
 
 ## Code Quality
