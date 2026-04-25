@@ -1,30 +1,29 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# Wave D CI gate: runtime-change PRs must cite a ticket with deploy evidence.
-# Ticket: OMN-8912 | Epic: OMN-8908 (contract-validation-in-CI)
-# Root cause: OMN-8841 — Dockerfile.runtime changed, deploy never dispatched,
-#             deploy-agent inactive 2 days undetected.
-# DGM-Phase6 (OMN-9734): validator moved to composite action for single-source reuse.
+# Reusable workflow: deploy-gate validator (DGM-Phase6, OMN-9734).
+# Canonical source — all repos call this via uses: instead of running
+# their own copy of validate_pr_deploy_required.py.
 #
-# Required status check: "deploy-gate"
-# Must pass before merging to main on all repos with runtime code.
+# Canonical validator: OMN-9685 (omnibase_core PR #902, 2026-04-25).
+# Centralised: OMN-9734 (DGM-Phase6). Supersedes DGM-Phase2.
+#
+# Usage in caller repos:
+#   jobs:
+#     deploy-gate:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/deploy-gate-reusable.yml@main
+#       secrets: inherit
 
-name: Deploy Gate
+name: Deploy Gate (reusable)
 
 on:
-  pull_request:
-    branches: [main, develop]
-  merge_group:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      pr-number:
-        description: "PR number to validate"
-        required: true
-
-concurrency:
-  group: deploy-gate-${{ github.ref }}
-  cancel-in-progress: true
+      contracts-dir:
+        description: Path to ticket contracts directory relative to repo root
+        type: string
+        required: false
+        default: contracts
 
 jobs:
   deploy-gate:
@@ -42,7 +41,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout code
+      - name: Checkout caller repo
         uses: actions/checkout@v6
 
       - name: Skip on merge_group
@@ -64,10 +63,10 @@ jobs:
             echo "pr_number=$PR_NUMBER_EVENT" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run deploy gate
+      - name: Run deploy gate (canonical composite action)
         if: github.event_name != 'merge_group'
-        uses: ./.github/actions/deploy-gate
+        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@main
         with:
           pr-number: ${{ steps.pr-number.outputs.pr_number }}
-          github-token: ${{ github.token }}
-          contracts-dir: contracts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          contracts-dir: ${{ inputs.contracts-dir }}

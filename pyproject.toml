@@ -492,6 +492,7 @@ ignore = [
 # and print() is the intended stdout output mechanism for CLI tools, hooks, and scripts
 "plugins/**/*.py" = ["BLE001", "T201"]
 "scripts/**/*.py" = ["BLE001", "T201"]
+".github/actions/**/*.py" = ["BLE001", "T201"]
 "consumers/**/*.py" = ["BLE001", "T201"]
 "shared_lib/**/*.py" = ["BLE001", "T201"]
 "examples/**/*.py" = ["T201"]

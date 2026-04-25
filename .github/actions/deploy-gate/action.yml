@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# Composite action: run the deploy-gate validator.
+# Called by omniclaude/.github/workflows/deploy-gate-reusable.yml
+# Canonical source for all repos — DGM-Phase6 (OMN-9734).
+
+name: Deploy Gate Validator
+description: >
+  Validates that PRs touching runtime paths cite a ticket with deploy DoD evidence.
+  Canonical implementation: OMN-9685. Centralised: OMN-9734 (DGM-Phase6).
+
+inputs:
+  pr-number:
+    description: PR number to validate
+    required: true
+  github-token:
+    description: GitHub token for gh CLI access
+    required: true
+  contracts-dir:
+    description: Path to directory containing OMN-XXXX.yaml ticket contracts
+    required: false
+    default: contracts
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        version: "0.8.3"
+
+    - name: Install pyyaml
+      shell: bash
+      run: uv pip install --system pyyaml
+
+    - name: Run deploy gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        CONTRACTS_DIR: ${{ inputs.contracts-dir }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        python "$ACTION_PATH/validate_pr_deploy_required.py" \
+          --changed-files "$(gh pr diff "$PR_NUMBER" --name-only | tr '\n' ' ')" \
+          --pr-body "$(gh pr view "$PR_NUMBER" --json body -q '.body')" \
+          --contracts-dir "$CONTRACTS_DIR"
