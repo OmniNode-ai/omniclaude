@@ -188,7 +188,7 @@ class PatternTrackingErrorPolicy:
     def handle_validation_error(
         self,
         operation: str,
-        validation_errors: list[Any],
+        validation_errors: list[str],
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Handle data validation errors"""
@@ -235,7 +235,7 @@ class CircuitBreaker:
         self.last_failure_time: float | None = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
-    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:  # Why: generic circuit breaker — wraps arbitrary callables
         """Execute function with circuit breaker protection"""
         if self.state == "OPEN":
             if (
@@ -264,7 +264,7 @@ class CircuitBreaker:
 
 def safe_execute_operation(
     operation_name: str,
-    operation_func: Callable[[], Any],
+    operation_func: Callable[[], dict[str, Any]],
     logger: PatternTrackingLogger,
     error_handler: PatternTrackingErrorPolicy,
     max_retries: int = 3,

@@ -40,6 +40,7 @@ Related:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -164,7 +165,7 @@ class NodeValidatorRolloutOrchestratorOrchestrator:
 
     def __init__(
         self,
-        db_session_factory: Any | None = None,
+        db_session_factory: Callable[..., Any] | None = None,
     ) -> None:
         """Initialise the controller.
 

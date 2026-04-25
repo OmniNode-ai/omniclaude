@@ -168,7 +168,7 @@ class IntelligenceConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def build_dynamic_topic_names(cls, data: Any) -> Any:
+    def build_dynamic_topic_names(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Populate topic names from constants if not explicitly provided.
 
         Topic names are wire-ready per OMN-1972 — no environment prefix.
@@ -180,9 +180,6 @@ class IntelligenceConfig(BaseModel):
         Returns:
             The data with topic names populated if not already set
         """
-        if not isinstance(data, dict):
-            return data
-
         # Build topic names if not explicitly provided (no env prefix per OMN-1972)
         if not data.get("topic_code_analysis_requested"):
             data["topic_code_analysis_requested"] = TOPIC_CODE_ANALYSIS_REQUESTED

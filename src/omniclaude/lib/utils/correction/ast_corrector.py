@@ -76,7 +76,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
 
     def __init__(
         self,
-        corrections: dict[tuple[Any, Any, Any], Any],
+        corrections: dict[tuple[int | None, int | None, str | None], str | None],  # Why: keys built from .get() which may be None
         framework_detector: FrameworkMethodDetector,
         original_tree: ast.Module,
     ) -> None:
@@ -170,7 +170,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         self.current_function = None
         return updated_node
 
-    def leave_Name(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
+    def leave_Name(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802  # Why: libcst.CSTNode subtype — exact type varies by visitor context
         """Rename variable/identifier names at specific line/column positions."""
         if not LIBCST_AVAILABLE:
             return updated_node

@@ -19,7 +19,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeEvidenceBundleCompute(NodeCompute[Any, Any]):
+class NodeEvidenceBundleCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Compute node for evidence bundle generation.
 
     Capability: nl.evidence.bundle.compute

@@ -20,7 +20,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeAmbiguityGateCompute(NodeCompute[Any, Any]):
+class NodeAmbiguityGateCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Compute node for the Plan→Ticket ambiguity gate.
 
     Capability: nl.ambiguity.gate.compute

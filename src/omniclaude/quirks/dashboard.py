@@ -26,6 +26,7 @@ Related:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ class QuirkSignalRow:
         "stage",
     )
 
-    def __init__(self, row: Any) -> None:
+    def __init__(self, row: Sequence[Any]) -> None:
         self.id = str(row[0])
         self.quirk_type = str(row[1])
         self.session_id = str(row[2])
@@ -132,7 +133,7 @@ class QuirkFindingRow:
         "validator_blueprint_id",
     )
 
-    def __init__(self, row: Any) -> None:
+    def __init__(self, row: Sequence[Any]) -> None:
         self.id = str(row[0])
         self.signal_id = str(row[1])
         self.quirk_type = str(row[2])
@@ -188,7 +189,7 @@ class NodeQuirkDashboardQueryEffect:
         )
     """
 
-    def __init__(self, db_session_factory: Any | None = None) -> None:
+    def __init__(self, db_session_factory: Callable[..., Any] | None = None) -> None:
         """Initialise the dashboard query node.
 
         Args:
@@ -542,10 +543,10 @@ def _empty_summary(days: int) -> dict[str, Any]:
 
 def _build_summary(
     days: int,
-    signal_rows: list[Any],
-    finding_rows: list[Any],
-    stage_rows: list[Any],
-    rec_rows: list[Any],
+    signal_rows: list[Sequence[Any]],
+    finding_rows: list[Sequence[Any]],
+    stage_rows: list[Sequence[Any]],
+    rec_rows: list[Sequence[Any]],
 ) -> dict[str, Any]:
     """Assemble summary dict from raw query result rows."""
     by_quirk_type: dict[str, dict[str, Any]] = {}

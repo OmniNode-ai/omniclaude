@@ -19,7 +19,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeNlIntentPipelineCompute(NodeCompute[Any, Any]):
+class NodeNlIntentPipelineCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Compute node for NL → Intent Object parsing.
 
     Capability: nl.intent.pipeline.compute

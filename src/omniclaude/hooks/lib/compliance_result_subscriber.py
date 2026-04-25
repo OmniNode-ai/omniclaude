@@ -36,8 +36,8 @@ import math
 import os
 import sys
 import threading
-import time
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
 from omniclaude.hooks.topics import TopicBase
@@ -114,7 +114,7 @@ def _parse_compliance_result(raw: bytes) -> dict[str, Any] | None:
 
 
 def violations_to_advisories(
-    violations: list[Any],
+    violations: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Filter violated entries and transform to PatternAdvisory format.
 
@@ -131,9 +131,6 @@ def violations_to_advisories(
     advisories: list[dict[str, Any]] = []
 
     for v in violations:
-        # Guard: skip non-dict entries before entering the try block
-        if not isinstance(v, dict):
-            continue
         try:
             # Filter: only transform entries where violated is True
             violated = v.get("violated", False)
@@ -309,103 +306,17 @@ def run_subscriber(
     group_id: str = "omniclaude-compliance-subscriber.v1",
     poll_timeout_ms: int = 1000,
     max_poll_records: int = 50,
-    stop_event: Any = None,
-) -> None:
+    stop_event: threading.Event | None = None,
+) -> threading.Thread:
     """Run a blocking Kafka consumer loop for compliance-evaluated events.
 
     Designed to run in a background thread (or daemon process) launched by
-    SessionStart. Exits when `stop_event` is set or on unrecoverable error.
+    SessionStart. Exits when ``stop_event`` is set or on unrecoverable error.
 
     All KafkaConsumer parameters are chosen for low-latency advisory delivery:
     - `auto_offset_reset="latest"`: only process new events (not historical ones)
     - `enable_auto_commit=True`: fire-and-forget; advisory loss is acceptable
     - No manual commit needed — we tolerate re-delivery on crash restart
-
-    Args:
-        kafka_bootstrap_servers: Kafka bootstrap servers string.
-        group_id: Consumer group ID (schema version encoded; default:
-            ``omniclaude-compliance-subscriber.v1``).
-        poll_timeout_ms: Kafka poll timeout in milliseconds.
-        max_poll_records: Maximum records per poll.
-        stop_event: Optional threading.Event; loop exits when set.
-    """
-    KafkaConsumer = _get_kafka_consumer_class()  # noqa: N806
-    if KafkaConsumer is None:
-        logger.warning(
-            "kafka-python not installed; compliance-evaluated subscriber disabled"
-        )
-        return
-
-    if not kafka_bootstrap_servers:
-        logger.warning(
-            "KAFKA_BOOTSTRAP_SERVERS not set; compliance-evaluated subscriber disabled"
-        )
-        return
-
-    logger.info(
-        "Starting compliance-evaluated subscriber (topic=%s, servers=%s)",
-        COMPLIANCE_EVALUATED_TOPIC,
-        kafka_bootstrap_servers,
-    )
-
-    try:
-        consumer = KafkaConsumer(
-            COMPLIANCE_EVALUATED_TOPIC,
-            bootstrap_servers=kafka_bootstrap_servers,
-            group_id=group_id,
-            auto_offset_reset="latest",
-            enable_auto_commit=True,
-            value_deserializer=None,  # We handle raw bytes in process_compliance_event
-            max_poll_records=max_poll_records,
-        )
-    except Exception as exc:  # noqa: BLE001 — boundary: consumer creation failure
-        logger.warning("Failed to create Kafka consumer: %s", exc)
-        return
-
-    try:
-        while True:
-            if stop_event is not None and stop_event.is_set():
-                logger.info("Compliance subscriber stop_event set; exiting")
-                break
-
-            try:
-                records = consumer.poll(timeout_ms=poll_timeout_ms)
-                for _tp, messages in records.items():
-                    for msg in messages:
-                        try:
-                            process_compliance_event(msg.value)
-                        except Exception as exc:  # noqa: BLE001 — boundary: individual message failures silent
-                            # Per design: individual message failures are silent
-                            logger.debug("Error processing message: %s", exc)
-            except Exception as exc:  # noqa: BLE001 — boundary: poll failure retries
-                logger.warning("Kafka poll error: %s", exc)
-                # Brief backoff before retrying
-                time.sleep(1.0)
-
-    finally:
-        try:
-            consumer.close()
-        except Exception:  # noqa: BLE001  # nosec B110 — boundary: cleanup must not raise
-            pass
-        logger.info("Compliance-evaluated subscriber stopped")
-
-
-# ---------------------------------------------------------------------------
-# Background thread launcher (used by plugin.py:start_consumers)
-# ---------------------------------------------------------------------------
-
-
-def run_subscriber_background(
-    *,
-    kafka_bootstrap_servers: str,
-    group_id: str = "omniclaude-compliance-subscriber.v1",
-    stop_event: Any = None,
-) -> threading.Thread:
-    """Launch ``run_subscriber`` in a daemon background thread.
-
-    The thread is marked daemon=True so it does not block interpreter exit.
-    The caller owns the ``stop_event`` and must set it to request a graceful
-    shutdown before the thread naturally exits.
 
     Args:
         kafka_bootstrap_servers: Kafka bootstrap servers string.
@@ -478,7 +389,7 @@ def main() -> None:
 
             import signal  # noqa: PLC0415
 
-            def _handle_signal(sig: int, frame: Any) -> None:
+            def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()
 
             signal.signal(signal.SIGTERM, _handle_signal)

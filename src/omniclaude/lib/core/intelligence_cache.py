@@ -91,7 +91,7 @@ class IntelligenceCache:
         else:
             default_url = "redis://onex-valkey:6379/0"
         self.redis_url = redis_url or settings.valkey_url or default_url
-        self._client: Any | None = None
+        self._client: Any | None = None  # Why: redis.asyncio.Redis — external lib, optional import
 
         # Default TTLs by operation type (in seconds)
         self._default_ttls: dict[str, int] = {

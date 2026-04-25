@@ -128,7 +128,10 @@ _load_action_logger()
 
 
 # Import data sanitizer for secure logging (optional integration)
-def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
+def _load_sanitizers() -> tuple[
+    Callable[[dict[str, Any]], dict[str, Any]],
+    Callable[[str], str],
+]:
     """
     Try to load sanitizer functions.
 
@@ -141,10 +144,10 @@ def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
         return sanitize_dict, sanitize_string
     except ImportError:  # nosec B110 - Optional dependency, graceful degradation
         # Fallback: no-op sanitization functions
-        def fallback_dict(d: Any, **kwargs: Any) -> Any:
+        def fallback_dict(d: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
             return d
 
-        def fallback_string(s: Any, **kwargs: Any) -> Any:
+        def fallback_string(s: str, **kwargs: Any) -> str:
             return s
 
         return fallback_dict, fallback_string
@@ -156,7 +159,7 @@ sanitize_dict, sanitize_string = _load_sanitizers()
 logger = logging.getLogger(__name__)
 
 
-def _connect_postgres(**extra_kwargs: Any) -> Any:
+def _connect_postgres(**extra_kwargs: Any) -> Any:  # Why: psycopg2 connection type not in stubs
     """Create a psycopg2 connection respecting ``OMNICLAUDE_DB_URL`` precedence.
 
     This is the module-level equivalent of
@@ -276,7 +279,7 @@ class CacheMetrics:
 class CacheEntry:
     """Individual cache entry with data and metadata."""
 
-    data: Any
+    data: Any  # Why: polymorphic — different query types store different shapes
     timestamp: datetime
     ttl_seconds: int
     query_type: str
@@ -326,7 +329,7 @@ class ManifestCache:
                 self.metrics[query_type] = CacheMetrics()
         self.logger = logging.getLogger(__name__)
 
-    def get(self, query_type: str) -> Any | None:
+    def get(self, query_type: str) -> Any | None:  # Why: returns CacheEntry.data which is polymorphic
         """Get cached data for query type."""
         import time
 
@@ -354,7 +357,7 @@ class ManifestCache:
         self.logger.debug(f"Cache HIT: {query_type}")
         return entry.data
 
-    def set(self, query_type: str, data: Any, ttl_seconds: int | None = None) -> None:
+    def set(self, query_type: str, data: Any, ttl_seconds: int | None = None) -> None:  # Why: stores polymorphic data — different shapes per query type
         """Store data in cache."""
         ttl = ttl_seconds or self._ttls.get(query_type, self.default_ttl_seconds)
         size_bytes = len(str(data).encode("utf-8"))
@@ -489,7 +492,7 @@ class ManifestInjectionStorage:
                     "POSTGRES_PASSWORD in your .env file."
                 )
 
-    def _connect(self, **extra_kwargs: Any) -> Any:
+    def _connect(self, **extra_kwargs: Any) -> Any:  # Why: psycopg2 connection type
         """Create a psycopg2 connection using the resolved configuration.
 
         When ``_db_url`` is set (via ``OMNICLAUDE_DB_URL`` or the ``db_url``
@@ -518,7 +521,7 @@ class ManifestInjectionStorage:
         )
 
     @staticmethod
-    def _serialize_for_json(obj: Any) -> Any:
+    def _serialize_for_json(obj: Any) -> Any:  # Why: recursive JSON serialization accepts/returns any JSON-compatible value
         """
         Recursively convert Pydantic types to JSON-serializable types.
 

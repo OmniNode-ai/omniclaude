@@ -141,7 +141,7 @@ class ModelToolCallConfig:
 KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 # Lazy-loaded Kafka producer (singleton)
-_kafka_producer: Any | None = None
+_kafka_producer: Any | None = None  # Why: kafka.KafkaProducer — external lib without stubs
 _producer_lock: asyncio.Lock | None = None
 
 # Threading lock for thread-safe asyncio.Lock creation
@@ -197,7 +197,7 @@ def _get_kafka_bootstrap_servers() -> str | None:
     return None
 
 
-async def _get_kafka_producer() -> Any:
+async def _get_kafka_producer() -> Any:  # Why: kafka.KafkaProducer — external lib without stubs
     """
     Get or create Kafka producer (async singleton pattern).
 

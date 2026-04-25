@@ -42,7 +42,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeFrictionObserverCompute(NodeCompute[Any, Any]):
+class NodeFrictionObserverCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Classify failure signals using contract-driven rules."""
 
     def __init__(self, container: ModelONEXContainer) -> None:

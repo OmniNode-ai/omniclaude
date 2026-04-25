@@ -24,7 +24,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeAgentRoutingCompute(NodeCompute[Any, Any]):
+class NodeAgentRoutingCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Compute node for agent routing decisions.
 
     Capability: agent.routing.compute

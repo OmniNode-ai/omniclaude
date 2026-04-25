@@ -279,8 +279,8 @@ class PatternQualityScorer:
 
     def _score_metadata_richness(
         self,
-        use_cases: list[Any] | None,
-        examples: list[Any] | None,
+        use_cases: list[str] | None,
+        examples: list[dict[str, Any]] | None,
         metadata: dict[
             str, Any
         ]  # ONEX_EXCLUDE: dict_str_any - generic metadata container

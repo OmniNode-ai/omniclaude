@@ -120,7 +120,7 @@ class KafkaProducerManager:
 
     def __init__(self, name: str = "default") -> None:
         self._name = name
-        self._producer: Any | None = None
+        self._producer: Any | None = None  # Why: kafka.KafkaProducer — external lib without stubs
         self._producer_loop: asyncio.AbstractEventLoop | None = None
         self._lock: asyncio.Lock | None = None
         self._lock_loop: asyncio.AbstractEventLoop | None = None
@@ -141,7 +141,7 @@ class KafkaProducerManager:
                 self._lock_loop = current_loop
         return self._lock
 
-    async def get_producer(self) -> Any | None:
+    async def get_producer(self) -> Any | None:  # Why: kafka.KafkaProducer — external lib without stubs
         """Get or create Kafka producer (async singleton pattern).
 
         AIOKafkaProducer is bound to the event loop it was started in.

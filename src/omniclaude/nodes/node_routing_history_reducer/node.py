@@ -26,7 +26,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeRoutingHistoryReducer(NodeReducer[Any, Any]):
+class NodeRoutingHistoryReducer(
+    NodeReducer[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Reducer node for routing history operations.
 
     Capability: routing.history

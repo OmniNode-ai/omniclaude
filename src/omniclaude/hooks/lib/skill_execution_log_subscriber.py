@@ -38,6 +38,7 @@ import os
 import sys
 import threading
 import time
+from types import FrameType
 from typing import Any
 from uuid import UUID
 
@@ -72,7 +73,7 @@ def _get_kafka_consumer_class() -> type | None:
         return None
 
 
-def _get_db_connection() -> Any | None:
+def _get_db_connection() -> Any | None:  # Why: psycopg2 connection type not in stubs
     """Open a psycopg2 connection using omniclaude settings.
 
     Returns None on any failure (fail-open).
@@ -194,7 +195,7 @@ def _upsert_skill_execution_log(payload: dict[str, Any]) -> bool:
         return False
 
     # Coerce UUID fields — accept both str and pre-parsed UUID
-    def _to_uuid_str(v: Any) -> str | None:
+    def _to_uuid_str(v: Any) -> str | None:  # Why: accepts str, UUID, or None
         if v is None:
             return None
         try:
@@ -288,7 +289,7 @@ def run_subscriber(
     group_id: str = DEFAULT_GROUP_ID,
     poll_timeout_ms: int = 1000,
     max_poll_records: int = 50,
-    stop_event: Any = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Run a blocking Kafka consumer loop for skill-completed events.
 
@@ -386,7 +387,7 @@ def run_subscriber_background(
     *,
     kafka_bootstrap_servers: str,
     group_id: str = DEFAULT_GROUP_ID,
-    stop_event: Any = None,
+    stop_event: threading.Event | None = None,
 ) -> threading.Thread:
     """Launch ``run_subscriber`` in a daemon background thread.
 
@@ -463,7 +464,7 @@ def main() -> None:
 
             import signal  # noqa: PLC0415
 
-            def _handle_signal(sig: int, frame: Any) -> None:
+            def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()
 
             signal.signal(signal.SIGTERM, _handle_signal)

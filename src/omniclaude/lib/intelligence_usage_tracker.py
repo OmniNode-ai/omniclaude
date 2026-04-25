@@ -36,7 +36,7 @@ from uuid import UUID
 import asyncpg
 
 
-def _json_default_serializer(obj: Any) -> str:
+def _json_default_serializer(obj: Any) -> str:  # Why: handles datetime, UUID, bytes, and arbitrary objects
     """
     Default JSON serializer for non-serializable types.
 

@@ -163,7 +163,7 @@ class PatternTrackerConfig:
             logger.warning("Could not load config file %s: %s", self.config_path, e)
             return {}
 
-    def get(self, key: str, yaml_path: list[str], default: Any) -> Any:
+    def get(self, key: str, yaml_path: list[str], default: Any) -> Any:  # Why: returns arbitrary YAML config values
         """Get configuration value with YAML config (no env override needed - handled by settings)."""
         # Note: Environment variable override is now handled by Pydantic Settings
         # This method now only checks YAML config and uses default if not found

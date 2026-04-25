@@ -48,7 +48,7 @@ class ProtocolQdrantSearch(Protocol):
         collection_name: str,
         query_vector: list[float],
         limit: int = 10,
-    ) -> list[Any]: ...
+    ) -> list[dict[str, Any]]: ...
 
 
 @runtime_checkable

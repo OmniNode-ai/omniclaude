@@ -280,7 +280,7 @@ class PatternTrackerSync:
         self._pattern_id_cache.clear()
         print("🧹 [PatternTrackerSync] Cache cleared", file=sys.stderr)
 
-    def calculate_quality_score(self, violations: list[Any]) -> float:
+    def calculate_quality_score(self, violations: list[dict[str, Any]]) -> float:
         """Calculate quality score based on violations.
 
         Args:

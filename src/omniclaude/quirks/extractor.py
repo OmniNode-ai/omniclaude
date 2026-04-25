@@ -80,7 +80,7 @@ class NodeQuirkSignalExtractorEffect:
 
     def __init__(
         self,
-        db_session_factory: Any | None = None,
+        db_session_factory: Callable[..., Any] | None = None,
         publish_hook: _PublishHook | None = None,
     ) -> None:
         """Initialise the extractor.

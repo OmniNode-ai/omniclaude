@@ -44,7 +44,7 @@ class _HttpQdrantClient:
         collection_name: str,
         query_vector: list[float],
         limit: int = 10,
-    ) -> list[Any]:
+    ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.post(
                 f"{self._url}/collections/{collection_name}/points/search",

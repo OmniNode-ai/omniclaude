@@ -111,7 +111,7 @@ class ResultCache:
     def set(
         self,
         query: str,
-        value: Any,
+        value: dict[str, Any] | list[str] | str | int | float | bool | None,
         context: dict[str, Any] | None = None,
         ttl_seconds: int | None = None,
     ) -> None:

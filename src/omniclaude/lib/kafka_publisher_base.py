@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 # Shared Kafka producer (singleton across all publishers)
-_kafka_producer: Any | None = None
+_kafka_producer: Any | None = None  # Why: kafka.KafkaProducer — external lib without stubs
 _producer_lock: asyncio.Lock | None = None
 
 # Threading lock for thread-safe asyncio.Lock creation (double-checked locking)
@@ -278,7 +278,7 @@ def _cleanup_producer_sync():
 atexit.register(_cleanup_producer_sync)
 
 
-def _run_in_new_loop(coro) -> Any:
+def _run_in_new_loop(coro: Any) -> Any:  # Why: generic coroutine runner — return type depends on coro  # noqa: ANN001
     """Create a new event loop in the current thread and run the coroutine."""
     loop = asyncio.new_event_loop()
     try:
@@ -287,7 +287,7 @@ def _run_in_new_loop(coro) -> Any:
         loop.close()
 
 
-def _run_async_in_new_thread(coro) -> Any:
+def _run_async_in_new_thread(coro: Any) -> Any:  # Why: generic coroutine runner — return type depends on coro
     """Run an async coroutine in a new thread with its own event loop."""
     pool = _get_thread_pool()
     future = pool.submit(_run_in_new_loop, coro)

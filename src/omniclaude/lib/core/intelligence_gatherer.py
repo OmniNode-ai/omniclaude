@@ -45,7 +45,7 @@ class IntelligenceGatherer:
 
     def __init__(
         self,
-        intelligence_client: Any = None,
+        intelligence_client: Any = None,  # Why: optional MCP client — type depends on transport
         config: IntelligenceConfig | None = None,
         event_client: IntelligenceEventClient | None = None,
     ) -> None:

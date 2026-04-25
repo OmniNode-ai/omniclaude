@@ -154,7 +154,7 @@ class NodeQuirkClassifierCompute:
 
     def __init__(
         self,
-        db_session_factory: Any | None = None,
+        db_session_factory: Callable[..., Any] | None = None,
         publish_hook: _PublishHook | None = None,
         operator_block_approved: bool = False,
         window_hours: int = _WINDOW_HOURS,

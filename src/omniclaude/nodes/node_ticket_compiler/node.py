@@ -19,7 +19,9 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 
-class NodeTicketCompilerCompute(NodeCompute[Any, Any]):
+class NodeTicketCompilerCompute(
+    NodeCompute[Any, Any]
+):  # Why: migrating to omnimarket — not worth typing
     """Compute node for Plan DAG work unit → Compiled Ticket.
 
     Capability: nl.ticket.compile.compute

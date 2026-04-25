@@ -41,6 +41,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
 from omniclaude.hooks.topics import TopicBase
@@ -227,7 +228,7 @@ def run_subscriber(
     group_id: str = "omniclaude-decision-record-subscriber.v1",
     poll_timeout_ms: int = 1000,
     max_poll_records: int = 50,
-    stop_event: Any = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     """Run a blocking Kafka consumer loop for decision-recorded (cmd) events.
 
@@ -321,7 +322,7 @@ def run_subscriber_background(
     *,
     kafka_bootstrap_servers: str,
     group_id: str = "omniclaude-decision-record-subscriber.v1",
-    stop_event: Any = None,
+    stop_event: threading.Event | None = None,
 ) -> threading.Thread:
     """Launch ``run_subscriber`` in a daemon background thread.
 
@@ -400,7 +401,7 @@ def main() -> None:
 
             import signal  # noqa: PLC0415
 
-            def _handle_signal(sig: int, frame: Any) -> None:
+            def _handle_signal(sig: int, frame: FrameType | None) -> None:
                 stop_event.set()
 
             signal.signal(signal.SIGTERM, _handle_signal)

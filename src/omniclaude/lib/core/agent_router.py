@@ -36,7 +36,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 import yaml
@@ -239,7 +239,7 @@ class AgentRouter:
             ) from e
 
     @staticmethod
-    def _resolve_emit_fn() -> Any:
+    def _resolve_emit_fn() -> Callable[..., Any] | None:
         """Resolve the emit_event function from emit_client_wrapper.
 
         Returns the emit_event callable or None if unavailable.

@@ -38,7 +38,7 @@ import requests
 #   be raised by any code, making the except blocks effectively unreachable
 #   (which is the desired behavior for graceful degradation)
 HAS_HTTPX = False
-httpx: Any = None  # Module placeholder for when httpx is unavailable
+httpx: Any = None  # Why: module-level placeholder — either real httpx module or None
 
 
 class _HttpxPlaceholderException(Exception):
