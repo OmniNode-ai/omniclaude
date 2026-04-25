@@ -19,6 +19,11 @@ name: Deploy Gate (reusable)
 on:
   workflow_call:
     inputs:
+      pr-number:
+        description: PR number to validate (defaults to github.event.pull_request.number)
+        type: number
+        required: false
+        default: 0
       contracts-dir:
         description: Path to ticket contracts directory relative to repo root
         type: string
@@ -51,8 +56,8 @@ jobs:
 
       - name: Run deploy gate (canonical composite action)
         if: github.event_name != 'merge_group'
-        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@jonah/omn-9734-dgm-phase6-dedupe
+        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@main
         with:
-          pr-number: ${{ github.event.pull_request.number }}
+          pr-number: ${{ inputs.pr-number != 0 && inputs.pr-number || github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           contracts-dir: ${{ inputs.contracts-dir }}
