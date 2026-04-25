@@ -194,6 +194,7 @@ Do not add new per-hook env vars of the legacy form.
 
 | This repo owns | Another repo owns |
 |----------------|-------------------|
+| **Repo Charter** | See [`docs/architecture/charter.md`](docs/architecture/charter.md) for full scope boundary declaration |
 | Claude Code hooks (SessionStart, UserPromptSubmit, PostToolUse, SessionEnd) | **omniintelligence** -- intelligence processing, code analysis |
 | Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniintelligence** -- intelligence processing, code analysis |
 | Slash commands and skills (`plugins/onex/commands/`, `plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
