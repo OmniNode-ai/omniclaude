@@ -84,6 +84,12 @@ repos:
         pass_filenames: true
         always_run: true
         stages: [pre-commit]
+      - id: reject-deploy-gate-skip-token-commit-msg
+        name: Reject skip-deploy-gate bypass tokens in commit messages (OMN-9730)
+        entry: .pre-commit-hooks/reject-deploy-gate-skip-token.sh
+        language: script
+        pass_filenames: true
+        stages: [commit-msg]
 
       # TODO: Simplify back to `uv run python -m omnibase_core.validation.validator_local_paths`
       # once validator_local_paths is included in a released omnibase_core package.
@@ -553,7 +559,7 @@ repos:
         pass_filenames: false
 
 # Configuration
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
 default_stages: [pre-commit]
 fail_fast: false
 

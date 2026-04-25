@@ -126,7 +126,35 @@ if [[ "${1:-}" == "--check-pr-body" ]]; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Commit-msg mode: invoked with a single argument pointing to COMMIT_EDITMSG.
+# pre-commit passes the message file path; we read it directly (it is not a
+# staged blob — it lives outside the index).
+# ──────────────────────────────────────────────────────────────────────────────
+if [[ "${GIT_HOOK_STAGE:-}" == "commit-msg" || "$#" -eq 1 && "${1:-}" == *COMMIT_EDITMSG* ]]; then
+    msg_file="${1:-}"
+    if [[ -n "$msg_file" && -f "$msg_file" ]]; then
+        if grep -qiE "$SKIP_PATTERN" "$msg_file"; then
+            if grep -qiE "$ALLOWLIST_PATTERN" "$msg_file"; then
+                echo "WARNING: [skip-deploy-gate:] found in commit message but explicit approval receipt present — allowed." >&2
+                exit 0
+            fi
+            echo "ERROR: commit message contains a [skip-deploy-gate:] bypass token." >&2
+            echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
+            echo "  Fix the deploy-gate properly:" >&2
+            echo "    1. Add dod_evidence with type: no_deployable_artifact (preferred)" >&2
+            echo "    2. Narrow the path patterns in validate_pr_deploy_required.py" >&2
+            echo "    3. If truly exceptional, add '# skip-token-allowed: <receipt-id>' with a traceable approval receipt" >&2
+            echo "  Ticket: $TICKET_REF" >&2
+            exit 1
+        fi
+    fi
+    exit 0
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Normal mode: scan staged files passed as arguments.
+# Read staged blobs from the index (git show :$file) rather than the working
+# tree to prevent bypass via working-tree edits after git add.
 # Only scan file types that could plausibly be PR bodies or ticket contracts:
 # markdown, yaml, yml, txt, md. Python/shell source that discusses skip tokens
 # (docs, tests, validators) should not be blocked by this hook.
@@ -134,17 +162,27 @@ fi
 FOUND_VIOLATION=0
 
 for file in "$@"; do
-    [[ -f "$file" ]] || continue
-
     # Restrict to PR-body-like file types to avoid false positives on source/test files
     case "$file" in
         *.md|*.yaml|*.yml|*.txt) ;;
         *) continue ;;
     esac
 
-    if grep -qiE "$SKIP_PATTERN" "$file"; then
-        # Check for explicit allowlist receipt in the same file (also case-insensitive)
-        if grep -qiE "$ALLOWLIST_PATTERN" "$file"; then
+    # Read the staged blob from the index. Fall back to the working-tree file
+    # only when the path is not in the index (e.g. self-test temp files, deleted
+    # paths). This prevents a working-tree edit after `git add` from hiding a
+    # staged bypass token while keeping self-test and edge-case behaviour intact.
+    if git cat-file -e ":$file" 2>/dev/null; then
+        staged_content="$(git show ":$file")"
+    elif [[ -f "$file" ]]; then
+        staged_content="$(cat "$file")"
+    else
+        continue
+    fi
+
+    if grep -qiE "$SKIP_PATTERN" <<< "$staged_content"; then
+        # Check for explicit allowlist receipt in the staged content (also case-insensitive)
+        if grep -qiE "$ALLOWLIST_PATTERN" <<< "$staged_content"; then
             echo "WARNING: [skip-deploy-gate:] found in $file but explicit approval receipt present — allowed." >&2
             continue
         fi
