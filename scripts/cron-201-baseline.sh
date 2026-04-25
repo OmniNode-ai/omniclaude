@@ -134,9 +134,16 @@ emit_check() {
   local ts
   ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+  # Sanitize detail: strip chars that would break JSON string interpolation.
+  # Detail is a short diagnostic string from controlled sources; stripping
+  # quotes/backslashes preserves readability without requiring jq at runtime.
+  local safe_detail
+  safe_detail="${detail//\"/\'}"
+  safe_detail="${safe_detail//\\/\/}"
+
   local line
   line=$(printf '{"run_id":"%s","ts":"%s","category":"%s","name":"%s","status":"%s","detail":"%s","friction_policy":"%s"}' \
-    "${RUN_ID}" "${ts}" "${category}" "${name}" "${status}" "${detail}" "${friction}")
+    "${RUN_ID}" "${ts}" "${category}" "${name}" "${status}" "${safe_detail}" "${friction}")
 
   echo "${line}"
   echo "${line}" >> "${LOG_FILE}"
@@ -309,7 +316,10 @@ if [[ ! -f "${CONSUMER_GROUPS_REGISTRY}" ]]; then
   emit_check "runtime_topology" "consumer_group_diff" "deferred" \
     "registry not found at ${CONSUMER_GROUPS_REGISTRY}; topology check deferred until F0/F1 ships registry" "info"
 else
-  # Parse expected group names from YAML (simple grep; no yq dependency)
+  # Parse expected group names from YAML (simple regex; no yq dependency).
+  # Assumes standard block-sequence format: "  - name: group-name" per line.
+  # Flow-style YAML, comments, or non-standard indentation will not be parsed
+  # correctly — if the registry uses these, switch to yq and update this block.
   expected_groups=()
   while IFS= read -r line; do
     # Match lines like "  - name: group-name" or "- name: group-name"
