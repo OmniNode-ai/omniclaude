@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.201-baseline.plist — launchd agent for daily .201 baseline health check [OMN-9721]
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+
+  INSTALLATION DEFERRED — this plist is shipped but NOT installed automatically.
+  Running tick-bundle-install.sh requires explicit user approval.
+
+  Install (after user approval):
+    bash omniclaude/scripts/tick-bundle-install.sh
+
+  Manual install (single tick only):
+    RENDERED="${HOME}/Library/LaunchAgents/ai.omninode.201-baseline.plist"
+    sed -e "s|__OMNI_HOME__|${OMNI_HOME}|g" -e "s|__HOME__|${HOME}|g" \
+      omniclaude/scripts/launchd/ai.omninode.201-baseline.plist > "${RENDERED}"
+    launchctl bootstrap gui/$(id -u) "${RENDERED}"
+
+  Uninstall:
+    bash omniclaude/scripts/tick-bundle-uninstall.sh
+    # or manually:
+    launchctl bootout gui/$(id -u)/ai.omninode.201-baseline
+    rm ~/Library/LaunchAgents/ai.omninode.201-baseline.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.201-baseline</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/cron-201-baseline.sh</string>
+  </array>
+
+  <key>StartInterval</key>
+  <integer>86400</integer><!-- 24 hours — daily baseline check -->
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cron-201-baseline-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/cron-201-baseline-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
