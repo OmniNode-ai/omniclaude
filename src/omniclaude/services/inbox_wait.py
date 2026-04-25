@@ -75,7 +75,7 @@ async def register_watch(
             valkey_port = int(os.environ.get("VALKEY_PORT", "16379"))
 
             try:
-                import valkey.asyncio as avalkey  # type: ignore[import-not-found]
+                import valkey.asyncio as avalkey  # type: ignore[import-not-found]  # Why: valkey is an optional dependency
 
                 client: ValkeyClientProtocol = avalkey.Valkey(
                     host=valkey_host, port=valkey_port

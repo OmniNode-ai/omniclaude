@@ -426,7 +426,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
                         },
                     )
                     await asyncio.sleep(self._RETRY_DELAY_SECONDS)
-        raise last_exc  # type: ignore[misc]
+        raise last_exc  # type: ignore[misc]  # Why: last_exc may be unbound if loop never executed
 
     async def _call_model_once(self, prompt: str) -> str:
         """Single model call via OpenAI-compatible chat completions API.
@@ -511,7 +511,7 @@ class NodeTransitionSelectorEffect(NodeEffect):
         if not isinstance(selected, int):
             # Try coercing string integer
             try:
-                selected = int(selected)  # type: ignore[arg-type]
+                selected = int(selected)  # type: ignore[arg-type]  # Why: coercing potentially non-int type from model output
             except (TypeError, ValueError):
                 return None
 

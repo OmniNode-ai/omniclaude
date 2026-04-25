@@ -115,7 +115,7 @@ def _parse_skill_completed_event(raw: bytes) -> dict[str, Any] | None:
     if not raw:
         return None
     try:
-        return json.loads(raw.decode("utf-8"))  # type: ignore[no-any-return]
+        return json.loads(raw.decode("utf-8"))  # type: ignore[no-any-return]  # Why: json.loads returns Any, caller validates shape
     except Exception as exc:  # noqa: BLE001 — boundary: parse failure returns None
         logger.debug("skill-execution-log-subscriber: failed to parse payload: %s", exc)
         return None

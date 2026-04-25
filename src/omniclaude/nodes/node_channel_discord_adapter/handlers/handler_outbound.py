@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-import discord  # type: ignore[import-untyped]
+import discord  # type: ignore[import-not-found]  # Why: discord.py is an optional dependency
 
 from omniclaude.nodes.node_channel_reply_dispatcher.models.model_channel_reply import (
     ModelChannelReply,

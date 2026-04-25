@@ -636,13 +636,13 @@ async def emit_hook_event(
         ):
             _emit_event_cb = None
             try:
-                from emit_client_wrapper import (  # type: ignore[no-redef]  # noqa: PLC0415
+                from emit_client_wrapper import (  # type: ignore[no-redef]  # Why: fallback import path in except handler  # noqa: PLC0415
                     emit_event as _emit_event_cb,
                 )
             except ImportError:
                 pass
             if _emit_event_cb is not None:
-                try:  # type: ignore[unreachable]
+                try:  # type: ignore[unreachable]  # Why: only reached when circuit breaker error detected
                     _kafka_cfg = create_kafka_config()
                     _cb_payload: dict[str, object] = {
                         "event_id": str(_uuid.uuid4()),

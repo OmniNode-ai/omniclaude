@@ -121,7 +121,7 @@ class RoutingRecorder:
             try:
                 from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415, I001
             except ImportError:
-                from omniclaude.publisher.emit_client import EmitClient  # type: ignore[no-redef]  # noqa: PLC0415, I001
+                from omniclaude.publisher.emit_client import EmitClient  # noqa: PLC0415, I001
 
             socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "")
             if not socket_path:

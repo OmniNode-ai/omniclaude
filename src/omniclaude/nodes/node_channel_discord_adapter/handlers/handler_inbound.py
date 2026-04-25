@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC
 
-import discord  # type: ignore[import-untyped]
+import discord  # type: ignore[import-not-found]  # Why: discord.py is an optional dependency
 
 from omniclaude.enums.enum_channel_type import EnumChannelType
 from omniclaude.shared.models.model_channel_envelope import ModelChannelEnvelope

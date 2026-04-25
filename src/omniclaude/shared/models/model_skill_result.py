@@ -62,7 +62,7 @@ except ImportError:
 
     from pydantic import BaseModel, ConfigDict, Field
 
-    class SkillResultStatus(StrEnum):  # type: ignore[no-redef]
+    class SkillResultStatus(StrEnum):  # type: ignore[no-redef]  # Why: fallback when omnibase_core is unavailable
         """Possible outcomes of a skill invocation.
 
         DEPRECATED: will become an alias for
@@ -76,7 +76,7 @@ except ImportError:
         FAILED = "failed"
         PARTIAL = "partial"
 
-    class ModelSkillResult(BaseModel):  # type: ignore[no-redef]
+    class ModelSkillResult(BaseModel):  # type: ignore[no-redef]  # Why: fallback when omnibase_core is unavailable
         """Output from any skill dispatch node (legacy local definition).
 
         DEPRECATED: use ``omnibase_core.models.skill.ModelSkillResult``
@@ -125,7 +125,7 @@ except ImportError:
 
     #: Alias matching omnibase_core naming; will be the real
     #: ``ModelSkillResult`` once OMN-3867 lands.
-    SkillResult: type[ModelSkillResult] = ModelSkillResult  # type: ignore[no-redef]
+    SkillResult: type[ModelSkillResult] = ModelSkillResult  # type: ignore[no-redef]  # Why: fallback alias matching omnibase_core naming
 
     _USING_CORE = False
 

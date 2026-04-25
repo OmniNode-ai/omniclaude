@@ -24,7 +24,7 @@ import yaml
 try:
     import httpx
 except ImportError:
-    httpx = None  # type: ignore[assignment]
+    httpx = None  # type: ignore[assignment]  # Why: httpx is an optional dependency
     print("Warning: httpx not available, AI scoring will be disabled", file=sys.stderr)
 
 

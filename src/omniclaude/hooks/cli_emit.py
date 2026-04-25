@@ -599,7 +599,7 @@ def cmd_claude_hook_event(
         }
         if corr_id is not None:
             config_kwargs["correlation_id"] = corr_id
-        config = ModelClaudeHookEventConfig(**config_kwargs)  # type: ignore[arg-type]
+        config = ModelClaudeHookEventConfig(**config_kwargs)  # type: ignore[arg-type]  # Why: dict[str, object] **kwargs to typed model fields
 
         result = run_with_timeout(emit_claude_hook_event(config))
 

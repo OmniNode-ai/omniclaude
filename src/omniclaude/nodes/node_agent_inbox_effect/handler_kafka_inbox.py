@@ -74,7 +74,7 @@ def _resolve_default_emit_fn() -> EmitFn:
         from emit_client_wrapper import emit_event
 
         logger.debug("Resolved emit_event from emit_client_wrapper")
-        return emit_event  # type: ignore[no-any-return]
+        return emit_event  # type: ignore[no-any-return]  # Why: imported from plugins path, return type is Any
     except ImportError:
         logger.warning(
             "emit_client_wrapper not on sys.path; "

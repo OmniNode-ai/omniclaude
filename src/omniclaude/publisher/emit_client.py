@@ -106,7 +106,7 @@ class EmitClient:
         self._buf = self._buf[idx + 1 :]  # Preserve leftover for next call
         # json.loads returns Any; caller expects dict[str, object] which is
         # guaranteed by the daemon's newline-delimited JSON protocol.
-        return json.loads(resp_line)  # type: ignore[no-any-return]
+        return json.loads(resp_line)  # type: ignore[no-any-return]  # Why: daemon protocol guarantees JSON object
 
     # ------------------------------------------------------------------
     # Public API (matches old omnibase_infra EmitClient interface)

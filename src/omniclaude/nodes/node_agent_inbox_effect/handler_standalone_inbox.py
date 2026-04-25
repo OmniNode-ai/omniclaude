@@ -330,7 +330,7 @@ def _parse_message(raw: dict[str, object]) -> ModelInboxMessage:
         message_id=UUID(str(raw["message_id"])),
         emitted_at=datetime.fromisoformat(str(raw["emitted_at"])),
         trace=trace,
-        type=str(raw["type"]),  # type: ignore[arg-type]
+        type=str(raw["type"]),  # type: ignore[arg-type]  # Why: raw dict value coerced to typed enum field
         source_agent_id=str(raw["source_agent_id"]),
         target_agent_id=str(raw["target_agent_id"])
         if raw.get("target_agent_id")

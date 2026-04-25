@@ -365,7 +365,7 @@ class SkillCommandDispatcher:
                     correlation_id=correlation_id,
                 )
                 result = await cc_backend.session_query(cc_request)
-                return result.output or ""  # type: ignore[attr-defined]
+                return result.output or ""  # type: ignore[attr-defined]  # Why: dynamic backend result type
 
         elif backend_type == "local_llm":
             if self._vllm_backend is None:
@@ -404,12 +404,12 @@ class SkillCommandDispatcher:
                     correlation_id=correlation_id,
                 )
                 result = await vllm_backend.infer(llm_request)
-                return result.output or ""  # type: ignore[attr-defined]
+                return result.output or ""  # type: ignore[attr-defined]  # Why: dynamic backend result type
 
         else:
             # Unknown backend type — emit failure and return rather than
             # using potentially uninitialized backend_detail / task_dispatcher.
-            await self._emit_completion(  # type: ignore[unreachable]
+            await self._emit_completion(  # type: ignore[unreachable]  # Why: defensive else branch for unknown backend
                 run_id=run_id,
                 skill_name=skill_id,
                 command_topic=topic or "unknown",

@@ -120,7 +120,7 @@ class NodeQuirkSignalExtractorEffect:
         # Signal worker to stop by sending a sentinel None.
         # Use put_nowait to avoid blocking if queue is full.
         try:
-            self._queue.put_nowait(None)  # type: ignore[arg-type]
+            self._queue.put_nowait(None)  # type: ignore[arg-type]  # Why: None sentinel to signal worker stop
         except asyncio.QueueFull:
             pass
 

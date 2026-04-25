@@ -161,7 +161,9 @@ class LiveConfigLoader:
     async def _watch_loop(self) -> None:
         """Watch for file changes and reload on modification."""
         try:
-            from watchfiles import awatch  # type: ignore[import-not-found]
+            from watchfiles import (
+                awatch,
+            )
 
             async for _ in awatch(str(self._path)):
                 logger.info("LiveConfigLoader: detected change in %s", self._path)

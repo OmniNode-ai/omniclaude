@@ -108,7 +108,7 @@ def _do_stop(args: argparse.Namespace) -> int:
         pid_path = Path(args.pid_path)
     else:
         try:
-            config = PublisherConfig()  # type: ignore[call-arg]  # pydantic-settings loads from env
+            config = PublisherConfig()  # type: ignore[call-arg]  # Why: pydantic-settings populates from env at runtime
         except Exception:  # noqa: BLE001 — boundary: config failure falls back to env
             # If config validation fails (e.g. missing kafka_bootstrap_servers),
             # fall back to env var / default — stop doesn't need Kafka.

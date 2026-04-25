@@ -378,7 +378,7 @@ class PluginClaude:
 
     @_publisher.setter
     def _publisher(self, value: object) -> None:
-        self._state.publisher = value  # type: ignore[assignment]
+        self._state.publisher = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
 
     @property
     def _publisher_config(self) -> object | None:
@@ -394,7 +394,7 @@ class PluginClaude:
 
     @_vllm_backend.setter
     def _vllm_backend(self, value: object) -> None:
-        self._state.vllm_backend = value  # type: ignore[assignment]
+        self._state.vllm_backend = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
 
     @property
     def _shutdown_in_progress(self) -> bool:
@@ -414,11 +414,11 @@ class PluginClaude:
         # Used by tests to inject mock stop events
         worker = self._state.workers.get("compliance-subscriber")
         if worker is not None:
-            worker.stop_event = value  # type: ignore[assignment]
+            worker.stop_event = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
         elif value is not None:
             self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
                 name="compliance-subscriber",
-                stop_event=value,  # type: ignore[arg-type]
+                stop_event=value,  # type: ignore[arg-type]  # Why: test mock injection through object-typed setter
             )
 
     @property
@@ -432,11 +432,11 @@ class PluginClaude:
         if value is not None:
             existing = self._state.workers.get("compliance-subscriber")
             if existing is not None:
-                existing.thread = value  # type: ignore[assignment]
+                existing.thread = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
             else:
                 self._state.workers["compliance-subscriber"] = _WorkerDescriptor(
                     name="compliance-subscriber",
-                    thread=value,  # type: ignore[arg-type]
+                    thread=value,  # type: ignore[arg-type]  # Why: test mock injection through object-typed setter
                 )
         elif "compliance-subscriber" in self._state.workers:
             del self._state.workers["compliance-subscriber"]
@@ -450,11 +450,11 @@ class PluginClaude:
     def _decision_record_stop_event(self, value: object) -> None:
         worker = self._state.workers.get("decision-record-subscriber")
         if worker is not None:
-            worker.stop_event = value  # type: ignore[assignment]
+            worker.stop_event = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
         elif value is not None:
             self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
                 name="decision-record-subscriber",
-                stop_event=value,  # type: ignore[arg-type]
+                stop_event=value,  # type: ignore[arg-type]  # Why: test mock injection through object-typed setter
             )
 
     @property
@@ -467,11 +467,11 @@ class PluginClaude:
         if value is not None:
             existing = self._state.workers.get("decision-record-subscriber")
             if existing is not None:
-                existing.thread = value  # type: ignore[assignment]
+                existing.thread = value  # type: ignore[assignment]  # Why: test mock injection through object-typed setter
             else:
                 self._state.workers["decision-record-subscriber"] = _WorkerDescriptor(
                     name="decision-record-subscriber",
-                    thread=value,  # type: ignore[arg-type]
+                    thread=value,  # type: ignore[arg-type]  # Why: test mock injection through object-typed setter
                 )
         elif "decision-record-subscriber" in self._state.workers:
             del self._state.workers["decision-record-subscriber"]

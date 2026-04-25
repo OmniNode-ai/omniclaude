@@ -66,12 +66,12 @@ def _read_lock_data(lock_file: Path) -> dict[str, Any] | None:
     try:
         import yaml
 
-        return yaml.safe_load(content)  # type: ignore[no-any-return]
+        return yaml.safe_load(content)  # type: ignore[no-any-return]  # Why: yaml.safe_load returns Any, caller validates shape
     except ImportError:
         pass
     import json
 
-    return json.loads(content)  # type: ignore[no-any-return]
+    return json.loads(content)  # type: ignore[no-any-return]  # Why: json.loads returns Any, caller validates shape
 
 
 def _serialize_lock(lock: ModelEpicNamespaceLock) -> str:
