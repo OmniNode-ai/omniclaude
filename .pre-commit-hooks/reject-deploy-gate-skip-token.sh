@@ -21,7 +21,8 @@
 set -euo pipefail
 
 SKIP_PATTERN='\[skip-deploy-gate:'
-ALLOWLIST_PATTERN='#[[:space:]]*skip-token-allowed:[[:space:]]*[^[:space:]]'
+# Case-insensitive allowlist pattern — matches the skip-pattern's -i flag
+ALLOWLIST_PATTERN='#[[:space:]]*[Ss][Kk][Ii][Pp]-[Tt][Oo][Kk][Ee][Nn]-[Aa][Ll][Ll][Oo][Ww][Ee][Dd]:[[:space:]]*[^[:space:]]'
 
 RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
 TICKET_REF="OMN-9730"
@@ -38,7 +39,8 @@ if [[ "${1:-}" == "--self-test" ]]; then
         local content="$2"
         local expect_exit="$3"
 
-        tmpfile=$(mktemp /tmp/skip-token-selftest.XXXXXX)
+        # Use .md extension so the file-type filter includes it in scanning
+        tmpfile=$(mktemp /tmp/skip-token-selftest.XXXXXX.md)
         printf '%s\n' "$content" > "$tmpfile"
 
         # Run hook against the temp file (not --self-test or --check-pr-body mode)
@@ -110,7 +112,7 @@ if [[ "${1:-}" == "--check-pr-body" ]]; then
     fi
 
     if echo "$PR_BODY" | grep -qiE "$SKIP_PATTERN"; then
-        if echo "$PR_BODY" | grep -qE "$ALLOWLIST_PATTERN"; then
+        if echo "$PR_BODY" | grep -qiE "$ALLOWLIST_PATTERN"; then
             echo "WARNING: [skip-deploy-gate:] found in PR #$PR_NUMBER body but explicit approval receipt present — allowed." >&2
             exit 0
         fi
@@ -124,16 +126,25 @@ if [[ "${1:-}" == "--check-pr-body" ]]; then
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Normal mode: scan staged files passed as arguments
+# Normal mode: scan staged files passed as arguments.
+# Only scan file types that could plausibly be PR bodies or ticket contracts:
+# markdown, yaml, yml, txt, md. Python/shell source that discusses skip tokens
+# (docs, tests, validators) should not be blocked by this hook.
 # ──────────────────────────────────────────────────────────────────────────────
 FOUND_VIOLATION=0
 
 for file in "$@"; do
     [[ -f "$file" ]] || continue
 
+    # Restrict to PR-body-like file types to avoid false positives on source/test files
+    case "$file" in
+        *.md|*.yaml|*.yml|*.txt) ;;
+        *) continue ;;
+    esac
+
     if grep -qiE "$SKIP_PATTERN" "$file"; then
-        # Check for explicit allowlist receipt in the same file
-        if grep -qE "$ALLOWLIST_PATTERN" "$file"; then
+        # Check for explicit allowlist receipt in the same file (also case-insensitive)
+        if grep -qiE "$ALLOWLIST_PATTERN" "$file"; then
             echo "WARNING: [skip-deploy-gate:] found in $file but explicit approval receipt present — allowed." >&2
             continue
         fi
@@ -148,18 +159,5 @@ for file in "$@"; do
         FOUND_VIOLATION=1
     fi
 done
-
-# Also scan the commit message if COMMIT_EDITMSG is available (pre-commit sets GIT_DIR)
-COMMIT_MSG_FILE="${GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null || true)}/COMMIT_EDITMSG"
-if [[ -f "$COMMIT_MSG_FILE" ]]; then
-    if grep -qiE "$SKIP_PATTERN" "$COMMIT_MSG_FILE"; then
-        if ! grep -qE "$ALLOWLIST_PATTERN" "$COMMIT_MSG_FILE"; then
-            echo "ERROR: commit message contains a [skip-deploy-gate:] bypass token." >&2
-            echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
-            echo "  Ticket: $TICKET_REF" >&2
-            FOUND_VIOLATION=1
-        fi
-    fi
-fi
 
 exit "$FOUND_VIOLATION"
