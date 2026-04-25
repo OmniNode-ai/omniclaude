@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,8 +15,10 @@ import pytest
 from omniclaude.verification.evidence_writer import (
     EvidenceWriter,
     ModelCheckResult,
+    ModelEvidenceWrittenEvent,
     ModelSelfCheckResult,
     ModelVerifierCheckResult,
+    emit_event,
 )
 
 
@@ -134,3 +137,38 @@ class TestEvidenceWriterKafka:
         first_event = mock_emit.call_args_list[0][0][0]
         second_event = mock_emit.call_args_list[1][0][0]
         assert first_event.emitted_at != second_event.emitted_at
+
+
+@pytest.mark.unit
+class TestEmitEventSocketGuard:
+    """emit_event skips EmitClient construction when no socket path is configured."""
+
+    def test_no_socket_env_skips_emission(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("OMNICLAUDE_EMIT_SOCKET", raising=False)
+        event = ModelEvidenceWrittenEvent(
+            task_id="task-x",
+            evidence_type="self_check",
+            evidence_path="/tmp/x",
+            passed=True,
+            emitted_at=datetime.now(UTC),
+        )
+        with patch("omniclaude.publisher.emit_client.EmitClient") as mock_cls:
+            emit_event(event)
+        mock_cls.assert_not_called()
+
+    def test_empty_socket_env_skips_emission(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", "  ")
+        event = ModelEvidenceWrittenEvent(
+            task_id="task-y",
+            evidence_type="verifier",
+            evidence_path="/tmp/y",
+            passed=False,
+            emitted_at=datetime.now(UTC),
+        )
+        with patch("omniclaude.publisher.emit_client.EmitClient") as mock_cls:
+            emit_event(event)
+        mock_cls.assert_not_called()

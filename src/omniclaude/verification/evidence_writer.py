@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -82,8 +83,12 @@ def emit_event(event: ModelEvidenceWrittenEvent) -> None:
         except ImportError:
             from omniclaude.publisher.emit_client import EmitClient  # noqa: PLC0415, I001
 
+        socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "").strip()
+        if not socket_path:
+            logger.debug("No emit socket configured, skipping evidence emission")
+            return
         topic = build_topic(TopicBase.EVIDENCE_WRITTEN)
-        client = EmitClient()
+        client = EmitClient(socket_path=socket_path)
         client.emit_sync(
             event_type=topic,
             payload=event.model_dump(mode="json"),
