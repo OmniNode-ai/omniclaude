@@ -4,7 +4,7 @@
 
 # tick-bundle-install.sh — idempotent launchd installer for the OMN-9036 tick bundle.
 #
-# Installs 8 plists under ~/Library/LaunchAgents:
+# Installs 9 plists under ~/Library/LaunchAgents:
 #   ai.omninode.merge-sweep       (5m)
 #   ai.omninode.dispatch-engine   (10m)
 #   ai.omninode.unstick-queue     (10m) [OMN-9065]
@@ -12,6 +12,7 @@
 #   ai.omninode.contract-verify   (15m)
 #   ai.omninode.idle-watchdog     (15m)
 #   ai.omninode.buildloop         (2h)  [OMN-9056]
+#   ai.omninode.quick-merge       (on-demand) [OMN-9721]
 #   ai.omninode.201-baseline      (24h) [OMN-9721]
 #
 # Source templates under scripts/launchd/ contain __OMNI_HOME__ / __HOME__ placeholders;
