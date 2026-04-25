@@ -51,7 +51,7 @@ jobs:
 
       - name: Run deploy gate (canonical composite action)
         if: github.event_name != 'merge_group'
-        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@main
+        uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@jonah/omn-9734-dgm-phase6-dedupe
         with:
           pr-number: ${{ github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
