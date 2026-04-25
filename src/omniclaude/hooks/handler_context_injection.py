@@ -124,7 +124,7 @@ def _get_emit_event() -> Callable[..., bool]:
     if _emit_event_func is None:
         try:
             from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
-        except ImportError:
+        except ImportError:  # type: ignore[no-redef]  # Why: fallback import — emit_event defined in both try/except branches
             from emit_client_wrapper import (
                 emit_event,
             )
