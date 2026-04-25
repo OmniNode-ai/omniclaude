@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# DGM-Phase4 (OMN-9730): Reusable workflow — mechanical block on skip-deploy-gate tokens.
+# Called from each repo via:
+#
+#   jobs:
+#     call-reject-skip-token:
+#       uses: OmniNode-ai/omniclaude/.github/workflows/reject-deploy-gate-skip.yml@main
+#
+# This is a REQUIRED status check. PRs containing [skip-deploy-gate:] bypass tokens
+# cannot merge unless an explicit approval receipt (# skip-token-allowed: <id>) is present.
+#
+# CLAUDE.md Rule #10: Never bypass local gates.
+# Plan: omni_home/docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4
+
+name: Reject deploy-gate skip tokens
+
+on:
+  workflow_call:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  scan-skip-tokens:
+    name: scan / reject-skip-deploy-gate-token
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Scan PR body for skip-deploy-gate bypass tokens
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          SKIP_PATTERN='\[skip-deploy-gate:'
+          ALLOWLIST_PATTERN='#[[:space:]]*skip-token-allowed:[[:space:]]*[^[:space:]]'
+          RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
+          TICKET_REF="OMN-9730"
+
+          # Use PR body from event payload (avoids gh cli dependency for workflow_call)
+          BODY="${PR_BODY:-}"
+
+          # Fallback: fetch via gh if body is empty (e.g. workflow_dispatch or workflow_call context)
+          if [[ -z "$BODY" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
+            BODY=$(gh pr view "$PR_NUMBER" --json body --jq .body 2>/dev/null || true)
+          fi
+
+          if [[ -z "$BODY" ]]; then
+            echo "::notice::No PR body available to scan — skipping skip-token check."
+            exit 0
+          fi
+
+          # Check for bypass token
+          if echo "$BODY" | grep -qiE "$SKIP_PATTERN"; then
+            # Check for explicit allowlist receipt
+            if echo "$BODY" | grep -qE "$ALLOWLIST_PATTERN"; then
+              echo "::warning::PR body contains [skip-deploy-gate:] but an explicit approval receipt (skip-token-allowed) is present. Allowed with friction logged."
+              exit 0
+            fi
+
+            echo "::error::PR body contains a [skip-deploy-gate:] bypass token."
+            echo "::error::Per $RULE_REF, bypass is not permitted without explicit user approval."
+            echo "::error::Fix the deploy-gate properly:"
+            echo "::error::  1. Add dod_evidence with type: no_deployable_artifact (preferred)"
+            echo "::error::  2. Narrow path patterns in validate_pr_deploy_required.py"
+            echo "::error::  3. If truly exceptional: add '# skip-token-allowed: <receipt-id>' with a traceable approval receipt"
+            echo "::error::Ticket: $TICKET_REF"
+            exit 1
+          fi
+
+          echo "::notice::No skip-deploy-gate bypass tokens found in PR body. OK."

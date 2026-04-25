@@ -73,6 +73,18 @@ repos:
       # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
       # ============================================================
 
+      # OMN-9730: DGM-Phase4 — mechanical block on skip-deploy-gate bypass tokens.
+      # Rejects any staged file containing [skip-deploy-gate:] without an explicit
+      # approval receipt (# skip-token-allowed: <receipt-id>).
+      # CLAUDE.md Rule #10: never bypass local gates. Fix the underlying issue.
+      - id: reject-deploy-gate-skip-token
+        name: Reject skip-deploy-gate bypass tokens (OMN-9730)
+        entry: .pre-commit-hooks/reject-deploy-gate-skip-token.sh
+        language: script
+        pass_filenames: true
+        always_run: true
+        stages: [pre-commit]
+
       # TODO: Simplify back to `uv run python -m omnibase_core.validation.validator_local_paths`
       # once validator_local_paths is included in a released omnibase_core package.
       # The module exists in omnibase_core source (PR #530) but is not yet on PyPI.

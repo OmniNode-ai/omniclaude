@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+#
+# yamllint configuration for omniclaude.
+# GitHub Actions workflows use long lines by necessity; document-start and
+# truthy checks are demoted to warnings to match the existing workflow style.
+---
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  document-start:
+    level: warning
+  truthy:
+    level: warning
+  comments:
+    level: warning
