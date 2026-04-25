@@ -49,24 +49,10 @@ jobs:
         run: |
           echo "::notice::deploy-gate: merge_group event — skipped (validated on PR branch)."
 
-      - name: Get PR number
-        if: github.event_name != 'merge_group'
-        id: pr-number
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER_INPUT: ${{ inputs.pr-number }}
-          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
-        run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo "pr_number=$PR_NUMBER_INPUT" >> "$GITHUB_OUTPUT"
-          else
-            echo "pr_number=$PR_NUMBER_EVENT" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Run deploy gate (canonical composite action)
         if: github.event_name != 'merge_group'
         uses: OmniNode-ai/omniclaude/.github/actions/deploy-gate@main
         with:
-          pr-number: ${{ steps.pr-number.outputs.pr_number }}
+          pr-number: ${{ github.event.pull_request.number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           contracts-dir: ${{ inputs.contracts-dir }}
