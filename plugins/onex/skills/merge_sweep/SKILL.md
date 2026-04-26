@@ -1,7 +1,7 @@
 ---
-description: Thin dispatch-only shim for the org-wide PR merge sweep pipeline. Routes to node_merge_sweep in omnimarket, which owns PR inventory, triage, auto-merge, pr-polish dispatch, queue stall detection, and pre-merge verification. No inline GH script fallback, no kcat publish, no orchestration logic.
+description: Thin dispatch-only shim for the org-wide PR merge sweep pipeline. Routes to node_merge_sweep_triage_orchestrator in omnimarket, which owns PR inventory, triage, auto-merge, pr-polish dispatch, queue stall detection, and pre-merge verification. No inline GH script fallback, no kcat publish, no orchestration logic.
 mode: full
-version: 6.0.0
+version: 6.1.0
 level: advanced
 debug: false
 category: workflow
@@ -109,14 +109,18 @@ outputs:
 # /onex:merge_sweep — Thin Dispatch Shim
 
 **Skill ID**: `onex:merge_sweep`
-**Version**: 6.0.0
+**Version**: 6.1.0
 **Owner**: omniclaude
 **Ticket**: OMN-8752
-**Backing node**: `omnimarket/src/omnimarket/nodes/node_merge_sweep/`
+**Backing node**: `omnimarket/src/omnimarket/nodes/node_merge_sweep_triage_orchestrator/`
+
+## Changelog
+
+- **6.1.0** — Repoint shim at `node_merge_sweep_triage_orchestrator` after the legacy `node_merge_sweep/` directory was gutted by the functional-core / imperative-shell decomposition (compute + state_reducer + triage_orchestrator + auto_merge_arm_effect). See `docs/diagnosis-merge-sweep-skill.md` in omni_home for the full diagnosis.
 
 ## What this skill does
 
-Dispatches directly to `node_merge_sweep` via `onex run-node`. The node
+Dispatches directly to `node_merge_sweep_triage_orchestrator` via `onex run-node`. The node
 owns PR inventory, triage, Track A auto-merge, Track B pr-polish
 dispatch, queue stall detection, DAG ordering, auto-rebase, bot comment
 resolution, and pre-merge verification. This shim contains no
@@ -134,7 +138,7 @@ handlers.
 ## Dispatch
 
 ```bash
-uv run onex run-node node_merge_sweep -- \
+uv run onex run-node node_merge_sweep_triage_orchestrator -- \
   [--repos <list>] \
   [--dry-run] \
   [--merge-method <squash|merge|rebase>] \
@@ -195,8 +199,8 @@ skill. It schedules invocations and provides the operator control
 surface (PID locks, circuit-breaker timeouts, log rotation) — it is
 **not** part of this shim and does **not** perform queue-heal or stall
 detection itself. Queue stall detection and queue-heal logic live in
-`node_merge_sweep`; the cron wrapper simply triggers the node and
-surfaces exit status.
+`node_merge_sweep_triage_orchestrator`; the cron wrapper simply
+triggers the node and surfaces exit status.
 
 ## Relation to autonomous closeout
 
