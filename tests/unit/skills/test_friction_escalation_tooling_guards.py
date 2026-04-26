@@ -68,6 +68,13 @@ class TestPrPolishPrecommitGuard:
             "pr_polish/prompt.md must mark precommit_status = 'FAILED' on "
             "pre-commit failure to block the push (OMN-8602)."
         )
+        idx = prompt.find('precommit_status = "FAILED"')
+        assert idx >= 0
+        gate_block = prompt[max(0, idx - 500) : idx + 500]
+        assert "goto Final Report" in gate_block, (
+            "pr_polish/prompt.md must route to 'Final Report' after "
+            "pre-commit failure so push is skipped (OMN-8602)."
+        )
 
     def test_forbids_no_verify(self, prompt: str) -> None:
         """The gate must forbid `--no-verify` as a workaround."""
