@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-6681
+summary: "Narrow Any types in omniclaude — 12 narrowed (threading.Event, FrameType, Sequence, Callable, dict[str, Any]) and 32 justified with # Why: comments"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Full omniclaude unit test suite passes including drift guards for run_subscriber and run_subscriber_background"
+    command: "uv run pytest tests/ -v"
+  - kind: ci
+    description: "omniclaude PR #1422 CI green across all gates"
+    command: "gh pr checks 1422 --repo OmniNode-ai/omniclaude --watch"
+  - kind: manual
+    description: "mypy --warn-unused-ignores produces no new regressions on touched files"
+    command: "uv run mypy --warn-unused-ignores src/omniclaude/"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Type narrowing changes do not regress mypy"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run mypy --warn-unused-ignores src/omniclaude/"
+  - id: dod-002
+    description: "Drift guard tests verifying run_subscriber and run_subscriber_background remain plain callables (not coroutines) pass on the omniclaude PR-1422 deploy target"
+    source: generated
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/runtime/test_plugin_claude.py::TestComplianceSubscriberDriftGuard -v  # deploy-verify post type-narrowing of compliance_result_subscriber.py"
+  - id: dod-003
+    description: "Lint and format pass on touched src/ tree"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/"
