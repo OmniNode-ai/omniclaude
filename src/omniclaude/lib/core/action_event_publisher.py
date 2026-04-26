@@ -197,7 +197,7 @@ def _get_kafka_bootstrap_servers() -> str | None:
     return None
 
 
-async def _get_kafka_producer() -> Any:  # Why: kafka.KafkaProducer — external lib without stubs
+async def _get_kafka_producer() -> Any | None:  # Why: kafka.KafkaProducer — external lib without stubs
     """
     Get or create Kafka producer (async singleton pattern).
 

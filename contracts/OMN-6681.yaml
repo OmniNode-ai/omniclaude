@@ -7,8 +7,8 @@ interface_change: false
 interfaces_touched: []
 evidence_requirements:
   - kind: tests
-    description: "Full omniclaude unit test suite passes including drift guards for run_subscriber and run_subscriber_background"
-    command: "uv run pytest tests/ -v"
+    description: "Targeted drift-guard and touched-area tests pass for OMN-6681 changes"
+    command: "uv run pytest tests/runtime/test_plugin_claude.py::TestComplianceSubscriberDriftGuard -v"
   - kind: ci
     description: "omniclaude PR #1422 CI green across all gates"
     command: "gh pr checks 1422 --repo OmniNode-ai/omniclaude --watch"

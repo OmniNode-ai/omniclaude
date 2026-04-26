@@ -57,7 +57,7 @@ jobs:
           # Check for bypass token
           if echo "$BODY" | grep -qiE "$SKIP_PATTERN"; then
             # Check for explicit allowlist receipt
-            if echo "$BODY" | grep -qE "$ALLOWLIST_PATTERN"; then
+            if echo "$BODY" | grep -qiE "$ALLOWLIST_PATTERN"; then
               echo "::warning::PR body contains [skip-deploy-gate:] but an explicit approval receipt (skip-token-allowed) is present. Allowed with friction logged."
               exit 0
             fi
