@@ -154,9 +154,12 @@ class TestEmitEventSocketGuard:
             passed=True,
             emitted_at=datetime.now(UTC),
         )
-        with patch("omniclaude.publisher.emit_client.EmitClient") as mock_cls:
+        # Why: assert the pre-guard invariant — emit_event must short-circuit
+        # before topic resolution, which proves no EmitClient (primary or
+        # fallback path) was constructed regardless of which import resolved.
+        with patch("omniclaude.hooks.topics.build_topic") as mock_build_topic:
             emit_event(event)
-        mock_cls.assert_not_called()
+        mock_build_topic.assert_not_called()
 
     def test_empty_socket_env_skips_emission(
         self, monkeypatch: pytest.MonkeyPatch
@@ -169,6 +172,6 @@ class TestEmitEventSocketGuard:
             passed=False,
             emitted_at=datetime.now(UTC),
         )
-        with patch("omniclaude.publisher.emit_client.EmitClient") as mock_cls:
+        with patch("omniclaude.hooks.topics.build_topic") as mock_build_topic:
             emit_event(event)
-        mock_cls.assert_not_called()
+        mock_build_topic.assert_not_called()
