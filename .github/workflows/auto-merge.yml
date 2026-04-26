@@ -9,6 +9,18 @@
 # re-attempts auto-merge after CodeRabbit review finishes and branch
 # protection gates clear. Silent continue-on-error removed; "already
 # enqueued" races are tolerated but real failures surface.
+#
+# OMN-9353: Two hardenings carried over from omnibase_infra:
+#  1. Stacked PRs (base != repo default branch) cannot be enrolled in
+#     auto-merge by GitHub — protected-branch auto-merge rules only
+#     apply to the default branch. Treat as an expected no-op instead
+#     of failing the required Enable Auto-Merge check.
+#  2. Pass `--squash` explicitly on `gh pr merge --auto`. Even though
+#     the merge queue is configured for SQUASH and `allow_merge_commit`
+#     is false on this repo, the GitHub `enablePullRequestAutoMerge`
+#     mutation reads the repo default `merge_method` and may arm a PR
+#     as MERGE, which is then silently dropped from a SQUASH-only
+#     queue. Naming the method explicitly removes the API ambiguity.
 name: Auto-Merge
 
 on:
@@ -70,6 +82,15 @@ jobs:
               exit 0
               ;;
           esac
+          BASE_REF="$(gh pr view "$PR" --repo "$GH_REPO" --json baseRefName --jq '.baseRefName')"
+          DEFAULT_BRANCH="$(gh repo view "$GH_REPO" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+          if [ "$BASE_REF" != "$DEFAULT_BRANCH" ]; then
+            echo "PR #$PR targets '$BASE_REF', not default '$DEFAULT_BRANCH'; skipping auto-merge enrollment for stacked PR"
+            echo "pr=$PR" >> "$GITHUB_OUTPUT"
+            echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
           echo "actor=$ACTOR" >> "$GITHUB_OUTPUT"
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -84,7 +105,7 @@ jobs:
           PR: ${{ steps.resolve.outputs.pr }}
         run: |
           set -euo pipefail
-          if output=$(gh pr merge "$PR" --repo "$GH_REPO" --auto 2>&1); then
+          if output=$(gh pr merge "$PR" --repo "$GH_REPO" --auto --squash 2>&1); then
             echo "auto-merge enabled: $output"
             exit 0
           fi
