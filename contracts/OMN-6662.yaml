@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-6662
+summary: "Resolve type suppressions in omniclaude — removed 8 stale # type: ignore, justified 43 remaining with # Why: comments across 27 files"
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Full omniclaude unit test suite passes after type-suppression cleanup"
+    command: "uv run pytest tests/ -v"
+  - kind: ci
+    description: "omniclaude PR #1421 CI green across all gates"
+    command: "gh pr checks 1421 --repo OmniNode-ai/omniclaude --watch"
+  - kind: manual
+    description: "mypy --warn-unused-ignores produces zero unused ignores"
+    command: "uv run mypy --warn-unused-ignores src/omniclaude/"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Type-suppression cleanup does not regress mypy"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run mypy --warn-unused-ignores src/omniclaude/"
+  - id: dod-002
+    description: "Touched runtime handlers (chat publisher, kafka inbox, discord adapter, routing emitter, transition selector, plugin, wiring_dispatchers) keep working after deploy — runtime smoke covers the post-deploy import + wire path"
+    source: generated
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/runtime/ -v  # deploy-verify post type-suppression cleanup of node handlers and runtime wiring"
+  - id: dod-003
+    description: "Lint and format pass on touched src/ and tests/ tree"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run ruff check src/ tests/ && uv run ruff format --check src/ tests/"
