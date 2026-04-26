@@ -356,6 +356,33 @@ if pr_number:
         # Non-fatal: continue to push
 ```
 
+### Pre-Push pre-commit Gate (MANDATORY — OMN-8602)
+
+Before pushing, run the full pre-commit suite locally. This is a **hard gate** —
+push is skipped if any hook fails. Polish agents repeatedly pushed fixes without
+running pre-commit, which surfaced as the high-severity friction
+`pr_polish:tooling/agents-skip-precommit-before-push`. See
+`.onex_state/friction/friction.ndjson` for the originating event.
+
+```python
+if not no_push and (phase_0_status == "OK" or phase_1_status == "OK" or phase_2_status == "OK"):
+    # NEVER use --no-verify. NEVER skip this gate. If hooks fail, fix the
+    # underlying issue and re-run; do not push broken code and let CI catch it.
+    pre_commit_result = run("uv run pre-commit run --all-files")
+    if pre_commit_result.returncode != 0:
+        print(
+            "BLOCKED: pre-commit run --all-files failed. "
+            "Fix the reported violations, then re-run pr-polish. "
+            "DO NOT push with --no-verify."
+        )
+        precommit_status = "FAILED"
+        # Skip push entirely — agent must fix and re-run.
+        goto Final Report
+    else:
+        precommit_status = "OK"
+        print("Pre-push pre-commit gate: PASSED")
+```
+
 ### Push
 
 ```python

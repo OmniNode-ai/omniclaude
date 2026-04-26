@@ -79,6 +79,14 @@ after 2-3 passes (9 recorded friction events). Headless `claude -p` eliminates t
 allowlists. The general-purpose indirection is unnecessary for headless invocations where
 each phase has a fixed prompt and tool set.
 
+**No foreground `Agent()` dispatch (OMN-8602).** Autopilot phases must NEVER be dispatched
+via inline `Agent(subagent_type=...)` calls from a foreground interactive session. Inline
+dispatch blocks the foreground session and bypasses the headless orchestration layer that
+owns checkpoint-resume, lock files, and circuit-breaker accounting. The friction surface
+`close_out:tooling/foreground-agent-dispatch` was logged repeatedly when agents fell back
+to inline dispatch despite this rule. If a phase needs to spawn workers, it does so from
+*within* the headless `claude -p` invocation — not from the operator session.
+
 **Checkpoint-resume**: Each phase writes its result to `{run_dir}/{phase_name}.txt`. If a
 `claude -p` invocation is interrupted (rate limit, network drop, process kill), re-running
 `cron-closeout.sh` starts a new run from Phase A. Individual phase outputs from previous

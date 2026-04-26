@@ -62,3 +62,23 @@ node       -> omnimarket/src/omnimarket/nodes/node_redeploy/
 contract   -> node_redeploy/contract.yaml (FSM, event_bus, inputs/outputs)
 handlers   -> HandlerRedeployWorkflowRunner (runner), HandlerRedeploy (FSM), HandlerRedeployKafka (deploy-agent publish-monitor)
 ```
+
+## Anti-Patterns (OMN-8602)
+
+Two friction surfaces caused this skill to be misused — both produce
+high-severity events in `.onex_state/friction/friction.ndjson`:
+
+1. **`redeploy:tooling/manual-deploy-execution`** — never run `deploy-runtime.sh`,
+   `docker compose up`, or any direct Docker / SSH command from the operator
+   session. Dispatch to `node_redeploy` via the `onex run-node` invocation above.
+   The node owns SSH-to-`INFRA_HOST`, Infisical seeding, and health verification;
+   manual execution skips all three.
+2. **`redeploy:tooling/deploy-targets-local-not-201`** — runtime containers live
+   on `${INFRA_HOST}` (the default host runs on the LAN; see `~/.omnibase/.env`).
+   The redeploy node SSHes to `INFRA_HOST` and runs Docker there. Never target
+   `localhost` or local Docker from the redeploy skill or its callers — local
+   Docker has no runtime containers and the deploy will silently no-op.
+
+If the dispatched node is unavailable (e.g. omnimarket runtime offline), surface
+the `SkillRoutingError` and stop. Do NOT fall through to inline `deploy-runtime.sh`
+execution; that recreates the original friction.
