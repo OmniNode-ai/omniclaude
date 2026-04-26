@@ -1,11 +1,14 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Integration-level contract tests for the merge-sweep thin shim (v6.0.0).
+"""Integration-level contract tests for the merge-sweep thin shim (v6.1.0).
 
 The skill was rewritten under OMN-8752 from a publish-monitor trigger that
 owned an inline `kcat -P` + `ModelEventEnvelope` Kafka publish and a
 `result.json` poll loop into a pure dispatch-only shim that forwards every
-argument to `node_merge_sweep` in omnimarket via `uv run onex run-node`.
+argument to `node_merge_sweep_triage_orchestrator` in omnimarket via
+`uv run onex run-node`. v6.1.0 (OMN-9884) repoints the shim at the
+post-decomposition orchestrator after the legacy `node_merge_sweep/`
+directory was gutted.
 
 These tests ride alongside `tests/unit/skills/test_merge_sweep_shim.py` and
 assert the same invariants at integration scope so the
@@ -63,7 +66,7 @@ class TestSkillMdIsThinShim:
 
     def test_skill_md_version_is_v6(self) -> None:
         fm = _frontmatter(_read(_MERGE_SWEEP_SKILL))
-        assert fm["version"] == "6.0.0"
+        assert fm["version"] == "6.1.0"
 
     def test_skill_md_tagged_dispatch_only(self) -> None:
         fm = _frontmatter(_read(_MERGE_SWEEP_SKILL))
