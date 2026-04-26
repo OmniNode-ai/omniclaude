@@ -70,7 +70,7 @@ high-severity events in `.onex_state/friction/friction.ndjson`:
 
 1. **`redeploy:tooling/manual-deploy-execution`** — never run `deploy-runtime.sh`,
    `docker compose up`, or any direct Docker / SSH command from the operator
-   session. Dispatch to `node_redeploy` via the `onex run-node` invocation above.
+   session. Dispatch to `node_redeploy` via the canonical invocation above.
    The node owns SSH-to-`INFRA_HOST`, Infisical seeding, and health verification;
    manual execution skips all three.
 2. **`redeploy:tooling/deploy-targets-local-not-201`** — runtime containers live
