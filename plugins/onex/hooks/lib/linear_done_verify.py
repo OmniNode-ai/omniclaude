@@ -32,7 +32,16 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
-DONE_STATES = {"done", "complete", "completed", "closed", "canceled", "cancelled"}
+# States that require merged-PR proof before the transition is allowed.
+# These represent successful completion ("the work shipped").
+DONE_STATES = {"done", "complete", "completed", "closed"}
+
+# States that close a ticket WITHOUT shipping the underlying work
+# (cancel / duplicate / won't-do bucket). These do not require merged-PR
+# proof — the whole point of cancelling is that no PR will land.
+# Without this distinction, the hook misfires on tickets whose descriptions
+# happen to contain `PR #N` strings inside markdown code blocks (OMN-10047).
+CANCEL_STATES = {"canceled", "cancelled", "duplicate", "won't do", "wont do"}
 
 # `#123` not preceded by a word char (skip things like `abc#1` inside code);
 # also `https://github.com/<owner>/<repo>/pull/<num>`.
@@ -129,7 +138,21 @@ def is_exempt(description: str, labels: list[str] | None) -> bool:
 
 
 def is_done_state(state_value: str) -> bool:
+    """Return True if the target state requires merged-PR verification.
+
+    Only the success-bucket Done states count. Cancel/Duplicate/Won't-do
+    transitions are NOT verified against PR state — they explicitly close
+    a ticket without shipping work. See OMN-10047.
+    """
     return state_value.strip().lower() in DONE_STATES
+
+
+def is_cancel_state(state_value: str) -> bool:
+    """Return True if the target state is in the cancel/duplicate bucket.
+
+    These states close a ticket without requiring merged-PR proof.
+    """
+    return state_value.strip().lower() in CANCEL_STATES
 
 
 def fetch_pr_status(ref: PRRef, timeout: float = 15.0) -> PRStatus:
@@ -360,6 +383,10 @@ def main() -> int:
 
     params: dict[str, Any] = call.get("tool_input") or {}
     state_value = str(params.get("state") or params.get("status") or "")
+    # Cancel/Duplicate/Won't-do close the ticket without requiring a PR;
+    # short-circuit before any verification logic. (OMN-10047)
+    if is_cancel_state(state_value):
+        return 0
     if not is_done_state(state_value):
         return 0
 
