@@ -1,6 +1,6 @@
 ---
-version: 1.0.0
-description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps in envelope, publishes to delegation-request topic. Requires Kafka to be reachable — no local prose fallback.
+version: 1.0.1
+description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps in envelope, publishes to delegate-task topic. Requires Kafka to be reachable — no local prose fallback.
 mode: full
 level: advanced
 debug: true
@@ -28,7 +28,7 @@ comparison — this skill only classifies and publishes.
 1. Parse the user's prompt
 2. Classify the task type using the existing `TaskClassifier` (heuristic keyword matching)
 3. Construct a delegation request envelope (plain dict, no infrastructure model imports)
-4. Publish to `onex.cmd.omnibase-infra.delegation-request.v1` via the emit daemon
+4. Publish to `onex.cmd.omniclaude.delegate-task.v1` via the emit daemon
 5. Return immediately with the correlation ID
 
 ## Task Types
@@ -63,9 +63,9 @@ Runtime-side validation occurs on the consuming `node_delegation_orchestrator`.
 
 ## Kafka Topic
 
-- **Command topic**: `onex.cmd.omnibase-infra.delegation-request.v1`
+- **Command topic**: `onex.cmd.omniclaude.delegate-task.v1`
 - **Producer**: this skill (via omniclaude emit daemon)
-- **Consumer**: `node_delegation_orchestrator` (omnibase_infra runtime)
+- **Consumer**: `node_delegation_orchestrator` (omniclaude runtime)
 
 ## Usage
 
@@ -150,35 +150,33 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
     envelope = {
         "payload": delegation_payload,
         "correlation_id": correlation_id,
-        "event_type": "omnibase-infra.delegation-request",
+        "event_type": "omniclaude.delegate-task",
         "source_tool": "omniclaude.delegate-skill",
     }
 
     # Publish via emit daemon.
-    # The emit daemon is started by the hook system; if unavailable,
-    # the skill reports the envelope for manual submission.
+    # The emit daemon is started by the hook system. If unavailable, the request
+    # is dropped — this skill is fire-and-forget with no local fallback.
     emitted = False
     try:
         from emit_client_wrapper import emit_event
-        emitted = emit_event("delegation.request", envelope)
+        emitted = emit_event("delegate.task", envelope)
     except ImportError:
-        pass  # Emit client unavailable — envelope returned for manual submission
+        pass
 
     if not emitted:
         return {
             "success": False,
             "error": "emit_event returned falsy — delegation request not queued",
             "correlation_id": correlation_id,
-            "topic": "onex.cmd.omnibase-infra.delegation-request.v1",
-            "envelope": envelope,
+            "topic": "onex.cmd.omniclaude.delegate-task.v1",
         }
 
     return {
         "success": True,
         "correlation_id": correlation_id,
         "task_type": result.intent.value,
-        "topic": "onex.cmd.omnibase-infra.delegation-request.v1",
-        "envelope": envelope,
+        "topic": "onex.cmd.omniclaude.delegate-task.v1",
     }
 ```
 
@@ -194,7 +192,7 @@ TaskClassifier.classify() --> task_type = "test"
 Construct plain dict envelope
   |
   v
-Publish to onex.cmd.omnibase-infra.delegation-request.v1
+Publish to onex.cmd.omniclaude.delegate-task.v1
   |
   v
 [RUNTIME SIDE - not in this skill]
@@ -203,12 +201,12 @@ node_delegation_orchestrator --> node_delegation_routing_reducer
   --> node_baseline_comparison_compute
   |
   v
-onex.evt.omnibase-infra.delegation-completed.v1 --> omnidash
+onex.evt.omniclaude.delegation-completed.v1 --> omnidash
 ```
 
 ## Related
 
 - **Bridge implementation**: `plugins/onex/skills/delegate/_lib/run.py`
 - **TaskClassifier**: `src/omniclaude/lib/task_classifier.py`
-- **Topics**: `src/omniclaude/hooks/topics.py` (`TopicBase.DELEGATION_REQUEST`)
+- **Topics**: `src/omniclaude/hooks/topics.py` (`TopicBase.DELEGATE_TASK`)
 - **Architecture**: `docs/architecture/DELEGATION_ARCHITECTURE.md`

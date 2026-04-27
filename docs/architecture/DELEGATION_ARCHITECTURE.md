@@ -1,7 +1,7 @@
 # Delegation Architecture
 
-**Last Updated**: 2026-04-14
-**Tickets**: OMN-8746 (remove delegation flags, unconditional bridge), OMN-8689 (bridge)
+**Last Updated**: 2026-04-27
+**Tickets**: OMN-8746 (remove delegation flags, unconditional bridge), OMN-8689 (bridge), OMN-10050 (topic alignment)
 
 ---
 
@@ -9,9 +9,9 @@
 
 The delegation system routes user prompts to the ONEX node pipeline via Kafka. Every
 non-slash, non-automated prompt that enters `UserPromptSubmit` is classified and
-published to `onex.cmd.omnibase-infra.delegation-request.v1`. The runtime
-`node_delegation_orchestrator` on .201 handles routing, LLM inference, quality
-gating, and result emission.
+published to `onex.cmd.omniclaude.delegate-task.v1`. The runtime
+`node_delegation_orchestrator` handles routing, LLM inference, quality gating, and
+result emission.
 
 **There is no local prose fallback.** Delegation requires Kafka to be reachable.
 If the emit daemon is unavailable, the request is dropped and Claude handles the
@@ -35,13 +35,13 @@ plugins/onex/skills/delegate/_lib/run.py
     │    { payload: { prompt, task_type, correlation_id, ... },
     │      correlation_id, event_type, source_tool }
     │
-    └─ EmitClient.emit_event("delegation.request", envelope)
-         → onex.cmd.omnibase-infra.delegation-request.v1
+    └─ EmitClient.emit_event("delegate.task", envelope)
+         → onex.cmd.omniclaude.delegate-task.v1
          → [RUNTIME SIDE] node_delegation_orchestrator
               → node_delegation_routing_reducer
               → node_llm_inference_effect
               → node_delegation_quality_gate_reducer
-              → onex.evt.omnibase-infra.delegation-completed.v1
+              → onex.evt.omniclaude.delegation-completed.v1
 ```
 
 ---
@@ -60,7 +60,7 @@ plugins/onex/skills/delegate/_lib/run.py
     "emitted_at": "2026-04-14T14:30:00Z"
   },
   "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "event_type": "omnibase-infra.delegation-request",
+  "event_type": "omniclaude.delegate-task",
   "source_tool": "omniclaude.delegate-skill"
 }
 ```
@@ -73,7 +73,7 @@ plugins/onex/skills/delegate/_lib/run.py
 |------|------|
 | `plugins/onex/skills/delegate/_lib/run.py` | Classify + publish to Kafka |
 | `src/omniclaude/lib/task_classifier.py` | Prompt classification |
-| `src/omniclaude/hooks/topics.py` (`DELEGATION_REQUEST`) | Kafka topic definition |
+| `src/omniclaude/hooks/topics.py` (`DELEGATE_TASK`) | Kafka topic definition |
 | `plugins/onex/hooks/scripts/user-prompt-submit.sh` | Bridge invocation (fire-and-forget) |
 
 ---

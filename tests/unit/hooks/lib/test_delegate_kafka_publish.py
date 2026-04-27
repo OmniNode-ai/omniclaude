@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Integration test: every /onex:delegate invocation publishes to delegation-request topic.
+"""Unit test: every /onex:delegate invocation publishes to the delegate-task topic.
 
-DoD evidence for OMN-8746:
-- classify_and_publish() calls emit_event("delegation.request", ...) with a
+DoD evidence for OMN-8746, OMN-10050:
+- classify_and_publish() calls emit_event("delegate.task", ...) with a
   valid UUID correlation_id whenever the intent is delegatable.
+- Topic aligned with node_delegation_orchestrator contract (OMN-10050).
 - No fallback to delegation_orchestrator.py prose path.
 - emit_event is asserted via a mocked Kafka producer (emit_client_wrapper mock),
   NOT a function-call mock on classify_and_publish itself.
@@ -86,10 +87,10 @@ def delegate_run_with_failing_emit() -> pytest.Generator[
 class TestDelegateKafkaPublish:
     """Assert that classify_and_publish publishes to Kafka — no prose fallback."""
 
-    def test_delegatable_prompt_publishes_to_delegation_request_topic(
+    def test_delegatable_prompt_publishes_to_delegate_task_topic(
         self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]
     ) -> None:
-        """A delegatable prompt must call emit_event with delegation.request event type."""
+        """A delegatable prompt must call emit_event with delegate.task event type (OMN-10050)."""
         delegate_run, mock_emit = delegate_run_with_mock_emit
 
         result = delegate_run.classify_and_publish(
@@ -105,8 +106,8 @@ class TestDelegateKafkaPublish:
         event_type = (
             call_args.args[0] if call_args.args else call_args.kwargs.get("event_type")
         )
-        assert event_type == "delegation.request", (
-            f"Expected event_type='delegation.request', got {event_type!r}"
+        assert event_type == "delegate.task", (
+            f"Expected event_type='delegate.task', got {event_type!r}"
         )
 
         envelope = (

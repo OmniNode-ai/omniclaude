@@ -446,13 +446,16 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Delegation pipeline command topics (OMN-7040)
     # Thin /delegate skill publishes to this topic; consumed by
-    # node_delegation_orchestrator on the omnibase_infra runtime.
+    # node_delegation_orchestrator in omniclaude.
     # ==========================================================================
-    DELEGATION_REQUEST = "onex.cmd.omnibase-infra.delegation-request.v1"
+    # Historical name: "DELEGATION_REQUEST" — kept to avoid churn on any code
+    # that imports this constant by name. Value corrected in OMN-10050 to align
+    # with the consumer's canonical topic (onex.cmd.omniclaude.delegate-task.v1).
+    DELEGATION_REQUEST = "onex.cmd.omniclaude.delegate-task.v1"
     """Command to request task delegation through the node-based pipeline.
 
-    Aligned with the node_delegation_orchestrator contract in omnibase_infra.
-    The runtime subscribes to this topic via EventBusSubcontractWiring.
+    Consumed by node_delegation_orchestrator (omniclaude/nodes/…/contract.yaml).
+    Topic ownership: omniclaude (orchestrator lives in this repo).
     """
 
     # ==========================================================================

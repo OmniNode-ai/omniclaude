@@ -646,8 +646,10 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # Emitted by the /delegate skill to trigger task delegation through the
     # node-based pipeline. The payload is a ModelEventEnvelope-compatible dict
     # so the runtime consumer can deserialize it directly.
-    "delegation.request": EventRegistration(
-        event_type="delegation.request",
+    # Event type renamed from "delegation.request" → "delegate.task" in OMN-10050
+    # to align with node_delegation_orchestrator contract topic.
+    "delegate.task": EventRegistration(
+        event_type="delegate.task",
         fan_out=[
             FanOutRule(
                 topic_base=TopicBase.DELEGATION_REQUEST,

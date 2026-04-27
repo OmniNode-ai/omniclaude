@@ -788,8 +788,8 @@ class TestEventRegistryIntegration:
             # Enrichment observability (OMN-2274)
             "context.enrichment",
             # routing.outcome.raw TOMBSTONED (OMN-2622): deprecated — no consumer, removed from registry
-            # Delegation command published by /delegate skill (OMN-7040)
-            "delegation.request",
+            # Delegation command published by /delegate skill (OMN-7040, aligned OMN-10050)
+            "delegate.task",
             # Shadow validation mode comparison results (OMN-2283)
             "delegation.shadow.comparison",
             # Pattern enforcement observability (OMN-2442)

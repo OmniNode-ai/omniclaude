@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Delegate skill — classify prompt and publish to delegation-request topic.
+"""Delegate skill — classify prompt and publish to delegate-task topic.
 
 Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, wraps it in a ModelEventEnvelope-compatible dict, and publishes
-to onex.cmd.omnibase-infra.delegation-request.v1 via the omniclaude emit daemon.
+to onex.cmd.omniclaude.delegate-task.v1 via the omniclaude emit daemon.
 
 Wire schema (plain dict — runtime-side validation by node_delegation_orchestrator):
   {
@@ -19,7 +19,7 @@ Wire schema (plain dict — runtime-side validation by node_delegation_orchestra
       "emitted_at": str (ISO-8601),
     },
     "correlation_id": str,
-    "event_type": "omnibase-infra.delegation-request",
+    "event_type": "omniclaude.delegate-task",
     "source_tool": "omniclaude.delegate-skill",
   }
 """
@@ -59,7 +59,10 @@ except ImportError:
 try:
     from omniclaude.hooks.topics import TopicBase as _TopicBase
 
-    _DELEGATION_REQUEST_TOPIC: str = _TopicBase.DELEGATION_REQUEST
+    # Use DELEGATE_TASK — the canonical topic that node_delegation_orchestrator
+    # subscribes to (contract.yaml:39). DELEGATION_REQUEST now has the same value
+    # but DELEGATE_TASK is the semantically correct name going forward.
+    _DELEGATION_REQUEST_TOPIC: str = _TopicBase.DELEGATE_TASK
 except (ImportError, AttributeError):
     _DELEGATION_REQUEST_TOPIC = ""  # fallback; emit still works via event_type key
 
@@ -120,7 +123,7 @@ def classify_and_publish(
     envelope = {
         "payload": delegation_payload,
         "correlation_id": correlation_id,
-        "event_type": "omnibase-infra.delegation-request",
+        "event_type": "omniclaude.delegate-task",
         "source_tool": "omniclaude.delegate-skill",
     }
 
@@ -128,7 +131,7 @@ def classify_and_publish(
     try:
         from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
 
-        emitted = bool(emit_event("delegation.request", envelope))
+        emitted = bool(emit_event("delegate.task", envelope))
     except ImportError:
         pass
 

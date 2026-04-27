@@ -93,8 +93,8 @@ Claude Code (stdin JSON)
     │  delegate/_lib/run.py (background subprocess) │
     │                                               │
     │  TaskClassifier.classify(prompt)              │
-    │  → publish to delegation-request.v1 (Kafka)  │
-    │  → node_delegation_orchestrator on .201       │
+    │  → publish to delegate-task.v1 (Kafka)        │
+    │  → node_delegation_orchestrator               │
     │                                               │
     │  Requires Kafka. No local prose fallback.     │
     └────┬──────────────────────────────────────────┘
