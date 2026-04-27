@@ -3,16 +3,18 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from omniclaude.nodes.node_delegation_orchestrator.enums.enum_cli_recipient import (
+    EnumCliRecipient,
+)
 
 
 class ModelCrossCLIInvocationResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     correlation_id: str = Field(..., description="Tracing correlation ID")
-    recipient: Literal["claude", "opencode", "codex"] = Field(...)
+    recipient: EnumCliRecipient = Field(...)
     stdout: str = Field(default="", description="Captured stdout")
     stderr: str = Field(default="", description="Captured stderr")
     exit_code: int = Field(..., description="Process exit code; 0 = success")

@@ -5,7 +5,7 @@ summary: "Add ModelCrossCLIInvocationResult for Cross-CLI Bridge subprocess disp
 is_seam_ticket: true
 interface_change: true
 interfaces_touched:
-  - "src/omniclaude/nodes/node_delegation_orchestrator/models/model_cross_cli_invocation_result.py"
+  - public_api
 evidence_requirements:
   - kind: tests
     description: "Cross-CLI invocation result model tests cover computed success and defaults"
