@@ -26,6 +26,9 @@
 # Canonical Homebrew Python interpreter for macOS hook launchers (OMN-10113).
 # All hook scripts that invoke Python must use: env -u PYTHONPATH "$BREW_PY" ...
 # This prevents PYTHONPATH leaks from the parent shell from corrupting imports.
+# Scope: macOS Apple Silicon only (ARM Homebrew prefix /opt/homebrew).
+# Intel Mac (/usr/local) and Linux are not supported runtime profiles for these hooks.
+# Version is intentionally pinned to 3.13 per the one-Python policy (OMN-10079).
 BREW_PY="/opt/homebrew/bin/python3.13"
 export BREW_PY
 
