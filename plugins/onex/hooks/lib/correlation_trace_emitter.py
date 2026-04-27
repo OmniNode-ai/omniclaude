@@ -12,7 +12,7 @@ Architecture (three-layer separation):
     - Schema (omniclaude.hooks.schemas): ModelCorrelationTraceSpanPayload -- pure data
     - Adapter layer (this module): Owns daemon integration -- validates payload,
       calls emit_event(), provides convenience helpers
-    - Emit daemon (omniclaude publisher): Routes flat JSON to Kafka topic
+    - Emit daemon (omnimarket node_emit_daemon): Routes flat JSON to Kafka topic
 
 INVARIANT: This function MUST fail open and NEVER block hook/session execution.
 If Kafka/daemon is unavailable, log warning and return False.
