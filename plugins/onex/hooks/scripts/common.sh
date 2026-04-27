@@ -23,6 +23,12 @@
 # =============================================================================
 # Python Environment Detection
 # =============================================================================
+# Canonical Homebrew Python interpreter for macOS hook launchers (OMN-10113).
+# All hook scripts that invoke Python must use: env -u PYTHONPATH "$BREW_PY" ...
+# This prevents PYTHONPATH leaks from the parent shell from corrupting imports.
+BREW_PY="/opt/homebrew/bin/python3.13"
+export BREW_PY
+
 # Strict priority chain with NO fallbacks. If no valid Python is found,
 # hooks refuse to run. This prevents silent degradation where hooks run
 # against the wrong interpreter with missing dependencies.

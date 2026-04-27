@@ -532,7 +532,7 @@ log "Using Python: $PYTHON_CMD"
 
 # Hook health probe [F32] — verify all Python hook handlers can import
 PROBE_RESULT=$("$PYTHON_CMD" -m omniclaude.hooks.lib.hook_health_probe 2>>"$LOG_FILE") || true
-PROBE_FAILURES=$(echo "$PROBE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('failures',0))" 2>/dev/null || echo "0")
+PROBE_FAILURES=$(echo "$PROBE_RESULT" | env -u PYTHONPATH "$BREW_PY" -c "import json,sys; print(json.load(sys.stdin).get('failures',0))" 2>/dev/null || echo "0")
 if [[ "$PROBE_FAILURES" != "0" ]]; then
     log "WARNING: $PROBE_FAILURES hook handler(s) failed import check. See hooks.log for details."
 fi

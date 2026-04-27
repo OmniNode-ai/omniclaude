@@ -109,7 +109,7 @@ PROMPT_B64="$(b64 "$PROMPT")"
 if command -v uuidgen >/dev/null 2>&1; then
     CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 else
-    CORRELATION_ID="$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+    CORRELATION_ID="$(env -u PYTHONPATH "$BREW_PY" -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
 fi
 
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"

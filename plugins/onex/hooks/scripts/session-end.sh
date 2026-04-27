@@ -440,7 +440,7 @@ print(result.outcome)
         # feedback_status="produced": outcome is meaningful (success/failed) — omniintelligence should learn.
         # feedback_status="skipped": outcome unclear (unknown/abandoned) — log skip_reason, no DB write.
         # All routing feedback outcomes are now on a single topic; consumers filter on feedback_status.
-        FEEDBACK_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
+        FEEDBACK_EMITTED_AT=$(env -u PYTHONPATH "$BREW_PY" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
             || date -u +"%Y-%m-%dT%H:%M:%SZ")
         if [[ "$DERIVED_OUTCOME" == "success" || "$DERIVED_OUTCOME" == "failed" ]]; then
             FEEDBACK_STATUS="produced"
