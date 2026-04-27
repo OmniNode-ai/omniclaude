@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
+import re
 from pathlib import Path
 
 
@@ -29,12 +30,10 @@ def test_repair_script_handles_hollow_dir():
 def test_repair_script_fails_fast_if_python_missing():
     script = Path("scripts/repair-plugin-venv.sh").read_text()
     assert "BREW_PYTHON" in script, "script must define BREW_PYTHON variable"
-    assert "exit 1" in script, "script must exit 1 when brew python is missing"
-    # Ensure the fail-fast guard references BREW_PYTHON
-    lines = script.splitlines()
-    has_guard = any(
-        "BREW_PYTHON" in line
-        and ("exit" in line or "!" in line or "-f" in line or "-x" in line)
-        for line in lines
+    has_guard_exit = re.search(
+        r'if\s+\[\[\s*!\s+-x\s+"\$BREW_PYTHON"\s*\]\];\s*then(?s:.*?)\bexit\s+1\b',
+        script,
     )
-    assert has_guard, "script must have a fail-fast guard checking BREW_PYTHON exists"
+    assert has_guard_exit, (
+        "script must fail fast with exit 1 when BREW_PYTHON is missing"
+    )
