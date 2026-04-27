@@ -69,6 +69,8 @@ args:
 
 # hostile-reviewer
 
+> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Do NOT invoke this skill in any mode (--gate, --static, --file, --pr). Re-enable when OMN-10111 closes (eval precision/recall thresholds met, silent-stub file-mode replaced).
+
 **Announce at start:** "I'm using the hostile-reviewer skill."
 
 ## Architecture

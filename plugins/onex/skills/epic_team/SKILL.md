@@ -361,6 +361,8 @@ of tickets; Sonnet is sufficient for implementation tasks.
 
 ### ONEX Pattern Gate (pre-dispatch static review)
 
+> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this gate entirely. Do NOT invoke. Proceed to Verification Steps directly. Re-enable when OMN-10111 closes.
+
 **Before dispatching any ticket in a wave**, run `hostile_reviewer --static` on each task
 description to catch ONEX anti-patterns before they consume a full pipeline run.
 
@@ -387,8 +389,7 @@ Escalate to user if more than 2 tickets in a wave are blocked by the pattern gat
 
 ### Verification Steps (per ticket, before Agent() dispatch)
 
-1. **ONEX pattern gate**: Run `hostile_reviewer --static` on task description (see above). Block
-   on violations before performing any further checks.
+1. **ONEX pattern gate**: ~~Run `hostile_reviewer --static` on task description~~ **DISABLED per OMN-10111** — skip this step, proceed to step 2.
 
 2. **Ticket readiness check**: Fetch ticket via `tracker.get_issue` and verify:
    - Description is non-empty and contains actionable content

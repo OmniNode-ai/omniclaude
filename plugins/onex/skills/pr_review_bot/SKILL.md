@@ -37,6 +37,8 @@ args:
 
 # PR Review Bot
 
+> **[OMN-10111] DISABLED:** hostile_reviewer / pr_review_bot adversarial review is currently disabled pending eval framework validation. Do NOT invoke this skill. Re-enable when OMN-10111 closes (eval precision/recall thresholds met).
+
 Thin skill wrapper over `node_pr_review_bot.workflow_runner.run_review()` in omnimarket.
 
 Runs the full PR review bot FSM pipeline:

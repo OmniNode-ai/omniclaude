@@ -3345,6 +3345,8 @@ EOF
 
 ### Phase 5.5: REVIEW_GATE (OMN-6535)
 
+> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this phase entirely. Do NOT invoke. Advance directly to integration_verification_gate. Re-enable when OMN-10111 closes.
+
 **Trigger**: pr_review_loop complete (all human review comments addressed)
 **Skip if**: `--docs-only` flag is set (documentation-only changes don't need adversarial review)
 

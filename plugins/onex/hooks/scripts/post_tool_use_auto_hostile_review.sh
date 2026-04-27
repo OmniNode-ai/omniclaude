@@ -20,6 +20,13 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------
+# OMN-10111: hostile_reviewer disabled pending eval framework validation
+# -----------------------------------------------------------------------
+echo "[hostile_reviewer disabled per OMN-10111] skipping auto-review advisory" >&2
+cat  # drain stdin
+exit 0
+
+# -----------------------------------------------------------------------
 # Kill switches
 # -----------------------------------------------------------------------
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then

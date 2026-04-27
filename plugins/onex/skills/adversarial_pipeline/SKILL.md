@@ -22,6 +22,8 @@ args:
 
 # Adversarial Pipeline
 
+> **[OMN-10111] DISABLED:** This skill chains into `hostile_reviewer` (Stage 2 gate), which is currently disabled pending eval framework validation. Do NOT invoke this skill. It will produce incorrect results (silent-pass gate). Re-enable when OMN-10111 closes.
+
 ## Overview
 
 Three-stage autonomous pipeline that catches wrong-approach patterns before tickets are created. Chains `design_to_plan`, `hostile_reviewer`, and `plan_to_tickets` as background agents. The adversarial gate blocks ticket creation until the plan has been stress-tested.

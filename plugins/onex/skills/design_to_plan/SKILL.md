@@ -596,13 +596,15 @@ If the review instructions do not catch all seven expected items, tighten the in
 
 ### Multi-Model Adversarial Review (Phase 2c)
 
+> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this step entirely. Do NOT invoke. Re-enable when OMN-10111 closes.
+
 After R1-R8 converges (Phase 2b), invoke the hostile-reviewer skill in file mode for
 an independent adversarial challenge from non-Claude models (DeepSeek-R1, Qwen3-Coder).
 
 **Flow:**
 
 1. R1-R8 converges (Phase 2b complete)
-2. Invoke `/hostile-reviewer --file <plan_file_path>`
+2. ~~Invoke `/hostile-reviewer --file <plan_file_path>`~~ **DISABLED per OMN-10111**
 3. Triage external findings (see policy below)
 4. If actionable CRITICAL/MAJOR with concrete evidence: run ONE additional R1-R8 pass
 5. If only MINOR/NIT: note them and proceed to Phase 3
@@ -651,6 +653,8 @@ Record in the plan output or review artifact:
 ---
 
 ### Mandatory Phase 2→3 Gate: ONEX Pattern Review
+
+> **[OMN-10111] DISABLED:** hostile_reviewer is currently disabled pending eval framework validation. Skip this gate entirely. Do NOT invoke. Proceed directly to Phase 3. Re-enable when OMN-10111 closes.
 
 **This gate is mandatory and blocks Phase 3 launch. It cannot be skipped or silently passed.**
 

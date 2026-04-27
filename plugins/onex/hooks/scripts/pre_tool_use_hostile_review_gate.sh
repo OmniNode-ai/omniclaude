@@ -32,6 +32,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then cat; exit 0; fi
 if [[ "${HOSTILE_REVIEW_GATE_DISABLED:-0}" == "1" ]]; then cat; exit 0; fi
 
+# OMN-10111: hostile_reviewer disabled pending eval framework validation
+echo "[hostile_reviewer gate disabled per OMN-10111] merge gate bypassed" >&2
+cat; exit 0
+
 # --- Lite mode guard ---
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
