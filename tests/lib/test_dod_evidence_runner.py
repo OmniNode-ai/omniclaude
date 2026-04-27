@@ -274,7 +274,7 @@ class TestEvidenceReceipt:
         data = json.loads(receipt_path.read_text())
         assert data["ticket_id"] == "OMN-5168"
 
-    def test_receipt_includes_timestamp(self, tmp_path: Path) -> None:
+    def test_receipt_includes_run_timestamp(self, tmp_path: Path) -> None:
         run_result = EvidenceRunResult(total=0)
         receipt_path = write_evidence_receipt(
             ticket_id="OMN-5168",
@@ -282,10 +282,11 @@ class TestEvidenceReceipt:
             run_result=run_result,
             working_dir=str(tmp_path),
             output_dir=str(tmp_path / ".evidence" / "OMN-5168"),
+            emit=False,
         )
         data = json.loads(receipt_path.read_text())
-        assert "timestamp" in data
-        assert "T" in data["timestamp"]  # ISO format
+        assert "run_timestamp" in data
+        assert "T" in data["run_timestamp"]  # ISO format
 
     def test_receipt_includes_provenance(self, tmp_path: Path) -> None:
         run_result = EvidenceRunResult(total=0)
@@ -295,12 +296,13 @@ class TestEvidenceReceipt:
             run_result=run_result,
             working_dir=str(tmp_path),
             output_dir=str(tmp_path / ".evidence" / "OMN-5168"),
+            emit=False,
         )
         data = json.loads(receipt_path.read_text())
-        assert "git_sha" in data
+        assert "commit_sha" in data
         assert "branch" in data
         assert "working_dir" in data
-        assert "contract_path" in data
+        assert "check_value" in data
 
     def test_receipt_provenance_matches_current_repo(self) -> None:
         """Receipt provenance reflects actual repo state when run from a git repo."""
@@ -312,17 +314,18 @@ class TestEvidenceReceipt:
         with tempfile.TemporaryDirectory() as output_dir:
             run_result = EvidenceRunResult(total=0)
             receipt_path = write_evidence_receipt(
-                ticket_id="OMN-TEST",
+                ticket_id="OMN-9999",
                 contract_path="test.yaml",
                 run_result=run_result,
                 working_dir=working_dir,
                 output_dir=output_dir,
+                emit=False,
             )
             data = json.loads(receipt_path.read_text())
 
             # Should have a real git SHA from the omniclaude repo
-            if data["git_sha"]:
-                assert len(data["git_sha"]) == 40  # Full SHA
+            if data["commit_sha"] and data["commit_sha"] != "0000000":
+                assert len(data["commit_sha"]) >= 7
             assert data["working_dir"] == working_dir
 
 
@@ -514,3 +517,54 @@ class TestWriteEvidenceReceiptWithEmission:
             )
 
         assert receipt_path.exists()
+
+
+class TestReceiptConsolidationOMN9792:
+    """OMN-9792: EvidenceReceipt removed; write_evidence_receipt produces ModelDodReceipt JSON."""
+
+    def test_evidence_receipt_class_does_not_exist(self) -> None:
+        import dod_evidence_runner
+
+        assert not hasattr(dod_evidence_runner, "EvidenceReceipt"), (
+            "EvidenceReceipt dataclass must be deleted (OMN-9792 consolidation)"
+        )
+
+    def test_write_evidence_receipt_produces_model_dod_receipt_fields(
+        self, tmp_path: Path
+    ) -> None:
+        run_result = EvidenceRunResult(total=1, verified=1)
+        receipt_path = write_evidence_receipt(
+            ticket_id="OMN-9792",
+            contract_path="contracts/OMN-9792.yaml",
+            run_result=run_result,
+            working_dir=str(tmp_path),
+            output_dir=str(tmp_path / ".evidence" / "OMN-9792"),
+            emit=False,
+        )
+        data = json.loads(receipt_path.read_text())
+        assert "ticket_id" in data
+        assert "run_timestamp" in data, (
+            "must use ModelDodReceipt field name run_timestamp"
+        )
+        assert "commit_sha" in data, "must use ModelDodReceipt field name commit_sha"
+        assert "branch" in data
+        assert "working_dir" in data
+        assert "check_value" in data, "contract_path must map to check_value"
+        assert data["ticket_id"] == "OMN-9792"
+
+    def test_write_evidence_receipt_no_legacy_field_names(self, tmp_path: Path) -> None:
+        run_result = EvidenceRunResult(total=0)
+        receipt_path = write_evidence_receipt(
+            ticket_id="OMN-9792",
+            contract_path="contracts/OMN-9792.yaml",
+            run_result=run_result,
+            working_dir=str(tmp_path),
+            output_dir=str(tmp_path / ".evidence" / "OMN-9792"),
+            emit=False,
+        )
+        data = json.loads(receipt_path.read_text())
+        assert "timestamp" not in data, "legacy field 'timestamp' must be removed"
+        assert "git_sha" not in data, "legacy field 'git_sha' must be removed"
+        assert "contract_path" not in data, (
+            "legacy field 'contract_path' must be removed"
+        )

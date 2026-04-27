@@ -23,6 +23,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    from omnibase_core.enums.ticket.enum_receipt_status import EnumReceiptStatus
+    from omnibase_core.models.contracts.ticket.model_dod_receipt import ModelDodReceipt
+
+    _CORE_AVAILABLE = True
+except ImportError:
+    _CORE_AVAILABLE = False
+
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 logger = logging.getLogger(__name__)
@@ -58,19 +66,6 @@ class EvidenceRunResult:
     failed: int = 0
     skipped: int = 0
     details: list[EvidenceItemResult] = field(default_factory=list)
-
-
-@dataclass
-class EvidenceReceipt:
-    """Full evidence receipt with provenance."""
-
-    ticket_id: str
-    timestamp: str
-    git_sha: str
-    branch: str
-    working_dir: str
-    contract_path: str
-    result: EvidenceRunResult = field(default_factory=EvidenceRunResult)
 
 
 def _run_check_test_exists(check_value: str | dict[str, str]) -> CheckResult:
@@ -384,18 +379,60 @@ def write_evidence_receipt(
 
     git_sha, branch = _get_git_info(working_dir)
 
-    receipt = EvidenceReceipt(
-        ticket_id=ticket_id,
-        timestamp=datetime.now(tz=UTC).isoformat(),
-        git_sha=git_sha,
-        branch=branch,
-        working_dir=working_dir,
-        contract_path=contract_path,
-        result=run_result,
-    )
+    overall_status = "verified" if run_result.failed == 0 else "failed"
+    run_timestamp = datetime.now(tz=UTC)
+
+    _used_model = False
+    if _CORE_AVAILABLE and git_sha and len(git_sha) >= 7:
+        status_enum = (
+            EnumReceiptStatus.PASS
+            if overall_status == "verified"
+            else EnumReceiptStatus.FAIL
+        )
+        try:
+            receipt_obj = ModelDodReceipt(
+                schema_version="1.0.0",
+                ticket_id=ticket_id,
+                evidence_item_id="dod-run",
+                check_type="command",
+                check_value=contract_path,
+                status=status_enum,
+                run_timestamp=run_timestamp,
+                commit_sha=git_sha[:40],
+                runner="dod-evidence-runner",
+                verifier="dod-evidence-runner-ci",
+                probe_command=f"run_dod_evidence({contract_path!r})",
+                probe_stdout=json.dumps(asdict(run_result), default=str)[:4096],
+                branch=branch or None,
+                working_dir=working_dir,
+            )
+            receipt_data = receipt_obj.model_dump(mode="json")
+            _used_model = True
+        except Exception:  # noqa: BLE001
+            pass  # Fall through to dict path when core lacks new fields (pre-OMN-9792 release)
+    if not _used_model:
+        # Fallback when omnibase_core unavailable or no valid git SHA
+        receipt_data = {
+            "schema_version": "1.0.0",
+            "ticket_id": ticket_id,
+            "evidence_item_id": "dod-run",
+            "check_type": "command",
+            "check_value": contract_path,
+            "status": "PASS" if overall_status == "verified" else "FAIL",
+            "run_timestamp": run_timestamp.isoformat(),
+            "commit_sha": (
+                git_sha[:40] if git_sha and len(git_sha) >= 7 else "0000000"
+            ),
+            "runner": "dod-evidence-runner",
+            "verifier": "dod-evidence-runner-ci",
+            "probe_command": f"run_dod_evidence({contract_path!r})",
+            "probe_stdout": json.dumps(asdict(run_result), default=str)[:4096],
+            "branch": branch or None,
+            "working_dir": working_dir,
+        }
 
     receipt_path = Path(output_dir) / "dod_report.json"
-    receipt_path.write_text(json.dumps(asdict(receipt), indent=2, default=str))
+    receipt_path.write_text(json.dumps(receipt_data, indent=2, default=str))
 
     # Emit Kafka event after writing the local receipt. Non-blocking: emission
     # failures do not affect the receipt file or the return value.
