@@ -327,16 +327,42 @@ def check_node_liveness(
 # ---------------------------------------------------------------------------
 
 
+def _omnimarket_available(repo_root: Path) -> bool:
+    """Return True when at least one omnimarket nodes base directory exists.
+
+    When *no* base is resolvable (developer machine without omnimarket
+    cloned and neither $OMNIMARKET_ROOT nor $OMNI_HOME set), the validator
+    skips enforcement rather than blocking the commit.  CI always has
+    omnimarket available via the ``_omnimarket/`` checkout, so the gate is
+    still effective on every PR.
+    """
+    return any(base.is_dir() for base in _resolve_omnimarket_nodes_root(repo_root))
+
+
 def scan(repo_root: Path) -> list[str]:
     """Scan *repo_root* for backing-node violations.
 
     Returns a list of human-readable error strings.  An empty list means the
     tree is clean.  Raises ``ValueError`` on a malformed allowlist entry.
+
+    When omnimarket is not resolvable locally (neither $OMNIMARKET_ROOT nor
+    $OMNI_HOME set, no _omnimarket/ checkout, no sibling repo), the function
+    prints a warning and returns an empty list rather than failing.  CI
+    enforces the gate unconditionally via the _omnimarket/ checkout.
     """
     allowlist = load_allowlist(repo_root)
     skills_root = repo_root / "plugins" / "onex" / "skills"
     if not skills_root.is_dir():
         return [f"skills directory not found at {skills_root}"]
+
+    if not _omnimarket_available(repo_root):
+        print(
+            "validate-skill-backing-node: SKIPPED locally — omnimarket not found. "
+            "Set $OMNIMARKET_ROOT or $OMNI_HOME to enable local enforcement. "
+            "CI checks out omnimarket and enforces this gate on every PR.",
+            file=sys.stderr,
+        )
+        return []
 
     errors: list[str] = []
 
