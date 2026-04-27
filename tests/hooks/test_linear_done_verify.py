@@ -527,25 +527,52 @@ class TestCancelBucketBypass:
         assert rc == 0
 
     def test_done_with_unmerged_pr_still_blocks(
-        self, monkeypatch: pytest.MonkeyPatch
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Sanity check: the PR verification path must still fire for true
         Done transitions. This test prevents the OMN-10047 fix from
         weakening OMN-8415's original guarantee."""
         monkeypatch.setattr(
             linear_done_verify,
-            "fetch_pr_status",
-            _blocked,
+            "_load_stdin_tool_call",
+            lambda: {
+                "tool_name": "mcp__linear-server__save_issue",
+                "tool_input": {
+                    "id": "OMN-9817",
+                    "state": "Done",
+                    "description": "Done. Fixed in #202.",
+                },
+            },
         )
-        # Patch the verify() default fetcher binding by monkeypatching
-        # the symbol used inside main() (default arg captures the original).
-        # We instead route through a description that triggers the check
-        # and use a captured fetcher via a partial; simpler: assert
-        # is_cancel_state("Done") is False and is_done_state("Done") is
-        # True — main()'s downstream verify() with a real fetcher is
-        # exercised by the existing TestMainFailClosed suite.
         assert is_cancel_state("Done") is False
         assert is_done_state("Done") is True
+
+        verify_calls: list[tuple[str, list[str] | None, str | None]] = []
+
+        def verify_with_blocked_pr(
+            description: str,
+            labels: list[str] | None,
+            default_repo: str | None = None,
+        ) -> linear_done_verify.VerificationResult:
+            verify_calls.append((description, labels, default_repo))
+            return verify(
+                description,
+                labels,
+                default_repo="OmniNode-ai/omniclaude",
+                fetcher=_blocked,
+            )
+
+        monkeypatch.setattr(linear_done_verify, "verify", verify_with_blocked_pr)
+
+        rc = linear_done_verify.main()
+        captured = capsys.readouterr()
+
+        assert rc == 2
+        assert verify_calls == [("Done. Fixed in #202.", [], None)]
+        assert "Cannot mark Done" in captured.err
+        assert "#202: state=OPEN mergeState=BLOCKED" in captured.err
 
 
 class TestShellWrapperCancel:
