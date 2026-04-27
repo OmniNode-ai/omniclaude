@@ -443,6 +443,19 @@ repos:
         stages: [pre-commit]
         files: ^plugins/onex/skills/
 
+      # Skill backing-node liveness (OMN-10052) — blocks skill→node regressions.
+      # Fires when SKILL.md files or the validator/allowlist change.
+      # Set $OMNIMARKET_ROOT to the omnimarket repo root for local dev;
+      # CI checks out omnimarket into _omnimarket/ automatically.
+      - id: validate-skill-backing-node
+        name: Skill backing-node liveness (OMN-10052)
+        entry: bash scripts/uv-run-worktree-safe.sh python plugins/onex/skills/_lib/validate_skill_backing_node.py .
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/skills/.*/SKILL\.md|plugins/onex/skills/_lib/validate_skill_backing_node\.py|plugins/onex/skills/_lib/skill_backing_node_allowlist\.yaml)$
+
       # Skill hygiene (OMN-5200) — validates skill dir naming, structure, Python separation
       - id: skill-hygiene
         name: Skill Hygiene

@@ -1,0 +1,100 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+# Skill Backing-Node Liveness — ValidateSkillBackingNode gate [OMN-10052]
+#
+# Canonical CI gate for validate_skill_backing_node.py.
+# Required status check context: "Skill Backing Node / validate".
+#
+# Incident reference: 2026-04-27 — /onex:merge_sweep pointed at gutted
+# node_merge_sweep for hours; cron ticked every 5 min against non-existent
+# entrypoint. This gate blocks that class of regression.
+#
+# Two-step job:
+#   1. Unit pytest for the validator itself (regression guard for the gate).
+#   2. Repo self-scan: walks all SKILL.md files, verifies each declared
+#      backing node exists and has a live handler.  Checks out omnimarket
+#      as a sibling repo so the resolver can find nodes.
+#
+# The job runs on PRs that touch SKILL.md files, the validator, or the
+# allowlist, and on every merge_group event (required status check).
+
+name: Skill Backing Node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/onex/skills/**/*.md'
+      - 'plugins/onex/skills/_lib/validate_skill_backing_node.py'
+      - 'plugins/onex/skills/_lib/skill_backing_node_allowlist.yaml'
+      - 'tests/unit/skills/_lib/test_validate_skill_backing_node.py'
+      - '.github/workflows/validate-skill-backing-node.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'plugins/onex/skills/**/*.md'
+      - 'plugins/onex/skills/_lib/validate_skill_backing_node.py'
+      - 'plugins/onex/skills/_lib/skill_backing_node_allowlist.yaml'
+      - 'tests/unit/skills/_lib/test_validate_skill_backing_node.py'
+      - '.github/workflows/validate-skill-backing-node.yml'
+  merge_group:
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.6.1"
+
+concurrency:
+  group: skill-backing-node-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate
+    # OMNINODE_SELF_HOSTED_RUNS_ON_V1 — do not edit inline; update plan + all occurrences together
+    runs-on: >-
+      ${{
+        (vars.USE_SELF_HOSTED_RUNNERS == 'true' &&
+         (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch' ||
+          github.event_name == 'schedule'))
+        && fromJSON('["self-hosted","omnibase-ci"]')
+        || fromJSON('["ubuntu-latest"]')
+      }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout omniclaude
+        uses: actions/checkout@v6
+
+      - name: Checkout omnimarket
+        uses: actions/checkout@v6
+        with:
+          repository: OmniNode-ai/omnimarket
+          path: _omnimarket
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run ValidateSkillBackingNode unit tests
+        run: |
+          uv run pytest \
+            tests/unit/skills/_lib/test_validate_skill_backing_node.py \
+            -v
+
+      - name: Self-scan omniclaude skill backing nodes
+        # The validator probes _omnimarket/ (CI checkout layout) automatically.
+        # OMNIMARKET_ROOT is not needed here — the _omnimarket/ path is baked
+        # into _resolve_omnimarket_nodes_root() as the highest-priority probe.
+        run: uv run python plugins/onex/skills/_lib/validate_skill_backing_node.py .
