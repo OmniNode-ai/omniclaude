@@ -60,8 +60,7 @@ try:
     from omniclaude.hooks.topics import TopicBase as _TopicBase
 
     # Use DELEGATE_TASK — the canonical topic that node_delegation_orchestrator
-    # subscribes to (contract.yaml:39). DELEGATION_REQUEST now has the same value
-    # but DELEGATE_TASK is the semantically correct name going forward.
+    # subscribes to (contract.yaml:39). Aligned in OMN-10050.
     _DELEGATION_REQUEST_TOPIC: str = _TopicBase.DELEGATE_TASK
 except (ImportError, AttributeError):
     _DELEGATION_REQUEST_TOPIC = ""  # fallback; emit still works via event_type key

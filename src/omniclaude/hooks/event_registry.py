@@ -652,7 +652,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         event_type="delegate.task",
         fan_out=[
             FanOutRule(
-                topic_base=TopicBase.DELEGATION_REQUEST,
+                topic_base=TopicBase.DELEGATE_TASK,
                 transform=None,  # Passthrough — payload is already envelope-shaped
                 description="Delegation request command for node_delegation_orchestrator",
             ),

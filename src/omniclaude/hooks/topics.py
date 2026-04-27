@@ -444,21 +444,6 @@ class TopicBase(StrEnum):
     """Session status change event for coordination projectors."""
 
     # ==========================================================================
-    # Delegation pipeline command topics (OMN-7040)
-    # Thin /delegate skill publishes to this topic; consumed by
-    # node_delegation_orchestrator in omniclaude.
-    # ==========================================================================
-    # Historical name: "DELEGATION_REQUEST" — kept to avoid churn on any code
-    # that imports this constant by name. Value corrected in OMN-10050 to align
-    # with the consumer's canonical topic (onex.cmd.omniclaude.delegate-task.v1).
-    DELEGATION_REQUEST = "onex.cmd.omniclaude.delegate-task.v1"
-    """Command to request task delegation through the node-based pipeline.
-
-    Consumed by node_delegation_orchestrator (omniclaude/nodes/…/contract.yaml).
-    Topic ownership: omniclaude (orchestrator lives in this repo).
-    """
-
-    # ==========================================================================
     # Team lifecycle topics (OMN-7026)
     # Unified event schema for all dispatch surfaces (team_worker,
     # headless_claude, local_llm). Consumed by omnidash team timeline.
