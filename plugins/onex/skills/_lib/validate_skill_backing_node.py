@@ -393,8 +393,8 @@ def main(argv: list[str] | None = None) -> int:
     if args:
         repo_root = Path(args[0]).resolve()
     else:
-        # Default: three levels up from this file (plugins/onex/skills/_lib/).
-        repo_root = Path(__file__).resolve().parents[3]
+        # Default: four levels up from this file (plugins/onex/skills/_lib/).
+        repo_root = Path(__file__).resolve().parents[4]
 
     try:
         errors = scan(repo_root)
@@ -417,6 +417,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # Distinguish a true clean pass from a skipped run (omnimarket unavailable).
+    if not _omnimarket_available(repo_root):
+        # scan() already emitted the SKIPPED warning; don't print a false "OK".
+        return 0
 
     print(
         f"validate-skill-backing-node: OK — {_count_skills_checked(repo_root)} "

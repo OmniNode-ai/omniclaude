@@ -94,7 +94,8 @@ jobs:
             -v
 
       - name: Self-scan omniclaude skill backing nodes
-        # The validator probes _omnimarket/ (CI checkout layout) automatically.
-        # OMNIMARKET_ROOT is not needed here — the _omnimarket/ path is baked
-        # into _resolve_omnimarket_nodes_root() as the highest-priority probe.
+        # Pin OMNIMARKET_ROOT to the checked-out _omnimarket/ tree so an
+        # ambient $OMNI_HOME on self-hosted runners can never shadow it.
+        env:
+          OMNIMARKET_ROOT: _omnimarket
         run: uv run python plugins/onex/skills/_lib/validate_skill_backing_node.py .
