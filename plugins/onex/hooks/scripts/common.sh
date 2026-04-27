@@ -32,6 +32,12 @@
 BREW_PY="/opt/homebrew/bin/python3.13"
 export BREW_PY
 
+# Default path to the omniclaude event registry YAML (OMN-10117).
+# Consumers: session-start.sh daemon launcher, Task 14 launcher, Task 22 restart handler.
+# Override: set ONEX_EMIT_EVENT_REGISTRY before sourcing common.sh.
+: "${ONEX_EMIT_EVENT_REGISTRY:=${OMNI_HOME:-}/omniclaude/plugins/onex/lib/event_registry/omniclaude.yaml}"
+export ONEX_EMIT_EVENT_REGISTRY
+
 # Strict priority chain with NO fallbacks. If no valid Python is found,
 # hooks refuse to run. This prevents silent degradation where hooks run
 # against the wrong interpreter with missing dependencies.

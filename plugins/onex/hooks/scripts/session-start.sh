@@ -352,58 +352,16 @@ start_emit_daemon_if_needed() {
         fi
     fi
 
-    # Check if publisher module is available (omniclaude.publisher, OMN-1944)
-    if ! "$PYTHON_CMD" -c "import omniclaude.publisher" 2>/dev/null; then
-        # Fallback: try legacy omnibase_infra emit daemon
-        if "$PYTHON_CMD" -c "import omnibase_infra.runtime.emit_daemon" 2>/dev/null; then
-            log "Using legacy emit daemon (omnibase_infra)"
-            _start_legacy_emit_daemon
-            return $?
-        fi
-        log "Publisher module not available (omniclaude.publisher)"
+    # Check if omnimarket runner is available (OMN-10117: cutover from legacy publisher)
+    if ! env -u PYTHONPATH "$BREW_PY" -c "import omnimarket.nodes.node_emit_daemon" 2>/dev/null; then
+        log "Emit daemon module not available (omnimarket.nodes.node_emit_daemon)"
         return 0  # Non-fatal, continue without publisher
     fi
 
-    log "Starting publisher (omniclaude.publisher)..."
+    log "Starting emit daemon (omnimarket.nodes.node_emit_daemon)..."
 
-    # Ensure logs directory exists for publisher output
-    mkdir -p "${HOOKS_DIR}/logs"
-
-    # Pre-flight: verify omnibase_infra>=0.14.0 is installed. (OMN-3251)
-    # omnibase_infra==0.13.0 passes reconnect_backoff_ms to AIOKafkaProducer,
-    # which aiokafka==0.11.0 does not accept, causing the daemon to crash at
-    # startup and all extraction events to fail silently. The fix shipped in
-    # omnibase_infra==0.14.0. When a stale venv is detected we log a targeted
-    # error and skip daemon startup rather than letting it fail in the background.
-    local _oi_ok
-    _oi_ok="$("$PYTHON_CMD" -c "
-import importlib.metadata, sys
-try:
-    v = importlib.metadata.version('omnibase-infra')
-    parts = [int(x) for x in v.split('.')[:2]]
-    if parts >= [0, 14]:
-        print('ok')
-    else:
-        print('stale:' + v)
-except Exception as e:
-    print('unknown:' + str(e))
-" 2>/dev/null || echo "unknown:import-error")"
-
-    if [[ "$_oi_ok" == ok ]]; then
-        : # version is fine, proceed
-    elif [[ "$_oi_ok" == stale:* ]]; then
-        local _stale_ver="${_oi_ok#stale:}"
-        log "ERROR: omnibase_infra==${_stale_ver} in plugin venv is too old (need >=0.14.0). (OMN-3251)"
-        log "ERROR: The emit daemon will crash with: AIOKafkaProducer.__init__() got an unexpected keyword argument 'reconnect_backoff_ms'"
-        log "ERROR: All extraction events (context.utilization, agent.match, latency.breakdown) will be silently dropped."
-        log "FIX: Rebuild the plugin venv by reinstalling the plugin:"
-        log "FIX:   claude plugin uninstall onex@omninode-tools && claude plugin install onex@omninode-tools"
-        write_daemon_status "stale_dependency"
-        return 0  # Non-fatal: continue without publisher; hook still provides ticket context
-    else
-        log "WARNING: Could not verify omnibase_infra version (${_oi_ok}); proceeding with daemon startup"
-    fi
-    unset _oi_ok
+    # Ensure logs directory exists
+    mkdir -p "${ONEX_STATE_DIR}/hooks/logs"
 
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
@@ -413,11 +371,17 @@ except Exception as e:
         return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
     fi
 
-    # Start publisher in background, detached from this process (OMN-1944)
-    nohup "$PYTHON_CMD" -m omniclaude.publisher start \
-        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
-        ${KAFKA_SECONDARY_BOOTSTRAP_SERVERS:+--secondary-kafka-servers "$KAFKA_SECONDARY_BOOTSTRAP_SERVERS"} \
+    # Start omnimarket emit daemon in background, detached from this process (OMN-10117)
+    # Dual-bus (secondary cluster) publish is intentionally omitted: KAFKA_SECONDARY_BOOTSTRAP_SERVERS
+    # is unset in this environment and the omnimarket runner does not support it.
+    # Decision: accepted data-loss scope per OMN-10116 audit + OMN-10117 dispatch context.
+    nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
         --socket-path "$EMIT_DAEMON_SOCKET" \
+        --pid-path "$EMIT_DAEMON_PID_FILE" \
+        --kafka-bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --spool-dir "${ONEX_STATE_DIR}/event-spool" \
+        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
+        --log-path "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" \
         >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!

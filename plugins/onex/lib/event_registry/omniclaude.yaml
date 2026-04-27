@@ -1,0 +1,496 @@
+# Event Registry: OmniClaude Platform
+# Source: TopicBase enum (omniclaude/src/omniclaude/hooks/topics.py)
+#         and emitter files (plugins/onex/hooks/lib/*_emitter.py)
+# Used by: omnimarket.nodes.node_emit_daemon --event-registry
+#
+# Transform names reference callables in TRANSFORM_REGISTRY:
+#   - passthrough: no modification
+#   - strip_prompt: remove full prompt, keep preview + length
+#   - strip_body: remove body, keep preview + length
+
+---
+platform: omniclaude
+version: "1.0.0"
+description: "Event registry for OmniClaude Claude Code hooks"
+
+events:
+  # =========================================================================
+  # Session Events
+  # =========================================================================
+  session.started:
+    fan_out:
+      - topic: "onex.evt.omniclaude.session-started.v1"
+        description: "Session start event for observability"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  session.ended:
+    fan_out:
+      - topic: "onex.evt.omniclaude.session-ended.v1"
+        description: "Session end event for observability"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  session.outcome:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.session-outcome.v1"
+        description: "Session outcome for intelligence feedback loop"
+      - topic: "onex.evt.omniclaude.session-outcome.v1"
+        description: "Session outcome for dashboards and monitoring"
+    partition_key_field: session_id
+    required_fields: [session_id, outcome]
+
+  utilization.scoring.requested:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.utilization-scoring.v1"
+        description: "Utilization scoring command to omniintelligence"
+    partition_key_field: session_id
+    required_fields: [session_id, injected_pattern_ids]
+
+  # =========================================================================
+  # Prompt Events (Fan-out to TWO topics)
+  # =========================================================================
+  prompt.submitted:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+        description: "Full prompt to intelligence service for analysis"
+      - topic: "onex.evt.omniclaude.prompt-submitted.v1"
+        transform: strip_prompt
+        description: "Sanitized 100-char preview for observability"
+    partition_key_field: session_id
+    required_fields: [prompt_preview, session_id]
+
+  # =========================================================================
+  # Tool Events
+  # =========================================================================
+  tool.executed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.tool-executed.v1"
+        description: "Tool execution event for observability"
+    partition_key_field: session_id
+    required_fields: [tool_name, session_id]
+
+  # =========================================================================
+  # Routing Events
+  # =========================================================================
+  routing.feedback:
+    fan_out:
+      - topic: "onex.evt.omniclaude.routing-feedback.v1"
+        description: "Routing feedback for reinforcement learning"
+    partition_key_field: session_id
+    required_fields: [session_id, outcome, feedback_status]
+
+  routing.decision:
+    fan_out:
+      - topic: "onex.evt.omniclaude.routing-decision.v1"
+        description: "Routing decision event for observability"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  llm.routing.decision:
+    fan_out:
+      - topic: "onex.evt.omniclaude.llm-routing-decision.v1"
+        description: "LLM routing decision with determinism audit fields"
+    partition_key_field: session_id
+    required_fields: [session_id, selected_agent, routing_prompt_version]
+
+  llm.routing.fallback:
+    fan_out:
+      - topic: "onex.evt.omniclaude.llm-routing-fallback.v1"
+        description: "LLM routing fallback -- pipeline fell through to fuzzy matching"
+    partition_key_field: session_id
+    required_fields: [session_id, fallback_reason, routing_prompt_version]
+
+  # =========================================================================
+  # Injection and Context Events
+  # =========================================================================
+  injection.recorded:
+    fan_out:
+      - topic: "onex.evt.omniclaude.injection-recorded.v1"
+        description: "Injection tracking for A/B analysis"
+    partition_key_field: session_id
+    required_fields: [injection_id, session_id, cohort]
+
+  context.utilization:
+    fan_out:
+      - topic: "onex.evt.omniclaude.context-utilization.v1"
+        description: "Context utilization metrics"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  context.enrichment:
+    fan_out:
+      - topic: "onex.evt.omniclaude.context-enrichment.v1"
+        description: "Per-channel enrichment observability"
+    partition_key_field: session_id
+    required_fields: [session_id, channel]
+
+  # =========================================================================
+  # Agent Events
+  # =========================================================================
+  agent.match:
+    fan_out:
+      - topic: "onex.evt.omniclaude.agent-match.v1"
+        description: "Agent match metrics"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  agent.status:
+    fan_out:
+      - topic: "onex.evt.omniclaude.agent-status.v1"
+        description: "Agent lifecycle status"
+    partition_key_field: session_id
+    required_fields: [agent_name, session_id, state, message]
+
+  agent.chat.broadcast:
+    fan_out:
+      - topic: "onex.evt.omniclaude.agent-chat-broadcast.v1"
+        transform: strip_body
+        description: "Agent chat broadcast for multi-terminal coordination"
+    partition_key_field: session_id
+    required_fields: [session_id, agent_id, body]
+
+  # =========================================================================
+  # Latency and Phase Metrics
+  # =========================================================================
+  latency.breakdown:
+    fan_out:
+      - topic: "onex.evt.omniclaude.latency-breakdown.v1"
+        description: "Latency breakdown metrics"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  phase.metrics:
+    fan_out:
+      - topic: "onex.evt.omniclaude.phase-metrics.v1"
+        description: "Phase instrumentation metrics"
+    required_fields: [event_id, event_type, timestamp_iso, payload]
+
+  # =========================================================================
+  # Stop Hook Events
+  # =========================================================================
+  response.stopped:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.claude-hook-event.v1"
+        description: "Stop hook event for pattern learning trigger"
+    required_fields: [session_id, event_type]
+
+  # =========================================================================
+  # Notification Events
+  # =========================================================================
+  notification.blocked:
+    fan_out:
+      - topic: "onex.evt.omniclaude.notification-blocked.v1"
+        description: "Notification blocked event"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  notification.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.notification-completed.v1"
+        description: "Notification completed event"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  # =========================================================================
+  # Compliance and Enforcement
+  # =========================================================================
+  compliance.evaluate:
+    fan_out:
+      - topic: "onex.cmd.omniintelligence.compliance-evaluate.v1"
+        description: "Compliance evaluation request"
+    partition_key_field: session_id
+    required_fields: [session_id, source_path, applicable_patterns]
+
+  pattern.enforcement:
+    fan_out:
+      - topic: "onex.evt.omniclaude.pattern-enforcement.v1"
+        description: "Pattern enforcement evaluation result"
+    partition_key_field: session_id
+    required_fields: [session_id, correlation_id, timestamp, language, domain, pattern_name, outcome]
+
+  # =========================================================================
+  # Validator Catch (bash-guard, pre-commit, poly-enforcer)
+  # =========================================================================
+  validator.catch:
+    fan_out:
+      - topic: "onex.evt.omniclaude.validator-catch.v1"
+        description: "Validator blocked or caught an issue"
+    partition_key_field: session_id
+    required_fields: [session_id, validator_name, severity]
+
+  # =========================================================================
+  # Static Context Edit Detection
+  # =========================================================================
+  static.context.edit.detected:
+    fan_out:
+      - topic: "onex.evt.omniclaude.static-context-edit-detected.v1"
+        description: "Static context file change detected"
+    partition_key_field: session_id
+    required_fields: [session_id, changed_file_count]
+
+  # =========================================================================
+  # Delegation Events
+  # =========================================================================
+  task.delegated:
+    fan_out:
+      - topic: "onex.evt.omniclaude.task-delegated.v1"
+        description: "Task delegation event"
+    partition_key_field: session_id
+    required_fields: [session_id, correlation_id, task_type]
+
+  delegation.request:
+    fan_out:
+      - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
+        description: "Delegation request command"
+    partition_key_field: correlation_id
+    required_fields: [payload, correlation_id]
+
+  delegation.shadow.comparison:
+    fan_out:
+      - topic: "onex.evt.omniclaude.delegation-shadow-comparison.v1"
+        description: "Shadow validation comparison result"
+    partition_key_field: session_id
+    required_fields: [session_id, correlation_id]
+
+  intent.drift.detected:
+    fan_out:
+      - topic: "onex.evt.omniclaude.agent-action.v1"
+        description: "Intent drift detection event (legacy topic routing)"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  # =========================================================================
+  # Intent Binding
+  # =========================================================================
+  intent.commit.bound:
+    fan_out:
+      - topic: "onex.evt.omniclaude.intent-commit-bound.v1"
+        description: "Intent-to-commit binding record"
+    partition_key_field: session_id
+    required_fields: [commit_sha, session_id]
+
+  # =========================================================================
+  # ChangeFrame Events
+  # =========================================================================
+  change.frame.emitted:
+    fan_out:
+      - topic: "onex.evt.omniclaude.change-frame.v1"
+        description: "ChangeFrame emitted after JSONL persist"
+    partition_key_field: session_id
+    required_fields: [frame_id, trace_id, session_id]
+
+  # =========================================================================
+  # Skill Lifecycle Events
+  # =========================================================================
+  skill.started:
+    fan_out:
+      - topic: "onex.evt.omniclaude.skill-started.v1"
+        description: "Skill invocation started"
+    partition_key_field: run_id
+    required_fields: [run_id, skill_name, correlation_id]
+
+  skill.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.skill-completed.v1"
+        description: "Skill invocation completed"
+      - topic: "onex.evt.omniclaude.skill-invoked.v1"
+        description: "Skill invocation record for omnidash"
+    partition_key_field: run_id
+    required_fields: [run_id, skill_name, correlation_id, status]
+
+  skill.friction_recorded:
+    fan_out: []
+    partition_key_field: session_id
+    required_fields: [skill, session_id]
+
+  friction.observed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.friction-observed.v1"
+        description: "Friction observation event"
+    partition_key_field: session_id
+    required_fields: [session_id, surface, severity]
+
+  # =========================================================================
+  # Pipeline Observability Events
+  # =========================================================================
+  epic.run.updated:
+    fan_out:
+      - topic: "onex.evt.omniclaude.epic-run-updated.v1"
+        description: "Epic run state update"
+    partition_key_field: run_id
+    required_fields: [run_id, epic_id, status]
+
+  pr.watch.updated:
+    fan_out:
+      - topic: "onex.evt.omniclaude.pr-watch-updated.v1"
+        description: "PR watch state update"
+    partition_key_field: run_id
+    required_fields: [run_id, pr_number, repo, status]
+
+  gate.decision:
+    fan_out:
+      - topic: "onex.evt.omniclaude.gate-decision.v1"
+        description: "Slack gate decision outcome"
+    partition_key_field: gate_id
+    required_fields: [gate_id, decision, correlation_id]
+
+  budget.cap.hit:
+    fan_out:
+      - topic: "onex.evt.omniclaude.budget-cap-hit.v1"
+        description: "Token budget cap hit"
+    partition_key_field: run_id
+    required_fields: [run_id, tokens_used, tokens_budget]
+
+  circuit.breaker.tripped:
+    fan_out:
+      - topic: "onex.evt.omniclaude.circuit-breaker-tripped.v1"
+        description: "Kafka circuit breaker opened"
+    partition_key_field: session_id
+    required_fields: [session_id, failure_count, threshold]
+
+  # =========================================================================
+  # PR Validation
+  # =========================================================================
+  pr.validation.rollup:
+    fan_out:
+      - topic: "onex.evt.omniclaude.pr-validation-rollup.v1"
+        description: "PR validation rollup with VTS"
+    partition_key_field: run_id
+    required_fields: [run_id, ticket_id, model_id, metric_version]
+
+  # =========================================================================
+  # DoD Telemetry
+  # =========================================================================
+  dod.verify.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.dod-verify-completed.v1"
+        description: "DoD evidence verification run result"
+    partition_key_field: session_id
+    required_fields: [session_id, ticket_id]
+
+  dod.guard.fired:
+    fan_out:
+      - topic: "onex.evt.omniclaude.dod-guard-fired.v1"
+        description: "DoD completion guard interception"
+    partition_key_field: session_id
+    required_fields: [session_id, ticket_id]
+
+  dod.sweep.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.dod-sweep-completed.v1"
+        description: "DoD batch sweep result"
+    partition_key_field: run_id
+    required_fields: [run_id, overall_status, total_tickets]
+
+  # =========================================================================
+  # Evidence Write
+  # =========================================================================
+  evidence.written:
+    fan_out:
+      - topic: "onex.evt.omniclaude.evidence-written.v1"
+        description: "Evidence artifact written to disk"
+    partition_key_field: session_id
+    required_fields: [session_id, ticket_id]
+
+  # =========================================================================
+  # Correlation Trace
+  # =========================================================================
+  correlation.trace.span:
+    fan_out:
+      - topic: "onex.evt.omniclaude.correlation-trace.v1"
+        description: "Trace span event"
+    partition_key_field: trace_id
+    required_fields: [span_id, trace_id, session_id, span_kind, operation_name]
+
+  # =========================================================================
+  # Context Integrity Audit
+  # =========================================================================
+  audit.dispatch.validated:
+    fan_out:
+      - topic: "onex.evt.omniclaude.audit-dispatch-validated.v1"
+        description: "Task dispatch validation result"
+    partition_key_field: task_id
+    required_fields: [task_id, contract_id, agent_type]
+
+  audit.scope.violation:
+    fan_out:
+      - topic: "onex.evt.omniclaude.audit-scope-violation.v1"
+        description: "Scope boundary violation"
+    partition_key_field: task_id
+    required_fields: [task_id, violation_type, enforcement_action]
+
+  # =========================================================================
+  # Plan and Review Events
+  # =========================================================================
+  plan.review.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.plan-review-completed.v1"
+        description: "Plan review strategy run result"
+    partition_key_field: session_id
+    required_fields: [session_id, plan_file, total_rounds, final_status]
+
+  hostile.reviewer.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.hostile-reviewer-completed.v1"
+        description: "Multi-model hostile review aggregated result"
+    partition_key_field: pr_number
+    required_fields: [pr_number, repo, verdict]
+
+  hostile.reviewer.failed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.hostile-reviewer-failed.v1"
+        description: "Multi-model hostile review failure"
+    partition_key_field: pr_number
+    required_fields: [pr_number, repo]
+
+  # =========================================================================
+  # Coordination Events
+  # =========================================================================
+  coordination.signal:
+    fan_out:
+      - topic: "onex.evt.omniclaude.session-coordination-signal.v1"
+        description: "Coordination signal for session registry"
+    partition_key_field: session_id
+    required_fields: [session_id, signal_type, task_id]
+
+  # =========================================================================
+  # Team Lifecycle Events
+  # =========================================================================
+  team.task.assigned:
+    fan_out:
+      - topic: "onex.evt.omniclaude.team-task-assigned.v1"
+        description: "Team task assignment"
+    partition_key_field: session_id
+    required_fields: [session_id]
+
+  team.task.progress:
+    fan_out:
+      - topic: "onex.evt.omniclaude.team-task-progress.v1"
+        description: "Team task progress update"
+    partition_key_field: session_id
+    required_fields: [session_id, task_id]
+
+  team.task.completed:
+    fan_out:
+      - topic: "onex.evt.omniclaude.team-task-completed.v1"
+        description: "Team task completion"
+    partition_key_field: session_id
+    required_fields: [session_id, task_id]
+
+  team.evidence.written:
+    fan_out:
+      - topic: "onex.evt.omniclaude.team-evidence-written.v1"
+        description: "Team evidence artifact written"
+    partition_key_field: session_id
+    required_fields: [session_id, task_id]
+
+  # =========================================================================
+  # Hook Health
+  # =========================================================================
+  hook.health.error:
+    fan_out:
+      - topic: "onex.evt.omniclaude.hook-health-error.v1"
+        description: "Structured hook error event"
+    partition_key_field: session_id
+    required_fields: [hook_name, error_tier, error_category, session_id]
