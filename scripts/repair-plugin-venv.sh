@@ -11,13 +11,23 @@
 # Usage:
 #   bash scripts/repair-plugin-venv.sh
 #
-# [OMN-7101]
+# [OMN-7101] [OMN-10112]
 
 set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
+
+# Pinned interpreter — macOS LAN grant is per-binary; brew python3.13 has the grant;
+# uv-managed ad-hoc Pythons do not surface a dialog and cannot be granted.
+BREW_PYTHON="/opt/homebrew/bin/python3.13"
+
+if [[ ! -x "$BREW_PYTHON" ]]; then
+    echo -e "${RED}Error: $BREW_PYTHON not found or not executable.${NC}" >&2
+    echo -e "${RED}Install via: brew install python@3.13${NC}" >&2
+    exit 1
+fi
 
 # Resolve repo root (this script lives in <repo>/scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,8 +44,16 @@ if ! command -v uv &>/dev/null; then
     exit 1
 fi
 
-echo "Rebuilding plugin venv at ${LIB_DIR}/.venv ..."
+# Remove hollow or stale .venv before recreating — uv refuses to rebuild over an
+# empty directory that was created by a different Python version.
+if [[ -d "${LIB_DIR}/.venv" ]]; then
+    echo "Removing stale .venv at ${LIB_DIR}/.venv ..."
+    rm -rf "${LIB_DIR}/.venv"
+fi
+
+echo "Rebuilding plugin venv at ${LIB_DIR}/.venv (python: $BREW_PYTHON) ..."
 cd "$REPO_ROOT"
+uv venv --python "$BREW_PYTHON" "${LIB_DIR}/.venv"
 UV_PROJECT_ENVIRONMENT="${LIB_DIR}/.venv" uv sync --frozen --no-dev
 
 # Smoke test
