@@ -70,16 +70,41 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Checking Bash command safety" >> "$LOG_FILE"
 
 # ---------------------------------------------------------------------------
-# Worktree path enforcement (OMN-7018)
+# Worktree path enforcement (OMN-7018, OMN-9896)
+#
 # Phase 1: supports only common `git worktree add <path> [-b <branch>]` form.
 # Unsupported flag/order variants (--lock, --detach, flags before path) trigger
 # conservative block until argument parsing is hardened.
+#
+# Configuration (OMN-9896):
+#   ONEX_WORKTREE_GUARD   off|disabled|0  → guard short-circuits, no enforcement.
+#                         Use this if you are running this plugin outside the
+#                         OmniNode workspace (alpha testers, non-OmniNode work).
+#   ONEX_WORKTREES_ROOT   absolute path   → override canonical worktree root.
+#   OMNI_WORKTREES_DIR    absolute path   → legacy alias (Python guard parity).
+#   OMNI_HOME             absolute path   → required when neither override is
+#                         set; canonical root resolves to "$OMNI_HOME/omni_worktrees".
+#                         Fail-fast: missing OMNI_HOME with no override blocks
+#                         with an actionable error rather than silently picking
+#                         a wrong default (omni_home CLAUDE.md rule #8).
 # ---------------------------------------------------------------------------
 CMD=$(echo "$TOOL_INFO" | jq -er '.tool_input.command // empty' 2>/dev/null || true)
 # Strip single- and double-quoted strings before checking for git worktree add
 # to avoid false positives on commit messages, grep patterns, etc.
 CMD_UNQUOTED=$(echo "$CMD" | sed -E "s/\"([^\"\\\\]|\\\\.)*\"//g; s/'[^']*'//g")
 if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
+    # Per-hook opt-out (OMN-9896): allow alpha testers / non-OmniNode users to
+    # disable the worktree guard without resorting to the global hook
+    # kill-switch (OMNICLAUDE_HOOKS_DISABLE).
+    case "${ONEX_WORKTREE_GUARD:-}" in
+        off|OFF|disabled|DISABLED|0|false|FALSE)
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Worktree guard disabled via ONEX_WORKTREE_GUARD=${ONEX_WORKTREE_GUARD}" >> "$LOG_FILE"
+            _hook_status "PASS" "worktree guard disabled (ONEX_WORKTREE_GUARD=${ONEX_WORKTREE_GUARD})" "0"
+            echo "$TOOL_INFO"
+            exit 0
+            ;;
+    esac
+
     # Extract the first non-flag argument after "add" as the path.
     # Strip only backslash+newline continuations (not all backslashes) so
     # multi-line commands parse cleanly without corrupting path characters.
@@ -97,19 +122,37 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
         [[ "$_token" == "add" ]] && _in_add=true
     done
 
-    CANONICAL_ROOT="${ONEX_WORKTREES_ROOT:-/Volumes/PRO-G40/Code/omni_worktrees}"  # local-path-ok: override via ONEX_WORKTREES_ROOT for non-primary machines
+    # Resolve canonical worktree root. Order:
+    #   1. ONEX_WORKTREES_ROOT (explicit override)
+    #   2. OMNI_WORKTREES_DIR (legacy alias; mirrors Python bash_guard.py)
+    #   3. $OMNI_HOME/omni_worktrees (fail-fast on unset OMNI_HOME)
+    if [[ -n "${ONEX_WORKTREES_ROOT:-}" ]]; then
+        CANONICAL_ROOT="${ONEX_WORKTREES_ROOT%/}"
+    elif [[ -n "${OMNI_WORKTREES_DIR:-}" ]]; then
+        CANONICAL_ROOT="${OMNI_WORKTREES_DIR%/}"
+    elif [[ -n "${OMNI_HOME:-}" ]]; then
+        CANONICAL_ROOT="${OMNI_HOME%/}/omni_worktrees"
+    else
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: cannot resolve worktree root — OMNI_HOME unset and no ONEX_WORKTREES_ROOT override" >> "$LOG_FILE"
+        _hook_status "BLOCKED" "worktree root unresolvable (OMNI_HOME unset)" "0"
+        jq -n --arg reason "BLOCKED: cannot resolve canonical worktree root. Set OMNI_HOME (preferred), set ONEX_WORKTREES_ROOT, or disable this guard with ONEX_WORKTREE_GUARD=off if you are not working in the OmniNode workspace." \
+            '{"decision": "block", "reason": $reason}'
+        trap - EXIT
+        exit 2
+    fi
+
     if [[ -z "$WORKTREE_PATH" ]]; then
         # Could not parse path — fail closed
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Could not parse worktree path from command" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree path unparseable" "0"
-        jq -n --arg reason "BLOCKED: Could not parse worktree path from command. Use: git worktree add <path> [-b <branch>]" \
+        jq -n --arg reason "BLOCKED: Could not parse worktree path from command. Use: git worktree add <path> [-b <branch>]. To disable this guard set ONEX_WORKTREE_GUARD=off." \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
         exit 2
     elif [[ "$WORKTREE_PATH" != "$CANONICAL_ROOT"/* ]]; then
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $WORKTREE_PATH" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree path outside canonical root" "0"
-        jq -n --arg reason "BLOCKED: Worktrees must be created under $CANONICAL_ROOT. Got: $WORKTREE_PATH" \
+        jq -n --arg reason "BLOCKED: Worktrees must be created under $CANONICAL_ROOT. Got: $WORKTREE_PATH. To use a different root set ONEX_WORKTREES_ROOT, or to disable this guard entirely set ONEX_WORKTREE_GUARD=off (alpha testers / non-OmniNode users)." \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
         exit 2
