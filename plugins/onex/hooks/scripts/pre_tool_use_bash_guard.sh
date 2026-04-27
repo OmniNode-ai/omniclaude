@@ -5,6 +5,7 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+HOOK_ORIGINAL_CWD="$(pwd -P 2>/dev/null || pwd)"
 
 # Ensure stable CWD before any Python invocation.
 # The session CWD may be on an external drive that disconnects/remounts;
@@ -149,10 +150,15 @@ if echo "$CMD_UNQUOTED" | grep -qE 'git\s+worktree\s+add'; then
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
         exit 2
-    elif [[ "$WORKTREE_PATH" != "$CANONICAL_ROOT"/* ]]; then
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $WORKTREE_PATH" >> "$LOG_FILE"
+    fi
+
+    NORMALIZED_ROOT="$("$PYTHON_CMD" -c 'import os, sys; print(os.path.abspath(os.path.normpath(sys.argv[1])))' "$CANONICAL_ROOT")"
+    NORMALIZED_WORKTREE="$("$PYTHON_CMD" -c 'import os, sys; base, path = sys.argv[1:3]; target = path if os.path.isabs(path) else os.path.join(base, path); print(os.path.abspath(os.path.normpath(target)))' "$HOOK_ORIGINAL_CWD" "$WORKTREE_PATH")"
+
+    if [[ "$NORMALIZED_WORKTREE" != "$NORMALIZED_ROOT"/* ]]; then
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] BLOCKED: Worktree path outside canonical root: $NORMALIZED_WORKTREE" >> "$LOG_FILE"
         _hook_status "BLOCKED" "worktree path outside canonical root" "0"
-        jq -n --arg reason "BLOCKED: Worktrees must be created under $CANONICAL_ROOT. Got: $WORKTREE_PATH. To use a different root set ONEX_WORKTREES_ROOT, or to disable this guard entirely set ONEX_WORKTREE_GUARD=off (alpha testers / non-OmniNode users)." \
+        jq -n --arg reason "BLOCKED: Worktrees must be created under $NORMALIZED_ROOT. Got: $NORMALIZED_WORKTREE. To use a different root set ONEX_WORKTREES_ROOT, or to disable this guard entirely set ONEX_WORKTREE_GUARD=off (alpha testers / non-OmniNode users)." \
             '{"decision": "block", "reason": $reason}'
         trap - EXIT
         exit 2

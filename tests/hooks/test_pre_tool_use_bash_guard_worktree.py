@@ -34,6 +34,7 @@ def _run_hook(
     *,
     env_overrides: dict[str, str | None] | None = None,
     sandbox_home: Path | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Invoke the shell hook with *command* on stdin and return the completed process.
 
@@ -53,8 +54,8 @@ def _run_hook(
     env["CLAUDE_PLUGIN_ROOT"] = str(REPO_ROOT / "plugins" / "onex")
     if sandbox_home is not None:
         env["HOME"] = str(sandbox_home)
-        # Keep ONEX_STATE_DIR pointing somewhere writable; default to sandbox.
-        env.setdefault("ONEX_STATE_DIR", str(sandbox_home / ".onex_state"))
+        # Keep ONEX_STATE_DIR pointing somewhere writable in the sandbox.
+        env["ONEX_STATE_DIR"] = str(sandbox_home / ".onex_state")
     if env_overrides:
         for key, value in env_overrides.items():
             if value is None:
@@ -71,6 +72,7 @@ def _run_hook(
         timeout=30,
         check=False,
         env=env,
+        cwd=cwd,
     )
 
 
@@ -187,6 +189,46 @@ class TestWorktreeGuardRootResolution:
         assert "BLOCKED" in body
         assert str(omni_home / "omni_worktrees") in body, (
             f"Block reason should name the resolved canonical root.\nGot: {body}"
+        )
+
+    def test_blocks_dotdot_escape_from_canonical_root(
+        self, tmp_path: Path, sandbox_home: Path
+    ) -> None:
+        """Normalized containment blocks paths that escape with ``..``."""
+        root = tmp_path / "wt"
+        result = _run_hook(
+            f"git worktree add {root}/../outside/repo -b feat/x",
+            env_overrides={
+                "ONEX_WORKTREES_ROOT": str(root),
+                "OMNI_WORKTREES_DIR": None,
+                "ONEX_WORKTREE_GUARD": None,
+            },
+            sandbox_home=sandbox_home,
+        )
+        assert result.returncode == 2
+        body = result.stdout
+        assert str(tmp_path / "outside" / "repo") in body
+        assert str(root) in body
+
+    def test_allows_relative_path_resolved_from_original_cwd(
+        self, tmp_path: Path, sandbox_home: Path
+    ) -> None:
+        """Relative worktree paths resolve against the cwd before the hook cd's home."""
+        root = tmp_path / "wt"
+        root.mkdir()
+        result = _run_hook(
+            "git worktree add wt/OMN-1/repo -b feat/x",
+            env_overrides={
+                "ONEX_WORKTREES_ROOT": str(root),
+                "OMNI_WORKTREES_DIR": None,
+                "ONEX_WORKTREE_GUARD": None,
+            },
+            sandbox_home=sandbox_home,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, (
+            f"Relative path under normalized root should pass.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
     def test_explicit_override_wins_over_omni_home(
