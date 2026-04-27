@@ -1,15 +1,6 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Tests for post_tool_use_auto_hostile_review.sh subagent-awareness [OMN-9268].
-
-When `gh pr create` runs under a Task()-spawned sub-agent session, the hook
-must NOT demand an Agent() dispatch (sub-agents cannot call Agent()). Instead
-it must emit an advisory for `--gate-only` mode, which invokes the review
-path directly without any further agent spawn.
-
-Lead-session behavior (no sub-agent marker) is unchanged: the advisory still
-points at `--gate`/`Agent()`-capable invocation.
-"""
+"""Tests for post_tool_use_auto_hostile_review.sh disable behavior [OMN-10111]."""
 
 from __future__ import annotations
 
@@ -72,24 +63,20 @@ def _env(tmp_path: Path) -> dict[str, str]:
 
 @pytest.mark.unit
 def test_lead_session_emits_gate_advisory(tmp_path: Path) -> None:
-    """Without a sub-agent marker, the advisory points at Agent()-capable --gate."""
+    """Without a sub-agent marker, the disabled hook emits no advisory."""
     session_id = f"lead-{uuid4()}"
     env = _env(tmp_path)
     proc = _run(_pr_create_payload(session_id), env)
     assert proc.returncode == 0, proc.stderr
-    # Advisory body lives in hookSpecificOutput.additionalContext.
     data = json.loads(proc.stdout)
     advisory = data.get("hookSpecificOutput", {}).get("additionalContext", "")
-    assert "hostile_reviewer" in advisory
-    # Lead advisory references the full gate path.
-    assert "--gate" in advisory
-    # Lead advisory MUST NOT push --gate-only (that is the sub-agent path).
-    assert "--gate-only" not in advisory
+    assert advisory == ""
+    assert "hostile_reviewer disabled per OMN-10111" in proc.stderr
 
 
 @pytest.mark.unit
 def test_subagent_marker_emits_gate_only_advisory(tmp_path: Path) -> None:
-    """With a sub-agent marker, the advisory points at --gate-only (no Agent() spawn)."""
+    """With a sub-agent marker, the disabled hook still emits no advisory."""
     session_id = f"subagent-{uuid4()}"
     env = _env(tmp_path)
     # Write the sub-agent marker that subagent-start.sh would produce.
@@ -109,13 +96,8 @@ def test_subagent_marker_emits_gate_only_advisory(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     data = json.loads(proc.stdout)
     advisory = data.get("hookSpecificOutput", {}).get("additionalContext", "")
-    assert "hostile_reviewer" in advisory
-    # Sub-agent advisory MUST point at --gate-only.
-    assert "--gate-only" in advisory
-    # Sub-agent advisory MUST NOT instruct an Agent()/Task() dispatch.
-    lowered = advisory.lower()
-    assert "agent(" not in lowered, advisory
-    assert "task(" not in lowered, advisory
+    assert advisory == ""
+    assert "hostile_reviewer disabled per OMN-10111" in proc.stderr
 
 
 @pytest.mark.unit

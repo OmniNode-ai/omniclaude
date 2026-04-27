@@ -367,10 +367,10 @@ def test_emit_result_calls_emit_fn_with_correct_event_type() -> None:
 
 
 @pytest.mark.unit
-def test_cli_invocation_exits_zero_on_all_models_failed(
+def test_cli_invocation_reports_disabled_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Script always exits 0 even when all models fail — degraded state is in JSON."""
+    """Direct CLI invocation exits non-zero with structured disabled status."""
     import subprocess
     import sys
 
@@ -389,9 +389,13 @@ def test_cli_invocation_exits_zero_on_all_models_failed(
         check=False,
         env={**dict(__import__("os").environ), "PATH": ""},
     )
-    assert result.returncode == 0, (
-        f"Script must exit 0 even on failure, got {result.returncode}"
-    )
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "status": "disabled",
+        "reason": "hostile_reviewer disabled pending eval framework validation per OMN-10111",
+        "ticket": "OMN-10111",
+    }
 
 
 @pytest.mark.unit
