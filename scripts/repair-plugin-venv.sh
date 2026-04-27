@@ -46,7 +46,7 @@ fi
 
 # Remove hollow or stale .venv before recreating — uv refuses to rebuild over an
 # empty directory that was created by a different Python version.
-if [[ -d "${LIB_DIR}/.venv" ]]; then
+if [[ -e "${LIB_DIR}/.venv" || -L "${LIB_DIR}/.venv" ]]; then
     echo "Removing stale .venv at ${LIB_DIR}/.venv ..."
     rm -rf "${LIB_DIR}/.venv"
 fi

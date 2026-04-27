@@ -21,6 +21,9 @@ def test_repair_script_handles_hollow_dir():
     assert "rm -rf" in script and ".venv" in script, (
         "script must rm -rf hollow .venv before recreating (uv refuses to rebuild over empty dir)"
     )
+    assert '[[ -e "${LIB_DIR}/.venv" || -L "${LIB_DIR}/.venv" ]]' in script, (
+        "script must remove stale .venv paths even when they are regular files or dangling symlinks"
+    )
 
 
 def test_repair_script_fails_fast_if_python_missing():
