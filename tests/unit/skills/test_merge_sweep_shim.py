@@ -4,7 +4,7 @@
 
 Validates that the merge_sweep skill contains no inline GH script fallback,
 no direct Kafka publish, no orchestration logic, and dispatches through the
-PR lifecycle orchestrator module CLI.
+manifest-canonical onex run-node path.
 """
 
 from __future__ import annotations
@@ -73,7 +73,10 @@ class TestMergeSweepSkillMd:
 
     def test_skill_md_has_dispatch_command(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
+        assert "onex run-node node_pr_lifecycle_orchestrator" in content
+        assert (
+            "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" not in content
+        )
 
     def test_skill_md_declares_nonzero_exit_passthrough(self) -> None:
         """Dispatch-only shims must surface backing command failures."""
@@ -108,7 +111,10 @@ class TestMergeSweepPromptMd:
 
     def test_prompt_md_dispatches_to_node(self) -> None:
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
+        assert "onex run-node node_pr_lifecycle_orchestrator" in content
+        assert (
+            "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" not in content
+        )
 
     def test_prompt_md_no_inline_orchestration(self) -> None:
         """Prompt must not contain inline per-repo or per-PR orchestration."""
@@ -143,14 +149,13 @@ class TestMergeSweepPromptMd:
         assert "from openai" not in content
 
     def test_prompt_md_single_dispatch(self) -> None:
-        """A4 invariant: exactly one module CLI dispatch to pr_lifecycle."""
+        """A4 invariant: exactly one runtime-backed dispatch to pr_lifecycle."""
         content = (SKILL_DIR / "prompt.md").read_text()
         matches = re.findall(
-            r"python\s+-m\s+omnimarket\.nodes\.node_pr_lifecycle_orchestrator",
-            content,
+            r"onex\s+run-node\s+node_pr_lifecycle_orchestrator", content
         )
         assert len(matches) == 1, (
-            f"Expected exactly 1 module CLI dispatch, found {len(matches)}"
+            f"Expected exactly 1 onex run-node dispatch, found {len(matches)}"
         )
 
     def test_prompt_md_surfaces_nonzero_exit_passthrough(self) -> None:
