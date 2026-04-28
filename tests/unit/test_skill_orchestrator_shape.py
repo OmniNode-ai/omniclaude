@@ -41,17 +41,27 @@ def test_shim_template_exists_and_declares_required_sections() -> None:
 
 
 def test_shim_template_forbids_inline_executable_code() -> None:
-    """Template must not contain executable Python/shell code blocks."""
+    """Template must not contain executable Python/shell code blocks.
+
+    Detects both backtick (```) and tilde (~~~) fences; tolerates leading
+    indentation and case-insensitive language IDs so the gate cannot be
+    bypassed by `   ```BASH`.
+    """
     template = _TEMPLATE_PATH.read_text()
     in_fence = False
+    fence_delim = ""
     fence_lang = ""
-    for line in template.splitlines():
-        if line.startswith("```"):
+    for raw_line in template.splitlines():
+        line = raw_line.lstrip()
+        if line.startswith(("```", "~~~")):
+            delim = line[:3]
             if not in_fence:
                 in_fence = True
-                fence_lang = line[3:].strip()
-            else:
+                fence_delim = delim
+                fence_lang = line[3:].strip().split(maxsplit=1)[0].lower()
+            elif delim == fence_delim:
                 in_fence = False
+                fence_delim = ""
                 fence_lang = ""
             continue
         if in_fence and fence_lang in ("python", "bash", "sh", "shell"):
