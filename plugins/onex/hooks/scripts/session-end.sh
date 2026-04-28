@@ -863,13 +863,11 @@ else
 fi
 if [[ "$_other_claude_sessions" -le 1 ]]; then
     # 1 or fewer = only this session (pgrep -x never matches itself); safe to stop
-    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
-        # Fallback: try legacy daemon stop
-        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
-    }
-    log "Publisher stop signal sent (last session)"
+    env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon stop \
+        --pid-path "$EMIT_DAEMON_PID_FILE" >> "$LOG_FILE" 2>&1 || true
+    log "Emit daemon stop signal sent (last session)"
 else
-    log "Publisher kept alive (${_other_claude_sessions} Claude processes still running)"
+    log "Emit daemon kept alive (${_other_claude_sessions} Claude processes still running)"
 fi
 
 log "SessionEnd hook completed"
