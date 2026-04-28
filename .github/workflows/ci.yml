@@ -2298,7 +2298,7 @@ jobs:
 
       - name: Trivy vulnerability scanner (SARIF)
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.34.2 (pinned 2026-03-04)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'sarif'
@@ -2314,7 +2314,7 @@ jobs:
 
       - name: Trivy vulnerability scanner (table)
         if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.34.2 (pinned 2026-03-04)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.34.2 (pinned 2026-03-04)
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'
