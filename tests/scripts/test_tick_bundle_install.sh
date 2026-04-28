@@ -88,6 +88,24 @@ if echo "${BUILDLOOP_PROG_ARGS}" | grep -q "cron-buildloop.sh"; then
 fi
 pass "buildloop template correctly invokes cron-closeout.sh --build-only"
 
+# --- Test 3b: merge-sweep source quarantine is removed ----------------------
+MERGE_SWEEP_TMPL="${LAUNCHD_SRC}/ai.omninode.merge-sweep.plist"
+[ -f "${MERGE_SWEEP_TMPL}" ] || fail "merge-sweep template missing at ${MERGE_SWEEP_TMPL}"
+if awk '
+  /<key>Disabled<\/key>/ {
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<true\/>/) { found=1; exit }
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<false\/>/) { pending=0; next }
+    pending=1
+    next
+  }
+  pending && /<true\/>/ { found=1; exit }
+  pending && /<false\/>/ { pending=0; next }
+  END { exit(found ? 0 : 1) }
+' "${MERGE_SWEEP_TMPL}"; then
+  fail "merge-sweep launchd template must not be Disabled=true after SEAM-5b repair"
+fi
+pass "merge-sweep launchd template is source-enabled"
+
 # --- Test 4: disabled plists are skipped without load/install ---------------
 TMPDIR_SANDBOX="$(mktemp -d)"
 trap 'rm -rf "${TMPDIR_SANDBOX}"' EXIT

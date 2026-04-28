@@ -1,14 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Integration-level contract tests for the merge-sweep thin shim (v6.1.0).
+"""Integration-level contract tests for the merge-sweep thin shim (v7.0.0).
 
-The skill was rewritten under OMN-8752 from a publish-monitor trigger that
-owned an inline `kcat -P` + `ModelEventEnvelope` Kafka publish and a
-`result.json` poll loop into a pure dispatch-only shim that forwards every
-argument to `node_merge_sweep_triage_orchestrator` in omnimarket via
-`uv run onex run-node`. v6.1.0 (OMN-9884) repoints the shim at the
-post-decomposition orchestrator after the legacy `node_merge_sweep/`
-directory was gutted.
+The skill now builds a contract-canonical
+`ModelEventEnvelope[ModelPrLifecycleStartCommand]` and invokes
+`python -m omnimarket.nodes.node_pr_lifecycle_orchestrator --input`.
 
 These tests ride alongside `tests/unit/skills/test_merge_sweep_shim.py` and
 assert the same invariants at integration scope so the
@@ -64,9 +60,9 @@ class TestSkillMdIsThinShim:
     def test_skill_md_exists(self) -> None:
         assert _MERGE_SWEEP_SKILL.exists()
 
-    def test_skill_md_version_is_v6(self) -> None:
+    def test_skill_md_version_is_v7(self) -> None:
         fm = _frontmatter(_read(_MERGE_SWEEP_SKILL))
-        assert fm["version"] == "6.1.0"
+        assert fm["version"] == "7.0.0"
 
     def test_skill_md_tagged_dispatch_only(self) -> None:
         fm = _frontmatter(_read(_MERGE_SWEEP_SKILL))
@@ -76,16 +72,16 @@ class TestSkillMdIsThinShim:
 
     def test_skill_md_references_backing_node(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
-        assert "node_merge_sweep" in content
+        assert "node_pr_lifecycle_orchestrator" in content
         assert "omnimarket" in content
 
     def test_skill_md_has_dispatch_command(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
-        assert "onex run-node node_merge_sweep" in content
+        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
 
-    def test_skill_md_surfaces_skill_routing_error(self) -> None:
+    def test_skill_md_surfaces_nonzero_exit_passthrough(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
-        assert "SkillRoutingError" in content
+        assert "non-zero exits" in content
         assert "do not produce prose" in content.lower()
 
     def test_skill_md_no_inline_gh_script(self) -> None:
@@ -97,24 +93,20 @@ class TestSkillMdIsThinShim:
     def test_skill_md_no_direct_kafka_publish(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
         assert "kcat -P" not in content
-        assert "ModelEventEnvelope" not in content
+        assert "kcat " not in content
 
     def test_skill_md_preserves_v3x_cli_surface(self) -> None:
         fm = _frontmatter(_read(_MERGE_SWEEP_SKILL))
         args = fm.get("args") or []
         arg_names = {a["name"] for a in args if isinstance(a, dict)}
-        # Spot-check the v3.x+ flags the operator surface depends on.
+        # Spot-check the v7 command fields the operator surface depends on.
         for required in (
             "--repos",
             "--dry-run",
-            "--merge-method",
-            "--skip-polish",
-            "--authors",
-            "--since",
-            "--resume",
             "--inventory-only",
             "--fix-only",
             "--merge-only",
+            "--max-parallel-polish",
             "--enable-auto-rebase",
             "--use-dag-ordering",
             "--enable-trivial-comment-resolution",
@@ -142,19 +134,21 @@ class TestPromptMdIsThinShim:
 
     def test_prompt_md_dispatches_to_node(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
-        assert "onex run-node node_merge_sweep" in content
+        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
 
     def test_prompt_md_single_dispatch(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
-        matches = re.findall(r"onex\s+run-node\s+node_merge_sweep", content)
+        matches = re.findall(
+            r"python\s+-m\s+omnimarket\.nodes\.node_pr_lifecycle_orchestrator",
+            content,
+        )
         assert len(matches) == 1, (
-            f"Expected exactly 1 onex run-node dispatch, found {len(matches)}"
+            f"Expected exactly 1 module CLI dispatch, found {len(matches)}"
         )
 
     def test_prompt_md_no_inline_orchestration(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
         assert "kcat -P" not in content
-        assert "ModelEventEnvelope" not in content
         assert "result.json" not in content
         assert "poll_interval" not in content
 
@@ -184,22 +178,20 @@ class TestPromptMdIsThinShim:
         assert "subprocess.run" not in content
         assert "subprocess.Popen" not in content
 
-    def test_prompt_md_surfaces_skill_routing_error(self) -> None:
+    def test_prompt_md_surfaces_nonzero_exit_passthrough(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
-        assert "SkillRoutingError" in content
-        assert "do not produce prose" in content.lower()
+        assert "exits non-zero" in content
+        assert "stop" in content.lower()
 
     def test_prompt_md_preserves_cli_args(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
         for flag in (
             "--repos",
             "--dry-run",
-            "--merge-method",
-            "--skip-polish",
-            "--authors",
-            "--since",
-            "--resume",
             "--inventory-only",
+            "--fix-only",
+            "--merge-only",
+            "--max-parallel-polish",
             "--enable-admin-merge-fallback",
             "--verify",
         ):
@@ -210,7 +202,7 @@ class TestPromptMdIsThinShim:
         line_count = len(content.splitlines())
         assert line_count <= 100, (
             f"Thin shim must be <= 100 lines, got {line_count}. "
-            f"If the skill is growing logic, move it into node_merge_sweep."
+            "If the skill is growing logic, move it into the backing node."
         )
 
     def test_prompt_md_no_claim_registry(self) -> None:
