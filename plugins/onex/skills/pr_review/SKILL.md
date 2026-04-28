@@ -29,30 +29,26 @@ args:
 
 ## Node Dispatch
 
-This skill delegates to `node_pr_review_bot` in omnimarket.
+This skill delegates to the manifest-declared `node_pr_review_bot` runtime path.
 
 ### Invocation
 
-```python
-from omnimarket.nodes.node_pr_review_bot.workflow_runner import run_review
-
-result = run_review(
-    pr_number=<pr_number>,
-    repo="<owner/repo>",
-    dry_run=False,  # set True to skip posting to GitHub
-)
-# result.verdict.verdict: "clean" | "risks_noted" | "blocking_issue"
-# result.verdict.total_findings, result.verdict.threads_posted
-# result.final_state.current_phase
+```bash
+uv run onex run-node node_pr_review_bot --input '{
+  "pr_number": <pr_number>,
+  "repo": "<owner/repo>",
+  "dry_run": false
+}'
 ```
+
+On non-zero exit, surface the `SkillRoutingError` JSON envelope directly; do not produce prose.
 
 ### Architecture
 
 ```
-SKILL.md   -> thin shell (this file)
-node       -> omnimarket/src/omnimarket/nodes/node_pr_review_bot/ (FSM + handlers)
-runner     -> node_pr_review_bot/workflow_runner.py (run_review entry point)
-contract   -> node_pr_review_bot/contract.yaml
+SKILL.md   -> thin runtime-backed skill surface
+node       -> onex run-node node_pr_review_bot
+contract   -> node_pr_review_bot
 ```
 
 ---
@@ -123,7 +119,7 @@ EOF
 > **Removed:** The general-purpose/bash flow described in previous versions of
 > this skill has been superseded by the `node_pr_review_bot` node-dispatch contract
 > (see **Node Dispatch** section above). The authoritative runtime is
-> `omnimarket.nodes.node_pr_review_bot` via `run_review`. Do not use the
+> `onex run-node node_pr_review_bot`. Do not use the
 > general-purpose or bash-script paths for new invocations.
 
 ## Skills Available
