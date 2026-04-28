@@ -39,22 +39,43 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 import yaml
 
-SEVERITY_WARNING = "WARNING"
 
-CHECK_NONCANONICAL_RUNTIME_PATH = "NONCANONICAL_RUNTIME_PATH"
-CHECK_UNKNOWN_MANIFEST_SKILL = "UNKNOWN_MANIFEST_SKILL"
+class EnumSeverity(StrEnum):
+    WARNING = "WARNING"
 
-PATH_ONEX_RUN_NODE = "onex_run_node"
-PATH_ONEX_NODE = "onex_node"
-PATH_DIRECT_NODE_CLI = "direct_node_cli"
-PATH_REPO_LOCAL_RUNTIME_PATH = "repo_local_runtime_path"
-PATH_DIRECT_HANDLER_IMPORT = "direct_handler_import"
-PATH_DIRECT_HANDLER_CALL = "direct_handler_call"
-PATH_DIRECT_TOPIC_PUBLISH = "direct_topic_publish"
+
+class EnumCheck(StrEnum):
+    NONCANONICAL_RUNTIME_PATH = "NONCANONICAL_RUNTIME_PATH"
+    UNKNOWN_MANIFEST_SKILL = "UNKNOWN_MANIFEST_SKILL"
+
+
+class EnumPathKind(StrEnum):
+    ONEX_RUN_NODE = "onex_run_node"
+    ONEX_NODE = "onex_node"
+    DIRECT_NODE_CLI = "direct_node_cli"
+    REPO_LOCAL_RUNTIME_PATH = "repo_local_runtime_path"
+    DIRECT_HANDLER_IMPORT = "direct_handler_import"
+    DIRECT_HANDLER_CALL = "direct_handler_call"
+    DIRECT_TOPIC_PUBLISH = "direct_topic_publish"
+
+
+SEVERITY_WARNING = EnumSeverity.WARNING
+
+CHECK_NONCANONICAL_RUNTIME_PATH = EnumCheck.NONCANONICAL_RUNTIME_PATH
+CHECK_UNKNOWN_MANIFEST_SKILL = EnumCheck.UNKNOWN_MANIFEST_SKILL
+
+PATH_ONEX_RUN_NODE = EnumPathKind.ONEX_RUN_NODE
+PATH_ONEX_NODE = EnumPathKind.ONEX_NODE
+PATH_DIRECT_NODE_CLI = EnumPathKind.DIRECT_NODE_CLI
+PATH_REPO_LOCAL_RUNTIME_PATH = EnumPathKind.REPO_LOCAL_RUNTIME_PATH
+PATH_DIRECT_HANDLER_IMPORT = EnumPathKind.DIRECT_HANDLER_IMPORT
+PATH_DIRECT_HANDLER_CALL = EnumPathKind.DIRECT_HANDLER_CALL
+PATH_DIRECT_TOPIC_PUBLISH = EnumPathKind.DIRECT_TOPIC_PUBLISH
 
 DEFAULT_MANIFEST = Path("plugins/onex/skills/skills_to_market_manifest.yaml")
 DEFAULT_SKILLS_ROOT = Path("plugins/onex/skills")
@@ -63,7 +84,7 @@ SURFACE_FILENAMES = ("SKILL.md", "prompt.md", "README.md", "run.sh")
 
 @dataclass(frozen=True)
 class PathPattern:
-    path_kind: str
+    path_kind: EnumPathKind
     regex: re.Pattern[str]
     suggestion: str
 
@@ -82,8 +103,8 @@ class AdvisoryFinding:
     skill_name: str
     file_path: str
     line_number: int
-    check: str
-    severity: str
+    check: EnumCheck
+    severity: EnumSeverity
     observed_path: str
     canonical_path: str
     matched_text: str
@@ -108,12 +129,14 @@ class ScanResult:
 PATH_PATTERNS: tuple[PathPattern, ...] = (
     PathPattern(
         path_kind=PATH_ONEX_RUN_NODE,
-        regex=re.compile(r"\bonex\s+run-node\s+node_[\w-]+\b", re.IGNORECASE),
+        regex=re.compile(
+            r"\bonex\s+run-node\s+(?P<target>node_[\w-]+)\b", re.IGNORECASE
+        ),
         suggestion="Keep this skill on the manifest-declared canonical runtime path only.",
     ),
     PathPattern(
         path_kind=PATH_ONEX_NODE,
-        regex=re.compile(r"\bonex\s+node\s+node_[\w-]+\b", re.IGNORECASE),
+        regex=re.compile(r"\bonex\s+node\s+(?P<target>node_[\w-]+)\b", re.IGNORECASE),
         suggestion="Keep this skill on the manifest-declared canonical runtime path only.",
     ),
     PathPattern(
@@ -180,6 +203,16 @@ def _line_for_offset(content: str, offset: int) -> int:
     return content.count("\n", 0, offset) + 1
 
 
+def _is_canonical_path_match(
+    pattern: PathPattern, match: re.Match[str], manifest_skill: ManifestSkill
+) -> bool:
+    if pattern.path_kind not in {PATH_ONEX_NODE, PATH_ONEX_RUN_NODE}:
+        return True
+
+    target = match.groupdict().get("target")
+    return target == manifest_skill.canonical_target
+
+
 def load_manifest(manifest_path: Path) -> dict[str, ManifestSkill]:
     raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
     skills_raw = raw.get("skills")
@@ -237,7 +270,9 @@ def scan_skill(skill_dir: Path, manifest_skill: ManifestSkill) -> list[AdvisoryF
                 if key in seen:
                     continue
                 seen.add(key)
-                if pattern.path_kind in allowed_paths:
+                if pattern.path_kind in allowed_paths and _is_canonical_path_match(
+                    pattern, match, manifest_skill
+                ):
                     continue
                 findings.append(
                     AdvisoryFinding(
@@ -246,7 +281,7 @@ def scan_skill(skill_dir: Path, manifest_skill: ManifestSkill) -> list[AdvisoryF
                         line_number=line_number,
                         check=CHECK_NONCANONICAL_RUNTIME_PATH,
                         severity=SEVERITY_WARNING,
-                        observed_path=pattern.path_kind,
+                        observed_path=str(pattern.path_kind),
                         canonical_path=manifest_skill.canonical_path,
                         matched_text=match.group(0).strip(),
                         suggestion=pattern.suggestion,

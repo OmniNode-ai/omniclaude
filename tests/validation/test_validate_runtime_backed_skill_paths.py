@@ -98,6 +98,25 @@ class TestCanonicalPathPasses:
         findings = scan_skill(skill_dir, manifest["runtime_sweep"])
         assert findings == [], [f.format_line() for f in findings]
 
+    def test_onex_node_wrong_target_emits_finding(
+        self, tmp_path: Path, manifest_path: Path
+    ) -> None:
+        skill_dir = _write_skill(
+            tmp_path,
+            "runtime_sweep",
+            {
+                "SKILL.md": (
+                    "---\n---\n\n"
+                    "```bash\nuv run onex node node_other_target -- --scope all\n```\n"
+                )
+            },
+        )
+        manifest = load_manifest(manifest_path)
+        findings = scan_skill(skill_dir, manifest["runtime_sweep"])
+        assert findings, (
+            "Expected finding for canonical path kind with non-canonical target"
+        )
+
 
 @pytest.mark.unit
 class TestDirectNodeCliInventory:
