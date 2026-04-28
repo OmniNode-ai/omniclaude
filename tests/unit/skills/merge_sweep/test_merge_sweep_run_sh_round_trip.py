@@ -15,7 +15,7 @@ import pytest
 
 _OMNICLAUDE_ROOT = Path(__file__).resolve().parents[4]
 _RUN_SH = _OMNICLAUDE_ROOT / "plugins" / "onex" / "skills" / "merge_sweep" / "run.sh"
-_OMNI_HOME_ROOT = _OMNICLAUDE_ROOT.parents[3]
+_OMNI_HOME_ROOT = _OMNICLAUDE_ROOT.parent
 _WORKTREE_TICKET = _OMNICLAUDE_ROOT.parent.name
 _OMNIMARKET_ROOT = (
     _OMNI_HOME_ROOT / "omnimarket" / "omni_worktrees" / _WORKTREE_TICKET / "omnimarket"

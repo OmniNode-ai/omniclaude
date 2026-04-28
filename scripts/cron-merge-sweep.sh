@@ -78,7 +78,15 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=true; shift ;;
     --skip-polish) MERGE_ONLY=true; SWEEP_ARGS="${SWEEP_ARGS} --skip-polish"; shift ;;
     --resume) RESUME_REQUESTED=true; SWEEP_ARGS="${SWEEP_ARGS} --resume"; shift ;;
-    --repos) REPOS_FILTER="$2"; SWEEP_ARGS="${SWEEP_ARGS} --repos $2"; shift 2 ;;
+    --repos)
+      if [[ $# -lt 2 || -z "${2}" || "${2}" == --* ]]; then
+        echo "ERROR: --repos requires a non-empty value" >&2
+        exit 1
+      fi
+      REPOS_FILTER="$2"
+      SWEEP_ARGS="${SWEEP_ARGS} --repos $2"
+      shift 2
+      ;;
     --repos=*) REPOS_FILTER="${1#*=}"; SWEEP_ARGS="${SWEEP_ARGS} --repos ${1#*=}"; shift ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
