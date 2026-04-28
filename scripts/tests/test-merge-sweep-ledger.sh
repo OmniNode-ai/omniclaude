@@ -50,6 +50,10 @@ RUNNER_EOF
   echo "" >> "${runner}"
   _extract_fn "count_pr_polish_dispatches" >> "${runner}"
   echo "" >> "${runner}"
+  _extract_fn "count_pr_polish_results" >> "${runner}"
+  echo "" >> "${runner}"
+  _extract_fn "count_pr_polish_results_with_state" >> "${runner}"
+  echo "" >> "${runner}"
   _extract_fn "write_result_yaml" >> "${runner}"
 
   cat >> "${runner}" <<'RUNNER_EOF'
@@ -64,6 +68,10 @@ RESUME_REQUESTED=false
 MERGE_ONLY=false
 REPOS_FILTER="omniclaude"
 SWEEP_ARGS="--enable-admin-merge-fallback --admin-fallback-threshold-minutes=15"
+POLISH_DISPATCHES_BEFORE=0
+POLISH_DISPATCHES_AFTER=1
+POLISH_RESULTS_BEFORE=0
+POLISH_RESULTS_AFTER=1
 mkdir -p "${STATE_DIR}" "${ONEX_STATE_DIR}/merge-sweep/${RUN_ID}" "${ONEX_STATE_DIR}/pr-polish/run-1"
 cat > "${STATE_DIR}/${RUN_ID}-attempt-1.json" <<'JSON_EOF'
 {
@@ -97,6 +105,14 @@ JSON_EOF
 cat > "${ONEX_STATE_DIR}/pr-polish/run-1/dispatch.json" <<'JSON_EOF'
 {"kind":"review-fix"}
 JSON_EOF
+cat > "${ONEX_STATE_DIR}/pr-polish/run-1/result.json" <<'JSON_EOF'
+{
+  "final_state": "COMPLETE",
+  "completed_event": {
+    "final_phase": "done"
+  }
+}
+JSON_EOF
 
 write_result_yaml "complete" "1" "0"
 cat "${STATE_DIR}/${RUN_ID}.yaml"
@@ -115,7 +131,10 @@ test_runtime_truth_fields_present() {
   _assert_contains "ledger includes orchestrator final state" "final_state: \"COMPLETE\"" "${output}"
   _assert_contains "ledger includes prs_fixed count" "prs_fixed: 2" "${output}"
   _assert_contains "ledger includes runtime result path" "result_json:" "${output}"
-  _assert_contains "ledger includes polish observation note" "prs_fixed is the orchestrator fix-action count" "${output}"
+  _assert_contains "ledger includes new polish dispatch count" "dispatch_breadcrumbs_new_this_run: 1" "${output}"
+  _assert_contains "ledger includes new polish result count" "result_files_new_this_run: 1" "${output}"
+  _assert_contains "ledger includes completed polish result count" "completed_results_observed_total: 1" "${output}"
+  _assert_contains "ledger includes polish observation note" "actual pr_polish completion is observed from result.json files" "${output}"
 
   rm -f "${runner}"
 }
