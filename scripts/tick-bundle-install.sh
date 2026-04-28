@@ -86,6 +86,22 @@ render_plist() {
     "${src}"
 }
 
+plist_is_disabled() {
+  # Return 0 when the rendered launchd plist declares Disabled=true. The parser
+  # intentionally accepts the compact and multi-line forms launchd plists use.
+  local rendered="$1"
+  echo "${rendered}" | awk '
+    /<key>Disabled<\/key>/ {
+      if ($0 ~ /<true\/>/) { found=1; exit }
+      pending=1
+      next
+    }
+    pending && /<true\/>/ { found=1; exit }
+    pending && /<false\/>/ { pending=0; next }
+    END { exit(found ? 0 : 1) }
+  '
+}
+
 verify_program_args() {
   # [OMN-9056] Post-render, pre-install verifier. Extracts ProgramArguments[0]
   # from a rendered plist and confirms the binary it points at exists and is
@@ -122,6 +138,12 @@ install_one() {
 
   local rendered
   rendered="$(render_plist "${src}")"
+
+  if plist_is_disabled "${rendered}"; then
+    echo "  [${label}] disabled - skipping install/load"
+    UNCHANGED=$((UNCHANGED + 1))
+    return
+  fi
 
   verify_program_args "${label}" "${rendered}" || return 1
 

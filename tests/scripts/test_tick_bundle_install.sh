@@ -7,7 +7,8 @@
 #      after __OMNI_HOME__ expansion.
 #   3. The buildloop template exists and invokes cron-closeout.sh --build-only
 #      (not the deprecated cron-buildloop.sh).
-#   4. The post-install verifier rejects a rendered plist whose
+#   4. Disabled plists are detected and skipped.
+#   5. The post-install verifier rejects a rendered plist whose
 #      ProgramArguments[0] does not exist (fail-fast).
 # Portable to bash 3.2 (macOS default) and bash 5+ (Linux CI).
 set -euo pipefail
@@ -87,13 +88,62 @@ if echo "${BUILDLOOP_PROG_ARGS}" | grep -q "cron-buildloop.sh"; then
 fi
 pass "buildloop template correctly invokes cron-closeout.sh --build-only"
 
-# --- Test 4: post-install verifier rejects a plist with a missing path ------
+# --- Test 4: disabled plists are skipped without load/install ---------------
 TMPDIR_SANDBOX="$(mktemp -d)"
 trap 'rm -rf "${TMPDIR_SANDBOX}"' EXIT
 
 SANDBOX_SRC="${TMPDIR_SANDBOX}/launchd"
 SANDBOX_HOME="${TMPDIR_SANDBOX}/home"
 mkdir -p "${SANDBOX_SRC}" "${SANDBOX_HOME}/Library/LaunchAgents"
+
+DISABLED_PROG="${TMPDIR_SANDBOX}/disabled-target.sh"
+cat > "${DISABLED_PROG}" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${DISABLED_PROG}"
+
+cat > "${SANDBOX_SRC}/ai.test.disabled.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ai.test.disabled</string>
+  <key>Disabled</key><true/>
+  <key>ProgramArguments</key>
+  <array><string>${DISABLED_PROG}</string></array>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>KeepAlive</key><false/>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
+EOF
+
+SANDBOX_INSTALL="${TMPDIR_SANDBOX}/tick-bundle-install.sh"
+sed \
+  -e "s|LAUNCHD_SRC=.*|LAUNCHD_SRC=\"${SANDBOX_SRC}\"|" \
+  -e "s|LAUNCH_AGENTS=.*|LAUNCH_AGENTS=\"${SANDBOX_HOME}/Library/LaunchAgents\"|" \
+  "${INSTALL_SCRIPT}" > "${SANDBOX_INSTALL}"
+python3 - "${SANDBOX_INSTALL}" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+src = p.read_text()
+src = re.sub(r"TICKS=\([^)]*\)", 'TICKS=(\n  "ai.test.disabled"\n)', src, count=1)
+p.write_text(src)
+PY
+chmod +x "${SANDBOX_INSTALL}"
+
+OMNI_HOME="${OMNI_HOME_RESOLVED}" HOME="${SANDBOX_HOME}" \
+  bash "${SANDBOX_INSTALL}" --dry-run >"${TMPDIR_SANDBOX}/disabled.log" 2>&1 \
+  || fail "installer must exit zero when a plist is disabled"
+grep -q "disabled.*skipping install/load" "${TMPDIR_SANDBOX}/disabled.log" \
+  || fail "installer must report disabled skip (got: $(cat "${TMPDIR_SANDBOX}/disabled.log"))"
+if [[ -f "${SANDBOX_HOME}/Library/LaunchAgents/ai.test.disabled.plist" ]]; then
+  fail "disabled plist must not be installed during dry-run skip"
+fi
+pass "installer skips disabled plists without loading them"
+
+# --- Test 5: post-install verifier rejects a plist with a missing path ------
 
 cat > "${SANDBOX_SRC}/ai.test.broken.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -116,7 +166,6 @@ cat > "${SANDBOX_SRC}/ai.test.broken.plist" <<'EOF'
 </plist>
 EOF
 
-SANDBOX_INSTALL="${TMPDIR_SANDBOX}/tick-bundle-install.sh"
 sed \
   -e "s|LAUNCHD_SRC=.*|LAUNCHD_SRC=\"${SANDBOX_SRC}\"|" \
   -e "s|LAUNCH_AGENTS=.*|LAUNCH_AGENTS=\"${SANDBOX_HOME}/Library/LaunchAgents\"|" \
