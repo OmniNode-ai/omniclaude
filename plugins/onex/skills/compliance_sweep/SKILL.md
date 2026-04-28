@@ -42,8 +42,8 @@ outputs:
 - **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — do not produce prose
 
 ```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"
-uv run onex run-node node_compliance_sweep --input <envelope>
+cd "$ONEX_WORKTREES_ROOT/omnimarket"
+uv run onex node node_compliance_sweep --input <envelope>
 ```
 
 See `prompt.md` for envelope construction.

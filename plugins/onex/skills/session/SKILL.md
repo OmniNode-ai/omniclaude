@@ -48,8 +48,8 @@ outputs:
 - **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
 
 ```bash
-cd "$ONEX_REGISTRY_ROOT/omnimarket"
-uv run onex run-node node_session_orchestrator --input <envelope>
+cd "$ONEX_WORKTREES_ROOT/omnimarket"
+uv run onex node node_session_orchestrator --input <envelope>
 ```
 
 See `prompt.md` for envelope construction.
