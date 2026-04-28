@@ -37,8 +37,13 @@ outputs:
 ## Routing Contract
 
 - **Classification**: Deterministic
-- **Dispatch**: see `prompt.md` — single invocation against `node_compliance_sweep` from the omnimarket worktree
+- **Dispatch**: single invocation against `node_compliance_sweep` from the omnimarket worktree
 - **No inline scanning**: all compliance checks live in the handler, not this skill
-- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — do not produce prose
+- **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — do not produce prose
 
-See `prompt.md` for the exact dispatch invocation.
+```bash
+cd "$ONEX_REGISTRY_ROOT/omnimarket"
+uv run onex run-node node_compliance_sweep --input <envelope>
+```
+
+See `prompt.md` for envelope construction.

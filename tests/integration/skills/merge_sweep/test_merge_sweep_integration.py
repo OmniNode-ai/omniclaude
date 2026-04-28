@@ -4,7 +4,7 @@
 
 The skill now builds a contract-canonical
 `ModelEventEnvelope[ModelPrLifecycleStartCommand]` and invokes
-`python -m omnimarket.nodes.node_pr_lifecycle_orchestrator --input`.
+`uv run onex run-node node_pr_lifecycle_orchestrator --input`.
 
 These tests ride alongside `tests/unit/skills/test_merge_sweep_shim.py` and
 assert the same invariants at integration scope so the
@@ -77,7 +77,10 @@ class TestSkillMdIsThinShim:
 
     def test_skill_md_has_dispatch_command(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
-        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
+        assert "onex run-node node_pr_lifecycle_orchestrator" in content
+        assert (
+            "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" not in content
+        )
 
     def test_skill_md_surfaces_nonzero_exit_passthrough(self) -> None:
         content = _read(_MERGE_SWEEP_SKILL)
@@ -134,16 +137,18 @@ class TestPromptMdIsThinShim:
 
     def test_prompt_md_dispatches_to_node(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
-        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
+        assert "onex run-node node_pr_lifecycle_orchestrator" in content
+        assert (
+            "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" not in content
+        )
 
     def test_prompt_md_single_dispatch(self) -> None:
         content = _read(_MERGE_SWEEP_PROMPT)
         matches = re.findall(
-            r"python\s+-m\s+omnimarket\.nodes\.node_pr_lifecycle_orchestrator",
-            content,
+            r"onex\s+run-node\s+node_pr_lifecycle_orchestrator", content
         )
         assert len(matches) == 1, (
-            f"Expected exactly 1 module CLI dispatch, found {len(matches)}"
+            f"Expected exactly 1 onex run-node dispatch, found {len(matches)}"
         )
 
     def test_prompt_md_no_inline_orchestration(self) -> None:

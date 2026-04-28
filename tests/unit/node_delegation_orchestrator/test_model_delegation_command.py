@@ -106,3 +106,30 @@ def test_delegation_command_existing_fields_unchanged() -> None:
     assert cmd.wait_for_result is False
     assert cmd.working_directory is None
     assert cmd.codex_sandbox_mode is None
+
+
+def test_delegation_command_accepts_delegate_skill_payload_fields() -> None:
+    from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+        ModelDelegationCommand,
+    )
+
+    cmd = ModelDelegationCommand(
+        prompt="write unit tests for handler_event_emitter.py",
+        correlation_id="corr-123",
+        session_id="sess-456",
+        prompt_length=43,
+        source_file_path=Path("src/omniclaude/hooks/handler_event_emitter.py"),
+        max_tokens=4096,
+    )
+
+    assert cmd.source_file_path == Path("src/omniclaude/hooks/handler_event_emitter.py")
+    assert cmd.max_tokens == 4096
+
+
+def test_delegation_command_rejects_non_positive_max_tokens() -> None:
+    from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+        ModelDelegationCommand,
+    )
+
+    with pytest.raises(ValidationError):
+        ModelDelegationCommand(prompt="do it", max_tokens=0)

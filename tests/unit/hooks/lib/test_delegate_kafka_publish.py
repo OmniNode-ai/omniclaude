@@ -87,14 +87,20 @@ def delegate_run_with_failing_emit() -> pytest.Generator[
 class TestDelegateKafkaPublish:
     """Assert that classify_and_publish publishes to Kafka — no prose fallback."""
 
-    def test_delegatable_prompt_publishes_to_delegate_task_topic(
-        self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]
+    def test_delegatable_prompt_publishes_typed_delegate_command(
+        self,
+        delegate_run_with_mock_emit: tuple[ModuleType, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """A delegatable prompt must call emit_event with delegate.task event type (OMN-10050)."""
+        """A delegatable prompt must publish a ModelDelegationCommand-compatible payload."""
         delegate_run, mock_emit = delegate_run_with_mock_emit
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "session-test-123")
+        prompt = "write unit tests for handler_event_emitter.py"
 
         result = delegate_run.classify_and_publish(
-            prompt="write unit tests for handler_event_emitter.py",
+            prompt=prompt,
+            source_file="src/omniclaude/hooks/handler_event_emitter.py",
+            max_tokens=4096,
         )
 
         assert result.get("success") is True, f"Expected success, got: {result}"
@@ -118,6 +124,7 @@ class TestDelegateKafkaPublish:
         assert isinstance(envelope, dict), (
             f"Expected dict envelope, got {type(envelope)}"
         )
+        assert envelope.get("event_type") == "DelegateTaskCommand"
 
         correlation_id = envelope.get("correlation_id") or (
             envelope.get("payload", {}).get("correlation_id")
@@ -127,6 +134,27 @@ class TestDelegateKafkaPublish:
             uuid.UUID(str(correlation_id))
         except ValueError:
             pytest.fail(f"correlation_id {correlation_id!r} is not a valid UUID")
+
+        from omnibase_core.models.events.model_event_envelope import (
+            ModelEventEnvelope,
+        )
+
+        from omniclaude.nodes.node_delegation_orchestrator.models.model_delegation_command import (
+            ModelDelegationCommand,
+        )
+
+        validated_envelope = ModelEventEnvelope[object].model_validate(envelope)
+        assert validated_envelope.event_type == "DelegateTaskCommand"
+        assert validated_envelope.metadata.tags["intent"] == "test"
+        command = ModelDelegationCommand.model_validate(envelope["payload"])
+        assert command.prompt == prompt
+        assert command.correlation_id == correlation_id
+        assert command.session_id == "session-test-123"
+        assert command.prompt_length == len(prompt)
+        assert str(command.source_file_path) == (
+            "src/omniclaude/hooks/handler_event_emitter.py"
+        )
+        assert command.max_tokens == 4096
 
     def test_correlation_id_is_valid_uuid(
         self, delegate_run_with_mock_emit: tuple[ModuleType, MagicMock]

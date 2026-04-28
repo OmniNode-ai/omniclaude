@@ -1,14 +1,13 @@
 # merge_sweep prompt
 
 ADR: The contract-canonical merge-sweep backing node is
-`node_pr_lifecycle_orchestrator`, because its contract publishes terminal event
+`node_pr_lifecycle_orchestrator`, because its contract terminal event is
 `onex.evt.omnimarket.pr-lifecycle-orchestrator-completed.v1`, which this skill
-uses as its completion signal. The old legacy run-node routes are not the
-dispatch target for this skill.
+uses as its completion signal.
 
 You are executing the **merge_sweep** skill. This skill builds a
 `ModelEventEnvelope[ModelPrLifecycleStartCommand]` and dispatches it through the
-omnimarket module CLI:
+manifest-canonical runtime path:
 
 ```bash
 plugins/onex/skills/merge_sweep/run.sh $PARSED_ARGS
@@ -42,7 +41,7 @@ Extract from `$ARGUMENTS`:
 The launcher sends `event_type:
 omnimarket.pr-lifecycle-orchestrator-start` with payload
 `ModelPrLifecycleStartCommand` to
-`python -m omnimarket.nodes.node_pr_lifecycle_orchestrator --input`.
+`uv run onex run-node node_pr_lifecycle_orchestrator --input`.
 
 ## Error handling
 

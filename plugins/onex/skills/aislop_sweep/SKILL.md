@@ -121,8 +121,8 @@ Write to `$ONEX_STATE_DIR/skill-results/<run_id>/aislop-sweep.json`:
 
 ```
 SKILL.md  → thin shell: parse args → node dispatch → render results
-node      → omnimarket/src/omnimarket/nodes/node_aislop_sweep/
-contract  → node_aislop_sweep/contract.yaml
+node      → onex node node_aislop_sweep
+contract  → node_aislop_sweep
 ```
 
 All scanning logic lives in the node handler. This skill does no scanning.

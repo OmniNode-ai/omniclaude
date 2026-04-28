@@ -64,7 +64,7 @@ skills:
     canonical_path: onex_run_node
     canonical_target: node_pr_review_bot
   delegate:
-    canonical_path: onex_run_node
+    canonical_path: direct_topic_publish
     canonical_target: node_delegation_orchestrator
 """.strip()
         + "\n",
@@ -182,7 +182,26 @@ class TestDirectHandlerInventory:
 
 @pytest.mark.unit
 class TestTopicPublishInventory:
-    def test_direct_topic_publish_is_flagged(
+    def test_noncanonical_direct_topic_publish_is_flagged(
+        self, tmp_path: Path, manifest_path: Path
+    ) -> None:
+        skill_dir = _write_skill(
+            tmp_path,
+            "merge_sweep",
+            {
+                "SKILL.md": (
+                    "Publish to onex.cmd.omnimarket.pr-lifecycle-start.v1 via the emit daemon.\n"
+                    "The skill publishes via the omniclaude emit daemon (`EmitClient`).\n"
+                    "emitted = emit_event('merge_sweep.start', envelope)\n"
+                )
+            },
+        )
+        manifest = load_manifest(manifest_path)
+        findings = scan_skill(skill_dir, manifest["merge_sweep"])
+        observed = {f.observed_path for f in findings}
+        assert PATH_DIRECT_TOPIC_PUBLISH in observed
+
+    def test_delegate_direct_topic_publish_is_canonical(
         self, tmp_path: Path, manifest_path: Path
     ) -> None:
         skill_dir = _write_skill(
@@ -198,8 +217,7 @@ class TestTopicPublishInventory:
         )
         manifest = load_manifest(manifest_path)
         findings = scan_skill(skill_dir, manifest["delegate"])
-        observed = {f.observed_path for f in findings}
-        assert PATH_DIRECT_TOPIC_PUBLISH in observed
+        assert findings == [], [f.format_line() for f in findings]
 
 
 @pytest.mark.unit
@@ -316,7 +334,8 @@ class TestCliInterface:
             "delegate",
             {
                 "SKILL.md": (
-                    "```bash\nuv run onex run-node node_delegation_orchestrator --input '{}'\n```\n"
+                    "Publish to onex.cmd.omniclaude.delegate-task.v1 via the emit daemon.\n"
+                    "emitted = emit_event('delegate.task', envelope)\n"
                 )
             },
         )

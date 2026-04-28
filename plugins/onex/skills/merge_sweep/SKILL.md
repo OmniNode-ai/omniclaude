@@ -1,5 +1,5 @@
 ---
-description: Thin dispatch-only shim for the org-wide PR merge sweep pipeline. Builds the contract-canonical pr_lifecycle_orchestrator start envelope and invokes the omnimarket module CLI. No inline GH script fallback, no direct Kafka publish, no orchestration logic.
+description: Thin dispatch-only shim for the org-wide PR merge sweep pipeline. Builds the contract-canonical pr_lifecycle_orchestrator start envelope and invokes the manifest-canonical onex run-node path. No inline GH script fallback, no direct Kafka publish, no orchestration logic.
 mode: full
 version: 7.0.0
 level: advanced
@@ -73,19 +73,19 @@ outputs:
 **Version**: 7.0.0
 **Owner**: omniclaude
 **Ticket**: OMN-10167
-**Backing node**: `omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator/`
+**Backing node**: `node_pr_lifecycle_orchestrator`
 
 ## Changelog
 
 - **7.0.0** — Breaking dispatch contract change. The shim now builds a
-  `ModelEventEnvelope[ModelPrLifecycleStartCommand]` and invokes
-  `python -m omnimarket.nodes.node_pr_lifecycle_orchestrator --input ...`.
-  This replaces the stale legacy run-node route.
+  `ModelEventEnvelope[ModelPrLifecycleStartCommand]` and invokes the
+  manifest-canonical `uv run onex run-node node_pr_lifecycle_orchestrator`
+  path.
 - **6.1.0** — Repointed the old shim after the merge-sweep decomposition.
 
 ## What this skill does
 
-Dispatches directly to `node_pr_lifecycle_orchestrator`. The node owns PR
+Dispatches through `onex run-node node_pr_lifecycle_orchestrator`. The node owns PR
 inventory, triage, merge, fix dispatch, state reduction, result persistence,
 and terminal event emission. This shim contains no orchestration logic, no
 inline GitHub merge script fallback, no direct Kafka publish, and no claim
@@ -95,16 +95,16 @@ registry management.
 
 ## Wire Schema
 
-Contract:
-`omnimarket/src/omnimarket/nodes/node_pr_lifecycle_orchestrator/contract.yaml`
+Contract target:
+`node_pr_lifecycle_orchestrator`
 
 Command topic:
 `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
 
 Dispatch declaration for deterministic routing gates:
-Kafka publish to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
-is performed by `plugins/onex/skills/merge_sweep/run.sh` through the
-contract-canonical omnimarket launcher.
+`plugins/onex/skills/merge_sweep/run.sh` invokes
+`uv run onex run-node node_pr_lifecycle_orchestrator --input <envelope>`
+through the manifest-canonical runtime path.
 
 Event type alias:
 `omnimarket.pr-lifecycle-orchestrator-start`
@@ -158,8 +158,8 @@ plugins/onex/skills/merge_sweep/run.sh \
   [--run-id <id>]
 ```
 
-The launcher dispatches to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
-and prints the `ModelPrLifecycleResult` JSON emitted by the backing node.
+The launcher dispatches through `onex run-node node_pr_lifecycle_orchestrator`
+and prints the `ModelPrLifecycleResult` JSON returned by the backing node.
 Surface non-zero exits directly. On routing failure raise `SkillRoutingError`;
 do not produce prose.
 

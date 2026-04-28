@@ -43,6 +43,13 @@ outputs:
 ## Routing Contract
 
 - **Classification**: Deterministic
-- **Dispatch**: single invocation of `node_session_orchestrator` — see `prompt.md` for the exact dispatch command
+- **Dispatch**: single invocation of `node_session_orchestrator`
 - **No inline orchestration**: phases 1/2/3 live in the handler, not this skill
-- **No prose fallback**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
+- **Routing failure handling**: on dispatch failure, raise `SkillRoutingError` — surface it directly, do not produce prose
+
+```bash
+cd "$ONEX_REGISTRY_ROOT/omnimarket"
+uv run onex run-node node_session_orchestrator --input <envelope>
+```
+
+See `prompt.md` for envelope construction.

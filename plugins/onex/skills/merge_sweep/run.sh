@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# run.sh — contract-canonical launcher for /onex:merge_sweep.
+# run.sh — manifest-canonical launcher for /onex:merge_sweep.
 
 set -euo pipefail
 
@@ -167,4 +167,4 @@ PY
 )"
 
 cd "${OMNIMARKET_DIR}"
-uv run python -m omnimarket.nodes.node_pr_lifecycle_orchestrator --input "${INPUT_JSON}"
+uv run onex run-node node_pr_lifecycle_orchestrator --input "${INPUT_JSON}"
