@@ -76,12 +76,11 @@ class ModelEvidenceWrittenEvent(BaseModel):
 def emit_event(event: ModelEvidenceWrittenEvent) -> None:
     """Emit an EvidenceWritten event to Kafka. Fail-open: logs on error."""
     try:
-        from omniclaude.hooks.topics import TopicBase, build_topic
+        from omnimarket.nodes.node_emit_daemon.client import (
+            EmitClient,  # noqa: PLC0415, I001
+        )
 
-        try:
-            from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415, I001
-        except ImportError:
-            from omniclaude.publisher.emit_client import EmitClient  # noqa: PLC0415, I001
+        from omniclaude.hooks.topics import TopicBase, build_topic
 
         socket_path = os.getenv("OMNICLAUDE_EMIT_SOCKET", "").strip()
         if not socket_path:

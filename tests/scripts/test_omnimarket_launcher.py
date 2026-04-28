@@ -36,8 +36,10 @@ def test_launcher_does_not_invoke_omniclaude_publisher() -> None:
     assert "-m omniclaude.publisher start" not in text, (
         "session-start.sh must NOT invoke -m omniclaude.publisher start (use omnimarket node)"
     )
+    assert "omnibase_infra.runtime.emit_daemon.cli start" not in text, (
+        "session-start.sh must NOT keep the removed omnibase_infra emit-daemon fallback"
+    )
     # The active daemon launch must not use the deprecated --kafka-servers CLI arg.
-    # (_start_legacy_emit_daemon may still reference it but is no longer called.)
     assert "omnimarket.nodes.node_emit_daemon start" in text, (
         "sanity: omnimarket daemon start must be present before checking for arg absence"
     )
