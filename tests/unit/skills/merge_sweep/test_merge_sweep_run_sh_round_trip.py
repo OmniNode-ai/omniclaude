@@ -17,8 +17,19 @@ _OMNICLAUDE_ROOT = Path(__file__).resolve().parents[4]
 _RUN_SH = _OMNICLAUDE_ROOT / "plugins" / "onex" / "skills" / "merge_sweep" / "run.sh"
 _OMNI_HOME_ROOT = _OMNICLAUDE_ROOT.parent
 _WORKTREE_TICKET = _OMNICLAUDE_ROOT.parent.name
-_OMNIMARKET_ROOT = (
+
+# Prefer OMNI_HOME/omnimarket (standard CI layout); fall back to worktree path via env override.
+_OMNIMARKET_ROOT_DEFAULT = _OMNI_HOME_ROOT / "omnimarket"
+_OMNIMARKET_ROOT_WORKTREE = (
     _OMNI_HOME_ROOT / "omnimarket" / "omni_worktrees" / _WORKTREE_TICKET / "omnimarket"
+)
+_OMNIMARKET_ROOT_OVERRIDE = os.environ.get("ONEX_TEST_OMNIMARKET_ROOT")
+_OMNIMARKET_ROOT = (
+    Path(_OMNIMARKET_ROOT_OVERRIDE)
+    if _OMNIMARKET_ROOT_OVERRIDE
+    else _OMNIMARKET_ROOT_DEFAULT
+    if _OMNIMARKET_ROOT_DEFAULT.is_dir()
+    else _OMNIMARKET_ROOT_WORKTREE
 )
 _EVENT_TYPE = "omnimarket.pr-lifecycle-orchestrator-start"
 
@@ -64,7 +75,9 @@ def test_run_sh_executes_real_cli_and_emits_contract_envelope(tmp_path: Path) ->
     if not _RUN_SH.is_file():
         pytest.skip(f"missing run.sh at {_RUN_SH}")
     if not _OMNIMARKET_ROOT.is_dir():
-        pytest.skip(f"missing OMN-10180 omnimarket worktree at {_OMNIMARKET_ROOT}")
+        pytest.skip(
+            f"missing omnimarket root at {_OMNIMARKET_ROOT}; set ONEX_TEST_OMNIMARKET_ROOT to override"
+        )
 
     real_uv = shutil.which("uv")
     assert real_uv is not None, "uv is required to execute the merge_sweep shim"

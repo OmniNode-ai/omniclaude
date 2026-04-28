@@ -87,7 +87,15 @@ while [[ $# -gt 0 ]]; do
       SWEEP_ARGS="${SWEEP_ARGS} --repos $2"
       shift 2
       ;;
-    --repos=*) REPOS_FILTER="${1#*=}"; SWEEP_ARGS="${SWEEP_ARGS} --repos ${1#*=}"; shift ;;
+    --repos=*)
+      REPOS_FILTER="${1#*=}"
+      if [[ -z "${REPOS_FILTER}" ]]; then
+        echo "ERROR: --repos requires a non-empty value" >&2
+        exit 1
+      fi
+      SWEEP_ARGS="${SWEEP_ARGS} --repos ${REPOS_FILTER}"
+      shift
+      ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -375,6 +383,11 @@ run_merge_sweep() {
         --correlation-id "${CORRELATION_ID}" \
         > "${output_file}" 2>&1
   ) || exit_code=$?
+
+  dispatches_after="$(count_pr_polish_dispatches)"
+  results_after="$(count_pr_polish_results)"
+  POLISH_DISPATCHES_AFTER="${dispatches_after}"
+  POLISH_RESULTS_AFTER="${results_after}"
 
   if [[ ${exit_code} -eq 124 ]]; then
     log "TIMEOUT: merge-sweep runtime dispatch exceeded ${PHASE_TIMEOUT}s"
