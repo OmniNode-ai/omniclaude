@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import subprocess
 from pathlib import Path
@@ -72,6 +73,8 @@ def test_node_dispatch_worker_proof_of_life(tmp_path: Path) -> None:
             f"Redpanda unreachable at {_REDPANDA_HOST}:{_REDPANDA_PORT} "
             "(live infra precondition)"
         )
+    if shutil.which("uv") is None:
+        pytest.skip("uv not found on PATH (required to invoke the node CLI)")
 
     correlation_id = "proof-of-life-omn-10209-pytest"
     env = os.environ.copy()
