@@ -48,9 +48,17 @@ args:
 # PR Polish
 
 The current live branch-fixing path is the multi-phase workflow described in
-`prompt.md`. Do not treat `node_pr_polish` completion as proof that a PR was
-actually polished: the node is still FSM/state evidence, while the prompt
-workflow owns real conflict resolution, review fixes, local-review, and push.
+`prompt.md`, but the live dispatch surface now runs through
+`omnimarket.nodes.node_pr_polish`. That node owns repo/worktree resolution,
+branch verification, pre-commit install, and `result.json` persistence before
+invoking this skill inside the correct worktree.
 
-Until node parity is implemented, the authoritative execution surface for
-`/onex:pr_polish` remains this skill workflow.
+Treat the authoritative execution path as:
+
+1. `PrPolishDispatchAdapter` dispatches `python -m omnimarket.nodes.node_pr_polish`
+2. `node_pr_polish` resolves the PR worktree and invokes `/onex:pr_polish <pr>`
+3. this skill workflow performs the actual conflict/review/local-review loop
+
+So the prompt workflow still owns the branch-fixing steps, but it is no longer
+the only live execution surface; the node is now the repo-aware wrapper that
+makes those steps real.
