@@ -69,7 +69,7 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, Protocol, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,17 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 # =============================================================================
 
 
-def _create_emit_client(socket_path: str, timeout: float) -> _SocketEmitClient:
+class _EmitClientProtocol(Protocol):
+    """Minimal emit client contract shared by local and omnimarket clients."""
+
+    _socket_path: str
+
+    def emit_sync(self, event_type: str, payload: dict[str, object]) -> str: ...
+
+    def is_daemon_running_sync(self) -> bool: ...
+
+
+def _create_emit_client(socket_path: str, timeout: float) -> _EmitClientProtocol:
     """Create an emit client, preferring omnimarket's portable client.
 
     Tries to import EmitClient from omnimarket.nodes.node_emit_daemon.client
@@ -226,7 +236,7 @@ def _create_emit_client(socket_path: str, timeout: float) -> _SocketEmitClient:
     try:
         from omnimarket.nodes.node_emit_daemon.client import EmitClient  # noqa: PLC0415
 
-        return EmitClient(socket_path=socket_path, timeout=timeout)  # type: ignore[no-any-return]
+        return EmitClient(socket_path=socket_path, timeout=timeout)
     except ImportError:
         import warnings  # noqa: PLC0415
 
@@ -325,11 +335,11 @@ class _SocketEmitClient:
 # =============================================================================
 
 _client_lock = threading.Lock()
-_emit_client: _SocketEmitClient | None = None
+_emit_client: _EmitClientProtocol | None = None
 _client_initialized = False
 
 
-def _get_client() -> _SocketEmitClient | None:
+def _get_client() -> _EmitClientProtocol | None:
     """Get or create the emit client instance (lazy, thread-safe).
 
     The client object is cached, but each request opens a fresh socket
