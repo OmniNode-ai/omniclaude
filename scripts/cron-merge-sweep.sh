@@ -100,35 +100,41 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+MERGE_SWEEP_SOURCED=false
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  MERGE_SWEEP_SOURCED=true
+fi
+
+if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
   cat >&2 <<'JSON'
 {"status":"quarantined","reason":"OMN-10181: merge-sweep launchd source remains disabled until OMN-10182 proves both the omnimarket CLI round-trip and the omniclaude run.sh shim path","ticket":"OMN-10181","blocked_by":["OMN-10182"]}
 JSON
   exit 64
 fi
-return 0
 
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
 
-if [[ -f "${HOME}/.omnibase/.env" ]]; then
+if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
+  if [[ -f "${HOME}/.omnibase/.env" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.omnibase/.env"
+  fi
+
+  export ONEX_RUN_ID="${RUN_ID}"
+  export ONEX_UNSAFE_ALLOW_EDITS=1
+  export ONEX_STATE_DIR
+  export CANONICAL_CLONE="${MARKET_REPO_ROOT}"
+
+  # Source headless emit wrapper for unified event emission [OMN-7034]
   # shellcheck disable=SC1091
-  source "${HOME}/.omnibase/.env"
+  source "$(dirname "$0")/headless-emit-wrapper.sh"
+
+  # Source canonical-clone preflight — pulls omniclaude before running the skill [OMN-9405]
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/lib/canonical-clone-preflight.sh"
 fi
-
-export ONEX_RUN_ID="${RUN_ID}"
-export ONEX_UNSAFE_ALLOW_EDITS=1
-export ONEX_STATE_DIR
-export CANONICAL_CLONE="${MARKET_REPO_ROOT}"
-
-# Source headless emit wrapper for unified event emission [OMN-7034]
-# shellcheck disable=SC1091
-source "$(dirname "$0")/headless-emit-wrapper.sh"
-
-# Source canonical-clone preflight — pulls omniclaude before running the skill [OMN-9405]
-# shellcheck disable=SC1091
-source "$(dirname "$0")/lib/canonical-clone-preflight.sh"
 
 # ---------------------------------------------------------------------------
 # Pre-flight checks
@@ -159,37 +165,39 @@ preflight() {
   fi
 }
 
-preflight
+if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
+  preflight
 
-# ---------------------------------------------------------------------------
-# Directory setup
-# ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Directory setup
+  # ---------------------------------------------------------------------------
 
-mkdir -p "${STATE_DIR}" "${LOG_DIR}"
+  mkdir -p "${STATE_DIR}" "${LOG_DIR}"
 
-# ---------------------------------------------------------------------------
-# Lock file — prevent concurrent runs
-# ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Lock file — prevent concurrent runs
+  # ---------------------------------------------------------------------------
 
-LOCK_FILE="${STATE_DIR}/cron-merge-sweep.lock"
-LOCK_TIMEOUT=1800  # 30 minutes
+  LOCK_FILE="${STATE_DIR}/cron-merge-sweep.lock"
+  LOCK_TIMEOUT=1800  # 30 minutes
 
-if [[ -f "${LOCK_FILE}" ]]; then
-  lock_time=$(stat -f %m "${LOCK_FILE}" 2>/dev/null || stat -c %Y "${LOCK_FILE}" 2>/dev/null || echo 0)
-  now=$(date +%s)
-  age=$(( now - lock_time ))
+  if [[ -f "${LOCK_FILE}" ]]; then
+    lock_time=$(stat -f %m "${LOCK_FILE}" 2>/dev/null || stat -c %Y "${LOCK_FILE}" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    age=$(( now - lock_time ))
 
-  if [[ ${age} -lt ${LOCK_TIMEOUT} ]]; then
-    echo "SKIP: Previous invocation still running (lock age: ${age}s < ${LOCK_TIMEOUT}s)"
-    exit 0
-  else
-    echo "WARN: Stale lock detected (age: ${age}s). Removing."
-    rm -f "${LOCK_FILE}"
+    if [[ ${age} -lt ${LOCK_TIMEOUT} ]]; then
+      echo "SKIP: Previous invocation still running (lock age: ${age}s < ${LOCK_TIMEOUT}s)"
+      exit 0
+    else
+      echo "WARN: Stale lock detected (age: ${age}s). Removing."
+      rm -f "${LOCK_FILE}"
+    fi
   fi
-fi
 
-echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_FILE}"
-trap 'rm -f "${LOCK_FILE}"' EXIT
+  echo "pid=$$ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${LOCK_FILE}"
+  trap 'rm -f "${LOCK_FILE}"' EXIT
+fi
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -372,6 +380,7 @@ run_merge_sweep() {
   local attempt="$1"
   local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.json"
   local payload_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.payload.json"
+  local stderr_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.stderr.log"
   local dispatches_before dispatches_after results_before results_after
   snapshot_pr_polish_before
   dispatches_before="${POLISH_DISPATCHES_BEFORE}"
@@ -402,7 +411,7 @@ run_merge_sweep() {
         --payload-file "${payload_file}" \
         --timeout-ms 300000 \
         --correlation-id "${CORRELATION_ID}" \
-        > "${output_file}" 2>&1
+        > "${output_file}" 2> "${stderr_file}"
   ) || exit_code=$?
 
   snapshot_pr_polish_after
@@ -414,7 +423,7 @@ run_merge_sweep() {
     return 1
   fi
 
-  if is_auth_failure "${output_file}"; then
+  if is_auth_failure "${stderr_file}" || is_auth_failure "${output_file}"; then
     log "Auth failure detected in merge-sweep output"
     return 2  # special code: auth failure
   fi
@@ -454,6 +463,9 @@ write_result_yaml() {
   local prs_skipped="0"
   local prs_verified="0"
   local runtime_error_message=""
+  local yaml_response_error_code='""'
+  local yaml_response_error_message='""'
+  local yaml_runtime_error_message='""'
   local polish_dispatches_observed="0"
   local polish_dispatches_new="0"
   local polish_results_observed="0"
@@ -478,6 +490,10 @@ write_result_yaml() {
     prs_verified="$(jq -r '.prs_verified // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
     runtime_error_message="$(jq -r '.error_message // ""' "${runtime_result_file}" 2>/dev/null || echo "")"
   fi
+
+  yaml_response_error_code="$(jq -Rn --arg v "${response_error_code}" '$v')"
+  yaml_response_error_message="$(jq -Rn --arg v "${response_error_message}" '$v')"
+  yaml_runtime_error_message="$(jq -Rn --arg v "${runtime_error_message}" '$v')"
 
   polish_dispatches_observed="$(count_pr_polish_dispatches)"
   polish_dispatches_new="$((POLISH_DISPATCHES_AFTER - POLISH_DISPATCHES_BEFORE))"
@@ -506,8 +522,8 @@ runtime_request:
   response_file: "$(basename "${response_file}")"
   result_json: "${runtime_result_file}"
   orchestrator_ok: ${orchestrator_ok}
-  response_error_code: "${response_error_code}"
-  response_error_message: "${response_error_message}"
+  response_error_code: ${yaml_response_error_code}
+  response_error_message: ${yaml_response_error_message}
 orchestrator_result:
   final_state: "${final_state}"
   prs_inventoried: ${prs_inventoried}
@@ -515,7 +531,7 @@ orchestrator_result:
   prs_fixed: ${prs_fixed}
   prs_skipped: ${prs_skipped}
   prs_verified: ${prs_verified}
-  error_message: "${runtime_error_message}"
+  error_message: ${yaml_runtime_error_message}
 polish_observation:
   dispatch_breadcrumbs_observed_total: ${polish_dispatches_observed}
   dispatch_breadcrumbs_new_this_run: ${polish_dispatches_new}
@@ -541,6 +557,7 @@ EOF
 # Main execution
 # ===========================================================================
 
+if [[ "${MERGE_SWEEP_SOURCED}" != "true" ]]; then
 log "=== Merge-sweep run ${RUN_ID} starting ==="
 log "ONEX_REGISTRY_ROOT: ${ONEX_REGISTRY_ROOT}"
 log "State dir: ${STATE_DIR}"
@@ -642,6 +659,7 @@ fi
 
 log "Merge-sweep run ${RUN_ID} finished: status=${FINAL_STATUS}, attempts=${ATTEMPT}, auth_refreshes=${AUTH_REFRESH_COUNT}"
 log "Full log: ${LOG_DIR}/${RUN_ID}.log"
+fi
 
 # ---------------------------------------------------------------------------
 # Queue method-mismatch heal — runs after sweep, fail-open [OMN-9434]
@@ -787,6 +805,10 @@ _queue_heal() {
 
 # Run heal block fail-open — errors inside _queue_heal are already logged;
 # a non-zero exit from _queue_heal must not abort the tick.
+if [[ "${MERGE_SWEEP_SOURCED}" == "true" ]]; then
+  return 0
+fi
+
 _queue_heal 2>>"${LOG_DIR}/${RUN_ID}.log" || \
   log "[queue-heal] WARN: heal block exited non-zero (fail-open, tick continues)"
 
