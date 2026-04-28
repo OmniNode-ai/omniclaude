@@ -58,7 +58,7 @@ Treat the authoritative execution path as:
 1. `PrPolishDispatchAdapter` dispatches `python -m omnimarket.nodes.node_pr_polish`
 2. `node_pr_polish` resolves the PR worktree, verifies branch alignment, and invokes `/onex:pr_polish <pr> --no-push`
 3. this skill workflow performs the conflict/review/local-review loop
-4. `node_pr_polish` then owns pre-push pre-commit, `git push`, post-push SHA verification, and auto-merge arming
+4. `node_pr_polish` then owns CodeRabbit triage, pre-push pre-commit, `git push`, post-push SHA verification, and auto-merge arming
 
 So the prompt workflow still owns the phase bodies, but it no longer owns the
 live branch mutation surface. The node is now the repo-aware wrapper that makes
