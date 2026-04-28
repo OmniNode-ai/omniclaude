@@ -354,8 +354,10 @@ run_merge_sweep() {
   local dispatches_before dispatches_after results_before results_after
   dispatches_before="$(count_pr_polish_dispatches)"
   results_before="$(count_pr_polish_results)"
-  POLISH_DISPATCHES_BEFORE="${dispatches_before}"
-  POLISH_RESULTS_BEFORE="${results_before}"
+  if [[ "${attempt}" -eq 1 ]]; then
+    POLISH_DISPATCHES_BEFORE="${dispatches_before}"
+    POLISH_RESULTS_BEFORE="${results_before}"
+  fi
 
   build_runtime_payload > "${payload_file}"
 
