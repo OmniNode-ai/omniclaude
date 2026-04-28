@@ -340,11 +340,15 @@ Branch protection requires all review threads resolved before the merge queue
 accepts PRs, and CodeRabbit posts 5-20 automated comments per PR. This step
 is idempotent and safe to call on PRs with no CodeRabbit threads.
 
+When `pr_polish` runs under `node_pr_polish`, the node always invokes this
+skill with `--no-push` and owns CodeRabbit triage itself after the prompt
+phases complete. In that path the prompt must not mutate review threads.
+
 ```python
 # Uses resolve_coderabbit_threads() from @_lib/pr-safety/helpers.md
 from plugins.onex.skills._lib.pr_safety.helpers import resolve_coderabbit_threads
 
-if pr_number:
+if pr_number and not no_push:
     try:
         repo_full = run("gh pr view {pr_number} --json baseRepository --jq .baseRepository.nameWithOwner").strip()
         if repo_full:
@@ -354,6 +358,8 @@ if pr_number:
     except Exception as e:
         print(f"WARNING: Failed to resolve CodeRabbit threads: {e}")
         # Non-fatal: continue to push
+elif pr_number:
+    print("Skipping prompt-side CodeRabbit resolution (--no-push); node_pr_polish owns this phase.")
 ```
 
 ### Pre-Push pre-commit Gate (MANDATORY — OMN-8602)
