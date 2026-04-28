@@ -1,8 +1,6 @@
 name: CR Thread Check
 on:
-  push:
-    branches:
-      - 'gh-readonly-queue/**'
+  merge_group:
   pull_request:
     types: [opened, synchronize, reopened]
   pull_request_review:
@@ -15,7 +13,7 @@ on:
     types: [created, edited, deleted]
 jobs:
   merge-queue-compat:
-    if: github.event_name == 'push'
+    if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - name: Legacy queue compatibility
@@ -23,7 +21,7 @@ jobs:
 
   cr-thread-gate:
     if: >-
-      github.event_name != 'push' &&
+      github.event_name != 'merge_group' &&
       (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
       github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/cr-thread-gate.yml
