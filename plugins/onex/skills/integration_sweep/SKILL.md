@@ -1,5 +1,5 @@
 ---
-description: Contract-driven post-merge integration verification — reads ModelTicketContract.dod_evidence for recently completed tickets, probes each integration surface (KAFKA, DB, CI, PLUGIN, GITHUB_CI, SCRIPT, CONTAINER_HEALTH, RUNTIME_HEALTH, CROSS_REPO_BOUNDARY, PLAYWRIGHT_BEHAVIORAL), and writes a ModelIntegrationRecord artifact to onex_change_control
+description: Contract-driven post-merge integration verification — dispatches to node_integration_sweep_orchestrator for execution
 version: 1.0.0
 mode: full
 level: advanced
@@ -46,6 +46,8 @@ outputs:
   - name: status
     description: "clean | fail | partial"
 ---
+
+<!-- routing-enforced: dispatches to node_integration_sweep_orchestrator (stub). functionally-complete requires real node implementation. -->
 
 # integration-sweep
 
