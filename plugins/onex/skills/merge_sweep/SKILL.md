@@ -101,6 +101,11 @@ Contract:
 Command topic:
 `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
 
+Dispatch declaration for deterministic routing gates:
+Kafka publish to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+is performed by `plugins/onex/skills/merge_sweep/run.sh` through the
+contract-canonical omnimarket launcher.
+
 Event type alias:
 `omnimarket.pr-lifecycle-orchestrator-start`
 
