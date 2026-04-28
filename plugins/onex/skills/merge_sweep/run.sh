@@ -6,7 +6,6 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_ID="merge-sweep-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 DRY_RUN=false
 INVENTORY_ONLY=false
@@ -51,7 +50,15 @@ while [[ $# -gt 0 ]]; do
     --enable-admin-merge-fallback=*) ENABLE_ADMIN_MERGE_FALLBACK="${1#*=}"; shift ;;
     --admin-fallback-threshold-minutes) require_value "$1" "${2:-}"; ADMIN_FALLBACK_THRESHOLD_MINUTES="$2"; shift 2 ;;
     --admin-fallback-threshold-minutes=*) ADMIN_FALLBACK_THRESHOLD_MINUTES="${1#*=}"; shift ;;
-    --verify) VERIFY=true; shift ;;
+    --verify)
+      if [[ -n "${2:-}" && "${2:-}" != --* ]]; then
+        VERIFY="$2"
+        shift 2
+      else
+        VERIFY=true
+        shift
+      fi
+      ;;
     --verify=*) VERIFY="${1#*=}"; shift ;;
     --verify-timeout-seconds) require_value "$1" "${2:-}"; VERIFY_TIMEOUT_SECONDS="$2"; shift 2 ;;
     --verify-timeout-seconds=*) VERIFY_TIMEOUT_SECONDS="${1#*=}"; shift ;;

@@ -90,8 +90,14 @@ pass "buildloop template correctly invokes cron-closeout.sh --build-only"
 
 # --- Test 3b: merge-sweep source quarantine is removed ----------------------
 MERGE_SWEEP_TMPL="${LAUNCHD_SRC}/ai.omninode.merge-sweep.plist"
+[ -f "${MERGE_SWEEP_TMPL}" ] || fail "merge-sweep template missing at ${MERGE_SWEEP_TMPL}"
 if awk '
-  /<key>Disabled<\/key>/ { pending=1; next }
+  /<key>Disabled<\/key>/ {
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<true\/>/) { found=1; exit }
+    if ($0 ~ /<key>Disabled<\/key>[[:space:]]*<false\/>/) { pending=0; next }
+    pending=1
+    next
+  }
   pending && /<true\/>/ { found=1; exit }
   pending && /<false\/>/ { pending=0; next }
   END { exit(found ? 0 : 1) }
