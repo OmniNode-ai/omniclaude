@@ -47,6 +47,7 @@ TIER1_DETERMINISTIC_SKILLS: set[str] = {
     "overnight",
     "pipeline_fill",
     "platform_readiness",
+    "pr_review",
     "redeploy",
     "release",
     "runtime_sweep",

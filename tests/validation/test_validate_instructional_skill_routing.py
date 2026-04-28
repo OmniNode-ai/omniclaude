@@ -220,6 +220,7 @@ class TestEnforcedSkillsSet:
             "autopilot",
             "compliance_sweep",
             "merge_sweep",
+            "pr_review",
             "session",
             "release",
             "redeploy",
