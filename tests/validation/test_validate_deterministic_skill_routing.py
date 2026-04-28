@@ -205,6 +205,11 @@ class TestEnforcedSkillsSet:
         # satisfy the deterministic routing enforcement gate.
         assert "overnight" in ENFORCED_SKILLS
 
+    def test_pr_review_bot_in_enforced(self) -> None:
+        # OMN-10269: pr_review_bot is a thin runtime-backed skill surface over
+        # node_pr_review_bot and must satisfy deterministic routing enforcement.
+        assert "pr_review_bot" in ENFORCED_SKILLS
+
     def test_missing_node_skills_not_in_enforced(self) -> None:
         for s in (
             "bus_audit",

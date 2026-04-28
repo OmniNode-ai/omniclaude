@@ -265,6 +265,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.report:
                 return 0
             return 1
+        if args.skill not in ENFORCED_SKILLS:
+            result = ScanResult(skills_scanned=0)
+            _print_result(result, report_mode=args.report)
+            return 0
         violations = scan_skill(skill_file)
         result = ScanResult(
             skills_scanned=1,

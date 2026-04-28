@@ -2,7 +2,7 @@
 
 This prompt executes the PR Review Bot skill by dispatching to the `node_pr_review_bot` ONEX node.
 
-> **Node distinction**: `node_pr_review_bot` is the external omnimarket service node (registered in `plugin-compat.yaml`). It is distinct from the internal `node_skill_pr_review_bot_orchestrator` that lives in this repo. All `onex run-node` invocations below target the external node and must be run from the omnimarket worktree.
+> **Node distinction**: `node_pr_review_bot` is the external omnimarket service node (registered in `plugin-compat.yaml`). It is distinct from the internal `node_skill_pr_review_bot_orchestrator` that lives in this repo. All `onex run-node` invocations below target the external node through the manifest-canonical runtime path.
 
 ## When to use
 
@@ -16,8 +16,7 @@ Use this skill when you need to run automated multi-model adversarial review on 
 Run the node via `onex run-node`:
 
 ```bash
-OMNIMARKET_ROOT="${OMNIMARKET_ROOT:-$(python3 -c 'import importlib.util; s=importlib.util.find_spec("omnimarket"); print(s.submodule_search_locations[0].split("/src/")[0]) if s else exit(1)' 2>/dev/null)}"
-cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'  # pragma: allowlist secret
+uv run onex run-node node_pr_review_bot --input '{"pr_number": <PR>, "repo": "owner/repo", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"], "judge_model": "mlx-community/DeepSeek-R1-Distill-Qwen-32B-bf16"}'  # pragma: allowlist secret
 ```
 
 ## Arguments
@@ -34,11 +33,9 @@ cd "${OMNIMARKET_ROOT}" && uv run onex run-node node_pr_review_bot --input '{"pr
 
 ## Example
 
-All examples must be run from the omnimarket worktree (same working directory as the Execution section above).
+All examples use the manifest-canonical runtime dispatcher.
 
 ```bash
-cd "$ONEX_WORKTREES_ROOT/omnimarket"  # local-path-ok: worktree convention documentation
-
 # Full review with defaults
 uv run onex run-node node_pr_review_bot --input '{"pr_number": 42, "repo": "OmniNode-ai/omnimarket", "reviewer_models": ["cyankiwi/Qwen3-Coder-30B-A3B-Instruct-AWQ-4bit"]}'  # pragma: allowlist secret
 
