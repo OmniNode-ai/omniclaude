@@ -54,6 +54,8 @@ RUNNER_EOF
   echo "" >> "${runner}"
   _extract_fn "count_pr_polish_results_with_state" >> "${runner}"
   echo "" >> "${runner}"
+  _extract_fn "count_pr_polish_results_with_true_field" >> "${runner}"
+  echo "" >> "${runner}"
   _extract_fn "write_result_yaml" >> "${runner}"
 
   cat >> "${runner}" <<'RUNNER_EOF'
@@ -108,6 +110,7 @@ JSON_EOF
 cat > "${ONEX_STATE_DIR}/pr-polish/run-1/result.json" <<'JSON_EOF'
 {
   "final_state": "COMPLETE",
+  "skill_changed_head": true,
   "completed_event": {
     "final_phase": "done"
   }
@@ -134,6 +137,7 @@ test_runtime_truth_fields_present() {
   _assert_contains "ledger includes new polish dispatch count" "dispatch_breadcrumbs_new_this_run: 1" "${output}"
   _assert_contains "ledger includes new polish result count" "result_files_new_this_run: 1" "${output}"
   _assert_contains "ledger includes completed polish result count" "completed_results_observed_total: 1" "${output}"
+  _assert_contains "ledger includes changed-head result count" "changed_head_results_observed_total: 1" "${output}"
   _assert_contains "ledger includes polish observation note" "actual pr_polish completion is observed from result.json files" "${output}"
 
   rm -f "${runner}"
