@@ -2,21 +2,23 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-# cron-merge-sweep.sh — Headless merge-sweep orchestrator with auth recovery
+# cron-merge-sweep.sh — Runtime-ingress merge-sweep launcher with auth recovery
 #
-# Wraps merge-sweep in a headless claude -p invocation with:
-# - Scoped --allowedTools matching SKILL.md minimum allowlist
+# Dispatches node_pr_lifecycle_orchestrator through the local runtime ingress:
+# - Structured runtime request/response, not Claude prose scraping
 # - Auth failure detection: if gh fails with auth error → gh auth refresh → retry once
 # - Max 2 auth refreshes per cycle; abort if both fail
 # - Structured result YAML at .onex_state/merge-sweep-results/{timestamp}.yaml
+# - Orchestrator result.json remains the source of truth for sweep outcome
 #
 # Usage:
 #   ./scripts/cron-merge-sweep.sh                     # Full merge-sweep
 #   ./scripts/cron-merge-sweep.sh --dry-run            # Print without executing
 #   ./scripts/cron-merge-sweep.sh --skip-polish        # Merge-only (no Track B)
 #   ./scripts/cron-merge-sweep.sh --repos omniclaude   # Limit to specific repos
+#   ./scripts/cron-merge-sweep.sh --resume             # Accepted for compatibility; logs fresh sweep
 #
-# Requires: claude CLI (with OAuth or API key), gh CLI (authenticated)
+# Requires: local runtime socket, omnimarket repo, gh CLI (authenticated), jq
 #
 # Design: Follows the headless decomposition pattern from cron-closeout.sh
 # - One task per invocation (bounded context)
@@ -37,10 +39,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 STATE_DIR="${ONEX_REGISTRY_ROOT}/.onex_state/merge-sweep-results"
+ONEX_STATE_DIR="${ONEX_STATE_DIR:-${ONEX_REGISTRY_ROOT}/.onex_state}"
+MARKET_REPO_ROOT="${ONEX_REGISTRY_ROOT}/omnimarket"
+RUNTIME_REQUEST_BIN="${MARKET_REPO_ROOT}/scripts/run_codex_runtime_request.py"
+PYTHON_BIN="${ONEX_PYTHON_BIN:-/opt/homebrew/bin/python3.13}"
 LOG_DIR="/tmp/merge-sweep-logs"
 PHASE_TIMEOUT=900  # 15 minutes — merge-sweep can be slow with polish
 RUN_ID="merge-sweep-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
 DRY_RUN=false
+MERGE_ONLY=false
+RESUME_REQUESTED=false
+REPOS_FILTER=""
+CORRELATION_ID=""
 
 # Auth recovery state
 AUTH_REFRESH_COUNT=0
@@ -62,13 +72,10 @@ SWEEP_ARGS="--enable-admin-merge-fallback=true --admin-fallback-threshold-minute
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
-    --skip-polish) SWEEP_ARGS="${SWEEP_ARGS} --skip-polish"; shift ;;
-    --resume)
-      echo "unsupported merge-sweep flag: --resume (run.sh rejects resume semantics)" >&2
-      exit 2
-      ;;
-    --repos) SWEEP_ARGS="${SWEEP_ARGS} --repos $2"; shift 2 ;;
-    --repos=*) SWEEP_ARGS="${SWEEP_ARGS} --repos ${1#*=}"; shift ;;
+    --skip-polish) MERGE_ONLY=true; SWEEP_ARGS="${SWEEP_ARGS} --skip-polish"; shift ;;
+    --resume) RESUME_REQUESTED=true; SWEEP_ARGS="${SWEEP_ARGS} --resume"; shift ;;
+    --repos) REPOS_FILTER="$2"; SWEEP_ARGS="${SWEEP_ARGS} --repos $2"; shift 2 ;;
+    --repos=*) REPOS_FILTER="${1#*=}"; SWEEP_ARGS="${SWEEP_ARGS} --repos ${1#*=}"; shift ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -92,6 +99,8 @@ fi
 
 export ONEX_RUN_ID="${RUN_ID}"
 export ONEX_UNSAFE_ALLOW_EDITS=1
+export ONEX_STATE_DIR
+export CANONICAL_CLONE="${MARKET_REPO_ROOT}"
 
 # Source headless emit wrapper for unified event emission [OMN-7034]
 # shellcheck disable=SC1091
@@ -102,27 +111,26 @@ source "$(dirname "$0")/headless-emit-wrapper.sh"
 source "$(dirname "$0")/lib/canonical-clone-preflight.sh"
 
 # ---------------------------------------------------------------------------
-# Tool allowlist (from SKILL.md minimum headless allowlist)
-# ---------------------------------------------------------------------------
-
-ALLOWED_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
-
-# ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 
 preflight() {
   local missing=()
 
-  if ! command -v claude &>/dev/null; then
-    missing+=("claude CLI (ensure ~/.local/bin is in PATH)")
-  fi
-
-  # Auth is handled by the claude CLI (OAuth session or API key).
-  # Do NOT check ANTHROPIC_API_KEY here — Claude Code sessions use OAuth.
-
   if ! command -v gh &>/dev/null; then
     missing+=("gh CLI")
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    missing+=("jq")
+  fi
+
+  if [[ ! -x "${PYTHON_BIN}" ]]; then
+    missing+=("${PYTHON_BIN}")
+  fi
+
+  if [[ ! -f "${RUNTIME_REQUEST_BIN}" ]]; then
+    missing+=("${RUNTIME_REQUEST_BIN}")
   fi
 
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -174,6 +182,14 @@ log() {
   echo "${msg}" >> "${LOG_DIR}/${RUN_ID}.log"
 }
 
+bool_json() {
+  if [[ "$1" == "true" ]]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
 # Check if output contains a GitHub auth failure
 is_auth_failure() {
   local output_file="$1"
@@ -205,43 +221,108 @@ try_auth_refresh() {
   fi
 }
 
-# Run merge-sweep via headless claude -p with auth recovery
+result_json_path() {
+  echo "${ONEX_STATE_DIR}/merge-sweep/${RUN_ID}/result.json"
+}
+
+count_pr_polish_dispatches() {
+  if [[ ! -d "${ONEX_STATE_DIR}/pr-polish" ]]; then
+    echo "0"
+    return
+  fi
+  find "${ONEX_STATE_DIR}/pr-polish" -name dispatch.json -type f 2>/dev/null | wc -l | tr -d ' '
+}
+
+build_runtime_payload() {
+  jq -n \
+    --arg correlation_id "${CORRELATION_ID}" \
+    --arg run_id "${RUN_ID}" \
+    --arg repos "${REPOS_FILTER}" \
+    --arg onex_state_dir "${ONEX_STATE_DIR}" \
+    --argjson dry_run "$(bool_json "${DRY_RUN}")" \
+    --argjson inventory_only false \
+    --argjson fix_only false \
+    --argjson merge_only "$(bool_json "${MERGE_ONLY}")" \
+    --argjson max_parallel_polish 20 \
+    --argjson enable_auto_rebase true \
+    --argjson use_dag_ordering true \
+    --argjson enable_trivial_comment_resolution true \
+    --argjson enable_admin_merge_fallback true \
+    --argjson admin_fallback_threshold_minutes 15 \
+    --argjson verify false \
+    --argjson verify_timeout_seconds 30 \
+    '{
+      correlation_id: $correlation_id,
+      run_id: $run_id,
+      repos: $repos,
+      onex_state_dir: $onex_state_dir,
+      dry_run: $dry_run,
+      inventory_only: $inventory_only,
+      fix_only: $fix_only,
+      merge_only: $merge_only,
+      max_parallel_polish: $max_parallel_polish,
+      enable_auto_rebase: $enable_auto_rebase,
+      use_dag_ordering: $use_dag_ordering,
+      enable_trivial_comment_resolution: $enable_trivial_comment_resolution,
+      enable_admin_merge_fallback: $enable_admin_merge_fallback,
+      admin_fallback_threshold_minutes: $admin_fallback_threshold_minutes,
+      verify: $verify,
+      verify_timeout_seconds: $verify_timeout_seconds
+    }'
+}
+
+# Run merge-sweep via direct runtime ingress with auth recovery
 run_merge_sweep() {
   local attempt="$1"
-  local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.txt"
-  local prompt="/onex:merge_sweep --run-id ${RUN_ID} ${SWEEP_ARGS}"
+  local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.json"
+  local payload_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.payload.json"
+  local dispatches_before dispatches_after
+  dispatches_before="$(count_pr_polish_dispatches)"
 
-  log "Starting merge-sweep (attempt ${attempt}): ${prompt}"
+  build_runtime_payload > "${payload_file}"
+
+  if [[ "${RESUME_REQUESTED}" == "true" ]]; then
+    log "Resume requested, but runtime path has no checkpoint resume. Running a fresh sweep."
+  fi
+
+  log "Starting merge-sweep runtime dispatch (attempt ${attempt})"
+  log "Payload file: ${payload_file}"
 
   if [[ "${DRY_RUN}" == "true" ]]; then
-    log "[DRY RUN] Would execute: claude -p '${prompt}' --allowedTools '${ALLOWED_TOOLS}'"
-    echo "DRY_RUN: merge-sweep" > "${output_file}"
+    log "[DRY RUN] Runtime payload prepared only"
+    cp "${payload_file}" "${output_file}"
     return 0
   fi
 
   local exit_code=0
-  timeout "${PHASE_TIMEOUT}" claude -p "${prompt}" \
-    --print \
-    --allowedTools "${ALLOWED_TOOLS}" \
-    > "${output_file}" 2>&1 || exit_code=$?
+  (
+    cd "${MARKET_REPO_ROOT}"
+    timeout "${PHASE_TIMEOUT}" \
+      env -u PYTHONPATH "${PYTHON_BIN}" "${RUNTIME_REQUEST_BIN}" \
+        --node-alias "pr_lifecycle_orchestrator" \
+        --payload-file "${payload_file}" \
+        --timeout-ms 300000 \
+        --correlation-id "${CORRELATION_ID}" \
+        > "${output_file}" 2>&1
+  ) || exit_code=$?
 
   if [[ ${exit_code} -eq 124 ]]; then
-    log "TIMEOUT: merge-sweep exceeded ${PHASE_TIMEOUT}s"
-    echo "TIMEOUT" >> "${output_file}"
+    log "TIMEOUT: merge-sweep runtime dispatch exceeded ${PHASE_TIMEOUT}s"
     return 1
   fi
 
-  # Check for auth failure — eligible for retry
   if is_auth_failure "${output_file}"; then
     log "Auth failure detected in merge-sweep output"
     return 2  # special code: auth failure
   fi
 
   if [[ ${exit_code} -ne 0 ]]; then
-    log "FAILED: merge-sweep exited with code ${exit_code}"
+    log "FAILED: merge-sweep runtime dispatch exited with code ${exit_code}"
     return 1
   fi
 
+  dispatches_after="$(count_pr_polish_dispatches)"
+  log "Completed merge-sweep (attempt ${attempt}); new pr-polish dispatch breadcrumbs: $((dispatches_after - dispatches_before))"
   log "Completed merge-sweep (attempt ${attempt})"
   return 0
 }
@@ -253,23 +334,77 @@ write_result_yaml() {
   local auth_refreshes="$3"
   local timestamp
   timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
   local result_file="${STATE_DIR}/${RUN_ID}.yaml"
+  local runtime_result_file
+  runtime_result_file="$(result_json_path)"
+  local response_file="${STATE_DIR}/${RUN_ID}-attempt-${attempts}.json"
+  local payload_file="${STATE_DIR}/${RUN_ID}-attempt-${attempts}.payload.json"
+  local orchestrator_ok="false"
+  local response_error_code=""
+  local response_error_message=""
+  local final_state=""
+  local prs_inventoried="0"
+  local prs_merged="0"
+  local prs_fixed="0"
+  local prs_skipped="0"
+  local prs_verified="0"
+  local runtime_error_message=""
+  local polish_dispatches_observed="0"
+
+  if [[ -f "${response_file}" ]]; then
+    orchestrator_ok="$(jq -r '.ok // false' "${response_file}" 2>/dev/null || echo "false")"
+    response_error_code="$(jq -r '.error.code // ""' "${response_file}" 2>/dev/null || echo "")"
+    response_error_message="$(jq -r '.error.message // ""' "${response_file}" 2>/dev/null || echo "")"
+  fi
+
+  if [[ -f "${runtime_result_file}" ]]; then
+    final_state="$(jq -r '.final_state // ""' "${runtime_result_file}" 2>/dev/null || echo "")"
+    prs_inventoried="$(jq -r '.prs_inventoried // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
+    prs_merged="$(jq -r '.prs_merged // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
+    prs_fixed="$(jq -r '.prs_fixed // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
+    prs_skipped="$(jq -r '.prs_skipped // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
+    prs_verified="$(jq -r '.prs_verified // 0' "${runtime_result_file}" 2>/dev/null || echo "0")"
+    runtime_error_message="$(jq -r '.error_message // ""' "${runtime_result_file}" 2>/dev/null || echo "")"
+  fi
+
+  polish_dispatches_observed="$(count_pr_polish_dispatches)"
 
   cat > "${result_file}" << EOF
 # merge-sweep result — generated by cron-merge-sweep.sh [OMN-7256]
 run_id: "${RUN_ID}"
+correlation_id: "${CORRELATION_ID}"
 completed_at: "${timestamp}"
 status: "${status}"
 dry_run: ${DRY_RUN}
 attempts: ${attempts}
 auth_refreshes: ${auth_refreshes}
+resume_requested: ${RESUME_REQUESTED}
+merge_only: ${MERGE_ONLY}
+repos_filter: "${REPOS_FILTER}"
 sweep_args: "${SWEEP_ARGS}"
+runtime_request:
+  market_repo_root: "${MARKET_REPO_ROOT}"
+  payload_file: "$(basename "${payload_file}")"
+  response_file: "$(basename "${response_file}")"
+  result_json: "${runtime_result_file}"
+  orchestrator_ok: ${orchestrator_ok}
+  response_error_code: "${response_error_code}"
+  response_error_message: "${response_error_message}"
+orchestrator_result:
+  final_state: "${final_state}"
+  prs_inventoried: ${prs_inventoried}
+  prs_merged: ${prs_merged}
+  prs_fixed: ${prs_fixed}
+  prs_skipped: ${prs_skipped}
+  prs_verified: ${prs_verified}
+  error_message: "${runtime_error_message}"
+polish_observation:
+  dispatch_breadcrumbs_observed_total: ${polish_dispatches_observed}
+  note: "prs_fixed is the orchestrator fix-action count; actual PR merge-readiness still requires later verification."
 output_files:
 EOF
 
-  # List all attempt output files
-  for f in "${STATE_DIR}/${RUN_ID}"-attempt-*.txt; do
+  for f in "${STATE_DIR}/${RUN_ID}"-attempt-*; do
     if [[ -f "$f" ]]; then
       echo "  - \"$(basename "$f")\"" >> "${result_file}"
     fi
@@ -285,7 +420,10 @@ EOF
 log "=== Merge-sweep run ${RUN_ID} starting ==="
 log "ONEX_REGISTRY_ROOT: ${ONEX_REGISTRY_ROOT}"
 log "State dir: ${STATE_DIR}"
+log "ONEX_STATE_DIR: ${ONEX_STATE_DIR}"
 log "Sweep args:${SWEEP_ARGS:- (none)}"
+CORRELATION_ID="$("${PYTHON_BIN}" -c 'import uuid; print(uuid.uuid4())')"
+log "Correlation ID: ${CORRELATION_ID}"
 
 # Pull canonical clone before running the skill so the latest code is always executed [OMN-9405]
 canonical_clone_preflight "preflight" || {
@@ -295,7 +433,7 @@ canonical_clone_preflight "preflight" || {
 
 emit_task_event "task-assigned" "${RUN_ID}" "\"session_id\": \"${ONEX_RUN_ID}\", \"phase\": \"merge-sweep-start\""
 
-# Pre-check: verify gh auth is working before invoking claude
+# Pre-check: verify gh auth is working before invoking the runtime-backed sweep
 if ! gh auth status &>/dev/null; then
   log "gh auth check failed at start — attempting refresh"
   if ! try_auth_refresh; then
@@ -314,7 +452,14 @@ while [[ ${ATTEMPT} -le 2 ]]; do
   result=$?
 
   if [[ ${result} -eq 0 ]]; then
-    FINAL_STATUS="complete"
+    if [[ "${DRY_RUN}" == "true" ]]; then
+      FINAL_STATUS="complete"
+    elif [[ -f "$(result_json_path)" ]] && \
+      [[ "$(jq -r '.final_state // ""' "$(result_json_path)" 2>/dev/null)" == "COMPLETE" ]]; then
+      FINAL_STATUS="complete"
+    else
+      FINAL_STATUS="failed"
+    fi
     break
   elif [[ ${result} -eq 2 ]]; then
     # Auth failure — try to recover

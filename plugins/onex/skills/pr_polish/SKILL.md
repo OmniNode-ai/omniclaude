@@ -47,8 +47,10 @@ args:
 
 # PR Polish
 
-Dispatch to the deterministic node — do NOT inline any logic:
+The current live branch-fixing path is the multi-phase workflow described in
+`prompt.md`. Do not treat `node_pr_polish` completion as proof that a PR was
+actually polished: the node is still FSM/state evidence, while the prompt
+workflow owns real conflict resolution, review fixes, local-review, and push.
 
-```bash
-onex run node_pr_polish -- --pr-number "${pr_number}" "${@}"
-```
+Until node parity is implemented, the authoritative execution surface for
+`/onex:pr_polish` remains this skill workflow.
