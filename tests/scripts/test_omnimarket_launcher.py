@@ -9,6 +9,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 SESSION_START = REPO_ROOT / "plugins/onex/hooks/scripts/session-start.sh"
+SESSION_END = REPO_ROOT / "plugins/onex/hooks/scripts/session-end.sh"
 COMMON = REPO_ROOT / "plugins/onex/hooks/scripts/common.sh"
 EVENT_REGISTRY_PATH = REPO_ROOT / "plugins/onex/lib/event_registry/omniclaude.yaml"
 
@@ -35,8 +36,10 @@ def test_launcher_does_not_invoke_omniclaude_publisher() -> None:
     assert "-m omniclaude.publisher start" not in text, (
         "session-start.sh must NOT invoke -m omniclaude.publisher start (use omnimarket node)"
     )
+    assert "omnibase_infra.runtime.emit_daemon.cli start" not in text, (
+        "session-start.sh must NOT keep the removed omnibase_infra emit-daemon fallback"
+    )
     # The active daemon launch must not use the deprecated --kafka-servers CLI arg.
-    # (_start_legacy_emit_daemon may still reference it but is no longer called.)
     assert "omnimarket.nodes.node_emit_daemon start" in text, (
         "sanity: omnimarket daemon start must be present before checking for arg absence"
     )
@@ -132,3 +135,29 @@ def test_launcher_uses_spool_dir_flag() -> None:
         "session-start.sh must pass --spool-dir to preserve event spool continuity "
         "across daemon restart (OMN-10116 Part 4)"
     )
+
+
+def test_common_restart_path_uses_omnimarket_node() -> None:
+    text = COMMON.read_text()
+    marker = 'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
+    assert marker in text
+    block_start = text.index(marker)
+    block_end = text.index(" &\n", block_start)
+    invocation = text[block_start:block_end]
+    assert "--kafka-bootstrap-servers" in invocation
+    assert "--pid-path" in invocation
+    assert "--spool-dir" in invocation
+    assert "--event-registry" in invocation
+    assert "--log-path" in invocation
+    assert "-m omniclaude.publisher start" not in invocation
+    assert "omnibase_infra.runtime.emit_daemon.cli start" not in invocation
+
+
+def test_session_end_stop_path_uses_omnimarket_node() -> None:
+    text = SESSION_END.read_text()
+    assert (
+        'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon stop' in text
+    )
+    assert "--pid-path" in text
+    assert "-m omniclaude.publisher stop" not in text
+    assert "omnibase_infra.runtime.emit_daemon.cli stop" not in text

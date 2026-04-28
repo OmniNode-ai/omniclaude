@@ -6,6 +6,7 @@ level: advanced
 debug: false
 category: workflow
 tags: [epic, team, multi-repo, autonomous, linear, slack]
+foreground_orchestrator: true
 args:
   - epic_id (required): Linear epic ID (e.g., OMN-2000)
   - --mode (required): Workflow mode — must be "build". Epic-team is exclusively a BUILD-mode skill. Omitting --mode emits a usage error.

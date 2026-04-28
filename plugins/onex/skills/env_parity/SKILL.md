@@ -1,5 +1,5 @@
 ---
-description: Local Docker vs onex-dev k8s environment parity checker — detects credential drift, stale ECR tags, and missing Infisical paths
+description: Local Docker vs onex-dev k8s environment parity checker -- dispatches to node_env_parity_compute for execution
 mode: full
 version: 1.0.0
 level: advanced
@@ -33,6 +33,8 @@ args:
     description: "Create Linear tickets for CRITICAL findings (opt-in, not default)"
     required: false
 ---
+
+<!-- routing-enforced: dispatches to node_env_parity_compute (stub). functionally-complete requires real node implementation. -->
 
 # Env Parity Checker
 

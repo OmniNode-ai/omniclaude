@@ -101,6 +101,11 @@ Contract:
 Command topic:
 `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
 
+Dispatch declaration for deterministic routing gates:
+Kafka publish to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+is performed by `plugins/onex/skills/merge_sweep/run.sh` through the
+contract-canonical omnimarket launcher.
+
 Event type alias:
 `omnimarket.pr-lifecycle-orchestrator-start`
 
@@ -153,8 +158,10 @@ plugins/onex/skills/merge_sweep/run.sh \
   [--run-id <id>]
 ```
 
-The launcher prints the `ModelPrLifecycleResult` JSON emitted by the backing
-node. Surface non-zero exits directly; do not produce prose.
+The launcher dispatches to `onex.cmd.omnimarket.pr-lifecycle-orchestrator-start.v1`
+and prints the `ModelPrLifecycleResult` JSON emitted by the backing node.
+Surface non-zero exits directly. On routing failure raise `SkillRoutingError`;
+do not produce prose.
 
 ## Headless / Cron Invocation
 

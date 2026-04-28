@@ -1,5 +1,5 @@
 ---
-description: Cross-repo integration health audit with detect, fix, and cycle modes
+description: Cross-repo integration health audit -- dispatches to node_gap_compute for execution
 mode: full
 version: 1.0.0
 level: advanced
@@ -87,6 +87,8 @@ args:
     description: "Consumer group lag threshold for projection_lag probe (default: 10000)"
     required: false
 ---
+
+<!-- routing-enforced: dispatches to node_gap_compute (stub). functionally-complete requires real node implementation. -->
 
 # Gap
 

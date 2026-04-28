@@ -1,5 +1,5 @@
 ---
-description: "DoD compliance sweep -- retroactive batch audit or targeted pre-close gate"
+description: "DoD compliance sweep -- dispatches to node_dod_sweep_orchestrator for execution"
 version: 1.1.0
 mode: full
 level: advanced
@@ -24,6 +24,8 @@ args:
     description: "Report only, no follow-up tickets"
     required: false
 ---
+
+<!-- routing-enforced: dispatches to node_dod_sweep_orchestrator (stub). functionally-complete requires real node implementation. -->
 
 # DoD Compliance Sweep
 

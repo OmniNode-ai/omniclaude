@@ -1,5 +1,5 @@
 ---
-description: Poll GitHub PR for review feedback, auto-fix issues, and report terminal state
+description: Poll GitHub PR for review feedback -- dispatches to node_pr_watch_orchestrator for execution
 mode: full
 version: 1.0.0
 level: basic
@@ -63,6 +63,8 @@ args:
     description: Also auto-fix Nit-level comments
     required: false
 ---
+
+<!-- routing-enforced: dispatches to node_pr_watch_orchestrator (stub). functionally-complete requires real node implementation. -->
 
 # PR Watch
 

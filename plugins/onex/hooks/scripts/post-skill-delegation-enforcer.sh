@@ -29,6 +29,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/hook-runtime-client.sh" 2>/dev/null || tr
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _MODE_SH="${_SCRIPT_DIR}/../../lib/mode.sh"
 if [[ -f "$_MODE_SH" ]]; then source "$_MODE_SH"; [[ "$(omniclaude_mode)" == "lite" ]] && exit 0; fi
+
+# Resolve PLUGIN_ROOT before cd changes CWD (BASH_SOURCE[0] relative paths break after cd).
+_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${_SCRIPT_DIR}/../.." && pwd)}"
 unset _SCRIPT_DIR _MODE_SH
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
@@ -52,6 +55,27 @@ fi
 # Extract skill name and session ID
 SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null) || SKILL_NAME="unknown"
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.session_id // .sessionId // ""' 2>/dev/null) || SESSION_ID=""
+
+# Opt-out: foreground orchestrator skills bypass the delegation enforcer.
+# If the skill's SKILL.md contains `foreground_orchestrator: true` in its YAML
+# frontmatter, the LLM must orchestrate inline — it cannot delegate to a subagent
+# because subagents cannot call Agent() themselves (confirmed in
+# feedback_dispatch_worker_subagent_limitation.md).
+
+# Strip plugin namespace prefix (e.g. "onex:epic_team" → "epic_team")
+_BARE_SKILL_NAME="${SKILL_NAME#*:}"
+_SKILL_MD="${_PLUGIN_ROOT}/skills/${_BARE_SKILL_NAME}/SKILL.md"
+
+if [[ -f "$_SKILL_MD" ]]; then
+    # Extract first YAML frontmatter block (between first pair of --- delimiters)
+    if awk '/^---$/{c++; if(c==2) exit; next} c==1{print}' "$_SKILL_MD" \
+        | grep -qE '^foreground_orchestrator:[[:space:]]*true[[:space:]]*$'; then
+        # Foreground orchestrator: skip enforcement, emit empty no-op output
+        jq -n '{hookSpecificOutput: {}}'
+        exit 0
+    fi
+fi
+unset _BARE_SKILL_NAME _SKILL_MD _PLUGIN_ROOT
 
 # Notify daemon that a skill was loaded (tightens thresholds) [OMN-5308]
 if [[ -n "$SESSION_ID" ]]; then

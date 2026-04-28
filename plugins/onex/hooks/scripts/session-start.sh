@@ -436,31 +436,6 @@ WARN
     return 0
 }
 
-# Legacy fallback: start omnibase_infra emit daemon (will be removed by OMN-1945)
-_start_legacy_emit_daemon() {
-    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        write_daemon_status "kafka_not_configured"
-        return 0
-    fi
-    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
-        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
-        --socket-path "$EMIT_DAEMON_SOCKET" \
-        --daemonize \
-        >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
-    local daemon_pid=$!
-    log "Legacy daemon started with PID $daemon_pid"
-    local wait_count=0
-    local max_wait=10
-    while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
-        sleep 0.02
-        ((wait_count++)) || true  # || true: post-increment from 0 returns exit code 1 under set -e
-    done
-    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        write_daemon_status "running"
-    fi
-    return 0
-}
-
 # Performance tracking
 START_TIME=$(get_time_ms)
 

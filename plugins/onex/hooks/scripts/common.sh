@@ -38,6 +38,13 @@ export BREW_PY
 : "${ONEX_EMIT_EVENT_REGISTRY:=${OMNI_HOME:-}/omniclaude/plugins/onex/lib/event_registry/omniclaude.yaml}"
 export ONEX_EMIT_EVENT_REGISTRY
 
+# Shared emit-daemon paths for hook launch/restart/stop surfaces.
+# Session-start may override EMIT_DAEMON_SOCKET before sourcing common.sh.
+: "${EMIT_DAEMON_SOCKET:=${OMNICLAUDE_EMIT_SOCKET:-${HOME}/.claude/emit.sock}}"
+: "${EMIT_DAEMON_PID_FILE:=${HOME}/.claude/emit.pid}"
+export EMIT_DAEMON_SOCKET
+export EMIT_DAEMON_PID_FILE
+
 # Strict priority chain with NO fallbacks. If no valid Python is found,
 # hooks refuse to run. This prevents silent degradation where hooks run
 # against the wrong interpreter with missing dependencies.
@@ -751,7 +758,7 @@ _try_restart_emit_daemon() {
     # Kill stale daemon process with tight pattern matching
     # Match process with full socket path to avoid false positives
     local stale_pids
-    stale_pids=$(pgrep -f "omniclaude\.publisher start.*--socket-path $(printf '%s\n' "$socket_path" | sed 's/[[\.*^$/]/\\&/g')" 2>/dev/null) || true
+    stale_pids=$(pgrep -f "omnimarket\.nodes\.node_emit_daemon start.*--socket-path $(printf '%s\n' "$socket_path" | sed 's/[[\.*^$/]/\\&/g')" 2>/dev/null) || true
 
     if [[ -n "$stale_pids" ]]; then
         log "Emit daemon: Killing stale processes: $stale_pids"
@@ -766,9 +773,13 @@ _try_restart_emit_daemon() {
         return 1
     fi
 
-    nohup "$PYTHON_CMD" -m omniclaude.publisher start \
-        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+    nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start \
         --socket-path "$socket_path" \
+        --pid-path "$EMIT_DAEMON_PID_FILE" \
+        --kafka-bootstrap-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --spool-dir "${ONEX_STATE_DIR}/event-spool" \
+        --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
+        --log-path "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" \
         >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!

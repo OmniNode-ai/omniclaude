@@ -5,6 +5,7 @@ version: "1.0.0"
 debug: false
 category: dispatch
 level: advanced
+foreground_orchestrator: true
 tags:
   - dispatch
   - orchestration

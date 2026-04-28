@@ -5,6 +5,7 @@ version: 1.0.0
 level: advanced
 debug: false
 category: workflow
+foreground_orchestrator: true
 tags:
   - wave
   - scheduler
