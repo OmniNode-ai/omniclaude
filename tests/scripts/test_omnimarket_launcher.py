@@ -139,16 +139,18 @@ def test_launcher_uses_spool_dir_flag() -> None:
 
 def test_common_restart_path_uses_omnimarket_node() -> None:
     text = COMMON.read_text()
-    assert (
-        'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
-        in text
-    )
-    assert "--kafka-bootstrap-servers" in text
-    assert "--pid-path" in text
-    assert "--spool-dir" in text
-    assert "--event-registry" in text
-    assert "--log-path" in text
-    assert "-m omniclaude.publisher start" not in text
+    marker = 'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
+    assert marker in text
+    block_start = text.index(marker)
+    block_end = text.index(" &\n", block_start)
+    invocation = text[block_start:block_end]
+    assert "--kafka-bootstrap-servers" in invocation
+    assert "--pid-path" in invocation
+    assert "--spool-dir" in invocation
+    assert "--event-registry" in invocation
+    assert "--log-path" in invocation
+    assert "-m omniclaude.publisher start" not in invocation
+    assert "omnibase_infra.runtime.emit_daemon.cli start" not in invocation
 
 
 def test_session_end_stop_path_uses_omnimarket_node() -> None:
