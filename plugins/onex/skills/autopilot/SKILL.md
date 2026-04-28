@@ -6,6 +6,7 @@ mode: full
 level: advanced
 debug: false
 category: workflow
+foreground_orchestrator: true
 tags:
   - autonomous
   - close-out

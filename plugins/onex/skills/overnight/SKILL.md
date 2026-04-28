@@ -5,6 +5,7 @@ version: 2.0.0
 level: advanced
 debug: false
 category: workflow
+foreground_orchestrator: true
 tags:
   - overnight
   - autonomous
