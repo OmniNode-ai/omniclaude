@@ -15,7 +15,7 @@ on:
     types: [created, edited, deleted]
 jobs:
   merge-queue-compat:
-    if: startsWith(github.ref, 'refs/heads/gh-readonly-queue/')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Legacy queue compatibility
@@ -23,7 +23,7 @@ jobs:
 
   cr-thread-gate:
     if: >-
-      !startsWith(github.ref, 'refs/heads/gh-readonly-queue/') &&
+      github.event_name != 'push' &&
       (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
       github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/cr-thread-gate.yml
