@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+# OMN-10239 runtime-backed skill migration manifest.
+#
+# This is the initial advisory slice only. Each entry declares the canonical
+# runtime-backed path the skill should converge on. The validator inventories
+# other runtime-backed paths still present in the skill surface so we can
+# migrate them without hard-gating yet.
+
+version: 1
+
+skills:
+  aislop_sweep:
+    canonical_path: onex_node
+    canonical_target: node_aislop_sweep
+    notes: Canonical RuntimeLocal dispatch path already documented in the skill.
+
+  merge_sweep:
+    canonical_path: onex_run_node
+    canonical_target: node_pr_lifecycle_orchestrator
+    notes: Legacy omnimarket module CLI references remain advisory until the migration is complete.
+
+  pr_review:
+    canonical_path: onex_run_node
+    canonical_target: node_pr_review_bot
+    notes: Legacy direct workflow_runner.run_review references remain advisory until the thin shim lands.
+
+  pr_review_bot:
+    canonical_path: onex_run_node
+    canonical_target: node_pr_review_bot
+    notes: Legacy direct workflow_runner.run_review references remain advisory until the skill routes only through run-node.
+
+  delegate:
+    canonical_path: onex_run_node
+    canonical_target: node_delegation_orchestrator
+    notes: Direct event-bus publish/emit-daemon wiring is inventoried here as a migration target.
