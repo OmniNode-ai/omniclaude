@@ -15,7 +15,6 @@
 #   ./scripts/cron-merge-sweep.sh --dry-run            # Print without executing
 #   ./scripts/cron-merge-sweep.sh --skip-polish        # Merge-only (no Track B)
 #   ./scripts/cron-merge-sweep.sh --repos omniclaude   # Limit to specific repos
-#   ./scripts/cron-merge-sweep.sh --resume             # Resume from checkpoint
 #
 # Requires: claude CLI (with OAuth or API key), gh CLI (authenticated)
 #
@@ -57,19 +56,30 @@ MAX_AUTH_REFRESHES=2
 #
 # Threshold 15 min = unstick within ~2 tick cycles at the 5-min tick interval.
 # CLI invocations can override via later flags (last-wins in argument parsing).
-SWEEP_ARGS="--enable-admin-merge-fallback --admin-fallback-threshold-minutes=15"
+SWEEP_ARGS="--enable-admin-merge-fallback=true --admin-fallback-threshold-minutes=15"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
     --skip-polish) SWEEP_ARGS="${SWEEP_ARGS} --skip-polish"; shift ;;
-    --resume) SWEEP_ARGS="${SWEEP_ARGS} --resume"; shift ;;
+    --resume)
+      echo "unsupported merge-sweep flag: --resume (run.sh rejects resume semantics)" >&2
+      exit 2
+      ;;
     --repos) SWEEP_ARGS="${SWEEP_ARGS} --repos $2"; shift 2 ;;
     --repos=*) SWEEP_ARGS="${SWEEP_ARGS} --repos ${1#*=}"; shift ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  cat >&2 <<'JSON'
+{"status":"quarantined","reason":"OMN-10181: merge-sweep launchd source remains disabled until OMN-10182 proves both the omnimarket CLI round-trip and the omniclaude run.sh shim path","ticket":"OMN-10181","blocked_by":["OMN-10182"]}
+JSON
+  exit 64
+fi
+return 0
 
 # ---------------------------------------------------------------------------
 # Environment

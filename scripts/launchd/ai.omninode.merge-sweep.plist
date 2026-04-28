@@ -16,6 +16,9 @@
   <key>Label</key>
   <string>ai.omninode.merge-sweep</string>
 
+  <key>Disabled</key>
+  <true/>
+
   <key>ProgramArguments</key>
   <array>
     <string>__OMNI_HOME__/omniclaude/scripts/cron-merge-sweep.sh</string>
