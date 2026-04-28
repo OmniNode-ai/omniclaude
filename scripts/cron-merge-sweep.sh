@@ -71,8 +71,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo '{"status":"quarantined","reason":"OMN-10165 SEAM-5a: merge_sweep skill dispatch is structurally broken until repaired","ticket":"OMN-10165"}' >&2
-exit 64
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  echo '{"status":"quarantined","reason":"OMN-10165 SEAM-5a: merge_sweep skill dispatch is structurally broken until repaired","ticket":"OMN-10165"}' >&2
+  exit 64
+fi
+return 0
 
 # ---------------------------------------------------------------------------
 # Environment
