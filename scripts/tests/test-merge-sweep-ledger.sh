@@ -56,6 +56,12 @@ RUNNER_EOF
   echo "" >> "${runner}"
   _extract_fn "count_pr_polish_results_with_true_field" >> "${runner}"
   echo "" >> "${runner}"
+  _extract_fn "snapshot_pr_polish_before" >> "${runner}"
+  echo "" >> "${runner}"
+  _extract_fn "snapshot_pr_polish_after" >> "${runner}"
+  echo "" >> "${runner}"
+  _extract_fn "ensure_pr_polish_snapshots" >> "${runner}"
+  echo "" >> "${runner}"
   _extract_fn "write_result_yaml" >> "${runner}"
 
   cat >> "${runner}" <<'RUNNER_EOF'

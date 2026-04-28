@@ -55,10 +55,10 @@ CORRELATION_ID=""
 # Auth recovery state
 AUTH_REFRESH_COUNT=0
 MAX_AUTH_REFRESHES=2
-POLISH_DISPATCHES_BEFORE=0
-POLISH_DISPATCHES_AFTER=0
-POLISH_RESULTS_BEFORE=0
-POLISH_RESULTS_AFTER=0
+POLISH_DISPATCHES_BEFORE=""
+POLISH_DISPATCHES_AFTER=""
+POLISH_RESULTS_BEFORE=""
+POLISH_RESULTS_AFTER=""
 
 # Pass-through args for merge-sweep skill
 #
@@ -308,6 +308,27 @@ count_pr_polish_results_with_true_field() {
   echo "${count}"
 }
 
+snapshot_pr_polish_before() {
+  if [[ -z "${POLISH_DISPATCHES_BEFORE}" ]]; then
+    POLISH_DISPATCHES_BEFORE="$(count_pr_polish_dispatches)"
+  fi
+  if [[ -z "${POLISH_RESULTS_BEFORE}" ]]; then
+    POLISH_RESULTS_BEFORE="$(count_pr_polish_results)"
+  fi
+}
+
+snapshot_pr_polish_after() {
+  POLISH_DISPATCHES_AFTER="$(count_pr_polish_dispatches)"
+  POLISH_RESULTS_AFTER="$(count_pr_polish_results)"
+}
+
+ensure_pr_polish_snapshots() {
+  snapshot_pr_polish_before
+  if [[ -z "${POLISH_DISPATCHES_AFTER}" || -z "${POLISH_RESULTS_AFTER}" ]]; then
+    snapshot_pr_polish_after
+  fi
+}
+
 build_runtime_payload() {
   jq -n \
     --arg correlation_id "${CORRELATION_ID}" \
@@ -352,12 +373,9 @@ run_merge_sweep() {
   local output_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.json"
   local payload_file="${STATE_DIR}/${RUN_ID}-attempt-${attempt}.payload.json"
   local dispatches_before dispatches_after results_before results_after
-  dispatches_before="$(count_pr_polish_dispatches)"
-  results_before="$(count_pr_polish_results)"
-  if [[ "${attempt}" -eq 1 ]]; then
-    POLISH_DISPATCHES_BEFORE="${dispatches_before}"
-    POLISH_RESULTS_BEFORE="${results_before}"
-  fi
+  snapshot_pr_polish_before
+  dispatches_before="${POLISH_DISPATCHES_BEFORE}"
+  results_before="${POLISH_RESULTS_BEFORE}"
 
   build_runtime_payload > "${payload_file}"
 
@@ -371,6 +389,7 @@ run_merge_sweep() {
   if [[ "${DRY_RUN}" == "true" ]]; then
     log "[DRY RUN] Runtime payload prepared only"
     cp "${payload_file}" "${output_file}"
+    snapshot_pr_polish_after
     return 0
   fi
 
@@ -386,10 +405,9 @@ run_merge_sweep() {
         > "${output_file}" 2>&1
   ) || exit_code=$?
 
-  dispatches_after="$(count_pr_polish_dispatches)"
-  results_after="$(count_pr_polish_results)"
-  POLISH_DISPATCHES_AFTER="${dispatches_after}"
-  POLISH_RESULTS_AFTER="${results_after}"
+  snapshot_pr_polish_after
+  dispatches_after="${POLISH_DISPATCHES_AFTER}"
+  results_after="${POLISH_RESULTS_AFTER}"
 
   if [[ ${exit_code} -eq 124 ]]; then
     log "TIMEOUT: merge-sweep runtime dispatch exceeded ${PHASE_TIMEOUT}s"
@@ -406,10 +424,9 @@ run_merge_sweep() {
     return 1
   fi
 
-  dispatches_after="$(count_pr_polish_dispatches)"
-  results_after="$(count_pr_polish_results)"
-  POLISH_DISPATCHES_AFTER="${dispatches_after}"
-  POLISH_RESULTS_AFTER="${results_after}"
+  snapshot_pr_polish_after
+  dispatches_after="${POLISH_DISPATCHES_AFTER}"
+  results_after="${POLISH_RESULTS_AFTER}"
   log "Completed merge-sweep (attempt ${attempt}); new pr-polish dispatch breadcrumbs: $((dispatches_after - dispatches_before)); new pr-polish result files: $((results_after - results_before))"
   log "Completed merge-sweep (attempt ${attempt})"
   return 0
@@ -444,6 +461,7 @@ write_result_yaml() {
   local polish_results_complete="0"
   local polish_results_failed="0"
   local polish_results_changed_head="0"
+  ensure_pr_polish_snapshots
 
   if [[ -f "${response_file}" ]]; then
     orchestrator_ok="$(jq -r '.ok // false' "${response_file}" 2>/dev/null || echo "false")"
