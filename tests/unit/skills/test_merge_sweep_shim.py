@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
-"""Tests for the thin /onex:merge_sweep dispatch shim (OMN-8752).
+"""Tests for the thin /onex:merge_sweep dispatch shim (OMN-10167).
 
 Validates that the merge_sweep skill contains no inline GH script fallback,
-no direct Kafka publish, no orchestration logic, and dispatches directly
-to node_merge_sweep via `onex run-node`.
+no direct Kafka publish, no orchestration logic, and dispatches through the
+PR lifecycle orchestrator module CLI.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class TestMergeSweepSkillMd:
         assert len(parts) >= 3, "Frontmatter not properly delimited"
         fm = yaml.safe_load(parts[1])
         assert fm["description"], "description required"
-        assert fm["version"] == "6.1.0"
+        assert fm["version"] == "7.0.0"
         assert fm["mode"] == "full"
         assert fm["category"] == "workflow"
 
@@ -48,18 +48,14 @@ class TestMergeSweepSkillMd:
         content = (SKILL_DIR / "SKILL.md").read_text()
         fm = yaml.safe_load(content.split("---", 2)[1])
         arg_names = [a["name"] for a in fm["args"]]
-        # Spot-check the critical v3.x+ flags are preserved
+        # Spot-check the v7 command fields the operator surface depends on.
         for required in (
             "--repos",
             "--dry-run",
-            "--merge-method",
-            "--skip-polish",
-            "--authors",
-            "--since",
-            "--resume",
             "--inventory-only",
             "--fix-only",
             "--merge-only",
+            "--max-parallel-polish",
             "--enable-auto-rebase",
             "--use-dag-ordering",
             "--enable-trivial-comment-resolution",
@@ -72,17 +68,17 @@ class TestMergeSweepSkillMd:
 
     def test_skill_md_references_backing_node(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "node_merge_sweep" in content
+        assert "node_pr_lifecycle_orchestrator" in content
         assert "omnimarket" in content
 
     def test_skill_md_has_dispatch_command(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "onex run-node node_merge_sweep" in content
+        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
 
-    def test_skill_md_declares_skill_routing_error(self) -> None:
-        """Dispatch-only shims must surface SkillRoutingError on failure."""
+    def test_skill_md_declares_nonzero_exit_passthrough(self) -> None:
+        """Dispatch-only shims must surface backing command failures."""
         content = (SKILL_DIR / "SKILL.md").read_text()
-        assert "SkillRoutingError" in content
+        assert "non-zero exits" in content
         assert "do not produce prose" in content.lower()
 
     def test_skill_md_no_inline_gh_script(self) -> None:
@@ -96,7 +92,7 @@ class TestMergeSweepSkillMd:
         """A4: no direct `kcat -P` or event-bus publish in the shim."""
         content = (SKILL_DIR / "SKILL.md").read_text()
         assert "kcat -P" not in content
-        assert "ModelEventEnvelope" not in content
+        assert "kcat " not in content
 
 
 @pytest.mark.unit
@@ -112,14 +108,13 @@ class TestMergeSweepPromptMd:
 
     def test_prompt_md_dispatches_to_node(self) -> None:
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "onex run-node node_merge_sweep" in content
+        assert "python -m omnimarket.nodes.node_pr_lifecycle_orchestrator" in content
 
     def test_prompt_md_no_inline_orchestration(self) -> None:
         """Prompt must not contain inline per-repo or per-PR orchestration."""
         content = (SKILL_DIR / "prompt.md").read_text()
         # No inline Kafka publish, no inline claim registry, no inline polling.
         assert "kcat -P" not in content
-        assert "ModelEventEnvelope" not in content
         assert "result.json" not in content
         assert "poll_interval" not in content
 
@@ -148,17 +143,20 @@ class TestMergeSweepPromptMd:
         assert "from openai" not in content
 
     def test_prompt_md_single_dispatch(self) -> None:
-        """A4 invariant: exactly one onex run-node dispatch to node_merge_sweep."""
+        """A4 invariant: exactly one module CLI dispatch to pr_lifecycle."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        matches = re.findall(r"onex\s+run-node\s+node_merge_sweep", content)
+        matches = re.findall(
+            r"python\s+-m\s+omnimarket\.nodes\.node_pr_lifecycle_orchestrator",
+            content,
+        )
         assert len(matches) == 1, (
-            f"Expected exactly 1 onex run-node dispatch, found {len(matches)}"
+            f"Expected exactly 1 module CLI dispatch, found {len(matches)}"
         )
 
-    def test_prompt_md_surfaces_skill_routing_error(self) -> None:
+    def test_prompt_md_surfaces_nonzero_exit_passthrough(self) -> None:
         content = (SKILL_DIR / "prompt.md").read_text()
-        assert "SkillRoutingError" in content
-        assert "do not produce prose" in content.lower()
+        assert "exits non-zero" in content
+        assert "stop" in content.lower()
 
     def test_prompt_md_preserves_cli_args(self) -> None:
         content = (SKILL_DIR / "prompt.md").read_text()
@@ -166,12 +164,10 @@ class TestMergeSweepPromptMd:
         for flag in (
             "--repos",
             "--dry-run",
-            "--merge-method",
-            "--skip-polish",
-            "--authors",
-            "--since",
-            "--resume",
             "--inventory-only",
+            "--fix-only",
+            "--merge-only",
+            "--max-parallel-polish",
             "--enable-admin-merge-fallback",
             "--verify",
         ):
@@ -189,7 +185,7 @@ class TestMergeSweepPromptMd:
         line_count = len(content.splitlines())
         assert line_count <= 100, (
             f"Thin shim must be <= 100 lines, got {line_count}. "
-            f"If the skill is growing logic, move it into node_merge_sweep."
+            "If the skill is growing logic, move it into the backing node."
         )
 
 
@@ -202,9 +198,8 @@ class TestMergeSweepSkillCompleteness:
         assert (SKILL_DIR / "prompt.md").is_file()
 
     def test_no_phantom_callables(self) -> None:
-        """Shim must not invent callables beyond the onex CLI."""
+        """Shim must not invent Python callables inside the prompt."""
         content = (SKILL_DIR / "prompt.md").read_text()
-        # Only `uv run onex run-node` is permitted for execution in the shim.
         assert "pr_lifecycle_orchestrator(" not in content
         assert "dispatch_merge_sweep(" not in content
         assert "run_merge_sweep(" not in content
