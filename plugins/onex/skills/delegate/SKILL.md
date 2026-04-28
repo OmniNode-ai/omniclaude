@@ -1,6 +1,6 @@
 ---
 version: 1.0.1
-description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps in envelope, publishes to delegate-task topic. Requires Kafka to be reachable — no local prose fallback.
+description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps a typed command envelope, publishes to delegate-task topic. Requires Kafka to be reachable — no local prose fallback.
 mode: full
 level: advanced
 debug: true
@@ -19,15 +19,15 @@ args:
 
 # Delegate
 
-Thin skill that classifies a user prompt and publishes a delegation request to the ONEX runtime
-event bus. The runtime pipeline handles routing, LLM inference, quality gating, and baseline
-comparison — this skill only classifies and publishes.
+Thin skill that classifies a user prompt and publishes a typed delegation command to the ONEX
+runtime event bus. The runtime pipeline handles routing, LLM inference, quality gating, and
+baseline comparison — this skill only classifies and publishes.
 
 ## How It Works
 
 1. Parse the user's prompt
 2. Classify the task type using the existing `TaskClassifier` (heuristic keyword matching)
-3. Construct a delegation request envelope (plain dict, no infrastructure model imports)
+3. Construct a `ModelDelegationCommand`-compatible payload (plain dict, no infrastructure model imports)
 4. Publish to `onex.cmd.omniclaude.delegate-task.v1` via the emit daemon
 5. Return immediately with the correlation ID
 
@@ -46,18 +46,17 @@ explaining that only test/document/research tasks can be delegated.
 
 ## Wire Schema
 
-The published payload is a plain dict (no Pydantic model import from omnibase_infra).
+The published payload is a plain dict compatible with `ModelDelegationCommand`.
 Runtime-side validation occurs on the consuming `node_delegation_orchestrator`.
 
 ```json
 {
   "prompt": "write unit tests for verify_registration.py",
-  "task_type": "test",
-  "source_session_id": "session-abc123",
-  "source_file_path": "/path/to/verify_registration.py",
   "correlation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "max_tokens": 2048,
-  "emitted_at": "2026-03-30T14:30:00Z"
+  "session_id": "session-abc123",
+  "prompt_length": 43,
+  "source_file_path": "/path/to/verify_registration.py",
+  "max_tokens": 2048
 }
 ```
 
@@ -124,23 +123,23 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
     classifier = TaskClassifier()
     result = classifier.classify(prompt)
 
-    if result.intent not in DELEGATABLE:
+    intent = result.primary_intent
+    if intent not in DELEGATABLE:
         return {
             "success": False,
-            "error": f"Task type '{result.intent.value}' is not delegatable. Only test/document/research tasks can be delegated.",
+            "error": f"Task type '{intent.value}' is not delegatable. Only test/document/research tasks can be delegated.",
         }
 
     correlation_id = str(uuid.uuid4())
 
-    # Inner payload: the delegation request fields
+    # Inner payload: ModelDelegationCommand-compatible command fields.
     delegation_payload = {
         "prompt": prompt,
-        "task_type": result.intent.value,
-        "source_session_id": os.environ.get("CLAUDE_SESSION_ID"),
-        "source_file_path": source_file,
         "correlation_id": correlation_id,
+        "session_id": os.environ.get("CLAUDE_SESSION_ID") or "",
+        "prompt_length": len(prompt),
+        "source_file_path": source_file,
         "max_tokens": max_tokens,
-        "emitted_at": datetime.now(UTC).isoformat(),
     }
 
     # Outer envelope: ModelEventEnvelope-compatible structure.
@@ -150,8 +149,14 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
     envelope = {
         "payload": delegation_payload,
         "correlation_id": correlation_id,
-        "event_type": "omniclaude.delegate-task",
+        "event_type": "DelegateTaskCommand",
         "source_tool": "omniclaude.delegate-skill",
+        "metadata": {
+            "tags": {
+                "emitted_at": datetime.now(UTC).isoformat(),
+                "intent": intent.value,
+            },
+        },
     }
 
     # Publish via emit daemon.
@@ -175,7 +180,7 @@ def classify_and_publish(prompt: str, source_file: str | None = None, max_tokens
     return {
         "success": True,
         "correlation_id": correlation_id,
-        "task_type": result.intent.value,
+        "task_type": intent.value,
         "topic": "onex.cmd.omniclaude.delegate-task.v1",
     }
 ```

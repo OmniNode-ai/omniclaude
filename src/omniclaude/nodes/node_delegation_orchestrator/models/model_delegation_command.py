@@ -22,6 +22,15 @@ class ModelDelegationCommand(BaseModel):
     correlation_id: str = Field(default="", description="Correlation ID for tracing")
     session_id: str = Field(default="", description="Claude Code session ID")
     prompt_length: int = Field(default=0, ge=0, description="Original prompt length")
+    source_file_path: Path | None = Field(
+        default=None,
+        description="Optional source file path supplied by the delegate skill",
+    )
+    max_tokens: int = Field(
+        default=2048,
+        ge=1,
+        description="Maximum tokens requested for downstream LLM response",
+    )
     recipient: Literal["auto", "claude", "opencode", "codex"] = Field(
         default="auto",
         description="Target CLI recipient; 'auto' preserves existing cost-cascade routing",
@@ -38,7 +47,7 @@ class ModelDelegationCommand(BaseModel):
         Literal["read-only", "workspace-write", "danger-full-access"] | None
     ) = Field(
         default=None,
-        description="Explicit codex sandbox override; None = auto-select from task_type",
+        description="Explicit codex sandbox override; None = auto-select from prompt classification",
     )
 
     @model_validator(mode="after")

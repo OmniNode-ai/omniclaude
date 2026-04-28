@@ -7,19 +7,18 @@ Invoked when the user runs /onex:delegate.  Classifies the prompt via
 TaskClassifier, wraps it in a ModelEventEnvelope-compatible dict, and publishes
 to onex.cmd.omniclaude.delegate-task.v1 via the omniclaude emit daemon.
 
-Wire schema (plain dict — runtime-side validation by node_delegation_orchestrator):
+Wire schema (plain dict — runtime-side validation by ModelDelegationCommand):
   {
     "payload": {
       "prompt": str,
-      "task_type": "test" | "document" | "research",
-      "source_session_id": str | None,
-      "source_file_path": str | None,
       "correlation_id": str (UUID4),
+      "session_id": str,
+      "prompt_length": int,
+      "source_file_path": str | None,
       "max_tokens": int,
-      "emitted_at": str (ISO-8601),
     },
     "correlation_id": str,
-    "event_type": "omniclaude.delegate-task",
+    "event_type": "DelegateTaskCommand",
     "source_tool": "omniclaude.delegate-skill",
   }
 """
@@ -111,19 +110,24 @@ def classify_and_publish(
 
     delegation_payload = {
         "prompt": prompt,
-        "task_type": intent.value,
-        "source_session_id": os.environ.get("CLAUDE_SESSION_ID"),
-        "source_file_path": source_file,
         "correlation_id": correlation_id,
+        "session_id": os.environ.get("CLAUDE_SESSION_ID") or "",
+        "prompt_length": len(prompt),
+        "source_file_path": source_file,
         "max_tokens": max_tokens,
-        "emitted_at": now_iso,
     }
 
     envelope = {
         "payload": delegation_payload,
         "correlation_id": correlation_id,
-        "event_type": "omniclaude.delegate-task",
+        "event_type": "DelegateTaskCommand",
         "source_tool": "omniclaude.delegate-skill",
+        "metadata": {
+            "tags": {
+                "emitted_at": now_iso,
+                "intent": intent.value,
+            },
+        },
     }
 
     emitted = False
