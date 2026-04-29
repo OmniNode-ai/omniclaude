@@ -1,0 +1,2 @@
+{"timestamp":"2026-04-29T20:00:00.000Z","type":"session_meta","payload":{"id":"codex-no-token-001","timestamp":"2026-04-29T20:00:00.000Z","cwd":"/workspace/omni_home/omniclaude","originator":"codex-tui","cli_version":"0.125.0","model_provider":"openai"}}
+{"timestamp":"2026-04-29T20:01:00.000Z","type":"event_msg","payload":{"type":"task_complete","completed_at":1777492860,"duration_ms":60000}}
