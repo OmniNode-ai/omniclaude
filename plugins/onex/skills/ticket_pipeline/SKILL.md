@@ -22,7 +22,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge)
+    description: Resume from specified phase (pre_flight|generate_contract|implement|enrich_contract|local_review|dod_verify|test_coverage_gate|create_pr|test_iterate|ci_watch|pr_review_loop|review_gate|integration_verification_gate|auto_merge|worktree_cleanup)
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects
@@ -98,6 +98,7 @@ Run each phase in sequence, advancing the FSM via `handler.advance()`. For each 
 6. **CI_WATCH**: Poll CI until green or timeout; auto-fix failures
 7. **PR_REVIEW**: Address CodeRabbit + human review comments
 8. **AUTO_MERGE**: Wait for merge queue; verify merged
+9. **WORKTREE_CLEANUP**: Verify and remove safe per-ticket worktrees before Done
 
 Circuit breaker halts after 3 consecutive phase failures → FAILED state.
 
@@ -116,7 +117,8 @@ Display final pipeline state: phase reached, PR URL, any errors, cycle counts.
 | TEST_ITERATE | → CI_WATCH | Fix test failures |
 | CI_WATCH | → PR_REVIEW | Wait for green CI |
 | PR_REVIEW | → AUTO_MERGE | Address comments |
-| AUTO_MERGE | → DONE | Merge queue |
+| AUTO_MERGE | → WORKTREE_CLEANUP | Merge queue |
+| WORKTREE_CLEANUP | → DONE | Remove safe ticket worktrees or block with Linear note |
 
 ## Architecture
 
