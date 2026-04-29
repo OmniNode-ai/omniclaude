@@ -19,6 +19,7 @@ HUMAN_REBUTTAL_FILTER='select(
 BLOCKING_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
+  | select((.isOutdated // false) == false)
   | select(
       .comments.nodes[0] != null and (
         ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
@@ -41,6 +42,7 @@ BLOCKING_JQ='[
 CONCESSION_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
+  | select((.isOutdated // false) == false)
   | select(
       .comments.nodes[0] != null and (
         ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
@@ -132,5 +134,14 @@ CASE_E='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
 ],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
 COUNT=$(echo "$CASE_E" | jq -s "$BLOCKING_JQ")
 [ "$COUNT" -eq 1 ] && echo "PASS: Case E blocking=1 when comments truncated (totalCount=60 > fetched=3)" || { echo "FAIL Case E: expected 1 got $COUNT"; exit 1; }
+
+# Case F: unresolved but outdated CR thread -> BLOCKING=0
+CASE_F='{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+  {"isResolved":false,"isOutdated":true,"comments":{"totalCount":1,"nodes":[
+    {"body":"<!-- coderabbit --> stale finding","author":{"login":"coderabbitai","__typename":"Bot"}}
+  ]}}
+],"pageInfo":{"hasNextPage":false,"endCursor":null}}}}}}'
+COUNT=$(echo "$CASE_F" | jq -s "$BLOCKING_JQ")
+[ "$COUNT" -eq 0 ] && echo "PASS: Case F blocking=0 for outdated CR thread" || { echo "FAIL Case F: expected 0 got $COUNT"; exit 1; }
 
 echo "ALL TESTS PASSED"

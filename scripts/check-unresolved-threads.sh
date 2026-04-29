@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: MIT
 # Usage: check-unresolved-threads.sh <owner> <repo> <pr_number>
 # Prints the count of unresolved CodeRabbit review threads as an integer.
-# A thread is counted if: isResolved=false AND the first comment body matches
-# CodeRabbit authorship patterns (coderabbitai bot or CR signature lines).
+# A thread is counted if: isResolved=false, isOutdated=false, AND the first
+# comment body matches CodeRabbit authorship patterns (coderabbitai bot or CR
+# signature lines).
 # Threads where a human rebuttal exists AND CR's last reply is a concession
 # (you're right / apologize / correct behavior / retract) are excluded from
 # the count and logged to stderr as cr_concession_ack lines.
@@ -22,6 +23,7 @@ QUERY='query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
       reviewThreads(first: 100, after: $endCursor) {
         nodes {
           isResolved
+          isOutdated
           comments(first: 50) {
             totalCount
             nodes {
@@ -54,6 +56,7 @@ HUMAN_REBUTTAL_FILTER='select(
 CONCESSION_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
+  | select((.isOutdated // false) == false)
   | select(
       .comments.nodes[0] != null and (
         ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
@@ -74,6 +77,7 @@ CONCESSION_JQ='[
 BLOCKING_JQ='[
   .[].data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
+  | select((.isOutdated // false) == false)
   | select(
       .comments.nodes[0] != null and (
         ((.comments.nodes[0].author.login // "") | test("coderabbitai"; "i")) or
