@@ -656,7 +656,7 @@ if not _state_file_existed and skip_to is None and not force_run:
                 # PR already merged — still must run worktree cleanup before Done
                 print(f"Auto-detected: Ticket {ticket_id} PR already merged "
                       f"(merged at {_merged_prs[0].get('mergedAt', '?')}). Starting worktree_cleanup.")
-                skip_to = "worktree_cleanup"
+                _auto_start_phase = "worktree_cleanup"
             else:
                 # No PR exists at all — also check if the branch exists on remote
                 if _branch:
@@ -3884,7 +3884,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
                pr_url=pr_url,
            )
            try:
-               tracker.save_comment(
+               tracker.create_comment(
                    issueId=ticket_id,
                    body="PR merged; ticket-pipeline is running mandatory worktree_cleanup before Done."
                )
@@ -3952,7 +3952,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 **Handle completed (merged) result:**
    ```python
    try:
-       tracker.save_comment(
+       tracker.create_comment(
            issueId=ticket_id,
            body="PR merged; ticket-pipeline is running mandatory worktree_cleanup before Done."
        )
@@ -3978,15 +3978,14 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 **Invariants:**
 - PR is merged or known to be pending auto-merge observation.
 - Ticket must not be marked Done until this phase completes.
-- New work is allowed only under `$OMNI_HOME/omni_worktrees`; any configured `LEGACY_WORKTREES_ROOT` is quarantine only.
+- New work is allowed only under `ONEX_WORKTREES_ROOT`; any configured `LEGACY_WORKTREES_ROOT` is quarantine only.
 
 **Actions:**
 
 1. **Resolve candidate worktree roots.**
 
    ```python
-   omni_home = Path(os.environ["OMNI_HOME"])
-   allowed_root = omni_home / "omni_worktrees"
+   allowed_root = Path(os.environ["ONEX_WORKTREES_ROOT"])
    legacy_value = os.environ.get("LEGACY_WORKTREES_ROOT")
    candidate_roots = [allowed_root]
    if legacy_value:
@@ -3997,7 +3996,7 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
 
    Check at minimum:
 
-   - `$OMNI_HOME/omni_worktrees/{ticket_id}/`
+   - `$ONEX_WORKTREES_ROOT/{ticket_id}/`
    - `$LEGACY_WORKTREES_ROOT/{ticket_id}/` when `LEGACY_WORKTREES_ROOT` is set
    - any legacy path whose basename or branch contains `{ticket_id}`
 
@@ -4023,8 +4022,10 @@ Ledger entry is NOT cleared — a new run resumes at Phase 5.75.
    Run removal from the canonical repo, then prune:
 
    ```bash
-   git -C "$OMNI_HOME/$repo" worktree remove "$worktree"
-   git -C "$OMNI_HOME/$repo" worktree prune
+   canonical_repo="$(git -C "$worktree" rev-parse --path-format=absolute --git-common-dir)"
+   canonical_repo="${canonical_repo%/.git}"
+   git -C "$canonical_repo" worktree remove "$worktree"
+   git -C "$canonical_repo" worktree prune
    ```
 
 5. **Block unsafe cleanup.**
