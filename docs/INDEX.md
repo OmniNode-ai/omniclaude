@@ -28,6 +28,7 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 | Understand LLM-based routing vs fuzzy matching | [decisions/ADR-006-llm-routing-with-fuzzy-fallback.md](decisions/ADR-006-llm-routing-with-fuzzy-fallback.md) |
 | Understand how context is enriched | [architecture/CONTEXT_ENRICHMENT_PIPELINE.md](architecture/CONTEXT_ENRICHMENT_PIPELINE.md) |
 | Understand the delegation system | [architecture/DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md) |
+| Know when a skill moves to omnimarket | [architecture/skill-lifecycle.md](architecture/skill-lifecycle.md) |
 | Add a new hook handler | [guides/ADDING_A_HOOK_HANDLER.md](guides/ADDING_A_HOOK_HANDLER.md) |
 | Add a new agent YAML | [guides/ADDING_AN_AGENT.md](guides/ADDING_AN_AGENT.md) |
 | Write a new skill | [guides/ADDING_A_SKILL.md](guides/ADDING_A_SKILL.md) |
@@ -64,6 +65,7 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 | [DELEGATION_ARCHITECTURE.md](architecture/DELEGATION_ARCHITECTURE.md) | Task classifier, local LLM, quality gate |
 | [LLM_ROUTING_ARCHITECTURE.md](architecture/LLM_ROUTING_ARCHITECTURE.md) | Endpoint registry, token-count routing |
 | [SERVICE-BOUNDARIES.md](architecture/SERVICE-BOUNDARIES.md) | Omniclaude vs omniintelligence service ownership |
+| [skill-lifecycle.md](architecture/skill-lifecycle.md) | When a skill stays here vs. moves to omnimarket |
 
 > **Note**: `architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md` and `architecture/ROUTING_ARCHITECTURE_COMPARISON.md` are ⚠️ Deprecated — they describe a superseded routing proposal. See banners within those files.
 
@@ -108,7 +110,8 @@ Each layer of documentation owns a distinct type of content. Do not duplicate ac
 
 | Document | Purpose |
 |---|---|
-| [SECURITY.md](SECURITY.md) | Security policy |
+| [../SECURITY.md](../SECURITY.md) | Vulnerability reporting policy (root) |
+| [SECURITY.md](SECURITY.md) | Security implementation guide |
 | [validation-contracts.md](validation-contracts.md) | Validation subcontract YAML schema |
 | [proposals/FUZZY_MATCHER_IMPROVEMENTS.md](proposals/FUZZY_MATCHER_IMPROVEMENTS.md) | Active spec for routing thresholds |
 

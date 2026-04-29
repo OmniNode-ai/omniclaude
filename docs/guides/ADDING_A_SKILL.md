@@ -9,6 +9,17 @@ executable scripts, prompt templates, and supporting files.
 Skills are invoked with `/skill-name` in Claude Code (after deploying the
 plugin). They can also be referenced by agents and commands.
 
+**Before creating a skill**, decide whether it belongs here or in omnimarket:
+
+| It belongs in omniclaude (as a skill stub) | It belongs in omnimarket (as a node) |
+|-------------------------------------------|--------------------------------------|
+| Single invocation, no persistent state | Multi-step workflow or FSM |
+| Dispatch to an existing Market node | Business logic that runs outside Claude Code |
+| Prompt formatting or UX text only | State stored across invocations |
+| Claude Code only (no headless/cron use) | Needs retry logic, circuit breakers |
+
+See [Skill Lifecycle](../architecture/skill-lifecycle.md) for the full decision rule and examples.
+
 ---
 
 ## Create the Skill Directory
@@ -140,3 +151,4 @@ If the skill does not appear after deploying:
 - Existing skills for reference patterns: `plugins/onex/skills/`
 - Skill authoring guide: `docs/reference/SKILL_AUTHORING_GUIDE.md`
 - Commands (related): `plugins/onex/commands/*.md`
+- [Skill Lifecycle](../architecture/skill-lifecycle.md) — when to put logic in omnimarket instead

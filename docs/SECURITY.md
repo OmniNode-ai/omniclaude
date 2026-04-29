@@ -1,275 +1,169 @@
-# Security Documentation
+# Security Implementation Guide
 
-**Last Updated**: 2025-11-17
+> **Reporting vulnerabilities**: See [`/SECURITY.md`](../SECURITY.md) at the repository root — that file is the canonical security policy and contact for reporting. This document covers implementation-level security practices in the codebase.
+
+**Last Updated**: 2026-04-29
 **Status**: Active
-
-## Overview
-
-This document outlines the security measures, best practices, and considerations implemented in the OmniClaude codebase to prevent common vulnerabilities.
-
-## Security Measures
-
-### 1. SQL Injection Prevention
-
-**Risk**: SQL injection attacks occur when untrusted user input is directly interpolated into SQL queries, allowing attackers to execute arbitrary SQL commands.
-
-**Mitigation Strategy**:
-
-#### Parameterized Queries
-All database operations use parameterized queries (also called prepared statements) where values are passed separately from the SQL statement:
-
-```python
-# ✅ SAFE: Parameterized query
-query = "SELECT * FROM users WHERE id = $1"
-result = await conn.fetchrow(query, user_id)
-
-# ❌ UNSAFE: String interpolation
-query = f"SELECT * FROM users WHERE id = '{user_id}'"  # NEVER DO THIS
-```
-
-#### Table and Column Name Validation
-Since table and column names cannot be parameterized in SQL, we validate them to ensure they contain only safe characters:
-
-```python
-from agents.lib.security_utils import validate_sql_identifier
-
-# Validate before using in query
-validate_sql_identifier(table_name, "table")
-validate_sql_identifier(column_name, "column")
-
-# Now safe to use in f-string (with nosec comment for Bandit)
-query = f"SELECT * FROM {table_name} WHERE {column_name} = $1"  # nosec B608
-```
-
-**Validation Rules**:
-- Only alphanumeric characters and underscores allowed
-- Must start with letter or underscore (not a digit)
-- Maximum 63 characters (PostgreSQL limit)
-- No special characters, quotes, or SQL keywords
-
-#### Files Using SQL Injection Protection
-
-**With Input Validation**:
-- `agents/lib/database_event_client.py` - All CRUD operations (insert, update, delete, upsert)
-- `agents/lib/performance_optimization.py` - Batch operations
-- `agents/lib/migrate.py` - Database migration tracking
-
-**With Parameterized WHERE Clauses**:
-- `agents/lib/embedding_search.py` - Error search with dynamic filters
-- `agents/lib/intelligence_usage_tracker.py` - Usage statistics queries
-- `agents/lib/stf_execution.py` - Transform function discovery
-
-**With Documentation Examples Only**:
-- `agents/lib/test_agent_traceability.py` - Print statements showing example queries (not executed)
-
-**With Database Introspection** (trusted sources):
-- `agents/lib/migrate.py` - Column names from `information_schema`
-- `agents/parallel_execution/observability_report.py` - Table and column names from schema
-
-**Code Generation Templates**:
-- `agents/lib/patterns/crud_pattern.py` - Generated code includes validation
-
-### 2. Pickle Deserialization Security
-
-**Risk**: Python's `pickle` module can execute arbitrary code during deserialization. Loading pickle files from untrusted sources is extremely dangerous.
-
-**Mitigation Strategy**:
-
-#### Limited Scope
-Pickle is only used for ML model serialization in `agents/lib/mixin_learner.py`:
-
-```python
-# Model files generated internally by this system
-with open(self.model_path, "rb") as f:
-    self.model = pickle.load(f)  # nosec B301 - internal model files only
-```
-
-**Security Measures**:
-1. Model files are generated internally (not from external sources)
-2. Model paths are controlled (not user-provided)
-3. Files stored in trusted directory (`.cache/models/`)
-4. File permissions should be restricted (0600) in production
-
-**Recommendations for Production**:
-- Use `joblib` with compression instead of raw pickle
-- Implement file integrity checks (SHA-256 hashes)
-- Use model signing/verification for distributed deployments
-- Restrict file permissions: `chmod 600 .cache/models/*`
-
-**References**:
-- [Python pickle documentation - Security](https://docs.python.org/3/library/pickle.html#module-pickle)
-- [OWASP: Deserialization of Untrusted Data](https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data)
-
-### 3. Network Binding Security
-
-**Risk**: Binding services to `0.0.0.0` (all network interfaces) can expose services to external networks if not properly firewalled.
-
-**Mitigation Strategy**:
-
-#### Intentional All-Interface Binding
-In `agents/services/agent_router_event_service.py`, the health check server binds to `0.0.0.0` for Docker/Kubernetes compatibility:
-
-```python
-# Intentional for container environments
-site = web.TCPSite(
-    self._health_runner, "0.0.0.0", self.health_check_port
-)  # nosec B104 - Docker/K8s deployment
-```
-
-**Production Recommendations**:
-- Use firewall rules to restrict access (e.g., iptables, AWS security groups)
-- Place behind reverse proxy (nginx, Envoy) for access control
-- Use network policies in Kubernetes
-- Bind to `127.0.0.1` for localhost-only access in non-containerized deployments
-
-### 4. API Key Management
-
-**Risk**: Hardcoded API keys in source code can be exposed through version control, logs, or error messages.
-
-**Mitigation Strategy**:
-
-#### Environment Variables
-All API keys and secrets are loaded from environment variables:
-
-```python
-# ✅ CORRECT
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# ❌ WRONG
-GEMINI_API_KEY = "AIza..."  # NEVER hardcode API keys
-```
-
-**Configuration**:
-- All secrets in `.env` file (never committed to version control)
-- `.env.example` provides template with placeholder values
-- `.gitignore` includes `.env` to prevent accidental commits
-
-**Best Practices**:
-- Rotate keys every 30-90 days
-- Use separate keys for development and production
-- Enable IP restrictions in provider dashboards
-- Set usage quotas to limit damage from leaks
-- Monitor API usage for anomalies
-
-<!-- SECURITY_KEY_ROTATION.md was removed; key rotation procedures are covered above. -->
-
-### 5. Password Security
-
-**Risk**: Hardcoded passwords or weak password policies can lead to unauthorized access.
-
-**Mitigation Strategy**:
-
-#### Environment-Based Credentials
-Database passwords and other credentials are loaded from environment variables:
-
-```bash
-# .env file (NEVER commit to version control)
-POSTGRES_PASSWORD=<strong_password_here>
-```
-
-**Usage Pattern**:
-```bash
-# Always source .env before database operations
-source .env
-
-# Use environment variables in connection strings
-psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} \
-     -U ${POSTGRES_USER} -d ${POSTGRES_DATABASE}
-```
-
-**Requirements**:
-- Never hardcode passwords in documentation or code
-- Use placeholders like `<set_in_env>` in examples
-- Change all default passwords immediately in production
-- Use strong passwords (minimum 16 characters, mixed case, numbers, symbols)
-
-## Security Scanning
-
-### Bandit Static Analysis
-
-We use Bandit for automated security scanning:
-
-```bash
-# Scan entire codebase
-bandit -r agents/ -f json -o security-report.json
-
-# Scan specific file
-bandit agents/lib/database_event_client.py
-
-# Scan with severity filter
-bandit -r agents/ -ll  # Only show MEDIUM and HIGH
-```
-
-**Suppressing False Positives**:
-
-Use `# nosec B<test_id>` comments only when:
-1. Security measure is already in place (e.g., input validation)
-2. Code is safe by design (e.g., hardcoded table list)
-3. Risk is mitigated by other controls (e.g., firewall rules)
-
-Always include a comment explaining why it's safe:
-
-```python
-# Table name validated with validate_sql_identifier()
-query = f"SELECT * FROM {table_name}"  # nosec B608
-```
-
-**Common Test IDs**:
-- `B608`: SQL injection (string-based query construction)
-- `B301`: Pickle deserialization
-- `B104`: Binding to all network interfaces
-- `B403`: Pickle import
-
-### Environment Validation
-
-Validate `.env` configuration:
-
-```bash
-./scripts/validate-env.sh .env
-```
-
-Checks for:
-- Required variables are set
-- No placeholder values remain
-- Password strength requirements
-- URL format validation
-- Port number ranges
-
-## Incident Response
-
-If a security issue is discovered:
-
-1. **Do Not Panic**: Document the issue clearly
-2. **Assess Severity**: Determine if it's actively exploited
-3. **Isolate**: Stop affected services if necessary
-4. **Patch**: Apply fix immediately
-5. **Rotate Credentials**: Change any potentially compromised keys/passwords
-6. **Audit**: Check logs for signs of exploitation
-7. **Update Documentation**: Document the fix and lessons learned
-
-## Security Checklist
-
-Before deploying to production:
-
-- [ ] All API keys in environment variables (not hardcoded)
-- [ ] Strong passwords set for all database accounts
-- [ ] `.env` file excluded from version control
-- [ ] Bandit scan passes with zero MEDIUM+ severity issues
-- [ ] Network services properly firewalled
-- [ ] File permissions restricted (0600 for sensitive files)
-- [ ] Logging configured (but sanitized - no secrets in logs)
-- [ ] Rate limiting enabled on public endpoints
-- [ ] HTTPS/TLS enabled for all network communication
-- [ ] Regular dependency updates scheduled
-
-## References
-
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [CWE: Common Weakness Enumeration](https://cwe.mitre.org/)
-- [Python Security Best Practices](https://docs.python.org/3/library/security_warnings.html)
-- [Bandit Documentation](https://bandit.readthedocs.io/)
-- [PostgreSQL Security](https://www.postgresql.org/docs/current/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS)
+**Primary source tree**: `src/omniclaude/`, `plugins/onex/hooks/`
 
 ---
 
-**Contact**: For security concerns, contact the development team or file a confidential issue.
+## Overview
+
+This document outlines the security measures, best practices, and considerations implemented in the omniclaude codebase. The main surfaces are:
+
+- Hook Python libraries (`plugins/onex/hooks/lib/`)
+- Hook Pydantic models (`src/omniclaude/hooks/schemas.py`)
+- Publisher / emit daemon client (`src/omniclaude/publisher/`)
+- CLI entry points (`src/omniclaude/cli/`)
+
+---
+
+## Security Measures
+
+### 1. Prompt Data Privacy
+
+**Risk**: User prompts contain sensitive information (API keys, passwords, proprietary code).
+
+**Mitigation**: Dual-emission with automatic sanitization.
+
+The `prompt_preview` field in `ModelHookPromptSubmittedPayload` is:
+- Truncated to 100 characters
+- Scanned and redacted for common secret patterns:
+  - OpenAI API keys (`sk-*`)
+  - AWS access keys (`AKIA*`)
+  - GitHub tokens (`ghp_*`)
+  - Slack tokens (`xox*`)
+  - PEM private keys
+  - Bearer tokens
+  - Passwords in URLs
+
+Full prompt content is published **only** to `onex.cmd.omniintelligence.*` topics
+(restricted access). Observability topics (`onex.evt.*`) receive only the
+sanitized preview.
+
+See [ADR-004: Dual-Emission Privacy Split](decisions/ADR-004-dual-emission-privacy-split.md).
+
+### 2. SQL Injection Prevention
+
+**Risk**: SQL injection via user-controlled input in database queries.
+
+**Mitigation**: All database operations use parameterized queries:
+
+```python
+# SAFE: parameterized
+query = "SELECT * FROM hooks WHERE session_id = $1"
+result = await conn.fetchrow(query, session_id)
+
+# UNSAFE: never do this
+query = f"SELECT * FROM hooks WHERE session_id = '{session_id}'"
+```
+
+When table or column names cannot be parameterized (e.g., dynamic schema
+introspection), they are validated with `validate_sql_identifier()` before
+use in f-strings.
+
+### 3. API Key and Secret Management
+
+**Risk**: Hardcoded API keys exposed via version control or logs.
+
+**Mitigation**:
+- All secrets loaded from environment variables or `~/.omnibase/.env`
+- `.env` is gitignored; `.env.example` contains only placeholder values
+- Hook logs at `~/.claude/hooks.log` sanitize token-shaped strings
+
+```python
+# CORRECT — from env var
+kafka_bootstrap = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
+
+# WRONG — never hardcode connection strings
+```
+
+Note: `ANTHROPIC_API_KEY` is **never required**. Claude Code authenticates
+via OAuth. Do not add it to any required-env list or preflight check.
+
+### 4. Network Binding
+
+**Risk**: Services binding to all interfaces expose unnecessary attack surface.
+
+**Mitigation**: The emit daemon binds to a Unix domain socket
+(`/tmp/onex-emit.sock` or `$XDG_RUNTIME_DIR/onex-emit.sock`) by default —
+no TCP port is opened. When the daemon runs in the kernel plugin on `.201`,
+a host-mounted volume path is used. No services in omniclaude bind to
+`0.0.0.0`.
+
+### 5. Hook Exit Discipline
+
+**Risk**: Hooks that exit non-zero block Claude Code UI.
+
+**Design choice**: Hooks always exit 0 on infrastructure failure. Data loss
+(dropped events) is acceptable; UI freeze is not. The one exception is
+`find_python()` — if no valid interpreter is found, the hook exits 1 with
+an actionable error message. See [CLAUDE.md](../CLAUDE.md) Failure Modes table.
+
+---
+
+## Security Scanning
+
+Bandit runs as a required CI gate on every PR. To run locally:
+
+```bash
+# Scan the source tree (medium severity and above)
+uv run bandit -r src/omniclaude/ -ll
+
+# Output JSON for review
+uv run bandit -r src/omniclaude/ -f json -o security-report.json
+```
+
+Suppressing false positives requires `# nosec B<id>` with an inline
+comment explaining the control in place:
+
+```python
+# Socket path is resolved from env var, not user input
+sock_path = os.environ.get("ONEX_EMIT_SOCKET_PATH", "/tmp/onex-emit.sock")  # nosec B108
+```
+
+Common Bandit test IDs in this codebase:
+
+| ID | Description | Typical context |
+|----|-------------|----------------|
+| `B104` | Binding to all interfaces | Not used — Unix sockets only |
+| `B108` | Probable insecure `/tmp` usage | Emit daemon socket default |
+| `B301` | Pickle use | Not used in omniclaude |
+| `B608` | SQL injection via string | Hook logging queries with validated identifiers |
+
+---
+
+## Deployment Security Checklist
+
+Before any production deploy:
+
+- [ ] `uv run bandit -r src/omniclaude/ -ll` exits 0
+- [ ] No secrets in `onex.evt.*` topics (preview fields only)
+- [ ] `OMNICLAUDE_HOOKS_DISABLE` not set in production env
+- [ ] Plugin venv built from brew Python (macOS): `bash scripts/repair-plugin-venv.sh`
+- [ ] Hook scripts executable: `ls -l plugins/onex/hooks/scripts/*.sh | grep -v ^-rwx`
+- [ ] `detect-secrets` scan passes (wired as CI gate)
+
+---
+
+## Incident Response
+
+If a security issue is discovered in production:
+
+1. Assess severity and whether it is actively exploited
+2. If actively exploited: disable hooks immediately (`export OMNICLAUDE_HOOKS_DISABLE=1`)
+3. Rotate any potentially exposed credentials
+4. Apply fix in a new worktree and ship via normal PR flow
+5. Check `~/.claude/hooks.log` for exploitation indicators
+6. Email **contact@omninode.ai** per the [root security policy](../SECURITY.md)
+
+---
+
+## References
+
+- [Root security policy](../SECURITY.md) — vulnerability reporting contact
+- [ADR-004: Dual-Emission Privacy Split](decisions/ADR-004-dual-emission-privacy-split.md)
+- [CLAUDE.md Failure Modes](../CLAUDE.md) — hook degradation behavior
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+- [Bandit Documentation](https://bandit.readthedocs.io/)
