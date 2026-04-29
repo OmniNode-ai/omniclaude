@@ -73,21 +73,11 @@ def read_accumulator_tokens(accumulator_path: Path) -> tuple[int, int] | None:
 
 
 def find_accumulator_path(session_id: str | None, accumulator_dir: Path) -> Path | None:
-    """Resolve a session accumulator path, falling back to newest accumulator."""
-    if session_id:
-        candidate = accumulator_dir / f"omniclaude-session-{session_id}.json"
-        if candidate.is_file():
-            return candidate
-
-    try:
-        candidates = sorted(
-            accumulator_dir.glob("omniclaude-session-*.json"),
-            key=lambda path: path.stat().st_mtime,
-            reverse=True,
-        )
-    except OSError:
+    """Resolve the accumulator for the current session only."""
+    if not session_id:
         return None
-    return candidates[0] if candidates else None
+    candidate = accumulator_dir / f"omniclaude-session-{session_id}.json"
+    return candidate if candidate.is_file() else None
 
 
 def _session_id_from_accumulator(path: Path) -> str | None:

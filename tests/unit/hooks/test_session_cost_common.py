@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from omniclaude.hooks.session_cost_common import (
     build_cost_payload,
     derive_idempotency_key,
@@ -111,3 +113,19 @@ def test_haiku_35_model_uses_haiku_35_price() -> None:
         )
         == 0.0048
     )
+
+
+def test_estimate_cost_rejects_negative_token_counts() -> None:
+    with pytest.raises(ValueError, match="Token counts must be non-negative"):
+        estimate_cost_usd(
+            model_id="claude-sonnet-4-5-20250929",
+            prompt_tokens=-1,
+            completion_tokens=1000,
+        )
+
+    with pytest.raises(ValueError, match="Token counts must be non-negative"):
+        estimate_cost_usd(
+            model_id="claude-sonnet-4-5-20250929",
+            prompt_tokens=1000,
+            completion_tokens=-1,
+        )

@@ -78,6 +78,9 @@ def estimate_cost_usd(
     *, model_id: str, prompt_tokens: int, completion_tokens: int
 ) -> float:
     """Estimate USD cost using static Claude per-million-token rates."""
+    if prompt_tokens < 0 or completion_tokens < 0:
+        raise ValueError("Token counts must be non-negative")
+
     model_key = model_id.lower()
     input_rate = DEFAULT_INPUT_USD_PER_MILLION
     output_rate = DEFAULT_OUTPUT_USD_PER_MILLION

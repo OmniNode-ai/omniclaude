@@ -8,6 +8,7 @@ from pathlib import Path
 
 from omniclaude.hooks.session_cost_emitter import (
     extract_session_tokens,
+    find_accumulator_path,
     normalize_session_cost_payload,
 )
 
@@ -78,6 +79,37 @@ def test_normalize_falls_back_to_accumulator(tmp_path: Path) -> None:
     assert payload["completion_tokens"] == 610
     assert payload["repo_name"] == "omniclaude"
     assert payload["machine_id"] is None
+
+
+def test_find_accumulator_path_requires_exact_session_id(tmp_path: Path) -> None:
+    foreign = tmp_path / "omniclaude-session-other-session.json"
+    foreign.write_text(
+        json.dumps({"total_input_tokens": 9999, "total_output_tokens": 9999}),
+        encoding="utf-8",
+    )
+
+    assert find_accumulator_path(None, tmp_path) is None
+    assert find_accumulator_path("", tmp_path) is None
+    assert find_accumulator_path("missing-session", tmp_path) is None
+
+
+def test_normalize_does_not_adopt_foreign_accumulator(tmp_path: Path) -> None:
+    foreign = tmp_path / "omniclaude-session-other-session.json"
+    foreign.write_text(
+        json.dumps({"total_input_tokens": 9999, "total_output_tokens": 9999}),
+        encoding="utf-8",
+    )
+
+    payload = normalize_session_cost_payload(
+        session_end_payload={
+            "sessionId": "current-session",
+            "timestamp": "2026-04-29T00:00:00Z",
+        },
+        env={},
+        accumulator_dir=tmp_path,
+    )
+
+    assert payload is None
 
 
 def test_normalize_returns_none_without_token_data(tmp_path: Path) -> None:
