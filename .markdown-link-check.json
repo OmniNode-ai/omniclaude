@@ -20,7 +20,10 @@
         "venv/**",
         "node_modules/**",
         "archived/**",
-        ".claude/worktrees/**"
+        ".claude/worktrees/**",
+        "plugins/**/.venv/**",
+        "plugins/**/lib/.venv/**",
+        "omni_worktrees/**"
     ],
     "checkExternal": false,
     "externalTimeout": 5000
