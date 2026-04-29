@@ -2118,7 +2118,7 @@ continues without a contract.
    if [ -z "$ONEX_CC_REPO_PATH" ]; then
      TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
      REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-${OMNI_HOME:?set OMNI_HOME}}"
-     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-$REGISTRY_BASE/omni_worktrees}"
+     WORKTREE_BASE="${ONEX_WORKTREES_ROOT:-$REGISTRY_BASE/omni_worktrees}"
      for candidate in \
        "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
        "$REGISTRY_BASE/onex_change_control"; do
@@ -2494,7 +2494,7 @@ local_review. Failure is non-fatal -- the pipeline continues with an unenriched 
    if [ -z "$ONEX_CC_REPO_PATH" ]; then
      TICKET_ID_SHORT=$(git branch --show-current | grep -oE 'OMN-[0-9]+')
      REGISTRY_BASE="${ONEX_REGISTRY_ROOT:-${OMNI_HOME:?set OMNI_HOME}}"
-     WORKTREE_BASE="${ONEX_WORKTREE_ROOT:-$REGISTRY_BASE/omni_worktrees}"
+     WORKTREE_BASE="${ONEX_WORKTREES_ROOT:-$REGISTRY_BASE/omni_worktrees}"
      for candidate in \
        "$WORKTREE_BASE/$TICKET_ID_SHORT/onex_change_control" \
        "$REGISTRY_BASE/onex_change_control"; do
