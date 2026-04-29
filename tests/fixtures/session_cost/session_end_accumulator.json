@@ -1,0 +1,8 @@
+{
+  "sessionId": "session-accum-001",
+  "model_id": "claude-3-5-haiku-20241022",
+  "timestamp": "2026-04-29T13:00:00Z",
+  "context_window": {
+    "current_usage": {}
+  }
+}

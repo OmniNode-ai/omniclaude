@@ -1,0 +1,11 @@
+{
+  "sessionId": "session-context-001",
+  "model": "claude-sonnet-4-5-20250929",
+  "timestamp": "2026-04-29T12:34:56Z",
+  "context_window": {
+    "current_usage": {
+      "input_tokens": 1200,
+      "output_tokens": 345
+    }
+  }
+}

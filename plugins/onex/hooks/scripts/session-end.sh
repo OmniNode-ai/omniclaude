@@ -480,100 +480,28 @@ print(result.outcome)
     # The session-outcome subshell above exits early on empty SESSION_ID, which
     # was preventing cost events from ever being emitted.
     (
-        # Resolve token data from SessionEnd payload first
-        _cost_input_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.input_tokens // empty' 2>/dev/null) || _cost_input_tokens=""
-        _cost_output_tokens=$(echo "$INPUT" | jq -r '.context_window.current_usage.output_tokens // empty' 2>/dev/null) || _cost_output_tokens=""
-        _cost_total="null"
-        if [[ "$_cost_input_tokens" =~ ^[0-9]+$ ]] || [[ "$_cost_output_tokens" =~ ^[0-9]+$ ]]; then
-            _in="${_cost_input_tokens:-0}"
-            _out="${_cost_output_tokens:-0}"
-            if [[ "$_in" =~ ^[0-9]+$ ]] && [[ "$_out" =~ ^[0-9]+$ ]]; then
-                _cost_total=$(( _in + _out ))
-                _cost_input_tokens="$_in"
-                _cost_output_tokens="$_out"
-            fi
-        fi
-
-        # Fallback: read accumulated tokens from session accumulator (OMN-7602).
-        if [[ "$_cost_total" == "null" ]]; then
-            _accum_file=""
-            if [[ -n "$SESSION_ID" ]]; then
-                _accum_file="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
-            else
-                # Find the most recently modified session accumulator (best-effort).
-                _accum_file=$(ls -t /tmp/omniclaude-session-*.json 2>/dev/null | head -1) || _accum_file=""
-            fi
-
-            if [[ -n "$_accum_file" && -f "$_accum_file" ]]; then
-                _accum_in=$(jq -r '.total_input_tokens // 0' "$_accum_file" 2>/dev/null) || _accum_in=0
-                _accum_out=$(jq -r '.total_output_tokens // 0' "$_accum_file" 2>/dev/null) || _accum_out=0
-                [[ "$_accum_in" =~ ^[0-9]+$ ]] || _accum_in=0
-                [[ "$_accum_out" =~ ^[0-9]+$ ]] || _accum_out=0
-                _accum_total=$(( _accum_in + _accum_out ))
-                if [[ "$_accum_total" -gt 0 ]]; then
-                    _cost_total="$_accum_total"
-                    _cost_input_tokens="$_accum_in"
-                    _cost_output_tokens="$_accum_out"
-                    if [[ -z "$SESSION_ID" ]]; then
-                        _accum_basename=$(basename "$_accum_file" .json)
-                        SESSION_ID="${_accum_basename#omniclaude-session-}"
-                    fi
-                    log "llm.cost: Token usage from accumulator: input=$_accum_in output=$_accum_out total=$_accum_total session=$SESSION_ID"
-                fi
-            fi
-        fi
-
-        if [[ "$_cost_total" != "null" ]] && [[ "$_cost_total" -gt 0 ]] 2>/dev/null; then
-            _model_id=$(echo "$INPUT" | jq -r '.model // .model_id // empty' 2>/dev/null) || _model_id=""
-            if [[ -z "$_model_id" ]]; then
-                _model_id="claude-unknown"
-            fi
-
-            _cost_session_id="${SESSION_ID}"
-            if [[ -z "$_cost_session_id" ]]; then
-                _cost_session_id="00000000-0000-0000-0000-$(date +%s%N | cut -c1-12)"
-            fi
-
-            COST_EMITTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-            if ! COST_PAYLOAD=$(jq -n \
-                --arg session_id "$_cost_session_id" \
-                --arg model_id "$_model_id" \
-                --arg correlation_id "$CORRELATION_ID" \
-                --argjson prompt_tokens "${_cost_input_tokens:-0}" \
-                --argjson completion_tokens "${_cost_output_tokens:-0}" \
-                --argjson total_tokens "$_cost_total" \
-                --arg timestamp_iso "$COST_EMITTED_AT" \
-                --arg emitted_at "$COST_EMITTED_AT" \
-                --arg request_type "session" \
-                --arg reporting_source "omniclaude" \
-                '{
-                    session_id: $session_id,
-                    model_id: $model_id,
-                    correlation_id: (if $correlation_id == "" then null else $correlation_id end),
-                    prompt_tokens: $prompt_tokens,
-                    completion_tokens: $completion_tokens,
-                    total_tokens: $total_tokens,
-                    input_tokens: $prompt_tokens,
-                    output_tokens: $completion_tokens,
-                    estimated_cost_usd: 0,
-                    cost_usd: 0,
-                    timestamp_iso: $timestamp_iso,
-                    emitted_at: $emitted_at,
-                    request_type: $request_type,
-                    reporting_source: $reporting_source,
-                    usage_source: "API",
-                    request_count: 1
-                }' 2>>"$LOG_FILE"); then
-                log "WARNING: Failed to construct llm.cost.completed payload (jq failed), skipping emission"
-            elif [[ -z "$COST_PAYLOAD" || "$COST_PAYLOAD" == "null" ]]; then
+        if COST_PAYLOAD=$(printf '%s' "$INPUT" \
+            | "$PYTHON_CMD" -m omniclaude.hooks.session_cost_emitter \
+                --session-id "$SESSION_ID" \
+                --correlation-id "$CORRELATION_ID" \
+                --accumulator-dir "${OMNICLAUDE_SESSION_ACCUMULATOR_DIR:-/tmp}" \
+                2>>"$LOG_FILE"); then
+            if [[ -z "$COST_PAYLOAD" || "$COST_PAYLOAD" == "null" ]]; then
                 log "WARNING: llm.cost.completed payload empty or null, skipping emission"
             else
                 emit_via_daemon "llm.cost.completed" "$COST_PAYLOAD" 100
-                log "llm.cost.completed emitted: model=$_model_id tokens=$_cost_total session=$_cost_session_id"
+                _cost_model=$(printf '%s' "$COST_PAYLOAD" | jq -r '.model_id // "unknown"' 2>/dev/null || echo "unknown")
+                _cost_tokens=$(printf '%s' "$COST_PAYLOAD" | jq -r '.total_tokens // 0' 2>/dev/null || echo "0")
+                _cost_session=$(printf '%s' "$COST_PAYLOAD" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
+                log "llm.cost.completed emitted: model=$_cost_model tokens=$_cost_tokens session=$_cost_session"
             fi
         else
-            log "llm.cost: No token data available, skipping cost event emission"
+            _cost_status=$?
+            if [[ "$_cost_status" -eq 1 ]]; then
+                log "llm.cost: No token data available, skipping cost event emission"
+            else
+                log "WARNING: Failed to construct llm.cost.completed payload (session_cost_emitter exit=$_cost_status), skipping emission"
+            fi
         fi
     ) &
     EMIT_PIDS+=($!)
