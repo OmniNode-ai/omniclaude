@@ -20,6 +20,16 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------
+# [DISABLED PENDING OMN-10110] hostile_reviewer auto-trigger disabled
+# Reason: silent-stub file-mode + degraded model output across 2 consecutive
+# runs (06-interim-adversarial-review.md, 07-interim-adversarial-review-round-2.md).
+# Re-enable when OMN-10110 closes (eval framework precision/recall threshold met).
+# -----------------------------------------------------------------------
+echo "[hostile_reviewer DISABLED PENDING OMN-10110] skipping auto hostile-review after gh pr create" >&2
+cat  # drain stdin
+exit 0
+
+# -----------------------------------------------------------------------
 # Kill switches
 # -----------------------------------------------------------------------
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then

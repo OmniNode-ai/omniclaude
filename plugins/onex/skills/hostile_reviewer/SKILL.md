@@ -69,6 +69,14 @@ args:
 
 # hostile-reviewer
 
+> **[DISABLED PENDING OMN-10110]** This skill is currently disabled.
+> Do NOT invoke it. Return immediately with the following message:
+> "hostile_reviewer is disabled pending eval framework validation [OMN-10110].
+> Reason: silent-stub node (file-mode returns total_findings=0 without invoking any model)
+> and degraded model output across 2 consecutive PR-mode runs.
+> Re-enable criteria: eval framework demonstrates precision ≥ 0.7 and recall ≥ 0.6 on oracle dataset.
+> See docs/safety/2026-04-27-hostile-reviewer-disabled.md"
+
 **Announce at start:** "I'm using the hostile-reviewer skill."
 
 ## Architecture

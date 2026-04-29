@@ -39,7 +39,24 @@ See SKILL.md "Token Budget" section for full rationale.
 
 from __future__ import annotations
 
+import json
+import sys
 import warnings
+
+# [DISABLED PENDING OMN-10110] hostile_reviewer aggregate_reviews disabled.
+# Reason: silent-stub node (file-mode returns total_findings=0 without invoking any model)
+# and degraded model output in 2 consecutive PR-mode runs.
+# Re-enable criteria: eval framework precision ≥ 0.7 AND recall ≥ 0.6 on oracle dataset.
+# See docs/safety/2026-04-27-hostile-reviewer-disabled.md
+_DISABLE_MSG = {
+    "disabled": True,
+    "reason": "hostile_reviewer disabled pending OMN-10110 eval framework validation",
+    "re_enable": "See OMN-10110: eval framework precision/recall threshold required before re-enable",
+    "total_findings": 0,
+    "overall_verdict": "disabled",
+}
+print(json.dumps(_DISABLE_MSG), flush=True)
+sys.exit(0)
 
 warnings.warn(
     "aggregate_reviews is deprecated (OMN-7803). "
