@@ -1,6 +1,6 @@
 # omniclaude
 
-Claude Code integration layer for the ONEX platform — hooks, routing, and thin UX wrappers for ONEX workflows.
+Claude Code integration layer for the ONEX (OmniNode eXecution) platform — hooks, routing, and thin UX wrappers for ONEX workflows.
 
 [![CI](https://github.com/OmniNode-ai/omniclaude/actions/workflows/ci.yml/badge.svg)](https://github.com/OmniNode-ai/omniclaude/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
