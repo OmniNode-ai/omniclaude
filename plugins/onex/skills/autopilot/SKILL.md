@@ -1,12 +1,13 @@
 ---
 user_invocable: false
+retired: true
+replacement_skill: session
 description: Autonomous close-out orchestrator — 4-phase pipeline with worktree health sweep, full merge-sweep with DIRTY PR triage and queue stall detection, infra health gate, quality sweeps (dod-sweep with per-ticket verification, aislop-sweep, bus-audit, gap detect), integration-sweep hard gate, Playwright regression gate, release, redeploy, and post-release verification (verify-plugin, dashboard-sweep, container health). Compounds — each cycle's merged infrastructure makes the next cycle's gate stricter.
 version: 3.0.0
 mode: full
 level: advanced
 debug: false
 category: workflow
-foreground_orchestrator: true
 tags:
   - autonomous
   - close-out
@@ -15,6 +16,7 @@ tags:
   - release
   - deploy
   - org-wide
+  - retired
 author: OmniClaude Team
 composable: true
 args:
@@ -34,10 +36,9 @@ outputs:
     description: "Integration surface(s) that caused halt, or empty string on complete"
 ---
 
-> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
+> **RETIRED — Superseded by `/onex:session`** (OMN-9428).
 > Phase A/B/C/D close-out logic becomes Phase 3 dispatch targets in `/onex:session`.
-> Use `/onex:session` for new session management. Existing cron invocations of `cron-closeout.sh`
-> remain valid until the cleanup ticket removes this skill.
+> Use `/onex:session` for session management.
 > Do not add new functionality here.
 
 # autopilot

@@ -22,6 +22,7 @@ from validate_deterministic_skill_routing import (  # noqa: E402
     CHECK_DISPATCH,
     CHECK_PROSE_FALLBACK,
     CHECK_ROUTING_ERROR,
+    DEPRECATED_SKILLS,
     ENFORCED_SKILLS,
     scan_skill,
     scan_skills_root,
@@ -200,10 +201,12 @@ class TestEnforcedSkillsSet:
     def test_session_in_enforced(self) -> None:
         assert "session" in ENFORCED_SKILLS
 
-    def test_overnight_in_enforced(self) -> None:
-        # OMN-8751: overnight is now a thin dispatch-only shim and must
-        # satisfy the deterministic routing enforcement gate.
-        assert "overnight" in ENFORCED_SKILLS
+    def test_retired_skills_not_in_enforced(self) -> None:
+        # OMN-9428: retired skills are not user-invocable deterministic
+        # dispatch surfaces and must not be enforced as active shims.
+        for skill in ("autopilot", "begin_day", "overnight"):
+            assert skill in DEPRECATED_SKILLS
+            assert skill not in ENFORCED_SKILLS
 
     def test_pr_review_bot_in_enforced(self) -> None:
         # OMN-10269: pr_review_bot is a thin runtime-backed skill surface over

@@ -1,5 +1,7 @@
 ---
 user_invocable: false
+retired: true
+replacement_skill: session
 description: Automated morning investigation pipeline — syncs repos, checks infra, dispatches 7 parallel probes, aggregates findings into ModelDayOpen YAML, and feeds into design-to-plan
 mode: full
 version: 1.0.0
@@ -12,6 +14,7 @@ tags:
   - orchestrator
   - parallel
   - investigation
+  - retired
 author: OmniClaude Team
 composable: true
 inputs:
@@ -44,10 +47,10 @@ outputs:
     description: Path to the action plan (if Phase 4 ran)
 ---
 
-> **DEPRECATED — Superseded by `/onex:session`** (OMN-8340).
+> **RETIRED — Superseded by `/onex:session --mode interactive`** (OMN-9428).
 > Phase 1 health check + Phase 2 RSD priority (interactive mode) replace this skill.
 > Use `/onex:session --mode interactive` instead.
-> This skill will be removed in a follow-up cleanup ticket. Do not add new functionality here.
+> Do not add new functionality here.
 
 # begin-day Skill
 

@@ -1,17 +1,20 @@
 ---
+user_invocable: false
+retired: true
+replacement_skill: session
 description: Thin dispatch-only shim for the overnight autonomous pipeline. Routes to node_overnight in omnimarket, which sequences nightly_loop_controller, build_loop, merge_sweep, ci_watch, and platform_readiness. No inline LLM orchestration.
 mode: full
 version: 2.0.0
 level: advanced
 debug: false
 category: workflow
-foreground_orchestrator: true
 tags:
   - overnight
   - autonomous
   - orchestrator
   - dispatch-only
   - routing-enforced
+  - retired
 author: OmniClaude Team
 composable: false
 inputs:
@@ -58,10 +61,14 @@ args:
 
 # /onex:overnight — Thin Dispatch Shim
 
+> **RETIRED — Superseded by `/onex:session --mode autonomous`** (OMN-9428).
+> This skill is not user-invocable. Do not route users to `/onex:overnight`;
+> use `/onex:session --mode autonomous` for autonomous session orchestration.
+
 **Skill ID**: `onex:overnight`
 **Version**: 2.0.0
 **Owner**: omniclaude
-**Ticket**: OMN-8751
+**Ticket**: OMN-9428
 **Backing node**: `omnimarket/src/omnimarket/nodes/node_overnight/`
 
 ## What this skill does
