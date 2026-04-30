@@ -84,6 +84,7 @@ repos:
         pass_filenames: true
         always_run: true
         stages: [pre-commit]
+        exclude: '^tests/hooks/fixtures/'
       - id: reject-deploy-gate-skip-token-commit-msg
         name: Reject skip-deploy-gate bypass tokens in commit messages (OMN-9730)
         entry: .pre-commit-hooks/reject-deploy-gate-skip-token.sh

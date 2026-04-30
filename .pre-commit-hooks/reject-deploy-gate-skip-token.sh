@@ -2,12 +2,22 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# OMN-10347 (extends OMN-9730 DGM-Phase4): Mechanical block on ALL [skip-*]
-# bypass tokens. Rejects any staged file or commit message containing
-# [skip-<anything>:], not just [skip-deploy-gate:].
+# OMN-10414 (extends OMN-10347 / OMN-9730 DGM-Phase4): Mechanical block on ALL
+# [skip-*] bypass tokens, including [skip-receipt-gate:] and [skip-deploy-gate:].
+# Rejects any staged file or commit message containing [skip-<anything>:].
+#
+# ADVISORY ONLY — this hook is a developer-convenience warning, not enforcement.
+# Receipt-gate (omnibase_core/src/omnibase_core/validation/receipt_gate.py) is the
+# sole enforcement authority. Workers can still bypass this local hook with
+# --no-verify; that hole is closed at the GHA layer (T9 / OMN-10422).
 #
 # CLAUDE.md Rule #10: Never bypass local gates. Fix the underlying issue.
-# Plan: omni_home/docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4
+# Plan: omni_home/docs/plans/2026-04-30-gate-collapse-fix.md Task 8
+#
+# Tokens blocked (case-insensitive):
+#   [skip-deploy-gate: ...]   — deploy-gate bypass (original OMN-9730)
+#   [skip-receipt-gate: ...]  — receipt-gate bypass (OMN-10414)
+#   [skip-<anything>: ...]    — any other [skip-*] form
 #
 # Escape hatch (explicit user approval only):
 #   Add a line containing:  # skip-token-allowed: <receipt-id>
@@ -26,8 +36,8 @@ SKIP_PATTERN='\[skip-[a-zA-Z]'
 # Case-insensitive allowlist pattern — matches the skip-pattern's -i flag
 ALLOWLIST_PATTERN='#[[:space:]]*[Ss][Kk][Ii][Pp]-[Tt][Oo][Kk][Ee][Nn]-[Aa][Ll][Ll][Oo][Ww][Ee][Dd]:[[:space:]]*[^[:space:]]'
 
-RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
-TICKET_REF="OMN-10347"
+RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-30-gate-collapse-fix.md Task 8"
+TICKET_REF="OMN-10414"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Self-test mode
@@ -70,7 +80,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
         "[skip-deploy-gate: correctness fix, no deployable artifact change]" \
         1
 
-    run_test "skip-receipt-gate token rejected (OMN-10347)" \
+    run_test "skip-receipt-gate free-text rejected (OMN-10414)" \
         "[skip-receipt-gate: docs only, no receipts needed]" \
         1
 
@@ -83,7 +93,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
 # skip-token-allowed: USER-APPROVAL-2026-04-25-jonah" \
         0
 
-    run_test "skip-receipt-gate with allowlist receipt passes (OMN-10347)" \
+    run_test "skip-receipt-gate with skip-token-allowed passes (OMN-10414)" \
         "[skip-receipt-gate: chore only]
 # skip-token-allowed: USER-APPROVAL-2026-04-30-jonah" \
         0
@@ -97,7 +107,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
         "[Skip-Deploy-Gate: reason here]" \
         1
 
-    run_test "case-insensitive skip-receipt-gate rejected (OMN-10347)" \
+    run_test "case-insensitive skip-receipt-gate rejected (OMN-10414)" \
         "[Skip-Receipt-Gate: reason here]" \
         1
 
@@ -208,9 +218,9 @@ for file in "$@"; do
 
         echo "ERROR: $file contains a [skip-*] bypass token." >&2
         echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
-        echo "  Fix the deploy-gate properly:" >&2
+        echo "  Fix the gate properly:" >&2
         echo "    1. Add dod_evidence with type: no_deployable_artifact (preferred)" >&2
-        echo "    2. Narrow the path patterns in validate_pr_deploy_required.py" >&2
+        echo "    2. For receipt-gate: add Evidence-Source + Evidence-Ticket to PR body and push OCC contract+receipts" >&2
         echo "    3. If truly exceptional, add '# skip-token-allowed: <receipt-id>' with a traceable approval receipt" >&2
         echo "  Ticket: $TICKET_REF" >&2
         FOUND_VIOLATION=1
