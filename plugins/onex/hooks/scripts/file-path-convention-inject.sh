@@ -13,6 +13,7 @@
 #   0 — always (informational injection, never blocks)
 
 set -eo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate FILE_PATH_CONVENTION_INJECT || exit 0
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"

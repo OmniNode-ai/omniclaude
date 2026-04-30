@@ -8,6 +8,7 @@
 # (e.g., pre-commit hook failure) and the agent proceeds as if it succeeded.
 
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate POST_TOOL_COMMIT_VERIFY || exit 0
 
 # Read tool input from stdin

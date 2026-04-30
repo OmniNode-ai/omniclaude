@@ -5,6 +5,7 @@
 # subagent dispatch (OMN-9084). Skips when not inside a dispatch.
 # Event: PostToolUse | Matcher: .* | Ticket: OMN-9084
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate POST_TOOL_SUBAGENT_TOOL_LOG || exit 0
 HOOK_EVENT=$(cat)
 printf '%s\n' "$HOOK_EVENT"

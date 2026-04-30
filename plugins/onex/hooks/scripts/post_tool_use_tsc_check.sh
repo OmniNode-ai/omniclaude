@@ -5,6 +5,7 @@
 # Exits 0 always (informational only — errors are surfaced as stdout warnings).
 
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate POST_TOOL_TSC_CHECK || exit 0
 
 # --- Lite mode guard [OMN-5398] ---

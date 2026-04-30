@@ -29,6 +29,11 @@
 # Fall back to "unknown-hook" if not set.
 _OMNICLAUDE_HOOK_NAME="${_OMNICLAUDE_HOOK_NAME:-unknown-hook}"
 
+# Standalone hooks source error-guard before common.sh, and some never source
+# common.sh at all. Load the bitmask gate here so ONEX_HOOKS_MASK checks are
+# available before hook-specific behavior starts.
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
+
 # Log directory for error-guard failures (created lazily on first error)
 _ERROR_GUARD_LOG_DIR="${_ERROR_GUARD_LOG_DIR:-${TMPDIR:-/tmp}/omniclaude-error-guard}"
 mkdir -p "$_ERROR_GUARD_LOG_DIR" 2>/dev/null || true

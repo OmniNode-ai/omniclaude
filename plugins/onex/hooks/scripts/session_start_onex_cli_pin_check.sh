@@ -16,6 +16,7 @@
 #   - Always exits 0 (non-blocking, per Hook Performance Budgets contract)
 
 set -u
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate SESSION_START_ONEX_CLI_PIN_CHECK || exit 0
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"

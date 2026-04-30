@@ -20,6 +20,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate CI_REMINDER || exit 0
 
 # -----------------------------------------------------------------------

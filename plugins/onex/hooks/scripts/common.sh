@@ -38,7 +38,8 @@ unset _hook_bits_path
 
 onex_hook_gate() {
   local bit_name="$1"
-  local bit="${HOOK_BITS_BY_NAME[$bit_name]:-}"
+  local bit
+  bit="$(hook_bits_bit_for_name "$bit_name" 2>/dev/null || true)"
   [[ -z "$bit" ]] && return 0
   local mask
   mask="$(hook_bits_parse_mask "${ONEX_HOOKS_MASK:-$HOOK_BITS_DEFAULT_MASK}")"

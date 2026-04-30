@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate EPIC_POSTACTION_GATE || exit 0
 # Post-action validation gate: pytest + pre-commit on worktree.
 # Env: WORKTREE_PATH, TICKET_ID, DRY_RUN (optional), GATE_RESULT_FILE (optional)

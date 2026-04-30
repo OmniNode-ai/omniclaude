@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
 onex_hook_gate EPIC_PREFLIGHT_GATE || exit 0
 # Pre-flight scope check for epic agent tickets.
 # Env: TICKET_ID, TICKET_REPO, EPIC_ID
