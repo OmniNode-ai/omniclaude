@@ -50,6 +50,7 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Checking $TOOL_NAME for TDD clause (ONEX_DISPATCH_TYPE=${ONEX_DISPATCH_TYPE:-<unset>})" >> "$LOG_FILE"
 
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate TDD_DISPATCH_GATE || exit 0
 
 set +e
 GUARD_OUTPUT=$(echo "$TOOL_INFO" | \

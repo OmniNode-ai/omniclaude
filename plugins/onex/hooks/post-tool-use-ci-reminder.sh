@@ -20,10 +20,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_CI_REMINDER:-1}" == "0" ]]; then
-    cat  # drain stdin
-    exit 0
-fi
+onex_hook_gate CI_REMINDER || exit 0
 
 # -----------------------------------------------------------------------
 # Repo-guard: only fire in OmniNode repos. External users of the plugin

@@ -16,6 +16,7 @@
 #   - Always exits 0 (non-blocking, per Hook Performance Budgets contract)
 
 set -u
+onex_hook_gate SESSION_START_ONEX_CLI_PIN_CHECK || exit 0
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 if [[ -z "$PLUGIN_ROOT" ]]; then

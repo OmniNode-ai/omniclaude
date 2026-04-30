@@ -28,6 +28,7 @@ set -euo pipefail
 
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+onex_hook_gate HOSTILE_REVIEW_GATE || exit 0
 
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then cat; exit 0; fi
 if [[ "${HOSTILE_REVIEW_GATE_DISABLED:-0}" == "1" ]]; then cat; exit 0; fi

@@ -216,6 +216,7 @@ fi
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 # shellcheck source=common.sh
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate SESSION_START || exit 0
 
 # Daemon status file path (used by write_daemon_status for observability)
 readonly DAEMON_STATUS_FILE="${HOOKS_DIR}/logs/daemon-status"

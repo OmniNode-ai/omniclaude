@@ -60,6 +60,7 @@ export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 
 # Source shared functions (provides PYTHON_CMD)
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate POST_TOOL_RETURN_PATH_AUDITOR || exit 0
 
 # Read hook event from stdin
 HOOK_EVENT=$(cat)

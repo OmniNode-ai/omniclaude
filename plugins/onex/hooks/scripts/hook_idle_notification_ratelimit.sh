@@ -78,6 +78,7 @@ fi
 
 # Locate Python
 if ! source "${HOOKS_DIR}/scripts/common.sh"; then
+onex_hook_gate HOOK_IDLE_NOTIFICATION_RATELIMIT || exit 0
     # Infra/config failure: fail open
     echo "$TOOL_INFO"
     exit 0

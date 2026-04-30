@@ -26,6 +26,7 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+onex_hook_gate PRE_TOOL_AGENT_DISPATCH_GATE || exit 0
 
 # Kill switch — fail open when disabled
 if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then

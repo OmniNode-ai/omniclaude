@@ -30,6 +30,7 @@ LIB_PY="${PLUGIN_ROOT}/hooks/lib/linear_done_verify.py"
 # that invoke Python. Sourced here to satisfy the hooks-source-common invariant.
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+onex_hook_gate LINEAR_DONE_VERIFY || exit 0
 unset _SCRIPT_DIR _MODE_SH
 
 if [[ ! -f "$LIB_PY" ]]; then

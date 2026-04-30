@@ -53,6 +53,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] checking $TOOL
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate OVERSEER_FOREGROUND_BLOCK || exit 0
 
 # Run Python guard
 set +e

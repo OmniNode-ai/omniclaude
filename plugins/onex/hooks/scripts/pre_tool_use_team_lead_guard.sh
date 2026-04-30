@@ -68,6 +68,7 @@ fi
 
 # Locate Python. The guard module uses only stdlib — any Python 3.10+ works.
 # We intentionally DO NOT source common.sh: its strict venv discovery path can
+onex_hook_gate TEAM_LEAD_GUARD || exit 0
 # hard-exit when the plugin venv isn't materialised, which would convert this
 # hook from fail-open to fail-closed. Stdlib-only means plain python3 is safe.
 PYTHON_CMD="${PLUGIN_PYTHON_BIN:-python3}"

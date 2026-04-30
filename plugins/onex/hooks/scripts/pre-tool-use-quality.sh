@@ -68,6 +68,7 @@ fi
 # pre-execution validation is synchronous and blocking, while Kafka events are
 # designed for async observability of completed actions.
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate PRE_TOOL_USE_QUALITY || exit 0
 
 # Generate or reuse correlation ID
 if [ -z "${CORRELATION_ID:-}" ]; then

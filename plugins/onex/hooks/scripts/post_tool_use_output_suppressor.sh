@@ -50,6 +50,7 @@ mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 
 # Source common.sh for PYTHON_CMD
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate POST_TOOL_OUTPUT_SUPPRESSOR || exit 0
 
 SUPPRESSOR="${HOOKS_LIB}/skill_output_suppressor.py"
 if [[ ! -f "$SUPPRESSOR" ]]; then

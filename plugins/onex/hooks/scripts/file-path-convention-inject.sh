@@ -13,6 +13,7 @@
 #   0 — always (informational injection, never blocks)
 
 set -eo pipefail
+onex_hook_gate FILE_PATH_CONVENTION_INJECT || exit 0
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"

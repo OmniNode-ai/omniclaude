@@ -19,10 +19,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_CHANGESET_GUARD:-1}" == "0" ]]; then
-    cat  # drain stdin
-    exit 0
-fi
+onex_hook_gate CHANGESET_GUARD_PRE || exit 0
 
 # -----------------------------------------------------------------------
 # Read stdin (Claude Code PreToolUse JSON)

@@ -47,6 +47,7 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Checking $TOOL_NAME for ticket+evidence" >> "$LOG_FILE"
 
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate DISPATCH_GUARD_TICKET_EVIDENCE || exit 0
 
 set +e
 GUARD_OUTPUT=$(echo "$TOOL_INFO" | \

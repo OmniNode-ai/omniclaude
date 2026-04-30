@@ -96,6 +96,7 @@ export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate POST_TOOL_USE_QUALITY || exit 0
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 

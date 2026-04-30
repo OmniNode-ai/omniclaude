@@ -25,10 +25,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_ENV_SYNC:-1}" == "0" ]]; then
-    cat
-    exit 0
-fi
+onex_hook_gate ENV_SYNC || exit 0
 
 # -----------------------------------------------------------------------
 # Read stdin

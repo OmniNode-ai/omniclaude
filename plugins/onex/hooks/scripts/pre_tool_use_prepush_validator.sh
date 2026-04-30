@@ -60,6 +60,7 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate PREPUSH_VALIDATOR || exit 0
 
 # Read stdin
 TOOL_INFO=$(cat)

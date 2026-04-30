@@ -54,6 +54,7 @@ fi
 # Resolve script dir before cd $HOME (relative paths break after cwd change)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+onex_hook_gate POST_TOOL_DELEGATION_COUNTER || exit 0
 # shellcheck source=hook-runtime-client.sh
 source "${SCRIPT_DIR}/hook-runtime-client.sh" 2>/dev/null || true
 

@@ -68,6 +68,7 @@ export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 
 # Source shared functions (provides log(), KAFKA_ENABLED)
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate PRE_COMPACT || exit 0
 
 # --- Mode resolution [OMN-5398] ---
 _MODE_SH="${PLUGIN_ROOT}/lib/mode.sh"

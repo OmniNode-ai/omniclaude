@@ -33,6 +33,7 @@ _BOOTSTRAP_STATE_DIR="${ONEX_STATE_DIR:-}"
 # common.sh provides PYTHON_CMD resolution and shared helpers.
 # shellcheck source=/dev/null
 source "${PLUGIN_ROOT}/hooks/scripts/common.sh"
+onex_hook_gate POST_TOOL_CRON_ACTION_GUARD || exit 0
 unset _SCRIPT_DIR _MODE_SH
 
 # Buffer stdin once so both the Python lib and the bootstrap check can use it.

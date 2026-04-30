@@ -33,6 +33,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-}"
 source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
 LOG_FILE="${ONEX_HOOK_LOG}"
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate POLY_ENFORCER || exit 0
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"

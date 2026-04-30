@@ -35,6 +35,7 @@ unset _SELF
 unset -f _resolve_self
 
 source "${_SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+onex_hook_gate PERMISSION_DENIED_LOGGER || exit 0
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 

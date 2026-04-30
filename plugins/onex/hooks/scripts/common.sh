@@ -21,6 +21,31 @@
 # =============================================================================
 
 # =============================================================================
+# Hook Bitmask Gate [OMN-9617]
+# =============================================================================
+# Sources hook_bits.sh once per session. Each GATE wrapper calls:
+#   onex_hook_gate <BIT_NAME> || exit 0
+# to silently skip when the bit is cleared in ONEX_HOOKS_MASK.
+: "${ONEX_HOOK_BITS_SOURCED:=}"
+if [[ -z "$ONEX_HOOK_BITS_SOURCED" ]]; then
+  _hook_bits_path="${HOOKS_DIR:-$(dirname "${BASH_SOURCE[0]}")/..}/lib/hook_bits.sh"
+  if [[ -f "$_hook_bits_path" ]]; then
+    source "$_hook_bits_path"
+  fi
+  ONEX_HOOK_BITS_SOURCED=1
+fi
+unset _hook_bits_path
+
+onex_hook_gate() {
+  local bit_name="$1"
+  local bit="${HOOK_BITS_BY_NAME[$bit_name]:-}"
+  [[ -z "$bit" ]] && return 0
+  local mask
+  mask="$(hook_bits_parse_mask "${ONEX_HOOKS_MASK:-$HOOK_BITS_DEFAULT_MASK}")"
+  hook_bits_is_enabled "$mask" "$bit"
+}
+
+# =============================================================================
 # Python Environment Detection
 # =============================================================================
 # Canonical Homebrew Python interpreter for macOS hook launchers (OMN-10113).

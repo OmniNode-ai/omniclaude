@@ -36,6 +36,7 @@ mkdir -p "$(dirname "$LOG_FILE")"
 
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate CONTEXT_SCOPE_AUDITOR || exit 0
 
 export OMNICLAUDE_HOOK_CRITICALITY="advisory"
 

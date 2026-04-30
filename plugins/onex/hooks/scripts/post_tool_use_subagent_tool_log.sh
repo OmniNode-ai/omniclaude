@@ -5,6 +5,7 @@
 # subagent dispatch (OMN-9084). Skips when not inside a dispatch.
 # Event: PostToolUse | Matcher: .* | Ticket: OMN-9084
 set -euo pipefail
+onex_hook_gate POST_TOOL_SUBAGENT_TOOL_LOG || exit 0
 HOOK_EVENT=$(cat)
 printf '%s\n' "$HOOK_EVENT"
 [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]] && exit 0

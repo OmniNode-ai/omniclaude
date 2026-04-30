@@ -30,6 +30,7 @@ mkdir -p "$(dirname "$LOG_FILE")"
 
 # Shared helpers (PYTHON_CMD, _hook_status).
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate BRANCH_PROTECTION_GUARD || exit 0
 
 TOOL_INFO=$(cat)
 

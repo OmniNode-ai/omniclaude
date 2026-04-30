@@ -19,10 +19,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_HANDOFF_NUDGE:-1}" == "0" ]]; then
-    cat  # drain stdin
-    exit 0
-fi
+onex_hook_gate HANDOFF_NUDGE || exit 0
 
 # -----------------------------------------------------------------------
 # Read stdin (Claude Code UserPromptSubmit JSON)

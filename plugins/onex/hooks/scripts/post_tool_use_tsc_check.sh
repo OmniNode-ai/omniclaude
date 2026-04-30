@@ -5,6 +5,7 @@
 # Exits 0 always (informational only — errors are surfaced as stdout warnings).
 
 set -euo pipefail
+onex_hook_gate POST_TOOL_TSC_CHECK || exit 0
 
 # --- Lite mode guard [OMN-5398] ---
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

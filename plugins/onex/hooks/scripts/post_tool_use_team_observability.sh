@@ -30,10 +30,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_TEAM_OBSERVABILITY:-1}" == "0" ]]; then
-    cat  # drain stdin
-    exit 0
-fi
+onex_hook_gate TEAM_OBSERVABILITY || exit 0
 
 # --- Lite mode guard [OMN-5398] ---
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

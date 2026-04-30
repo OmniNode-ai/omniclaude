@@ -22,6 +22,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLE:-0}" == "1" ]] || [[ -f "${HOME}/.claude/omnic
 fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+onex_hook_gate POST_SKILL_DELEGATION_ENFORCER || exit 0
 # shellcheck source=hook-runtime-client.sh
 source "$(dirname "${BASH_SOURCE[0]}")/hook-runtime-client.sh" 2>/dev/null || true
 

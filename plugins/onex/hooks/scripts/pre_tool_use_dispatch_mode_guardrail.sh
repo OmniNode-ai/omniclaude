@@ -66,6 +66,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [$_OMNICLAUDE_HOOK_NAME] Evaluating Age
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate DISPATCH_MODE_GUARDRAIL || exit 0
 
 # Run Python guard (advisory-only — never exits 2)
 set +e

@@ -42,6 +42,7 @@ export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:
 
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED)
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate CONVENTION_INJECTOR || exit 0
 
 PYTHON_CMD="$(find_python)"
 if [[ -z "$PYTHON_CMD" ]]; then

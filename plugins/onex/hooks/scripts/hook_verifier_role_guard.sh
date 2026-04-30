@@ -71,6 +71,7 @@ fi
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate HOOK_VERIFIER_ROLE_GUARD || exit 0
 
 # Look up the agent's YAML config and check is_verifier
 AGENTS_DIR="${PLUGIN_ROOT}/agents/configs"

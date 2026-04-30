@@ -25,6 +25,7 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
+onex_hook_gate POST_TOOL_AGENT_RESULT_VERIFIER || exit 0
 
 # --- Lite mode guard (OMN-5398) -------------------------------------------
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

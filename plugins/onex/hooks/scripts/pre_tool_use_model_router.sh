@@ -50,6 +50,7 @@ fi
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate MODEL_ROUTER || exit 0
 
 # Run Python model router
 set +e

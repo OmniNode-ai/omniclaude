@@ -31,6 +31,7 @@ unset _SELF
 unset -f _resolve_self
 
 source "${_SCRIPT_DIR}/error-guard.sh" 2>/dev/null || true
+onex_hook_gate POST_TOOL_KAFKA_POISON_MESSAGE_GUARD || exit 0
 
 # Python getpath may call os.getcwd() during startup. Ensure CWD is stable.
 cd "$HOME" 2>/dev/null || cd /tmp || true

@@ -73,6 +73,7 @@ fi
 
 # Locate Python
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate HOOK_DISPATCH_CLAIM_POSTTOOL || exit 0
 
 set +e
 RESULT=$(echo "$TOOL_TEXT" | \

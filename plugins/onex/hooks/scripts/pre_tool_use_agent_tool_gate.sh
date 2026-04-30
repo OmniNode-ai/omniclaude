@@ -38,6 +38,7 @@ TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>/dev/null) || {
 }
 
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate PRE_TOOL_AGENT_TOOL_GATE || exit 0
 
 set +e
 RESULT=$(echo "$TOOL_INFO" | \

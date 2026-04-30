@@ -50,6 +50,7 @@ fi
 
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED)
 source "${HOOKS_DIR}/scripts/common.sh"
+onex_hook_gate BASH_GUARD || exit 0
 
 # Read stdin
 TOOL_INFO=$(cat)

@@ -20,10 +20,7 @@ if [[ "${OMNICLAUDE_HOOKS_DISABLED:-0}" == "1" ]]; then
     cat  # drain stdin
     exit 0
 fi
-if [[ "${OMNICLAUDE_HOOK_AUTO_CHECKPOINT:-1}" == "0" ]]; then
-    cat  # drain stdin
-    exit 0
-fi
+onex_hook_gate AUTO_CHECKPOINT || exit 0
 
 # -----------------------------------------------------------------------
 # Read stdin (Claude Code PostToolUse JSON)
