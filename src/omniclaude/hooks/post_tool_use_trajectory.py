@@ -25,20 +25,23 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
+# Claude Code tool envelopes are untyped external API boundaries.
+_Envelope = (
+    dict[  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
+        str, Any
+    ]
+)
+
 
 def _load_trajectory_store(
     session_id: str,
-) -> (
-    Any
-):  # ONEX_EXCLUDE: any_type - lazy-loaded omnibase_core type; concrete at runtime
+) -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded omnibase_core type
     from omnibase_core.agents.trajectory_store import TrajectoryStore
 
     return TrajectoryStore(session_id=session_id)
 
 
-def _load_detectors() -> list[
-    Any
-]:  # ONEX_EXCLUDE: any_type - lazy-loaded detector callables; concrete at runtime
+def _load_detectors() -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded detector callables
     from omnibase_core.agents.prm_detectors import (
         detect_context_thrash,
         detect_expansion_drift,
@@ -56,9 +59,7 @@ def _load_detectors() -> list[
     ]
 
 
-def _load_escalation_tracker() -> (
-    Any
-):  # ONEX_EXCLUDE: any_type - lazy-loaded singleton; concrete at runtime
+def _load_escalation_tracker() -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded singleton
     from omnibase_core.agents.prm_escalation import escalation_tracker
 
     return escalation_tracker
@@ -66,9 +67,7 @@ def _load_escalation_tracker() -> (
 
 def _make_trajectory_entry(
     step: int, agent: str, action: str, target: str, result: str
-) -> (
-    Any
-):  # ONEX_EXCLUDE: any_type - lazy-loaded ModelTrajectoryEntry; concrete at runtime
+) -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded ModelTrajectoryEntry
     from omnibase_core.models.agents.model_trajectory_entry import ModelTrajectoryEntry
 
     return ModelTrajectoryEntry(
@@ -77,24 +76,20 @@ def _make_trajectory_entry(
 
 
 # Module-level singletons — lazily initialized
-trajectory_store: Any = (
-    None  # ONEX_EXCLUDE: any_type - lazy-loaded TrajectoryStore; concrete at runtime
-)
+trajectory_store: Any = None  # ONEX_EXCLUDE: any_type - lazy-loaded TrajectoryStore
 _last_processed_step: int = 0
 
 
 def _get_store(
     session_id: str,
-) -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded TrajectoryStore; concrete at runtime
+) -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded TrajectoryStore
     global trajectory_store
     if trajectory_store is None:
         trajectory_store = _load_trajectory_store(session_id)
     return trajectory_store
 
 
-def _extract_target(
-    tool_name: str, tool_input: dict[str, Any]
-) -> str:  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
+def _extract_target(tool_name: str, tool_input: _Envelope) -> str:
     for key in ("file_path", "path", "command", "query", "subject", "prompt"):
         val = tool_input.get(key)
         if isinstance(val, str) and val:
@@ -105,28 +100,25 @@ def _extract_target(
     return ""
 
 
-def _extract_result(
-    tool_response: dict[str, Any],
-) -> str:  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
+def _extract_result(tool_response: _Envelope) -> str:
     if tool_response.get("error"):
         return "error"
     return "ok"
 
 
 def build_trajectory_entry(
-    step: int, envelope: dict[str, Any]
-) -> Any:  # ONEX_EXCLUDE: dict_str_any any_type - external/untyped Claude Code tool envelope; return type concrete at runtime
+    step: int,
+    envelope: _Envelope,
+) -> (
+    Any  # ONEX_EXCLUDE: any_type - return type is ModelTrajectoryEntry, concrete at runtime
+):
     """Construct a ModelTrajectoryEntry from a PostToolUse envelope."""
     session_id: str = (
         envelope.get("sessionId") or envelope.get("session_id") or "unknown"
     )
     tool_name: str = envelope.get("tool_name") or "unknown"
-    tool_input: dict[str, Any] = (
-        envelope.get("tool_input") or {}
-    )  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
-    tool_response: dict[str, Any] = (
-        envelope.get("tool_response") or {}
-    )  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
+    tool_input: _Envelope = envelope.get("tool_input") or {}
+    tool_response: _Envelope = envelope.get("tool_response") or {}
 
     target = _extract_target(tool_name, tool_input)
     result = _extract_result(tool_response)
@@ -140,16 +132,24 @@ def build_trajectory_entry(
     )
 
 
-def _run_detectors(entries: list[Any], last_processed_step: int) -> list[Any]:
+def _run_detectors(
+    entries: list[Any],  # ONEX_EXCLUDE: any_type - PRM entry type concrete at runtime
+    last_processed_step: int,
+) -> list[Any]:  # ONEX_EXCLUDE: any_type - PRM match type concrete at runtime
     """Run all 5 PRM pattern detectors and aggregate results."""
     detectors = _load_detectors()
-    matches: list[Any] = []
+    matches: list[Any] = []  # ONEX_EXCLUDE: any_type - PRM match type concrete at runtime  # fmt: skip
     for detector in detectors:
         matches.extend(detector(entries, last_processed_step=last_processed_step))
     return matches
 
 
-def _escalate_matches(matches: list[Any], session_id: str) -> list[Any]:
+def _escalate_matches(
+    matches: list[Any],  # ONEX_EXCLUDE: any_type - PRM match type concrete at runtime
+    session_id: str,
+) -> list[
+    Any  # ONEX_EXCLUDE: any_type - PRM escalation result type concrete at runtime
+]:
     """Pass PRM matches through the escalation tracker, return escalation results."""
     tracker = _load_escalation_tracker()
     results = []
@@ -165,11 +165,7 @@ class HookResult:
     additional_context: str | None
 
 
-def process_tool_envelope(
-    envelope: dict[str, Any], step: int
-) -> (
-    HookResult
-):  # ONEX_EXCLUDE: dict_str_any - external/untyped Claude Code tool envelope
+def process_tool_envelope(envelope: _Envelope, step: int) -> HookResult:
     """Core hook logic: append entry, detect patterns, escalate, return result."""
     global _last_processed_step
 
