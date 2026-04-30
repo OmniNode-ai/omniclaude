@@ -8,7 +8,11 @@
 set -euo pipefail
 _OMNICLAUDE_HOOK_NAME="$(basename "${BASH_SOURCE[0]}")"
 source "$(dirname "${BASH_SOURCE[0]}")/error-guard.sh" 2>/dev/null || true
-onex_hook_gate SWEEP_PREFLIGHT || exit 0
+source "$(dirname "${BASH_SOURCE[0]}")/hook-gate.sh" 2>/dev/null || true
+if declare -F onex_hook_gate >/dev/null 2>&1 && ! onex_hook_gate SWEEP_PREFLIGHT; then
+    cat >/dev/null || true
+    exit 0
+fi
 
 # Capture the caller's CWD BEFORE we stabilize to $HOME. The repo-guard
 # needs to know which project the tool call was launched from, not where

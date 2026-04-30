@@ -66,11 +66,15 @@ if [[ ! "$TOOL_NAME" =~ ^(Read|Edit|Write|Bash|Glob|Grep)$ ]]; then
     exit 0
 fi
 
-# Locate Python. The guard module uses only stdlib — any Python 3.10+ works.
+# Locate Python. The guard module uses only stdlib - any Python 3.10+ works.
 # We intentionally DO NOT source common.sh: its strict venv discovery path can
-onex_hook_gate TEAM_LEAD_GUARD || exit 0
 # hard-exit when the plugin venv isn't materialised, which would convert this
 # hook from fail-open to fail-closed. Stdlib-only means plain python3 is safe.
+source "${HOOKS_DIR}/scripts/hook-gate.sh" 2>/dev/null || true
+if declare -F onex_hook_gate >/dev/null 2>&1 && ! onex_hook_gate TEAM_LEAD_GUARD; then
+    echo "$TOOL_INFO"
+    exit 0
+fi
 PYTHON_CMD="${PLUGIN_PYTHON_BIN:-python3}"
 
 # Run Python guard.
