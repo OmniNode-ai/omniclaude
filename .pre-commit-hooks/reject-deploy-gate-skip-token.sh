@@ -2,8 +2,9 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 #
-# DGM-Phase4 (OMN-9730): Mechanical block on skip-deploy-gate bypass tokens.
-# Rejects any staged file or commit message containing [skip-deploy-gate:].
+# OMN-10347 (extends OMN-9730 DGM-Phase4): Mechanical block on ALL [skip-*]
+# bypass tokens. Rejects any staged file or commit message containing
+# [skip-<anything>:], not just [skip-deploy-gate:].
 #
 # CLAUDE.md Rule #10: Never bypass local gates. Fix the underlying issue.
 # Plan: omni_home/docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4
@@ -20,12 +21,13 @@
 
 set -euo pipefail
 
-SKIP_PATTERN='\[skip-deploy-gate:'
+# OMN-10347: Broadened to ALL [skip-* tokens per Rule #10 (was [skip-deploy-gate: only).
+SKIP_PATTERN='\[skip-[a-zA-Z]'
 # Case-insensitive allowlist pattern — matches the skip-pattern's -i flag
 ALLOWLIST_PATTERN='#[[:space:]]*[Ss][Kk][Ii][Pp]-[Tt][Oo][Kk][Ee][Nn]-[Aa][Ll][Ll][Oo][Ww][Ee][Dd]:[[:space:]]*[^[:space:]]'
 
 RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
-TICKET_REF="OMN-9730"
+TICKET_REF="OMN-10347"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Self-test mode
@@ -68,9 +70,22 @@ if [[ "${1:-}" == "--self-test" ]]; then
         "[skip-deploy-gate: correctness fix, no deployable artifact change]" \
         1
 
+    run_test "skip-receipt-gate token rejected (OMN-10347)" \
+        "[skip-receipt-gate: docs only, no receipts needed]" \
+        1
+
+    run_test "skip-anything token rejected (OMN-10347)" \
+        "[skip-anything: some reason]" \
+        1
+
     run_test "skip-deploy-gate with allowlist receipt passes" \
         "[skip-deploy-gate: correctness fix]
 # skip-token-allowed: USER-APPROVAL-2026-04-25-jonah" \
+        0
+
+    run_test "skip-receipt-gate with allowlist receipt passes (OMN-10347)" \
+        "[skip-receipt-gate: chore only]
+# skip-token-allowed: USER-APPROVAL-2026-04-30-jonah" \
         0
 
     run_test "allowlist without skip-token passes" \
@@ -80,6 +95,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
 
     run_test "case-insensitive skip-deploy-gate rejected" \
         "[Skip-Deploy-Gate: reason here]" \
+        1
+
+    run_test "case-insensitive skip-receipt-gate rejected (OMN-10347)" \
+        "[Skip-Receipt-Gate: reason here]" \
         1
 
     echo ""
@@ -113,12 +132,12 @@ if [[ "${1:-}" == "--check-pr-body" ]]; then
 
     if echo "$PR_BODY" | grep -qiE "$SKIP_PATTERN"; then
         if echo "$PR_BODY" | grep -qiE "$ALLOWLIST_PATTERN"; then
-            echo "WARNING: [skip-deploy-gate:] found in PR #$PR_NUMBER body but explicit approval receipt present — allowed." >&2
+            echo "WARNING: [skip-*] token found in PR #$PR_NUMBER body but explicit approval receipt present — allowed." >&2
             exit 0
         fi
-        echo "ERROR: PR #$PR_NUMBER body contains a [skip-deploy-gate:] bypass token." >&2
+        echo "ERROR: PR #$PR_NUMBER body contains a [skip-*] bypass token." >&2
         echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
-        echo "  Fix the deploy-gate properly: add dod_evidence or use the structured no_deployable_artifact exception." >&2
+        echo "  Fix the gate properly: add dod_evidence or use the structured no_deployable_artifact exception." >&2
         echo "  Ticket: $TICKET_REF" >&2
         exit 1
     fi
@@ -135,12 +154,12 @@ if [[ "${GIT_HOOK_STAGE:-}" == "commit-msg" || "$#" -eq 1 && "${1:-}" == *COMMIT
     if [[ -n "$msg_file" && -f "$msg_file" ]]; then
         if grep -qiE "$SKIP_PATTERN" "$msg_file"; then
             if grep -qiE "$ALLOWLIST_PATTERN" "$msg_file"; then
-                echo "WARNING: [skip-deploy-gate:] found in commit message but explicit approval receipt present — allowed." >&2
+                echo "WARNING: [skip-*] token found in commit message but explicit approval receipt present — allowed." >&2
                 exit 0
             fi
-            echo "ERROR: commit message contains a [skip-deploy-gate:] bypass token." >&2
+            echo "ERROR: commit message contains a [skip-*] bypass token." >&2
             echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
-            echo "  Fix the deploy-gate properly:" >&2
+            echo "  Fix the gate properly:" >&2
             echo "    1. Add dod_evidence with type: no_deployable_artifact (preferred)" >&2
             echo "    2. Narrow the path patterns in validate_pr_deploy_required.py" >&2
             echo "    3. If truly exceptional, add '# skip-token-allowed: <receipt-id>' with a traceable approval receipt" >&2
@@ -183,11 +202,11 @@ for file in "$@"; do
     if grep -qiE "$SKIP_PATTERN" <<< "$staged_content"; then
         # Check for explicit allowlist receipt in the staged content (also case-insensitive)
         if grep -qiE "$ALLOWLIST_PATTERN" <<< "$staged_content"; then
-            echo "WARNING: [skip-deploy-gate:] found in $file but explicit approval receipt present — allowed." >&2
+            echo "WARNING: [skip-*] token found in $file but explicit approval receipt present — allowed." >&2
             continue
         fi
 
-        echo "ERROR: $file contains a [skip-deploy-gate:] bypass token." >&2
+        echo "ERROR: $file contains a [skip-*] bypass token." >&2
         echo "  Per $RULE_REF, bypass is not permitted without explicit user approval." >&2
         echo "  Fix the deploy-gate properly:" >&2
         echo "    1. Add dod_evidence with type: no_deployable_artifact (preferred)" >&2
