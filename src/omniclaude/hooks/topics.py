@@ -206,6 +206,11 @@ class TopicBase(StrEnum):
     RUN_EVALUATED = "onex.evt.omniintelligence.run-evaluated.v1"
     """Emitted by omniintelligence after a session run evaluation completes."""
 
+    DISPATCH_OUTCOME_EVALUATED = (
+        "onex.evt.omniintelligence.dispatch-outcome-evaluated.v1"
+    )
+    """Emitted by omniintelligence after a dispatch worker outcome is evaluated."""
+
     # ==========================================================================
     # Delegation observability topics (OMN-2281)
     # ==========================================================================
