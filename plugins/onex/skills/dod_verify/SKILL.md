@@ -103,6 +103,53 @@ logic lives in the node handler.
 
 ---
 
+## DurableEvidenceGate (OMN-10407)
+
+`node_dod_verify` runs a `DurableEvidenceGate` before approving any Linear Done
+transition. The gate is pure logic over three pluggable probes. A gate failure
+returns `status: failed` and identifies the first failing check.
+
+**Background:** The OMN-9855 incident closed a ticket as Done after generating a DoD
+receipt locally (never committing it) and updating the Linear description to point at a
+PR. The contract on `onex_change_control/main` still cited the superseded PR. The gate
+was added to make this class of silent-broken-trail impossible.
+
+### Gate checks (EnumDurableEvidenceCheck)
+
+| Check ID | Name | What it validates | Evidence required to pass |
+|----------|------|-------------------|--------------------------|
+| `receipt_tracked` | RECEIPT_TRACKED | `evidence/<TICKET>/dod_report.json` is committed and tracked on `onex_change_control/main` (not local-only) | Run `git -C <occ_repo> ls-tree HEAD evidence/<ticket>/dod_report.json` — must return a blob entry |
+| `contract_cites_merge_commit` | CONTRACT_CITES_MERGE_COMMIT | The contract's `dod_evidence[].pr_url` resolves to a MERGED PR and its `mergeCommit.oid` matches the SHA cited in the contract | `gh pr view <pr_number> --repo <owner>/<repo> --json mergeCommit,state` — `state` must be `MERGED`; `mergeCommit.oid` must match cited SHA |
+| `contract_on_occ_main` | CONTRACT_ON_OCC_MAIN | The contract version on `onex_change_control/main` already contains the real merge commit citation — not a stale pre-merge version | `git -C <occ_repo> show HEAD:<contract_path>` must contain a non-empty `mergeCommit` field matching the verified SHA |
+
+### Failure surface
+
+When any check fails, the node raises `DurableEvidenceGateError` (defined in
+`omnimarket/src/omnimarket/nodes/node_dod_verify/services/durable_evidence_gate.py`).
+The skill renders:
+
+```
+DurableEvidenceGate FAILED for OMN-XXXX
+  Check: receipt_tracked
+  Message: evidence/OMN-XXXX/dod_report.json is NOT tracked on onex_change_control/main.
+           Commit and push the receipt to onex_change_control before re-running the gate.
+```
+
+All three checks run; the gate result contains `checks: list[ModelDurableEvidenceCheckResult]`
+with `passed: bool` and `message: str` per check. The `message` on failure carries the
+remediation hint the worker should follow before re-running the gate.
+
+### Gate model paths
+
+- Gate service: `omnimarket/src/omnimarket/nodes/node_dod_verify/services/durable_evidence_gate.py`
+- Gate models: `omnimarket/src/omnimarket/nodes/node_dod_verify/models/model_durable_evidence_gate.py`
+  - `EnumDurableEvidenceCheck` — check IDs (`RECEIPT_TRACKED`, `CONTRACT_CITES_MERGE_COMMIT`, `CONTRACT_ON_OCC_MAIN`)
+  - `ModelDurableEvidenceCheckResult` — per-check result (`check`, `passed`, `message`)
+  - `ModelDurableEvidenceGateResult` — full gate result (`ticket_id`, `status`, `checks`)
+  - `ModelCitedMergeCommit` — a single PR/merge-commit citation extracted from `dod_evidence[]`
+
+---
+
 ## New evidence type: rendered_output
 
 For tickets tagged with data pipeline, dashboard, or display labels:
