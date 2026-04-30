@@ -19,7 +19,8 @@ tags:
 author: OmniClaude Team
 composable: true
 migration_status: pending_node
-migration_target: node_integration_sweep
+migration_target: node_integration_sweep_orchestrator
+# Note: node_integration_sweep_orchestrator is currently a stub; full implementation tracked under OMN-7538
 migration_epic: OMN-7538
 args:
   - name: --date
