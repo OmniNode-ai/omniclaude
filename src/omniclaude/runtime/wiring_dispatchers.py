@@ -799,7 +799,10 @@ def _int_from_extra(extra: dict[str, object], *keys: str) -> int | None:
         value = extra.get(key)
         if value is not None:
             if isinstance(value, int | float | str):
-                return int(value)
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return None
             return None
     return None
 
@@ -809,7 +812,10 @@ def _float_from_extra(extra: dict[str, object], *keys: str) -> float | None:
         value = extra.get(key)
         if value is not None:
             if isinstance(value, int | float | str):
-                return float(value)
+                try:
+                    return float(value)
+                except (TypeError, ValueError):
+                    return None
             return None
     return None
 

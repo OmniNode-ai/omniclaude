@@ -96,6 +96,7 @@ def _make_materialized_envelope(
 
 def _mock_claude_code_backend(
     output: str = "RESULT:\nstatus: success\nerror:\n",
+    extra: dict[str, Any] | None = None,
 ) -> Any:
     """Create a mock SubprocessClaudeCodeSessionBackend."""
     backend = MagicMock()
@@ -104,6 +105,7 @@ def _mock_claude_code_backend(
     result = MagicMock()
     result.output = output
     result.status = SkillResultStatus.SUCCESS
+    result.extra = extra
     backend.session_query = AsyncMock(return_value=result)
 
     return backend
@@ -554,6 +556,49 @@ class TestSkillCommandDispatcher:
         assert payload["dollars_cost"] > 0
         assert len(payload["model_calls"]) == 1
         assert payload["cost_provenance"]["usage_source"] == "estimated"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_worker_ignores_nonnumeric_backend_usage_extra(
+        self,
+    ) -> None:
+        """Non-numeric backend usage extras fall back to estimated completion cost."""
+        event_bus = _CaptureEventBus()
+        contracts = {
+            "dispatch-worker": _make_contract(
+                name="node_skill_dispatch_worker_orchestrator",
+                backend="claude_code",
+                topic_skill_id="dispatch_worker",
+            ),
+        }
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=_mock_claude_code_backend(
+                extra={
+                    "input_tokens": "n/a",
+                    "output_tokens": "unknown",
+                    "cost_dollars": "not-a-number",
+                }
+            ),
+            vllm_backend=None,
+            event_bus=event_bus,
+        )
+
+        envelope = _make_materialized_envelope(
+            topic="onex.cmd.omniclaude.dispatch_worker.v1",
+            payload={"args": {"task_id": "OMN-10386", "dispatch_id": "dispatch-1"}},
+        )
+        result = await dispatcher.handle(envelope)
+
+        assert result is not None
+        payload = next(
+            payload
+            for topic, payload in event_bus.published
+            if topic == "onex.evt.omniclaude.dispatch_worker-completed.v1"
+        )
+        assert payload["model_calls"][0]["cost_provenance"]["usage_source"] == (
+            "estimated"
+        )
+        assert payload["token_cost"] > 0
 
     def test_load_contracts_accepts_underscore_subscription_alias(
         self,
