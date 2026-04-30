@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from omnibase_core.models.cost import ModelCostProvenance  # noqa: TC002
+from omnibase_core.models.dispatch import ModelCallRecord  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
@@ -89,6 +91,44 @@ class ModelSkillCompletionEvent(BaseModel):
     working_directory: str | None = Field(
         default=None,
         description="Filesystem path the skill ran in, or None if not applicable",
+    )
+    task_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Task identifier associated with a dispatch worker run.",
+    )
+    dispatch_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Dispatch identifier associated with a dispatch worker run.",
+    )
+    ticket_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Ticket identifier associated with a dispatch worker run.",
+    )
+    artifact_path: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Path to the durable artifact produced by the dispatch run.",
+    )
+    model_calls: list[ModelCallRecord] = Field(
+        default_factory=list,
+        description="Model calls attributed to this skill completion.",
+    )
+    token_cost: int = Field(  # noqa: secrets
+        default=0,
+        ge=0,
+        description="Total input plus output tokens attributed to the run.",
+    )
+    dollars_cost: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Total dollar cost attributed to the run.",
+    )
+    cost_provenance: ModelCostProvenance | None = Field(
+        default=None,
+        description="Envelope-level cost provenance rollup for model_calls.",
     )
     duration_ms: int = Field(
         ...,

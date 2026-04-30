@@ -53,8 +53,10 @@ def _make_contract(
     name: str = "node_skill_local_review_orchestrator",
     backend: str = "claude_code",
     model_purpose: str | None = None,
+    topic_skill_id: str | None = None,
 ) -> ModelSkillNodeContract:
     """Create a test skill node contract."""
+    skill_id = topic_skill_id or _extract_skill_id_from_name(name)
     return ModelSkillNodeContract(
         name=name,
         node_type="ORCHESTRATOR_GENERIC",
@@ -64,10 +66,11 @@ def _make_contract(
         ),
         event_bus={
             "subscribe": {
-                "topic": f"onex.cmd.omniclaude.{_extract_skill_id_from_name(name)}.v1",
+                "topic": f"onex.cmd.omniclaude.{skill_id}.v1",
             },
             "publish": {
-                "success_topic": f"onex.evt.omniclaude.{_extract_skill_id_from_name(name)}-completed.v1",
+                "success_topic": f"onex.evt.omniclaude.{skill_id}-completed.v1",
+                "failure_topic": f"onex.evt.omniclaude.{skill_id}-failed.v1",
             },
         },
     )
@@ -104,6 +107,14 @@ def _mock_claude_code_backend(
     backend.session_query = AsyncMock(return_value=result)
 
     return backend
+
+
+class _CaptureEventBus:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict[str, Any]]] = []
+
+    async def publish(self, topic: str, payload: dict[str, Any]) -> None:
+        self.published.append((topic, payload))
 
 
 def _mock_vllm_backend(output: str = "RESULT:\nstatus: success\nerror:\n") -> Any:
@@ -493,6 +504,83 @@ class TestSkillCommandDispatcher:
         }
         result = await dispatcher.handle(envelope)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_dispatch_worker_publishes_augmented_contract_completion(
+        self,
+    ) -> None:
+        """dispatch_worker emits the contract topic with cost and artifact fields."""
+        event_bus = _CaptureEventBus()
+        contracts = {
+            "dispatch-worker": _make_contract(
+                name="node_skill_dispatch_worker_orchestrator",
+                backend="claude_code",
+                topic_skill_id="dispatch_worker",
+            ),
+        }
+        dispatcher = SkillCommandDispatcher(
+            contracts=contracts,
+            claude_code_backend=_mock_claude_code_backend(),
+            vllm_backend=None,
+            event_bus=event_bus,
+        )
+
+        envelope = _make_materialized_envelope(
+            topic="onex.cmd.omniclaude.dispatch_worker.v1",
+            payload={
+                "args": {
+                    "task_id": "OMN-10386",
+                    "dispatch_id": "dispatch-1",
+                    "ticket_id": "OMN-10386",
+                    "artifact_path": ".onex_state/evidence/OMN-10386/report.md",
+                }
+            },
+        )
+        result = await dispatcher.handle(envelope)
+
+        assert result is not None
+        topics = [topic for topic, _payload in event_bus.published]
+        assert "onex.evt.omniclaude.skill-completed.v1" in topics
+        assert "onex.evt.omniclaude.dispatch_worker-completed.v1" in topics
+        payload = next(
+            payload
+            for topic, payload in event_bus.published
+            if topic == "onex.evt.omniclaude.dispatch_worker-completed.v1"
+        )
+        assert payload["task_id"] == "OMN-10386"
+        assert payload["dispatch_id"] == "dispatch-1"
+        assert payload["artifact_path"] == ".onex_state/evidence/OMN-10386/report.md"
+        assert payload["token_cost"] > 0
+        assert payload["dollars_cost"] > 0
+        assert len(payload["model_calls"]) == 1
+        assert payload["cost_provenance"]["usage_source"] == "estimated"
+
+    def test_load_contracts_accepts_underscore_subscription_alias(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Underscore command topics resolve to the normalized contract key."""
+        node_dir = tmp_path / "node_skill_dispatch_worker_orchestrator"
+        node_dir.mkdir()
+        contract_data = {
+            "name": "node_skill_dispatch_worker_orchestrator",
+            "node_type": "ORCHESTRATOR_GENERIC",
+            "execution": {"backend": "claude_code", "model_purpose": None},
+            "event_bus": {
+                "subscribe": {"topic": "onex.cmd.omniclaude.dispatch_worker.v1"},
+                "publish": {
+                    "success_topic": (
+                        "onex.evt.omniclaude.dispatch_worker-completed.v1"
+                    ),
+                },
+            },
+        }
+        (node_dir / "contract.yaml").write_text(yaml.dump(contract_data))
+
+        contracts, total = load_skill_contracts(tmp_path)
+
+        assert total == 1
+        assert "dispatch-worker" in contracts
 
 
 # ---------------------------------------------------------------------------

@@ -54,6 +54,8 @@ EXCLUDE_PATTERNS = [
     ".venv/",
     "cli/",  # CLI debugging tools use dynamic DB row types by design
     "quirks/",  # Quirks module uses dynamic DB row types and dict payloads by design
+    "hooks/topic_allowlist.yaml",  # topic config, not a node contract
+    "hooks/topic_registry.yaml",  # topic config, not a node contract
 ]
 
 

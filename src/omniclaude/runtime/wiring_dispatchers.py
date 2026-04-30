@@ -33,6 +33,9 @@ from typing import TYPE_CHECKING, Any, TypedDict  # any-ok: external API boundar
 
 import yaml
 from omnibase_core.enums import EnumMessageCategory
+from omnibase_core.enums.cost import EnumUsageSource
+from omnibase_core.models.cost import ModelCostProvenance
+from omnibase_core.models.dispatch import ModelCallRecord
 from omnibase_core.models.dispatch.model_dispatch_route import ModelDispatchRoute
 
 from omniclaude.hooks.topics import TopicBase
@@ -74,6 +77,8 @@ _TOPIC_PATTERN = "onex.cmd.omniclaude.*.v1"  # arch-topic-naming: ignore  # noqa
 _DISPATCHER_ID = "dispatcher.skill.command"
 _ROUTE_ID = "skill-command-router"
 _COMPLETION_TOPIC = TopicBase.SKILL_COMPLETED
+_DISPATCH_WORKER_SKILL_ID = "dispatch-worker"
+_ESTIMATED_COST_PER_1K_TOKENS_USD = 0.0001
 
 _CONTRACT_PARSE_THRESHOLD = 0.80
 
@@ -139,6 +144,12 @@ def _extract_skill_id_from_name(contract_name: str) -> str:
     return contract_name.replace("_", "-")
 
 
+def _canonical_skill_id(skill_id: str) -> str:
+    """Normalize topic skill IDs to the contract-key convention."""
+
+    return skill_id.replace("_", "-")
+
+
 def load_skill_contracts(
     contracts_root: Path,
 ) -> tuple[dict[str, ModelSkillNodeContract], int]:
@@ -164,6 +175,7 @@ def load_skill_contracts(
 
     contracts: dict[str, ModelSkillNodeContract] = {}
     errors: list[str] = []
+    parsed_contracts = 0
 
     for path in contract_files:
         try:
@@ -173,13 +185,25 @@ def load_skill_contracts(
                 errors.append(f"{path}: not a dict")
                 continue
             contract = ModelSkillNodeContract.model_validate(raw)
+            parsed_contracts += 1
             skill_id = _extract_skill_id_from_name(contract.name)
             contracts[skill_id] = contract
+            subscribe_topic = (
+                contract.event_bus.get("subscribe", {}).get("topic")
+                if isinstance(contract.event_bus.get("subscribe"), dict)
+                else None
+            )
+            if isinstance(subscribe_topic, str):
+                topic_skill_id = SkillCommandDispatcher._extract_skill_id(
+                    subscribe_topic
+                )
+                if topic_skill_id:
+                    contracts[_canonical_skill_id(topic_skill_id)] = contract
         except Exception as exc:  # noqa: BLE001 — boundary: individual contract parse failure
             errors.append(f"{path}: {exc}")
             logger.warning("Failed to parse contract %s: %s", path, exc)
 
-    parsed = len(contracts)
+    parsed = parsed_contracts
     if total > 0 and (parsed / total) < _CONTRACT_PARSE_THRESHOLD:
         raise ContractLoadError(parsed, total, _CONTRACT_PARSE_THRESHOLD)
 
@@ -280,7 +304,8 @@ class SkillCommandDispatcher:
         t0 = time.perf_counter()
 
         # Extract skill_id from topic: onex.cmd.omniclaude.{skill_id}.v1
-        skill_id = self._extract_skill_id(topic)
+        raw_skill_id = self._extract_skill_id(topic)
+        skill_id = _canonical_skill_id(raw_skill_id) if raw_skill_id else None
         if skill_id is None:
             logger.warning(
                 "Could not extract skill_id from topic %r (correlation_id=%s)",
@@ -327,6 +352,9 @@ class SkillCommandDispatcher:
         backend_type = contract.execution.backend
         backend_detail: str
 
+        backend_result: Any = None  # ONEX_EXCLUDE: any_type - backend boundary
+        backend_prompt: str | None = None
+
         if backend_type == "claude_code":
             if self._claude_code_backend is None:
                 await self._emit_completion(
@@ -364,8 +392,11 @@ class SkillCommandDispatcher:
                     prompt=prompt,
                     correlation_id=correlation_id,
                 )
+                nonlocal backend_prompt, backend_result
+                backend_prompt = prompt
                 result = await cc_backend.session_query(cc_request)
-                return result.output or ""  # type: ignore[attr-defined]  # Why: dynamic backend result type
+                backend_result = result
+                return _skill_result_output(result)
 
         elif backend_type == "local_llm":
             if self._vllm_backend is None:
@@ -403,8 +434,11 @@ class SkillCommandDispatcher:
                     model_purpose=model_purpose,
                     correlation_id=correlation_id,
                 )
+                nonlocal backend_prompt, backend_result
+                backend_prompt = prompt
                 result = await vllm_backend.infer(llm_request)
-                return result.output or ""  # type: ignore[attr-defined]  # Why: dynamic backend result type
+                backend_result = result
+                return _skill_result_output(result)
 
         else:
             # Unknown backend type — emit failure and return rather than
@@ -439,6 +473,7 @@ class SkillCommandDispatcher:
 
         # Emit completion event
         await self._emit_completion(
+            contract=contract,
             run_id=run_id,
             skill_name=skill_id,
             command_topic=topic or "unknown",
@@ -451,6 +486,9 @@ class SkillCommandDispatcher:
             else "DISPATCH_ERROR",
             error_message=result.extra.get("error") if result.extra else None,
             correlation_id=correlation_id,
+            source_payload=payload,
+            backend_prompt=backend_prompt,
+            backend_result=backend_result,
         )
 
         return f"dispatched:{skill_id}:{result.status.value}"
@@ -523,6 +561,7 @@ class SkillCommandDispatcher:
     async def _emit_completion(
         self,
         *,
+        contract: ModelSkillNodeContract | None = None,
         run_id: uuid.UUID,
         skill_name: str,
         command_topic: str,
@@ -533,6 +572,9 @@ class SkillCommandDispatcher:
         error_code: str | None,
         error_message: str | None,
         correlation_id: uuid.UUID,
+        source_payload: Any = None,  # ONEX_EXCLUDE: any_type - envelope boundary
+        backend_prompt: str | None = None,
+        backend_result: Any = None,  # ONEX_EXCLUDE: any_type - backend boundary
     ) -> None:
         """Emit a ``ModelSkillCompletionEvent`` to the unified completion topic.
 
@@ -553,6 +595,23 @@ class SkillCommandDispatcher:
         try:
             # Truncate error_message to 1000 chars as per model constraint
             bounded_error = error_message[:1000] if error_message else None
+            dispatch_metadata = _extract_dispatch_metadata(
+                source_payload=source_payload,
+                run_id=run_id,
+                correlation_id=correlation_id,
+            )
+            model_calls = _extract_model_calls(
+                backend_selected=backend_selected,
+                backend_detail=backend_detail,
+                backend_prompt=backend_prompt,
+                backend_result=backend_result,
+                duration_ms=duration_ms,
+            )
+            token_cost = sum(  # noqa: secrets
+                call.input_tokens + call.output_tokens for call in model_calls
+            )
+            dollars_cost = sum(call.cost_dollars for call in model_calls)
+            cost_provenance = ModelCostProvenance.rollup(model_calls)
 
             event = ModelSkillCompletionEvent(
                 event_id=uuid.uuid4(),
@@ -563,6 +622,14 @@ class SkillCommandDispatcher:
                 backend_selected=backend_selected or "none",
                 backend_detail=backend_detail or "none",
                 duration_ms=duration_ms,
+                task_id=dispatch_metadata["task_id"],
+                dispatch_id=dispatch_metadata["dispatch_id"],
+                ticket_id=dispatch_metadata["ticket_id"],
+                artifact_path=dispatch_metadata["artifact_path"],
+                model_calls=model_calls,
+                token_cost=token_cost,
+                dollars_cost=dollars_cost,
+                cost_provenance=cost_provenance,
                 error_code=error_code,
                 error_message=bounded_error,
                 correlation_id=correlation_id,
@@ -572,6 +639,19 @@ class SkillCommandDispatcher:
                     _COMPLETION_TOPIC,
                     event.model_dump(mode="json"),
                 )
+                contract_topic = _completion_topic_for_contract(
+                    contract=contract,
+                    status=status,
+                )
+                if (
+                    skill_name == _DISPATCH_WORKER_SKILL_ID
+                    and contract_topic
+                    and contract_topic != _COMPLETION_TOPIC
+                ):
+                    await self._event_bus.publish(
+                        contract_topic,
+                        event.model_dump(mode="json"),
+                    )
             else:
                 logger.debug(
                     "Completion event (no event bus): skill=%s status=%s",
@@ -580,6 +660,180 @@ class SkillCommandDispatcher:
                 )
         except Exception:
             logger.exception("Failed to emit completion event for skill %r", skill_name)
+
+
+def _skill_result_output(
+    result: object | None,
+) -> str:
+    """Extract output text from either legacy or core ModelSkillResult shapes."""
+
+    output = getattr(result, "output", None)
+    if output is None:
+        extra = getattr(result, "extra", None)
+        if isinstance(extra, dict):
+            output = extra.get("output")
+    return str(output) if output is not None else ""
+
+
+def _extract_dispatch_metadata(
+    *,
+    source_payload: Any,  # ONEX_EXCLUDE: any_type - envelope boundary
+    run_id: uuid.UUID,
+    correlation_id: uuid.UUID,
+) -> dict[str, str | None]:
+    """Extract dispatch worker identifiers and artifact path from command payload."""
+
+    payload: dict[str, object] = (
+        {str(k): v for k, v in source_payload.items()}
+        if isinstance(source_payload, dict)
+        else {}
+    )
+    raw_args = payload.get("args")
+    args: dict[str, object] = (
+        {str(k): v for k, v in raw_args.items()} if isinstance(raw_args, dict) else {}
+    )
+
+    def first_str(*keys: str) -> str | None:
+        for container in (payload, args):
+            for key in keys:
+                value = container.get(key)
+                if value is not None and str(value):
+                    return str(value)
+        return None
+
+    return {
+        "task_id": first_str("task_id", "ticket_id") or str(correlation_id),
+        "dispatch_id": first_str("dispatch_id", "worker_id") or str(run_id),
+        "ticket_id": first_str("ticket_id"),
+        "artifact_path": first_str("artifact_path", "artifact"),
+    }
+
+
+def _extract_model_calls(
+    *,
+    backend_selected: str,
+    backend_detail: str,
+    backend_prompt: str | None,
+    backend_result: object | None,
+    duration_ms: int,
+) -> list[ModelCallRecord]:
+    """Build model-call records from backend instrumentation or estimates."""
+
+    if backend_result is None and backend_prompt is None:
+        return []
+
+    extra = getattr(backend_result, "extra", None)
+    extra_dict = extra if isinstance(extra, dict) else {}
+    output = _skill_result_output(backend_result)
+    input_tokens = _int_from_extra(extra_dict, "input_tokens", "prompt_tokens")  # noqa: secrets
+    output_tokens = _int_from_extra(  # noqa: secrets
+        extra_dict,
+        "output_tokens",
+        "completion_tokens",
+    )
+    cost_dollars = _float_from_extra(extra_dict, "cost_dollars", "dollars_cost")
+    source_payload_hash = extra_dict.get("source_payload_hash")
+
+    if (
+        input_tokens is not None
+        and output_tokens is not None
+        and cost_dollars is not None
+    ):
+        provenance = ModelCostProvenance(
+            usage_source=EnumUsageSource.MEASURED,
+            source_payload_hash=str(source_payload_hash)
+            if source_payload_hash is not None
+            else _hash_model_call_payload(extra_dict),
+        )
+        return [
+            ModelCallRecord(
+                provider=backend_selected,
+                model=backend_detail,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=duration_ms,
+                cost_dollars=cost_dollars,
+                cost_provenance=provenance,
+            )
+        ]
+
+    estimated_prompt_count = input_tokens
+    if estimated_prompt_count is None:
+        estimated_prompt_count = _estimate_tokens(backend_prompt or "")
+    estimated_completion_count = output_tokens
+    if estimated_completion_count is None:
+        estimated_completion_count = _estimate_tokens(output)
+    estimated_total_tokens = estimated_prompt_count + estimated_completion_count
+    estimated_cost = cost_dollars
+    if estimated_cost is None:
+        estimated_cost = (
+            estimated_total_tokens / 1000
+        ) * _ESTIMATED_COST_PER_1K_TOKENS_USD
+
+    return [
+        ModelCallRecord(
+            provider=backend_selected or "unknown",
+            model=backend_detail or "unknown",
+            input_tokens=estimated_prompt_count,
+            output_tokens=estimated_completion_count,
+            latency_ms=duration_ms,
+            cost_dollars=estimated_cost,
+            cost_provenance=ModelCostProvenance(
+                usage_source=EnumUsageSource.ESTIMATED,
+                estimation_method="omniclaude_dispatch_worker_token_estimate_v1",
+            ),
+        )
+    ]
+
+
+def _estimate_tokens(text: str) -> int:
+    """Deterministic local token estimate used when backend usage is absent."""
+
+    if not text:
+        return 0
+    return max(1, (len(text) + 3) // 4)
+
+
+def _int_from_extra(extra: dict[str, object], *keys: str) -> int | None:
+    for key in keys:
+        value = extra.get(key)
+        if value is not None:
+            if isinstance(value, int | float | str):
+                return int(value)
+            return None
+    return None
+
+
+def _float_from_extra(extra: dict[str, object], *keys: str) -> float | None:
+    for key in keys:
+        value = extra.get(key)
+        if value is not None:
+            if isinstance(value, int | float | str):
+                return float(value)
+            return None
+    return None
+
+
+def _hash_model_call_payload(payload: dict[str, object]) -> str:
+    serialized = yaml.safe_dump(payload, sort_keys=True)
+    import hashlib
+
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _completion_topic_for_contract(
+    *,
+    contract: ModelSkillNodeContract | None,
+    status: SkillResultStatus,
+) -> str | None:
+    if contract is None:
+        return None
+    publish = contract.event_bus.get("publish")
+    if not isinstance(publish, dict):
+        return None
+    key = "success_topic" if status == SkillResultStatus.SUCCESS else "failure_topic"
+    topic = publish.get(key)
+    return str(topic) if topic else None
 
 
 # ---------------------------------------------------------------------------

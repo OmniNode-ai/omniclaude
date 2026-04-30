@@ -44,7 +44,7 @@ input_model:
   module: omniclaude.shared.models
 
 output_model:
-  name: ModelSkillResult
+  name: ModelSkillCompletionEvent
   module: omniclaude.shared.models
 
 # Execution backend configuration
@@ -88,9 +88,15 @@ io_operations:
     output_fields:
       - skill_name: str
       - status: SkillResultStatus
-      - output: str | None
-      - error: str | None
       - correlation_id: UUID
+      - task_id: str | None
+      - dispatch_id: str | None
+      - ticket_id: str | None
+      - token_cost: int
+      - dollars_cost: float
+      - artifact_path: str | None
+      - model_calls: list[ModelCallRecord]
+      - cost_provenance: ModelCostProvenance
     idempotent: false
 
 # Dependencies
