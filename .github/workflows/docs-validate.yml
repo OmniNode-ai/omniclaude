@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+
+name: docs-validate
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+      - 'docs/**'
+      - 'README.md'
+      - 'CLAUDE.md'
+  push:
+    branches: [main]
+
+jobs:
+  call:
+    # self-gating-ok: reusable workflow in omnibase_core — not a required status check on omniclaude main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/validate-docs.yml@main
