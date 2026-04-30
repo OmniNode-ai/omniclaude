@@ -88,31 +88,27 @@ args:
     required: false
 ---
 
-<!-- routing-enforced: dispatches to node_gap_compute (stub). functionally-complete requires real node implementation. -->
+<!-- routing-enforced: dispatches to node_gap_compute. Dispatch path is correctly wired. Handler raises NotImplementedError (node_not_implemented: true in contract.yaml) pending OMN-8761 implementation. When OMN-8761 lands, remove this comment. -->
 
 # Gap
 
 ## Dispatch Surface
 
-**Target**: Node dispatch via `handle_skill_requested`
+**Target**: `node_gap_compute` in omnimarket via `onex run-node`.
 
 ```
 /gap <subcommand> [args]
         |
         v
-onex.cmd.omniclaude.gap.v1  (Kafka)
+uv run onex run node_gap_compute -- --subcommand <subcommand> [flags]
+  omnimarket/src/omnimarket/nodes/node_gap_compute/
+  contract.yaml → subscribe: onex.cmd.omnimarket.gap-compute-start.v1 (pending OMN-8761)
         |
         v
-NodeSkillGapOrchestrator
-  src/omniclaude/nodes/node_skill_gap_orchestrator/
-  → handle_skill_requested (omniclaude.shared)
-  → claude -p (general-purpose agent executes skill)
-        |
-        v
-onex.evt.omniclaude.gap-completed.v1
+node_gap_compute returns ModelGapComputeResult { status: str }
 ```
 
-All audit, fix, and cycle logic executes inside the general-purpose agent. This skill is a thin shell: parse subcommand + args, dispatch to node, render results.
+This skill is a thin shell: parse subcommand + args, dispatch to node, render results.
 
 Cross-repo integration health audit. Consolidated from gap-analysis, gap-fix, and gap-cycle.
 
