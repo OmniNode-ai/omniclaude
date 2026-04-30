@@ -11,13 +11,120 @@ Model ownership: PRIVATE to omniclaude.
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Sequence
+from enum import StrEnum
 from uuid import UUID
 
-from omnibase_core.models.cost import ModelCostProvenance  # noqa: TC002
-from omnibase_core.models.dispatch import ModelCallRecord  # noqa: TC002
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from omniclaude.shared.models.model_skill_result import SkillResultStatus
+
+
+class EnumUsageSource(StrEnum):
+    """Source quality for token/cost usage attribution."""
+
+    MEASURED = "measured"
+    ESTIMATED = "estimated"
+    UNKNOWN = "unknown"
+
+
+class ModelCostProvenance(BaseModel):
+    """Validated provenance for measured, estimated, or unknown usage."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
+
+    usage_source: EnumUsageSource = Field(
+        description="Whether usage/cost was measured, estimated, or unknown."
+    )
+    estimation_method: str | None = Field(
+        default=None,
+        description="Estimator name or method. Required only for estimated usage.",
+    )
+    source_payload_hash: str | None = Field(
+        default=None,
+        description="Stable payload hash. Required only for measured usage.",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_requirements(self) -> ModelCostProvenance:
+        if self.usage_source == EnumUsageSource.MEASURED:
+            if self.source_payload_hash is None:
+                raise ValueError("source_payload_hash is required for measured usage")
+            if self.estimation_method is not None:
+                raise ValueError("estimation_method must be null for measured usage")
+            return self
+
+        if self.usage_source == EnumUsageSource.ESTIMATED:
+            if self.estimation_method is None:
+                raise ValueError("estimation_method is required for estimated usage")
+            if self.source_payload_hash is not None:
+                raise ValueError("source_payload_hash must be null for estimated usage")
+            return self
+
+        if self.estimation_method is not None:
+            raise ValueError("estimation_method must be null for unknown usage")
+        if self.source_payload_hash is not None:
+            raise ValueError("source_payload_hash must be null for unknown usage")
+        return self
+
+    @classmethod
+    def rollup(cls, calls: Sequence[ModelCallRecord]) -> ModelCostProvenance:
+        """Roll up per-call provenance into dispatch-level cost provenance."""
+
+        cost_bearing_calls = [
+            call
+            for call in calls
+            if call.input_tokens > 0 or call.output_tokens > 0 or call.cost_dollars > 0
+        ]
+        if not cost_bearing_calls:
+            return cls(usage_source=EnumUsageSource.UNKNOWN)
+
+        if any(
+            call.cost_provenance.usage_source == EnumUsageSource.ESTIMATED
+            for call in cost_bearing_calls
+        ):
+            return cls(
+                usage_source=EnumUsageSource.ESTIMATED,
+                estimation_method="model_call_rollup",
+            )
+
+        if all(
+            call.cost_provenance.usage_source == EnumUsageSource.MEASURED
+            for call in cost_bearing_calls
+        ):
+            hashes = [
+                call.cost_provenance.source_payload_hash
+                for call in cost_bearing_calls
+                if call.cost_provenance.source_payload_hash is not None
+            ]
+            source_payload_hash = hashlib.sha256(
+                "\n".join(sorted(hashes)).encode("utf-8")
+            ).hexdigest()
+            return cls(
+                usage_source=EnumUsageSource.MEASURED,
+                source_payload_hash=source_payload_hash,
+            )
+
+        return cls(usage_source=EnumUsageSource.UNKNOWN)
+
+
+class ModelCallRecord(BaseModel):
+    """Single model call attribution record for a skill completion event."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
+
+    provider: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+    input_tokens: int = Field(default=0, ge=0)  # secret-ok: token usage metric
+    output_tokens: int = Field(default=0, ge=0)  # secret-ok: token usage metric
+    latency_ms: int = Field(default=0, ge=0)
+    cost_dollars: float = Field(default=0.0, ge=0.0)
+    cost_provenance: ModelCostProvenance = Field(
+        default_factory=lambda: ModelCostProvenance(
+            usage_source=EnumUsageSource.UNKNOWN
+        ),
+    )
 
 
 class ModelSkillCompletionEvent(BaseModel):
@@ -116,7 +223,7 @@ class ModelSkillCompletionEvent(BaseModel):
         default_factory=list,
         description="Model calls attributed to this skill completion.",
     )
-    token_cost: int = Field(  # noqa: secrets
+    token_cost: int = Field(  # secret-ok: token usage metric
         default=0,
         ge=0,
         description="Total input plus output tokens attributed to the run.",
@@ -153,4 +260,9 @@ class ModelSkillCompletionEvent(BaseModel):
     )
 
 
-__all__ = ["ModelSkillCompletionEvent"]
+__all__ = [
+    "EnumUsageSource",
+    "ModelCallRecord",
+    "ModelCostProvenance",
+    "ModelSkillCompletionEvent",
+]

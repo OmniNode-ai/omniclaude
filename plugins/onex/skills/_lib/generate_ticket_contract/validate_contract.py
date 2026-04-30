@@ -14,6 +14,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+_COMPAT_METADATA_KEYS = {
+    "evidence_required",
+    "interfaces_touched",
+    "is_seam_ticket",
+}
+
 
 def _load_yaml(path: Path) -> object:
     """Load YAML from path. Returns parsed object or exits on error."""
@@ -56,8 +62,12 @@ def _validate(data: object) -> list[str]:
     except ImportError as exc:
         return [f"Import error — ensure omnibase_core is installed: {exc}"]
 
+    contract_data = {
+        key: value for key, value in data.items() if key not in _COMPAT_METADATA_KEYS
+    }
+
     try:
-        ModelTicketContract.model_validate(data)
+        ModelTicketContract.model_validate(contract_data)
     except ValidationError as exc:
         for err in exc.errors():
             loc = " -> ".join(str(part) for part in err["loc"])

@@ -97,9 +97,10 @@ def test_all_skill_node_contracts_parse() -> None:
     # It raises ContractLoadError if parse rate < 80%, but we want 100%
     contracts, _ = load_skill_contracts(contracts_root)
 
-    assert len(contracts) == discovered_count, (
+    parsed_contract_names = {contract.name for contract in contracts.values()}
+    assert len(parsed_contract_names) == discovered_count, (
         f"Generator produced malformed contracts: "
-        f"{discovered_count - len(contracts)}/{discovered_count} failed to parse.\n"
+        f"{discovered_count - len(parsed_contract_names)}/{discovered_count} failed to parse.\n"
         f"This is a generator bug. Check docs/templates/skill_node_contract.yaml.template."
     )
 
