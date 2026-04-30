@@ -67,7 +67,9 @@ Contract-driven post-merge verification. For each recently completed ticket:
 2. Map `interfaces_touched` fields to `EnumIntegrationSurface` values
 3. Execute the `dod_evidence[*].checks` for each surface
 4. Assemble a `ModelIntegrationRecord` with per-surface `ModelIntegrationProbeResult` entries
-5. Write the artifact to `$ONEX_CC_REPO_PATH/drift/integration/{date}.yaml`
+5. Return the assembled integration record. Durable artifact persistence under
+   `$ONEX_CC_REPO_PATH/drift/integration/` is tracked by OMN-10409 and must not
+   be claimed until the backing node implements it.
 
 The contract IS the guard rail. No contract → UNKNOWN/no_contract → halt.
 

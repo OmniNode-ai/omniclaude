@@ -57,7 +57,9 @@ Flow:
    - Locate ticket contract at `$ONEX_CC_REPO_PATH/contracts/{ticket_id}.yaml`
    - If contract exists with `dod_evidence[]`, run evidence checks via the shared
      runner at `plugins/onex/skills/_lib/dod-evidence-runner/dod_evidence_runner.py`
-   - Write evidence receipt to `.evidence/{ticket_id}/dod_report.json`
+   - Collect the DoD verification result for the ticket. Durable per-ticket
+     receipt persistence is tracked by OMN-10408 and must not be claimed until
+     the backing node implements it.
 3. Flag any tickets with incomplete DoD evidence (failed or missing checks)
 4. Aggregate results and report summary
 

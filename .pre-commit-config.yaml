@@ -456,6 +456,17 @@ repos:
         stages: [pre-commit]
         files: ^(plugins/onex/skills/.*/SKILL\.md|plugins/onex/skills/_lib/validate_skill_backing_node\.py|plugins/onex/skills/_lib/skill_backing_node_allowlist\.yaml)$
 
+      # Skill aspiration validation (OMN-9075) — blocks SKILL.md claims without
+      # backing-node behavior for deterministic receipt/artifact/event claims.
+      - id: validate-skill-aspiration
+        name: Skill aspiration validation (OMN-9075)
+        entry: bash scripts/uv-run-worktree-safe.sh python scripts/validation/validate_skill_aspiration.py
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+        files: ^(plugins/onex/skills/.*/SKILL\.md|plugins/onex/skills/_lib/validate_skill_aspiration\.py|scripts/(extract_skill_claims|validation/validate_skill_aspiration)\.py)$
+
       # Skill hygiene (OMN-5200) — validates skill dir naming, structure, Python separation
       - id: skill-hygiene
         name: Skill Hygiene
