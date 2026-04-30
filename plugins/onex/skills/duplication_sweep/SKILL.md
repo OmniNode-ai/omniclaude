@@ -4,6 +4,7 @@ description: >
   Detect duplicate definitions across repos: Drizzle table definitions,
   Kafka topic registrations, migration prefixes, and Python model names.
   Returns structured findings for autopilot halt decisions.
+  Dispatches to node_duplication_sweep (omnimarket).
 mode: full
 user_invocable: true
 level: advanced
@@ -13,34 +14,42 @@ tags: [sweep, quality, enforcement]
 
 # Duplication Sweep
 
+**Skill ID**: `onex:duplication_sweep`
+**Backing node**: `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
+**Ticket**: OMN-10431
+
+---
+
 ## Dispatch Surface
 
-**Target**: Node dispatch via `handle_skill_requested`
+**Target**: `node_duplication_sweep` in omnimarket via `onex run-node`.
 
-```
-/duplication-sweep [args]
-        |
-        v
-onex.cmd.omniclaude.duplication_sweep.v1  (Kafka)
-        |
-        v
-NodeSkillDuplicationSweepOrchestrator
-  src/omniclaude/nodes/node_skill_duplication_sweep_orchestrator/
-  → handle_skill_requested (omniclaude.shared)
-  → claude -p (general-purpose agent executes skill)
-        |
-        v
-onex.evt.omniclaude.duplication_sweep-completed.v1
+```bash
+uv run onex run-node node_duplication_sweep -- \
+  ${OMNI_HOME:+--omni-home "$OMNI_HOME"} \
+  ${CHECKS:+--checks "$CHECKS"}
 ```
 
-All scanning logic executes inside the general-purpose agent. This skill is a thin shell: parse args, dispatch to node, render results.
+**Backing node:** `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
+**Contract:** `node_duplication_sweep/contract.yaml`
+  - subscribe: `onex.cmd.omnimarket.duplication-sweep-start.v1`
+  - publish: `onex.evt.omnimarket.duplication-sweep-completed.v1`
+
+The node handler owns all scanning logic. This skill is a thin shell: parse args, dispatch to node, render results.
 
 Lightweight structural scan designed to catch obvious collision classes quickly.
 It is intentionally text- and pattern-driven, not a full semantic analyzer.
 
+---
+
 ## Result Contract
 
-Each check produces a stable per-check result with:
+The node returns `ModelDuplicationCheckResult` per check and an overall status:
+
+- `check_results: list[ModelDuplicationCheckResult]` — per-check results with findings
+- `overall_status: str` — `PASS` if no FAIL checks, `FAIL` otherwise
+
+Each check result contains:
 
 - `check_id` -- D1, D2, D3, or D4
 - `status` -- PASS, WARN, or FAIL
@@ -51,6 +60,8 @@ Each check produces a stable per-check result with:
 Autopilot consumes `status` for gate decisions. A check with one FAIL and
 one WARN produces two separate findings, and the check status is FAIL
 (worst-of aggregation). Exit 0 if all checks are PASS/WARN, exit 1 if any FAIL.
+
+---
 
 ## Checks
 
@@ -75,6 +86,8 @@ For each repo (discovered via `gh repo list OmniNode-ai --json name`), grep `cla
 Treat duplicate model names as WARN by default unless the duplicate appears in
 production codepaths outside `omnibase_core`, in which case escalate to FAIL.
 Models in `omnibase_core` are expected shared types and are excluded from collision checks.
+
+---
 
 ## Usage
 
