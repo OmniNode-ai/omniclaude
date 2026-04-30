@@ -39,6 +39,10 @@ args:
 
 # Batch Create Tickets from Plan
 
+<!-- Doctrine: feedback_create_epic_before_ticketization.md — when no epic_id is present in
+     the plan frontmatter, auto-create the epic in Linear, inject epic_id into the plan file,
+     and proceed. Never present a "Path A / B / C" menu; the answer is always "create the epic." -->
+
 ## Anti-Pattern Preamble (Mandatory)
 
 Before creating any tickets, enforce these five rules. Violations are hard failures --
@@ -67,16 +71,8 @@ the skill MUST refuse to proceed and report which rule was violated.
    warn and skip architecture validation (do not silently create cross-repo tickets).
    Print: `"Warning: --repo not specified. Architecture validation skipped for external deps."`
 
-6. **`epic_id` must be set on the plan contract before ticketization.**
-   Before creating any tickets, check the plan file's YAML frontmatter (or a companion
-   `.contract.yaml` file in the same directory) for `epic_id`. The value must be present
-   and match `^OMN-\d+$`. If missing or blank, fail fast with:
-   `"epic_id is not set on this plan contract. Set epic_id: OMN-XXXX in the plan frontmatter before running plan_to_tickets."`
-   If the plan file has no frontmatter at all, treat `epic_id` as missing and fail fast.
-   This check is exempt only when `--dry-run` is passed (dry-runs may be exploratory).
-
 These rules are enforced in Step 2 (after structure detection) and Step 7.5 (architecture
-validation). The skill MUST check all six before proceeding to ticket creation.
+validation). The skill MUST check all five before proceeding to ticket creation.
 
 ---
 
@@ -1163,44 +1159,53 @@ manual commit banner.
 ```python
 import re as _re
 import yaml as _yaml
+from pathlib import Path as _Path
 
-# Step 0: Enforce epic_id pre-flight (Rule 6 — skipped only for --dry-run)
 _EPIC_ID_RE = _re.compile(r'^OMN-\d+$')
 
-def _extract_frontmatter_epic_id(plan_path: str, content: str) -> str | None:
-    """Extract epic_id from YAML frontmatter (---...---) or companion .contract.yaml."""
-    from pathlib import Path
 
-    # Try YAML frontmatter in the plan file itself
+def _read_frontmatter(content: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from plan content.
+
+    Returns (frontmatter_dict, body_after_frontmatter).
+    If no frontmatter block is present, returns ({}, content).
+    """
     fm_match = _re.match(r'^---\s*\n(.*?)\n---\s*\n', content, _re.DOTALL)
     if fm_match:
         try:
-            fm = _yaml.safe_load(fm_match.group(1))
+            fm = _yaml.safe_load(fm_match.group(1)) or {}
             if isinstance(fm, dict):
-                return fm.get('epic_id')  # May be None
+                body = content[fm_match.end():]
+                return fm, body
         except _yaml.YAMLError:
             pass
+    return {}, content
 
-    # Try companion .contract.yaml
-    companion = Path(plan_path).with_suffix('.contract.yaml')
+
+def _write_frontmatter(plan_path: str, fm: dict, body: str) -> None:
+    """Serialise frontmatter + body back to the plan file (idempotent)."""
+    fm_block = _yaml.dump(fm, default_flow_style=False, allow_unicode=True).strip()
+    new_content = f"---\n{fm_block}\n---\n{body}"
+    _Path(plan_path).write_text(new_content, encoding='utf-8')
+
+
+def _extract_frontmatter_epic_id(plan_path: str, content: str) -> str | None:
+    """Return epic_id from YAML frontmatter or companion .contract.yaml, or None."""
+    fm, _ = _read_frontmatter(content)
+    if fm.get('epic_id'):
+        return str(fm['epic_id']).strip()
+
+    companion = _Path(plan_path).with_suffix('.contract.yaml')
     if companion.exists():
         try:
             data = _yaml.safe_load(companion.read_text(encoding='utf-8'))
-            if isinstance(data, dict):
-                return data.get('epic_id')
+            if isinstance(data, dict) and data.get('epic_id'):
+                return str(data['epic_id']).strip()
         except (_yaml.YAMLError, OSError):
             pass
 
-    return None  # No frontmatter and no companion contract
+    return None
 
-if not args.dry_run:
-    _epic_id_value = _extract_frontmatter_epic_id(args.plan_file, content_raw)
-    if not _epic_id_value or not _EPIC_ID_RE.match(str(_epic_id_value).strip()):
-        print(
-            "epic_id is not set on this plan contract. "
-            "Set epic_id: OMN-XXXX in the plan frontmatter before running plan_to_tickets."
-        )
-        raise SystemExit(1)
 
 # Step 1: Read plan file
 content = read_plan_file(args.plan_file)
@@ -1219,10 +1224,36 @@ print(f"[structure_detected] type={doc.structure_type.value} entries={len(doc.en
 epic_title = args.epic_title or doc.title or extract_epic_title(content, None)
 print(f"Epic title: {epic_title}")
 
-# Step 4: Resolve or create epic (even in dry-run mode for preview)
+# Step 4: Resolve or create epic (even in dry-run mode for preview).
+# After creation, inject the assigned epic_id into the plan file's YAML frontmatter so
+# subsequent runs are idempotent (see doctrine: feedback_create_epic_before_ticketization.md).
+#
+# Idempotency rule: if the frontmatter already contains a valid epic_id matching ^OMN-\d+$,
+# skip the search/create path and reuse that identifier directly.
 epic = None
 try:
-    epic = resolve_epic(epic_title, args.team, args.no_create_epic, args.project, dry_run=args.dry_run)
+    _existing_epic_id = _extract_frontmatter_epic_id(args.plan_file, content)
+    if _existing_epic_id and _EPIC_ID_RE.match(_existing_epic_id):
+        # Reuse — look up the existing epic by identifier rather than creating a new one
+        print(f"Reusing existing epic_id from frontmatter: {_existing_epic_id}")
+        _found = tracker.list_issues(query=_existing_epic_id, team=args.team, limit=10)
+        _matches = [i for i in _found.get('issues', []) if i.get('identifier') == _existing_epic_id]
+        if _matches:
+            epic = _matches[0]
+            print(f"Found epic: {epic['identifier']} - {epic['title']}")
+        else:
+            # Identifier in frontmatter but not found in Linear — proceed to resolve_epic
+            epic = resolve_epic(epic_title, args.team, args.no_create_epic, args.project, dry_run=args.dry_run)
+    else:
+        epic = resolve_epic(epic_title, args.team, args.no_create_epic, args.project, dry_run=args.dry_run)
+        # After a successful (non-dry-run) epic creation, persist epic_id into the plan file
+        if epic and not epic.get('_dry_run') and not args.dry_run:
+            _new_epic_identifier = epic.get('identifier', '')
+            if _new_epic_identifier and _EPIC_ID_RE.match(_new_epic_identifier):
+                _fm, _body = _read_frontmatter(content)
+                _fm['epic_id'] = _new_epic_identifier
+                _write_frontmatter(args.plan_file, _fm, _body)
+                print(f"Injected epic_id: {_new_epic_identifier} into plan frontmatter: {args.plan_file}")
 except ValueError as e:
     print(f"Error: {e}")
     raise SystemExit(1)
