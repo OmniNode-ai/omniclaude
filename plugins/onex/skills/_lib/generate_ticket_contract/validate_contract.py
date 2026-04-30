@@ -54,6 +54,15 @@ def _validate(data: object) -> list[str]:
     if not isinstance(data, dict):
         return [f"Expected mapping at top level, got {type(data).__name__}"]
 
+    normalized_data = {
+        key: value for key, value in data.items() if key not in _COMPAT_METADATA_KEYS
+    }
+    if (
+        "interface_change" not in normalized_data
+        and data.get("is_seam_ticket") is True
+    ):
+        normalized_data["interface_change"] = True
+
     try:
         from omnibase_core.models.ticket.model_ticket_contract import (
             ModelTicketContract,
@@ -62,12 +71,8 @@ def _validate(data: object) -> list[str]:
     except ImportError as exc:
         return [f"Import error — ensure omnibase_core is installed: {exc}"]
 
-    contract_data = {
-        key: value for key, value in data.items() if key not in _COMPAT_METADATA_KEYS
-    }
-
     try:
-        ModelTicketContract.model_validate(contract_data)
+        ModelTicketContract.model_validate(normalized_data)
     except ValidationError as exc:
         for err in exc.errors():
             loc = " -> ".join(str(part) for part in err["loc"])

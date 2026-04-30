@@ -718,6 +718,13 @@ allowed_extras:
       for the intelligence evaluation chain. Contract ownership: omniintelligence.
     ticket: OMN-7356
 
+  - topic: "onex.evt.omniintelligence.dispatch-outcome-evaluated.v1"
+    lifecycle: integration
+    reason: >
+      Emitted by omniintelligence after a dispatch worker outcome evaluation
+      completes. Contract ownership: omniintelligence.
+    ticket: OMN-10387
+
   - topic: "onex.evt.omniintelligence.llm-call-completed.v1"
     lifecycle: telemetry
     reason: >
