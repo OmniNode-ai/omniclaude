@@ -218,6 +218,9 @@ nodes:
       - name: onex.cmd.omnimarket.duplication-sweep-start.v1
         schema_version: v1
         role: subscribe
+      - name: onex.evt.omnimarket.duplication-sweep-completed.v1
+        schema_version: v1
+        role: publish
 
   - node: node_environment_health_scanner
     topics:

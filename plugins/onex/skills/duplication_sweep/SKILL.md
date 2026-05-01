@@ -93,4 +93,4 @@ Models in `omnibase_core` are expected shared types and are excluded from collis
 
 ## Usage
 
-`/duplication-sweep [--check D1,D2] [--omni-home /path] [--json]`
+`/duplication-sweep [--checks D1,D2] [--omni-home /path] [--json]`
