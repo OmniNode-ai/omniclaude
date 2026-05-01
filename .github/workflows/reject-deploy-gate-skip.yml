@@ -9,6 +9,11 @@
 #     call-reject-skip-token:
 #       uses: OmniNode-ai/omniclaude/.github/workflows/reject-deploy-gate-skip.yml@main
 #
+# OMN-10422: Added merge_group trigger with explicit PR resolution (invariant I10).
+# On merge_group, github.event.pull_request is null; the workflow resolves the PR
+# via gh pr list --search <head_sha>. Exactly-one-PR is required — 0 or 2+ → fail.
+# Cache is disabled on this job (invariant I9).
+#
 # This is a REQUIRED status check. PRs containing any [skip-*] bypass token
 # cannot merge unless an explicit approval receipt (# skip-token-allowed: <id>) is present.
 #
@@ -21,6 +26,7 @@ on:
   workflow_call:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  merge_group:
 
 jobs:
   scan-skip-tokens:
@@ -29,11 +35,63 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: Scan PR body for skip-gate bypass tokens
+      - name: Resolve PR body
+        id: resolve-body
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "merge_group" ]]; then
+            # On merge_group, github.event.pull_request is null.
+            # Resolve via head SHA — invariant I10: must match exactly one PR.
+            HEAD_SHA="${MERGE_GROUP_HEAD_SHA}"
+            if [[ -z "${HEAD_SHA}" ]]; then
+              echo "::error::merge_group event has no head_sha — cannot resolve PR body."
+              exit 1
+            fi
+
+            RESULTS=$(gh pr list \
+              --search "${HEAD_SHA}" \
+              --state all \
+              --json number,body \
+              --limit 5 2>/dev/null || echo "[]")
+
+            COUNT=$(echo "${RESULTS}" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+
+            if [[ "${COUNT}" != "1" ]]; then
+              echo "::error::Invariant I10 violated: expected exactly 1 PR matching merge_group head SHA '${HEAD_SHA}', got ${COUNT}."
+              echo "::error::Cannot resolve unique PR body from merge_group — gate must fail to preserve skip-token integrity."
+              exit 1
+            fi
+
+            BODY=$(echo "${RESULTS}" | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('body','') or '')")
+            # Use delimiter to safely pass multiline body through GITHUB_OUTPUT
+            {
+              echo "body<<OMNEOD"
+              echo "${BODY}"
+              echo "OMNEOD"
+            } >> "${GITHUB_OUTPUT}"
+          else
+            BODY="${PR_BODY:-}"
+            if [[ -z "${BODY}" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
+              BODY=$(gh pr view "${PR_NUMBER}" --json body --jq .body 2>/dev/null || true)
+            fi
+            {
+              echo "body<<OMNEOD"
+              echo "${BODY}"
+              echo "OMNEOD"
+            } >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Scan PR body for skip-gate bypass tokens
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESOLVED_BODY: ${{ steps.resolve-body.outputs.body }}
         run: |
           set -euo pipefail
 
@@ -41,15 +99,9 @@ jobs:
           SKIP_PATTERN='\[skip-[a-zA-Z]'
           ALLOWLIST_PATTERN='#[[:space:]]*skip-token-allowed:[[:space:]]*[^[:space:]]'
           RULE_REF="CLAUDE.md Rule #10 + docs/plans/2026-04-25-deploy-gate-matcher-narrowing.md Phase 4"
-          TICKET_REF="OMN-10347"
+          TICKET_REF="OMN-10422"
 
-          # Use PR body from event payload (avoids gh cli dependency for workflow_call)
-          BODY="${PR_BODY:-}"
-
-          # Fallback: fetch via gh if body is empty (e.g. workflow_dispatch or workflow_call context)
-          if [[ -z "$BODY" ]] && [[ -n "${PR_NUMBER:-}" ]]; then
-            BODY=$(gh pr view "$PR_NUMBER" --json body --jq .body 2>/dev/null || true)
-          fi
+          BODY="${RESOLVED_BODY:-}"
 
           if [[ -z "$BODY" ]]; then
             echo "::notice::No PR body available to scan — skipping skip-token check."
