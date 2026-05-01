@@ -57,10 +57,7 @@ def _validate(data: object) -> list[str]:
     normalized_data = {
         key: value for key, value in data.items() if key not in _COMPAT_METADATA_KEYS
     }
-    if (
-        "interface_change" not in normalized_data
-        and data.get("is_seam_ticket") is True
-    ):
+    if "interface_change" not in normalized_data and data.get("is_seam_ticket") is True:
         normalized_data["interface_change"] = True
 
     try:

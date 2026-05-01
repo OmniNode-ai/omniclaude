@@ -60,14 +60,26 @@ args:
 
 # CI Watch
 
-Dispatch to the deterministic node — do NOT inline any logic:
+Dispatch to the deterministic node — do NOT inline any logic.
+
+## Primary path (bus-driven)
 
 ```bash
-onex node node_ci_watch -- --repo "${repo}" --pr "${pr_number}" "${@}"
+onex run-node node_ci_watch \
+  --input '{"pr_number": <pr_number>, "repo": "<repo>", "correlation_id": "<uuid>", "timeout_minutes": 60, "max_fix_cycles": 3, "dry_run": false}' \
+  --timeout 300
 ```
+
+## Fallback path (local/offline)
+
+```bash
+onex node node_ci_watch --input <json_file>
+```
+
+Where `<json_file>` contains `ModelCiWatchCommand` JSON: `{"pr_number": <n>, "repo": "<org/repo>", "correlation_id": "<uuid>"}`.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose.
 
 ## Routing Contract
 
-Dispatch must use `onex node <node_name>` (not `onex run`). Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
+Primary dispatch uses `onex run-node node_ci_watch` (Kafka bus). Fall back to `onex node node_ci_watch --input <file>` for local/offline execution. Non-zero exit emits a `SkillRoutingError` JSON envelope — callers must surface it verbatim, never paraphrase.
