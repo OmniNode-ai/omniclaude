@@ -53,7 +53,7 @@ class TestPlatformReadinessSkillMd:
         fm = yaml.safe_load(content.split("---", 2)[1])
         arg_names = [a["name"] for a in fm["args"]]
         assert "--json" in arg_names
-        assert "--dimension" in arg_names
+        assert "--dimension" not in arg_names
 
     def test_skill_md_not_deprecated(self) -> None:
         content = (SKILL_DIR / "SKILL.md").read_text()
@@ -133,7 +133,12 @@ class TestPlatformReadinessPromptMd:
     def test_prompt_md_preserves_cli_args(self) -> None:
         content = (SKILL_DIR / "prompt.md").read_text()
         assert "--json" in content
-        assert "--dimension" in content
+        assert "--dimension" not in content
+
+    def test_prompt_md_uses_run_node_input_envelope(self) -> None:
+        content = (SKILL_DIR / "prompt.md").read_text()
+        assert "onex run-node node_platform_readiness --input '{}'" in content
+        assert "onex run-node node_platform_readiness -- " not in content
 
     def test_prompt_md_no_subprocess_wrappers(self) -> None:
         """A4 invariant: no subprocess.run / Popen / shell helpers."""

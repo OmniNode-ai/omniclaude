@@ -16,11 +16,7 @@ composable: false
 inputs:
   - name: json_output
     type: bool
-    description: "Output raw JSON instead of markdown table (default: false)"
-    required: false
-  - name: dimension
-    type: str
-    description: "Check a single dimension only (e.g., golden_chain_health)"
+    description: "Surface the node JSON directly instead of rendering a markdown table"
     required: false
 outputs:
   - name: overall
@@ -37,10 +33,7 @@ outputs:
     description: "WARN dimensions with actionable recommendations"
 args:
   - name: --json
-    description: "Output raw JSON instead of markdown table (default: false)"
-    required: false
-  - name: --dimension
-    description: "Check a single dimension only"
+    description: "Surface the node JSON directly instead of rendering a markdown table"
     required: false
 ---
 
@@ -51,7 +44,7 @@ args:
 ## Routing Contract
 
 - **Classification**: Deterministic
-- **Dispatch**: see `prompt.md` — single `uv run onex run-node node_platform_readiness` invocation from the omnimarket worktree
+- **Dispatch**: see `prompt.md` — single `uv run onex run-node node_platform_readiness --input` invocation from the omnimarket worktree
 - **No inline probe aggregation**: the 7 dimensions (contract, golden chain, data flow, runtime, dashboard, cost, CI) live in the node, not this skill
 - **Routing failure envelope**: on non-zero exit, `SkillRoutingError` JSON is surfaced verbatim — do not produce prose
 

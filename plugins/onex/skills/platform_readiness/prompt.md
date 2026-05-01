@@ -13,22 +13,13 @@ dashboard/cost/CI verification and freshness logic.
 | Flag | Default |
 |------|---------|
 | `--json` | unset |
-| `--dimension <name>` | unset |
 
 ## Dispatch
 
 ```bash
 cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
 
-ARGS=""
-if [ "$JSON_OUTPUT" = "true" ]; then
-  ARGS="$ARGS --output-format json"
-fi
-if [ -n "$SINGLE_DIMENSION" ]; then
-  ARGS="$ARGS --dimension $SINGLE_DIMENSION"
-fi
-
-uv run onex run-node node_platform_readiness -- $ARGS
+uv run onex run-node node_platform_readiness --input '{}'
 ```
 
 Capture the JSON output from stdout. The node produces a
