@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import psycopg2
 from pydantic import BaseModel, ConfigDict, Field
@@ -153,7 +155,7 @@ def _row_to_model(row: tuple[object, ...]) -> ModelSessionRegistryRow:
         "decisions",
     ):
         val = raw.get(key)
-        raw[key] = list(val) if val is not None else []
+        raw[key] = list(cast("Iterable[object]", val)) if val is not None else []
     return ModelSessionRegistryRow.model_validate(raw)
 
 

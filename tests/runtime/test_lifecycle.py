@@ -4,7 +4,7 @@
 
 Ticket: OMN-7659 - Extract PluginClaude custom init into lifecycle modules.
 
-All tests mock external dependencies (Kafka, publisher, backends) to ensure
+All tests mock external dependencies (Kafka, emit daemon, backends) to ensure
 they run without infrastructure.
 """
 
@@ -110,22 +110,22 @@ class TestOnStart:
         mock_publisher = AsyncMock()
         mock_publisher.start = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-                "omniclaude.config.model_local_llm_config": MagicMock(
-                    LocalLlmEndpointRegistry=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.nodes.node_local_llm_inference_effect.backends": MagicMock(
-                    VllmInferenceBackend=MagicMock(return_value=MagicMock())
-                ),
-            },
+        with (
+            patch(
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+                return_value=mock_publisher,
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "omniclaude.config.model_local_llm_config": MagicMock(
+                        LocalLlmEndpointRegistry=MagicMock(return_value=MagicMock())
+                    ),
+                    "omniclaude.nodes.node_local_llm_inference_effect.backends": MagicMock(
+                        VllmInferenceBackend=MagicMock(return_value=MagicMock())
+                    ),
+                },
+            ),
         ):
             diagnostics = await on_start(state, "localhost:9092")
 
@@ -134,7 +134,7 @@ class TestOnStart:
         # Should have publisher + backend diagnostics
         assert len(diagnostics) >= 1
         assert diagnostics[0].success is True
-        assert diagnostics[0].component == "EmbeddedEventPublisher"
+        assert diagnostics[0].component == "OmnimarketEmitDaemon"
 
     @pytest.mark.asyncio
     async def test_publisher_failure_returns_failed_diagnostic(self):
@@ -143,16 +143,9 @@ class TestOnStart:
         mock_publisher.start = AsyncMock(side_effect=RuntimeError("Kafka down"))
         mock_publisher.stop = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-            },
+        with patch(
+            "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+            return_value=mock_publisher,
         ):
             diagnostics = await on_start(state, "localhost:9092")
 
@@ -166,21 +159,21 @@ class TestOnStart:
         mock_publisher = AsyncMock()
         mock_publisher.start = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-                "omniclaude.config.model_local_llm_config": MagicMock(
-                    LocalLlmEndpointRegistry=MagicMock(
-                        side_effect=RuntimeError("registry fail")
-                    )
-                ),
-            },
+        with (
+            patch(
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+                return_value=mock_publisher,
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "omniclaude.config.model_local_llm_config": MagicMock(
+                        LocalLlmEndpointRegistry=MagicMock(
+                            side_effect=RuntimeError("registry fail")
+                        )
+                    ),
+                },
+            ),
         ):
             diagnostics = await on_start(state, "localhost:9092")
 

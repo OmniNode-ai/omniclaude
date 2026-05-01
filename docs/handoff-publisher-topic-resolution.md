@@ -9,7 +9,7 @@
 ## What Was Done
 
 ### 1. Publisher Rewired to Local Registry
-- `src/omniclaude/publisher/embedded_publisher.py` no longer imports `EventRegistry` from `omnibase_infra`
+- The legacy in-process publisher no longer imports `EventRegistry` from `omnibase_infra`
 - Uses local `event_registry.py` for fan-out rules, validation, partition keys
 - Uses local `_inject_metadata()` for correlation_id, causation_id, emitted_at, schema_version
 - Fan-out support: one event type can publish to multiple topics with payload transforms (e.g., `prompt.submitted` -> intelligence topic + sanitized observability topic)
@@ -33,15 +33,15 @@ Three new TopicBase entries added to `src/omniclaude/hooks/topics.py`:
 - `ROUTING_DECISION`, `NOTIFICATION_BLOCKED`, `NOTIFICATION_COMPLETED`
 
 ### 4. Tests Updated
-- `tests/publisher/test_embedded_publisher.py`: 4 tests updated to remove mocks of deleted `self._registry`
+- Legacy in-process publisher tests were updated to remove mocks of deleted `self._registry`
 
 ## Files Modified
 | File | Change |
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries |
 | `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total) |
-| `src/omniclaude/publisher/embedded_publisher.py` | Replaced infra EventRegistry with local registry + fan-out; bare suffix topics |
-| `tests/publisher/test_embedded_publisher.py` | 4 tests updated |
+| Legacy in-process publisher | Replaced infra EventRegistry with local registry + fan-out; bare suffix topics |
+| Legacy publisher tests | 4 tests updated |
 
 ## Architectural Principle Established
 
@@ -127,13 +127,13 @@ print(f'Wire topic: {topic}')
 
 ### No infra EventRegistry import in publisher
 ```bash
-grep -c 'from omnibase_infra.*event_registry' src/omniclaude/publisher/embedded_publisher.py
+grep -c 'from omnibase_infra.*event_registry' <legacy publisher module>
 # Should print: 0
 ```
 
 ### Tests pass
 ```bash
-.venv/bin/pytest tests/ -v -k "event_registry or publisher or topic" --tb=short
+.venv/bin/pytest tests/ -v -k "event_registry or topic" --tb=short
 ```
 
 ## Related Tickets

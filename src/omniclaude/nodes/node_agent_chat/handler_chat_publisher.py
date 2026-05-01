@@ -62,7 +62,7 @@ def _emit_to_kafka(message: ModelAgentChatMessage) -> bool:
             "schema_version": message.schema_version,
             "metadata": message.metadata,
         }
-        return emit_event(_EMIT_EVENT_TYPE, payload)
+        return bool(emit_event(_EMIT_EVENT_TYPE, payload))
     except ImportError:
         logger.debug("emit_client_wrapper not available; Kafka emit skipped")
         return False

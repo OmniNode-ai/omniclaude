@@ -50,7 +50,8 @@ class RoutingRecorder:
     """
 
     def __init__(self, state_dir: str | None = None) -> None:
-        self._state_dir = Path(state_dir or os.getenv("ONEX_STATE_DIR", ".onex_state"))
+        state_root = state_dir if state_dir is not None else os.getenv("ONEX_STATE_DIR")
+        self._state_dir = Path(state_root or ".onex_state")
         self._decisions_path = self._state_dir / _DECISIONS_SUBPATH
 
     def record(

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -931,12 +932,9 @@ class HandlerContextInjection:
                     start_projection_consumer_if_configured as _start_consumer,
                 )
             except ImportError:
-                from pattern_cache import (  # type: ignore[no-redef]  # Why: fallback import path in except handler
-                    get_pattern_cache as _get_pattern_cache,
-                )
-                from pattern_cache import (  # type: ignore[no-redef]  # Why: fallback import path in except handler
-                    start_projection_consumer_if_configured as _start_consumer,
-                )
+                pattern_cache = importlib.import_module("pattern_cache")
+                _get_pattern_cache = pattern_cache.get_pattern_cache
+                _start_consumer = pattern_cache.start_projection_consumer_if_configured
         except ImportError as exc:
             logger.warning("pattern_cache module unavailable (ImportError): %s", exc)
         else:

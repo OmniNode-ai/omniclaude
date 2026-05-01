@@ -34,7 +34,9 @@ import asyncio
 import logging
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from omniclaude.quirks.controller import NodeValidatorRolloutOrchestratorOrchestrator
 from omniclaude.quirks.detectors.context import DetectionContext
@@ -141,7 +143,7 @@ def emit_annotations(
 async def run_checks(
     diff_content: str,
     pr_description: str,
-    db_session_factory: object | None = None,
+    db_session_factory: Callable[..., Any] | None = None,
 ) -> int:
     """Run quirk detectors against *diff_content* and enforce stage policy.
 
