@@ -1,6 +1,7 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-10432
+title: "Two Strike Arbiter Skill Shim"
 summary: "Add two_strike_arbiter skill shim for node_two_strike_arbiter"
 is_seam_ticket: true
 interface_change: true
@@ -29,4 +30,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "gh pr checks 1489 --repo OmniNode-ai/omniclaude --watch"
+        check_value: "gh pr checks 1489 --repo OmniNode-ai/omniclaude --watch # deploy-verify OMN-10432 PR gate"
