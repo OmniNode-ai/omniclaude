@@ -225,7 +225,7 @@ def _default_event_registry_path() -> Path:
         / "onex"
         / "lib"
         / "event_registry"
-        / "omniclaude.yaml"
+        / "omniclaude.yaml"  # arch-topic-naming: ignore
     )
 
 
