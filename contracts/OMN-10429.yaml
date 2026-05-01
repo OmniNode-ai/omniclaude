@@ -30,4 +30,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "gh pr checks 1486 --repo OmniNode-ai/omniclaude --watch"
+        check_value: "gh pr checks 1486 --repo OmniNode-ai/omniclaude --watch # deploy-verify OMN-10429 PR gate"
