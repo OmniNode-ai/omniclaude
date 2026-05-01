@@ -127,13 +127,25 @@ def test_runtime_backed_shims_use_run_node_input_envelopes() -> None:
     violations = []
     for path in RUN_NODE_ENVELOPE_FILES:
         text = path.read_text(encoding="utf-8")
-        if re.search(r"onex\s+run-node\s+\S+\s+--\s*(?:\\)?\s*$", text, re.M):
-            violations.append(f"{path.relative_to(SKILLS_ROOT)} uses run-node -- flags")
-        if re.search(r"uv\s+run\s+onex\s+run\s+node_", text):
-            violations.append(
-                f"{path.relative_to(SKILLS_ROOT)} uses nonexistent onex run"
-            )
-        if "onex run-node" in text and "--input" not in text:
-            violations.append(f"{path.relative_to(SKILLS_ROOT)} omits --input")
+        invocation_lines = []
+        for line in text.splitlines():
+            if re.search(r"^\s*(?:uv\s+run\s+)?onex\s+run-node\b", line):
+                invocation_lines.append(line)
+            if re.search(r"^\s*uv\s+run\s+onex\s+run\s+node_", line):
+                violations.append(
+                    f"{path.relative_to(SKILLS_ROOT)} uses nonexistent onex run"
+                )
+
+        if not invocation_lines:
+            violations.append(f"{path.relative_to(SKILLS_ROOT)} omits run-node")
+            continue
+
+        for line in invocation_lines:
+            if re.search(r"\bonex\s+run-node\s+\S+\s+--(?:\s+\S|\\\s*$|\s*$)", line):
+                violations.append(
+                    f"{path.relative_to(SKILLS_ROOT)} uses run-node -- flags"
+                )
+            if "--input" not in line:
+                violations.append(f"{path.relative_to(SKILLS_ROOT)} omits --input")
 
     assert not violations, "\n".join(violations)
