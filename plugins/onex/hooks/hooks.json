@@ -366,6 +366,15 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre_tool_use_task_boundary_tests.sh"
+          }
+        ]
+      },
+      {
         "matcher": "^SendMessage$",
         "hooks": [
           {
