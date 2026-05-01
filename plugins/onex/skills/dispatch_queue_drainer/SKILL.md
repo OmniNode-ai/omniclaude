@@ -53,8 +53,8 @@ batch mode.
 ## Usage
 
 ```
-/dispatch-queue-drainer --queue-item-path .onex_state/dispatch_queue/item-001.yaml
-/dispatch-queue-drainer --queue-item-path .onex_state/dispatch_queue/item-001.yaml --dry-run
+/onex:dispatch_queue_drainer --queue-item-path .onex_state/dispatch_queue/item-001.yaml
+/onex:dispatch_queue_drainer --queue-item-path .onex_state/dispatch_queue/item-001.yaml --dry-run
 ```
 
 ---
