@@ -487,7 +487,7 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Diagnostic daemon health topics (OMN-10126)
     # ==========================================================================
-    DIAGNOSTIC_DAEMON_HEALTH = "onex.evt.diagnostic.daemon-health.v1"
+    DIAGNOSTIC_DAEMON_HEALTH = "onex.evt.omniclaude.diagnostic-daemon-health.v1"
     """Portable daemon health diagnostic event emitted by runtime probes."""
 
     # ==========================================================================

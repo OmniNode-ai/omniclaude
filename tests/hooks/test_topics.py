@@ -70,7 +70,8 @@ class TestTopicBase:
             == "onex.evt.omniclaude.agent-observability-dlq.v1"
         )
         assert (
-            TopicBase.DIAGNOSTIC_DAEMON_HEALTH == "onex.evt.diagnostic.daemon-health.v1"
+            TopicBase.DIAGNOSTIC_DAEMON_HEALTH
+            == "onex.evt.omniclaude.diagnostic-daemon-health.v1"
         )
 
     def test_topic_base_is_str_enum(self) -> None:

@@ -461,6 +461,6 @@ topics:
   # Runtime diagnostics topics
   # ---------------------------------------------------------------------------
   - event_type: "diagnostic.daemon.health"
-    topic: "onex.evt.diagnostic.daemon-health.v1"
+    topic: "onex.evt.omniclaude.diagnostic-daemon-health.v1"
     topic_base_constant: "DIAGNOSTIC_DAEMON_HEALTH"
     description: "Portable daemon health diagnostic event"
