@@ -1,5 +1,5 @@
 ---
-version: 1.0.1
+version: 1.0.2
 description: Delegate tasks to the ONEX node-based delegation pipeline via Kafka. Classifies prompt, wraps a typed command envelope, publishes to delegate-task topic. Requires Kafka to be reachable — no local prose fallback.
 mode: full
 level: advanced
