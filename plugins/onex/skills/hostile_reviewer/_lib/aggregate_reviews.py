@@ -354,6 +354,7 @@ def run_codex(pr_head_sha: str) -> list[dict[str, str]]:
             timeout=120,
             check=False,
         )
+        _emit_codex_cost()
         stdout = result.stdout.strip()
         json_str = _extract_first_json_object(stdout)
         if json_str is None:
@@ -367,6 +368,21 @@ def run_codex(pr_head_sha: str) -> list[dict[str, str]]:
     except Exception as e:
         print(f"[codex] failed: {e}", file=sys.stderr)
         return []
+
+
+def _emit_codex_cost() -> None:
+    """Emit a cost event file for one codex invocation. Non-fatal on any error."""
+    try:
+        _scripts_dir = Path(__file__).parents[4] / "hooks" / "scripts"
+        if str(_scripts_dir) not in sys.path:
+            sys.path.insert(0, str(_scripts_dir))
+        from codex_cost_wrapper import (
+            emit_codex_invocation_cost,  # type: ignore[import]
+        )
+
+        emit_codex_invocation_cost()
+    except Exception as e:
+        print(f"[codex] cost emission failed (non-fatal): {e}", file=sys.stderr)
 
 
 # =============================================================================
