@@ -26,9 +26,11 @@ tags: [sweep, quality, enforcement]
 
 ```bash
 uv run onex run-node node_duplication_sweep -- \
-  ${OMNI_HOME:+--omni-home "$OMNI_HOME"} \
   ${CHECKS:+--checks "$CHECKS"}
 ```
+
+Pass `--omni-home <workspace-root>` explicitly only when the node needs a
+non-default repository discovery root.
 
 **Backing node:** `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
 **Contract:** `node_duplication_sweep/contract.yaml`
