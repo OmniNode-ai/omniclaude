@@ -25,6 +25,21 @@ env:
 
 jobs:
   # ============================================================================
+  # ZONE FILTER (OMN-10475)
+  # ============================================================================
+  # Calls the reusable workflow in omnibase_core. When every changed file is in
+  # the DOCS zone (now including contracts/, drift/dod_receipts/, allowlists/,
+  # .evidence/), heavy jobs (pyright, test matrix, hooks-tests,
+  # agent-framework-tests, golden-chain-integrity, security-python) skip.
+  # Code Quality (ruff+mypy), arch invariants, contract validation, and the
+  # receipt-gate caller still run on every PR.
+  zone-filter:
+    # self-gating-ok: target is in omnibase_core, not a required check on omniclaude main
+    uses: OmniNode-ai/omnibase_core/.github/workflows/zone-filter.yml@main
+    with:
+      python-version: "3.12"
+
+  # ============================================================================
   # QUALITY CHECKS
   # ============================================================================
 
@@ -135,6 +150,8 @@ jobs:
 
   pyright:
     name: Pyright Type Checking
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1105,6 +1122,8 @@ jobs:
   # Golden chain registry integrity (OMN-7389)
   golden-chain-integrity:
     name: Golden Chain Integrity
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1149,6 +1168,8 @@ jobs:
 
   security-python:
     name: Python Security Scan
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1272,7 +1293,7 @@ jobs:
   # ---------------------------------------------------------------------------
   detect-changes:
     name: Detect Changes
-    needs: [quality-gate]
+    needs: [zone-filter, quality-gate]
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1281,7 +1302,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    if: always() && needs.quality-gate.result == 'success'
+    if: always() && needs.zone-filter.outputs.docs_only != 'true' && needs.quality-gate.result == 'success'
     outputs:
       is_full_suite: ${{ steps.detect.outputs.is_full_suite }}
       full_suite_reason: ${{ steps.detect.outputs.full_suite_reason }}
@@ -1522,6 +1543,8 @@ jobs:
 
   hooks-tests:
     name: Hooks System Tests
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
@@ -1661,6 +1684,8 @@ jobs:
 
   agent-framework-tests:
     name: Agent Framework Tests
+    needs: zone-filter
+    if: needs.zone-filter.outputs.docs_only != 'true'
     # OMNI_RUNNER_SELECTOR_V1 - trusted CI defaults to self-hosted omnibase-ci; public forks default to ubuntu-latest
     runs-on: >-
       ${{
