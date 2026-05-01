@@ -51,7 +51,7 @@ args:
 ## Routing Contract
 
 - **Classification**: Deterministic
-- **Dispatch**: see `prompt.md` — single `uv run python -m omnimarket.nodes.node_platform_readiness` invocation from the omnimarket worktree
+- **Dispatch**: see `prompt.md` — single `uv run onex run-node node_platform_readiness` invocation from the omnimarket worktree
 - **No inline probe aggregation**: the 7 dimensions (contract, golden chain, data flow, runtime, dashboard, cost, CI) live in the node, not this skill
 - **Routing failure envelope**: on non-zero exit, `SkillRoutingError` JSON is surfaced verbatim — do not produce prose
 

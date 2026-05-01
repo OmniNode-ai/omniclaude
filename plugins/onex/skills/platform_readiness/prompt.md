@@ -28,7 +28,7 @@ if [ -n "$SINGLE_DIMENSION" ]; then
   ARGS="$ARGS --dimension $SINGLE_DIMENSION"
 fi
 
-uv run python -m omnimarket.nodes.node_platform_readiness $ARGS
+uv run onex run-node node_platform_readiness -- $ARGS
 ```
 
 Capture the JSON output from stdout. The node produces a

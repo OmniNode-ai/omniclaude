@@ -96,7 +96,7 @@ Before any phase executes, run the platform readiness gate:
 
 ```bash
 cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
-uv run python -m omnimarket.nodes.node_platform_readiness --output-format json
+uv run onex run-node node_platform_readiness -- --output-format json
 ```
 
 Then parse the JSON result and apply the following policy:
