@@ -33,7 +33,7 @@ without describing handler internals.
 The skill invokes its backing node via the standard ONEX runner. Foreground
 runs (no executable code fence — this is documentation):
 
-    uv run onex run-node <node> -- <allowed-args>
+    uv run onex run-node <node> --input '<json-envelope>'
 
 Foreground waits synchronously for the typed result. The handler MUST NOT call
 `Agent()`. See foreground-only Agent() ADR
@@ -42,7 +42,7 @@ Foreground waits synchronously for the typed result. The handler MUST NOT call
 ## Foreground responsibility
 
 1. Parse skill args from the slash-command invocation.
-2. Invoke `uv run onex run-node <node>` with the parsed args.
+2. Invoke `uv run onex run-node <node> --input '<json-envelope>'` with the parsed args serialized to the node input model.
 3. Read the typed result returned by the node handler.
 4. Act per archetype:
    - `dispatch_worker` — read `proposed_agent_spawn_args`; call `TeamCreate`

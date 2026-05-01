@@ -63,12 +63,8 @@ and (3) files a friction event. Implements the Two-Strike Diagnosis Protocol
 ## Dispatch
 
 ```bash
-uv run onex run-node node_two_strike_arbiter -- \
-  --ticket-id <ticket_id> \
-  ${REPO:+--repo "$REPO"} \
-  ${PR:+--pr-number "$PR"} \
-  ${BRANCH:+--branch "$BRANCH"} \
-  ${DRY_RUN:+--dry-run}
+INPUT_JSON='{"ticket_id":"<ticket_id>","repo":"<repo>","pr_number":<pr_number_or_null>,"branch":"<branch>","fix_attempts":[],"dry_run":true}'
+uv run onex run-node node_two_strike_arbiter --input "${INPUT_JSON}"
 ```
 
 Do not invoke diagnosis logic inline. All state tracking and side effects are in the node handler.

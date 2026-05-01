@@ -25,12 +25,12 @@ tags: [sweep, quality, enforcement]
 **Target**: `node_duplication_sweep` in omnimarket via `onex run-node`.
 
 ```bash
-uv run onex run-node node_duplication_sweep -- \
-  ${CHECKS:+--checks "$CHECKS"}
+INPUT_JSON='{"omni_home":"<workspace-root>","checks":["D1","D2"]}'
+uv run onex run-node node_duplication_sweep --input "${INPUT_JSON}"
 ```
 
-Pass `--omni-home <workspace-root>` explicitly only when the node needs a
-non-default repository discovery root.
+Omit `omni_home` or `checks` from the JSON envelope when the default repository
+root or full check set should be used.
 
 **Backing node:** `omnimarket/src/omnimarket/nodes/node_duplication_sweep/`
 **Contract:** `node_duplication_sweep/contract.yaml`

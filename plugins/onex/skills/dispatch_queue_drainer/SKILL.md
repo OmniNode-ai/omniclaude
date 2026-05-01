@@ -62,13 +62,14 @@ batch mode.
 ## Dispatch
 
 ```bash
-uv run onex run-node node_dispatch_queue_drainer -- \
-  --queue-item-path <queue_item_path> \
-  ${DRY_RUN:+--dry-run}
+INPUT_JSON='{"name":"<name>","team":"<team>","role":"<role>","scope":"<scope>","targets":["<target>"]}'
+uv run onex run-node node_dispatch_queue_drainer --input "${INPUT_JSON}"
 ```
 
-Do not implement queue processing inline. All compilation and dispatch logic is in the
-node handler (`omnimarket/src/omnimarket/nodes/node_dispatch_queue_drainer/handlers/handler_dispatch_queue_drainer.py`).
+The foreground may load the YAML queue item and serialize it as the typed input
+envelope, but must not process, move, or delete queue files inline. All compilation
+and dispatch logic is in the node handler
+(`omnimarket/src/omnimarket/nodes/node_dispatch_queue_drainer/handlers/handler_dispatch_queue_drainer.py`).
 
 ---
 

@@ -69,13 +69,8 @@ This skill is a **thin shim** — all stall detection and recovery logic lives i
 `node_worker_stall_recovery` (omnimarket, OMN-9403).
 
 ```bash
-uv run onex run node_worker_stall_recovery -- \
-  --ticket-id <ticket_id> \
-  --agent-id <agent_id> \
-  ${TIMEOUT_MINUTES:+--timeout-minutes "$TIMEOUT_MINUTES"} \
-  ${CONTEXT_THRESHOLD_PCT:+--context-threshold-pct "$CONTEXT_THRESHOLD_PCT"} \
-  ${MAX_REDISPATCHES:+--max-redispatches "$MAX_REDISPATCHES"} \
-  ${DRY_RUN:+--dry-run}
+INPUT_JSON='{"ticket_id":"<ticket_id>","agent_id":"<agent_id>","timeout_minutes":2,"context_threshold_pct":80,"max_redispatches":2,"dry_run":true}'
+uv run onex run-node node_worker_stall_recovery --input "${INPUT_JSON}"
 ```
 
 The node returns `ModelStallRecoveryResult`:

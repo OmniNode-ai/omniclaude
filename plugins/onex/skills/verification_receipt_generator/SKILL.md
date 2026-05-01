@@ -7,7 +7,7 @@ debug: false
 category: verification
 tags:
   - verification
-  - receipts
+  - verification-results
   - ci
   - dod
 author: OmniClaude Team
@@ -32,7 +32,7 @@ args:
     description: "Run pytest in worktree (default: true)"
     required: false
   - name: --dry-run
-    description: "Return receipt without running verification"
+    description: "Return a dry-run result without running verification"
     required: false
 ---
 
@@ -68,14 +68,8 @@ structured per-dimension verification evidence.
 ## Dispatch
 
 ```bash
-uv run onex run-node node_verification_receipt_generator -- \
-  --task-id <task_id> \
-  --claim "<claim>" \
-  ${REPO:+--repo "$REPO"} \
-  ${PR:+--pr-number "$PR"} \
-  ${WORKTREE_PATH:+--worktree-path "$WORKTREE_PATH"} \
-  ${RUN_TESTS:+--verify-tests} \
-  ${DRY_RUN:+--dry-run}
+INPUT_JSON='{"task_id":"<task_id>","claim":"<claim>","repo":"<repo>","pr_number":<pr_number_or_null>,"worktree_path":"<worktree_path>","verify_ci":true,"verify_tests":true,"dry_run":false}'
+uv run onex run-node node_verification_receipt_generator --input "${INPUT_JSON}"
 ```
 
 Do not implement verification logic inline. All checking is in the node handler.
