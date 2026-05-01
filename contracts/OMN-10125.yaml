@@ -1,0 +1,50 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10125
+title: "Drop emit daemon launcher log append redirection"
+summary: "Stop appending emit daemon stdout/stderr to emit-daemon.log from shell launchers; pass --log-path and let the daemon handler own file logging."
+is_seam_ticket: false
+interface_change: false
+interfaces_touched: []
+evidence_requirements:
+  - kind: tests
+    description: "Static launcher tests prove omnimarket daemon launch uses --log-path without append redirection"
+    command: "uv run pytest tests/scripts/test_omnimarket_launcher.py -q"
+  - kind: manual
+    description: "Changed launcher shell and test files pass formatting/lint"
+    command: "uv run ruff check tests/scripts/test_omnimarket_launcher.py"
+  - kind: manual
+    description: "No emit-daemon log append redirection remains in daemon launch/restart blocks"
+    command: "grep -n '>> \"${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log\"' plugins/onex/hooks/scripts/session-start.sh plugins/onex/hooks/scripts/common.sh; test $? -eq 1"
+  - kind: manual
+    description: "Changed launcher shell scripts parse cleanly"
+    command: "bash -n plugins/onex/hooks/scripts/session-start.sh plugins/onex/hooks/scripts/common.sh && echo 'bash syntax ok'"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-launcher-static-tests
+    description: "Launcher tests pass and cover --log-path without shell append redirection"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/scripts/test_omnimarket_launcher.py -q"
+  - id: dod-launcher-lint
+    description: "Changed launcher test file passes ruff"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run ruff check tests/scripts/test_omnimarket_launcher.py"
+  - id: dod-no-log-append
+    description: "Static grep finds no emit-daemon log append redirection in daemon launch/restart scripts"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "grep -n '>> \"${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log\"' plugins/onex/hooks/scripts/session-start.sh plugins/onex/hooks/scripts/common.sh; test $? -eq 1"
+  - id: dod-shell-parse
+    description: "Changed launcher shell scripts parse cleanly"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "bash -n plugins/onex/hooks/scripts/session-start.sh plugins/onex/hooks/scripts/common.sh && echo 'bash syntax ok'"

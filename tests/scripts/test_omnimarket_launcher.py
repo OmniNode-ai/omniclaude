@@ -137,6 +137,21 @@ def test_launcher_uses_spool_dir_flag() -> None:
     )
 
 
+def test_launcher_uses_log_path_without_appending_stdout_to_log() -> None:
+    text = SESSION_START.read_text()
+    marker = (
+        'nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
+    )
+    assert marker in text
+    block_start = text.index(marker)
+    block_end = text.index(" &\n", block_start)
+    invocation = text[block_start:block_end]
+
+    assert "--log-path" in invocation
+    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
+    assert ">/dev/null 2>&1" in invocation
+
+
 def test_common_restart_path_uses_omnimarket_node() -> None:
     text = COMMON.read_text()
     marker = 'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
@@ -149,6 +164,8 @@ def test_common_restart_path_uses_omnimarket_node() -> None:
     assert "--spool-dir" in invocation
     assert "--event-registry" in invocation
     assert "--log-path" in invocation
+    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
+    assert ">/dev/null 2>&1" in invocation
     assert "-m omniclaude.publisher start" not in invocation
     assert "omnibase_infra.runtime.emit_daemon.cli start" not in invocation
 

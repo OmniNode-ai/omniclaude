@@ -806,7 +806,7 @@ _try_restart_emit_daemon() {
         --spool-dir "${ONEX_STATE_DIR}/event-spool" \
         --event-registry "$ONEX_EMIT_EVENT_REGISTRY" \
         --log-path "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" \
-        >> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log" 2>&1 &
+        >/dev/null 2>&1 &
 
     local daemon_pid=$!
     log "Emit daemon: Respawned with PID $daemon_pid, socket: $socket_path"
