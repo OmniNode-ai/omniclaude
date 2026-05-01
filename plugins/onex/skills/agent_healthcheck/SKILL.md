@@ -69,7 +69,7 @@ This skill is a **thin shim** — all stall detection and recovery logic lives i
 `node_worker_stall_recovery` (omnimarket, OMN-9403).
 
 ```bash
-uv run onex run-node node_worker_stall_recovery -- \
+uv run onex run node_worker_stall_recovery -- \
   --ticket-id <ticket_id> \
   --agent-id <agent_id> \
   ${TIMEOUT_MINUTES:+--timeout-minutes "$TIMEOUT_MINUTES"} \
