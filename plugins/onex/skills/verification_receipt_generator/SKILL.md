@@ -1,5 +1,5 @@
 ---
-description: Generate a CI-verified evidence receipt for a task completion claim — dispatches to node_verification_receipt_generator (omnimarket)
+description: Verify a task completion claim with CI evidence via node_verification_receipt_generator (omnimarket)
 mode: full
 version: 1.0.0
 level: intermediate
@@ -49,9 +49,9 @@ args:
 ## Purpose
 
 Thin shim that dispatches to `node_verification_receipt_generator` in omnimarket.
-Generates CI-verified evidence receipts for task completion claims. Kills
-rubber-stamping: the node probes `gh pr checks` and/or runs `pytest` in the
-worktree and returns a structured receipt with per-dimension evidence.
+Checks task completion claims against CI and test evidence. Kills rubber-stamping:
+the node probes `gh pr checks` and/or runs `pytest` in the worktree and returns
+structured per-dimension verification evidence.
 
 ---
 

@@ -95,10 +95,11 @@ context management, and the orchestration layer.
 Before any phase executes, run the platform readiness gate:
 
 ```bash
-onex run node_platform_readiness --output-format json
+cd "$ONEX_REGISTRY_ROOT/omnimarket"  # local-path-ok: canonical omnimarket worktree
+uv run python -m omnimarket.nodes.node_platform_readiness --output-format json
 ```
 
-Then read `.onex_state/readiness/latest.yaml` and apply the following policy:
+Then parse the JSON result and apply the following policy:
 
 | Overall Status | Action |
 |----------------|--------|
