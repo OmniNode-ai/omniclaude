@@ -85,6 +85,11 @@ The node returns `ModelStallRecoveryResult`:
 - `redispatch_count`: number of redispatches performed
 - `error`: error message if `status == failed`
 
+Checkpoint and relaunch semantics remain governed by the OMN-6887 recovery
+protocol. The backing node writes the recovery checkpoint, captures completed
+and remaining work, and relaunches or redispatches a fresh agent when recovery
+is required; this shim only forwards the invocation and returns the receipt.
+
 Surface the JSON output directly. Do not implement detection inline.
 
 **Backing node:** `omnimarket/src/omnimarket/nodes/node_worker_stall_recovery/`
