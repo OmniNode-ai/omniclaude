@@ -56,18 +56,18 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.two_strike_arbiter.v1"
-    consumer_group: "omniclaude.skill.two_strike_arbiter"
+    topic: "onex.cmd.omniclaude.two-strike-arbiter.v1"
+    consumer_group: "omniclaude.skill.two-strike-arbiter"
   publish:
-    success_topic: "onex.evt.omniclaude.two_strike_arbiter-completed.v1"
-    failure_topic: "onex.evt.omniclaude.two_strike_arbiter-failed.v1"
+    success_topic: "onex.evt.omniclaude.two-strike-arbiter-completed.v1"
+    failure_topic: "onex.evt.omniclaude.two-strike-arbiter-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.two_strike_arbiter.v1"
+    - "onex.cmd.omniclaude.two-strike-arbiter.v1"
   publish_topics:
-    - "onex.evt.omniclaude.two_strike_arbiter-completed.v1"
-    - "onex.evt.omniclaude.two_strike_arbiter-failed.v1"
+    - "onex.evt.omniclaude.two-strike-arbiter-completed.v1"
+    - "onex.evt.omniclaude.two-strike-arbiter-failed.v1"
 
 # Capabilities
 capabilities:
@@ -108,9 +108,7 @@ error_handling:
     initial_delay_ms: 500
     max_delay_ms: 5000
     exponential_base: 2
-    retry_on:
-      - SkillDispatchError
-      - SkillTimeoutError
+    retry_on: []
   circuit_breaker:
     enabled: false
 
