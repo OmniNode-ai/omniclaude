@@ -1,6 +1,7 @@
 ---
 schema_version: "1.0.0"
 ticket_id: OMN-10429
+title: "Add verification receipt generator skill shim"
 summary: "Add verification_receipt_generator skill shim for node_verification_receipt_generator"
 is_seam_ticket: true
 interface_change: true
@@ -29,4 +30,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "deploy verification: gh pr checks 1486 --repo OmniNode-ai/omniclaude --watch"
+        check_value: "gh pr checks 1486 --repo OmniNode-ai/omniclaude --watch"

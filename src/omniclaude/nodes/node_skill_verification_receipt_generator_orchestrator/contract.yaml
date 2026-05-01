@@ -56,18 +56,18 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.verification_receipt_generator.v1"
-    consumer_group: "omniclaude.skill.verification_receipt_generator"
+    topic: "onex.cmd.omniclaude.verification-receipt-generator.v1"
+    consumer_group: "omniclaude.skill.verification-receipt-generator"
   publish:
-    success_topic: "onex.evt.omniclaude.verification_receipt_generator-completed.v1"
-    failure_topic: "onex.evt.omniclaude.verification_receipt_generator-failed.v1"
+    success_topic: "onex.evt.omniclaude.verification-receipt-generator-completed.v1"
+    failure_topic: "onex.evt.omniclaude.verification-receipt-generator-failed.v1"
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.verification_receipt_generator.v1"
+    - "onex.cmd.omniclaude.verification-receipt-generator.v1"
   publish_topics:
-    - "onex.evt.omniclaude.verification_receipt_generator-completed.v1"
-    - "onex.evt.omniclaude.verification_receipt_generator-failed.v1"
+    - "onex.evt.omniclaude.verification-receipt-generator-completed.v1"
+    - "onex.evt.omniclaude.verification-receipt-generator-failed.v1"
 
 # Capabilities
 capabilities:
