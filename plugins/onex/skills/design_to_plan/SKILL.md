@@ -110,17 +110,23 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 ### HARD FORMAT REQUIREMENT
 
-**Every implementation item MUST be a `## Task N:` heading (H2 level).** This is non-negotiable — `plan-to-tickets` parses this exact format. Plans that use any other structure (numbered lists, `### Phase` sub-headings, bullet items, `## Phase N:`) will fail downstream ticketization.
+**Every implementation item MUST be a `## Task N:` heading (H2 level).** This is non-negotiable — `plan-to-tickets` parses this exact format. Plans that use any other structure will fail downstream ticketization.
 
 **Validation contract:** `ModelPlanDocument` from `omnibase_core.models.plan` is the validation target for every plan produced by this skill. A plan that cannot be parsed into a `ModelPlanDocument` is a failure — regenerate the offending sections before proceeding.
 
 - **DO**: `## Task 1: Create autopilot SKILL.md specification`
 - **DO**: `## Task 2: Implement state management`
-- **DON'T**: `### Phase 1:` with numbered items inside
+- **DO**: `## Task 15: [Wave 2] Register Kafka topics` — embed wave/phase context in the task title if needed
+- **DON'T**: `### Wave 1:` or `### Wave N:` headers used as task headings — these are H3 and will NOT be detected by `plan-to-tickets`
+- **DON'T**: `### Phase 1:` with numbered items inside — same problem, H3 level is invisible to the parser
+- **DON'T**: `- **T1**` or `- **TX**` bullet items as task entries — bullets are not parsed as tasks
 - **DON'T**: `1. Create SKILL.md` as a flat numbered list
 - **DON'T**: `## Implementation Sequence` with sub-sections
+- **DON'T**: `## Wave N:` as a grouping header that contains the actual tasks — the wave heading itself is not a task
 
-If the design has phases (e.g., "Phase 1: Core", "Phase 2: Dashboard"), flatten them into sequential `## Task N:` headings. Use the task title to indicate the phase if helpful: `## Task 15: [Phase 2] Register Kafka topics`.
+**Grouping headers are allowed between tasks** (e.g., `### Wave 1 — Core Infrastructure` between `## Task 3:` and `## Task 4:`) but ONLY if they contain no implementation items. Every implementation item must be its own `## Task N:` heading.
+
+If the design has waves or phases (e.g., "Wave 1: Core", "Wave 2: Dashboard"), flatten them into sequential `## Task N:` headings. Use the task title to indicate the wave/phase if helpful: `## Task 15: [Wave 2] Register Kafka topics`.
 
 **Post-plan validation**: After writing the plan, parse it through `ModelPlanDocument` (from `omnibase_core.models.plan`). If parsing fails, regenerate the offending sections before proceeding to the adversarial review. Specifically:
 
