@@ -8,10 +8,10 @@
 
 ## What Was Done
 
-### 1. Publisher Rewired to Local Registry
-- The legacy in-process publisher no longer imports `EventRegistry` from `omnibase_infra`
+### 1. Emit Daemon Routing Uses Local Contracts
+- The runtime lifecycle starts the omnimarket emit daemon wrapper instead of `omniclaude.publisher`
 - Uses local `event_registry.py` for fan-out rules, validation, partition keys
-- Uses local `_inject_metadata()` for correlation_id, causation_id, emitted_at, schema_version
+- The emit daemon normalizes correlation_id, causation_id, emitted_at, and schema_version metadata
 - Fan-out support: one event type can publish to multiple topics with payload transforms (e.g., `prompt.submitted` -> intelligence topic + sanitized observability topic)
 
 ### 2. Topics Are Bare ONEX Suffixes
@@ -33,15 +33,16 @@ Three new TopicBase entries added to `src/omniclaude/hooks/topics.py`:
 - `ROUTING_DECISION`, `NOTIFICATION_BLOCKED`, `NOTIFICATION_COMPLETED`
 
 ### 4. Tests Updated
-- Legacy in-process publisher tests were updated to remove mocks of deleted `self._registry`
+- Runtime lifecycle and launcher tests verify the omnimarket emit daemon startup path and deleted publisher absence.
 
 ## Files Modified
+
 | File | Change |
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries |
 | `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total) |
-| Legacy in-process publisher | Replaced infra EventRegistry with local registry + fan-out; bare suffix topics |
-| Legacy publisher tests | 4 tests updated |
+| `src/omniclaude/runtime/lifecycle.py` | Starts the omnimarket emit daemon wrapper and publishes through `EventBusKafka` |
+| `tests/runtime/test_lifecycle.py` and `tests/scripts/test_omnimarket_launcher.py` | Cover runtime lifecycle and launcher cutover behavior |
 
 ## Architectural Principle Established
 
@@ -125,9 +126,9 @@ print(f'Wire topic: {topic}')
 "
 ```
 
-### No infra EventRegistry import in publisher
+### No deleted publisher package import remains
 ```bash
-grep -c 'from omnibase_infra.*event_registry' <legacy publisher module>
+! rg 'omniclaude\.publisher' src tests plugins scripts --glob '!uv.lock'
 # Should print: 0
 ```
 

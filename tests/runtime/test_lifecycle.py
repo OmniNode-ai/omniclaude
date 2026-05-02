@@ -10,6 +10,7 @@ they run without infrastructure.
 
 from __future__ import annotations
 
+import os
 import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,6 +19,7 @@ import pytest
 from omniclaude.runtime.lifecycle import (
     LifecycleState,
     ModelLifecycleDiagnostic,
+    _OmnimarketEmitDaemon,
     _WorkerDescriptor,
     on_shutdown,
     on_start,
@@ -184,6 +186,43 @@ class TestOnStart:
         )
         assert state.publisher is not None
         assert state.vllm_backend is None
+
+
+# ---------------------------------------------------------------------------
+# _OmnimarketEmitDaemon
+# ---------------------------------------------------------------------------
+
+
+class TestOmnimarketEmitDaemon:
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_creates_file_exclusively(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+
+        await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_rejects_running_process_pid(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text(str(os.getpid()))
+
+        with pytest.raises(RuntimeError, match="Another emit daemon"):
+            await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_replaces_stale_pid(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text("not-a-pid")
+
+        await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
 
 
 # ---------------------------------------------------------------------------

@@ -125,9 +125,7 @@ class _OmnimarketEmitDaemon:
         return self._event_bus
 
     async def start(self) -> None:
-        await self._ensure_single_instance()
-        self._pid_path.parent.mkdir(parents=True, exist_ok=True)
-        self._pid_path.write_text(str(os.getpid()))
+        await self._claim_pid_file()
 
         try:
             from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
@@ -195,16 +193,38 @@ class _OmnimarketEmitDaemon:
             headers=event_headers,
         )
 
-    async def _ensure_single_instance(self) -> None:
-        if not self._pid_path.exists():
+    async def _claim_pid_file(self) -> None:
+        self._pid_path.parent.mkdir(parents=True, exist_ok=True)
+        while True:
+            try:
+                fd = os.open(
+                    self._pid_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o644,
+                )
+            except FileExistsError:
+                if self._remove_stale_pid_file():
+                    continue
+                pid = self._read_pid_file()
+                raise RuntimeError(
+                    f"Another emit daemon is already running with PID {pid}"
+                )
+
+            with os.fdopen(fd, "w") as pid_file:
+                pid_file.write(str(os.getpid()))
             return
+
+    def _remove_stale_pid_file(self) -> bool:
         try:
-            pid = int(self._pid_path.read_text().strip())
+            pid = self._read_pid_file()
             os.kill(pid, 0)
         except (ProcessLookupError, ValueError):
             self._pid_path.unlink(missing_ok=True)
-            return
-        raise RuntimeError(f"Another emit daemon is already running with PID {pid}")
+            return True
+        return False
+
+    def _read_pid_file(self) -> int:
+        return int(self._pid_path.read_text().strip())
 
 
 def _resolve_path(primary_env: str, legacy_env: str, *, default: str) -> str:
