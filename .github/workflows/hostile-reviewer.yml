@@ -33,7 +33,13 @@ jobs:
     name: Hostile Reviewer (adversarial gate)
     # self-hosted runner on .201 required — DeepSeek-R1 at :8001 is LAN-only  # onex-allow-internal-ip
     # LLM_DEEPSEEK_URL must be set in the runner's environment (Infisical or shell profile)
-    runs-on: [self-hosted, omnibase-ci]
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
     timeout-minutes: 20
 
     steps:
@@ -225,7 +231,13 @@ jobs:
 
   hostile-review-gate:
     name: Hostile Review Gate
-    runs-on: [self-hosted, omnibase-ci]
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
     needs: [hostile-review]
     if: always()
     steps:

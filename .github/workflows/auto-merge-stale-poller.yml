@@ -20,7 +20,13 @@ permissions:
 jobs:
   poll-and-enqueue:
     name: Enqueue Stale CLEAN+Armed PRs
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
+        || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
+      }}
     steps:
       - name: Enqueue stale CLEAN+armed PRs
         env:
