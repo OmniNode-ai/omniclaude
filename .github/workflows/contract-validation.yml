@@ -54,6 +54,7 @@ jobs:
         id: auth-preflight
         env:
           GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
           echo "Checking visibility of OmniNode-ai/onex_change_control..."
           if gh api repos/OmniNode-ai/onex_change_control --silent; then
@@ -70,6 +71,7 @@ jobs:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
+        working-directory: ${{ github.workspace }}
         run: |
           # merge_group events run on gh-readonly-queue/... branches with no PR head ref.
           # Contract validation is not meaningful in this context — skip immediately.
@@ -106,6 +108,7 @@ jobs:
         continue-on-error: true
         env:
           TICKET_ID: ${{ steps.validate-contract.outputs.ticket-id }}
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Proof Reference Resolution (v1) ==="
           echo "SEMANTICS: RESOLVED = reference plausibility only; not proof of test execution."
@@ -130,6 +133,7 @@ jobs:
           TICKET_ID: ${{ steps.validate-contract.outputs.ticket-id }}
           VALIDATION_STATUS: ${{ steps.validate-contract.outputs.validation-status }}
           SKIP_VALIDATION: ${{ steps.resolve-branch.outputs.skip_validation }}
+        working-directory: ${{ github.workspace }}
         run: |
           if [[ "$SKIP_VALIDATION" == "true" ]]; then
             echo "::notice::Contract validation SKIPPED — merge_group event."

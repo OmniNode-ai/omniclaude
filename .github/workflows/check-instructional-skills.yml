@@ -55,6 +55,7 @@ jobs:
         # follow-up ticket clears those so "all 15 skills pass gate green".
         # Pre-commit hook is blocking for new/edited SKILL.md files, so the
         # gate prevents NEW partial-ports immediately.
+        working-directory: ${{ github.workspace }}
         run: |
           python scripts/validation/validate_instructional_skill_routing.py \
             --skills-root plugins/onex/skills \
@@ -62,6 +63,7 @@ jobs:
 
       - name: Gate summary
         if: always()
+        working-directory: ${{ github.workspace }}
         run: |
           echo "## Instructional Skill Enforcement (OMN-8766)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

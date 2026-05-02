@@ -83,9 +83,11 @@ jobs:
           version: ${{ env.UV_VERSION }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --all-extras
 
       - name: Run ValidateSkillBackingNode unit tests
+        working-directory: ${{ github.workspace }}
         run: |
           uv run pytest \
             tests/unit/skills/_lib/test_validate_skill_backing_node.py \
@@ -96,4 +98,5 @@ jobs:
         # ambient $OMNI_HOME on self-hosted runners can never shadow it.
         env:
           OMNIMARKET_ROOT: _omnimarket
+        working-directory: ${{ github.workspace }}
         run: uv run python plugins/onex/skills/_lib/validate_skill_backing_node.py .

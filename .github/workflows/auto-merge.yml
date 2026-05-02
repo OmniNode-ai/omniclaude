@@ -62,6 +62,7 @@ jobs:
           PR_FROM_DISPATCH: ${{ github.event.inputs.pr_number }}
           CHECK_SUITE_PRS: ${{ toJson(github.event.check_suite.pull_requests) }}
           PR_AUTHOR_FROM_PAYLOAD: ${{ github.event.pull_request.user.login }}
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           case "$EVENT_NAME" in
@@ -109,6 +110,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ steps.resolve.outputs.pr }}
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           if output=$(gh pr merge "$PR" --repo "$GH_REPO" --auto --squash 2>&1); then

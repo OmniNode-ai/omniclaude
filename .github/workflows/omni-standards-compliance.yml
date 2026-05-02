@@ -43,6 +43,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate omniclaude directory structure
+        working-directory: ${{ github.workspace }}
         run: |
           MISSING=0
 
@@ -83,6 +84,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate agent YAML schema_version fields
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
           CONFIGS_DIR="plugins/onex/agents/configs"
@@ -136,6 +138,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Validate CLAUDE.md exists
+        working-directory: ${{ github.workspace }}
         run: |
           if [ ! -f "CLAUDE.md" ]; then
             echo "ERROR: CLAUDE.md is required — omniclaude project instructions are missing."
@@ -144,6 +147,7 @@ jobs:
           echo "OK: CLAUDE.md found"
 
       - name: Validate hooks.json exists and is valid JSON
+        working-directory: ${{ github.workspace }}
         run: |
           HOOKS_JSON="plugins/onex/hooks/hooks.json"
 
@@ -161,6 +165,7 @@ jobs:
           echo "OK: hooks.json is valid JSON"
 
       - name: Validate hooks.json schema fields
+        working-directory: ${{ github.workspace }}
         run: |
           python3 -c "
           import json, sys
@@ -210,6 +215,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Check for forbidden legacy patterns
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
 
@@ -282,6 +288,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Enforce pr-queue claims/ and runs/ path bans
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
 
@@ -309,6 +316,7 @@ jobs:
           echo "All pr-queue path bans passed."
 
       - name: Enforce PR mutation command bans (new skills only)
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
 
@@ -370,6 +378,7 @@ jobs:
           echo "All PR mutation command bans passed."
 
       - name: Enforce git worktree add ban (new skills only)
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
 
@@ -394,6 +403,7 @@ jobs:
           fi
 
       - name: Enforce --no-gate ban (migration complete)
+        working-directory: ${{ github.workspace }}
         run: |
           ERRORS=0
 
@@ -415,6 +425,7 @@ jobs:
           fi
 
       - name: Run validate_ledger_stop_reasons.py
+        working-directory: ${{ github.workspace }}
         run: |
           python3 tests/validate_ledger_stop_reasons.py
 
@@ -445,6 +456,7 @@ jobs:
     if: always()
     steps:
       - name: Check standards results
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Omni Standards Gate ==="
           FAILED=false
@@ -487,6 +499,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Verify CI workflow naming convention
+        working-directory: ${{ github.workspace }}
         run: |
           if [ ! -f .github/workflows/ci.yml ]; then
             echo "::error::Missing .github/workflows/ci.yml"

@@ -55,10 +55,12 @@ jobs:
           token: ${{ github.token }}
 
       - name: Install onex_change_control
+        working-directory: ${{ github.workspace }}
         run: |
           cd _onex_change_control
           uv pip install --system .
 
       - name: Validate agent configs
+        working-directory: ${{ github.workspace }}
         run: |
           validate-agent-yaml plugins/onex/agents/configs/*.yaml

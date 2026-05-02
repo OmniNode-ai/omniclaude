@@ -36,12 +36,14 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Assert clean working tree
+        working-directory: ${{ github.workspace }}
         run: |
           git diff --exit-code
           git diff --cached --exit-code
           test -z "$(git ls-files --others --exclude-standard)"
 
       - name: Validate tag matches pyproject.toml version
+        working-directory: ${{ github.workspace }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
@@ -69,9 +71,11 @@ jobs:
           python-version: '3.12'
 
       - name: Build wheel + sdist
+        working-directory: ${{ github.workspace }}
         run: uv build
 
       - name: Verify dist artifacts exist
+        working-directory: ${{ github.workspace }}
         run: |
           ls -la dist/
           ls dist/*.whl dist/*.tar.gz >/dev/null 2>&1 || {
@@ -80,16 +84,19 @@ jobs:
           }
 
       - name: Publish to PyPI
+        working-directory: ${{ github.workspace }}
         run: |
           uv publish --token "$UV_PUBLISH_TOKEN" dist/*.whl dist/*.tar.gz
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
       - name: Generate checksums
+        working-directory: ${{ github.workspace }}
         run: sha256sum dist/*.whl dist/*.tar.gz > dist/SHA256SUMS.txt
 
       - name: Set release tag
         id: tag
+        working-directory: ${{ github.workspace }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
@@ -125,10 +132,12 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Assert clean working tree
+        working-directory: ${{ github.workspace }}
         run: git diff --exit-code
 
       - name: Set version
         id: ver
+        working-directory: ${{ github.workspace }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ inputs.tag }}" | sed 's/version=v/version=/' >> $GITHUB_OUTPUT
@@ -137,6 +146,7 @@ jobs:
           fi
 
       - name: Package plugin artifact
+        working-directory: ${{ github.workspace }}
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
           TMPDIR=$(mktemp -d)
@@ -192,6 +202,7 @@ jobs:
         id: token_check
         env:
           CROSS_REPO_PAT: ${{ secrets.CROSS_REPO_PAT }}
+        working-directory: ${{ github.workspace }}
         run: |
           if [ -z "$CROSS_REPO_PAT" ]; then
             echo "::warning::CROSS_REPO_PAT secret is not set. Skipping cross-repo dispatch." \

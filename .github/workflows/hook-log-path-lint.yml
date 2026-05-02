@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Check hook scripts do not derive state paths from plugin tree
+        working-directory: ${{ github.workspace }}
         run: |
           # All scripts must be fully migrated to ONEX_STATE_DIR. Zero violations allowed.
           # Pattern matches any state/log path assignment or redirection targeting plugin source dirs.

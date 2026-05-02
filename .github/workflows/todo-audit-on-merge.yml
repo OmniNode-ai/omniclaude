@@ -49,6 +49,7 @@ jobs:
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
           echo "Branch: $BRANCH"
 
@@ -80,6 +81,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 

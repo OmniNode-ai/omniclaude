@@ -32,6 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 

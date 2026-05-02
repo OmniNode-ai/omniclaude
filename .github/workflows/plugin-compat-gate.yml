@@ -48,6 +48,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Assert plugin-compat.yaml exists
+        working-directory: ${{ github.workspace }}
         run: |
           COMPAT_PATH="plugins/onex/plugin-compat.yaml"
           if [ ! -f "$COMPAT_PATH" ]; then
@@ -76,9 +77,11 @@ jobs:
           key: uv-plugin-compat-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen
 
       - name: Run plugin-compat.yaml schema tests
+        working-directory: ${{ github.workspace }}
         run: |
           uv run pytest plugins/onex/tests/test_plugin_compat_yaml.py -v \
             --tb=short \

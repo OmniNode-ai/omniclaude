@@ -42,6 +42,7 @@ jobs:
         env:
           IMAGE_URI: ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}
           COMMIT_SHA: ${{ github.sha }}
+        working-directory: ${{ github.workspace }}
         run: |
           docker build -f docker/Dockerfile.migrate -t "${IMAGE_URI}:${COMMIT_SHA}" -t "${IMAGE_URI}:latest" .
           docker push "${IMAGE_URI}:${COMMIT_SHA}"

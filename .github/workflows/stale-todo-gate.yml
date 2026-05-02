@@ -42,6 +42,7 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
 

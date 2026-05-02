@@ -36,6 +36,7 @@ jobs:
           path: omnibase_core
 
       - name: Verify omnibase_core checkout
+        working-directory: ${{ github.workspace }}
         run: |
           if [ ! -f omnibase_core/architecture-handshakes/check-handshake.sh ]; then
             echo "::error::Failed to checkout omnibase_core or check-handshake.sh not found."
@@ -43,4 +44,5 @@ jobs:
           fi
 
       - name: Check architecture handshake
+        working-directory: ${{ github.workspace }}
         run: bash omnibase_core/architecture-handshakes/check-handshake.sh

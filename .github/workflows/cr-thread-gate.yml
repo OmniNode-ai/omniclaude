@@ -45,6 +45,7 @@ jobs:
 
       - name: Resolve repo name
         id: resolve-repo
+        working-directory: ${{ github.workspace }}
         run: |
           REPO="${{ inputs.repo }}"
           [ -z "$REPO" ] && REPO="${{ github.repository }}"
@@ -53,6 +54,7 @@ jobs:
 
       - name: Resolve PR number
         id: resolve-pr
+        working-directory: ${{ github.workspace }}
         run: |
           PR="${{ inputs.pr-number }}"
           if [ -z "$PR" ]; then
@@ -66,6 +68,7 @@ jobs:
       - name: Check unresolved CodeRabbit threads
         env:
           GH_TOKEN: ${{ secrets.CROSS_REPO_PAT || secrets.github-token || secrets.GITHUB_TOKEN }}
+        working-directory: ${{ github.workspace }}
         run: |
           PR="${{ steps.resolve-pr.outputs.pr }}"
           if [ -z "$PR" ] || [ "$PR" = "0" ]; then

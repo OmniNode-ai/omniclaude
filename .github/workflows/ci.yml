@@ -58,15 +58,19 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Ruff format check
+        working-directory: ${{ github.workspace }}
         run: uv run ruff format --check src/ tests/
 
       - name: Ruff lint
+        working-directory: ${{ github.workspace }}
         run: uv run ruff check src/ tests/
 
       - name: Mypy type checking
+        working-directory: ${{ github.workspace }}
         run: |
           # Phase 1: Non-blocking (report errors but don't fail CI)
           # Phase 2: Fix errors and make blocking (TODO: remove || true)
@@ -159,9 +163,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Pyright
+        working-directory: ${{ github.workspace }}
         run: uv run pyright src/omniclaude
 
   check-handshake:
@@ -186,6 +192,7 @@ jobs:
           path: omnibase_core
 
       - name: Verify handshake is current
+        working-directory: ${{ github.workspace }}
         run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
 
   enum-governance:
@@ -219,9 +226,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Validate enum governance
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_enum_governance.py
 
   exports-validation:
@@ -255,9 +264,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Validate exports
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_exports.py
 
   env-var-registry:
@@ -286,6 +297,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check env var registry completeness
+        working-directory: ${{ github.workspace }}
         run: |
           echo "================================================================"
           echo "Env Var Registry: os.getenv refs vs .env.example (OMN-6263)"
@@ -328,9 +340,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Kafka import guard
+        working-directory: ${{ github.workspace }}
         run: uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
 
   migration-freeze:
@@ -351,6 +365,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check migration freeze
+        working-directory: ${{ github.workspace }}
         run: ./scripts/check_migration_freeze.sh --ci
         env:
           MIGRATION_CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
@@ -381,9 +396,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen
 
       - name: Validate ONEX naming conventions
+        working-directory: ${{ github.workspace }}
         run: |
           set -e
           NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
@@ -414,6 +431,7 @@ jobs:
           echo "All ONEX naming conventions validated"
 
       - name: Validate ONEX contracts
+        working-directory: ${{ github.workspace }}
         run: |
           set -e
           NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
@@ -429,6 +447,7 @@ jobs:
           echo "Contract validation completed"
 
       - name: Validate ONEX method signatures
+        working-directory: ${{ github.workspace }}
         run: |
           set -e
           EFFECT_FILES=$(find src/omniclaude/ -name "*_effect.py" -type f 2>/dev/null || true)
@@ -471,6 +490,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check no DB access in orchestrator/compute (static)
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_db_in_orchestrator.py
 
   arch-no-git-outside-effects:
@@ -494,6 +514,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check no git/gh subprocess calls outside effects
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_git_outside_effects.py
 
   arch-no-linear-outside-effects:
@@ -517,6 +538,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check no LinearClient outside effects
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_linear_outside_effects.py
 
   arch-no-repo-adapter-in-orchestrator:
@@ -540,6 +562,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check no repository adapter imports in orchestrator/compute
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_repo_adapter_in_orchestrator.py
 
   arch-cost-ledger-isolation:
@@ -563,6 +586,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check cost ledger isolation
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_cost_ledger_isolation.py
 
   arch-topic-naming:
@@ -586,6 +610,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check topic naming convention
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_topic_naming.py
 
   arch-omnidash-db-role:
@@ -612,12 +637,13 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 5432/tcp
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Install PostgreSQL client
+        working-directory: ${{ github.workspace }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client
@@ -625,6 +651,8 @@ jobs:
       - name: Provision omnidash_readonly role and verify permissions
         env:
           PGPASSWORD: postgres
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+        working-directory: ${{ github.workspace }}
         run: |
           set -e
 
@@ -727,6 +755,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check ModelCostLedger structure
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_cost_ledger_structure.py
 
   arch-no-direct-kafka-producer:
@@ -750,6 +779,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Check no direct Kafka producer usage
+        working-directory: ${{ github.workspace }}
         run: python3 scripts/validation/validate_no_direct_kafka_producer.py
 
   arch-no-utcnow:
@@ -784,9 +814,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Check no datetime.utcnow() usage
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_no_utcnow.py
 
   arch-no-hardcoded-ip:
@@ -821,9 +853,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Check no hardcoded internal IPs
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_no_hardcoded_ip.py
 
   # ============================================================================
@@ -861,9 +895,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: F5.1 - Validate no cmd topic uses cleanup.policy=compact
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_no_compact_cmd_topic.py
 
   arch-invariants:
@@ -880,6 +916,7 @@ jobs:
     steps:
       - name: Runner sanity check
         if: "!startsWith(runner.name, 'GitHub Actions')"
+        working-directory: ${{ github.workspace }}
         run: |
           echo "Runner: ${{ runner.name }}"
           uv --version
@@ -905,15 +942,18 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Check ONEX architectural invariants
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/check_arch_invariants.py src/
 
       - name: Validate skill-node boundary (OMN-8094)
         # Advisory until existing skills are ported to thin triggers (OMN-8088 et al.)
         # Remove continue-on-error once all skills pass: uv run python scripts/validation/validate_skill_node_boundary.py --strict
         continue-on-error: true
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_skill_node_boundary.py --skills-root plugins/onex/skills
 
   # Golden chain registry integrity (OMN-7389)
@@ -949,9 +989,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Validate golden chain registry
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/validation/validate_golden_chain_integrity.py
 
   # ============================================================================
@@ -983,9 +1025,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Export requirements
+        working-directory: ${{ github.workspace }}
         run: uv pip compile pyproject.toml -o requirements.txt
 
       - name: Bandit security scan
+        working-directory: ${{ github.workspace }}
         run: |
           pip install bandit
           # JSON report (don't fail -- just collect)
@@ -1021,9 +1065,11 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install detect-secrets
+        working-directory: ${{ github.workspace }}
         run: pip install detect-secrets
 
       - name: Scan for secrets
+        working-directory: ${{ github.workspace }}
         run: |
           # Copy baseline so we can detect new findings
           cp .secrets.baseline .secrets.baseline.bak
@@ -1094,7 +1140,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 5432/tcp
 
       redis:
         image: redis:7-alpine
@@ -1104,7 +1150,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 6379:6379
+          - 6379/tcp
 
     env:
       # Database environment variables must be available to all steps,
@@ -1123,6 +1169,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Export service ports
+        working-directory: ${{ github.workspace }}
+        run: |
+          {
+            echo "POSTGRES_PORT=${{ job.services.postgres.ports['5432'] }}"
+            echo "DATABASE_URL=postgresql://test:test@localhost:${{ job.services.postgres.ports['5432'] }}/test_db"
+            echo "TEST_PG_DSN=postgresql://test:test@localhost:${{ job.services.postgres.ports['5432'] }}/test_db"
+            echo "REDIS_URL=redis://localhost:${{ job.services.redis.ports['6379'] }}/0"
+          } >> "$GITHUB_ENV"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -1140,14 +1196,17 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: |
           uv sync --frozen --group dev
           uv pip install pytest-split pytest-cov
 
       - name: Auto-generate skill nodes
+        working-directory: ${{ github.workspace }}
         run: uv run python scripts/generate_skill_node.py --all
 
       - name: Run tests
+        working-directory: ${{ github.workspace }}
         run: |
           # Run all tests across both directories, split into 5 groups
           # Exit code 5 = no tests collected (expected for some splits)
@@ -1211,7 +1270,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 5432/tcp
 
     env:
       # Database environment variables at job level to prevent psycopg2 OS-user fallback
@@ -1223,11 +1282,22 @@ jobs:
       POSTGRES_PASSWORD: hooks_test
       POSTGRES_DATABASE: hooks_test_db
       PGPASSWORD: hooks_test
+      PGPORT: 5432
       SEMANTIC_SEARCH_URL: http://localhost:8055
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Export service ports
+        working-directory: ${{ github.workspace }}
+        run: |
+          {
+            echo "POSTGRES_PORT=${{ job.services.postgres.ports['5432'] }}"
+            echo "PGPORT=${{ job.services.postgres.ports['5432'] }}"
+            echo "DATABASE_URL=postgresql://hooks_test:hooks_test@localhost:${{ job.services.postgres.ports['5432'] }}/hooks_test_db"
+            echo "OMNICLAUDE_DB_URL=postgresql://hooks_test:hooks_test@localhost:${{ job.services.postgres.ports['5432'] }}/hooks_test_db"
+          } >> "$GITHUB_ENV"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -1246,9 +1316,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Initialize hooks database
+        working-directory: ${{ github.workspace }}
         run: |
           until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -1259,6 +1331,7 @@ jobs:
           fi
 
       - name: Run hooks tests
+        working-directory: ${{ github.workspace }}
         run: |
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
             uv run pytest tests/hooks/ -v \
@@ -1309,9 +1382,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Run agent framework tests
+        working-directory: ${{ github.workspace }}
         run: |
           AGENT_TESTS=""
           for test_file in tests/test_enhanced_router.py tests/test_quality_gates.py tests/test_performance_thresholds.py; do
@@ -1360,7 +1435,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - 5432/tcp
 
     env:
       # Database environment variables at job level to prevent psycopg2 OS-user fallback
@@ -1371,12 +1446,22 @@ jobs:
       POSTGRES_DATABASE: schema_test_db
       POSTGRES_DB: schema_test_db
       PGPASSWORD: schema_test
+      PGPORT: 5432
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Export service ports
+        working-directory: ${{ github.workspace }}
+        run: |
+          {
+            echo "POSTGRES_PORT=${{ job.services.postgres.ports['5432'] }}"
+            echo "PGPORT=${{ job.services.postgres.ports['5432'] }}"
+          } >> "$GITHUB_ENV"
+
       - name: Validate database schema
+        working-directory: ${{ github.workspace }}
         run: |
           until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -1424,6 +1509,7 @@ jobs:
         # Advisory until CI can generate DoD evidence (evidence files are local
         # artifacts not committed to the repo). Hard mode blocks every PR that
         # has a ticket ID in the branch name. Tracked: OMN-6117.
+        working-directory: ${{ github.workspace }}
         run: bash scripts/dod-pre-push-check.sh
         env:
           DOD_ENFORCEMENT: advisory
@@ -1454,6 +1540,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install coverage
+        working-directory: ${{ github.workspace }}
         run: pip install coverage[toml]
 
       - name: Download all coverage artifacts
@@ -1463,6 +1550,7 @@ jobs:
           path: coverage-files/
 
       - name: Combine coverage
+        working-directory: ${{ github.workspace }}
         run: |
           if [ ! -d "coverage-files" ]; then
             echo "No coverage files directory found"
@@ -1541,9 +1629,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --group dev
 
       - name: Validate mode metadata integrity
+        working-directory: ${{ github.workspace }}
         run: uv run pytest tests/unit/test_mode_metadata_integrity.py -v
 
   skill-hygiene:
@@ -1579,6 +1669,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Validate skill hygiene
+        working-directory: ${{ github.workspace }}
         run: python onex_change_control/scripts/validation/validate_skill_hygiene.py --skills-root plugins/onex/skills --strict
 
   # ---------------------------------------------------------------------------
@@ -1621,9 +1712,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: pip install pyyaml packaging
 
       - name: Check version pin compliance
+        working-directory: ${{ github.workspace }}
         run: python onex_change_control/standards/check_version_pins.py --repo omniclaude --root onex_change_control --repo-path .
 
   # ---------------------------------------------------------------------------
@@ -1663,9 +1756,11 @@ jobs:
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Run merge-sweep contract tests
+        working-directory: ${{ github.workspace }}
         run: uv run pytest tests/integration/skills/merge_sweep/ -v -m "unit and not integration"
 
   # ---------------------------------------------------------------------------
@@ -1707,6 +1802,7 @@ jobs:
 
       - name: Validate skill contracts
         # Initially without --strict; promote to --strict after baseline warnings are resolved
+        working-directory: ${{ github.workspace }}
         run: python onex_change_control/scripts/validation/validate_skill_contracts.py --skills-root plugins/onex/skills
 
   # ============================================================================
@@ -1742,10 +1838,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
 
       - name: Check if onex compliance command exists
         id: check-command
+        working-directory: ${{ github.workspace }}
         run: |
           if uv run onex compliance check --help >/dev/null 2>&1; then
             echo "available=true" >> "$GITHUB_OUTPUT"
@@ -1757,6 +1855,7 @@ jobs:
       - name: Run onex compliance check
         id: compliance
         if: steps.check-command.outputs.available == 'true'
+        working-directory: ${{ github.workspace }}
         run: |
           mkdir -p .onex_state/compliance
           if uv run onex compliance check --repo-root . --output .onex_state/compliance/report.yaml; then
@@ -1797,6 +1896,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Detect AI anti-patterns
+        working-directory: ${{ github.workspace }}
         run: python scripts/ci/run_aislop_sweep.py
 
   # Agent YAML contract validation (OMN-8914)
@@ -1823,10 +1923,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: uv sync --frozen
 
       - name: Validate all agent YAML contracts
         id: validator
+        working-directory: ${{ github.workspace }}
         run: |
           if bash plugins/onex/scripts/validate-all-agents.sh; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
@@ -1850,6 +1952,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Detect monorepo refs in skill files
+        working-directory: ${{ github.workspace }}
         run: bash scripts/check-skill-monorepo-refs.sh
 
   # ============================================================================
@@ -1916,6 +2019,7 @@ jobs:
     if: always()
     steps:
       - name: Check quality results
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Quality Gate ==="
           FAILED=false
@@ -1988,6 +2092,7 @@ jobs:
     if: always()
     steps:
       - name: Check test results
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Tests Gate ==="
           FAILED=false
@@ -2031,6 +2136,7 @@ jobs:
     if: always()
     steps:
       - name: Check security results
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Security Gate ==="
           FAILED=false
@@ -2142,6 +2248,7 @@ jobs:
     if: always()
     steps:
       - name: Check all jobs passed
+        working-directory: ${{ github.workspace }}
         run: |
           quality="${{ needs.quality-gate.result }}"
           tests="${{ needs.tests-gate.result }}"
@@ -2235,6 +2342,7 @@ jobs:
 
       - name: Set lowercase image name
         id: image-name
+        working-directory: ${{ github.workspace }}
         run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Export image for scanning
@@ -2295,6 +2403,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Deploy to staging
+        working-directory: ${{ github.workspace }}
         run: echo "Deploying to staging environment..."
 
   deploy-production:
@@ -2317,6 +2426,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Deploy to production
+        working-directory: ${{ github.workspace }}
         run: echo "Deploying to production environment..."
 
   ai-slop-check:
@@ -2339,6 +2449,7 @@ jobs:
           python-version: '3.12'
       - name: Compute changed Python/Markdown files vs PR base
         id: changed
+        working-directory: ${{ github.workspace }}
         run: |
           if [ -n "${{ github.base_ref }}" ]; then
             git fetch origin "${{ github.base_ref }}" --no-tags --depth=1
@@ -2348,6 +2459,7 @@ jobs:
           fi
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
       - name: Check changed files for AI-slop patterns (strict)
+        working-directory: ${{ github.workspace }}
         run: |
           FILES="${{ steps.changed.outputs.files }}"
           if [ -z "$FILES" ]; then exit 0; fi

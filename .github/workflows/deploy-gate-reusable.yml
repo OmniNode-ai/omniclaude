@@ -49,6 +49,7 @@ jobs:
 
       - name: Skip on merge_group
         if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
         run: |
           echo "::notice::deploy-gate: merge_group event — skipped (validated on PR branch)."
 

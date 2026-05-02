@@ -49,15 +49,19 @@ jobs:
           fetch-depth: 0
 
       - name: Clean stale dependency clones
+        working-directory: ${{ github.workspace }}
         run: rm -rf ../omniintelligence ../omnibase_core ../omnibase_compat
 
       - name: Clone omniintelligence
+        working-directory: ${{ github.workspace }}
         run: git clone --depth=1 https://github.com/OmniNode-ai/omniintelligence.git ../omniintelligence
 
       - name: Clone omnibase_core
+        working-directory: ${{ github.workspace }}
         run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_core.git ../omnibase_core
 
       - name: Clone omnibase_compat
+        working-directory: ${{ github.workspace }}
         run: git clone --depth=1 https://github.com/OmniNode-ai/omnibase_compat.git ../omnibase_compat
 
       - name: Install uv
@@ -66,6 +70,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python 3.12
+        working-directory: ${{ github.workspace }}
         run: uv python install 3.12
 
       - name: Install omniintelligence dependencies
@@ -242,6 +247,7 @@ jobs:
     if: always()
     steps:
       - name: Evaluate gate
+        working-directory: ${{ github.workspace }}
         run: |
           echo "=== Hostile Review Gate ==="
           RESULT="${{ needs.hostile-review.result }}"
