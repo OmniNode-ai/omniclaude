@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import threading
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -223,6 +224,51 @@ class TestOmnimarketEmitDaemon:
         await daemon._claim_pid_file()
 
         assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_retries_when_pid_file_disappears(
+        self, tmp_path, monkeypatch
+    ):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        original_open = os.open
+        calls = 0
+
+        def flaky_open(path, flags, mode=0o777):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise FileExistsError
+            return original_open(path, flags, mode)
+
+        monkeypatch.setattr(os, "open", flaky_open)
+        daemon._remove_stale_pid_file = MagicMock(side_effect=FileNotFoundError)
+
+        await daemon._claim_pid_file()
+
+        assert calls == 2
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_stop_releases_pid_file_when_shutdown_step_fails(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text(str(os.getpid()))
+        daemon._config = SimpleNamespace(shutdown_drain_seconds=1)
+        daemon._server = MagicMock(stop=AsyncMock(side_effect=RuntimeError("stop")))
+        daemon._publisher_loop = MagicMock(stop=AsyncMock())
+        daemon._queue = MagicMock(drain_to_spool=AsyncMock())
+        event_bus = MagicMock(close=AsyncMock())
+        daemon._event_bus = event_bus
+
+        with pytest.raises(RuntimeError, match="stop"):
+            await daemon.stop()
+
+        daemon._publisher_loop.stop.assert_awaited_once_with(drain_timeout=1)
+        daemon._queue.drain_to_spool.assert_awaited_once()
+        event_bus.close.assert_awaited_once()
+        assert daemon._event_bus is None
+        assert not daemon._pid_path.exists()
 
 
 # ---------------------------------------------------------------------------

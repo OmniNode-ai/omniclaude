@@ -149,15 +149,36 @@ class _OmnimarketEmitDaemon:
             raise
 
     async def stop(self) -> None:
-        await self._server.stop()
-        await self._publisher_loop.stop(
-            drain_timeout=self._config.shutdown_drain_seconds
-        )
-        await self._queue.drain_to_spool()
-        if self._event_bus is not None and hasattr(self._event_bus, "close"):
-            await self._event_bus.close()
-        self._event_bus = None
-        self._pid_path.unlink(missing_ok=True)
+        errors: list[Exception] = []
+
+        try:
+            await self._server.stop()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+        try:
+            await self._publisher_loop.stop(
+                drain_timeout=self._config.shutdown_drain_seconds
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+        try:
+            await self._queue.drain_to_spool()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+        try:
+            if self._event_bus is not None and hasattr(self._event_bus, "close"):
+                await self._event_bus.close()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+        finally:
+            self._event_bus = None
+            self._pid_path.unlink(missing_ok=True)
+
+        if errors:
+            raise errors[0]
 
     async def _publish_to_kafka(
         self,
@@ -203,9 +224,12 @@ class _OmnimarketEmitDaemon:
                     0o644,
                 )
             except FileExistsError:
-                if self._remove_stale_pid_file():
+                try:
+                    if self._remove_stale_pid_file():
+                        continue
+                    pid = self._read_pid_file()
+                except FileNotFoundError:
                     continue
-                pid = self._read_pid_file()
                 raise RuntimeError(
                     f"Another emit daemon is already running with PID {pid}"
                 )
@@ -218,6 +242,8 @@ class _OmnimarketEmitDaemon:
         try:
             pid = self._read_pid_file()
             os.kill(pid, 0)
+        except FileNotFoundError:
+            return True
         except (ProcessLookupError, ValueError):
             self._pid_path.unlink(missing_ok=True)
             return True

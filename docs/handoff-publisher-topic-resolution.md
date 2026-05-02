@@ -10,8 +10,8 @@
 
 ### 1. Emit Daemon Routing Uses Local Contracts
 - The runtime lifecycle starts the omnimarket emit daemon wrapper instead of `omniclaude.publisher`
-- Uses local `event_registry.py` for fan-out rules, validation, partition keys
-- The emit daemon normalizes correlation_id, causation_id, emitted_at, and schema_version metadata
+- `lifecycle.py` loads the local contract from `plugins/onex/lib/event_registry/omniclaude.yaml`
+- The emit daemon wrapper normalizes `correlation_id` and `timestamp` metadata before publishing
 - Fan-out support: one event type can publish to multiple topics with payload transforms (e.g., `prompt.submitted` -> intelligence topic + sanitized observability topic)
 
 ### 2. Topics Are Bare ONEX Suffixes
@@ -21,7 +21,7 @@
 - `build_full_topic(env, namespace, suffix)` in omnibase_infra is dead code with zero production callers
 
 ### 3. Six Missing Event Registrations Added
-Added to `src/omniclaude/hooks/event_registry.py`:
+Added to `plugins/onex/lib/event_registry/omniclaude.yaml`:
 - `context.utilization` -> `onex.evt.omniclaude.context-utilization.v1`
 - `agent.match` -> `onex.evt.omniclaude.agent-match.v1`
 - `latency.breakdown` -> `onex.evt.omniclaude.latency-breakdown.v1`
@@ -40,7 +40,7 @@ Three new TopicBase entries added to `src/omniclaude/hooks/topics.py`:
 | File | Change |
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries |
-| `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total) |
+| `plugins/onex/lib/event_registry/omniclaude.yaml` | Local emit daemon contract source |
 | `src/omniclaude/runtime/lifecycle.py` | Starts the omnimarket emit daemon wrapper and publishes through `EventBusKafka` |
 | `tests/runtime/test_lifecycle.py` and `tests/scripts/test_omnimarket_launcher.py` | Cover runtime lifecycle and launcher cutover behavior |
 
@@ -98,7 +98,7 @@ The `_register_defaults()` method hardcodes 12 omniclaude-specific event types. 
 - False source-of-truth confusion
 - Coupling between platform infra and application semantics
 
-**Resolution**: Remove `_register_defaults()` from infra's EventRegistry. Make EventRegistry a generic class that apps populate. The omniclaude event catalog lives only in `omniclaude4/src/omniclaude/hooks/event_registry.py`.
+**Resolution**: Remove `_register_defaults()` from infra's EventRegistry. Make EventRegistry a generic class that apps populate. The omniclaude emit-daemon contract lives only in `plugins/onex/lib/event_registry/omniclaude.yaml`.
 
 ## How to Verify Current State
 
@@ -134,7 +134,7 @@ print(f'Wire topic: {topic}')
 
 ### Tests pass
 ```bash
-.venv/bin/pytest tests/ -v -k "event_registry or topic" --tb=short
+.venv/bin/pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
 ```
 
 ## Related Tickets
