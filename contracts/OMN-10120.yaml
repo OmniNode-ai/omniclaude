@@ -42,4 +42,4 @@ dod_evidence:
     source: manual
     checks:
       - check_type: command
-        check_value: "uv run pytest tests/runtime/test_lifecycle.py tests/runtime/test_plugin_claude.py tests/scripts/test_emit_daemon_cutover_static.py tests/scripts/test_omnimarket_launcher.py -q"
+        check_value: "echo 'deploy validation required after merge' && uv run pytest tests/runtime/test_lifecycle.py tests/runtime/test_plugin_claude.py tests/scripts/test_emit_daemon_cutover_static.py tests/scripts/test_omnimarket_launcher.py -q"
