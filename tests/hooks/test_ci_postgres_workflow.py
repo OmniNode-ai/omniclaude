@@ -134,6 +134,15 @@ def test_init_db_tracks_migrations_in_public_schema() -> None:
     assert "INSERT INTO public.schema_migrations" in script
 
 
+def test_init_db_passes_configured_postgres_port_to_psql() -> None:
+    script = INIT_DB_SCRIPT.read_text(encoding="utf-8")
+
+    assert "PSQL_ARGS=(--username" in script
+    assert 'PSQL_ARGS+=(--port "$POSTGRES_PORT")' in script
+    assert 'PSQL_ARGS+=(--port "$PGPORT")' in script
+    assert '"${PSQL_ARGS[@]}"' in script
+
+
 @pytest.mark.parametrize(
     "workflow_path",
     [
