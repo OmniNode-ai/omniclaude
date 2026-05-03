@@ -24,10 +24,24 @@ fi
 
 cd "$HOME" 2>/dev/null || cd /tmp || true
 
-_SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
-    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
-SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+if ! _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
+    || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"; then
+    _OMNICLAUDE_PASSTHROUGH=$(cat)
+    echo "$_OMNICLAUDE_PASSTHROUGH"
+    exit 0
+fi
+if ! SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"; then
+    _OMNICLAUDE_PASSTHROUGH=$(cat)
+    echo "$_OMNICLAUDE_PASSTHROUGH"
+    exit 0
+fi
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" ]]; then
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+elif ! PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"; then
+    _OMNICLAUDE_PASSTHROUGH=$(cat)
+    echo "$_OMNICLAUDE_PASSTHROUGH"
+    exit 0
+fi
 unset _SELF
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
@@ -43,14 +57,24 @@ LOG_FILE="${ONEX_HOOK_LOG}"
 HOOK_BITS_PATH="${HOOKS_LIB}/hook_bits.sh"
 if [[ -f "$HOOK_BITS_PATH" ]]; then
     # shellcheck source=../lib/hook_bits.sh
-    source "$HOOK_BITS_PATH"
+    if ! source "$HOOK_BITS_PATH"; then
+        echo "$TOOL_INFO"
+        exit 0
+    fi
     TASK_BOUNDARY_BIT="$(hook_bits_bit_for_name TASK_BOUNDARY_TESTS 2>/dev/null || true)"
     if [[ -n "$TASK_BOUNDARY_BIT" ]]; then
         if [[ -z "${ONEX_HOOKS_MASK:-}" ]]; then
             echo "$TOOL_INFO"
             exit 0
         fi
-        TASK_BOUNDARY_MASK="$(hook_bits_parse_mask "$ONEX_HOOKS_MASK")"
+        if ! TASK_BOUNDARY_MASK="$(hook_bits_parse_mask "$ONEX_HOOKS_MASK" 2>/dev/null)"; then
+            echo "$TOOL_INFO"
+            exit 0
+        fi
+        if [[ -z "$TASK_BOUNDARY_MASK" ]]; then
+            echo "$TOOL_INFO"
+            exit 0
+        fi
         if ! hook_bits_is_enabled "$TASK_BOUNDARY_MASK" "$TASK_BOUNDARY_BIT"; then
             echo "$TOOL_INFO"
             exit 0
@@ -116,11 +140,19 @@ fi
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Task-boundary tests triggered" >> "$LOG_FILE"
 
+RUNNER="${HOOKS_LIB}/task_boundary_tests.py"
+if [[ ! -r "$RUNNER" ]]; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: runner missing/unreadable, failing open" >> "$LOG_FILE"
+    echo "$TOOL_INFO"
+    exit 0
+fi
+
 set +e
 RESULT=$(echo "$TOOL_INFO" | \
-    env -u PYTHONPATH "$PYTHON_CMD" "${HOOKS_LIB}/task_boundary_tests.py" 2>>"$LOG_FILE")
+    env -u PYTHONPATH "$PYTHON_CMD" "$RUNNER" 2>>"$LOG_FILE")
 EXIT_CODE=$?
 set -e
+unset RUNNER
 
 if [ $EXIT_CODE -eq 0 ]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Task-boundary tests PASSED" >> "$LOG_FILE"

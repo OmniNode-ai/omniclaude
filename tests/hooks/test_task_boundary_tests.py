@@ -437,3 +437,57 @@ class TestShellHook:
 
         assert result.returncode == 0
         assert json.loads(result.stdout) == payload
+
+    def test_shell_hook_fails_open_when_hook_bits_source_fails(
+        self, tmp_path: Path
+    ) -> None:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        fake_plugin = tmp_path / "plugin"
+        (fake_plugin / "hooks" / "lib").mkdir(parents=True)
+        (fake_plugin / "hooks" / "lib" / "hook_bits.sh").write_text("return 1\n")
+        result = self._run_shell_hook(
+            {
+                "CLAUDE_PLUGIN_ROOT": str(fake_plugin),
+                "ONEX_HOOKS_MASK": "0x400000000000000",
+                "ONEX_STATE_DIR": str(tmp_path / "state"),
+            }
+        )
+
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == payload
+
+    def test_shell_hook_fails_open_when_runner_missing(self, tmp_path: Path) -> None:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        fake_plugin = tmp_path / "plugin"
+        (fake_plugin / "hooks" / "lib").mkdir(parents=True)
+        (fake_plugin / "hooks" / "scripts").mkdir(parents=True)
+        (fake_plugin / "hooks" / "lib" / "hook_bits.sh").write_text(
+            "\n".join(
+                [
+                    "HOOK_BITS_DEFAULT_MASK=0x0",
+                    "hook_bits_bit_for_name() { echo 0x400000000000000; }",
+                    'hook_bits_parse_mask() { echo "$1"; }',
+                    "hook_bits_is_enabled() { return 0; }",
+                    "",
+                ]
+            )
+        )
+        (fake_plugin / "hooks" / "scripts" / "common.sh").write_text(
+            "PYTHON_CMD=/usr/bin/python3\nexport PYTHON_CMD\n"
+        )
+        result = self._run_shell_hook(
+            {
+                "CLAUDE_PLUGIN_ROOT": str(fake_plugin),
+                "ONEX_HOOKS_MASK": "0x400000000000000",
+                "ONEX_STATE_DIR": str(tmp_path / "state"),
+            }
+        )
+
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == payload
