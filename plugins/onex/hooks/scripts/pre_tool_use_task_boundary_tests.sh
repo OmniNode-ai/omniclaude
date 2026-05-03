@@ -78,7 +78,18 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-source "${HOOKS_DIR}/scripts/common.sh"
+COMMON_SH="${HOOKS_DIR}/scripts/common.sh"
+if [[ ! -f "$COMMON_SH" ]]; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: common.sh missing; failing open" >> "$LOG_FILE"
+    echo "$TOOL_INFO"
+    exit 0
+fi
+if ! source "$COMMON_SH"; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: failed to source common.sh; failing open" >> "$LOG_FILE"
+    echo "$TOOL_INFO"
+    exit 0
+fi
+unset COMMON_SH
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>>"$LOG_FILE"); then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"
     echo "$TOOL_INFO"

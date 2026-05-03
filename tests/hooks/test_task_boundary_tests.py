@@ -417,3 +417,23 @@ class TestShellHook:
 
         assert result.returncode == 0
         assert json.loads(result.stdout) == payload
+
+    def test_shell_hook_fails_open_when_common_script_missing(
+        self, tmp_path: Path
+    ) -> None:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        fake_plugin = tmp_path / "plugin"
+        (fake_plugin / "hooks" / "lib").mkdir(parents=True)
+        result = self._run_shell_hook(
+            {
+                "CLAUDE_PLUGIN_ROOT": str(fake_plugin),
+                "ONEX_HOOKS_MASK": "0x400000000000000",
+                "ONEX_STATE_DIR": str(tmp_path / "state"),
+            }
+        )
+
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == payload
