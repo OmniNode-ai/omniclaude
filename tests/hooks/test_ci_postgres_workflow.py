@@ -15,6 +15,10 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+ONEX_SCHEMA_COMPAT_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "onex-schema-compat.yml"
+)
+PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-gate.yml"
 
 
 @pytest.fixture(scope="module")
@@ -78,3 +82,30 @@ def test_postgres_service_jobs_use_bounded_mapped_port_waits(
     assert "for attempt in {1..30}" in run
     assert 'psql -h localhost -p "$PGPORT"' in run
     assert "Waiting for PostgreSQL on localhost:${PGPORT}" in run
+
+
+@pytest.mark.parametrize(
+    "workflow_path",
+    [WORKFLOW_PATH, ONEX_SCHEMA_COMPAT_WORKFLOW, PLUGIN_COMPAT_WORKFLOW],
+)
+def test_cache_restore_steps_are_disabled_for_ci_timeout_resilience(
+    workflow_path: Path,
+) -> None:
+    loaded = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    jobs = loaded.get("jobs")
+    assert isinstance(jobs, dict)
+
+    cache_steps = []
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []):
+            if isinstance(step, dict) and str(step.get("uses", "")).startswith(
+                "actions/cache"
+            ):
+                cache_steps.append(step)
+
+    assert cache_steps
+    for step in cache_steps:
+        assert step.get("if") == "${{ false }}"

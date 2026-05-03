@@ -53,7 +53,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -158,7 +159,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -221,7 +223,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -259,7 +262,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -335,7 +339,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -358,7 +363,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -836,7 +841,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -875,7 +881,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -917,7 +924,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -964,6 +972,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv (restore-only to avoid post-job upload timeout)
+        if: ${{ false }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1011,7 +1020,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1223,7 +1233,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1343,7 +1354,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1414,7 +1426,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1666,7 +1679,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -1730,7 +1744,7 @@ jobs:
         && fromJSON(vars.OMNI_PUBLIC_PR_RUNS_ON_JSON || '["ubuntu-latest"]')
         || fromJSON(vars.OMNI_TRUSTED_CI_RUNS_ON_JSON || '["self-hosted","omnibase-ci"]')
       }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     # Advisory until range pin support (OMN-5132) and matrix alignment land
     continue-on-error: true
 
@@ -1793,7 +1807,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        uses: actions/cache@v5
+        if: ${{ false }}
+        uses: actions/cache/restore@v5
         with:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
