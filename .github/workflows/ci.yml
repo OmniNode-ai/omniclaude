@@ -747,22 +747,28 @@ jobs:
             "SELECT * FROM public.ci_permission_test;" > /dev/null && echo "SELECT: OK"
 
           # Verify INSERT is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "INSERT INTO public.ci_permission_test (data) VALUES ('should_fail');" 2>&1 \
-            | grep -q "permission denied" && echo "INSERT denied: OK" \
-            || (echo "FAIL: INSERT should be denied for omnidash_readonly" && exit 1)
+          if PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
+            "INSERT INTO public.ci_permission_test (data) VALUES ('should_fail');" > /tmp/omnidash_readonly_insert.out 2>&1; then
+            echo "FAIL: INSERT should be denied for omnidash_readonly"
+            exit 1
+          fi
+          grep -q "permission denied" /tmp/omnidash_readonly_insert.out && echo "INSERT denied: OK"
 
           # Verify UPDATE is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "UPDATE public.ci_permission_test SET data = 'should_fail';" 2>&1 \
-            | grep -q "permission denied" && echo "UPDATE denied: OK" \
-            || (echo "FAIL: UPDATE should be denied for omnidash_readonly" && exit 1)
+          if PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
+            "UPDATE public.ci_permission_test SET data = 'should_fail';" > /tmp/omnidash_readonly_update.out 2>&1; then
+            echo "FAIL: UPDATE should be denied for omnidash_readonly"
+            exit 1
+          fi
+          grep -q "permission denied" /tmp/omnidash_readonly_update.out && echo "UPDATE denied: OK"
 
           # Verify DELETE is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "DELETE FROM public.ci_permission_test;" 2>&1 \
-            | grep -q "permission denied" && echo "DELETE denied: OK" \
-            || (echo "FAIL: DELETE should be denied for omnidash_readonly" && exit 1)
+          if PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
+            "DELETE FROM public.ci_permission_test;" > /tmp/omnidash_readonly_delete.out 2>&1; then
+            echo "FAIL: DELETE should be denied for omnidash_readonly"
+            exit 1
+          fi
+          grep -q "permission denied" /tmp/omnidash_readonly_delete.out && echo "DELETE denied: OK"
 
           echo "omnidash_readonly role: SELECT-only permissions verified"
 

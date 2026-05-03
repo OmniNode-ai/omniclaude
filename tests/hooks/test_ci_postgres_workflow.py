@@ -82,6 +82,9 @@ def test_omnidash_role_check_uses_mapped_postgres_port(
     assert "DROP TABLE IF EXISTS public.ci_permission_test" in provision_step["run"]
     assert "GRANT SELECT ON public.ci_permission_test" in provision_step["run"]
     assert "SELECT to_regclass('public.ci_permission_test')" in provision_step["run"]
+    assert "> /tmp/omnidash_readonly_insert.out 2>&1" in provision_step["run"]
+    assert "> /tmp/omnidash_readonly_update.out 2>&1" in provision_step["run"]
+    assert "> /tmp/omnidash_readonly_delete.out 2>&1" in provision_step["run"]
 
 
 @pytest.mark.parametrize(
