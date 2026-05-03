@@ -77,10 +77,11 @@ export EMIT_DAEMON_PID_FILE
 #
 # Priority:
 #   1. PLUGIN_PYTHON_BIN env var (explicit override / escape hatch)
-#   2. Repo main venv at PLUGIN_ROOT/../../.venv (OMN-7310: use repo venv, not plugin lib venv)
-#   2.5. ONEX_REGISTRY_ROOT/omniclaude/.venv (plugin cache path can't resolve repo venv)
-#   3. OMNICLAUDE_PROJECT_ROOT/.venv (explicit dev mode, no heuristics)
-#   4. Hard failure with actionable error message
+#   2. CLAUDE_PLUGIN_DATA/.venv (OMN-10500: built by ensure-plugin-venv.sh, survives plugin updates)
+#   2.5. Repo main venv at PLUGIN_ROOT/../../.venv (OMN-7310: only works from source, not cache)
+#   3. ONEX_REGISTRY_ROOT/omniclaude/.venv (plugin cache path can't resolve repo venv)
+#   4. OMNICLAUDE_PROJECT_ROOT/.venv (explicit dev mode, no heuristics)
+#   5. Hard failure with actionable error message
 
 find_python() {
     # 1. Explicit override (escape hatch for custom environments)
@@ -89,7 +90,13 @@ find_python() {
         return
     fi
 
-    # 2. Repo main venv (OMN-7310: plugin lives at plugins/onex/, repo root is ../..)
+    # 2. Plugin data venv (CLAUDE_PLUGIN_DATA — survives plugin updates, built by ensure-plugin-venv.sh)
+    if [[ -n "${CLAUDE_PLUGIN_DATA:-}" && -x "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3" ]]; then
+        echo "${CLAUDE_PLUGIN_DATA}/.venv/bin/python3"
+        return
+    fi
+
+    # 2.5. Repo main venv (OMN-7310: plugin lives at plugins/onex/, repo root is ../..)
     local repo_root
     repo_root="$(cd "${PLUGIN_ROOT}/../.." 2>/dev/null && pwd)"
     if [[ -n "$repo_root" && -f "${repo_root}/.venv/bin/python3" && -x "${repo_root}/.venv/bin/python3" ]]; then

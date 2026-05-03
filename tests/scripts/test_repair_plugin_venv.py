@@ -1,39 +1,44 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-import re
 from pathlib import Path
 
 
-def test_repair_script_pins_brew_python_313():
+def test_repair_script_delegates_to_session_start_builder():
     script = Path("scripts/repair-plugin-venv.sh").read_text()
-    assert "/opt/homebrew/bin/python3.13" in script, (
-        "repair-plugin-venv.sh must pin /opt/homebrew/bin/python3.13 (per macOS LAN grant policy)"
+    assert "ensure-plugin-venv.sh" in script, (
+        "repair-plugin-venv.sh must delegate venv creation to the SessionStart builder"
     )
-    assert (
-        "uv venv --python /opt/homebrew/bin/python3.13" in script
-        or 'uv venv --python "$BREW_PYTHON"' in script
-        or "uv venv --python ${BREW_PYTHON}" in script
-    ), "venv creation must use --python /opt/homebrew/bin/python3.13"
+    assert "uv venv" not in script, (
+        "repair-plugin-venv.sh must not duplicate venv construction logic"
+    )
 
 
-def test_repair_script_handles_hollow_dir():
+def test_repair_script_forces_rebuild_by_clearing_marker():
     script = Path("scripts/repair-plugin-venv.sh").read_text()
-    assert "rm -rf" in script and ".venv" in script, (
-        "script must rm -rf hollow .venv before recreating (uv refuses to rebuild over empty dir)"
-    )
-    assert '[[ -e "${LIB_DIR}/.venv" || -L "${LIB_DIR}/.venv" ]]' in script, (
-        "script must remove stale .venv paths even when they are regular files or dangling symlinks"
+    assert 'VENV_DIR="${CLAUDE_PLUGIN_DATA}/.venv"' in script
+    assert 'rm -f "${VENV_DIR}/.built-from"' in script, (
+        "repair-plugin-venv.sh must clear the marker so ensure-plugin-venv.sh rebuilds"
     )
 
 
-def test_repair_script_fails_fast_if_python_missing():
-    script = Path("scripts/repair-plugin-venv.sh").read_text()
-    assert "BREW_PYTHON" in script, "script must define BREW_PYTHON variable"
-    has_guard_exit = re.search(
-        r'if\s+\[\[\s*!\s+-x\s+"\$BREW_PYTHON"\s*\]\];\s*then(?s:.*?)\bexit\s+1\b',
-        script,
+def test_session_start_builder_owns_python_pin_and_cleanup():
+    script = Path("plugins/onex/hooks/scripts/ensure-plugin-venv.sh").read_text()
+    assert 'BREW_PY="/opt/homebrew/bin/python3.13"' in script, (
+        "ensure-plugin-venv.sh must pin /opt/homebrew/bin/python3.13"
     )
-    assert has_guard_exit, (
-        "script must fail fast with exit 1 when BREW_PYTHON is missing"
+    assert 'uv venv --python "$BREW_PY"' in script, (
+        "venv creation must use the pinned Homebrew Python"
+    )
+    assert 'rm -rf "$VENV_DIR"' in script, (
+        "ensure-plugin-venv.sh must remove stale or hollow .venv before recreating"
+    )
+
+
+def test_session_start_builder_fails_fast_if_python_missing():
+    script = Path("plugins/onex/hooks/scripts/ensure-plugin-venv.sh").read_text()
+    assert '[[ ! -x "$BREW_PY" ]]' in script
+    assert "brew install python@3.13" in script
+    assert "exit 1" in script, (
+        "ensure-plugin-venv.sh must fail fast when the pinned Python is missing"
     )
