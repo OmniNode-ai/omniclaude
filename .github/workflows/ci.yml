@@ -696,29 +696,30 @@ jobs:
           psql -h localhost -p "$PGPORT" -U postgres -c '\q'
 
           # Provision omnidash_readonly role
-          if ! psql -h localhost -p "$PGPORT" -U postgres -tAc \
+          if ! psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -tAc \
             "SELECT 1 FROM pg_database WHERE datname = 'omnidash_analytics'" \
             | grep -q '^1$'; then
-            psql -h localhost -p "$PGPORT" -U postgres -c \
+            psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -c \
               "CREATE DATABASE omnidash_analytics"
           fi
 
-          psql -h localhost -p "$PGPORT" -U postgres <<'SQL'
-            -- Create omnidash_readonly role if it doesn't exist
-            DO $$
-            BEGIN
-              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'omnidash_readonly') THEN
-                CREATE ROLE omnidash_readonly WITH LOGIN PASSWORD 'readonly_ci_test';
-              END IF;
-            END
-            $$;
+          if ! psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -tAc \
+            "SELECT 1 FROM pg_roles WHERE rolname = 'omnidash_readonly'" \
+            | grep -q '^1$'; then
+            psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -c \
+              "CREATE ROLE omnidash_readonly WITH LOGIN PASSWORD 'readonly_ci_test'"
+          fi
 
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -c \
+            "ALTER ROLE omnidash_readonly WITH LOGIN PASSWORD 'readonly_ci_test'"
+
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres <<'SQL'
             -- Grant SELECT-only on omnidash_analytics
             GRANT CONNECT ON DATABASE omnidash_analytics TO omnidash_readonly;
           SQL
 
           # Connect to omnidash_analytics and set up schema permissions
-          psql -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
             -- Grant usage on public schema
             GRANT USAGE ON SCHEMA public TO omnidash_readonly;
             -- Grant SELECT on all current tables
@@ -731,7 +732,7 @@ jobs:
 
           # Verify: omnidash_readonly has SELECT but NOT INSERT/UPDATE/DELETE
           # Test using pg_roles and information_schema
-          psql -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
             -- Create a test table to verify permissions
             CREATE TABLE IF NOT EXISTS ci_permission_test (id serial PRIMARY KEY, data text);
             INSERT INTO ci_permission_test (data) VALUES ('ci_test_row');
@@ -1586,19 +1587,19 @@ jobs:
           bash scripts/init-db.sh
 
           echo "Validating schema_migrations table..."
-          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d schema_migrations'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.schema_migrations'
 
           echo "Validating claude_session_snapshots table..."
-          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_snapshots'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_snapshots'
 
           echo "Validating claude_session_prompts table..."
-          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_prompts'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_prompts'
 
           echo "Validating claude_session_tools table..."
-          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_tools'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_tools'
 
           echo "Validating indexes..."
-          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\di'
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\di'
 
           echo "Database schema validation passed"
 

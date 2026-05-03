@@ -72,8 +72,12 @@ def test_omnidash_role_check_uses_mapped_postgres_port(
     assert provision_env.get("PGPORT") == "${{ job.services.postgres.ports['5432'] }}"
     assert "for attempt in {1..30}" in provision_step["run"]
     assert 'psql -h localhost -p "$PGPORT"' in provision_step["run"]
+    assert "psql -v ON_ERROR_STOP=1" in provision_step["run"]
     assert "\\gexec" not in provision_step["run"]
+    assert "DO $$" not in provision_step["run"]
     assert "CREATE DATABASE omnidash_analytics" in provision_step["run"]
+    assert "CREATE ROLE omnidash_readonly" in provision_step["run"]
+    assert "ALTER ROLE omnidash_readonly" in provision_step["run"]
 
 
 @pytest.mark.parametrize(
@@ -141,6 +145,21 @@ def test_init_db_passes_configured_postgres_port_to_psql() -> None:
     assert 'PSQL_ARGS+=(--port "$POSTGRES_PORT")' in script
     assert 'PSQL_ARGS+=(--port "$PGPORT")' in script
     assert '"${PSQL_ARGS[@]}"' in script
+
+
+def test_database_validation_uses_public_schema_qualified_tables(
+    ci_workflow: dict[str, Any],
+) -> None:
+    step = _step(_job(ci_workflow, "database-validation"), "Validate database schema")
+    run = step["run"]
+
+    assert "\\d public.schema_migrations" in run
+    assert "\\d public.claude_session_snapshots" in run
+    assert "\\d public.claude_session_prompts" in run
+    assert "\\d public.claude_session_tools" in run
+    assert "psql -v ON_ERROR_STOP=1" in run
+    assert "\\d schema_migrations" not in run
+    assert "\\d claude_session_snapshots" not in run
 
 
 @pytest.mark.parametrize(
