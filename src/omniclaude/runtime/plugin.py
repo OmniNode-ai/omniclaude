@@ -99,11 +99,11 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Start the EmbeddedEventPublisher via lifecycle.on_start().
+        """Start the omnimarket emit daemon via lifecycle.on_start().
 
-        Creates a ``PublisherConfig`` (reads ``OMNICLAUDE_PUBLISHER_*`` from
-        env) and starts the publisher.  On failure the half-initialised
-        resources are cleaned up and a ``.failed()`` result is returned.
+        Creates the runtime-managed daemon wrapper and starts the socket
+        server/publisher loop. On failure the half-initialised resources are
+        cleaned up and a ``.failed()`` result is returned.
         """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
@@ -129,9 +129,9 @@ class PluginClaude:
         return ModelDomainPluginResult(
             plugin_id=_PLUGIN_ID,
             success=True,
-            message="EmbeddedEventPublisher started",
+            message="Emit daemon started",
             resources_created=[
-                "embedded-event-publisher",
+                "omnimarket-emit-daemon",
                 "kafka-connection",
             ],
         )
@@ -345,12 +345,12 @@ class PluginClaude:
 
         # Determine message based on whether publisher was stopped
         publisher_diags = [
-            d for d in diagnostics if d.component == "EmbeddedEventPublisher"
+            d for d in diagnostics if d.component == "OmnimarketEmitDaemon"
         ]
         if publisher_diags:
             return ModelDomainPluginResult.succeeded(
                 plugin_id=_PLUGIN_ID,
-                message="Publisher stopped",
+                message="Emit daemon stopped",
             )
 
         return ModelDomainPluginResult.succeeded(
@@ -366,7 +366,7 @@ class PluginClaude:
         """Return human-readable status for diagnostics."""
         if self._state.publisher is None:
             return "disabled"
-        return "enabled (Publisher + Kafka)"
+        return "enabled (Emit daemon + Kafka)"
 
     # ------------------------------------------------------------------
     # Backward-compat accessors for tests that inspect internal state

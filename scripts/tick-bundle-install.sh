@@ -4,16 +4,18 @@
 
 # tick-bundle-install.sh — idempotent launchd installer for the OMN-9036 tick bundle.
 #
-# Installs 9 plists under ~/Library/LaunchAgents:
-#   ai.omninode.merge-sweep       (5m)
-#   ai.omninode.dispatch-engine   (10m)
-#   ai.omninode.unstick-queue     (10m) [OMN-9065]
-#   ai.omninode.overseer-verify   (15m)
-#   ai.omninode.contract-verify   (15m)
-#   ai.omninode.idle-watchdog     (15m)
-#   ai.omninode.buildloop         (2h)  [OMN-9056]
-#   ai.omninode.quick-merge       (on-demand) [OMN-9721]
-#   ai.omninode.201-baseline      (24h) [OMN-9721]
+# Installs 11 plists under ~/Library/LaunchAgents:
+#   ai.omninode.merge-sweep           (5m)
+#   ai.omninode.dispatch-engine       (10m)
+#   ai.omninode.unstick-queue         (10m) [OMN-9065]
+#   ai.omninode.overseer-verify       (15m)
+#   ai.omninode.contract-verify       (15m)
+#   ai.omninode.idle-watchdog         (15m)
+#   ai.omninode.buildloop             (2h)  [OMN-9056]
+#   ai.omninode.quick-merge           (on-demand) [OMN-9721]
+#   ai.omninode.201-baseline          (24h) [OMN-9721]
+#   ai.omninode.cron-closeout         (30m) [OMN-7842]
+#   ai.omninode.nightly-merge-sweep   (2:00 AM daily) [OMN-7842]
 #
 # Source templates under scripts/launchd/ contain __OMNI_HOME__ / __HOME__ placeholders;
 # this script expands them at install time so the deployed plists are absolute-path correct
@@ -56,6 +58,8 @@ TICKS=(
   "ai.omninode.buildloop"
   "ai.omninode.quick-merge"
   "ai.omninode.201-baseline"
+  "ai.omninode.cron-closeout"
+  "ai.omninode.nightly-merge-sweep"
 )
 
 echo "=== tick-bundle-install [OMN-9036] ==="

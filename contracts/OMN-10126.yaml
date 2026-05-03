@@ -1,0 +1,34 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10126
+title: "Register Diagnostic Daemon Health Topic"
+summary: "Add diagnostic.daemon.health to TopicBase, topic_registry.yaml, emit wrapper support, and EVENT_REGISTRY"
+is_seam_ticket: true
+interface_change: true
+interfaces_touched:
+  - topics
+  - events
+evidence_requirements:
+  - kind: tests
+    description: "TopicBase, topic registry, governance, emit wrapper, and EVENT_REGISTRY validation pass"
+    command: "uv run pytest tests/unit/test_topic_governance.py tests/hooks/test_topics.py tests/hooks/test_topic_registry.py tests/hooks/test_event_registry.py tests/hooks/test_emit_client_wrapper.py -q"
+  - kind: manual
+    description: "Changed omniclaude hook registry files pass ruff"
+    command: "uv run ruff check src/omniclaude/hooks/topics.py src/omniclaude/hooks/event_registry.py tests/hooks/test_topics.py tests/hooks/test_event_registry.py"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-omniclaude-topic-registry
+    description: "diagnostic.daemon.health is registered with TopicBase, governance allowlist, and required daemon health fields"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run pytest tests/unit/test_topic_governance.py tests/hooks/test_topics.py tests/hooks/test_topic_registry.py tests/hooks/test_event_registry.py tests/hooks/test_emit_client_wrapper.py -q"
+  - id: dod-omniclaude-lint
+    description: "Changed omniclaude hook registry files pass lint"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "uv run ruff check src/omniclaude/hooks/topics.py src/omniclaude/hooks/event_registry.py tests/hooks/test_topics.py tests/hooks/test_event_registry.py"

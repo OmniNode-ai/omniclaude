@@ -672,6 +672,14 @@ allowed_extras:
       No dedicated node contract; contract governance to follow.
     ticket: OMN-7156
 
+  - topic: "onex.evt.omniclaude.diagnostic-daemon-health.v1"
+    lifecycle: observability
+    reason: >
+      Portable daemon health diagnostic event emitted by runtime probes and
+      resolved by the omnimarket emit daemon registry. Runtime-wide diagnostic
+      topic contract is tracked by OMN-10126.
+    ticket: OMN-10126
+
   # ---------------------------------------------------------------------------
   # OmniClaw channel messaging topics (OMN-7185)
   # Inbound normalized messages from channel adapters, outbound replies,

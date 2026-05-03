@@ -227,9 +227,9 @@ The same `event_type` can legitimately map to both CMD and EVT via fan-out. This
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries (`ROUTING_DECISION`, `NOTIFICATION_BLOCKED`, `NOTIFICATION_COMPLETED`), renamed `SESSION_OUTCOME` → `SESSION_OUTCOME_CMD` + `SESSION_OUTCOME_EVT`, removed `ROUTING_DECISIONS` |
 | `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total), `session.outcome` upgraded to dual fan-out |
-| `src/omniclaude/publisher/embedded_publisher.py` | Replaced infra `EventRegistry` with local registry imports, added `_inject_metadata()`, fan-out loop in `_handle_emit()` |
+| `src/omniclaude/runtime/lifecycle.py` | Starts the omnimarket emit daemon wrapper and publishes queued events through `EventBusKafka` |
 | `plugins/onex/hooks/lib/hook_event_adapter.py` | `TopicBase.ROUTING_DECISIONS` → `TopicBase.ROUTING_DECISION` |
-| `tests/publisher/test_embedded_publisher.py` | Removed all `patch.object(publisher._registry, ...)` mocks |
+| `tests/runtime/test_lifecycle.py` and `tests/scripts/test_omnimarket_launcher.py` | Cover emit-daemon lifecycle startup and launcher wiring |
 | `tests/hooks/test_topics.py` | Removed `ROUTING_DECISIONS` assertions |
 | `tests/hooks/test_event_registry.py` | +4 tests for session.outcome fan-out and routing.decision topic |
 | `tests/hooks/test_emit_client_wrapper.py` | Updated docstring referencing legacy topic |
@@ -254,12 +254,12 @@ for et in sorted(EVENT_REGISTRY.keys()):
 print(f'Total: {len(EVENT_REGISTRY)} event types')
 "
 
-# No infra EventRegistry import in publisher
-grep -c 'from omnibase_infra.*event_registry' src/omniclaude/publisher/embedded_publisher.py
+# No deleted publisher package import remains
+! rg 'omniclaude\.publisher' src tests plugins scripts --glob '!uv.lock'
 # Expected: 0
 
 # Tests pass
-.venv/bin/pytest tests/hooks/test_event_registry.py tests/hooks/test_topics.py tests/publisher/test_embedded_publisher.py -v
+uv run pytest tests/runtime/test_lifecycle.py tests/runtime/test_plugin_claude.py tests/scripts/test_emit_daemon_cutover_static.py tests/scripts/test_omnimarket_launcher.py -q
 ```
 
 ---
@@ -330,7 +330,7 @@ Extend infra with `FanOutRule` support. **Rejected** because:
 
 - **Event Registry**: `src/omniclaude/hooks/event_registry.py` — 14 event types with fan-out rules
 - **Topic Definitions**: `src/omniclaude/hooks/topics.py` — `TopicBase` StrEnum
-- **Publisher**: `src/omniclaude/publisher/embedded_publisher.py` — fan-out loop in `_handle_emit()`
+- **Emit Daemon Lifecycle**: `src/omniclaude/runtime/lifecycle.py` — wraps omnimarket emit-daemon startup and Kafka publishing
 - **Infra PR**: omnibase_infra #275 — removed `_register_defaults()` from `EventRegistry`
 
 ### Related Issues

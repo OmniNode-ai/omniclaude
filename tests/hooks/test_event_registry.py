@@ -845,6 +845,8 @@ class TestEventRegistryIntegration:
             "team.evidence.written",
             # Hook health observability (OMN-7158)
             "hook.health.error",
+            # Diagnostic daemon health (OMN-10126)
+            "diagnostic.daemon.health",
             # LLM cost telemetry (OMN-7570)
             "llm.cost.completed",
             # Per-tool agent action (wire-missing-producers)
@@ -937,6 +939,42 @@ class TestEventRegistryIntegration:
             reg = EVENT_REGISTRY[event_type]
             for rule in reg.fan_out:
                 assert rule.transform is None
+
+    def test_diagnostic_daemon_health_registration(self) -> None:
+        """diagnostic.daemon.health routes to the portable health topic."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY, validate_payload
+
+        reg = EVENT_REGISTRY["diagnostic.daemon.health"]
+
+        assert reg.partition_key_field == "daemon_id"
+        assert reg.required_fields == [
+            "daemon_id",
+            "pid",
+            "socket_path",
+            "kafka_offset",
+            "round_trip_ms",
+            "status",
+        ]
+        assert len(reg.fan_out) == 1
+        assert reg.fan_out[0].topic_base is TopicBase.DIAGNOSTIC_DAEMON_HEALTH
+        assert reg.fan_out[0].transform is None
+
+        payload: dict[str, object] = {
+            "daemon_id": "emit-daemon",
+            "pid": 12345,
+            "socket_path": "/tmp/emit.sock",
+            "kafka_offset": 99,
+            "round_trip_ms": 7.5,
+            "status": "PASS",
+        }
+        assert validate_payload("diagnostic.daemon.health", payload) == []
+        assert validate_payload("diagnostic.daemon.health", {"daemon_id": "x"}) == [
+            "pid",
+            "socket_path",
+            "kafka_offset",
+            "round_trip_ms",
+            "status",
+        ]
 
     def test_all_registrations_have_valid_structure(self) -> None:
         """Verify all registrations have valid structure."""

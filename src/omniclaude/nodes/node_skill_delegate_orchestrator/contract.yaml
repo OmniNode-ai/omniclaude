@@ -33,7 +33,7 @@ node_type: ORCHESTRATOR_GENERIC
 # Description
 description: >
   Orchestrator node for the delegate skill.
-  Delegate tasks to the ONEX node-based delegation pipeline via Kafka command event. Classifies prompt, wraps in envelope, publishes to delegation-request topic.
+  Delegate tasks to the ONEX node-based delegation pipeline via Kafka command event. Classifies prompt, wraps in envelope, publishes to delegate-task topic (onex.cmd.omniclaude.delegate-task.v1).
   Dispatches skill invocations to the general-purpose agent via the shared
   handle_skill_requested handler. Subscribes to command events, emits
   outcome events on success or failure.
@@ -56,7 +56,7 @@ execution:
 # Event bus configuration
 event_bus:
   subscribe:
-    topic: "onex.cmd.omniclaude.delegate.v1"
+    topic: "onex.cmd.omniclaude.delegate-task.v1"
     consumer_group: "omniclaude.skill.delegate"
   publish:
     success_topic: "onex.evt.omniclaude.delegate-completed.v1"
@@ -64,7 +64,7 @@ event_bus:
 
   # Canonical topic registry (gap-analysis scanner) [OMN-3373]
   subscribe_topics:
-    - "onex.cmd.omniclaude.delegate.v1"
+    - "onex.cmd.omniclaude.delegate-task.v1"
   publish_topics:
     - "onex.evt.omniclaude.delegate-completed.v1"
     - "onex.evt.omniclaude.delegate-failed.v1"

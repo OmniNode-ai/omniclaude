@@ -1163,6 +1163,28 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["hook_name", "error_tier", "error_category", "session_id"],
     ),
     # =========================================================================
+    # Diagnostic Daemon Health (OMN-10126)
+    # =========================================================================
+    "diagnostic.daemon.health": EventRegistration(
+        event_type="diagnostic.daemon.health",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DIAGNOSTIC_DAEMON_HEALTH,
+                transform=None,
+                description="Portable daemon health diagnostic event",
+            ),
+        ],
+        partition_key_field="daemon_id",
+        required_fields=[
+            "daemon_id",
+            "pid",
+            "socket_path",
+            "kafka_offset",
+            "round_trip_ms",
+            "status",
+        ],
+    ),
+    # =========================================================================
     # LLM Cost Telemetry (OMN-7570)
     # =========================================================================
     # Emitted by session-end hook with session-level token usage and cost data.

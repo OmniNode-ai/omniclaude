@@ -4,13 +4,15 @@
 
 Ticket: OMN-7659 - Extract PluginClaude custom init into lifecycle modules.
 
-All tests mock external dependencies (Kafka, publisher, backends) to ensure
+All tests mock external dependencies (Kafka, emit daemon, backends) to ensure
 they run without infrastructure.
 """
 
 from __future__ import annotations
 
+import os
 import threading
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +20,7 @@ import pytest
 from omniclaude.runtime.lifecycle import (
     LifecycleState,
     ModelLifecycleDiagnostic,
+    _OmnimarketEmitDaemon,
     _WorkerDescriptor,
     on_shutdown,
     on_start,
@@ -110,22 +113,22 @@ class TestOnStart:
         mock_publisher = AsyncMock()
         mock_publisher.start = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-                "omniclaude.config.model_local_llm_config": MagicMock(
-                    LocalLlmEndpointRegistry=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.nodes.node_local_llm_inference_effect.backends": MagicMock(
-                    VllmInferenceBackend=MagicMock(return_value=MagicMock())
-                ),
-            },
+        with (
+            patch(
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+                return_value=mock_publisher,
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "omniclaude.config.model_local_llm_config": MagicMock(
+                        LocalLlmEndpointRegistry=MagicMock(return_value=MagicMock())
+                    ),
+                    "omniclaude.nodes.node_local_llm_inference_effect.backends": MagicMock(
+                        VllmInferenceBackend=MagicMock(return_value=MagicMock())
+                    ),
+                },
+            ),
         ):
             diagnostics = await on_start(state, "localhost:9092")
 
@@ -134,7 +137,7 @@ class TestOnStart:
         # Should have publisher + backend diagnostics
         assert len(diagnostics) >= 1
         assert diagnostics[0].success is True
-        assert diagnostics[0].component == "EmbeddedEventPublisher"
+        assert diagnostics[0].component == "OmnimarketEmitDaemon"
 
     @pytest.mark.asyncio
     async def test_publisher_failure_returns_failed_diagnostic(self):
@@ -143,16 +146,9 @@ class TestOnStart:
         mock_publisher.start = AsyncMock(side_effect=RuntimeError("Kafka down"))
         mock_publisher.stop = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-            },
+        with patch(
+            "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+            return_value=mock_publisher,
         ):
             diagnostics = await on_start(state, "localhost:9092")
 
@@ -166,21 +162,21 @@ class TestOnStart:
         mock_publisher = AsyncMock()
         mock_publisher.start = AsyncMock()
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "omniclaude.publisher.publisher_config": MagicMock(
-                    PublisherConfig=MagicMock(return_value=MagicMock())
-                ),
-                "omniclaude.publisher.embedded_publisher": MagicMock(
-                    EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                ),
-                "omniclaude.config.model_local_llm_config": MagicMock(
-                    LocalLlmEndpointRegistry=MagicMock(
-                        side_effect=RuntimeError("registry fail")
-                    )
-                ),
-            },
+        with (
+            patch(
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+                return_value=mock_publisher,
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "omniclaude.config.model_local_llm_config": MagicMock(
+                        LocalLlmEndpointRegistry=MagicMock(
+                            side_effect=RuntimeError("registry fail")
+                        )
+                    ),
+                },
+            ),
         ):
             diagnostics = await on_start(state, "localhost:9092")
 
@@ -191,6 +187,88 @@ class TestOnStart:
         )
         assert state.publisher is not None
         assert state.vllm_backend is None
+
+
+# ---------------------------------------------------------------------------
+# _OmnimarketEmitDaemon
+# ---------------------------------------------------------------------------
+
+
+class TestOmnimarketEmitDaemon:
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_creates_file_exclusively(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+
+        await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_rejects_running_process_pid(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text(str(os.getpid()))
+
+        with pytest.raises(RuntimeError, match="Another emit daemon"):
+            await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_replaces_stale_pid(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text("not-a-pid")
+
+        await daemon._claim_pid_file()
+
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_claim_pid_file_retries_when_pid_file_disappears(
+        self, tmp_path, monkeypatch
+    ):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        original_open = os.open
+        calls = 0
+
+        def flaky_open(path, flags, mode=0o777):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise FileExistsError
+            return original_open(path, flags, mode)
+
+        monkeypatch.setattr(os, "open", flaky_open)
+        daemon._remove_stale_pid_file = MagicMock(side_effect=FileNotFoundError)
+
+        await daemon._claim_pid_file()
+
+        assert calls == 2
+        assert daemon._pid_path.read_text() == str(os.getpid())
+
+    @pytest.mark.asyncio
+    async def test_stop_releases_pid_file_when_shutdown_step_fails(self, tmp_path):
+        daemon = _OmnimarketEmitDaemon.__new__(_OmnimarketEmitDaemon)
+        daemon._pid_path = tmp_path / "emit.pid"
+        daemon._pid_path.write_text(str(os.getpid()))
+        daemon._config = SimpleNamespace(shutdown_drain_seconds=1)
+        daemon._server = MagicMock(stop=AsyncMock(side_effect=RuntimeError("stop")))
+        daemon._publisher_loop = MagicMock(stop=AsyncMock())
+        daemon._queue = MagicMock(drain_to_spool=AsyncMock())
+        event_bus = MagicMock(close=AsyncMock())
+        daemon._event_bus = event_bus
+
+        with pytest.raises(RuntimeError, match="stop"):
+            await daemon.stop()
+
+        daemon._publisher_loop.stop.assert_awaited_once_with(drain_timeout=1)
+        daemon._queue.drain_to_spool.assert_awaited_once()
+        event_bus.close.assert_awaited_once()
+        assert daemon._event_bus is None
+        assert not daemon._pid_path.exists()
 
 
 # ---------------------------------------------------------------------------

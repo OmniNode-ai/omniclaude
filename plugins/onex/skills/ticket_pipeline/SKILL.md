@@ -78,11 +78,21 @@ from headless or cron contexts must include it explicitly.
 
 ### Step 2 — Initialize FSM
 
+Primary path (bus-driven):
+
 ```bash
 onex run-node node_ticket_pipeline \
   --input '{"ticket_id": "<ticket_id>", "skip_to": null, "skip_test_iterate": false, "dry_run": false}' \
   --timeout 300
 ```
+
+Fallback path (local/offline):
+
+```bash
+onex node node_ticket_pipeline --input <json_file>
+```
+
+Where `<json_file>` contains `ModelPipelineStartCommand` JSON matching the payload fields above.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Outputs `ModelPipelineState` JSON with initial phase.
 

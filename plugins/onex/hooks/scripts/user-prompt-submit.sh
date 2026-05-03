@@ -579,7 +579,7 @@ fi
 # -----------------------------
 # Delegation Bridge (OMN-8746)
 # -----------------------------
-# Publish a delegation-request command to the ONEX node pipeline for every
+# Publish a delegate-task command to the ONEX node pipeline for every
 # non-slash, non-automated prompt. node_delegation_orchestrator on .201
 # handles routing, LLM inference, and quality gating.
 # Requires Kafka to be reachable — there is no local prose fallback.

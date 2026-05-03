@@ -14,13 +14,15 @@ set -euo pipefail
 # -----------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------
-ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-/Volumes/PRO-G40/Code/omni_home}"  # local-path-ok
+ONEX_REGISTRY_ROOT="${ONEX_REGISTRY_ROOT:-${OMNI_HOME:-/Users/jonah/Code/omni_home}}"  # local-path-ok
 DEFAULT_REPOS="omniclaude,omnibase_core,omnibase_infra,omnibase_spi,omniintelligence,omnimemory,omnidash,omninode_infra,omniweb,onex_change_control"
 TIMEOUT_MINUTES="${NIGHTLY_SWEEP_TIMEOUT_MINUTES:-15}"
 LOG_DIR="${HOME}/.claude/nightly-sweep"
 DATE_STAMP=$(date -u +"%Y-%m-%d")
 LOCK_FILE="${LOG_DIR}/nightly-sweep.lock"
 OUTPUT_DIR="${LOG_DIR}/${DATE_STAMP}"
+RUN_ID="nightly-sweep-$(date -u +"%Y-%m-%dT%H-%M-%SZ")"
+export ONEX_RUN_ID="${ONEX_RUN_ID:-${RUN_ID}}"
 
 # Allowed tools for headless mode
 ALLOWED_TOOLS="Bash,Read,Edit,Write,Glob,Grep,Skill,mcp__linear-server__save_issue,mcp__linear-server__list_issues,mcp__linear-server__get_issue"

@@ -59,10 +59,12 @@ def _load_detectors() -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded detector c
     ]
 
 
-def _load_escalation_tracker() -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded singleton
-    from omnibase_core.agents.prm_escalation import escalation_tracker
+def _load_escalation_tracker(
+    session_id: str,
+) -> Any:  # ONEX_EXCLUDE: any_type - lazy-loaded
+    from omnibase_core.agents.prm_escalation import EscalationTracker
 
-    return escalation_tracker
+    return EscalationTracker(session_id=session_id)
 
 
 def _make_trajectory_entry(
@@ -151,7 +153,7 @@ def _escalate_matches(
     Any  # ONEX_EXCLUDE: any_type - PRM escalation result type concrete at runtime
 ]:
     """Pass PRM matches through the escalation tracker, return escalation results."""
-    tracker = _load_escalation_tracker()
+    tracker = _load_escalation_tracker(session_id)
     results = []
     for match in matches:
         result = tracker.process(match, session_id=session_id)

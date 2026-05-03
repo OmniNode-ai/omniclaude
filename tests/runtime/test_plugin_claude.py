@@ -10,7 +10,7 @@ they run without infrastructure. The test matrix covers:
 - Protocol compliance
 - Property accessors
 - Activation gating (KAFKA_BOOTSTRAP_SERVERS)
-- Publisher initialisation and failure cleanup
+- Emit daemon initialisation and failure cleanup
 - Handler wiring delegation
 - Dispatcher / consumer skip behaviour
 - Shutdown idempotency and exception safety
@@ -161,7 +161,7 @@ def config():
 
 @pytest.fixture
 def mock_publisher():
-    """Return a mock EmbeddedEventPublisher with async start/stop."""
+    """Return a mock emit daemon with async start/stop."""
     pub = AsyncMock()
     pub.start = AsyncMock()
     pub.stop = AsyncMock()
@@ -170,7 +170,7 @@ def mock_publisher():
 
 @pytest.fixture
 def mock_publisher_config():
-    """Return a mock PublisherConfig."""
+    """Return a mock publisher config object."""
     return MagicMock()
 
 
@@ -256,41 +256,21 @@ class TestShouldActivate:
 
 
 class TestInitialize:
-    """Verify publisher creation, start, and failure handling."""
+    """Verify emit daemon creation, start, and failure handling."""
 
     @pytest.mark.asyncio
-    async def test_starts_publisher(
-        self, plugin, config, mock_publisher, mock_publisher_config
-    ):
+    async def test_starts_publisher(self, plugin, config, mock_publisher):
         with (
             patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
             patch(
-                "omniclaude.runtime.plugin.PublisherConfig",
-                return_value=mock_publisher_config,
-                create=True,
-            ) as mock_cfg_cls,
-            patch(
-                "omniclaude.runtime.plugin.EmbeddedEventPublisher",
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
                 return_value=mock_publisher,
-                create=True,
-            ) as mock_pub_cls,
+            ),
         ):
-            # Ensure the lazy imports inside initialize() resolve to our mocks
-            with patch.dict(
-                sys.modules,
-                {
-                    "omniclaude.publisher.publisher_config": MagicMock(
-                        PublisherConfig=mock_cfg_cls
-                    ),
-                    "omniclaude.publisher.embedded_publisher": MagicMock(
-                        EmbeddedEventPublisher=mock_pub_cls
-                    ),
-                },
-            ):
-                result = await plugin.initialize(config)
+            result = await plugin.initialize(config)
 
         assert result.success is True
-        assert "embedded-event-publisher" in result.resources_created
+        assert "omnimarket-emit-daemon" in result.resources_created
         mock_publisher.start.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -312,16 +292,9 @@ class TestInitialize:
 
         with (
             patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
-            patch.dict(
-                sys.modules,
-                {
-                    "omniclaude.publisher.publisher_config": MagicMock(
-                        PublisherConfig=MagicMock(return_value=MagicMock())
-                    ),
-                    "omniclaude.publisher.embedded_publisher": MagicMock(
-                        EmbeddedEventPublisher=MagicMock(return_value=mock_publisher)
-                    ),
-                },
+            patch(
+                "omniclaude.runtime.lifecycle._OmnimarketEmitDaemon",
+                return_value=mock_publisher,
             ),
         ):
             result = await plugin.initialize(config)
@@ -697,7 +670,7 @@ class TestStatusLine:
 
     def test_enabled_when_publisher_running(self, plugin, mock_publisher):
         plugin._publisher = mock_publisher
-        assert plugin.get_status_line() == "enabled (Publisher + Kafka)"
+        assert plugin.get_status_line() == "enabled (Emit daemon + Kafka)"
 
 
 # ===================================================================

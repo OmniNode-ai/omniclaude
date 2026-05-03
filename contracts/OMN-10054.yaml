@@ -1,0 +1,40 @@
+---
+schema_version: "1.0.0"
+ticket_id: OMN-10054
+title: "Align delegate skill publisher to consumer topic"
+summary: "Align delegate skill registry and node contract on the delegate-task command topic"
+is_seam_ticket: false
+interface_change: true
+interfaces_touched:
+  - topics
+  - events
+evidence_requirements:
+  - kind: tests
+    description: "Delegate event registry and node contract topic references are aligned"
+    command: "python scripts/validation/validate_topic_naming.py && rg 'delegate-task' plugins/onex/lib/event_registry/omniclaude.yaml src/omniclaude/nodes/node_skill_delegate_orchestrator/contract.yaml"
+  - kind: ci
+    description: "omniclaude PR CI green across required gates"
+    command: "gh pr checks --repo OmniNode-ai/omniclaude 1501"
+emergency_bypass:
+  enabled: false
+  justification: ""
+  follow_up_ticket_id: ""
+dod_evidence:
+  - id: dod-001
+    description: "Delegate event registry maps delegate.task to the consumer topic"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "rg 'delegate.task|delegate-task' plugins/onex/lib/event_registry/omniclaude.yaml"
+  - id: dod-002
+    description: "Delegate orchestrator contract subscribes to the delegate-task command topic"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "rg 'delegate-task' src/omniclaude/nodes/node_skill_delegate_orchestrator/contract.yaml"
+  - id: dod-003
+    description: "Post-merge runtime deploy validation is required because this PR changes a runtime node contract topic"
+    source: manual
+    checks:
+      - check_type: command
+        check_value: "after user-authorized deploy to .201, verify node_skill_delegate_orchestrator consumes the delegate-task command topic"

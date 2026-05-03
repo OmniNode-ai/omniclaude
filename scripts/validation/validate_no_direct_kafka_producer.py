@@ -9,8 +9,8 @@ Task 10 from OMN-2592:
   grep/AST check blocks `AIOKafkaProducer`, `KafkaProducer`, `confluent_kafka`
   usage outside the shared publisher implementation.
 
-The shared publisher lives in src/omniclaude/publisher/ and src/omniclaude/lib/.
-All other modules must go through the shared publisher abstraction, never
+Shared publisher utilities live in src/omniclaude/lib/ and dedicated service
+publisher modules. All other modules must go through those abstractions, never
 instantiating Kafka producer clients directly.
 """
 
@@ -143,7 +143,7 @@ def main() -> int:
     print(
         "\nDirect Kafka producer usage (AIOKafkaProducer, KafkaProducer, confluent_kafka)"
         " must only occur in the shared publisher layer"
-        " (src/omniclaude/publisher/ or src/omniclaude/lib/)."
+        " (src/omniclaude/lib/ or service publisher modules)."
         "\nUse emit_via_daemon() or the shared publisher abstraction instead."
     )
     return 1

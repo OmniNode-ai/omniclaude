@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
 # SPDX-License-Identifier: MIT
 
-"""Tests for OMN-10117: session-start.sh must launch omnimarket runner, not omniclaude.publisher."""
+"""Tests for OMN-10117: session-start.sh must launch the omnimarket runner."""
 
 from pathlib import Path
 
@@ -18,9 +18,10 @@ _KNOWN_TRANSFORMS = {"passthrough", "strip_prompt", "strip_body"}
 
 
 def test_launcher_invokes_omnimarket_node() -> None:
+    legacy_module = "omniclaude" + ".publisher"
     text = SESSION_START.read_text()
     assert "omnimarket.nodes.node_emit_daemon" in text, (
-        "session-start.sh must invoke omnimarket.nodes.node_emit_daemon, not omniclaude.publisher"
+        f"session-start.sh must invoke omnimarket.nodes.node_emit_daemon, not {legacy_module}"
     )
     assert "--kafka-bootstrap-servers" in text, (
         "session-start.sh must use --kafka-bootstrap-servers (omnimarket CLI arg)"
@@ -31,10 +32,11 @@ def test_launcher_invokes_omnimarket_node() -> None:
 
 
 def test_launcher_does_not_invoke_omniclaude_publisher() -> None:
+    legacy_module = "omniclaude" + ".publisher"
     text = SESSION_START.read_text()
     # The old invocation line must be gone
-    assert "-m omniclaude.publisher start" not in text, (
-        "session-start.sh must NOT invoke -m omniclaude.publisher start (use omnimarket node)"
+    assert f"-m {legacy_module} start" not in text, (
+        f"session-start.sh must NOT invoke -m {legacy_module} start (use omnimarket node)"
     )
     assert "omnibase_infra.runtime.emit_daemon.cli start" not in text, (
         "session-start.sh must NOT keep the removed omnibase_infra emit-daemon fallback"
@@ -125,7 +127,7 @@ def test_launcher_uses_pid_path_flag() -> None:
     text = SESSION_START.read_text()
     assert "--pid-path" in text, (
         "session-start.sh must pass --pid-path to the omnimarket daemon "
-        "(was implicit in omniclaude.publisher PublisherConfig; must be explicit now)"
+        "(was implicit in the legacy config; must be explicit now)"
     )
 
 
@@ -137,7 +139,23 @@ def test_launcher_uses_spool_dir_flag() -> None:
     )
 
 
+def test_launcher_uses_log_path_without_appending_stdout_to_log() -> None:
+    text = SESSION_START.read_text()
+    marker = (
+        'nohup env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
+    )
+    assert marker in text
+    block_start = text.index(marker)
+    block_end = text.index(" &\n", block_start)
+    invocation = text[block_start:block_end]
+
+    assert "--log-path" in invocation
+    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
+    assert ">/dev/null 2>&1" in invocation
+
+
 def test_common_restart_path_uses_omnimarket_node() -> None:
+    legacy_module = "omniclaude" + ".publisher"
     text = COMMON.read_text()
     marker = 'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon start'
     assert marker in text
@@ -149,15 +167,18 @@ def test_common_restart_path_uses_omnimarket_node() -> None:
     assert "--spool-dir" in invocation
     assert "--event-registry" in invocation
     assert "--log-path" in invocation
-    assert "-m omniclaude.publisher start" not in invocation
+    assert '>> "${ONEX_STATE_DIR}/hooks/logs/emit-daemon.log"' not in invocation
+    assert ">/dev/null 2>&1" in invocation
+    assert f"-m {legacy_module} start" not in invocation
     assert "omnibase_infra.runtime.emit_daemon.cli start" not in invocation
 
 
 def test_session_end_stop_path_uses_omnimarket_node() -> None:
+    legacy_module = "omniclaude" + ".publisher"
     text = SESSION_END.read_text()
     assert (
         'env -u PYTHONPATH "$BREW_PY" -m omnimarket.nodes.node_emit_daemon stop' in text
     )
     assert "--pid-path" in text
-    assert "-m omniclaude.publisher stop" not in text
+    assert f"-m {legacy_module} stop" not in text
     assert "omnibase_infra.runtime.emit_daemon.cli stop" not in text

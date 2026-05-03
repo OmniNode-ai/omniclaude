@@ -502,7 +502,6 @@ ignore = [
 # Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 # CLI entrypoints — intentional user-facing print() output
 "src/omniclaude/runtime/__main__.py" = ["T201"]
-"src/omniclaude/publisher/__main__.py" = ["T201"]
 # Subscribers use print() for CLI __main__ output and JSON stdout
 "src/omniclaude/hooks/lib/compliance_result_subscriber.py" = ["T201"]
 "src/omniclaude/hooks/lib/decision_record_subscriber.py" = ["T201"]
