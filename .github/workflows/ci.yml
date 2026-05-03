@@ -696,12 +696,14 @@ jobs:
           psql -h localhost -p "$PGPORT" -U postgres -c '\q'
 
           # Provision omnidash_readonly role
-          psql -h localhost -p "$PGPORT" -U postgres <<'SQL'
-            -- Create omnidash analytics database if it doesn't exist
-            SELECT 'CREATE DATABASE omnidash_analytics'
-              WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'omnidash_analytics')
-            \gexec
+          if ! psql -h localhost -p "$PGPORT" -U postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = 'omnidash_analytics'" \
+            | grep -q '^1$'; then
+            psql -h localhost -p "$PGPORT" -U postgres -c \
+              "CREATE DATABASE omnidash_analytics"
+          fi
 
+          psql -h localhost -p "$PGPORT" -U postgres <<'SQL'
             -- Create omnidash_readonly role if it doesn't exist
             DO $$
             BEGIN

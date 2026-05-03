@@ -67,7 +67,7 @@ MIGRATIONS_DIR="${SCRIPT_DIR}/../sql/migrations"
 if [ -d "$MIGRATIONS_DIR" ]; then
     # Create migration tracking table if it doesn't exist
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
-        CREATE TABLE IF NOT EXISTS schema_migrations (
+        CREATE TABLE IF NOT EXISTS public.schema_migrations (
             filename TEXT PRIMARY KEY,
             applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
@@ -81,7 +81,7 @@ EOSQL
             migration_name="$(basename "$migration")"
             # Use psql variable binding (-v) to avoid SQL injection via filenames.
             # :'varname' is psql's syntax for a string-quoted variable reference.
-            already_applied=$(echo "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' LIMIT 1;" | psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tA)
+            already_applied=$(echo "SELECT 1 FROM public.schema_migrations WHERE filename = :'migration_name' LIMIT 1;" | psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tA)
             if [ "$already_applied" = "1" ]; then
                 echo "  Skipping ${migration_name} (already applied)"
                 continue
@@ -106,7 +106,7 @@ EOSQL
             # filesystem under our control) so they will never contain single
             # quotes. Use the raw filename directly — the previous bash
             # substitution (${var//\'/\'\'}) was unreliable across bash versions.
-            tracking_sql="INSERT INTO schema_migrations (filename) VALUES ('${migration_name}');"
+            tracking_sql="INSERT INTO public.schema_migrations (filename) VALUES ('${migration_name}');"
             # Find the LAST line where COMMIT; appears (with optional leading whitespace).
             # The start-of-line anchor avoids false matches inside SQL comments
             # (e.g., "-- See COMMIT; behavior") or string literals.

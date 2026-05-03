@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+INIT_DB_SCRIPT = REPO_ROOT / "scripts" / "init-db.sh"
 ONEX_SCHEMA_COMPAT_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "onex-schema-compat.yml"
 )
@@ -71,6 +72,8 @@ def test_omnidash_role_check_uses_mapped_postgres_port(
     assert provision_env.get("PGPORT") == "${{ job.services.postgres.ports['5432'] }}"
     assert "for attempt in {1..30}" in provision_step["run"]
     assert 'psql -h localhost -p "$PGPORT"' in provision_step["run"]
+    assert "\\gexec" not in provision_step["run"]
+    assert "CREATE DATABASE omnidash_analytics" in provision_step["run"]
 
 
 @pytest.mark.parametrize(
@@ -121,6 +124,14 @@ def test_postgres_service_jobs_install_psql_before_use(
     assert install_index < psql_index
     assert "apt-get install -y postgresql-client" in install_step["run"]
     assert '-e PGPORT="${PGPORT:-}"' in install_step["run"]
+
+
+def test_init_db_tracks_migrations_in_public_schema() -> None:
+    script = INIT_DB_SCRIPT.read_text(encoding="utf-8")
+
+    assert "CREATE TABLE IF NOT EXISTS public.schema_migrations" in script
+    assert "FROM public.schema_migrations" in script
+    assert "INSERT INTO public.schema_migrations" in script
 
 
 @pytest.mark.parametrize(
