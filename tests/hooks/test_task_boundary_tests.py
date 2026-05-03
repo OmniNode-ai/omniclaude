@@ -44,11 +44,20 @@ class TestTriggerConditions:
     def test_git_commit_with_semicolon(self) -> None:
         assert tbt._is_trigger_command("echo hi; git commit -m 'x'")
 
+    def test_git_commit_with_pipe(self) -> None:
+        assert tbt._is_trigger_command("echo hi | git commit -m 'x'")
+
+    def test_git_commit_with_or_pipe(self) -> None:
+        assert tbt._is_trigger_command("echo hi || git commit -m 'x'")
+
     def test_gh_pr_create_triggers(self) -> None:
         assert tbt._is_trigger_command("gh pr create --title 'x'")
 
     def test_gh_pr_create_with_pipe(self) -> None:
         assert tbt._is_trigger_command("echo body | gh pr create --title 'x'")
+
+    def test_gh_pr_create_with_or_pipe(self) -> None:
+        assert tbt._is_trigger_command("echo body || gh pr create --title 'x'")
 
     def test_gh_pr_create_with_semicolon(self) -> None:
         assert tbt._is_trigger_command("echo hi; gh pr create --title 'x'")

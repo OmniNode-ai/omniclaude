@@ -96,8 +96,8 @@ if [[ -z "$COMMAND" ]]; then
     exit 0
 fi
 
-if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|\||;)git\s+commit(\s|$)'; then
-    if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\||;)gh\s+pr\s+create(\s|$)'; then
+if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|\||\||;)git\s+commit(\s|$)'; then
+    if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|\||\||;)gh\s+pr\s+create(\s|$)'; then
         echo "$TOOL_INFO"
         exit 0
     fi

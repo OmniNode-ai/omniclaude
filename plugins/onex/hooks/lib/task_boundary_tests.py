@@ -29,7 +29,7 @@ DEBOUNCE_SECONDS = 60
 TEST_TIMEOUT_SECONDS = 120
 
 _RE_GIT_COMMIT = re.compile(r"(^|\s|&&|\|\||;)\s*git\s+commit\b")
-_RE_GH_PR_CREATE = re.compile(r"(^|\s|&&|\||;)\s*gh\s+pr\s+create\b")
+_RE_GH_PR_CREATE = re.compile(r"(^|\s|&&|\|\||\||;)\s*gh\s+pr\s+create\b")
 
 
 def _is_trigger_command(command: str) -> bool:
