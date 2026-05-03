@@ -92,12 +92,21 @@ def test_review_job_runs_on_self_hosted_runner(workflow: dict[object, object]) -
 
     runs_on = review_job.get("runs-on")
     assert runs_on is not None, "hostile-review must declare runs-on"
-    # ``runs-on`` may be a list (labels) or a string. Normalize to a set.
-    labels = set(runs_on) if isinstance(runs_on, list) else {runs_on}
-    assert "self-hosted" in labels, "runner must be self-hosted"
-    assert "omnibase-ci" in labels, (
-        "runner label must include 'omnibase-ci' so the .201 LAN endpoints "
-        "(LLM_DEEPSEEK_URL) are reachable"
+    if isinstance(runs_on, list):
+        labels = set(runs_on)
+        assert "self-hosted" in labels, "runner must be self-hosted"
+        assert "omnibase-ci" in labels, (
+            "runner label must include 'omnibase-ci' so the .201 LAN endpoints "
+            "(LLM_DEEPSEEK_URL) are reachable"
+        )
+        return
+
+    assert isinstance(runs_on, str), "runs-on must be labels or a routing expression"
+    assert "OMNI_TRUSTED_CI_RUNS_ON_JSON" in runs_on, (
+        "trusted PRs must use the org-managed self-hosted runner routing variable"
+    )
+    assert '"self-hosted","omnibase-ci"' in runs_on, (
+        "trusted runner fallback must include self-hosted and omnibase-ci labels"
     )
 
 
@@ -158,9 +167,15 @@ def test_summary_comment_step_present(workflow: dict[object, object]) -> None:
     )
     # Comment posting must run regardless of review outcome so degraded /
     # blocked verdicts still surface to the PR author.
-    assert script_step.get("if") == "always()", (
+    script_if = script_step.get("if")
+    assert isinstance(script_if, str), "summary comment step must declare if"
+    assert script_if.startswith("always()"), (
         "summary comment step must run with if: always()"
     )
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository"
+        in script_if
+    ), "summary comment step must avoid write attempts for forked PRs"
 
 
 def test_gate_job_depends_on_review_and_fails_on_failure(

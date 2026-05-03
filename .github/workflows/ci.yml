@@ -663,7 +663,7 @@ jobs:
             mkdir -p .ci-bin
             cat > .ci-bin/psql <<'SH'
           #!/usr/bin/env bash
-          exec docker run --rm --network host -e PGPASSWORD="${PGPASSWORD:-}" postgres:16-alpine psql "$@"
+          exec docker run --rm --network host -e PGPASSWORD="${PGPASSWORD:-}" -e PGPORT="${PGPORT:-}" postgres:16-alpine psql "$@"
           SH
             chmod +x .ci-bin/psql
             echo "${PWD}/.ci-bin" >> "$GITHUB_PATH"
@@ -678,16 +678,20 @@ jobs:
           PGPORT: ${{ job.services.postgres.ports['5432'] }}
         working-directory: ${{ github.workspace }}
         run: |
-          set -e
+          set -euo pipefail
 
           # Wait for Postgres to be ready
-          until psql -h localhost -U postgres -c '\q' 2>/dev/null; do
-            echo "Waiting for PostgreSQL..."
+          for attempt in {1..30}; do
+            if psql -h localhost -p "$PGPORT" -U postgres -c '\q'; then
+              break
+            fi
+            echo "Waiting for PostgreSQL on localhost:${PGPORT} (${attempt}/30)..."
             sleep 2
           done
+          psql -h localhost -p "$PGPORT" -U postgres -c '\q'
 
           # Provision omnidash_readonly role
-          psql -h localhost -U postgres <<'SQL'
+          psql -h localhost -p "$PGPORT" -U postgres <<'SQL'
             -- Create omnidash analytics database if it doesn't exist
             SELECT 'CREATE DATABASE omnidash_analytics'
               WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'omnidash_analytics')
@@ -707,7 +711,7 @@ jobs:
           SQL
 
           # Connect to omnidash_analytics and set up schema permissions
-          psql -h localhost -U postgres -d omnidash_analytics <<'SQL'
+          psql -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
             -- Grant usage on public schema
             GRANT USAGE ON SCHEMA public TO omnidash_readonly;
             -- Grant SELECT on all current tables
@@ -720,30 +724,30 @@ jobs:
 
           # Verify: omnidash_readonly has SELECT but NOT INSERT/UPDATE/DELETE
           # Test using pg_roles and information_schema
-          psql -h localhost -U postgres -d omnidash_analytics <<'SQL'
+          psql -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
             -- Create a test table to verify permissions
             CREATE TABLE IF NOT EXISTS ci_permission_test (id serial PRIMARY KEY, data text);
             INSERT INTO ci_permission_test (data) VALUES ('ci_test_row');
           SQL
 
           # Verify SELECT works for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
             "SELECT * FROM ci_permission_test;" > /dev/null && echo "SELECT: OK"
 
           # Verify INSERT is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
             "INSERT INTO ci_permission_test (data) VALUES ('should_fail');" 2>&1 \
             | grep -q "permission denied" && echo "INSERT denied: OK" \
             || (echo "FAIL: INSERT should be denied for omnidash_readonly" && exit 1)
 
           # Verify UPDATE is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
             "UPDATE ci_permission_test SET data = 'should_fail';" 2>&1 \
             | grep -q "permission denied" && echo "UPDATE denied: OK" \
             || (echo "FAIL: UPDATE should be denied for omnidash_readonly" && exit 1)
 
           # Verify DELETE is denied for readonly role
-          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d omnidash_analytics -c \
+          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
             "DELETE FROM ci_permission_test;" 2>&1 \
             | grep -q "permission denied" && echo "DELETE denied: OK" \
             || (echo "FAIL: DELETE should be denied for omnidash_readonly" && exit 1)
@@ -752,7 +756,7 @@ jobs:
 
           # Verify zero access to omniclaude databases (no CONNECT granted)
           # omniclaude DB is postgres (default) in this CI environment
-          PGPASSWORD=readonly_ci_test psql -h localhost -U omnidash_readonly -d postgres -c '\q' 2>&1 \
+          PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d postgres -c '\q' 2>&1 \
             | grep -q "permission denied\|FATAL" && echo "omniclaude DB access denied: OK" \
             || echo "NOTE: omniclaude DB isolation not enforced in this CI environment (honor system)"
 
@@ -1351,10 +1355,15 @@ jobs:
       - name: Initialize hooks database
         working-directory: ${{ github.workspace }}
         run: |
-          until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
-            echo "Waiting for PostgreSQL..."
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if psql -h localhost -p "$PGPORT" -U hooks_test -d hooks_test_db -c '\q'; then
+              break
+            fi
+            echo "Waiting for PostgreSQL on localhost:${PGPORT} (${attempt}/30)..."
             sleep 2
           done
+          psql -h localhost -p "$PGPORT" -U hooks_test -d hooks_test_db -c '\q'
           if [ -f "scripts/init-db.sh" ]; then
             bash scripts/init-db.sh
           fi
@@ -1492,26 +1501,31 @@ jobs:
       - name: Validate database schema
         working-directory: ${{ github.workspace }}
         run: |
-          until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
-            echo "Waiting for PostgreSQL..."
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\q'; then
+              break
+            fi
+            echo "Waiting for PostgreSQL on localhost:${PGPORT} (${attempt}/30)..."
             sleep 2
           done
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\q'
           bash scripts/init-db.sh
 
           echo "Validating schema_migrations table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d schema_migrations'
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d schema_migrations'
 
           echo "Validating claude_session_snapshots table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_snapshots'
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_snapshots'
 
           echo "Validating claude_session_prompts table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_prompts'
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_prompts'
 
           echo "Validating claude_session_tools table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_tools'
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d claude_session_tools'
 
           echo "Validating indexes..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\di'
+          psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\di'
 
           echo "Database schema validation passed"
 
@@ -2365,7 +2379,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_DATE=${{ steps.meta.outputs.created }}
+            BUILD_DATE=${{ github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ steps.meta.outputs.version }}
 
