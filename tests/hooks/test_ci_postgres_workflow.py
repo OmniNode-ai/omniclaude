@@ -78,6 +78,8 @@ def test_omnidash_role_check_uses_mapped_postgres_port(
     assert "CREATE DATABASE omnidash_analytics" in provision_step["run"]
     assert "CREATE ROLE omnidash_readonly" in provision_step["run"]
     assert "ALTER ROLE omnidash_readonly" in provision_step["run"]
+    assert "public.ci_permission_test" in provision_step["run"]
+    assert "GRANT SELECT ON public.ci_permission_test" in provision_step["run"]
 
 
 @pytest.mark.parametrize(

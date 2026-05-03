@@ -734,29 +734,30 @@ jobs:
           # Test using pg_roles and information_schema
           psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
             -- Create a test table to verify permissions
-            CREATE TABLE IF NOT EXISTS ci_permission_test (id serial PRIMARY KEY, data text);
-            INSERT INTO ci_permission_test (data) VALUES ('ci_test_row');
+            CREATE TABLE IF NOT EXISTS public.ci_permission_test (id serial PRIMARY KEY, data text);
+            INSERT INTO public.ci_permission_test (data) VALUES ('ci_test_row');
+            GRANT SELECT ON public.ci_permission_test TO omnidash_readonly;
           SQL
 
           # Verify SELECT works for readonly role
           PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "SELECT * FROM ci_permission_test;" > /dev/null && echo "SELECT: OK"
+            "SELECT * FROM public.ci_permission_test;" > /dev/null && echo "SELECT: OK"
 
           # Verify INSERT is denied for readonly role
           PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "INSERT INTO ci_permission_test (data) VALUES ('should_fail');" 2>&1 \
+            "INSERT INTO public.ci_permission_test (data) VALUES ('should_fail');" 2>&1 \
             | grep -q "permission denied" && echo "INSERT denied: OK" \
             || (echo "FAIL: INSERT should be denied for omnidash_readonly" && exit 1)
 
           # Verify UPDATE is denied for readonly role
           PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "UPDATE ci_permission_test SET data = 'should_fail';" 2>&1 \
+            "UPDATE public.ci_permission_test SET data = 'should_fail';" 2>&1 \
             | grep -q "permission denied" && echo "UPDATE denied: OK" \
             || (echo "FAIL: UPDATE should be denied for omnidash_readonly" && exit 1)
 
           # Verify DELETE is denied for readonly role
           PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
-            "DELETE FROM ci_permission_test;" 2>&1 \
+            "DELETE FROM public.ci_permission_test;" 2>&1 \
             | grep -q "permission denied" && echo "DELETE denied: OK" \
             || (echo "FAIL: DELETE should be denied for omnidash_readonly" && exit 1)
 
