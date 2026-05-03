@@ -130,6 +130,16 @@ ${tracking_sql}"
             echo "$modified_content" | psql -v ON_ERROR_STOP=1 "${PSQL_ARGS[@]}"
         fi
     done
+
+    # Reassert the tracking table after all migration transaction boundaries.
+    # Some migrations manage their own BEGIN/COMMIT blocks; this keeps the
+    # post-init validation surface deterministic across PostgreSQL runners.
+    psql -v ON_ERROR_STOP=1 "${PSQL_ARGS[@]}" <<-EOSQL
+        CREATE TABLE IF NOT EXISTS public.schema_migrations (
+            filename TEXT PRIMARY KEY,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+EOSQL
 else
     echo "No migrations directory found at ${MIGRATIONS_DIR}, skipping."
 fi

@@ -136,6 +136,7 @@ def test_init_db_tracks_migrations_in_public_schema() -> None:
     assert "CREATE TABLE IF NOT EXISTS public.schema_migrations" in script
     assert "FROM public.schema_migrations" in script
     assert "INSERT INTO public.schema_migrations" in script
+    assert "post-init validation surface" in script
 
 
 def test_init_db_passes_configured_postgres_port_to_psql() -> None:
