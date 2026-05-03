@@ -731,13 +731,16 @@ jobs:
           echo "omnidash_readonly role provisioned successfully"
 
           # Verify: omnidash_readonly has SELECT but NOT INSERT/UPDATE/DELETE
-          # Test using pg_roles and information_schema
-          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics <<'SQL'
-            -- Create a test table to verify permissions
-            CREATE TABLE IF NOT EXISTS public.ci_permission_test (id serial PRIMARY KEY, data text);
-            INSERT INTO public.ci_permission_test (data) VALUES ('ci_test_row');
-            GRANT SELECT ON public.ci_permission_test TO omnidash_readonly;
-          SQL
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics -c \
+            "DROP TABLE IF EXISTS public.ci_permission_test"
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics -c \
+            "CREATE TABLE public.ci_permission_test (id serial PRIMARY KEY, data text)"
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics -c \
+            "INSERT INTO public.ci_permission_test (data) VALUES ('ci_test_row')"
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics -c \
+            "GRANT SELECT ON public.ci_permission_test TO omnidash_readonly"
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U postgres -d omnidash_analytics -tAc \
+            "SELECT to_regclass('public.ci_permission_test')" | grep -q '^ci_permission_test$'
 
           # Verify SELECT works for readonly role
           PGPASSWORD=readonly_ci_test psql -h localhost -p "$PGPORT" -U omnidash_readonly -d omnidash_analytics -c \
