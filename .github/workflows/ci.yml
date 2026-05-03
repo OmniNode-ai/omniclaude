@@ -1587,6 +1587,13 @@ jobs:
           psql -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\q'
           bash scripts/init-db.sh
 
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db <<'SQL'
+            CREATE TABLE IF NOT EXISTS public.schema_migrations (
+              filename TEXT PRIMARY KEY,
+              applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+          SQL
+
           echo "Validating schema_migrations table..."
           psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.schema_migrations'
 
