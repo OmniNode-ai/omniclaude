@@ -115,7 +115,6 @@ def _run_tests(repo_root: Path, test_files: list[str]) -> tuple[bool, str]:
                 "-m",
                 "pytest",
                 *test_files,
-                "--timeout=120",
                 "-q",
                 "--tb=short",
             ],

@@ -166,6 +166,22 @@ class TestRunTests:
         assert ok is True
         assert msg == ""
 
+    def test_uses_subprocess_timeout_without_pytest_timeout_plugin(
+        self, tmp_path: Path
+    ) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "1 passed"
+        mock_result.stderr = ""
+        with patch("subprocess.run", return_value=mock_result) as run:
+            ok, msg = tbt._run_tests(tmp_path, ["test_foo.py"])
+
+        assert ok is True
+        assert msg == ""
+        args = run.call_args.args[0]
+        assert "--timeout=120" not in args
+        assert run.call_args.kwargs["timeout"] == tbt.TEST_TIMEOUT_SECONDS
+
     def test_failing_tests(self, tmp_path: Path) -> None:
         mock_result = MagicMock()
         mock_result.returncode = 1
