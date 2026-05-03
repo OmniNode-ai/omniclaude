@@ -19,6 +19,7 @@ import io
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,9 @@ class TestTriggerConditions:
 
     def test_gh_pr_create_with_pipe(self) -> None:
         assert tbt._is_trigger_command("echo body | gh pr create --title 'x'")
+
+    def test_gh_pr_create_with_semicolon(self) -> None:
+        assert tbt._is_trigger_command("echo hi; gh pr create --title 'x'")
 
     def test_git_push_does_not_trigger(self) -> None:
         assert not tbt._is_trigger_command("git push origin main")
@@ -289,6 +293,27 @@ class TestMainIntegration:
         assert code == 0
         assert json.loads(out)["tool_name"] == "Bash"
 
+    def test_debounce_marker_touched_only_after_success(self) -> None:
+        with patch.object(tbt, "_repo_root_for", return_value=Path("/fake")):
+            with patch.object(tbt, "_staged_python_files", return_value=["foo.py"]):
+                with patch.object(
+                    tbt, "_discover_tests", return_value=["tests/test_foo.py"]
+                ):
+                    with patch.object(tbt, "_should_skip_debounce", return_value=False):
+                        with patch.object(
+                            tbt, "_run_tests", return_value=(False, "FAILED test_x")
+                        ):
+                            with patch.object(tbt, "_touch_debounce") as touch:
+                                out, code = self._run_main(
+                                    {
+                                        "tool_name": "Bash",
+                                        "tool_input": {"command": "git commit -m 'x'"},
+                                    }
+                                )
+        assert code == 2
+        assert "FAILED" in json.loads(out)["reason"]
+        touch.assert_not_called()
+
 
 class TestRepoRootFor:
     def test_finds_git_dir(self, tmp_path: Path) -> None:
@@ -306,3 +331,64 @@ class TestRepoRootFor:
         sub.mkdir()
         result = tbt._repo_root_for(str(sub))
         assert result is None
+
+
+class TestShellHook:
+    @staticmethod
+    def _run_shell_hook(
+        extra_env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess:
+        repo_root = pathlib.Path(__file__).parent.parent.parent
+        script = (
+            repo_root
+            / "plugins"
+            / "onex"
+            / "hooks"
+            / "scripts"
+            / "pre_tool_use_task_boundary_tests.sh"
+        )
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        env = os.environ.copy()
+        env.update(
+            {
+                "CLAUDE_PLUGIN_ROOT": str(repo_root / "plugins" / "onex"),
+                "CLAUDE_PROJECT_DIR": str(repo_root),
+                "ONEX_HOOKS_MASK": "0",
+                "ONEX_STATE_DIR": str(repo_root / ".onex_state_test"),
+            }
+        )
+        if extra_env:
+            env.update(extra_env)
+
+        return subprocess.run(
+            [str(script.resolve())],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            env=env,
+            check=False,
+            timeout=10,
+        )
+
+    def test_shell_hook_drains_input_when_gate_disabled(self) -> None:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        result = self._run_shell_hook({"ONEX_HOOKS_MASK": "0"})
+
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == payload
+
+    def test_shell_hook_is_disabled_without_explicit_mask(self) -> None:
+        payload = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git commit -m 'x'"},
+        }
+        result = self._run_shell_hook({"ONEX_HOOKS_MASK": ""})
+
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == payload

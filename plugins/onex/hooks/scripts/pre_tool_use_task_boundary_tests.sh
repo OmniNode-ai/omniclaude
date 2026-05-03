@@ -28,11 +28,36 @@ _SELF="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null \
     || python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "${_SELF}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
-unset _SELF SCRIPT_DIR
+unset _SELF
 HOOKS_DIR="${PLUGIN_ROOT}/hooks"
 HOOKS_LIB="${HOOKS_DIR}/lib"
-source "$(dirname "${BASH_SOURCE[0]}")/onex-paths.sh" || { echo "ONEX_STATE_DIR not set" >&2; exit 1; }
+TOOL_INFO=$(cat)
+source "${SCRIPT_DIR}/onex-paths.sh" || {
+    echo "ONEX_STATE_DIR not set" >&2
+    echo "$TOOL_INFO"
+    exit 0
+}
+unset SCRIPT_DIR
 LOG_FILE="${ONEX_HOOK_LOG}"
+
+HOOK_BITS_PATH="${HOOKS_LIB}/hook_bits.sh"
+if [[ -f "$HOOK_BITS_PATH" ]]; then
+    # shellcheck source=../lib/hook_bits.sh
+    source "$HOOK_BITS_PATH"
+    TASK_BOUNDARY_BIT="$(hook_bits_bit_for_name TASK_BOUNDARY_TESTS 2>/dev/null || true)"
+    if [[ -n "$TASK_BOUNDARY_BIT" ]]; then
+        if [[ -z "${ONEX_HOOKS_MASK:-}" ]]; then
+            echo "$TOOL_INFO"
+            exit 0
+        fi
+        TASK_BOUNDARY_MASK="$(hook_bits_parse_mask "$ONEX_HOOKS_MASK")"
+        if ! hook_bits_is_enabled "$TASK_BOUNDARY_MASK" "$TASK_BOUNDARY_BIT"; then
+            echo "$TOOL_INFO"
+            exit 0
+        fi
+    fi
+fi
+unset HOOK_BITS_PATH TASK_BOUNDARY_BIT TASK_BOUNDARY_MASK
 
 PROJECT_ROOT="${PLUGIN_ROOT}/../.."
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
@@ -54,9 +79,6 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 source "${HOOKS_DIR}/scripts/common.sh"
-onex_hook_gate TASK_BOUNDARY_TESTS || exit 0
-
-TOOL_INFO=$(cat)
 if ! TOOL_NAME=$(echo "$TOOL_INFO" | jq -er '.tool_name // empty' 2>>"$LOG_FILE"); then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ERROR: invalid hook JSON; failing open" >> "$LOG_FILE"
     echo "$TOOL_INFO"
@@ -75,7 +97,7 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|\||;)git\s+commit(\s|$)'; then
-    if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\|)gh\s+pr\s+create(\s|$)'; then
+    if ! echo "$COMMAND" | grep -qE '(^|\s|&&|\||;)gh\s+pr\s+create(\s|$)'; then
         echo "$TOOL_INFO"
         exit 0
     fi

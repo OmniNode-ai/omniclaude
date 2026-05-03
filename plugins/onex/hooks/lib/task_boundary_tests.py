@@ -29,7 +29,7 @@ DEBOUNCE_SECONDS = 60
 TEST_TIMEOUT_SECONDS = 120
 
 _RE_GIT_COMMIT = re.compile(r"(^|\s|&&|\|\||;)\s*git\s+commit\b")
-_RE_GH_PR_CREATE = re.compile(r"(^|\s|&&|\|)\s*gh\s+pr\s+create\b")
+_RE_GH_PR_CREATE = re.compile(r"(^|\s|&&|\||;)\s*gh\s+pr\s+create\b")
 
 
 def _is_trigger_command(command: str) -> bool:
@@ -173,10 +173,9 @@ def main() -> None:
         json.dump(tool_info, sys.stdout)
         sys.exit(0)
 
-    _touch_debounce(debounce_key)
-
     passed, message = _run_tests(repo_root, tests)
     if passed:
+        _touch_debounce(debounce_key)
         json.dump(tool_info, sys.stdout)
         sys.exit(0)
 
