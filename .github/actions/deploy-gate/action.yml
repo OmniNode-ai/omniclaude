@@ -37,7 +37,7 @@ runs:
 
     - name: Install pyyaml
       shell: bash
-      run: uv pip install --system pyyaml
+      run: python -m pip install pyyaml
 
     - name: Run deploy gate
       shell: bash

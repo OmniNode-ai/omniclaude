@@ -149,7 +149,7 @@ jobs:
           fi
 
       - name: Post review summary as PR comment
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         uses: actions/github-script@v9
         env:
           REVIEW_VERDICT: ${{ steps.review.outputs.verdict }}
