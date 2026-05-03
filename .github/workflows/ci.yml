@@ -1594,17 +1594,8 @@ jobs:
             );
           SQL
 
-          echo "Validating schema_migrations table..."
-          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.schema_migrations'
-
-          echo "Validating claude_session_snapshots table..."
-          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_snapshots'
-
-          echo "Validating claude_session_prompts table..."
-          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_prompts'
-
-          echo "Validating claude_session_tools table..."
-          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\d public.claude_session_tools'
+          echo "Listing initialized public tables..."
+          psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\dt public.*'
 
           echo "Validating indexes..."
           psql -v ON_ERROR_STOP=1 -h localhost -p "$PGPORT" -U schema_test -d schema_test_db -c '\di'

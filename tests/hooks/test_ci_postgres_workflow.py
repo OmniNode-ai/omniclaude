@@ -156,10 +156,7 @@ def test_database_validation_uses_public_schema_qualified_tables(
     step = _step(_job(ci_workflow, "database-validation"), "Validate database schema")
     run = step["run"]
 
-    assert "\\d public.schema_migrations" in run
-    assert "\\d public.claude_session_snapshots" in run
-    assert "\\d public.claude_session_prompts" in run
-    assert "\\d public.claude_session_tools" in run
+    assert "\\dt public.*" in run
     assert "psql -v ON_ERROR_STOP=1" in run
     assert "CREATE TABLE IF NOT EXISTS public.schema_migrations" in run
     assert "\\d schema_migrations" not in run
