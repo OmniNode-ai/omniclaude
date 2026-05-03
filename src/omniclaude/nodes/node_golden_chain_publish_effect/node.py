@@ -17,7 +17,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, cast
 
 from omniclaude.lib.kafka_publisher_base import (
     create_event_envelope,
@@ -139,8 +140,8 @@ async def run_chain(
             )
             row = cur.fetchone()
             if row is not None:
-                description = cur.description or []
-                col_names = [desc[0] for desc in description]
+                description = cast("Sequence[Sequence[object]] | None", cur.description)
+                col_names = [str(desc[0]) for desc in description or []]
                 projected_row = dict(zip(col_names, row))
                 break
             await asyncio.sleep(poll_interval_s)

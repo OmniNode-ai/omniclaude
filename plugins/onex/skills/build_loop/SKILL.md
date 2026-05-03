@@ -65,11 +65,22 @@ Include this as the first instruction in every `Agent()` dispatch prompt emitted
 
 ### Step 2 — Run node
 
+Primary path (bus-driven):
+
 ```bash
 onex run-node node_build_loop_orchestrator \
   --input '{"max_cycles": 1, "skip_closeout": false, "dry_run": false, "max_tickets": 5, "mode": "build"}' \
   --timeout 300
 ```
+
+Fallback path (local/offline):
+
+```bash
+onex node node_build_loop_orchestrator \
+  --input <json_file>
+```
+
+Where `<json_file>` contains `ModelLoopStartCommand` JSON matching the payload fields above.
 
 On non-zero exit, a `SkillRoutingError` JSON envelope is returned — surface it directly, do not produce prose. Exit 0 = all cycles completed, exit 1 = any cycle failed.
 

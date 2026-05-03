@@ -239,10 +239,10 @@ events:
     partition_key_field: session_id
     required_fields: [session_id, correlation_id, task_type]
 
-  delegation.request:
+  delegate.task:
     fan_out:
-      - topic: "onex.cmd.omnibase-infra.delegation-request.v1"
-        description: "Delegation request command"
+      - topic: "onex.cmd.omniclaude.delegate-task.v1"
+        description: "Delegation request command for node_delegation_orchestrator"
     partition_key_field: correlation_id
     required_fields: [payload, correlation_id]
 

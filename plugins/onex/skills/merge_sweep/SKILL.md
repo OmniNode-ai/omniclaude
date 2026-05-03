@@ -163,6 +163,14 @@ and prints the `ModelPrLifecycleResult` JSON returned by the backing node.
 Surface non-zero exits directly. On routing failure raise `SkillRoutingError`;
 do not produce prose.
 
+**Fallback path (local/offline):**
+
+```bash
+onex node node_pr_lifecycle_orchestrator --input <envelope_json_file>
+```
+
+Where `<envelope_json_file>` contains a `ModelEventEnvelope[ModelPrLifecycleStartCommand]` JSON blob (same structure as the envelope built by `run.sh`).
+
 ## Headless / Cron Invocation
 
 `scripts/cron-merge-sweep.sh` is the durable launchd trigger for this skill. It

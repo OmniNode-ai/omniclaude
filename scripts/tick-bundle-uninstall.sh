@@ -36,6 +36,8 @@ TICKS=(
   "ai.omninode.buildloop"
   "ai.omninode.quick-merge"
   "ai.omninode.201-baseline"
+  "ai.omninode.cron-closeout"
+  "ai.omninode.nightly-merge-sweep"
 )
 
 UID_GUI="$(id -u)"

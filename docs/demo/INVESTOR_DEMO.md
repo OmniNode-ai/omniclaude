@@ -338,7 +338,7 @@ emit_client_wrapper.py  -->  emit_via_daemon()
 Unix Domain Socket (/tmp/omniclaude-emit.sock)
     |
     v
-Publisher Daemon (src/omniclaude/publisher/)
+Emit daemon (omnimarket node)
     |
     v
 Kafka / Redpanda (<kafka-bootstrap-servers>:9092)
@@ -357,7 +357,7 @@ Kafka / Redpanda (<kafka-bootstrap-servers>:9092)
 | `plugins/onex/hooks/scripts/user-prompt-submit.sh` | Prompt submission hook script |
 | `plugins/onex/hooks/scripts/post-tool-use-quality.sh` | Tool use hook script |
 | `plugins/onex/hooks/lib/emit_client_wrapper.py` | Socket-based emit client |
-| `src/omniclaude/publisher/` | Publisher daemon (Kafka producer) |
+| `omnimarket.nodes.node_emit_daemon` | Emit daemon (Kafka producer) |
 | `src/omniclaude/hooks/schemas.py` | Frozen Pydantic event schemas |
 | `src/omniclaude/hooks/topics.py` | `TopicBase` enum (all topic names) |
 

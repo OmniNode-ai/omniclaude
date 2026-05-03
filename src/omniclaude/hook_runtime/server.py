@@ -4,7 +4,7 @@
 """Hook runtime daemon async Unix socket server. [OMN-5306, OMN-5312]
 
 Lightweight asyncio Unix socket server that services all omniclaude hook
-nodes. Follows the EmbeddedEventPublisher lifecycle pattern:
+nodes. Follows the emit daemon lifecycle pattern:
 - PID file management
 - Stale socket detection and cleanup
 - asyncio.start_unix_server binding
@@ -115,7 +115,7 @@ class HookRuntimeConfig:
 class HookRuntimeServer:
     """Lightweight async Unix socket server for hook enforcement.
 
-    Follows EmbeddedEventPublisher lifecycle pattern:
+    Follows emit daemon lifecycle pattern:
     PID file, stale socket detection, signal handlers, graceful shutdown.
     No Kafka, no Postgres — pure in-memory state.
     """

@@ -485,6 +485,12 @@ class TopicBase(StrEnum):
     """Structured hook error event for health observability dashboard."""
 
     # ==========================================================================
+    # Diagnostic daemon health topics (OMN-10126)
+    # ==========================================================================
+    DIAGNOSTIC_DAEMON_HEALTH = "onex.evt.omniclaude.diagnostic-daemon-health.v1"
+    """Portable daemon health diagnostic event emitted by runtime probes."""
+
+    # ==========================================================================
     # OmniClaw channel messaging topics (OMN-7185)
     # Inbound normalized messages from any channel adapter, outbound replies,
     # and processing observability.

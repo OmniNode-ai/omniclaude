@@ -29,12 +29,12 @@ _SHARED_PATH = str(
 if _SHARED_PATH not in sys.path:
     sys.path.insert(0, _SHARED_PATH)
 
-from friction_classifier import (  # noqa: E402, TC002
+from friction_classifier import (  # type: ignore[import-not-found]  # noqa: E402, TC002
     ClassificationResult,
     load_rules_from_yaml,
     match_signal,
 )
-from friction_signal import (  # noqa: E402, TC002
+from friction_signal import (  # type: ignore[import-not-found]  # noqa: E402, TC002
     FrictionSignal,
 )
 

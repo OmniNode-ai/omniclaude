@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ai.omninode.nightly-merge-sweep.plist — launchd agent for nightly per-repo merge sweep [OMN-7842]
+
+  Runs nightly-merge-sweep.sh at 2:00 AM daily. The script iterates all
+  OmniNode-ai repos, invokes claude -p per repo for merge-sweep, and produces
+  per-repo JSON records under ~/.claude/nightly-sweep/.
+
+  The script internally generates ONEX_RUN_ID for session correlation and
+  sources ~/.omnibase/.env for credentials.
+
+  Uses StartCalendarInterval for daily schedule (launchd ignores StartInterval
+  when StartCalendarInterval is present).
+
+  Template: __OMNI_HOME__ and __HOME__ are expanded at install time by tick-bundle-install.sh.
+
+  Install:
+    bash omniclaude/scripts/tick-bundle-install.sh
+
+  Uninstall:
+    bash omniclaude/scripts/tick-bundle-uninstall.sh
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.omninode.nightly-merge-sweep</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__OMNI_HOME__/omniclaude/scripts/nightly-merge-sweep.sh</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/nightly-merge-sweep-stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/nightly-merge-sweep-stderr.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>OMNI_HOME</key>
+    <string>__OMNI_HOME__</string>
+  </dict>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

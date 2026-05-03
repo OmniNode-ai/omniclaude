@@ -1,7 +1,7 @@
 ---
 description: End-to-end design workflow — brainstorm ideas into structured implementation plans with optional launch
 mode: full
-version: 1.0.0
+version: 1.1.0
 level: intermediate
 debug: false
 category: planning
@@ -33,6 +33,83 @@ End-to-end design workflow with three phases:
 3. **Launch**: Route to execution (ticket-pipeline or plan-to-tickets + epic-team)
 
 **Announce at start:** "I'm using the design-to-plan skill [Phase N: <phase name>]."
+
+---
+
+## Output Format Contract (OMN-10353)
+
+**This contract is enforced on every plan file produced by this skill. Violations are bugs.**
+
+### Required heading structure
+
+Every numbered implementation task MUST appear as an H2 heading:
+
+```
+## Task N: <title>
+```
+
+Each task body MUST contain all of:
+- **Why**: one-sentence rationale for the task
+- **Files**: exact file paths (Create / Modify / Test)
+- **Steps**: numbered bite-sized steps (2–5 min each)
+- **Acceptance**: verifiable acceptance criteria (no subjective language)
+- **Verification grade**: `strong` / `medium` / `weak` as defined in R6
+
+### Forbidden structures
+
+The following are **FORBIDDEN** in any plan written by this skill:
+
+| Forbidden pattern | Reason |
+|---|---|
+| Blockquote placeholder (`> Task N: ...`) | `plan_to_tickets` regex does not match blockquotes |
+| `### TRACK X — Y (Tasks N-M)` without sibling `## Task N:` headings | Placeholder, not parseable |
+| Bullet-list-only task summaries (`- Task N: ...`) | Not matched by `plan_to_tickets` |
+| `## Phase N:` headings as task containers | Wrong heading format; flatten into `## Task N:` |
+| Numbered flat list (`1. Create X`) | Not matched by `plan_to_tickets` |
+
+### Foreground blocking on agent sub-task delegation
+
+When sub-task generation is delegated to background agents (via `Agent()`, `Task`, or skill calls),
+the foreground session **MUST block** on each agent before writing the plan file:
+
+1. Poll agent output via `TaskGet` / `TaskOutput` in a loop.
+2. Default max wait: **5 minutes per agent** (configurable via `--agent-timeout-minutes N`).
+3. On agent timeout or failure, the foreground writes a failure-placeholder heading:
+
+```markdown
+## Task N: <title> [GENERATION-FAILED — agent <agent-id> timed out at <ISO-timestamp>]
+
+**Failure mode:** Agent `<agent-id>` did not return within the configured timeout.
+
+**Recovery:** Re-run `design_to_plan --phase plan` and paste the agent output for this
+track manually, or run `/onex:design_to_plan --phase plan --topic "<track title>"` to
+regenerate this track.
+```
+
+**Never write a blockquote placeholder** (`> Track 1A tasks here...`) — always write either a
+complete `## Task N:` heading body or the explicit `[GENERATION-FAILED]` failure header above.
+
+### Pre-write linter (mandatory)
+
+Before calling `Write()` on any plan file, parse the draft plan and validate:
+
+1. Identify every track section and its associated numbered task list.
+2. For every task number N referenced in a track's numbered list, confirm a `## Task N:` H2
+   heading exists in the document.
+3. If any task is missing its `## Task N:` heading: **do not write the file**. Instead, either:
+   - Generate the missing task sections inline, or
+   - Emit `[GENERATION-FAILED]` placeholder headings (see above).
+4. Emit a validation summary line before writing:
+   ```
+   [design_to_plan pre-write linter] N tasks found, N/N have ## Task N: headings — OK
+   ```
+   or:
+   ```
+   [design_to_plan pre-write linter] FAILED: tasks [3, 7, 12] missing ## Task N: headings
+   — writing GENERATION-FAILED placeholders (OMN-10353)
+   ```
+
+This linter step runs on **every** plan Write(), including partial saves during generation.
 
 ---
 

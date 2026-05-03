@@ -81,11 +81,11 @@ def _extract_thread_id(msg: EmailMessage) -> str | None:
     Prefers In-Reply-To; falls back to the last entry in References.
     """
     in_reply_to = msg.get("In-Reply-To")
-    if in_reply_to:
+    if isinstance(in_reply_to, str) and in_reply_to:
         return in_reply_to.strip()
 
     references = msg.get("References", "")
-    if references:
+    if isinstance(references, str) and references:
         parts = references.strip().split()
         if parts:
             return parts[-1]

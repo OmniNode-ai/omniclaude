@@ -14,7 +14,7 @@ This document outlines the security measures, best practices, and considerations
 
 - Hook Python libraries (`plugins/onex/hooks/lib/`)
 - Hook Pydantic models (`src/omniclaude/hooks/schemas.py`)
-- Publisher / emit daemon client (`src/omniclaude/publisher/`)
+- Emit daemon client (`omnimarket.nodes.node_emit_daemon.client`)
 - CLI entry points (`src/omniclaude/cli/`)
 
 ---

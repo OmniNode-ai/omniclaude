@@ -8,10 +8,10 @@
 
 ## What Was Done
 
-### 1. Publisher Rewired to Local Registry
-- `src/omniclaude/publisher/embedded_publisher.py` no longer imports `EventRegistry` from `omnibase_infra`
-- Uses local `event_registry.py` for fan-out rules, validation, partition keys
-- Uses local `_inject_metadata()` for correlation_id, causation_id, emitted_at, schema_version
+### 1. Emit Daemon Routing Uses Local Contracts
+- The runtime lifecycle starts the omnimarket emit daemon wrapper instead of `omniclaude.publisher`
+- `lifecycle.py` loads the local contract from `plugins/onex/lib/event_registry/omniclaude.yaml`
+- The emit daemon wrapper normalizes `correlation_id` and `timestamp` metadata before publishing
 - Fan-out support: one event type can publish to multiple topics with payload transforms (e.g., `prompt.submitted` -> intelligence topic + sanitized observability topic)
 
 ### 2. Topics Are Bare ONEX Suffixes
@@ -21,7 +21,7 @@
 - `build_full_topic(env, namespace, suffix)` in omnibase_infra is dead code with zero production callers
 
 ### 3. Six Missing Event Registrations Added
-Added to `src/omniclaude/hooks/event_registry.py`:
+Added to `plugins/onex/lib/event_registry/omniclaude.yaml`:
 - `context.utilization` -> `onex.evt.omniclaude.context-utilization.v1`
 - `agent.match` -> `onex.evt.omniclaude.agent-match.v1`
 - `latency.breakdown` -> `onex.evt.omniclaude.latency-breakdown.v1`
@@ -33,15 +33,16 @@ Three new TopicBase entries added to `src/omniclaude/hooks/topics.py`:
 - `ROUTING_DECISION`, `NOTIFICATION_BLOCKED`, `NOTIFICATION_COMPLETED`
 
 ### 4. Tests Updated
-- `tests/publisher/test_embedded_publisher.py`: 4 tests updated to remove mocks of deleted `self._registry`
+- Runtime lifecycle and launcher tests verify the omnimarket emit daemon startup path and deleted publisher absence.
 
 ## Files Modified
+
 | File | Change |
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries |
-| `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total) |
-| `src/omniclaude/publisher/embedded_publisher.py` | Replaced infra EventRegistry with local registry + fan-out; bare suffix topics |
-| `tests/publisher/test_embedded_publisher.py` | 4 tests updated |
+| `plugins/onex/lib/event_registry/omniclaude.yaml` | Local emit daemon contract source |
+| `src/omniclaude/runtime/lifecycle.py` | Starts the omnimarket emit daemon wrapper and publishes through `EventBusKafka` |
+| `tests/runtime/test_lifecycle.py` and `tests/scripts/test_omnimarket_launcher.py` | Cover runtime lifecycle and launcher cutover behavior |
 
 ## Architectural Principle Established
 
@@ -97,7 +98,7 @@ The `_register_defaults()` method hardcodes 12 omniclaude-specific event types. 
 - False source-of-truth confusion
 - Coupling between platform infra and application semantics
 
-**Resolution**: Remove `_register_defaults()` from infra's EventRegistry. Make EventRegistry a generic class that apps populate. The omniclaude event catalog lives only in `omniclaude4/src/omniclaude/hooks/event_registry.py`.
+**Resolution**: Remove `_register_defaults()` from infra's EventRegistry. Make EventRegistry a generic class that apps populate. The omniclaude emit-daemon contract lives only in `plugins/onex/lib/event_registry/omniclaude.yaml`.
 
 ## How to Verify Current State
 
@@ -125,15 +126,15 @@ print(f'Wire topic: {topic}')
 "
 ```
 
-### No infra EventRegistry import in publisher
+### No deleted publisher package import remains
 ```bash
-grep -c 'from omnibase_infra.*event_registry' src/omniclaude/publisher/embedded_publisher.py
+! rg 'omniclaude\.publisher' src tests plugins scripts --glob '!uv.lock'
 # Should print: 0
 ```
 
 ### Tests pass
 ```bash
-.venv/bin/pytest tests/ -v -k "event_registry or publisher or topic" --tb=short
+.venv/bin/pytest tests/runtime/test_lifecycle.py tests/scripts/test_omnimarket_launcher.py tests/scripts/test_emit_daemon_cutover_static.py -v --tb=short
 ```
 
 ## Related Tickets

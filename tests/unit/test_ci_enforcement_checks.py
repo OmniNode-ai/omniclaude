@@ -407,7 +407,7 @@ class TestNoDirectKafkaProducer:
 
     def test_clean_file_passes(self, tmp_path: Path) -> None:
         source = """
-        from omniclaude.publisher.emit_client import emit_event
+        from omnimarket.nodes.node_emit_daemon.client import EmitClient
         """
         violations = _check_source(self.mod.check_file, source, tmp_path)
         assert violations == []
@@ -421,9 +421,9 @@ class TestNoDirectKafkaProducer:
             f"Expected violation for case '{description}' but got none"
         )
 
-    def test_publisher_path_is_allowed(self, tmp_path: Path) -> None:
+    def test_shared_publisher_path_is_allowed(self, tmp_path: Path) -> None:
         assert (
-            self.mod.is_allowed_path(tmp_path / "publisher" / "embedded_publisher.py")
+            self.mod.is_allowed_path(tmp_path / "lib" / "kafka_publisher_base.py")
             is True
         )
         assert self.mod.is_allowed_path(tmp_path / "nodes" / "node_compute.py") is False

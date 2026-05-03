@@ -108,6 +108,7 @@ class TestModuleImport:
             "hook.health.error",  # OMN-7158 - Structured hook error event for health observability
             "llm.cost.completed",  # OMN-7570 - LLM cost telemetry for omnidash llm_cost_aggregates
             "agent.action",  # wire-missing-producers - Per-tool agent action
+            "diagnostic.daemon.health",  # OMN-10126 - Runtime daemon health probe
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
