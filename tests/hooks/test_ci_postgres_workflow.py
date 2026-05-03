@@ -19,6 +19,10 @@ ONEX_SCHEMA_COMPAT_WORKFLOW = (
     REPO_ROOT / ".github" / "workflows" / "onex-schema-compat.yml"
 )
 PLUGIN_COMPAT_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "plugin-compat-gate.yml"
+INTEGRATION_TESTS_WORKFLOW = (
+    REPO_ROOT / ".github" / "workflows" / "integration-tests.yml"
+)
+VENV_CACHE_RESTORE_IF = "${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}"
 
 
 @pytest.fixture(scope="module")
@@ -37,14 +41,19 @@ def _job(ci_workflow: dict[str, Any], job_name: str) -> dict[str, Any]:
 
 
 def _step(job: dict[str, Any], step_name: str) -> dict[str, Any]:
-    steps = job.get("steps")
-    assert isinstance(steps, list)
+    steps = _steps(job)
     step = next(
         item
         for item in steps
         if isinstance(item, dict) and item.get("name") == step_name
     )
     return cast("dict[str, Any]", step)
+
+
+def _steps(job: dict[str, Any]) -> list[Any]:
+    steps = job.get("steps")
+    assert isinstance(steps, list)
+    return steps
 
 
 def test_omnidash_role_check_uses_mapped_postgres_port(
@@ -85,10 +94,45 @@ def test_postgres_service_jobs_use_bounded_mapped_port_waits(
 
 
 @pytest.mark.parametrize(
-    "workflow_path",
-    [WORKFLOW_PATH, ONEX_SCHEMA_COMPAT_WORKFLOW, PLUGIN_COMPAT_WORKFLOW],
+    ("job_name", "psql_step_name"),
+    [
+        ("hooks-tests", "Initialize hooks database"),
+        ("database-validation", "Validate database schema"),
+    ],
 )
-def test_cache_restore_steps_are_disabled_for_ci_timeout_resilience(
+def test_postgres_service_jobs_install_psql_before_use(
+    ci_workflow: dict[str, Any],
+    job_name: str,
+    psql_step_name: str,
+) -> None:
+    steps = _steps(_job(ci_workflow, job_name))
+    install_index = next(
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step, dict) and step.get("name") == "Install PostgreSQL client"
+    )
+    psql_index = next(
+        index
+        for index, step in enumerate(steps)
+        if isinstance(step, dict) and step.get("name") == psql_step_name
+    )
+    install_step = cast("dict[str, Any]", steps[install_index])
+
+    assert install_index < psql_index
+    assert "apt-get install -y postgresql-client" in install_step["run"]
+    assert '-e PGPORT="${PGPORT:-}"' in install_step["run"]
+
+
+@pytest.mark.parametrize(
+    "workflow_path",
+    [
+        WORKFLOW_PATH,
+        ONEX_SCHEMA_COMPAT_WORKFLOW,
+        PLUGIN_COMPAT_WORKFLOW,
+        INTEGRATION_TESTS_WORKFLOW,
+    ],
+)
+def test_cache_restore_steps_are_opt_in_for_ci_timeout_resilience(
     workflow_path: Path,
 ) -> None:
     loaded = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
@@ -108,4 +152,5 @@ def test_cache_restore_steps_are_disabled_for_ci_timeout_resilience(
 
     assert cache_steps
     for step in cache_steps:
-        assert step.get("if") == "${{ false }}"
+        assert step.get("if") == VENV_CACHE_RESTORE_IF
+        assert step.get("uses") == "actions/cache/restore@v5"

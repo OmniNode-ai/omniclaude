@@ -53,7 +53,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -159,7 +159,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -223,7 +223,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -262,7 +262,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -339,7 +339,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -841,7 +841,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -881,7 +881,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -924,7 +924,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -972,7 +972,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv (restore-only to avoid post-job upload timeout)
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1020,7 +1020,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1233,7 +1233,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1354,7 +1354,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1363,6 +1363,35 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ github.workspace }}
         run: uv sync --frozen --group dev
+
+      - name: Install PostgreSQL client
+        working-directory: ${{ github.workspace }}
+        run: |
+          if command -v psql >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update -qq
+            apt-get install -y postgresql-client
+            exit 0
+          fi
+          if command -v docker >/dev/null 2>&1; then
+            mkdir -p .ci-bin
+            cat > .ci-bin/psql <<'SH'
+          #!/usr/bin/env bash
+          exec docker run --rm --network host -e PGPASSWORD="${PGPASSWORD:-}" -e PGPORT="${PGPORT:-}" postgres:16-alpine psql "$@"
+          SH
+            chmod +x .ci-bin/psql
+            echo "${PWD}/.ci-bin" >> "$GITHUB_PATH"
+            exit 0
+          fi
+          echo "::error::psql is unavailable and no supported installer or Docker fallback exists"
+          exit 1
 
       - name: Initialize hooks database
         working-directory: ${{ github.workspace }}
@@ -1426,7 +1455,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1510,6 +1539,35 @@ jobs:
             echo "POSTGRES_PORT=${{ job.services.postgres.ports['5432'] }}"
             echo "PGPORT=${{ job.services.postgres.ports['5432'] }}"
           } >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        working-directory: ${{ github.workspace }}
+        run: |
+          if command -v psql >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y postgresql-client
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+            apt-get update -qq
+            apt-get install -y postgresql-client
+            exit 0
+          fi
+          if command -v docker >/dev/null 2>&1; then
+            mkdir -p .ci-bin
+            cat > .ci-bin/psql <<'SH'
+          #!/usr/bin/env bash
+          exec docker run --rm --network host -e PGPASSWORD="${PGPASSWORD:-}" -e PGPORT="${PGPORT:-}" postgres:16-alpine psql "$@"
+          SH
+            chmod +x .ci-bin/psql
+            echo "${PWD}/.ci-bin" >> "$GITHUB_PATH"
+            exit 0
+          fi
+          echo "::error::psql is unavailable and no supported installer or Docker fallback exists"
+          exit 1
 
       - name: Validate database schema
         working-directory: ${{ github.workspace }}
@@ -1679,7 +1737,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
@@ -1807,7 +1865,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv

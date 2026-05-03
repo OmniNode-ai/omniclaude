@@ -70,7 +70,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Load cached venv
-        if: ${{ false }}
+        if: ${{ vars.OMNI_ENABLE_VENV_CACHE_RESTORE == 'true' }}
         uses: actions/cache/restore@v5
         with:
           path: .venv
