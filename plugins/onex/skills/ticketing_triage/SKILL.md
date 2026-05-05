@@ -280,6 +280,25 @@ tracker.list_issues(parentId=epic_ticket.id, includeArchived=true, limit=50)
 Write report to `$ONEX_STATE_DIR/state/ticketing-triage/{run_id}.yaml` (see `TriageReport` in
 `@_lib/contracts/helpers.md` for schema).
 
+#### Enumeration completeness (no caps, no sampling) [OMN-10543]
+
+The report MUST enumerate **every** orphan, **every** stale ticket, and **every**
+applied action. Do NOT truncate to a "top N oldest sample" or any other subset:
+
+- `orphaned_tickets` list length MUST equal `summary.orphaned_tickets`
+- `stale_tickets` list length MUST equal `summary.stale_tickets`
+- `actions_applied` list length MUST equal the sum of applied-action counters
+  (`marked_done` + `marked_done_superseded` + `marked_done_epic` + any
+  `comment_posted_*` variants)
+
+Downstream skills (`ticketing-epic-org`, `ticket-plan --sync`) iterate the full
+list. A truncated report silently drops work and is a bug. Phrases like
+`top N oldest sample`, `first N records`, or any cap comment are forbidden in
+the emitted YAML.
+
+Before writing the report, assert these invariants and fail loudly if any list
+is shorter than its corresponding summary count.
+
 Print summary to stdout:
 
 ```
